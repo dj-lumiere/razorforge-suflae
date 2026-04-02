@@ -37,6 +37,12 @@ public partial class Parser
                 existingConstraints: inlineConstraints);
 
 
+        // Allow a line break before 'obeys' in the type header.
+        while (Check(type: TokenType.Newline) && PeekToken(offset: 1).Type == TokenType.Obeys)
+        {
+            Advance();
+        }
+
         // Parse interfaces/protocols the entity obeys
         var interfaces = new List<TypeExpression>();
         if (Match(type: TokenType.Obeys))
@@ -159,6 +165,12 @@ public partial class Parser
             ParseGenericConstraints(genericParams: genericParams,
                 existingConstraints: inlineConstraints);
 
+
+        // Allow a line break before 'obeys' in the type header.
+        while (Check(type: TokenType.Newline) && PeekToken(offset: 1).Type == TokenType.Obeys)
+        {
+            Advance();
+        }
 
         // Parse interfaces/protocols the record obeys
         var interfaces = new List<TypeExpression>();
@@ -510,6 +522,12 @@ public partial class Parser
             ParseGenericConstraints(genericParams: genericParams,
                 existingConstraints: inlineConstraints);
 
+
+        // Allow a line break before 'obeys' in the protocol header.
+        while (Check(type: TokenType.Newline) && PeekToken(offset: 1).Type == TokenType.Obeys)
+        {
+            Advance();
+        }
 
         // Parse parent protocols (protocol X obeys Y, Z)
         var parentProtocols = new List<TypeExpression>();

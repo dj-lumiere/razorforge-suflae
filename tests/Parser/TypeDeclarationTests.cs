@@ -88,6 +88,29 @@ public class TypeDeclarationTests
 
         Assert.Single(collection: record.Protocols);
     }
+
+    [Fact]
+    public void Parse_Record_FollowsMultipleProtocols_AcrossLines()
+    {
+        string source = """
+                        record Address
+                        obeys UnsignedIntegral, Ordered, ConstCompatible, WrappingAddable, WrappingSubtractable,
+                        WrappingMultiplicable, FloorDivisible
+                          pass
+                        """;
+
+        Program program = AssertParses(source: source);
+        RecordDeclaration record = GetDeclaration<RecordDeclaration>(program: program);
+
+        Assert.Equal(expected: 7, actual: record.Protocols.Count);
+        Assert.Equal(expected: "UnsignedIntegral", actual: record.Protocols[0].Name);
+        Assert.Equal(expected: "Ordered", actual: record.Protocols[1].Name);
+        Assert.Equal(expected: "ConstCompatible", actual: record.Protocols[2].Name);
+        Assert.Equal(expected: "WrappingAddable", actual: record.Protocols[3].Name);
+        Assert.Equal(expected: "WrappingSubtractable", actual: record.Protocols[4].Name);
+        Assert.Equal(expected: "WrappingMultiplicable", actual: record.Protocols[5].Name);
+        Assert.Equal(expected: "FloorDivisible", actual: record.Protocols[6].Name);
+    }
     /// <summary>
     /// Tests Parse_Record_MultipleTypeParameters.
     /// </summary>

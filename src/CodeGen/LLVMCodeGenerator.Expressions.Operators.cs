@@ -159,10 +159,11 @@ public partial class LLVMCodeGenerator
                 _ => null
             };
 
+        TypeInfo? rightType = GetExpressionType(expr: binary.Right);
+
         if (arithInstr != null)
         {
             // Ensure right operand matches left operand's type width
-            TypeInfo? rightType = GetExpressionType(expr: binary.Right);
             string rightLlvmType = rightType != null
                 ? GetLLVMType(type: rightType)
                 : llvmType;
@@ -215,7 +216,10 @@ public partial class LLVMCodeGenerator
         };
         if (methodName != null && leftType != null)
         {
-            RoutineInfo? method = _registry.LookupMethod(type: leftType, methodName: methodName);
+            RoutineInfo? method = _registry.LookupMethodOverload(type: leftType,
+                                     methodName: methodName,
+                                     argTypes: [rightType]) ??
+                                 _registry.LookupMethod(type: leftType, methodName: methodName);
             if (method != null)
             {
                 // For generic resolutions (e.g., Snatched[Point].$eq), use the concrete type name

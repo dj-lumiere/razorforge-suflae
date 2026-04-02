@@ -727,4 +727,32 @@ public class ControlFlowTests
     }
 
     #endregion
+
+    #region Suspended Routine Tests
+    /// <summary>
+    /// Tests Parse_SuspendedRoutine_RazorForge.
+    /// </summary>
+
+    [Fact]
+    public void Parse_SuspendedRoutine_RazorForge()
+    {
+        string source = """
+                        suspended routine fetch_value() -> S32
+                          waitfor 10ms
+                          return 42
+                        """;
+
+        Program program = AssertParses(source: source);
+        RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
+
+        Assert.Equal(expected: AsyncStatus.Suspended, actual: routine.Async);
+        BlockStatement body = Assert.IsType<BlockStatement>(@object: routine.Body);
+        Assert.Contains(collection: body.Statements,
+            filter: stmt => stmt is ExpressionStatement
+            {
+                Expression: WaitforExpression
+            });
+    }
+
+    #endregion
 }

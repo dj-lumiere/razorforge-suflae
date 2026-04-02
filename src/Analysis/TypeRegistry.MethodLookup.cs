@@ -382,6 +382,85 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
+    /// Looks up a method overload on a type using the argument types for disambiguation.
+    /// This is used for operator/member dispatch where multiple wired overloads may exist
+    /// on the same owner type (for example Moment.$sub(Duration) and Moment.$sub(Moment)).
+    /// </summary>
+    public RoutineInfo? LookupMethodOverload(TypeInfo type, string methodName,
+        IReadOnlyList<TypeInfo> argTypes)
+    {
+        var candidates = new List<RoutineInfo>();
+        CollectMethodCandidates(type: type, methodName: methodName, candidates: candidates);
+
+        if (candidates.Count == 0)
+        {
+            return null;
+        }
+
+        // Prefer exact arity + exact type-name matches first.
+        foreach (RoutineInfo candidate in candidates)
+        {
+            if (candidate.Parameters.Count != argTypes.Count)
+            {
+                continue;
+            }
+
+            bool exactMatch = true;
+            for (int i = 0; i < argTypes.Count; i++)
+            {
+                TypeInfo paramType = candidate.Parameters[index: i].Type;
+                if (paramType is ProtocolSelfTypeInfo)
+                {
+                    paramType = type;
+                }
+
+                if (paramType.Name != argTypes[index: i].Name)
+                {
+                    exactMatch = false;
+                    break;
+                }
+            }
+
+            if (exactMatch)
+            {
+                return candidate;
+            }
+        }
+
+        // Then accept assignable matches.
+        foreach (RoutineInfo candidate in candidates)
+        {
+            if (candidate.Parameters.Count != argTypes.Count)
+            {
+                continue;
+            }
+
+            bool assignableMatch = true;
+            for (int i = 0; i < argTypes.Count; i++)
+            {
+                TypeInfo paramType = candidate.Parameters[index: i].Type;
+                if (paramType is ProtocolSelfTypeInfo)
+                {
+                    paramType = type;
+                }
+
+                if (!IsMethodArgumentAssignable(source: argTypes[index: i], target: paramType))
+                {
+                    assignableMatch = false;
+                    break;
+                }
+            }
+
+            if (assignableMatch)
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Synthesizes a complete RoutineInfo from a ProtocolMethodInfo, including parameters,
     /// modification category, storage, and all other metadata. Substitutes generic type
     /// parameters for instantiated generic protocols (e.g., Iterator[S64]: T → S64).
@@ -519,6 +598,93 @@ public sealed partial class TypeRegistry
             Storage = method.Storage,
             AsyncStatus = method.AsyncStatus
         };
+    }
+
+    private void CollectMethodCandidates(TypeInfo type, string methodName, List<RoutineInfo> candidates)
+    {
+        if (_routinesByOwner.TryGetValue(key: type.FullName, value: out List<RoutineInfo>? methods))
+        {
+            candidates.AddRange(methods.Where(predicate: m => m.Name == methodName));
+        }
+
+        if (type is ProtocolTypeInfo proto)
+        {
+            foreach (ProtocolMethodInfo protoMethod in proto.Methods.Where(predicate: m => m.Name == methodName))
+            {
+                candidates.Add(item: SynthesizeProtocolMethod(proto: proto,
+                    protoMethod: protoMethod,
+                    ownerType: type));
+            }
+        }
+
+        if (type.IsGenericResolution)
+        {
+            TypeInfo? genericDef = type switch
+            {
+                RecordTypeInfo r => r.GenericDefinition,
+                EntityTypeInfo e => e.GenericDefinition,
+                ProtocolTypeInfo p => p.GenericDefinition,
+                _ => null
+            };
+
+            if (genericDef != null)
+            {
+                var genericCandidates = new List<RoutineInfo>();
+                CollectMethodCandidates(type: genericDef, methodName: methodName, candidates: genericCandidates);
+                foreach (RoutineInfo genericCandidate in genericCandidates)
+                {
+                    if (genericCandidate.OwnerType is GenericParameterTypeInfo)
+                    {
+                        candidates.Add(item: genericCandidate);
+                    }
+                    else
+                    {
+                        candidates.Add(item: SubstituteMethodForOwner(method: genericCandidate,
+                            resolvedOwner: type));
+                    }
+                }
+            }
+        }
+
+        IReadOnlyList<TypeInfo>? protocols = type switch
+        {
+            RecordTypeInfo r => r.ImplementedProtocols,
+            EntityTypeInfo e => e.ImplementedProtocols,
+            _ => null
+        };
+
+        if (protocols != null)
+        {
+            foreach (TypeInfo protocol in protocols)
+            {
+                CollectMethodCandidates(type: protocol, methodName: methodName, candidates: candidates);
+            }
+        }
+
+        if (_universalMethods.TryGetValue(key: methodName, value: out RoutineInfo? universalMethod))
+        {
+            candidates.Add(item: universalMethod);
+        }
+    }
+
+    private static bool IsMethodArgumentAssignable(TypeInfo source, TypeInfo target)
+    {
+        if (source.Name == target.Name)
+        {
+            return true;
+        }
+
+        if (target is ProtocolTypeInfo)
+        {
+            return true;
+        }
+
+        if (target.Name == "Me")
+        {
+            return true;
+        }
+
+        return false;
     }
 
     /// <summary>

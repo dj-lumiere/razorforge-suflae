@@ -382,6 +382,9 @@ public sealed partial class SemanticAnalyzer
             if (methodName != null)
             {
                 RoutineInfo? method =
+                    _registry.LookupMethodOverload(type: leftType,
+                        methodName: methodName,
+                        argTypes: [rightType]) ??
                     _registry.LookupMethod(type: leftType, methodName: methodName);
                 if (method is { Parameters.Count: > 0 })
                 {
