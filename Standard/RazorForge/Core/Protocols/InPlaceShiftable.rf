@@ -1,0 +1,15 @@
+# InPlaceShiftable - Protocol for types that support in-place shift operations
+module Core
+
+protocol InPlaceShiftable
+  @writable
+  routine Me.$iashl(amount: Integral)
+
+  @writable
+  routine Me.$iashr(amount: Integral)
+
+  @writable
+  routine Me.$ilshl(amount: Integral)
+
+  @writable
+  routine Me.$ilshr(amount: Integral)

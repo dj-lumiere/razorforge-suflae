@@ -14,7 +14,8 @@ module Core
 
 # Core Address type definition - maps to LLVM i64
 @llvm("i64")
-record Address obeys UnsignedIntegral, Ordered, ConstCompatible
+record Address obeys UnsignedIntegral, Ordered, ConstCompatible,
+                    WrappingAddable, WrappingSubtractable, WrappingMultiplicable, FloorDivisible
   pass
 
 # ============================================================================

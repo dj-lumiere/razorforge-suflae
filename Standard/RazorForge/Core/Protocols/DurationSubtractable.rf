@@ -1,0 +1,6 @@
+# DurationSubtractable - Protocol for types that support subtracting a Duration (- Duration)
+module Core
+
+protocol DurationSubtractable
+  @readonly
+  routine Me.$sub(you: Duration) -> Me

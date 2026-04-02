@@ -1,0 +1,6 @@
+# Scalable - Protocol for unit-like types that can be scaled by an integer
+module Core
+
+protocol Scalable
+  @readonly
+  routine Me.$mul(you: Integral) -> Me

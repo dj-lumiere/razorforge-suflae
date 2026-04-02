@@ -32,7 +32,7 @@ preset SECONDS_PER_WEEK: S64 = 604_800_s64
 # Record definition
 # ============================================================================
 
-record Duration obeys Ordered, Addable, Subtractable, FloorDivisible, Negatable
+record Duration obeys Ordered, Addable, Subtractable, FloorDivisible, Negatable, Scalable, ScalarFloorDivisible
   secret seconds: S64      # Whole seconds (negative for negative durations)
   secret nanoseconds: U32  # Nanoseconds within second [0, 1_000_000_000)
 
@@ -188,8 +188,12 @@ routine Duration.abs() -> Duration
 # ============================================================================
 
 @readonly
-routine Duration.$add!(you: Duration) -> Duration
+routine Duration.$add(you: Duration) -> Duration
   return normalize_duration(me.seconds + you.seconds, S64(me.nanoseconds) + S64(you.nanoseconds))
+
+@readonly
+routine Duration.$add!(you: Duration) -> Duration
+  return me.$add(you)
 
 @readonly
 routine Duration.$sub(you: Duration) -> Duration
@@ -209,12 +213,16 @@ routine Duration.scale(factor: S64) -> Duration
   var total_s = me.seconds *% factor
   return normalize_duration(total_s, total_ns)
 
+@readonly
+routine Duration.$mul(factor: S64) -> Duration
+  return me.scale(factor)
+
 # Floor division: how many durations fit
 @readonly
-routine Duration.$floordiv(you: Duration) -> Duration
+routine Duration.$floordiv(you: Duration) -> S64
   var me_ns = me.total_nanoseconds()
   var you_ns = you.total_nanoseconds()
-  return Duration.from_nanoseconds(me_ns // you_ns)
+  return me_ns // you_ns
 
 # Remainder after floor division
 @readonly
@@ -228,6 +236,10 @@ routine Duration.$mod(you: Duration) -> Duration
 routine Duration.div_by(divisor: S64) -> Duration
   var total_ns = me.total_nanoseconds()
   return Duration.from_nanoseconds(total_ns // divisor)
+
+@readonly
+routine Duration.$floordiv(divisor: S64) -> Duration
+  return me.div_by(divisor)
 
 # ============================================================================
 # Comparison operators

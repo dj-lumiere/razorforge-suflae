@@ -1,0 +1,6 @@
+# ScalarDivisible - Protocol for unit-like types that support true division by a scalar
+module Core
+
+protocol ScalarDivisible
+  @readonly
+  routine Me.$truediv(you: Numeric) -> Me

@@ -1,0 +1,6 @@
+# InPlaceAddable - Protocol for types that support in-place addition (+=)
+module Core
+
+protocol InPlaceAddable
+  @writable
+  routine Me.$iadd(you: Me)

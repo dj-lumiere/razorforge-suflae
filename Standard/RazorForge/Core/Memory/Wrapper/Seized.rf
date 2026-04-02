@@ -4,18 +4,18 @@
 # It provides thread-safe exclusive access with automatic lock acquisition/release.
 #
 # Syntax:
-#   var shared = data.retain(policy: Exclusive)
+#   var shared = data.share[Exclusive]()
 #   using shared.seize!() as s
 #     s.value = 42  # Exclusive write access, lock held
 #   Lock automatically released at block exit
 #
 # Properties:
-# - Created by compiler via `seizing` syntax on Shared[T, Policy]
+# - Created by compiler via `.seize!()` on Shared[T, Policy]
 # - Scope-bound: cannot be stored, returned, or escape
 # - Exclusive: cannot be copied (only one handle at a time)
 # - Modifiable: allows modification through this handle
 # - Thread-safe: holds Exclusive or MultiRead write lock
-# - Temporary: source is invalidated during scope, restored on exit
+# - Temporary: shared handle remains usable after access ends
 # - Blocks ALL other access (both read and write) while held
 #
 # Locking Policy Behavior:
@@ -34,11 +34,11 @@ record Seized[T]
   secret lock_guard: Address  # Fixed type - opaque lock handle
 
 # NOTE: No creators, no manual methods - all operations handled by compiler
-# The seizing syntax acquires the Exclusive or MultiRead write lock and creates this token
+# The `.seize!()` syntax acquires the Exclusive or MultiRead write lock and creates this token
 # The lock is automatically released when the scope exits
 # Only ONE thread can hold a write lock at a time
 #
-# Lock acquisition can fail (e.g., poisoned lock) - use seizing! for fallible acquisition
+# Lock acquisition can fail (e.g., poisoned lock) - use `try_seize()` / `check_seize()` for fallible acquisition
 
 # ============================================================================
 # Resource management — enables `using shared.seize!() as s`

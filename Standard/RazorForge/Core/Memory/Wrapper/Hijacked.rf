@@ -1,18 +1,18 @@
 ### RazorForge Hijacked[T] - Scoped exclusive access token
 ###
-### Hijacked[T] is created ONLY by the `hijacking` syntax, NOT by creators.
-### It provides exclusive modifiable access to entities/residents within a scoped block.
+### Hijacked[T] is created by `.hijack()` and is intended for temporary exclusive access.
+### It provides modifiable access to entities and modifiable records within an inline use or scoped block.
 ###
 ### Syntax:
-###   using <entity_or_resident>.hijack() as h
+###   using <entity_or_record>.hijack() as h
 ###     h.member variable = 42  # Exclusive write access
 ###   # h destroyed here, cannot escape scope
 ###
 ### Properties:
-### - Created by compiler via `hijacking` syntax
+### - Created through `.hijack()`
 ### - Scope-bound: cannot be stored, returned, or escape
 ### - Exclusive: cannot be copied (only one handle at a time)
-### - Temporary: source is invalidated during scope, restored on exit
+### - Temporary: source is preserved and usable again when access ends
 ### - Single-threaded: for multi-threaded use, see Seized[T]
 ###
 ### This type is a marker for the type system - the compiler handles all operations.
@@ -26,7 +26,7 @@ routine T.hijack() -> Hijacked[T]
   return Hijacked[T](me.snatch())
 
 # NOTE: No creators, no manual methods - all operations handled by compiler
-# The address member variable is managed internally by the hijacking syntax implementation
+# The address member variable is managed internally by the `.hijack()` implementation
 # Users should NEVER create Hijacked[T] values directly
 
 # ============================================================================

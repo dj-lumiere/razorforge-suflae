@@ -1,0 +1,6 @@
+# ScalarFloorDivisible - Protocol for unit-like types that support floor division by an integer scalar
+module Core
+
+protocol ScalarFloorDivisible
+  @readonly
+  routine Me.$floordiv(you: Integral) -> Me

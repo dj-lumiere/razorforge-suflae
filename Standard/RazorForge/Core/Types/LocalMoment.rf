@@ -16,7 +16,7 @@ module Core
 # Record definition
 # ============================================================================
 
-record LocalMoment obeys Ordered
+record LocalMoment obeys Ordered, DurationAddable, DurationSubtractable
   secret moment: Moment       # The UTC moment
   secret offset: Duration     # UTC offset (positive = east of UTC)
 
@@ -47,6 +47,10 @@ routine LocalMoment.now_utc() -> LocalMoment
 # Get the underlying UTC moment
 routine Moment.$create(from: LocalMoment) -> Moment
   return from.moment
+
+@readonly
+routine LocalMoment.to_moment() -> Moment
+  return me.moment
 
 # Get the UTC offset
 @readonly
@@ -146,6 +150,18 @@ routine LocalMoment.subtract_duration(duration: Duration) -> LocalMoment
 @readonly
 routine LocalMoment.elapsed_since(earlier: LocalMoment) -> Duration
   return me.moment.elapsed_since(earlier.moment)
+
+@readonly
+routine LocalMoment.$add(you: Duration) -> LocalMoment
+  return me.add_duration(you)
+
+@readonly
+routine LocalMoment.$sub(you: Duration) -> LocalMoment
+  return me.subtract_duration(you)
+
+@readonly
+routine LocalMoment.$sub(you: LocalMoment) -> Duration
+  return me.elapsed_since(you)
 
 # ============================================================================
 # Comparison operators (compare UTC moments, offset is irrelevant)

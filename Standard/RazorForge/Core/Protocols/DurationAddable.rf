@@ -1,0 +1,6 @@
+# DurationAddable - Protocol for types that support adding a Duration (+ Duration)
+module Core
+
+protocol DurationAddable
+  @readonly
+  routine Me.$add(you: Duration) -> Me

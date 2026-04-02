@@ -1,0 +1,6 @@
+# InPlaceExponentiable - Protocol for types that support in-place exponentiation (**=)
+module Core
+
+protocol InPlaceExponentiable
+  @writable
+  routine Me.$ipow(you: Me)

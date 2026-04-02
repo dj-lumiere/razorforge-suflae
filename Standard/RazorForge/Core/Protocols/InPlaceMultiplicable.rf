@@ -1,0 +1,6 @@
+# InPlaceMultiplicable - Protocol for types that support in-place multiplication (*=)
+module Core
+
+protocol InPlaceMultiplicable
+  @writable
+  routine Me.$imul(you: Me)

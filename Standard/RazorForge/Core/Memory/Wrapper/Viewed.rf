@@ -1,20 +1,20 @@
 ### RazorForge Viewed[T] - Scoped read-only access token
 ###
-### Viewed[T] is created ONLY by the `viewing` syntax, NOT by creators.
-### It provides read-only access to entities/residents within a scoped block.
+### Viewed[T] is created by `.view()` and is intended for temporary read-only access.
+### It provides read-only access to entities and records within an inline use or scoped block.
 ###
 ### Syntax:
-###   using <entity_or_resident>.view() as v
+###   using <entity_or_record>.view() as v
 ###     show(v.member variable)  # Read-only access
 ###     var copy = v   # OK - Viewed can be copied
 ###   # v destroyed here, cannot escape scope
 ###
 ### Properties:
-### - Created by compiler via `viewing` syntax
+### - Created through `.view()`
 ### - Scope-bound: cannot be stored, returned, or escape
 ### - Copyable: multiple Viewed[T] handles can coexist
 ### - Read-only: cannot modify through this handle
-### - Temporary: source is invalidated during scope, restored on exit
+### - Temporary: source is preserved and usable again when access ends
 ### - Single-threaded: for multi-threaded use, see Inspected[T]
 ###
 ### This type is a marker for the type system - the compiler handles all operations.
@@ -28,7 +28,7 @@ routine T.view() -> Viewed[T]
   return Viewed[T](me.snatch())
 
 # NOTE: No creators, no manual methods - all operations handled by compiler
-# The address member variable is managed internally by the viewing syntax implementation
+# The address member variable is managed internally by the `.view()` implementation
 # Users should NEVER create Viewed[T] values directly
 
 # ============================================================================

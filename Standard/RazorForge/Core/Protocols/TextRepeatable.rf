@@ -1,0 +1,6 @@
+# TextRepeatable - Protocol for text-like types that support repetition with an integer
+module Core
+
+protocol TextRepeatable
+  @readonly
+  routine Me.$mul(you: Integral) -> Me

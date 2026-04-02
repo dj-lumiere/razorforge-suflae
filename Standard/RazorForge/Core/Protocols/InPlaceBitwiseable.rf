@@ -1,0 +1,12 @@
+# InPlaceBitwiseable - Protocol for types that support in-place bitwise operations
+module Core
+
+protocol InPlaceBitwiseable
+  @writable
+  routine Me.$ibitand(you: Me)
+
+  @writable
+  routine Me.$ibitor(you: Me)
+
+  @writable
+  routine Me.$ibitxor(you: Me)

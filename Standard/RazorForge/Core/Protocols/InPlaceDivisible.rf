@@ -1,0 +1,6 @@
+# InPlaceDivisible - Protocol for types that support in-place true division (/=)
+module Core
+
+protocol InPlaceDivisible
+  @writable
+  routine Me.$itruediv(you: Me)

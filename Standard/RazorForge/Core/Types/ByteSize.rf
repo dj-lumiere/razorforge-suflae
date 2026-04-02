@@ -33,7 +33,7 @@ preset BYTES_PER_PB: U64 = 1_000_000_000_000_000_u64
 # Record definition
 # ============================================================================
 
-record ByteSize obeys Ordered, Addable, Subtractable, FloorDivisible
+record ByteSize obeys Ordered, Addable, Subtractable, FloorDivisible, Scalable, ScalarFloorDivisible
   secret value: U64
 
 # ============================================================================

@@ -1,0 +1,6 @@
+# InPlaceSubtractable - Protocol for types that support in-place subtraction (-=)
+module Core
+
+protocol InPlaceSubtractable
+  @writable
+  routine Me.$isub(you: Me)

@@ -18,7 +18,7 @@ import Collections.List
 # Text - UTF-32 unmodifiable text
 # ============================================================================
 
-entity Text
+entity Text obeys Addable, Ordered, TextRepeatable
   secret letters: List[Letter]
 
 # Creators
@@ -164,6 +164,16 @@ routine Text.concat(other: Text) -> Text
 
 routine Text.$add(other: Text) -> Text
   return me.concat(other)
+
+routine Text.$mul[I obeys Integral](count: I) -> Text
+  var times = U64(count)
+  var result = List[Letter]()
+
+  for _ in 0 til times
+    for i in 0 til me.count()
+      result.add_last(me[i])
+
+  return Text(from_list: result)
 
 routine Text.$eq(other: Text) -> Bool
   if me.count() != other.count()
@@ -490,4 +500,3 @@ routine TextIterator.$next!() -> Letter
   var value = me.text[me.index]
   me.index = me.index + 1u64
   return value
-

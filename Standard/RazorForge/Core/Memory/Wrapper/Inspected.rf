@@ -4,21 +4,21 @@
 # It provides thread-safe read-only access with automatic lock acquisition/release.
 #
 # Syntax:
-#   var shared = data.retain(policy: MultiRead)
+#   var shared = data.share[MultiRead]()
 #   using shared.inspect!() as obs
 #     show(obs.value)  # Read-only access, lock held
 #     var copy = obs   # OK - Inspected is copyable
 #   Lock automatically released at block exit
 #
 # Properties:
-# - Created by compiler via `inspecting` syntax on Shared[T, MultiRead]
+# - Created by compiler via `.inspect!()` on Shared[T, MultiRead]
 # - Scope-bound: cannot be stored, returned, or escape
 # - Copyable: multiple Inspected[T] handles can coexist within scope
 # - Read-only: cannot modify through this handle
 # - Thread-safe: holds MultiRead read lock
 # - Multiple threads can hold read locks simultaneously
 # - Blocks write locks (seizing) while held
-# - Temporary: source is invalidated during scope, restored on exit
+# - Temporary: shared handle remains usable after access ends
 #
 # Downgrading:
 # - Can create Inspected[T] from within seizing block (downgrade write to read)
@@ -31,11 +31,11 @@ record Inspected[T]
   secret lock_guard: Address  # Fixed type - opaque lock handle
 
 # NOTE: No creators, no manual methods - all operations handled by compiler
-# The inspecting syntax acquires the MultiRead read lock and creates this token
+# The `.inspect!()` syntax acquires the MultiRead read lock and creates this token
 # The lock is automatically released when the scope exits
 # Multiple threads can hold read locks simultaneously (MultiRead semantics)
 #
-# Lock acquisition can fail (e.g., poisoned lock) - use observing! for fallible acquisition
+# Lock acquisition can fail (e.g., poisoned lock) - use `try_inspect()` / `check_inspect()` for fallible acquisition
 
 # ============================================================================
 # Resource management — enables `using shared.inspect!() as obs`

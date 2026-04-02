@@ -1,0 +1,9 @@
+# InPlaceFloorDivisible - Protocol for types that support in-place floor division and modulo
+module Core
+
+protocol InPlaceFloorDivisible
+  @writable
+  routine Me.$ifloordiv(you: Me)
+
+  @writable
+  routine Me.$imod(you: Me)
