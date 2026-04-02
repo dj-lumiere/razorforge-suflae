@@ -38,59 +38,57 @@ public sealed partial class SemanticAnalyzer
                 typeArguments: typeArgs.Cast<TypeInfo>()
                                        .ToList());
 
-            // Build expected element type from explicit generic type args
-            TypeSymbol? expectedElemType = null;
-            // TODO: This seems hack
-            bool isMapType = typeId.Name is "Dict" or "SortedDict" or "PriorityQueue";
-            if (isMapType && typeArgs.Count >= 2)
-            {
-                expectedElemType = _registry.GetOrCreateTupleType(elementTypes:
-                    [(TypeInfo)typeArgs[index: 0], (TypeInfo)typeArgs[index: 1]]);
-            }
-            else if (typeArgs.Count >= 1)
-            {
-                expectedElemType = typeArgs[index: 0];
-            }
-
-            // Analyze constructor arguments
+            var argTypes = new List<TypeSymbol>();
             foreach (Expression arg in generic.Arguments)
             {
-                AnalyzeExpression(expression: arg, expectedType: expectedElemType);
+                argTypes.Add(item: AnalyzeExpression(expression: arg));
             }
 
-            // Collection literal constructor with explicit type args: List[S64](1, 2, 3)
-            if (CollectionLiteralTypes.Contains(item: typeId.Name) &&
-                generic.Arguments.Count > 0 &&
-                generic.Arguments.All(predicate: a => a is not NamedArgumentExpression))
+            if (generic.Arguments.Count > 0)
             {
-                generic.IsCollectionLiteral = true;
+                RoutineInfo? creator = _registry.LookupRoutineOverload(
+                    baseName: $"{resolvedType.Name}.$create",
+                    argTypes: argTypes);
 
-                // ValueList[T, N] / ValueBitList[N] — argument count must match N
-                // TODO: This is also hack
-                if (typeId.Name == "ValueList" && typeArgs.Count >= 2)
+                if ((creator == null || creator.Parameters.Count != argTypes.Count) &&
+                    typeInfo.IsGenericDefinition)
                 {
-                    // N is the second type arg (a numeric constant type)
-                    string nStr = typeArgs[index: 1].Name;
-                    if (ulong.TryParse(s: nStr, result: out ulong n) &&
-                        (ulong)generic.Arguments.Count != n)
+                    RoutineInfo? genericCreator = _registry.LookupRoutineOverload(
+                        baseName: $"{typeInfo.Name}.$create",
+                        argTypes: argTypes);
+                    if (genericCreator != null &&
+                        genericCreator.Parameters.Count == argTypes.Count)
                     {
-                        ReportError(code: SemanticDiagnosticCode.ArgumentCountMismatch,
-                            message:
-                            $"ValueList[{typeArgs[index: 0].Name}, {n}] constructor requires exactly {n} arguments, got {generic.Arguments.Count}.",
-                            location: generic.Location);
+                        creator = genericCreator;
                     }
                 }
-                // TODO: This is also hack
-                else if (typeId.Name == "ValueBitList" && typeArgs.Count >= 1)
+
+                if (creator != null && creator.Parameters.Count == argTypes.Count &&
+                    !creator.Parameters.Any(predicate: p => p.IsVariadicParam))
                 {
-                    string nStr = typeArgs[index: 0].Name;
-                    if (ulong.TryParse(s: nStr, result: out ulong n) &&
-                        (ulong)generic.Arguments.Count != n)
+                    generic.ResolvedRoutine = creator;
+                    ValidateExclusiveTokenUniqueness(arguments: generic.Arguments,
+                        location: generic.Location);
+                    return creator.ReturnType ?? resolvedType;
+                }
+            }
+
+            int memberCount = resolvedType switch
+            {
+                EntityTypeInfo e => e.MemberVariables.Count,
+                RecordTypeInfo r => r.MemberVariables.Count,
+                _ => 0
+            };
+            if (memberCount >= 2)
+            {
+                foreach (Expression arg in generic.Arguments)
+                {
+                    if (arg is not NamedArgumentExpression)
                     {
-                        ReportError(code: SemanticDiagnosticCode.ArgumentCountMismatch,
+                        ReportError(code: SemanticDiagnosticCode.NamedArgumentRequired,
                             message:
-                            $"ValueBitList[{n}] constructor requires exactly {n} arguments, got {generic.Arguments.Count}.",
-                            location: generic.Location);
+                            $"Type '{resolvedType.Name}' has {memberCount} fields - all constructor arguments must be named.",
+                            location: arg.Location);
                     }
                 }
             }

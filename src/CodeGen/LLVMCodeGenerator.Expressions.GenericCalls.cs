@@ -40,19 +40,18 @@ public partial class LLVMCodeGenerator
                         typeArguments: resolvedTypeArgs);
                 }
 
-                // Collection literal constructor: List[S64](1, 2, 3), Dict[S64, Text](1:"a"), etc.
-                // Prefer SA-resolved type (handles const generics like ValueList[S64, 4] correctly)
-                if (generic.IsCollectionLiteral)
+                if (generic.ResolvedRoutine != null)
                 {
-                    TypeInfo collType = generic.ResolvedType as TypeInfo ?? resolvedFullType;
-                    return EmitCollectionLiteralConstructor(sb: sb,
-                        resolvedType: collType,
-                        arguments: generic.Arguments);
+                    return EmitFunctionCall(sb: sb,
+                        functionName: generic.ResolvedRoutine.Name,
+                        arguments: generic.Arguments,
+                        resolvedRoutine: generic.ResolvedRoutine);
                 }
 
                 // Named-field construction: Type[T](field1: val1, field2: val2, ...)
                 // e.g., List[T](data: ..., count: ..., capacity: ...) during monomorphization
                 if (generic.Arguments.Count > 1 &&
+                    generic.Arguments.All(predicate: a => a is NamedArgumentExpression) &&
                     resolvedFullType is EntityTypeInfo resolvedEntity)
                 {
                     return EmitEntityConstruction(sb: sb,
@@ -63,6 +62,7 @@ public partial class LLVMCodeGenerator
                 }
 
                 if (generic.Arguments.Count > 1 &&
+                    generic.Arguments.All(predicate: a => a is NamedArgumentExpression) &&
                     resolvedFullType is RecordTypeInfo resolvedRecord)
                 {
                     return EmitRecordConstruction(sb: sb,

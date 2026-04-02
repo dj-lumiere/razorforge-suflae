@@ -9,15 +9,37 @@ using TypeSymbol = Types.TypeInfo;
 
 public sealed partial class SemanticAnalyzer
 {
+    private static long? GetConstGenericLong(TypeSymbol? type)
+    {
+        return type is ConstGenericValueTypeInfo constVal
+            ? constVal.Value
+            : null;
+    }
+
+    private static string GetTypeBaseName(TypeSymbol type)
+    {
+        int bracket = type.Name.IndexOf(value: '[');
+        return bracket >= 0
+            ? type.Name[..bracket]
+            : type.Name;
+    }
+
     private TypeSymbol AnalyzeListLiteralExpression(ListLiteralExpression list,
         TypeSymbol? expectedType = null)
     {
-        // Extract expected element type from List[X] expected type
+        // Extract expected element type from list-shaped expected types.
         TypeSymbol? expectedElementType = null;
-        if (expectedType is { IsGenericResolution: true, TypeArguments.Count: 1 } &&
-            expectedType.Name.StartsWith(value: "List["))
+        string? expectedBaseName = expectedType != null
+            ? GetTypeBaseName(type: expectedType)
+            : null;
+        if (expectedType is { IsGenericResolution: true, TypeArguments.Count: >= 1 } &&
+            expectedBaseName is "List" or "Deque" or "SortedList" or "ValueList")
         {
             expectedElementType = expectedType.TypeArguments![index: 0];
+        }
+        else if (expectedBaseName is "BitList" or "ValueBitList")
+        {
+            expectedElementType = _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
         }
 
         TypeSymbol? elementType = null;
@@ -62,7 +84,37 @@ public sealed partial class SemanticAnalyzer
             elementType = ErrorTypeInfo.Instance;
         }
 
-        // Return List<T> type
+        if (expectedBaseName == "ValueList" && expectedType?.TypeArguments is { Count: >= 2 })
+        {
+            long? expectedCount = GetConstGenericLong(type: expectedType.TypeArguments[index: 1]);
+            if (expectedCount != null && list.Elements.Count != expectedCount.Value)
+            {
+                ReportError(code: SemanticDiagnosticCode.ArgumentCountMismatch,
+                    message:
+                    $"ValueList[{expectedType.TypeArguments[index: 0].Name}, {expectedCount.Value}] literal requires exactly {expectedCount.Value} elements, got {list.Elements.Count}.",
+                    location: list.Location);
+            }
+        }
+
+        if (expectedBaseName == "ValueBitList" && expectedType?.TypeArguments is { Count: >= 1 })
+        {
+            long? expectedCount = GetConstGenericLong(type: expectedType.TypeArguments[index: 0]);
+            if (expectedCount != null && list.Elements.Count != expectedCount.Value)
+            {
+                ReportError(code: SemanticDiagnosticCode.ArgumentCountMismatch,
+                    message:
+                    $"ValueBitList[{expectedCount.Value}] literal requires exactly {expectedCount.Value} elements, got {list.Elements.Count}.",
+                    location: list.Location);
+            }
+        }
+
+        if (expectedType != null && expectedBaseName is "Deque" or "SortedList" or "BitList" or
+            "ValueList" or "ValueBitList")
+        {
+            return expectedType;
+        }
+
+        // Return List<T> type by default.
         TypeSymbol? listDef = _registry.LookupType(name: "List");
         if (listDef != null && elementType != null)
         {
@@ -76,10 +128,13 @@ public sealed partial class SemanticAnalyzer
     private TypeSymbol AnalyzeSetLiteralExpression(SetLiteralExpression set,
         TypeSymbol? expectedType = null)
     {
-        // Extract expected element type from Set[X] expected type
+        // Extract expected element type from set-shaped expected types.
         TypeSymbol? expectedElementType = null;
+        string? expectedBaseName = expectedType != null
+            ? GetTypeBaseName(type: expectedType)
+            : null;
         if (expectedType is { IsGenericResolution: true, TypeArguments.Count: 1 } &&
-            expectedType.Name.StartsWith(value: "Set["))
+            expectedBaseName is "Set" or "SortedSet")
         {
             expectedElementType = expectedType.TypeArguments![index: 0];
         }
@@ -109,13 +164,18 @@ public sealed partial class SemanticAnalyzer
             elementType = ErrorTypeInfo.Instance;
         }
 
-        // Analyze all elements
+        // Analyze all elements with the inferred/expected element type.
         foreach (Expression elem in set.Elements)
         {
-            AnalyzeExpression(expression: elem);
+            AnalyzeExpression(expression: elem, expectedType: expectedElementType ?? elementType);
         }
 
-        // Return Set<T> type
+        if (expectedType != null && expectedBaseName == "SortedSet")
+        {
+            return expectedType;
+        }
+
+        // Return Set<T> type by default.
         TypeSymbol? setDef = _registry.LookupType(name: "Set");
         if (setDef != null && elementType != null)
         {
@@ -129,11 +189,14 @@ public sealed partial class SemanticAnalyzer
     private TypeSymbol AnalyzeDictLiteralExpression(DictLiteralExpression dict,
         TypeSymbol? expectedType = null)
     {
-        // Extract expected key/value types from Dict[K, V] expected type
+        // Extract expected key/value types from dict-shaped expected types.
         TypeSymbol? expectedKeyType = null;
         TypeSymbol? expectedValueType = null;
+        string? expectedBaseName = expectedType != null
+            ? GetTypeBaseName(type: expectedType)
+            : null;
         if (expectedType is { IsGenericResolution: true, TypeArguments.Count: 2 } &&
-            expectedType.Name.StartsWith(value: "Dict["))
+            expectedBaseName is "Dict" or "SortedDict" or "PriorityQueue")
         {
             expectedKeyType = expectedType.TypeArguments![index: 0];
             expectedValueType = expectedType.TypeArguments![index: 1];
@@ -169,14 +232,21 @@ public sealed partial class SemanticAnalyzer
             valueType = ErrorTypeInfo.Instance;
         }
 
-        // Analyze all pairs
+        // Analyze all pairs with the inferred/expected key/value types.
         foreach ((Expression Key, Expression Value) pair in dict.Pairs)
         {
-            AnalyzeExpression(expression: pair.Key);
-            AnalyzeExpression(expression: pair.Value);
+            AnalyzeExpression(expression: pair.Key,
+                expectedType: expectedKeyType ?? keyType);
+            AnalyzeExpression(expression: pair.Value,
+                expectedType: expectedValueType ?? valueType);
         }
 
-        // Return Dict<K, V> type
+        if (expectedType != null && expectedBaseName is "SortedDict" or "PriorityQueue")
+        {
+            return expectedType;
+        }
+
+        // Return Dict<K, V> type by default.
         TypeSymbol? dictDef = _registry.LookupType(name: "Dict");
         if (dictDef != null && keyType != null && valueType != null)
         {

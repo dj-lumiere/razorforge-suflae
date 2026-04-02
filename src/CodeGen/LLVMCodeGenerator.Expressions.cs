@@ -130,14 +130,6 @@ public partial class LLVMCodeGenerator
             return "undef";
         }
 
-        // Collection literal constructor: List(1, 2, 3), Set(1, 2), Dict(1:2, 3:4), etc.
-        if (call.IsCollectionLiteral && call.ResolvedType != null)
-        {
-            return EmitCollectionLiteralConstructor(sb: sb,
-                resolvedType: call.ResolvedType,
-                arguments: call.Arguments);
-        }
-
         // Intercept source location routines — emit constants from call site, no actual call
         if (call.Callee is IdentifierExpression { Name: var name } &&
             IsSourceLocationRoutine(name: name))

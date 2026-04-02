@@ -234,44 +234,6 @@ public sealed partial class SemanticAnalyzer
                     }
                 }
 
-                // Collection literal constructor: List(1, 2, 3), Set(1, 2), Dict(1:2, 3:4), etc.
-                // Detected when: type name is a known collection AND args are positional/DictEntry (not named field inits)
-                if (CollectionLiteralTypes.Contains(item: id.Name) && call.Arguments.Count > 0 &&
-                    call.Arguments.All(predicate: a => a is not NamedArgumentExpression))
-                {
-                    call.IsCollectionLiteral = true;
-
-                    // Infer generic type arguments from elements and resolve collection type
-                    if (type.IsGenericDefinition)
-                    {
-                        bool isMapType = id.Name is "Dict" or "SortedDict";
-                        TypeSymbol resolvedType;
-
-                        if (isMapType &&
-                            call.Arguments[index: 0] is DictEntryLiteralExpression firstEntry)
-                        {
-                            // K, V from first DictEntry
-                            TypeSymbol keyType =
-                                firstEntry.Key.ResolvedType ?? ErrorTypeInfo.Instance;
-                            TypeSymbol valueType = firstEntry.Value.ResolvedType ??
-                                                   ErrorTypeInfo.Instance;
-                            resolvedType = _registry.GetOrCreateResolution(genericDef: type,
-                                typeArguments: [keyType, valueType]);
-                        }
-                        else
-                        {
-                            // T from first positional arg
-                            TypeSymbol elemType = argTypes[index: 0];
-                            resolvedType = _registry.GetOrCreateResolution(genericDef: type,
-                                typeArguments: [elemType]);
-                        }
-
-                        return resolvedType;
-                    }
-
-                    return type;
-                }
-
                 // #115: Data boxing restrictions — certain types cannot be boxed to Data
                 if (id.Name == "Data" && argTypes.Count > 0)
                 {

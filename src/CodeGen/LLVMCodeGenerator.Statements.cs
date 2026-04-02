@@ -218,7 +218,7 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private TypeInfo? ResolveTypeExpression(TypeExpression typeExpr)
     {
-        return _registry.LookupType(name: typeExpr.Name);
+        return ResolveTypeArgument(ta: typeExpr);
     }
 
     #endregion

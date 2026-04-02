@@ -12,122 +12,81 @@ public partial class LLVMCodeGenerator
 {
     private string EmitListLiteral(StringBuilder sb, ListLiteralExpression list)
     {
-        // Determine element type from ResolvedType or first element
         TypeInfo? listType = list.ResolvedType;
         TypeInfo? elemType = null;
-
-        if (listType is EntityTypeInfo entity && entity.TypeArguments.Count > 0)
+        if (listType != null)
         {
-            elemType = entity.TypeArguments[index: 0];
-        }
-        else if (list.Elements.Count > 0)
-        {
-            elemType = GetExpressionType(expr: list.Elements[index: 0]);
+            string baseName = GetGenericBaseName(type: listType) ?? listType.Name;
+            if (baseName == "ValueList")
+            {
+                return EmitCollectionLiteralConstructor(sb: sb,
+                    resolvedType: listType,
+                    arguments: list.Elements);
+            }
+
+            if (baseName == "ValueBitList")
+            {
+                return EmitCollectionLiteralConstructor(sb: sb,
+                    resolvedType: listType,
+                    arguments: list.Elements);
+            }
+
+            if (listType.TypeArguments?.Count > 0)
+            {
+                elemType = listType.TypeArguments[index: 0];
+            }
+            else if (baseName is "BitList" or "ValueBitList")
+            {
+                elemType = _registry.LookupType(name: "Bool");
+            }
         }
 
+        elemType ??= list.Elements.Count > 0
+            ? GetExpressionType(expr: list.Elements[index: 0])
+            : null;
+
+        string listTypeName = listType != null
+            ? listType.Name
+            : $"List[{elemType?.Name ?? "S64"}]";
+        string listPtr = EmitCollectionCreate(sb: sb, resolvedType: listType, typeName: listTypeName);
         string elemLLVMType = elemType != null
             ? GetLLVMType(type: elemType)
             : "i64";
 
-        // Look up List type and its constructor/add_last method
-        string listTypeName = listType != null
-            ? listType.Name
-            : $"List[{elemType?.Name ?? "S64"}]";
-        // mangledListType is no longer needed — list type name used directly via Q()
+        ResolvedMethod? resolvedAdd = listType != null
+            ? ResolveMethod(receiverType: listType, methodName: "add_last") ??
+              ResolveMethod(receiverType: listType, methodName: "add")
+            : null;
 
-        // Allocate the list via constructor or rf_alloc
-        // Try to find a $create or use a fallback allocation
-        RoutineInfo? createMethod = listType != null
-            ? _registry.LookupMethod(type: listType, methodName: "$create")
-            : _registry.LookupRoutine(fullName: $"{listTypeName}.$create");
-        string entityTypeName = listType is EntityTypeInfo eti
-            ? GetEntityTypeName(entity: eti)
-            : $"%\"Entity.{listTypeName}\"";
-
-        string listPtr;
-        if (createMethod != null)
+        if (resolvedAdd != null)
         {
-            string mangledCreate = MangleFunctionName(routine: createMethod);
-            listPtr = NextTemp();
-            EmitLine(sb: sb, line: $"  {listPtr} = call ptr @{mangledCreate}()");
-        }
-        else
-        {
-            // Fallback: allocate collection header: { ptr data, i64 count, i64 capacity }
-            listPtr = NextTemp();
-            EmitLine(sb: sb,
-                line:
-                $"  {listPtr} = call ptr @rf_allocate_dynamic(i64 {_collectionHeaderSizeBytes})");
+            string mangledAdd = resolvedAdd.MangledName;
+            string addReturnType = resolvedAdd.Routine.ReturnType != null
+                ? GetLLVMType(type: ResolveTypeSubstitution(type: resolvedAdd.Routine.ReturnType))
+                : "void";
+            if (!_generatedFunctions.Contains(item: mangledAdd))
+            {
+                EmitLine(sb: _functionDeclarations,
+                    line: $"declare {addReturnType} @{mangledAdd}(ptr, {elemLLVMType})");
+                _generatedFunctions.Add(item: mangledAdd);
+            }
 
-            // Initialize: data = alloc(n * elem_size), count = 0, capacity = element count
-            // Entity layout is { ptr (data), i64 (count), i64 (capacity) }
-            int elemSize = elemType != null
-                ? GetTypeSize(type: elemType)
-                : 8;
-            long capacity = Math.Max(val1: list.Elements.Count, val2: 4);
-            string dataPtr = NextTemp();
-            EmitLine(sb: sb,
-                line: $"  {dataPtr} = call ptr @rf_allocate_dynamic(i64 {capacity * elemSize})");
-            string dataPtrSlot = NextTemp();
-            EmitLine(sb: sb,
-                line:
-                $"  {dataPtrSlot} = getelementptr {entityTypeName}, ptr {listPtr}, i32 0, i32 0");
-            EmitLine(sb: sb, line: $"  store ptr {dataPtr}, ptr {dataPtrSlot}");
-
-            string countPtr = NextTemp();
-            EmitLine(sb: sb,
-                line:
-                $"  {countPtr} = getelementptr {entityTypeName}, ptr {listPtr}, i32 0, i32 1");
-            EmitLine(sb: sb, line: $"  store i64 0, ptr {countPtr}");
-
-            string capPtr = NextTemp();
-            EmitLine(sb: sb,
-                line: $"  {capPtr} = getelementptr {entityTypeName}, ptr {listPtr}, i32 0, i32 2");
-            EmitLine(sb: sb, line: $"  store i64 {capacity}, ptr {capPtr}");
-        }
-
-        // Add each element via add_last or direct store
-        RoutineInfo? addLastMethod = listType != null
-            ? _registry.LookupMethod(type: listType, methodName: "add_last")
-            : _registry.LookupRoutine(fullName: $"{listTypeName}.add_last");
-
-        if (addLastMethod != null)
-        {
-            string mangledAddLast = MangleFunctionName(routine: addLastMethod);
             foreach (Expression elem in list.Elements)
             {
                 string elemValue = EmitExpression(sb: sb, expr: elem);
-                EmitLine(sb: sb,
-                    line:
-                    $"  call void @{mangledAddLast}(ptr {listPtr}, {elemLLVMType} {elemValue})");
+                if (addReturnType == "void")
+                {
+                    EmitLine(sb: sb,
+                        line: $"  call void @{mangledAdd}(ptr {listPtr}, {elemLLVMType} {elemValue})");
+                }
+                else
+                {
+                    string ignored = NextTemp();
+                    EmitLine(sb: sb,
+                        line:
+                        $"  {ignored} = call {addReturnType} @{mangledAdd}(ptr {listPtr}, {elemLLVMType} {elemValue})");
+                }
             }
-        }
-        else
-        {
-            // Fallback: direct store into data buffer
-            // Load data ptr (field 0), then GEP + store for each element
-            string dataPtrSlot2 = NextTemp();
-            EmitLine(sb: sb,
-                line:
-                $"  {dataPtrSlot2} = getelementptr {entityTypeName}, ptr {listPtr}, i32 0, i32 0");
-            string dataBase = NextTemp();
-            EmitLine(sb: sb, line: $"  {dataBase} = load ptr, ptr {dataPtrSlot2}");
-
-            for (int i = 0; i < list.Elements.Count; i++)
-            {
-                string elemValue = EmitExpression(sb: sb, expr: list.Elements[index: i]);
-                string elemPtr = NextTemp();
-                EmitLine(sb: sb,
-                    line: $"  {elemPtr} = getelementptr {elemLLVMType}, ptr {dataBase}, i64 {i}");
-                EmitLine(sb: sb, line: $"  store {elemLLVMType} {elemValue}, ptr {elemPtr}");
-            }
-
-            // Update count (field 1)
-            string countPtr2 = NextTemp();
-            EmitLine(sb: sb,
-                line:
-                $"  {countPtr2} = getelementptr {entityTypeName}, ptr {listPtr}, i32 0, i32 1");
-            EmitLine(sb: sb, line: $"  store i64 {list.Elements.Count}, ptr {countPtr2}");
         }
 
         return listPtr;
@@ -141,6 +100,9 @@ public partial class LLVMCodeGenerator
         string setPtr = EmitCollectionCreate(sb: sb, resolvedType: setType, typeName: setTypeName);
 
         // Add each element via .add(element)
+        ResolvedMethod? resolvedAdd = setType != null
+            ? ResolveMethod(receiverType: setType, methodName: "add")
+            : null;
         foreach (Expression elem in set.Elements)
         {
             string elemValue = EmitExpression(sb: sb, expr: elem);
@@ -149,12 +111,16 @@ public partial class LLVMCodeGenerator
                 ? GetLLVMType(type: elemType)
                 : "i64";
 
-            RoutineInfo? addMethod = setType != null
-                ? _registry.LookupMethod(type: setType, methodName: "add")
-                : _registry.LookupRoutine(fullName: $"{setTypeName}.add");
-            if (addMethod != null)
+            if (resolvedAdd != null)
             {
-                string mangledAdd = MangleFunctionName(routine: addMethod);
+                string mangledAdd = resolvedAdd.MangledName;
+                if (!_generatedFunctions.Contains(item: mangledAdd))
+                {
+                    EmitLine(sb: _functionDeclarations,
+                        line: $"declare i1 @{mangledAdd}(ptr, {elemLLVMType})");
+                    _generatedFunctions.Add(item: mangledAdd);
+                }
+
                 EmitLine(sb: sb,
                     line: $"  call i1 @{mangledAdd}(ptr {setPtr}, {elemLLVMType} {elemValue})");
             }
@@ -168,10 +134,27 @@ public partial class LLVMCodeGenerator
         TypeInfo? dictType = dict.ResolvedType;
         string dictTypeName = dictType?.Name ?? "Dict";
 
+        if (dictType != null && (GetGenericBaseName(type: dictType) ?? dictType.Name) ==
+            "PriorityQueue")
+        {
+            var entryArgs = dict.Pairs.Select(selector: pair =>
+                    (Expression)new DictEntryLiteralExpression(Key: pair.Key,
+                        Value: pair.Value,
+                        Location: pair.Key.Location))
+                .ToList();
+            return EmitPriorityQueueLiteral(sb: sb,
+                resolvedType: dictType,
+                typeName: dictTypeName,
+                arguments: entryArgs);
+        }
+
         string dictPtr =
             EmitCollectionCreate(sb: sb, resolvedType: dictType, typeName: dictTypeName);
 
         // Add each pair via .add(key, value)
+        ResolvedMethod? resolvedAdd = dictType != null
+            ? ResolveMethod(receiverType: dictType, methodName: "add")
+            : null;
         foreach ((Expression key, Expression value) in dict.Pairs)
         {
             string keyValue = EmitExpression(sb: sb, expr: key);
@@ -186,12 +169,17 @@ public partial class LLVMCodeGenerator
                 ? GetLLVMType(type: valueType)
                 : "i64";
 
-            RoutineInfo? addMethod = dictType != null
-                ? _registry.LookupMethod(type: dictType, methodName: "add")
-                : _registry.LookupRoutine(fullName: $"{dictTypeName}.add");
-            if (addMethod != null)
+            if (resolvedAdd != null)
             {
-                string mangledAdd = MangleFunctionName(routine: addMethod);
+                string mangledAdd = resolvedAdd.MangledName;
+                if (!_generatedFunctions.Contains(item: mangledAdd))
+                {
+                    EmitLine(sb: _functionDeclarations,
+                        line:
+                        $"declare i1 @{mangledAdd}(ptr, {keyLLVMType}, {valueLLVMType})");
+                    _generatedFunctions.Add(item: mangledAdd);
+                }
+
                 EmitLine(sb: sb,
                     line:
                     $"  call i1 @{mangledAdd}(ptr {dictPtr}, {keyLLVMType} {keyValue}, {valueLLVMType} {valValue})");

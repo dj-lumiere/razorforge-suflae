@@ -141,4 +141,5 @@ public class CollectionLiteralTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+
 }

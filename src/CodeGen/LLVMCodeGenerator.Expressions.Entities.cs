@@ -638,6 +638,16 @@ public partial class LLVMCodeGenerator
             return sub;
         }
 
+        // Const generic literal values (e.g., 4, 8u64) used in types like ValueList[S64, 4].
+        if (TryParseConstGenericLiteral(name: ta.Name,
+                value: out long constValue,
+                explicitType: out string? explicitType))
+        {
+            return new ConstGenericValueTypeInfo(literalText: ta.Name,
+                value: constValue,
+                explicitTypeName: explicitType);
+        }
+
         // If the type argument itself has generic arguments (e.g., SortedDict[K, V]),
         // resolve those recursively and create the concrete type
         if (ta.GenericArguments is { Count: > 0 })
@@ -683,6 +693,36 @@ public partial class LLVMCodeGenerator
         }
 
         return _registry.LookupType(name: ta.Name);
+    }
+
+    private static bool TryParseConstGenericLiteral(string name, out long value,
+        out string? explicitType)
+    {
+        explicitType = null;
+
+        if (long.TryParse(s: name, result: out value))
+        {
+            return true;
+        }
+
+        (string Suffix, string TypeName)[] integerSuffixes =
+        [
+            ("u8", "U8"), ("u16", "U16"), ("u32", "U32"), ("u64", "U64"), ("u128", "U128"),
+            ("s8", "S8"), ("s16", "S16"), ("s32", "S32"), ("s64", "S64"), ("s128", "S128")
+        ];
+
+        foreach ((string suffix, string typeName) in integerSuffixes)
+        {
+            if (name.EndsWith(value: suffix, comparisonType: StringComparison.OrdinalIgnoreCase) &&
+                long.TryParse(s: name[..^suffix.Length], result: out value))
+            {
+                explicitType = typeName;
+                return true;
+            }
+        }
+
+        value = 0;
+        return false;
     }
 
     private static bool IsMaybeType(TypeInfo type)
