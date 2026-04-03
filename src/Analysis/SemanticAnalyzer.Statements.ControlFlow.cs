@@ -362,8 +362,9 @@ public sealed partial class SemanticAnalyzer
 
         TypeSymbol errorType = AnalyzeExpression(expression: throwStmt.Error);
 
-        // Error must implement Crashable protocol
-        if (!ImplementsProtocol(type: errorType, protocolName: "Crashable"))
+        // Error must explicitly obey Crashable — structural conformance is intentionally not used here,
+        // as Crashable is a safety contract that requires an explicit declaration.
+        if (!ExplicitlyImplementsProtocol(type: errorType, protocolName: "Crashable"))
         {
             ReportError(code: SemanticDiagnosticCode.ThrowNotCrashable,
                 message:
