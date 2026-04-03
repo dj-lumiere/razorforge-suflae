@@ -1191,48 +1191,44 @@ internal partial class Program
             _ => "-O0"
         };
 
-        // Debug: skip opt (O0 means no optimization).
-        // Optimized builds: run opt at the requested level.
-        if (buildMode != RfBuildMode.Debug)
+        // Debug: run mem2reg+sroa at O0 (improves readability without changing semantics).
+        // Optimized builds: run opt at the requested level (which includes mem2reg+sroa).
+        string optPasses = buildMode == RfBuildMode.Debug
+            ? $"{optLevel} -passes=mem2reg,sroa"
+            : optLevel;
+        string optArgs = $"-S {optPasses} \"{llFile}\" -o \"{optFile}\"";
+        var optPsi = new ProcessStartInfo
         {
-            string optArgs = $"-S {optLevel} \"{llFile}\" -o \"{optFile}\"";
-            var optPsi = new ProcessStartInfo
-            {
-                FileName = "opt",
-                Arguments = optArgs,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
+            FileName = "opt",
+            Arguments = optArgs,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
 
-            try
+        try
+        {
+            using var optProcess = Process.Start(startInfo: optPsi);
+            if (optProcess != null)
             {
-                using var optProcess = Process.Start(startInfo: optPsi);
-                if (optProcess != null)
-                {
-                    string optStderr = optProcess.StandardError.ReadToEnd();
-                    optProcess.WaitForExit();
+                string optStderr = optProcess.StandardError.ReadToEnd();
+                optProcess.WaitForExit();
 
-                    if (optProcess.ExitCode != 0)
-                    {
-                        // opt failed — fall back to unoptimized IR
-                        Console.Error.WriteLine(value: $"opt warning: {optStderr.Trim()}");
-                        optFile = llFile;
-                    }
-                }
-                else
+                if (optProcess.ExitCode != 0)
                 {
+                    // opt failed — fall back to unoptimized IR
+                    Console.Error.WriteLine(value: $"opt warning: {optStderr.Trim()}");
                     optFile = llFile;
                 }
             }
-            catch
+            else
             {
-                // opt not available — fall back to unoptimized IR
                 optFile = llFile;
             }
         }
-        else
+        catch
         {
+            // opt not available — fall back to unoptimized IR
             optFile = llFile;
         }
 
