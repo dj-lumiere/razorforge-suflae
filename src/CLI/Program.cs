@@ -1143,8 +1143,13 @@ internal partial class Program
     /// </summary>
     private static int BuildAndRun(string entryFile, string? projectRoot = null)
     {
-        // Build first (to a temp .ll file)
+        // Remove stale per-target outputs before rebuilding.
         string llFile = Path.ChangeExtension(path: entryFile, extension: ".ll");
+        string optFile = Path.ChangeExtension(path: llFile, extension: ".opt.ll");
+        string exeFile = Path.ChangeExtension(path: llFile, extension: ".exe");
+        CleanBuildAndRunOutputs(llFile: llFile, optFile: optFile, exeFile: exeFile);
+
+        // Build first (to a temp .ll file)
         int buildResult = BuildMultiFile(entryFile: entryFile,
             outputFile: llFile,
             projectRoot: projectRoot);
@@ -1161,7 +1166,6 @@ internal partial class Program
             path4: "lib");
 
         // Run opt with mem2reg + sroa passes on the .ll file
-        string optFile = Path.ChangeExtension(path: llFile, extension: ".opt.ll");
         string optArgs = $"-S -passes=mem2reg,sroa \"{llFile}\" -o \"{optFile}\"";
         var optPsi = new ProcessStartInfo
         {
@@ -1199,7 +1203,6 @@ internal partial class Program
         }
 
         // Compile .ll ??.exe using clang
-        string exeFile = Path.ChangeExtension(path: llFile, extension: ".exe");
         string runtimeOverrideArgs = BuildRuntimeOverrideLinkArgs(exeDir: exeDir);
         string windowsThreadingLibs = OperatingSystem.IsWindows()
             ? " -lucrt -lmsvcrt -lkernel32"
@@ -1320,6 +1323,46 @@ internal partial class Program
         {
             Console.WriteLine(value: $"Failed to execute {exeFile}: {ex.Message}");
             return 1;
+        }
+    }
+
+    /// <summary>
+    /// Deletes stale per-target outputs that can cause buildandrun to execute or link against
+    /// previous artifacts after source, stdlib, or runtime changes.
+    /// </summary>
+    private static void CleanBuildAndRunOutputs(string llFile, string optFile, string exeFile)
+    {
+        string basePath = Path.Combine(
+            path1: Path.GetDirectoryName(path: exeFile) ?? ".",
+            path2: Path.GetFileNameWithoutExtension(path: exeFile));
+
+        string[] pathsToDelete =
+        [
+            llFile,
+            optFile,
+            exeFile,
+            basePath + ".obj",
+            basePath + ".pdb",
+            basePath + ".ilk",
+            basePath + ".exp",
+            basePath + ".lib",
+            Path.Combine(path1: Path.GetDirectoryName(path: exeFile) ?? ".",
+                path2: "razorforge_runtime.dll")
+        ];
+
+        foreach (string path in pathsToDelete.Distinct(comparer: StringComparer.OrdinalIgnoreCase))
+        {
+            try
+            {
+                if (File.Exists(path: path))
+                {
+                    File.Delete(path: path);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Console.WriteLine(value: $"Warning: Could not remove stale build artifact '{path}': {ex.Message}");
+            }
         }
     }
 
