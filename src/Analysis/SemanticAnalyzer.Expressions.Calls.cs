@@ -30,8 +30,9 @@ public sealed partial class SemanticAnalyzer
         // Get the callee type/routine
         if (call.Callee is IdentifierExpression id)
         {
+            bool isFailableCall = id.Name.EndsWith(value: '!');
             // Strip '!' suffix for failable calls (e.g., "stop!" → "stop")
-            string callName = id.Name.EndsWith(value: '!')
+            string callName = isFailableCall
                 ? id.Name[..^1]
                 : id.Name;
 
@@ -45,11 +46,13 @@ public sealed partial class SemanticAnalyzer
                 return ErrorTypeInfo.Instance;
             }
 
-            RoutineInfo? routine = _registry.LookupRoutine(fullName: callName);
+            RoutineInfo? routine = _registry.LookupRoutine(fullName: callName,
+                isFailable: isFailableCall);
             // Try current module prefix (e.g., "infinite_loop" → "HelloWorld.infinite_loop")
             if (routine == null && _currentModuleName != null && !callName.Contains(value: '.'))
             {
-                routine = _registry.LookupRoutine(fullName: $"{_currentModuleName}.{callName}");
+                routine = _registry.LookupRoutine(fullName: $"{_currentModuleName}.{callName}",
+                    isFailable: isFailableCall);
             }
 
             // Overload resolution: if the found routine is non-generic and the first
@@ -468,11 +471,14 @@ public sealed partial class SemanticAnalyzer
                     location: call.Location);
             }
 
-            string callLookupName = member.PropertyName.EndsWith(value: '!')
+            bool isFailableMethodCall = member.PropertyName.EndsWith(value: '!');
+            string callLookupName = isFailableMethodCall
                 ? member.PropertyName[..^1]
                 : member.PropertyName;
             RoutineInfo? method =
-                _registry.LookupMethod(type: objectType, methodName: callLookupName);
+                _registry.LookupMethod(type: objectType,
+                    methodName: callLookupName,
+                    isFailable: isFailableMethodCall);
 
             if (method != null)
             {

@@ -371,14 +371,17 @@ public sealed partial class SemanticAnalyzer
                 location: throwStmt.Error.Location);
         }
 
-        // Error types must be records (#84)
-        if (errorType.Category != TypeCategory.Record && errorType is not ErrorTypeInfo &&
+        // Error types must be stack-safe named types that obey Crashable.
+        // RazorForge stdlib already uses entity-backed errors such as IOError and InvalidValueError.
+        if (errorType.Category != TypeCategory.Record &&
+            errorType.Category != TypeCategory.Entity &&
+            errorType is not ErrorTypeInfo &&
             errorType.Name != "Error")
         {
             ReportError(code: SemanticDiagnosticCode.ThrowRequiresRecordType,
                 message:
-                $"Only record types can be thrown, got '{errorType.Name}' ({errorType.Category}). " +
-                "Error types must be records for safe stack-based error propagation.",
+                $"Only record or entity types can be thrown, got '{errorType.Name}' ({errorType.Category}). " +
+                "Thrown errors must be named Crashable types.",
                 location: throwStmt.Error.Location);
         }
 

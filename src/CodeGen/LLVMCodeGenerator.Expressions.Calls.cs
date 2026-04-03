@@ -317,8 +317,9 @@ public partial class LLVMCodeGenerator
     private string EmitFunctionCall(StringBuilder sb, string functionName,
         List<Expression> arguments, RoutineInfo? resolvedRoutine = null)
     {
+        bool isFailableCallSyntax = functionName.EndsWith(value: '!');
         // Strip failable '!' suffix — registry stores names without it
-        if (functionName.EndsWith(value: '!'))
+        if (isFailableCallSyntax)
         {
             functionName = functionName[..^1];
         }
@@ -396,8 +397,10 @@ public partial class LLVMCodeGenerator
         // Use semantic analyzer's resolved routine if available (e.g., generic overload)
         // Otherwise look up the routine — try full name first, then short name fallback
         RoutineInfo? routine = resolvedRoutine ??
-                               _registry.LookupRoutine(fullName: functionName) ??
-                               _registry.LookupRoutineByName(name: functionName);
+                               _registry.LookupRoutine(fullName: functionName,
+                                   isFailable: isFailableCallSyntax) ??
+                               _registry.LookupRoutineByName(name: functionName,
+                                   isFailable: isFailableCallSyntax);
 
         // Generic free function monomorphization: when calling a generic instance (e.g., show[S64]),
         // record the monomorphization so the body is compiled with T=S64
@@ -653,7 +656,8 @@ public partial class LLVMCodeGenerator
         // Build the call
         string mangledName = routine != null
             ? MangleFunctionName(routine: routine)
-            : SanitizeLLVMName(name: functionName);
+            : DecorateRoutineSymbolName(baseName: SanitizeLLVMName(name: functionName),
+                isFailable: isFailableCallSyntax);
 
         // Inside monomorphized bodies, calls to routines on generic types need the resolved owner type.
         // e.g., Snatched[T].$create(from: addr) inside Snatched[T].offset → when T=SortedDict[S64,S64],
@@ -690,8 +694,10 @@ public partial class LLVMCodeGenerator
                 }
 
                 mangledName =
-                    Q(name:
-                        $"{resolvedOwnerName}.{SanitizeLLVMName(name: routine.Name)}{paramSuffix}");
+                    Q(name: DecorateRoutineSymbolName(
+                        baseName:
+                        $"{resolvedOwnerName}.{SanitizeLLVMName(name: routine.Name)}{paramSuffix}",
+                        isFailable: routine.IsFailable));
 
                 // Record monomorphization so the body gets generated
                 if (!_pendingMonomorphizations.ContainsKey(key: mangledName) &&
@@ -868,11 +874,14 @@ public partial class LLVMCodeGenerator
 
         // Look up the method — prefer resolved routine from semantic analysis (P1)
         // Strip '!' suffix from failable method calls (e.g., invalidate!() → invalidate)
-        string methodName = member.PropertyName.EndsWith(value: '!')
+        bool isFailableMethodCall = member.PropertyName.EndsWith(value: '!');
+        string methodName = isFailableMethodCall
             ? member.PropertyName[..^1]
             : member.PropertyName;
         RoutineInfo? method = resolvedRoutine ??
-                              _registry.LookupMethod(type: receiverType, methodName: methodName);
+                              _registry.LookupMethod(type: receiverType,
+                                  methodName: methodName,
+                                  isFailable: isFailableMethodCall);
 
         // Representable pattern: obj.Text() → Text.$create(from: obj)
         // When the method name matches a registered type and no direct method exists,
@@ -913,9 +922,10 @@ public partial class LLVMCodeGenerator
                     {
                         IEnumerable<string> resolvedParamNames =
                             argTypes2.Select(selector: t => t.Name);
-                        string creatorMangledName =
-                            Q(name:
-                                $"{creator.OwnerType?.FullName ?? conversionTypeName}.$create#{string.Join(separator: ",", values: resolvedParamNames)}");
+                        string creatorMangledName = Q(name: DecorateRoutineSymbolName(
+                            baseName:
+                            $"{creator.OwnerType?.FullName ?? conversionTypeName}.$create#{string.Join(separator: ",", values: resolvedParamNames)}",
+                            isFailable: creator.IsFailable));
 
                         GenerateFunctionDeclaration(routine: creator);
                         RecordMonomorphization(mangledName: creatorMangledName,
@@ -987,8 +997,9 @@ public partial class LLVMCodeGenerator
                             TypeInfo resolvedOwner =
                                 _registry.GetOrCreateResolution(genericDef: creator.OwnerType,
                                     typeArguments: resolvedOwnerArgs);
-                            string resolvedFuncName =
-                                Q(name: $"{resolvedOwner.FullName}.$create#{receiverType.Name}");
+                            string resolvedFuncName = Q(name: DecorateRoutineSymbolName(
+                                baseName: $"{resolvedOwner.FullName}.$create#{receiverType.Name}",
+                                isFailable: creator.IsFailable));
 
                             GenerateFunctionDeclaration(routine: creator);
                             RecordMonomorphization(mangledName: resolvedFuncName,
@@ -1157,9 +1168,10 @@ public partial class LLVMCodeGenerator
             }
 
             string ownerName = method.OwnerType?.FullName ?? receiverType.FullName;
-            mangledName =
-                Q(name:
-                    $"{ownerName}.{SanitizeLLVMName(name: method.Name)}#{string.Join(separator: ",", values: resolvedParamNames)}");
+            mangledName = Q(name: DecorateRoutineSymbolName(
+                baseName:
+                $"{ownerName}.{SanitizeLLVMName(name: method.Name)}#{string.Join(separator: ",", values: resolvedParamNames)}",
+                isFailable: method.IsFailable));
             RecordMonomorphization(mangledName: mangledName,
                 genericMethod: method,
                 resolvedOwnerType: receiverType,
@@ -1169,14 +1181,18 @@ public partial class LLVMCodeGenerator
         {
             // Delegate to ResolveMethod for generic resolution, generic-param owner, and standard cases
             ResolvedMethod? resolved = ResolveMethod(receiverType: receiverType,
-                methodName: method.Name);
+                methodName: method.Name,
+                isFailable: method.IsFailable);
             mangledName = resolved?.MangledName ??
-                Q(name: $"{receiverType.FullName}.{SanitizeLLVMName(name: member.PropertyName)}");
+                Q(name: DecorateRoutineSymbolName(
+                    baseName: $"{receiverType.FullName}.{SanitizeLLVMName(name: member.PropertyName)}",
+                    isFailable: method.IsFailable));
         }
         else
         {
-            mangledName =
-                Q(name: $"{receiverType.FullName}.{SanitizeLLVMName(name: member.PropertyName)}");
+            mangledName = Q(name: DecorateRoutineSymbolName(
+                baseName: $"{receiverType.FullName}.{SanitizeLLVMName(name: member.PropertyName)}",
+                isFailable: isFailableMethodCall));
         }
 
         // Ensure the method is declared (so the multi-pass stdlib loop can compile its body)

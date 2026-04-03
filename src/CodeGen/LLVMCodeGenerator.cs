@@ -892,10 +892,13 @@ public partial class LLVMCodeGenerator
     /// Handles mangling, monomorphization recording, and method-level generic inference.
     /// </summary>
     private ResolvedMethod? ResolveMethod(TypeInfo receiverType, string methodName,
+        bool? isFailable = null,
         IReadOnlyList<TypeInfo>? methodTypeArgs = null,
         IReadOnlyList<TypeInfo>? argTypes = null)
     {
-        RoutineInfo? method = _registry.LookupMethod(type: receiverType, methodName: methodName);
+        RoutineInfo? method = _registry.LookupMethod(type: receiverType,
+            methodName: methodName,
+            isFailable: isFailable);
         if (method == null) return null;
 
         string mangledName;
@@ -929,7 +932,8 @@ public partial class LLVMCodeGenerator
                 baseName = $"{baseName}#{method.Parameters[index: 0].Type.Name}";
             }
 
-            mangledName = Q(name: baseName);
+            mangledName = Q(name: DecorateRoutineSymbolName(baseName: baseName,
+                isFailable: method.IsFailable));
             RecordMonomorphization(mangledName: mangledName,
                 genericMethod: method,
                 resolvedOwnerType: receiverType,

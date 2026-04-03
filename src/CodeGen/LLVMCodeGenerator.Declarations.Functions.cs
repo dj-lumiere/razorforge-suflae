@@ -500,7 +500,8 @@ public partial class LLVMCodeGenerator
         // so that LLVM IR symbols match the actual C linker symbols.
         if (routine.CallingConvention == "C")
         {
-            return Q(name: SanitizeLLVMName(name: routine.Name));
+            return Q(name: DecorateRoutineSymbolName(baseName: SanitizeLLVMName(name: routine.Name),
+                isFailable: routine.IsFailable));
         }
 
         string name = SanitizeLLVMName(name: routine.Name);
@@ -521,7 +522,8 @@ public partial class LLVMCodeGenerator
                 fullName = $"{fullName}{variadicMarker}#{typeArgSuffix}";
             }
 
-            return Q(name: fullName);
+            return Q(name: DecorateRoutineSymbolName(baseName: fullName,
+                isFailable: routine.IsFailable));
         }
 
         // Method: Module.OwnerType.Name (OwnerType.FullName includes module)
@@ -535,7 +537,15 @@ public partial class LLVMCodeGenerator
             baseName = $"{baseName}#{firstParamType}";
         }
 
-        return Q(name: baseName);
+        return Q(name: DecorateRoutineSymbolName(baseName: baseName,
+            isFailable: routine.IsFailable));
+    }
+
+    private static string DecorateRoutineSymbolName(string baseName, bool isFailable)
+    {
+        return isFailable
+            ? $"{baseName}$f"
+            : baseName;
     }
 
     /// <summary>

@@ -121,8 +121,18 @@ public sealed partial class TypeRegistry
     /// </summary>
     /// <param name="fullName">The fully qualified name of the routine.</param>
     /// <returns>The routine info if found, null otherwise.</returns>
-    public RoutineInfo? LookupRoutine(string fullName)
+    public RoutineInfo? LookupRoutine(string fullName, bool? isFailable = null)
     {
+        if (isFailable != null)
+        {
+            return _routines.Values.Concat(_routineResolutions.Values)
+                .FirstOrDefault(routine =>
+                    routine.IsFailable == isFailable &&
+                    (routine.RegistryKey == fullName ||
+                     routine.BaseName == fullName ||
+                     routine.QualifiedName == fullName));
+        }
+
         if (_routines.TryGetValue(key: fullName, value: out RoutineInfo? routine))
         {
             return routine;
@@ -161,11 +171,13 @@ public sealed partial class TypeRegistry
     /// Looks up a routine by its short name (without module prefix).
     /// Used by codegen when the AST has "Console.show" but the registry key is "IO.show".
     /// </summary>
-    public RoutineInfo? LookupRoutineByName(string name)
+    public RoutineInfo? LookupRoutineByName(string name, bool? isFailable = null)
     {
         foreach (RoutineInfo routine in _routines.Values)
         {
-            if (routine.Name == name && routine.OwnerType == null)
+            if (routine.Name == name &&
+                routine.OwnerType == null &&
+                (isFailable == null || routine.IsFailable == isFailable))
             {
                 return routine;
             }
@@ -296,12 +308,14 @@ public sealed partial class TypeRegistry
     /// <param name="type">The type to search for the method.</param>
     /// <param name="methodName">The name of the method to look up.</param>
     /// <returns>The routine info if found, null otherwise.</returns>
-    public RoutineInfo? LookupMethod(TypeInfo type, string methodName)
+    public RoutineInfo? LookupMethod(TypeInfo type, string methodName, bool? isFailable = null)
     {
         // First check the type's own methods
         if (_routinesByOwner.TryGetValue(key: type.FullName, value: out List<RoutineInfo>? methods))
         {
-            RoutineInfo? method = methods.FirstOrDefault(predicate: m => m.Name == methodName);
+            RoutineInfo? method = methods.FirstOrDefault(predicate: m =>
+                m.Name == methodName &&
+                (isFailable == null || m.IsFailable == isFailable));
             if (method != null)
             {
                 return method;
@@ -312,7 +326,9 @@ public sealed partial class TypeRegistry
         if (type is ProtocolTypeInfo proto)
         {
             ProtocolMethodInfo? protoMethod =
-                proto.Methods.FirstOrDefault(predicate: m => m.Name == methodName);
+                proto.Methods.FirstOrDefault(predicate: m =>
+                    m.Name == methodName &&
+                    (isFailable == null || m.IsFailable == isFailable));
             if (protoMethod != null)
             {
                 return SynthesizeProtocolMethod(proto: proto,
@@ -335,7 +351,7 @@ public sealed partial class TypeRegistry
             if (genericDef != null)
             {
                 RoutineInfo? genericMethod =
-                    LookupMethod(type: genericDef, methodName: methodName);
+                    LookupMethod(type: genericDef, methodName: methodName, isFailable: isFailable);
                 if (genericMethod != null)
                 {
                     // Universal methods on bare type params (e.g., T.get_address(), T.snatch())

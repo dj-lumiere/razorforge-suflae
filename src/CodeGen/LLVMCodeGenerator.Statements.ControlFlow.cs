@@ -353,19 +353,45 @@ public partial class LLVMCodeGenerator
 
                 MemberVariableInfo memberVar = tupleElemType.MemberVariables[index: i];
                 string memberLlvmType = GetLLVMType(type: memberVar.Type);
-                EmitEntryAlloca(llvmName: $"%{bindName}.addr", llvmType: memberLlvmType);
+                string uniqueName;
+                if (_varNameCounts.TryGetValue(key: bindName, value: out int bindCount))
+                {
+                    _varNameCounts[key: bindName] = bindCount + 1;
+                    uniqueName = $"{bindName}.{bindCount + 1}";
+                }
+                else
+                {
+                    _varNameCounts[key: bindName] = 1;
+                    uniqueName = bindName;
+                }
+
+                EmitEntryAlloca(llvmName: $"%{uniqueName}.addr", llvmType: memberLlvmType);
                 _localVariables[key: bindName] = memberVar.Type;
+                _localVarLLVMNames[key: bindName] = uniqueName;
             }
         }
         else
         {
             string varName = forStmt.Variable ?? "_iter";
-            varAddr = $"%{varName}.addr";
+            string uniqueName;
+            if (_varNameCounts.TryGetValue(key: varName, value: out int count))
+            {
+                _varNameCounts[key: varName] = count + 1;
+                uniqueName = $"{varName}.{count + 1}";
+            }
+            else
+            {
+                _varNameCounts[key: varName] = 1;
+                uniqueName = varName;
+            }
+
+            varAddr = $"%{uniqueName}.addr";
             EmitEntryAlloca(llvmName: varAddr, llvmType: elemLlvmType);
 
             if (elemType != null)
             {
                 _localVariables[key: varName] = elemType;
+                _localVarLLVMNames[key: varName] = uniqueName;
             }
         }
 
@@ -485,8 +511,12 @@ public partial class LLVMCodeGenerator
                     $"  {memberPtr} = getelementptr {anonStructType}, ptr {handleVal}, i32 0, i32 {i}");
                 string memberVal = NextTemp();
                 EmitLine(sb: sb, line: $"  {memberVal} = load {memberLlvmType}, ptr {memberPtr}");
+                string bindLlvmName =
+                    _localVarLLVMNames.TryGetValue(key: bindName, value: out string? unique)
+                        ? unique
+                        : bindName;
                 EmitLine(sb: sb,
-                    line: $"  store {memberLlvmType} {memberVal}, ptr %{bindName}.addr");
+                    line: $"  store {memberLlvmType} {memberVal}, ptr %{bindLlvmName}.addr");
             }
         }
         else if (varAddr != null)
