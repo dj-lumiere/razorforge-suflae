@@ -59,12 +59,34 @@ public sealed class ProtocolTypeInfo : TypeInfo
         string resolvedName = $"{Name}[{string.Join(separator: ", ",
             values: typeArguments.Select(selector: t => t.Name))}]";
 
-        // TODO: Substitute types in method signatures
+        var substitutedMethods = Methods
+            .Select(selector: m => new ProtocolMethodInfo(name: m.Name)
+            {
+                IsInstanceMethod = m.IsInstanceMethod,
+                Modification = m.Modification,
+                ParameterTypes = m.ParameterTypes
+                    .Select(selector: t => RecordTypeInfo.SubstituteType(type: t, substitution: substitution))
+                    .ToList(),
+                ParameterNames = m.ParameterNames,
+                ReturnType = m.ReturnType != null
+                    ? RecordTypeInfo.SubstituteType(type: m.ReturnType, substitution: substitution)
+                    : null,
+                IsFailable = m.IsFailable,
+                GenerationKind = m.GenerationKind,
+                HasDefaultImplementation = m.HasDefaultImplementation,
+                Location = m.Location
+            })
+            .ToList();
+
+        var substitutedParentProtocols = ParentProtocols
+            .Select(selector: p =>
+                (ProtocolTypeInfo)RecordTypeInfo.SubstituteType(type: p, substitution: substitution))
+            .ToList();
 
         return new ProtocolTypeInfo(name: resolvedName)
         {
-            Methods = Methods,
-            ParentProtocols = ParentProtocols,
+            Methods = substitutedMethods,
+            ParentProtocols = substitutedParentProtocols,
             TypeArguments = typeArguments,
             GenericDefinition = this,
             Visibility = Visibility,

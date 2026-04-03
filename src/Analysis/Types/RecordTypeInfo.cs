@@ -139,10 +139,14 @@ public sealed class RecordTypeInfo : TypeInfo
         string resolvedName = $"{Name}[{string.Join(separator: ", ",
             values: typeArguments.Select(selector: t => t.Name))}]";
 
+        var substitutedProtocols = ImplementedProtocols
+            .Select(selector: p => (ProtocolTypeInfo)SubstituteType(type: p, substitution: substitution))
+            .ToList();
+
         return new RecordTypeInfo(name: resolvedName)
         {
             MemberVariables = substitutedMemberVariables,
-            ImplementedProtocols = ImplementedProtocols, // TODO: substitute protocol type args
+            ImplementedProtocols = substitutedProtocols,
             TypeArguments = typeArguments,
             GenericDefinition = this,
             BackendType =
@@ -385,7 +389,7 @@ public sealed class RecordTypeInfo : TypeInfo
     /// <param name="type">The type to substitute.</param>
     /// <param name="substitution">The type parameter substitution map.</param>
     /// <returns>The substituted type, or the original if no substitution applies.</returns>
-    private static TypeInfo SubstituteType(TypeInfo type,
+    internal static TypeInfo SubstituteType(TypeInfo type,
         Dictionary<string, TypeInfo> substitution)
     {
         // If it's a type parameter, substitute it

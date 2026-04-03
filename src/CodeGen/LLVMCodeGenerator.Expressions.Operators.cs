@@ -251,7 +251,7 @@ public partial class LLVMCodeGenerator
         }
 
         throw new NotImplementedException(
-            message: $"Binary operator '{binary.Operator}' not supported for type '{typeName}' " +
+            message: $"Binary operator '{binary.Operator}' not supported for type '{leftType?.Name}' " +
                      $"(left={binary.Left.GetType().Name}, right={binary.Right.GetType().Name}, loc={binary.Location})");
     }
 

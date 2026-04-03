@@ -75,8 +75,7 @@ public partial class LLVMCodeGenerator
                 return false;
 
             case DiscardStatement discard:
-                // Discard: evaluate the call expression and ignore the result
-                // TODO: Maybe NOT evaluating if it is creator?
+                // Discard: evaluate the expression and ignore the result (including creators, for side effects)
                 EmitExpression(sb: sb, expr: discard.Expression);
                 return false;
 
