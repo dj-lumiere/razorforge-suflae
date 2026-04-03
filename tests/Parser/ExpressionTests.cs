@@ -363,8 +363,9 @@ public class ExpressionTests
     /// <summary>
     /// Tests Parse_LambdaWithCapture.
     /// </summary>
+    // Parser accepts free captures as syntactically valid. Rejecting undeclared captures
+    // (variables not listed in a given clause) is the semantic analyzer's responsibility.
     [Fact]
-    // TODO: This should NOT parse.
     public void Parse_LambdaWithCapture()
     {
         string source = """

@@ -271,7 +271,7 @@ public class ErrorVariantGenerationTests
     /// Tests Analyze_ThrowNonCrashable_ReportsError.
     /// </summary>
 
-    [Fact] // TODO: Flaky — sometimes reports 0 errors
+    [Fact]
     public void Analyze_ThrowNonCrashable_ReportsError()
     {
         string source = """

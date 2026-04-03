@@ -9,7 +9,7 @@ using static TestHelpers;
 
 /// <summary>
 /// Tests for error handling semantic validation:
-/// - Throw requires record type (#84)
+/// - Throw requires named crashable type (#84)
 /// - Failable routines must contain throw or absent (#77)
 /// - @crash_only validation (#76)
 /// - Unhandled crashable call (#159)
@@ -19,13 +19,13 @@ using static TestHelpers;
 /// </summary>
 public class ErrorHandlingValidationTests
 {
-    #region Throw Requires Record Type
+    #region Throw Requires Named Crashable Type
     /// <summary>
-    /// Tests Analyze_ThrowEntity_ReportsError.
+    /// Tests Analyze_ThrowEntity_NoRecordError.
     /// </summary>
 
     [Fact]
-    public void Analyze_ThrowEntity_ReportsError()
+    public void Analyze_ThrowEntity_NoRecordError()
     {
         string source = """
                         entity BadError obeys Crashable
@@ -36,7 +36,7 @@ public class ErrorHandlingValidationTests
                         """;
 
         AnalysisResult result = Analyze(source: source);
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ThrowRequiresRecordType);
     }
     /// <summary>
