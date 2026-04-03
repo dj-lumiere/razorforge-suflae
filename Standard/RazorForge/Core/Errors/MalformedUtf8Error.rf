@@ -1,0 +1,8 @@
+module Core
+
+entity MalformedUtf8Error obeys Crashable
+  index: U64
+  reason: Text
+
+routine MalformedUtf8Error.crash_message() -> Text
+  return f"Malformed UTF-8 at byte {me.index}: {me.reason}."
