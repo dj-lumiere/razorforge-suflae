@@ -141,6 +141,12 @@ public partial class LLVMCodeGenerator
         Dictionary<string, TypeInfo>? MethodTypeArgs
     );
 
+    /// <summary>Target platform configuration (triple, data layout, page size, etc.).</summary>
+    private readonly TargetConfig _target;
+
+    /// <summary>Requested build optimization mode.</summary>
+    private readonly RfBuildMode _buildMode;
+
     /// <summary>Pointer bit width for the target platform (64 for x86_64, 32 for x86).</summary>
     private readonly int _pointerBitWidth;
 
@@ -152,6 +158,12 @@ public partial class LLVMCodeGenerator
 
     /// <summary>LLVM data layout string for the current platform.</summary>
     private readonly string _dataLayout;
+
+    /// <summary>OS virtual memory page size in bytes.</summary>
+    private readonly int _pageSize;
+
+    /// <summary>CPU cache line size in bytes.</summary>
+    private readonly int _cacheLineSize;
 
     /// <summary>Byte size of a collection header: { ptr data, i64 count, i64 capacity }.</summary>
     private readonly int _collectionHeaderSizeBytes;
@@ -181,14 +193,17 @@ public partial class LLVMCodeGenerator
     /// <param name="program">The program AST to generate code for.</param>
     /// <param name="registry">The type registry from semantic analysis.</param>
     /// <param name="stdlibPrograms">Optional stdlib programs for intrinsic routine definitions.</param>
-    /// <param name="pointerBitWidth">Pointer bit width for the target platform (currently only 64 is supported).</param>
+    /// <param name="target">Target platform configuration (defaults to current host).</param>
+    /// <param name="buildMode">Build optimization mode (defaults to Debug).</param>
     public LLVMCodeGenerator(Program program, TypeRegistry registry,
         IReadOnlyList<(Program Program, string FilePath, string Module)>? stdlibPrograms = null,
-        int pointerBitWidth = 64) : this(userPrograms:
+        TargetConfig? target = null,
+        RfBuildMode buildMode = RfBuildMode.Debug) : this(userPrograms:
         [(program, program.Location.FileName, "")],
         registry: registry,
         stdlibPrograms: stdlibPrograms,
-        pointerBitWidth: pointerBitWidth)
+        target: target,
+        buildMode: buildMode)
     {
     }
 
@@ -198,28 +213,33 @@ public partial class LLVMCodeGenerator
     /// <param name="userPrograms">The user program ASTs with file paths and module names.</param>
     /// <param name="registry">The type registry from semantic analysis.</param>
     /// <param name="stdlibPrograms">Optional stdlib programs for intrinsic routine definitions.</param>
-    /// <param name="pointerBitWidth">Pointer bit width for the target platform (currently only 64 is supported).</param>
+    /// <param name="target">Target platform configuration (defaults to current host).</param>
+    /// <param name="buildMode">Build optimization mode (defaults to Debug).</param>
     public LLVMCodeGenerator(
         IReadOnlyList<(Program Program, string FilePath, string Module)> userPrograms,
         TypeRegistry registry,
         IReadOnlyList<(Program Program, string FilePath, string Module)>? stdlibPrograms = null,
-        int pointerBitWidth = 64)
+        TargetConfig? target = null,
+        RfBuildMode buildMode = RfBuildMode.Debug)
     {
-        if (pointerBitWidth != 64)
+        _target = target ?? TargetConfig.ForCurrentHost();
+        if (_target.PointerBitWidth != 64)
         {
             throw new ArgumentException(
-                message: $"Only 64-bit targets are currently supported (got {pointerBitWidth}).",
-                paramName: nameof(pointerBitWidth));
+                message: $"Only 64-bit targets are currently supported (got {_target.PointerBitWidth}).",
+                paramName: nameof(target));
         }
 
         _userPrograms = userPrograms;
         _registry = registry;
         _stdlibPrograms = stdlibPrograms ?? [];
-        _pointerBitWidth = pointerBitWidth;
-        _pointerSizeBytes = pointerBitWidth / 8;
-        // Target configuration — currently x86_64 Windows only
-        _targetTriple = "x86_64-pc-windows-msvc";
-        _dataLayout = "e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128";
+        _buildMode = buildMode;
+        _pointerBitWidth = _target.PointerBitWidth;
+        _pointerSizeBytes = _target.PointerBitWidth / 8;
+        _targetTriple = _target.Triple;
+        _dataLayout = _target.DataLayout;
+        _pageSize = _target.PageSize;
+        _cacheLineSize = _target.CacheLineSize;
         // Runtime object layout sizes — derived from field types, not from type definitions yet
         _collectionHeaderSizeBytes = _pointerSizeBytes + 8 + 8; // ptr + i64 count + i64 capacity
         _dataEntitySizeBytes =

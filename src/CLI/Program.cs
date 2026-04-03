@@ -77,12 +77,13 @@ internal partial class Program
                 return GenerateCode(sourceFile: args[1],
                     outputFile: args.Length > 2
                         ? args[2]
-                        : null);
+                        : null,
+                    buildMode: RfBuildMode.Debug);
 
             case "build":
             {
-                (string? entryFile, string? projectRoot, string? outputFile2) =
-                    ResolveEntryFile(args: args, needsOutputArg: true);
+                (string? entryFile, string? projectRoot, string? outputFile2,
+                    RfBuildMode buildMode2) = ResolveEntryFile(args: args, needsOutputArg: true);
                 if (entryFile == null)
                 {
                     return 1;
@@ -90,24 +91,27 @@ internal partial class Program
 
                 return BuildMultiFile(entryFile: entryFile,
                     outputFile: outputFile2,
-                    projectRoot: projectRoot);
+                    projectRoot: projectRoot,
+                    buildMode: buildMode2);
             }
 
             case "buildandrun":
             {
-                (string? entryFile, string? projectRoot, _) =
-                    ResolveEntryFile(args: args, needsOutputArg: false);
+                (string? entryFile, string? projectRoot, _,
+                    RfBuildMode buildMode3) = ResolveEntryFile(args: args, needsOutputArg: false);
                 if (entryFile == null)
                 {
                     return 1;
                 }
 
-                return BuildAndRun(entryFile: entryFile, projectRoot: projectRoot);
+                return BuildAndRun(entryFile: entryFile,
+                    projectRoot: projectRoot,
+                    buildMode: buildMode3);
             }
 
             case "check":
             {
-                (string? entryFile, string? projectRoot, _) =
+                (string? entryFile, string? projectRoot, _, _) =
                     ResolveEntryFile(args: args, needsOutputArg: false);
                 if (entryFile == null)
                 {
@@ -140,13 +144,14 @@ internal partial class Program
     }
 
     /// <summary>
-    /// Resolves the entry file, project root, and optional output file for build/buildandrun/check commands.
+    /// Resolves the entry file, project root, optional output file, and build mode
+    /// for build/buildandrun/check commands.
     /// When no explicit entry file is given, searches for a razorforge.toml manifest.
     /// Supports --target to select a specific target from the manifest.
-    /// Returns (entryFile, projectRoot, outputFile) ??entryFile is null on error.
+    /// Returns (entryFile, projectRoot, outputFile, buildMode); entryFile is null on error.
     /// </summary>
-    private static (string? EntryFile, string? ProjectRoot, string? OutputFile) ResolveEntryFile(
-        string[] args, bool needsOutputArg)
+    private static (string? EntryFile, string? ProjectRoot, string? OutputFile,
+        RfBuildMode BuildMode) ResolveEntryFile(string[] args, bool needsOutputArg)
     {
         // args[0] is the command name (build/buildandrun/check)
         string? targetName = null;
@@ -182,21 +187,21 @@ internal partial class Program
             }
         }
 
-        // Explicit entry file given ??use it directly
+        // Explicit entry file given — use it directly (debug mode, no manifest)
         if (explicitEntry != null)
         {
             if (!File.Exists(path: explicitEntry))
             {
                 Console.WriteLine(value: $"Error: File '{explicitEntry}' not found.");
-                return (null, null, null);
+                return (null, null, null, RfBuildMode.Debug);
             }
 
             string projectRoot =
                 Path.GetDirectoryName(path: Path.GetFullPath(path: explicitEntry)) ?? ".";
-            return (explicitEntry, projectRoot, outputFile);
+            return (explicitEntry, projectRoot, outputFile, RfBuildMode.Debug);
         }
 
-        // No explicit entry ??search for manifest
+        // No explicit entry — search for manifest
         string? manifestPath = ManifestLoader.FindManifest(startDir: Environment.CurrentDirectory);
         if (manifestPath == null)
         {
@@ -204,7 +209,7 @@ internal partial class Program
                 value: "Error: No entry file specified and no razorforge.toml found.");
             Console.WriteLine(
                 value: "Either provide an entry file or create a razorforge.toml manifest.");
-            return (null, null, null);
+            return (null, null, null, RfBuildMode.Debug);
         }
 
         try
@@ -225,7 +230,7 @@ internal partial class Program
                     Console.WriteLine(
                         value:
                         $"Available targets: {string.Join(separator: ", ", values: manifest.Targets.Select(selector: t => t.Name))}");
-                    return (null, null, null);
+                    return (null, null, null, RfBuildMode.Debug);
                 }
             }
             else
@@ -235,16 +240,24 @@ internal partial class Program
                          manifest.Targets[index: 0];
             }
 
-            Console.WriteLine(value: $"Using manifest: {manifestPath}");
-            Console.WriteLine(value: $"Target: {target.Name} ({target.Type})");
+            RfBuildMode buildMode = target.Mode.ToLowerInvariant() switch
+            {
+                "release" => RfBuildMode.Release,
+                "release-time" => RfBuildMode.ReleaseTime,
+                "release-space" => RfBuildMode.ReleaseSpace,
+                _ => RfBuildMode.Debug
+            };
 
-            return (target.Entry, manifest.ManifestDirectory, outputFile);
+            Console.WriteLine(value: $"Using manifest: {manifestPath}");
+            Console.WriteLine(value: $"Target: {target.Name} ({target.Type}, {target.Mode})");
+
+            return (target.Entry, manifest.ManifestDirectory, outputFile, buildMode);
         }
         catch (Exception ex)
         {
             Console.WriteLine(
                 value: $"Error loading {ManifestLoader.ManifestFileName}: {ex.Message}");
-            return (null, null, null);
+            return (null, null, null, RfBuildMode.Debug);
         }
     }
 
@@ -500,7 +513,8 @@ internal partial class Program
     /// or to a default <c>.ll</c> file if no output path is specified.
     /// Returns 0 on success or 1 if any stage fails.
     /// </summary>
-    private static int GenerateCode(string sourceFile, string? outputFile)
+    private static int GenerateCode(string sourceFile, string? outputFile,
+        RfBuildMode buildMode = RfBuildMode.Debug)
     {
         if (!File.Exists(path: sourceFile))
         {
@@ -580,7 +594,8 @@ internal partial class Program
                 stdlibPrograms = result.Registry.StdlibPrograms;
             var generator = new LLVMCodeGenerator(program: ast,
                 registry: result.Registry,
-                stdlibPrograms: stdlibPrograms);
+                stdlibPrograms: stdlibPrograms,
+                buildMode: buildMode);
             string llvmIR = generator.Generate();
 
             // Output
@@ -793,7 +808,7 @@ internal partial class Program
     /// Returns 0 on success or 1 if any stage fails.
     /// </summary>
     private static int BuildMultiFile(string entryFile, string? outputFile,
-        string? projectRoot = null)
+        string? projectRoot = null, RfBuildMode buildMode = RfBuildMode.Debug)
     {
         if (!File.Exists(path: entryFile))
         {
@@ -963,7 +978,8 @@ internal partial class Program
                 stdlibPrograms = result.Registry.StdlibPrograms;
             var generator = new LLVMCodeGenerator(userPrograms: userPrograms,
                 registry: result.Registry,
-                stdlibPrograms: stdlibPrograms);
+                stdlibPrograms: stdlibPrograms,
+                buildMode: buildMode);
             string llvmIR = generator.Generate();
 
             // Output
@@ -1141,7 +1157,8 @@ internal partial class Program
     /// Builds a multi-file project and executes the resulting LLVM IR via lli.
     /// Returns 0 on success or 1 if build or execution fails.
     /// </summary>
-    private static int BuildAndRun(string entryFile, string? projectRoot = null)
+    private static int BuildAndRun(string entryFile, string? projectRoot = null,
+        RfBuildMode buildMode = RfBuildMode.Debug)
     {
         // Remove stale per-target outputs before rebuilding.
         string llFile = Path.ChangeExtension(path: entryFile, extension: ".ll");
@@ -1152,7 +1169,8 @@ internal partial class Program
         // Build first (to a temp .ll file)
         int buildResult = BuildMultiFile(entryFile: entryFile,
             outputFile: llFile,
-            projectRoot: projectRoot);
+            projectRoot: projectRoot,
+            buildMode: buildMode);
         if (buildResult != 0)
         {
             return buildResult;
@@ -1165,50 +1183,66 @@ internal partial class Program
             path3: "build",
             path4: "lib");
 
-        // Run opt with mem2reg + sroa passes on the .ll file
-        string optArgs = $"-S -passes=mem2reg,sroa \"{llFile}\" -o \"{optFile}\"";
-        var optPsi = new ProcessStartInfo
+        string optLevel = buildMode switch
         {
-            FileName = "opt",
-            Arguments = optArgs,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
+            RfBuildMode.Release => "-O2",
+            RfBuildMode.ReleaseTime => "-O3",
+            RfBuildMode.ReleaseSpace => "-Os",
+            _ => "-O0"
         };
 
-        try
+        // Debug: skip opt (O0 means no optimization).
+        // Optimized builds: run opt at the requested level.
+        if (buildMode != RfBuildMode.Debug)
         {
-            using var optProcess = Process.Start(startInfo: optPsi);
-            if (optProcess != null)
+            string optArgs = $"-S {optLevel} \"{llFile}\" -o \"{optFile}\"";
+            var optPsi = new ProcessStartInfo
             {
-                string optStderr = optProcess.StandardError.ReadToEnd();
-                optProcess.WaitForExit();
+                FileName = "opt",
+                Arguments = optArgs,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
 
-                if (optProcess.ExitCode != 0)
+            try
+            {
+                using var optProcess = Process.Start(startInfo: optPsi);
+                if (optProcess != null)
                 {
-                    // opt failed ??fall back to unoptimized .ll
-                    Console.Error.WriteLine(value: $"opt warning: {optStderr.Trim()}");
+                    string optStderr = optProcess.StandardError.ReadToEnd();
+                    optProcess.WaitForExit();
+
+                    if (optProcess.ExitCode != 0)
+                    {
+                        // opt failed — fall back to unoptimized IR
+                        Console.Error.WriteLine(value: $"opt warning: {optStderr.Trim()}");
+                        optFile = llFile;
+                    }
+                }
+                else
+                {
                     optFile = llFile;
                 }
             }
-            else
+            catch
             {
+                // opt not available — fall back to unoptimized IR
                 optFile = llFile;
             }
         }
-        catch
+        else
         {
-            // opt not available ??fall back to unoptimized .ll
             optFile = llFile;
         }
 
-        // Compile .ll ??.exe using clang
+        // Compile .ll → .exe using clang
         string runtimeOverrideArgs = BuildRuntimeOverrideLinkArgs(exeDir: exeDir);
         string windowsThreadingLibs = OperatingSystem.IsWindows()
             ? " -lucrt -lmsvcrt -lkernel32"
             : "";
         string clangArgs =
-            $"-o \"{exeFile}\" \"{optFile}\"{runtimeOverrideArgs} -L\"{runtimeLibDir}\" -lrazorforge_runtime{windowsThreadingLibs}";
+            $"{optLevel} -o \"{exeFile}\" \"{optFile}\"{runtimeOverrideArgs} -L\"{runtimeLibDir}\" -lrazorforge_runtime{windowsThreadingLibs}";
 
         var clangPsi = new ProcessStartInfo
         {

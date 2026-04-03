@@ -68,3 +68,6 @@ old
 /native/tomlc99/
 /native/yyjson/
 /.dotnet-home/.dotnet/
+/native/libco/
+/native/libuv/
+/.dotnet/.nuget/packages/

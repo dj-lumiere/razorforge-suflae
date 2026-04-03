@@ -205,10 +205,12 @@ public partial class LLVMCodeGenerator
             case "page_size":
                 EmitSynthesizedBuilderServiceU64(routine: routine,
                     funcName: funcName,
-                    value: 4096);
+                    value: _pageSize);
                 break;
             case "cache_line":
-                EmitSynthesizedBuilderServiceU64(routine: routine, funcName: funcName, value: 64);
+                EmitSynthesizedBuilderServiceU64(routine: routine,
+                    funcName: funcName,
+                    value: _cacheLineSize);
                 break;
             case "word_size":
                 EmitSynthesizedBuilderServiceU64(routine: routine,
@@ -231,14 +233,9 @@ public partial class LLVMCodeGenerator
                     value: typeof(LLVMCodeGenerator).Assembly.GetName().Version?.ToString(fieldCount: 3) ?? "0.0.0");
                 break;
             case "build_mode":
-                // TODO: There is only four modes: DEBUG, RELEASE, RELEASE-TIME, RELEASE-SPACE
-                #if DEBUG
-                EmitSynthesizedBuilderServiceU64(routine: routine,
+                EmitSynthesizedBuilderServiceI32(routine: routine,
                     funcName: funcName,
-                    value: 0); // BuildMode.DEBUG
-                #else
-                EmitSynthesizedBuilderServiceU64(routine, funcName, 1); // BuildMode.RELEASE
-                #endif
+                    value: (int)_buildMode);
                 break;
             case "build_timestamp":
                 EmitSynthesizedBuilderServiceText(routine: routine,

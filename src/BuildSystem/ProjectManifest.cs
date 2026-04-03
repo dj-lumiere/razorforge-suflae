@@ -56,6 +56,12 @@ public sealed class TargetInfo
     /// Gets the library output kind when <see cref="Type"/> is a library target.
     /// </summary>
     public string? LibType { get; set; }
+
+    /// <summary>
+    /// Gets the build mode for this target ("debug", "release", "release-time", "release-space").
+    /// Defaults to "debug" when not specified.
+    /// </summary>
+    public string Mode { get; set; } = "debug";
 }
 /// <summary>
 /// Represents the parsed contents of a project manifest file.

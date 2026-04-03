@@ -13,6 +13,15 @@ public partial class LLVMCodeGenerator
         EmitLine(sb: _functionDefinitions, line: "");
     }
 
+    private void EmitSynthesizedBuilderServiceI32(RoutineInfo routine, string funcName, int value)
+    {
+        EmitLine(sb: _functionDefinitions, line: $"define i32 @{funcName}() {{");
+        EmitLine(sb: _functionDefinitions, line: "entry:");
+        EmitLine(sb: _functionDefinitions, line: $"  ret i32 {value}");
+        EmitLine(sb: _functionDefinitions, line: "}");
+        EmitLine(sb: _functionDefinitions, line: "");
+    }
+
     /// <summary>
     /// Emits a BuilderService standalone routine that returns a Text constant.
     /// </summary>
@@ -28,44 +37,9 @@ public partial class LLVMCodeGenerator
         EmitLine(sb: _functionDefinitions, line: "");
     }
 
-    /// <summary>
-    /// Detects the target operating system name.
-    /// </summary>
-    private static string DetectTargetOS()
-    {
-        if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
-                osPlatform: System.Runtime.InteropServices.OSPlatform.Windows))
-        {
-            return "windows";
-        }
+    /// <summary>Returns the target OS name from the current <see cref="TargetConfig"/>.</summary>
+    private string DetectTargetOS() => _target.TargetOS;
 
-        if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
-                osPlatform: System.Runtime.InteropServices.OSPlatform.Linux))
-        {
-            return "linux";
-        }
-
-        if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
-                osPlatform: System.Runtime.InteropServices.OSPlatform.OSX))
-        {
-            return "macos";
-        }
-
-        return "unknown";
-    }
-
-    /// <summary>
-    /// Detects the target CPU architecture name.
-    /// </summary>
-    private static string DetectTargetArch()
-    {
-        return System.Runtime.InteropServices.RuntimeInformation.OSArchitecture switch
-        {
-            System.Runtime.InteropServices.Architecture.X64 => "x86_64",
-            System.Runtime.InteropServices.Architecture.X86 => "x86",
-            System.Runtime.InteropServices.Architecture.Arm64 => "aarch64",
-            System.Runtime.InteropServices.Architecture.Arm => "arm",
-            _ => "unknown"
-        };
-    }
+    /// <summary>Returns the target CPU architecture from the current <see cref="TargetConfig"/>.</summary>
+    private string DetectTargetArch() => _target.TargetArch;
 }

@@ -158,6 +158,11 @@ public static class ManifestLoader
             target.LibType = libType?.ToString();
         }
 
+        if (table.TryGetValue(key: "mode", value: out object? mode))
+        {
+            target.Mode = mode?.ToString() ?? "debug";
+        }
+
         if (string.IsNullOrWhiteSpace(value: target.Entry))
         {
             throw new InvalidOperationException(
