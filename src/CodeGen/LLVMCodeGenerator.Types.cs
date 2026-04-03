@@ -453,5 +453,15 @@ public partial class LLVMCodeGenerator
         return (size + alignment - 1) / alignment * alignment;
     }
 
+    /// <summary>
+    /// Returns true if <paramref name="type"/> is an unsigned integer type.
+    /// Uses protocol conformance: unsigned types obey <c>UnsignedIntegral</c>.
+    /// </summary>
+    private static bool IsUnsignedIntegerType(TypeInfo? type)
+    {
+        return type is RecordTypeInfo record &&
+               record.ImplementedProtocols.Any(p => p.Name == "UnsignedIntegral");
+    }
+
     #endregion
 }

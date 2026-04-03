@@ -340,60 +340,6 @@ public partial class LLVMCodeGenerator
             }
         }
 
-        // Compiler intrinsics for heap memory management
-        // TODO: This should be removed as they are going to be C native
-        if (functionName is "heap_alloc" or "heap_free" or "heap_realloc")
-        {
-            var argVals = new List<string>();
-            var argLlvmTypes = new List<string>();
-            foreach (Expression arg in arguments)
-            {
-                argVals.Add(item: EmitExpression(sb: sb, expr: arg));
-                TypeInfo? at = GetExpressionType(expr: arg);
-                argLlvmTypes.Add(item: at != null
-                    ? GetLLVMType(type: at)
-                    : "i64");
-            }
-
-            switch (functionName)
-            {
-                case "heap_alloc":
-                {
-                    // heap_alloc(bytes) → rf_allocate_dynamic(i64 bytes) → returns ptr
-                    string bytesVal = argVals[index: 0];
-                    string result = NextTemp();
-                    EmitLine(sb: sb,
-                        line: $"  {result} = call ptr @rf_allocate_dynamic(i64 {bytesVal})");
-                    // Convert ptr to i64 (Address) for caller
-                    string asInt = NextTemp();
-                    EmitLine(sb: sb, line: $"  {asInt} = ptrtoint ptr {result} to i64");
-                    return asInt;
-                }
-                case "heap_free":
-                {
-                    // heap_free(ptr) → rf_invalidate(ptr)
-                    string asPtr = NextTemp();
-                    EmitLine(sb: sb, line: $"  {asPtr} = inttoptr i64 {argVals[index: 0]} to ptr");
-                    EmitLine(sb: sb, line: $"  call void @rf_invalidate(ptr {asPtr})");
-                    return "undef";
-                }
-                case "heap_realloc":
-                {
-                    // heap_realloc(ptr, new_size) → rf_reallocate_dynamic(ptr, i64)
-                    string asPtr = NextTemp();
-                    EmitLine(sb: sb, line: $"  {asPtr} = inttoptr i64 {argVals[index: 0]} to ptr");
-                    string result = NextTemp();
-                    EmitLine(sb: sb,
-                        line:
-                        $"  {result} = call ptr @rf_reallocate_dynamic(ptr {asPtr}, i64 {argVals[index: 1]})");
-                    // Convert ptr back to i64 (Address)
-                    string asInt = NextTemp();
-                    EmitLine(sb: sb, line: $"  {asInt} = ptrtoint ptr {result} to i64");
-                    return asInt;
-                }
-            }
-        }
-
         // Use semantic analyzer's resolved routine if available (e.g., generic overload)
         // Otherwise look up the routine — try full name first, then short name fallback
         RoutineInfo? routine = resolvedRoutine ??

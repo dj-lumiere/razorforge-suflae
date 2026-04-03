@@ -210,8 +210,7 @@ public partial class LLVMCodeGenerator
 
         bool sourceIsFloat = sourceLlvm is "half" or "float" or "double" or "fp128";
         bool targetIsFloat = targetLlvm is "half" or "float" or "double" or "fp128";
-        bool targetUnsigned =
-            targetTypeName is "U8" or "U16" or "U32" or "U64" or "U128" or "Address";
+        bool targetUnsigned = IsUnsignedIntegerType(type: targetType);
 
         string cast = NextTemp();
         if (sourceIsFloat && targetIsFloat)
@@ -231,8 +230,7 @@ public partial class LLVMCodeGenerator
         }
         else if (targetIsFloat)
         {
-            bool sourceUnsigned =
-                argType?.Name is "U8" or "U16" or "U32" or "U64" or "U128" or "Address";
+            bool sourceUnsigned = IsUnsignedIntegerType(type: argType);
             string op = sourceUnsigned
                 ? "uitofp"
                 : "sitofp";

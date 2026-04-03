@@ -143,13 +143,12 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Checks if a type is a fixed-width integer type (S8-S128, U8-U128, Address).
+    /// Checks if a type is a fixed-width integer type (S8–S128, U8–U128, Address).
+    /// Uses protocol conformance: fixed-width integer types obey <c>FixedIntegral</c>.
     /// </summary>
-    // TODO: remove this because it is going to be protocol based
-    private static bool IsFixedWidthIntegerType(TypeSymbol type)
+    private bool IsFixedWidthIntegerType(TypeSymbol type)
     {
-        return type.Name is "S8" or "S16" or "S32" or "S64" or "S128" or "U8" or "U16" or "U32"
-            or "U64" or "U128" or "Address";
+        return ImplementsProtocol(type: type, protocolName: "FixedIntegral");
     }
 
     private static string GetIntegerTypeRange(string typeName)

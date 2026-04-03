@@ -88,8 +88,7 @@ public partial class LLVMCodeGenerator
         string llvmType = leftType != null
             ? GetLLVMType(type: leftType)
             : "i64";
-        string typeName = leftType?.Name ?? "";
-        bool isUnsigned = typeName is "U8" or "U16" or "U32" or "U64" or "U128" or "Address";
+        bool isUnsigned = IsUnsignedIntegerType(type: leftType);
         bool isFloat = llvmType is "half" or "float" or "double" or "fp128";
         bool isSoftwareType = llvmType.StartsWith(value: "%Record.") ||
                               llvmType.StartsWith(value: "%Tuple.") ||
@@ -356,8 +355,7 @@ public partial class LLVMCodeGenerator
             string llvmType = leftType != null
                 ? GetLLVMType(type: leftType)
                 : "i64";
-            string typeName = leftType?.Name ?? "";
-            bool isUnsigned = typeName is "U8" or "U16" or "U32" or "U64" or "U128" or "Address";
+            bool isUnsigned = IsUnsignedIntegerType(type: leftType);
             bool isFloat = llvmType is "half" or "float" or "double" or "fp128";
 
             string cmpInstr = chain.Operators[index: i] switch
