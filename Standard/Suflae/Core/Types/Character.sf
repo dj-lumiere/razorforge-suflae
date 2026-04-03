@@ -43,9 +43,6 @@ routine Character.is_control() -> Bool
 routine Character.is_digit() -> Bool
   return me.value.is_digit()
 
-routine Character.is_letter() -> Bool
-  return me.value.is_letter()
-
 routine Character.is_printable() -> Bool
   return me.value.is_printable()
 

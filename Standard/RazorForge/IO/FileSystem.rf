@@ -81,35 +81,35 @@ routine join_path(a: Text, b: Text) -> Text
   var ptr = rf_fs_join_path(a_cstr.ptr, a_cstr.count().S32(), b_cstr.ptr, b_cstr.count().S32())
   var len = rf_get_result_len()
   var bytes = Bytes(ptr: ptr, count: len)
-  return bytes.as_utf8_text()
+  return bytes.decode_as_utf8()
 
 routine parent_path(path: Text) -> Text
   var cstr = CStr(from: path)
   var ptr = rf_fs_parent_path(cstr.ptr, cstr.count().S32())
   var len = rf_get_result_len()
   var bytes = Bytes(ptr: ptr, count: len)
-  return bytes.as_utf8_text()
+  return bytes.decode_as_utf8()
 
 routine file_name(path: Text) -> Text
   var cstr = CStr(from: path)
   var ptr = rf_fs_file_name(cstr.ptr, cstr.count().S32())
   var len = rf_get_result_len()
   var bytes = Bytes(ptr: ptr, count: len)
-  return bytes.as_utf8_text()
+  return bytes.decode_as_utf8()
 
 routine file_stem(path: Text) -> Text
   var cstr = CStr(from: path)
   var ptr = rf_fs_file_stem(cstr.ptr, cstr.count().S32())
   var len = rf_get_result_len()
   var bytes = Bytes(ptr: ptr, count: len)
-  return bytes.as_utf8_text()
+  return bytes.decode_as_utf8()
 
 routine extension(path: Text) -> Text
   var cstr = CStr(from: path)
   var ptr = rf_fs_extension(cstr.ptr, cstr.count().S32())
   var len = rf_get_result_len()
   var bytes = Bytes(ptr: ptr, count: len)
-  return bytes.as_utf8_text()
+  return bytes.decode_as_utf8()
 
 # ============================================================================
 # Path resolution (OS calls, failable)
@@ -122,7 +122,7 @@ routine absolute_path!(path: Text) -> Text
   if ptr == Address(0)
     throw IOError(message: f"Cannot resolve absolute path: {path}")
   var bytes = Bytes(ptr: ptr, count: len)
-  return bytes.as_utf8_text()
+  return bytes.decode_as_utf8()
 
 routine canonical_path!(path: Text) -> Text
   var cstr = CStr(from: path)
@@ -131,7 +131,7 @@ routine canonical_path!(path: Text) -> Text
   if ptr == Address(0)
     throw IOError(message: f"Cannot resolve canonical path: {path}")
   var bytes = Bytes(ptr: ptr, count: len)
-  return bytes.as_utf8_text()
+  return bytes.decode_as_utf8()
 
 # ============================================================================
 # Permissions

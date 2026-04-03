@@ -30,8 +30,33 @@ routine Bytes.$eq(other: Bytes) -> Bool
   return me.value.$eq(other.value)
 
 # Conversion
+
+routine Bytes.decode_as_utf8!() -> Text
+  return Text(value: me.value.decode_as_utf8!())
+
+routine Bytes.decode_as_utf8_lossy() -> Text
+  return Text(value: me.value.decode_as_utf8_lossy())
+
 routine Bytes.to_text() -> Text
-  return Text(value: me.value.to_text())
+  return me.decode_as_utf8_lossy()
+
+entity BytesUtf8View
+  secret value: RazorForge/Bytes.BytesUtf8View
+
+entity BytesUtf8Iterator
+  secret value: RazorForge/Bytes.BytesUtf8Iterator
+
+routine Bytes.interpret_as_utf8!() -> BytesUtf8View
+  return BytesUtf8View(value: me.value.interpret_as_utf8!())
+
+routine Bytes.interpret_as_utf8_lossy() -> BytesUtf8View
+  return BytesUtf8View(value: me.value.interpret_as_utf8_lossy())
+
+routine BytesUtf8View.$iter() -> BytesUtf8Iterator
+  return BytesUtf8Iterator(value: me.value.$iter())
+
+routine BytesUtf8Iterator.$next!() -> Character
+  return Character(me.value.$next!())
 
 routine List[Byte].$create(from: Bytes) -> List[Byte]
   return from.List()

@@ -93,7 +93,7 @@ routine ask_line() -> Text
   if ptr.is_none()
     return ""
   var bytes = Bytes(ptr: ptr)
-  return bytes.as_utf8_text()
+  return bytes.decode_as_utf8()
 
 # Read text until whitespace (single word)
 routine ask_word() -> Text
@@ -102,7 +102,7 @@ routine ask_word() -> Text
   if ptr.is_none()
     return ""
   var bytes = Bytes(ptr: ptr)
-  return bytes.as_utf8_text()
+  return bytes.decode_as_utf8()
 
 # Read all text until EOF
 routine ask_all() -> Text
@@ -111,7 +111,7 @@ routine ask_all() -> Text
   if ptr.is_none()
     return ""
   var bytes = Bytes(ptr: ptr)
-  return bytes.as_utf8_text()
+  return bytes.decode_as_utf8()
 
 # Read all lines separated by newline
 routine ask_lines() -> List[Text]

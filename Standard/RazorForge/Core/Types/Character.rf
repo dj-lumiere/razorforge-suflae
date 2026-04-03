@@ -143,9 +143,6 @@ routine Character.$diagnose() -> Text
 routine Character.is_digit() -> Bool
   return me.is_numeric()
 
-routine Character.is_letter() -> Bool
-  return me.is_alphabetic()
-
 routine Character.digit_value() -> S32
   if me.is_numeric()
     return S32(U32(me) - 0x0030u32)

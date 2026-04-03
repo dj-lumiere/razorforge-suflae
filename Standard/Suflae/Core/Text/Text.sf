@@ -72,8 +72,11 @@ routine Text.lines() -> List[Text]
   return List[Text](value: me.value.lines())
 
 # Conversion
+routine Text.encode_as_utf8() -> Bytes
+  return Bytes(value: me.value.encode_as_utf8())
+
 routine Text.to_bytes() -> Bytes
-  return Bytes(value: me.value.to_bytes())
+  return me.encode_as_utf8()
 
 routine Text.List() -> List[Character]
   return me.value.List()

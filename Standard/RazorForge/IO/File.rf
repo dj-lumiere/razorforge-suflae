@@ -44,14 +44,14 @@ routine FileHandle.read_all() -> Text
   var ptr = rf_file_read_all(me.fd)
   var len = rf_get_result_len()
   var bytes = Bytes(ptr: ptr, count: len)
-  return bytes.as_utf8_text()
+  return bytes.decode_as_utf8()
 
 # Read one line
 routine FileHandle.read_line() -> Text
   var ptr = rf_file_read_line(me.fd)
   var len = rf_get_result_len()
   var bytes = Bytes(ptr: ptr, count: len)
-  return bytes.as_utf8_text()
+  return bytes.decode_as_utf8()
 
 # Read up to n bytes
 routine FileHandle.read_bytes(count: U64) -> Bytes
