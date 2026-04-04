@@ -636,10 +636,6 @@ internal partial class Program
     private static int BuildNativeRuntime()
     {
         string? exeDir = Path.GetDirectoryName(path: typeof(Program).Assembly.Location);
-        if (CanUseNativeRuntimeOverrides(exeDir: exeDir))
-        {
-            return 0;
-        }
 
         // Find native/build by walking up from the executable directory
         string? current = exeDir;
@@ -729,28 +725,6 @@ internal partial class Program
         {
             return 0; // cmake not found ??skip silently
         }
-    }
-
-    private static bool CanUseNativeRuntimeOverrides(string? exeDir)
-    {
-        if (string.IsNullOrEmpty(value: exeDir))
-        {
-            return false;
-        }
-
-        string runtimeDll = Path.Combine(exeDir, "razorforge_runtime.dll");
-        string runtimeLib = Path.Combine(exeDir, "native", "build", "lib", "razorforge_runtime.lib");
-        string taskRuntimeObj = Path.Combine(exeDir,
-            "native",
-            "build",
-            "CMakeFiles",
-            "razorforge_runtime.dir",
-            "runtime",
-            "task_runtime.c.obj");
-
-        return File.Exists(path: runtimeDll) &&
-               File.Exists(path: runtimeLib) &&
-               File.Exists(path: taskRuntimeObj);
     }
 
     private static void CopyDirectoryFiles(string srcDir, string dstDir)
@@ -1233,12 +1207,11 @@ internal partial class Program
         }
 
         // Compile .ll → .exe using clang
-        string runtimeOverrideArgs = BuildRuntimeOverrideLinkArgs(exeDir: exeDir);
         string windowsThreadingLibs = OperatingSystem.IsWindows()
             ? " -lucrt -lmsvcrt -lkernel32"
             : "";
         string clangArgs =
-            $"{optLevel} -o \"{exeFile}\" \"{optFile}\"{runtimeOverrideArgs} -L\"{runtimeLibDir}\" -lrazorforge_runtime{windowsThreadingLibs}";
+            $"{optLevel} -o \"{exeFile}\" \"{optFile}\" -L\"{runtimeLibDir}\" -lrazorforge_runtime{windowsThreadingLibs}";
 
         var clangPsi = new ProcessStartInfo
         {
@@ -1396,31 +1369,4 @@ internal partial class Program
         }
     }
 
-    private static string BuildRuntimeOverrideLinkArgs(string? exeDir)
-    {
-        if (string.IsNullOrEmpty(value: exeDir))
-        {
-            return "";
-        }
-
-        var args = new StringBuilder();
-
-        // Threaded routines currently rely on the freshest task runtime object. Linking this
-        // object directly keeps playground/user executables on the new task implementation
-        // even when the full native runtime DLL relink has not completed yet.
-        string taskRuntimeObj = Path.Combine(exeDir,
-            "native",
-            "build",
-            "CMakeFiles",
-            "razorforge_runtime.dir",
-            "runtime",
-            "task_runtime.c.obj");
-
-        if (File.Exists(path: taskRuntimeObj))
-        {
-            args.Append(value: $" \"{taskRuntimeObj}\"");
-        }
-
-        return args.ToString();
-    }
 }
