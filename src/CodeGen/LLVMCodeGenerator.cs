@@ -250,6 +250,10 @@ public partial class LLVMCodeGenerator
 
     #region Helpers
 
+    /// <summary>Whether to emit rf_trace_push/rf_trace_pop calls for stack trace diagnostics.</summary>
+    private bool ShouldEmitTrace =>
+        _buildMode is RfBuildMode.Debug or RfBuildMode.Release;
+
     /// <summary>
     /// Looks up a type by name, trying the current routine's module-qualified name first,
     /// then falling back to the bare name. Mirrors SemanticAnalyzer.LookupTypeInCurrentModule.
@@ -591,6 +595,26 @@ public partial class LLVMCodeGenerator
                                 {
                                     routineInfo = overload;
                                 }
+                            }
+                        }
+
+                        // Ensure the resolved routine's failable flag matches the AST routine.
+                        // When failable/non-failable overloads share the same name and parameter types
+                        // (e.g., interpret_as_utf8() and interpret_as_utf8!()), they collide in
+                        // the _routines dictionary under the same RegistryKey. The last registration
+                        // wins, making the first invisible to LookupRoutine. Use LookupMethod
+                        // (which indexes by owner type and preserves all overloads) to find the
+                        // correct variant.
+                        if (routineInfo != null && routineInfo.IsFailable != routine.IsFailable &&
+                            routineInfo.OwnerType != null)
+                        {
+                            RoutineInfo? corrected = _registry.LookupMethod(
+                                type: routineInfo.OwnerType,
+                                methodName: routineInfo.Name,
+                                isFailable: routine.IsFailable);
+                            if (corrected != null)
+                            {
+                                routineInfo = corrected;
                             }
                         }
 

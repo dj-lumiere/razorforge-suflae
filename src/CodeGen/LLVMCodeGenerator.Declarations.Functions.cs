@@ -371,6 +371,7 @@ public partial class LLVMCodeGenerator
         }
 
         // Emit stack trace push
+        if (ShouldEmitTrace)
         {
             string paramTypes = string.Join(separator: ", ",
                 values: routine.Parameters.Select(selector: p => p.Type.Name));
@@ -406,7 +407,8 @@ public partial class LLVMCodeGenerator
         EmitUsingCleanup(sb: sb);
         EmitRCRecordCleanup(sb: sb);
         EmitEntityCleanup(sb: sb, returnedVarName: null);
-        EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
+        if (ShouldEmitTrace)
+            EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
         if (routine.ReturnType == null)
         {
             if (_currentRoutineIsFailable)

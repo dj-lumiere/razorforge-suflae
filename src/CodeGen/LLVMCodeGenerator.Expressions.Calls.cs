@@ -1272,7 +1272,8 @@ public partial class LLVMCodeGenerator
             _currentRoutineIsFailable)
         {
             // Inside emitting or failable routine: propagate absence to caller
-            EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
+            if (ShouldEmitTrace)
+                EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
             EmitLine(sb: sb, line: "  ret { i64, ptr } { i64 0, ptr null }");
         }
         else

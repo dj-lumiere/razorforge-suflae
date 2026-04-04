@@ -542,7 +542,8 @@ public partial class LLVMCodeGenerator
                 EmitUsingCleanup(sb: sb);
                 EmitRCRecordCleanup(sb: sb);
                 EmitEntityCleanup(sb: sb, returnedVarName: null);
-                EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
+                if (ShouldEmitTrace)
+                    EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
                 EmitLine(sb: sb, line: $"  ret {{ i64, ptr }} {v1}");
             }
             else if (_currentRoutineIsFailable)
@@ -551,7 +552,8 @@ public partial class LLVMCodeGenerator
                 EmitUsingCleanup(sb: sb);
                 EmitRCRecordCleanup(sb: sb);
                 EmitEntityCleanup(sb: sb, returnedVarName: null);
-                EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
+                if (ShouldEmitTrace)
+                    EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
                 EmitLine(sb: sb, line: "  ret { i64, ptr } { i64 1, ptr null }");
             }
             else
@@ -559,7 +561,8 @@ public partial class LLVMCodeGenerator
                 EmitUsingCleanup(sb: sb);
                 EmitRCRecordCleanup(sb: sb);
                 EmitEntityCleanup(sb: sb, returnedVarName: null);
-                EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
+                if (ShouldEmitTrace)
+                    EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
                 EmitLine(sb: sb, line: "  ret void");
             }
         }
@@ -586,7 +589,8 @@ public partial class LLVMCodeGenerator
             EmitRCRecordCleanup(sb: sb);
             EmitEntityCleanup(sb: sb, returnedVarName: returnedVarName);
 
-            EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
+            if (ShouldEmitTrace)
+                EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
 
             // Failable routines wrap the return value in { i64, ptr } with tag=1 (VALID)
             if (_currentRoutineIsFailable)
