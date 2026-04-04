@@ -591,6 +591,20 @@ public sealed partial class TypeRegistry
             ? RoutineInfo.SubstituteType(type: method.ReturnType, substitution: substitution)
             : null;
 
+        // Only keep method-level generic parameters (owner params are now resolved)
+        IReadOnlyList<string>? methodOnlyGenericParams = method.GenericParameters?
+            .Where(gp => !substitution.ContainsKey(gp))
+            .ToList();
+        if (methodOnlyGenericParams?.Count == 0)
+            methodOnlyGenericParams = null;
+
+        // Only keep constraints on method-level generic parameters
+        IReadOnlyList<GenericConstraintDeclaration>? methodOnlyConstraints = method.GenericConstraints?
+            .Where(c => methodOnlyGenericParams?.Contains(c.ParameterName) == true)
+            .ToList();
+        if (methodOnlyConstraints?.Count == 0)
+            methodOnlyConstraints = null;
+
         return new RoutineInfo(name: method.Name)
         {
             Kind = method.Kind,
@@ -600,8 +614,8 @@ public sealed partial class TypeRegistry
             IsFailable = method.IsFailable,
             DeclaredModification = method.DeclaredModification,
             ModificationCategory = method.ModificationCategory,
-            GenericParameters = method.GenericParameters,
-            GenericConstraints = method.GenericConstraints,
+            GenericParameters = methodOnlyGenericParams,
+            GenericConstraints = methodOnlyConstraints,
             Visibility = method.Visibility,
             Location = method.Location,
             Module = method.Module,

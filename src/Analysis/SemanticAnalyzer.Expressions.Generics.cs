@@ -122,25 +122,18 @@ public sealed partial class SemanticAnalyzer
             TypeSymbol returnType = method.ReturnType;
 
             // Substitute method's own generic params (U from obtain_as[U])
-            // GenericParameters includes both owner-level (T) and method-level (U) params,
-            // but typeArgs only contains method-level args from the call site.
-            // Compute the offset to skip owner-level params when indexing into typeArgs.
+            // GenericParameters now contains only method-level params (owner-level params
+            // are stripped by SubstituteMethodForOwner), so indices map directly to typeArgs.
             if (method.GenericParameters != null)
             {
-                int ownerParamCount = objectType is
-                    { IsGenericResolution: true, TypeArguments: not null }
-                    ? objectType.TypeArguments.Count
-                    : 0;
-
                 // Direct param (return type is just U)
                 if (returnType is GenericParameterTypeInfo)
                 {
                     int paramIndex = method.GenericParameters
                                            .ToList()
                                            .IndexOf(item: returnType.Name);
-                    int adjustedIndex = paramIndex - ownerParamCount;
-                    if (adjustedIndex >= 0 && adjustedIndex < typeArgs.Count &&
-                        typeArgs[index: adjustedIndex] is TypeInfo resolved)
+                    if (paramIndex >= 0 && paramIndex < typeArgs.Count &&
+                        typeArgs[index: paramIndex] is TypeInfo resolved)
                     {
                         return resolved;
                     }
@@ -156,9 +149,8 @@ public sealed partial class SemanticAnalyzer
                         int idx = method.GenericParameters
                                         .ToList()
                                         .IndexOf(item: typeArg.Name);
-                        int adjustedIdx = idx - ownerParamCount;
-                        if (adjustedIdx >= 0 && adjustedIdx < typeArgs.Count &&
-                            typeArgs[index: adjustedIdx] is TypeInfo sub)
+                        if (idx >= 0 && idx < typeArgs.Count &&
+                            typeArgs[index: idx] is TypeInfo sub)
                         {
                             substitutedArgs.Add(item: sub);
                             anySubstituted = true;

@@ -64,11 +64,11 @@ public partial class LLVMCodeGenerator
             if (getItem != null)
             {
                 // Emit as method call: obj.$getitem(index) or obj.$getitem!(index)
-                // Use the actual method name (may be failable with ! suffix).
-                // For generic definitions on generic resolution types (e.g., List[S64].$getitem!),
-                // EmitMethodCall handles monomorphization automatically.
+                // The parser strips '!' from failable routine names (IsFailable = true, Name = "$getitem").
+                // EmitMethodCall detects failability from the trailing '!' in PropertyName, so restore it.
+                string getItemPropertyName = getItem.IsFailable ? getItem.Name + "!" : getItem.Name;
                 var member = new MemberExpression(Object: index.Object,
-                    PropertyName: getItem.Name,
+                    PropertyName: getItemPropertyName,
                     Location: index.Location);
                 return EmitMethodCall(sb: sb,
                     member: member,
