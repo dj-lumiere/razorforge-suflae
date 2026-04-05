@@ -461,22 +461,18 @@ public partial class LLVMCodeGenerator
                 line: "declare void @llvm.trap() noreturn nounwind");
         }
 
-        // Alloca and store the maybe/error-handling value using its proper LLVM type
-        string maybeType = operandType != null
-            ? GetLLVMType(type: operandType)
-            : "{ i1, ptr }";
+        // Alloca and store the carrier value
+        string maybeType = GetLLVMType(type: operandType!);
         string allocaPtr = NextTemp();
         EmitEntryAlloca(llvmName: allocaPtr, llvmType: maybeType);
         EmitLine(sb: sb, line: $"  store {maybeType} {operand}, ptr {allocaPtr}");
 
-        // Determine tag type and valid discriminant
-        ErrorHandlingKind carrierKind = operandType is ErrorHandlingTypeInfo ehOp
-            ? ehOp.Kind
-            : ErrorHandlingKind.Maybe;
+        // Determine tag type and valid discriminant from the carrier kind
+        ErrorHandlingKind carrierKind = GetCarrierKind(type: operandType!);
         string tagType = GetCarrierTagType(kind: carrierKind);
         string validTag = operandType is ErrorHandlingTypeInfo ehValid
             ? GetCarrierValidTag(errorType: ehValid)
-            : "1";
+            : "1"; // Maybe[T] from RecordTypeInfo: valid = Bool true = 1
 
         // Extract tag (field 0)
         string tagPtr = NextTemp();

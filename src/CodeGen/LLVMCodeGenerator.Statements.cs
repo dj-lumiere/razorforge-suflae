@@ -3,6 +3,7 @@ using SemanticAnalysis.Symbols;
 namespace Compiler.CodeGen;
 
 using System.Text;
+using SemanticAnalysis.Enums;
 using SemanticAnalysis.Types;
 using SyntaxTree;
 
@@ -476,9 +477,9 @@ public partial class LLVMCodeGenerator
 
         string elemType = targetType switch
         {
-            RecordTypeInfo r when r.TypeArguments?.Count > 0 => GetLLVMType(
+            RecordTypeInfo { TypeArguments.Count: > 0 } r => GetLLVMType(
                 type: r.TypeArguments[index: 0]),
-            EntityTypeInfo e when e.TypeArguments?.Count > 0 => GetLLVMType(
+            EntityTypeInfo { TypeArguments.Count: > 0 } e => GetLLVMType(
                 type: e.TypeArguments[index: 0]),
             _ => throw new InvalidOperationException(
                 message:
@@ -525,16 +526,13 @@ public partial class LLVMCodeGenerator
                 string loaded = NextTemp();
                 EmitLine(sb: sb, line: $"  {loaded} = load {_emitSlotType}, ptr {_emitSlotAddr}");
 
-                TypeInfo? emitElemType = _currentEmittingRoutine?.ReturnType;
-                string emitCarrierType = emitElemType != null
-                    ? GetMaybeCarrierLLVMType(valueType: emitElemType)
-                    : "{ i1, ptr }";
+                string emitCarrierType = GetMaybeCarrierLLVMType(valueType: _currentEmittingRoutine!.ReturnType!);
 
                 // Build { i1 1, <value> } — VALID
                 string v0 = NextTemp();
                 EmitLine(sb: sb, line: $"  {v0} = insertvalue {emitCarrierType} undef, i1 1, 0");
                 string v1 = NextTemp();
-                if (emitElemType is EntityTypeInfo)
+                if (_currentEmittingRoutine!.ReturnType is EntityTypeInfo)
                     EmitLine(sb: sb,
                         line: $"  {v1} = insertvalue {emitCarrierType} {v0}, ptr {loaded}, 1");
                 else
@@ -630,32 +628,14 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private bool IsEntityConstructorCall(Expression? expr)
     {
-        if (expr is CreatorExpression)
+        return expr switch
         {
-            return true;
-        }
-
-        if (expr is ListLiteralExpression)
-        {
-            return true;
-        }
-
-        if (expr is SetLiteralExpression)
-        {
-            return true;
-        }
-
-        if (expr is DictLiteralExpression)
-        {
-            return true;
-        }
-
-        if (expr is CallExpression { Callee: IdentifierExpression id })
-        {
-            return _registry.LookupType(name: id.Name) is EntityTypeInfo;
-        }
-
-        return false;
+            CreatorExpression or ListLiteralExpression or SetLiteralExpression
+                or DictLiteralExpression => true,
+            CallExpression { Callee: IdentifierExpression id } =>
+                _registry.LookupType(name: id.Name) is EntityTypeInfo,
+            _ => false
+        };
     }
 
     /// <summary>
@@ -879,10 +859,7 @@ public partial class LLVMCodeGenerator
         }
 
         // Return zeroinitializer — tag=0 means ABSENT for any carrier layout
-        TypeInfo? absentElemType = _currentEmittingRoutine?.ReturnType;
-        string absentCarrierType = absentElemType != null
-            ? GetMaybeCarrierLLVMType(valueType: absentElemType)
-            : "{ i1, ptr }";
+        string absentCarrierType = GetMaybeCarrierLLVMType(valueType: _currentEmittingRoutine!.ReturnType!);
         // Clean up active scopes before returning absent
         EmitUsingCleanup(sb: sb);
         EmitRCRecordCleanup(sb: sb);

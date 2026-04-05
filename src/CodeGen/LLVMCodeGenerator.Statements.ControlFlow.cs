@@ -3,6 +3,7 @@ using SemanticAnalysis.Symbols;
 namespace Compiler.CodeGen;
 
 using System.Text;
+using SemanticAnalysis.Enums;
 using SemanticAnalysis.Types;
 using SyntaxTree;
 
@@ -130,9 +131,9 @@ public partial class LLVMCodeGenerator
             return;
         }
 
-        // General iterator protocol: seq.$iter() → emitter, emitter.$next() → Maybe[T]
-        // Maybe layout: { i64 (DataState), ptr (Snatched handle) }
-        // DataState: VALID=1 → has value, ABSENT=0 → done
+        // General iterator protocol: seq.$iter() → emitter, emitter.try_next() → Maybe[T]
+        // try_next() is the emitting variant; $next!() crashes when exhausted.
+        // Maybe layout: { i1 (present), T } for record T, { i1 (present), ptr } for entity T
 
         string condLabel = NextLabel(prefix: "for_cond");
         string bodyLabel = NextLabel(prefix: "for_body");
@@ -305,7 +306,7 @@ public partial class LLVMCodeGenerator
         if (emitterType != null)
         {
             RoutineInfo? nextLookup =
-                _registry.LookupMethod(type: emitterType, methodName: "$next");
+                _registry.LookupMethod(type: emitterType, methodName: "try_next");
             // Skip protocol-typed return values — they need further resolution
             if (nextLookup?.ReturnType is ErrorHandlingTypeInfo { ValueType: not null } errType &&
                 errType.ValueType is not ProtocolTypeInfo)
@@ -397,23 +398,22 @@ public partial class LLVMCodeGenerator
 
         EmitLine(sb: sb, line: $"  br label %{condLabel}");
 
-        // Condition block: call $next() → Maybe[T] = { i64, ptr }
+        // Condition block: call try_next() → Maybe[T]
+        // try_next is the emitting routine (returns Maybe[T]); $next! is generated from it (crashes when None).
         EmitLine(sb: sb, line: $"{condLabel}:");
         string emitterLoad = NextTemp();
         EmitLine(sb: sb, line: $"  {emitterLoad} = load {emitterLlvmType}, ptr {emitterAddr}");
 
-        // Call $next() on the emitter (emitting routine, always returns { i64, ptr })
+        // Call try_next() on the emitter — returns Maybe[T] carrier
         // LookupMethod handles generic type fallback (e.g., RangeEmitter[S64] → RangeEmitter[T])
         RoutineInfo? nextMethod = emitterType != null
-            ? _registry.LookupMethod(type: emitterType, methodName: "$next")
+            ? _registry.LookupMethod(type: emitterType, methodName: "try_next")
             : null;
 
         string maybeResult;
 
         // Emitting routines return a Maybe carrier — layout depends on element type
-        string maybeRetType = elemType != null
-            ? GetMaybeCarrierLLVMType(valueType: elemType)
-            : "{ i1, ptr }";
+        string maybeRetType = GetMaybeCarrierLLVMType(valueType: elemType!);
 
         if (nextMethod != null)
         {
@@ -425,7 +425,7 @@ public partial class LLVMCodeGenerator
                  nextMethod.OwnerType is ProtocolTypeInfo or GenericParameterTypeInfo) &&
                 emitterType != null && emitterType.IsGenericResolution)
             {
-                nextMangled = Q(name: $"{emitterType.FullName}.$next");
+                nextMangled = Q(name: $"{emitterType.FullName}.try_next");
                 RecordMonomorphization(mangledName: nextMangled,
                     genericMethod: nextMethod,
                     resolvedOwnerType: emitterType);
@@ -455,15 +455,16 @@ public partial class LLVMCodeGenerator
         {
             // Fallback: construct the call name from the type
             string fallbackName = emitterType != null
-                ? Q(name: $"{emitterType.FullName}.$next")
-                : "$next";
+                ? Q(name: $"{emitterType.FullName}.try_next")
+                : "try_next";
             maybeResult = NextTemp();
             EmitLine(sb: sb,
                 line:
                 $"  {maybeResult} = call {maybeRetType} @{fallbackName}({emitterLlvmType} {emitterLoad})");
         }
 
-        // Extract tag from Maybe result (field 0 = i1 for Maybe)
+        // Extract tag from Maybe result (field 0 = Bool present)
+        string maybeTagType = GetCarrierTagType(kind: ErrorHandlingKind.Maybe);
         string maybeTagPtr = NextTemp();
         EmitEntryAlloca(llvmName: maybeTagPtr, llvmType: maybeRetType);
         EmitLine(sb: sb, line: $"  store {maybeRetType} {maybeResult}, ptr {maybeTagPtr}");
@@ -472,11 +473,11 @@ public partial class LLVMCodeGenerator
         EmitLine(sb: sb,
             line:
             $"  {tagFieldPtr} = getelementptr {maybeRetType}, ptr {maybeTagPtr}, i32 0, i32 0");
-        EmitLine(sb: sb, line: $"  {tagVal} = load i1, ptr {tagFieldPtr}");
+        EmitLine(sb: sb, line: $"  {tagVal} = load {maybeTagType}, ptr {tagFieldPtr}");
 
-        // tag == 1 (VALID) → has value → body, else → end
+        // tag == 1 (Bool true / VALID) → has value → body, else → end
         string hasValue = NextTemp();
-        EmitLine(sb: sb, line: $"  {hasValue} = icmp eq i1 {tagVal}, 1");
+        EmitLine(sb: sb, line: $"  {hasValue} = icmp eq {maybeTagType} {tagVal}, 1");
         EmitLine(sb: sb, line: $"  br i1 {hasValue}, label %{bodyLabel}, label %{endLabel}");
 
         // Body block: extract payload (field 1)
@@ -682,9 +683,9 @@ public partial class LLVMCodeGenerator
         // Evaluate range bounds
         string start = EmitExpression(sb: sb, expr: range.Start);
         string end = EmitExpression(sb: sb, expr: range.End);
-        string userStep = range.Step != null
+        string userStep = (range.Step != null
             ? EmitExpression(sb: sb, expr: range.Step)
-            : null;
+            : null) ?? "";
 
         // Allocate loop variable (uniquify name to avoid conflicts with repeated loops)
         string varName = forStmt.Variable ?? "_iter";
@@ -721,7 +722,7 @@ public partial class LLVMCodeGenerator
         string step;
         if (isFloat || range.IsDescending)
         {
-            step = userStep ?? "1";
+            step = userStep;
         }
         else
         {

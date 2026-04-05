@@ -85,9 +85,7 @@ public partial class LLVMCodeGenerator
         // The carrier layout depends on the element type (record → inline, entity → ptr).
         if (routine.AsyncStatus == AsyncStatus.Emitting)
         {
-            returnType = routine.ReturnType != null
-                ? GetMaybeCarrierLLVMType(valueType: routine.ReturnType)
-                : "{ i1, ptr }";
+            returnType = GetMaybeCarrierLLVMType(valueType: routine.ReturnType!);
         }
 
         if (isCExtern && returnType == "half")
@@ -271,9 +269,7 @@ public partial class LLVMCodeGenerator
         // Failable routines return T directly — they crash on failure, never wrap.
         if (routineInfo.AsyncStatus == AsyncStatus.Emitting)
         {
-            returnType = routineInfo.ReturnType != null
-                ? GetMaybeCarrierLLVMType(valueType: routineInfo.ReturnType)
-                : "{ i1, ptr }";
+            returnType = GetMaybeCarrierLLVMType(valueType: routineInfo.ReturnType!);
         }
 
         // Start function — save position so we can rollback on error

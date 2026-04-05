@@ -294,49 +294,39 @@ public partial class LLVMCodeGenerator
         string operand = EmitExpression(sb: sb, expr: isPattern.Expression);
 
         // Handle NonePattern or TypePattern with type name "None" — check Maybe tag == 0
-        bool isNoneCheck = isPattern.Pattern is NonePattern ||
-                           isPattern.Pattern is TypePattern tp && tp.Type.Name == "None";
+        bool isNoneCheck = isPattern.Pattern is NonePattern or TypePattern { Type.Name: "None" };
 
-        if (isNoneCheck)
+        if (!isNoneCheck)
         {
-            // For Maybe types, check tag == 0 (ABSENT/None)
-            // Use the proper LLVM type for the operand (named or anonymous)
-            TypeInfo? operandType = GetExpressionType(expr: isPattern.Expression);
-            string maybeType = operandType != null
-                ? GetLLVMType(type: operandType)
-                : "{ i1, ptr }";
-            ErrorHandlingKind carrierKind = operandType is ErrorHandlingTypeInfo ehOp
-                ? ehOp.Kind
-                : ErrorHandlingKind.Maybe;
-            string tagType = GetCarrierTagType(kind: carrierKind);
-
-            string allocaPtr = NextTemp();
-            EmitEntryAlloca(llvmName: allocaPtr, llvmType: maybeType);
-            EmitLine(sb: sb, line: $"  store {maybeType} {operand}, ptr {allocaPtr}");
-
-            string tagPtr = NextTemp();
-            string tag = NextTemp();
-            EmitLine(sb: sb,
-                line: $"  {tagPtr} = getelementptr {maybeType}, ptr {allocaPtr}, i32 0, i32 0");
-            EmitLine(sb: sb, line: $"  {tag} = load {tagType}, ptr {tagPtr}");
-
-            string result = NextTemp();
-            if (isPattern.IsNegated)
-            {
-                EmitLine(sb: sb,
-                    line: $"  {result} = icmp ne {tagType} {tag}, 0"); // isnot None → tag != 0
-            }
-            else
-            {
-                EmitLine(sb: sb, line: $"  {result} = icmp eq {tagType} {tag}, 0"); // is None → tag == 0
-            }
-
-            return result;
+            throw new NotImplementedException(
+                message:
+                $"IsPatternExpression pattern type not implemented: {isPattern.Pattern.GetType().Name}");
         }
 
-        throw new NotImplementedException(
-            message:
-            $"IsPatternExpression pattern type not implemented: {isPattern.Pattern.GetType().Name}");
+        // For Maybe types, check tag == 0 (ABSENT/None)
+        // Use the proper LLVM type for the operand (named or anonymous)
+        TypeInfo? operandType = GetExpressionType(expr: isPattern.Expression);
+        string maybeType = GetLLVMType(type: operandType!);
+        string tagType = GetCarrierTagType(kind: GetCarrierKind(type: operandType!));
+
+        string allocaPtr = NextTemp();
+        EmitEntryAlloca(llvmName: allocaPtr, llvmType: maybeType);
+        EmitLine(sb: sb, line: $"  store {maybeType} {operand}, ptr {allocaPtr}");
+
+        string tagPtr = NextTemp();
+        string tag = NextTemp();
+        EmitLine(sb: sb,
+            line: $"  {tagPtr} = getelementptr {maybeType}, ptr {allocaPtr}, i32 0, i32 0");
+        EmitLine(sb: sb, line: $"  {tag} = load {tagType}, ptr {tagPtr}");
+
+        string result = NextTemp();
+        EmitLine(sb: sb,
+            line: isPattern.IsNegated
+                ? $"  {result} = icmp ne {tagType} {tag}, 0"
+                : $"  {result} = icmp eq {tagType} {tag}, 0"); // is None → tag == 0
+        // isnot None → tag != 0
+        return result;
+
     }
 
     /// <summary>

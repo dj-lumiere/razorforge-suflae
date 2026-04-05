@@ -1214,23 +1214,22 @@ public partial class LLVMCodeGenerator
         TypeInfo? valueType)
     {
         // Store Maybe carrier to memory for field extraction
-        string maybeCarrierType = valueType != null
-            ? GetMaybeCarrierLLVMType(valueType: valueType)
-            : "{ i1, ptr }";
+        string maybeCarrierType = GetMaybeCarrierLLVMType(valueType: valueType!);
+        string maybeTagType = GetCarrierTagType(kind: ErrorHandlingKind.Maybe);
         string maybeAddr = NextTemp();
         EmitEntryAlloca(llvmName: maybeAddr, llvmType: maybeCarrierType);
         EmitLine(sb: sb, line: $"  store {maybeCarrierType} {maybeResult}, ptr {maybeAddr}");
 
-        // Extract tag (field 0 = i1 for Maybe)
+        // Extract tag (field 0 = Bool present)
         string tagPtr = NextTemp();
         EmitLine(sb: sb,
             line: $"  {tagPtr} = getelementptr {maybeCarrierType}, ptr {maybeAddr}, i32 0, i32 0");
         string tag = NextTemp();
-        EmitLine(sb: sb, line: $"  {tag} = load i1, ptr {tagPtr}");
+        EmitLine(sb: sb, line: $"  {tag} = load {maybeTagType}, ptr {tagPtr}");
 
-        // Branch: tag == 1 (VALID) → extract value, else → propagate ABSENT
+        // Branch: tag == 1 (Bool true / VALID) → extract value, else → propagate ABSENT
         string isValid = NextTemp();
-        EmitLine(sb: sb, line: $"  {isValid} = icmp eq i1 {tag}, 1");
+        EmitLine(sb: sb, line: $"  {isValid} = icmp eq {maybeTagType} {tag}, 1");
 
         string validLabel = NextLabel(prefix: "emit_unwrap_valid");
         string absentLabel = NextLabel(prefix: "emit_unwrap_absent");
@@ -1241,10 +1240,7 @@ public partial class LLVMCodeGenerator
         if (_currentEmittingRoutine?.AsyncStatus == AsyncStatus.Emitting)
         {
             // Inside an emitting routine: propagate absence via zeroinitializer
-            TypeInfo? callerElemType = _currentEmittingRoutine.ReturnType;
-            string callerCarrierType = callerElemType != null
-                ? GetMaybeCarrierLLVMType(valueType: callerElemType)
-                : "{ i1, ptr }";
+            string callerCarrierType = GetMaybeCarrierLLVMType(valueType: _currentEmittingRoutine.ReturnType!);
             if (ShouldEmitTrace)
                 EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
             EmitLine(sb: sb, line: $"  ret {callerCarrierType} zeroinitializer");

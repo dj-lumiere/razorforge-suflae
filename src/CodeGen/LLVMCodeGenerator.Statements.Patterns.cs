@@ -322,6 +322,73 @@ public partial class LLVMCodeGenerator
             ? NextLabel(prefix: "type_bind")
             : matchLabel;
 
+        // Error-handling carriers: Maybe checks i1 tag, Result/Lookup compare i64 type_id
+        if (subjectType is ErrorHandlingTypeInfo errorInfo)
+        {
+            string carrierType = GetCarrierLLVMType(errorType: errorInfo);
+            string tagType = GetCarrierTagType(kind: errorInfo.Kind);
+            string tagPtr = NextTemp();
+            string tag = NextTemp();
+            EmitLine(sb: sb,
+                line: $"  {tagPtr} = getelementptr {carrierType}, ptr {subject}, i32 0, i32 0");
+            EmitLine(sb: sb, line: $"  {tag} = load {tagType}, ptr {tagPtr}");
+
+            string expectedTag = errorInfo.Kind == ErrorHandlingKind.Maybe
+                ? "1"
+                : (targetType != null
+                    ? ComputeTypeId(fullName: targetType.FullName).ToString()
+                    : "0");
+            string cmp = NextTemp();
+            EmitLine(sb: sb, line: $"  {cmp} = icmp eq {tagType} {tag}, {expectedTag}");
+            EmitLine(sb: sb, line: $"  br i1 {cmp}, label %{branchTarget}, label %{failLabel}");
+
+            if (needsBind && targetType != null)
+            {
+                EmitLine(sb: sb, line: $"{branchTarget}:");
+                string varAddr = $"%{typePattern.VariableName}.addr";
+
+                if (errorInfo.Kind == ErrorHandlingKind.Maybe)
+                {
+                    string valPtr = NextTemp();
+                    EmitLine(sb: sb,
+                        line: $"  {valPtr} = getelementptr {carrierType}, ptr {subject}, i32 0, i32 1");
+                    if (targetType is EntityTypeInfo or WrapperTypeInfo)
+                    {
+                        string ptrVal = NextTemp();
+                        EmitLine(sb: sb, line: $"  {ptrVal} = load ptr, ptr {valPtr}");
+                        EmitEntryAlloca(llvmName: varAddr, llvmType: "ptr");
+                        EmitLine(sb: sb, line: $"  store ptr {ptrVal}, ptr {varAddr}");
+                    }
+                    else
+                    {
+                        string valLlvm = GetLLVMType(type: targetType);
+                        string val = NextTemp();
+                        EmitLine(sb: sb, line: $"  {val} = load {valLlvm}, ptr {valPtr}");
+                        EmitEntryAlloca(llvmName: varAddr, llvmType: valLlvm);
+                        EmitLine(sb: sb, line: $"  store {valLlvm} {val}, ptr {varAddr}");
+                    }
+                }
+                else
+                {
+                    // Result/Lookup: field 1 is i64 address → inttoptr
+                    string addrPtr = NextTemp();
+                    string addrVal = NextTemp();
+                    string handleVal = NextTemp();
+                    EmitLine(sb: sb,
+                        line: $"  {addrPtr} = getelementptr {carrierType}, ptr {subject}, i32 0, i32 1");
+                    EmitLine(sb: sb, line: $"  {addrVal} = load i64, ptr {addrPtr}");
+                    EmitLine(sb: sb, line: $"  {handleVal} = inttoptr i64 {addrVal} to ptr");
+                    EmitEntryAlloca(llvmName: varAddr, llvmType: "ptr");
+                    EmitLine(sb: sb, line: $"  store ptr {handleVal}, ptr {varAddr}");
+                }
+
+                _localVariables[key: typePattern.VariableName!] = targetType;
+                EmitLine(sb: sb, line: $"  br label %{matchLabel}");
+            }
+
+            return;
+        }
+
         if (subjectType is VariantTypeInfo variant && targetType != null)
         {
             // For variants, check if any member matches the target type

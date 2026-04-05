@@ -394,9 +394,7 @@ public partial class LLVMCodeGenerator
         }
 
         // Determine the wrapper LLVM type (Maybe[T]) and inner value type
-        string wrapperLlvmType = memberType != null
-            ? GetLLVMType(type: memberType)
-            : "{ i1, ptr }";
+        string wrapperLlvmType = GetLLVMType(type: memberType!);
         TypeInfo? valueType = memberType switch
         {
             ErrorHandlingTypeInfo eh => eh.ValueType,
@@ -417,15 +415,16 @@ public partial class LLVMCodeGenerator
         EmitEntryAlloca(llvmName: allocaPtr, llvmType: wrapperLlvmType);
         EmitLine(sb: sb, line: $"  store {wrapperLlvmType} {maybeValue}, ptr {allocaPtr}");
 
-        // Extract tag (i1 for Maybe)
+        // Extract tag
+        string tagType = GetCarrierTagType(kind: ErrorHandlingKind.Maybe);
         string tagPtr = NextTemp();
         string tag = NextTemp();
         EmitLine(sb: sb,
             line: $"  {tagPtr} = getelementptr {wrapperLlvmType}, ptr {allocaPtr}, i32 0, i32 0");
-        EmitLine(sb: sb, line: $"  {tag} = load i1, ptr {tagPtr}");
+        EmitLine(sb: sb, line: $"  {tag} = load {tagType}, ptr {tagPtr}");
 
         string isValid = NextTemp();
-        EmitLine(sb: sb, line: $"  {isValid} = icmp eq i1 {tag}, 1");
+        EmitLine(sb: sb, line: $"  {isValid} = icmp eq {tagType} {tag}, 1");
 
         string okLabel = NextLabel(prefix: "unwrap_ok");
         string failLabel = NextLabel(prefix: "unwrap_fail");
