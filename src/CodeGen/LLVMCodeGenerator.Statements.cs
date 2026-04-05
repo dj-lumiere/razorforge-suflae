@@ -547,16 +547,6 @@ public partial class LLVMCodeGenerator
                     EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
                 EmitLine(sb: sb, line: $"  ret {{ i64, ptr }} {v1}");
             }
-            else if (_currentRoutineIsFailable)
-            {
-                // Failable void routine: return { i64 1, ptr null } (VALID, no payload)
-                EmitUsingCleanup(sb: sb);
-                EmitRCRecordCleanup(sb: sb);
-                EmitEntityCleanup(sb: sb, returnedVarName: null);
-                if (ShouldEmitTrace)
-                    EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
-                EmitLine(sb: sb, line: "  ret { i64, ptr } { i64 1, ptr null }");
-            }
             else
             {
                 EmitUsingCleanup(sb: sb);
@@ -593,33 +583,6 @@ public partial class LLVMCodeGenerator
             if (ShouldEmitTrace)
                 EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
 
-            // Failable routines wrap the return value in { i64, ptr } with tag=1 (VALID)
-            if (_currentRoutineIsFailable)
-            {
-                string v0 = NextTemp();
-                EmitLine(sb: sb, line: $"  {v0} = insertvalue {{ i64, ptr }} undef, i64 1, 0");
-
-                if (retType is EntityTypeInfo)
-                {
-                    // Entity types are already pointers — store directly, no heap allocation
-                    string v1 = NextTemp();
-                    EmitLine(sb: sb,
-                        line: $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr {value}, 1");
-                    EmitLine(sb: sb, line: $"  ret {{ i64, ptr }} {v1}");
-                }
-                else
-                {
-                    int size = GetTypeSize(type: retType);
-                    string handle = NextTemp();
-                    EmitLine(sb: sb,
-                        line: $"  {handle} = call ptr @rf_allocate_dynamic(i64 {size})");
-                    EmitLine(sb: sb, line: $"  store {llvmType} {value}, ptr {handle}");
-                    string v1 = NextTemp();
-                    EmitLine(sb: sb,
-                        line: $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr {handle}, 1");
-                    EmitLine(sb: sb, line: $"  ret {{ i64, ptr }} {v1}");
-                }
-            }
             // Auto-wrap bare values in Maybe when function returns Maybe[T] but expression is T
             else if (IsMaybeType(type: retType) && value != "zeroinitializer")
             {
@@ -910,7 +873,18 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private void EmitAbsent(StringBuilder sb)
     {
-        // Build { i64 0, ptr null } — DataState.ABSENT
+        // In a failable routine, `absent` is a contract violation — crash
+        if (_currentRoutineIsFailable)
+        {
+            EmitUsingCleanup(sb: sb);
+            EmitRCRecordCleanup(sb: sb);
+            EmitLine(sb: sb,
+                line: "  call void @rf_crash(i64 0, i64 0, i64 0, i64 0, i32 0, i32 0, i64 0, i64 0)");
+            EmitLine(sb: sb, line: "  unreachable");
+            return;
+        }
+
+        // Build { i64 0, ptr null } — DataState.ABSENT (for emitting routines)
         string v0 = NextTemp();
         EmitLine(sb: sb, line: $"  {v0} = insertvalue {{ i64, ptr }} undef, i64 0, 0");
         string v1 = NextTemp();

@@ -699,12 +699,7 @@ public partial class LLVMCodeGenerator
         string returnType = routine?.ReturnType != null
             ? GetLLVMType(type: routine.ReturnType)
             : "void";
-        // Failable routines return Maybe[T] = { i64, ptr } at IR level
-        bool isFailableCall = routine?.IsFailable == true;
-        if (isFailableCall)
-        {
-            returnType = "{ i64, ptr }";
-        }
+        // Failable routines return T directly — they crash on failure, no carrier needed
 
         string callReturnType = isCExtern && returnType == "half"
             ? "i16"
@@ -749,20 +744,6 @@ public partial class LLVMCodeGenerator
                 string halfResult = NextTemp();
                 EmitLine(sb: sb, line: $"  {halfResult} = bitcast i16 {result} to half");
                 return halfResult;
-            }
-
-            // Unwrap failable calls
-            if (isFailableCall)
-            {
-                // Failable void routines: no value to unwrap
-                if (routine?.ReturnType == null)
-                {
-                    return result;
-                }
-
-                return EmitEmittingCallUnwrap(sb: sb,
-                    maybeResult: result,
-                    valueType: routine?.ReturnType);
             }
 
             return routine?.IsAsync == true
@@ -995,14 +976,6 @@ public partial class LLVMCodeGenerator
                     line:
                     $"  {result3} = call {retType3} @{funcName}({receiverLlvm3} {receiver})");
 
-                // Unwrap failable result (crash on failure in non-failable context)
-                if (creator.IsFailable && creator.ReturnType != null)
-                {
-                    return EmitEmittingCallUnwrap(sb: sb,
-                        maybeResult: result3,
-                        valueType: creator.ReturnType);
-                }
-
                 if (creator.AsyncStatus == AsyncStatus.Threaded)
                 {
                     return EmitThreadedTaskSpawn(sb: sb,
@@ -1181,8 +1154,8 @@ public partial class LLVMCodeGenerator
             string retType = resolvedReturnType != null
                 ? GetLLVMType(type: resolvedReturnType)
                 : "void";
-            // Emitting and failable routines return Maybe[T] = { i64, ptr } at IR level
-            if (method?.AsyncStatus == AsyncStatus.Emitting || method?.IsFailable == true)
+            // Emitting routines return { i64, ptr } carrier; failable return T directly
+            if (method?.AsyncStatus == AsyncStatus.Emitting)
             {
                 retType = "{ i64, ptr }";
             }
@@ -1196,10 +1169,9 @@ public partial class LLVMCodeGenerator
         string returnType = resolvedReturnType != null
             ? GetLLVMType(type: resolvedReturnType)
             : "void";
-        // Emitting and failable routines return Maybe[T] = { i64, ptr } at IR level
+        // Emitting routines return { i64, ptr } carrier; failable return T directly
         bool isEmittingCall = method?.AsyncStatus == AsyncStatus.Emitting;
-        bool isFailableCall = method?.IsFailable == true;
-        if (isEmittingCall || isFailableCall)
+        if (isEmittingCall)
         {
             returnType = "{ i64, ptr }";
         }
@@ -1218,17 +1190,11 @@ public partial class LLVMCodeGenerator
             string args = BuildCallArgs(types: argTypes, values: argValues);
             EmitLine(sb: sb, line: $"  {result} = call {returnType} @{mangledName}({args})");
 
-            // Unwrap Maybe[T] from emitting/failable routine calls (C74).
+            // Unwrap { i64, ptr } from emitting routine calls (C74).
             // EmitFor handles $next() unwrapping directly, so this only fires for
             // direct calls like `var item = me.source.$next()` inside emitting bodies.
-            if (isEmittingCall || isFailableCall)
+            if (isEmittingCall)
             {
-                // Failable void routines: no value to unwrap, just discard the { i64, ptr }
-                if (isFailableCall && resolvedReturnType == null)
-                {
-                    return result;
-                }
-
                 return EmitEmittingCallUnwrap(sb: sb,
                     maybeResult: result,
                     valueType: resolvedReturnType);
@@ -1267,19 +1233,18 @@ public partial class LLVMCodeGenerator
         string absentLabel = NextLabel(prefix: "emit_unwrap_absent");
         EmitLine(sb: sb, line: $"  br i1 {isValid}, label %{validLabel}, label %{absentLabel}");
 
-        // ABSENT branch: propagate absence or trap
+        // ABSENT branch: propagate absence (emitting caller) or trap (non-emitting caller)
         EmitLine(sb: sb, line: $"{absentLabel}:");
-        if (_currentEmittingRoutine?.AsyncStatus == AsyncStatus.Emitting ||
-            _currentRoutineIsFailable)
+        if (_currentEmittingRoutine?.AsyncStatus == AsyncStatus.Emitting)
         {
-            // Inside emitting or failable routine: propagate absence to caller
+            // Inside an emitting routine: propagate absence to caller via { i64, ptr } carrier
             if (ShouldEmitTrace)
                 EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
             EmitLine(sb: sb, line: "  ret { i64, ptr } { i64 0, ptr null }");
         }
         else
         {
-            // Non-failable caller: absence is a contract violation
+            // Any other caller: absence is a contract violation — unreachable
             EmitLine(sb: sb, line: "  unreachable");
         }
 

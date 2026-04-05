@@ -81,8 +81,10 @@ public partial class LLVMCodeGenerator
         string returnType = routine.ReturnType != null
             ? GetLLVMType(type: routine.ReturnType)
             : "void";
-        // Emitting and failable routines return Maybe[T] = { i64, ptr } at IR level
-        if (routine.AsyncStatus == AsyncStatus.Emitting || routine.IsFailable)
+        // TODO C115: emitting routines should also return T directly once the for-loop
+        // is redesigned to call try_next() instead of $next() directly.
+        // For now, emitting routines use { i64, ptr } so the current for-loop codegen works.
+        if (routine.AsyncStatus == AsyncStatus.Emitting)
         {
             returnType = "{ i64, ptr }";
         }
@@ -264,8 +266,9 @@ public partial class LLVMCodeGenerator
         string returnType = routineInfo.ReturnType != null
             ? GetLLVMType(type: routineInfo.ReturnType)
             : "void";
-        // Emitting and failable routines return Maybe[T] = { i64, ptr } at IR level
-        if (routineInfo.AsyncStatus == AsyncStatus.Emitting || routineInfo.IsFailable)
+        // Emitting routines return { i64, ptr } carrier at IR level
+        // Failable routines return T directly — they crash on failure, never wrap
+        if (routineInfo.AsyncStatus == AsyncStatus.Emitting)
         {
             returnType = "{ i64, ptr }";
         }
@@ -411,14 +414,7 @@ public partial class LLVMCodeGenerator
             EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
         if (routine.ReturnType == null)
         {
-            if (_currentRoutineIsFailable)
-            {
-                EmitLine(sb: sb, line: "  ret { i64, ptr } { i64 0, ptr null }");
-            }
-            else
-            {
-                EmitLine(sb: sb, line: "  ret void");
-            }
+            EmitLine(sb: sb, line: "  ret void");
         }
         else
         {
