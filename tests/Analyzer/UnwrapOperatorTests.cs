@@ -35,7 +35,7 @@ public class UnwrapOperatorTests
         AnalysisResult result = Analyze(source: source);
         RoutineInfo? tryVariant = result.Registry.GetRoutine(name: "try_get");
         Assert.NotNull(@object: tryVariant);
-        Assert.IsType<ErrorHandlingTypeInfo>(@object: tryVariant.ReturnType);
+        Assert.IsType<RecordTypeInfo>(@object: tryVariant.ReturnType);
     }
 
     [Fact]
