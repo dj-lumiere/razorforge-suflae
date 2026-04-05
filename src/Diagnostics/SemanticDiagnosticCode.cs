@@ -792,9 +792,6 @@ public enum SemanticDiagnosticCode
     /// <summary>Suflae cannot use C interop directly.</summary>
     SuflaeNoCInterop = 810,
 
-    /// <summary>Only Level 3 expressions (identifiers, literals, member access, calls) allowed in f-text.</summary>
-    FTextExpressionLevelRestriction = 815,
-
     /// <summary>Invalid f-text format specifier.</summary>
     InvalidFTextFormatSpec = 816,
 

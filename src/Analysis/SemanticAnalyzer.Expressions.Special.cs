@@ -15,10 +15,6 @@ public sealed partial class SemanticAnalyzer
         {
             if (part is ExpressionPart exprPart)
             {
-                // #16: F-text expression level restriction — only Level 3 expressions
-                // (identifiers, literals, member access, calls) are allowed
-                ValidateFTextExpression(expression: exprPart.Expression,
-                    location: exprPart.Location);
                 AnalyzeExpression(expression: exprPart.Expression);
                 ValidateFTextFormatSpec(formatSpec: exprPart.FormatSpec,
                     location: exprPart.Location);
@@ -54,34 +50,7 @@ public sealed partial class SemanticAnalyzer
             location: location);
     }
 
-    /// <summary>
-    /// Validates that an f-text embedded expression is a Level 3 expression.
-    /// Level 3: identifiers, literals, member access, routine calls, indexing.
-    /// Disallowed: assignments, control flow, binary operators (except chained member access).
-    /// </summary>
-    private void ValidateFTextExpression(Expression expression, SourceLocation location)
-    {
-        switch (expression)
-        {
-            case IdentifierExpression:
-            case LiteralExpression:
-            case MemberExpression:
-            case CallExpression:
-            case IndexExpression:
-            case OptionalMemberExpression:
-                // Level 3 — allowed
-                break;
-            default:
-                ReportError(code: SemanticDiagnosticCode.FTextExpressionLevelRestriction,
-                    message:
-                    "Only simple expressions (identifiers, literals, member access, calls) are allowed in f-text interpolation. " +
-                    "Assign complex expressions to a variable first.",
-                    location: location);
-                break;
-        }
-    }
-
-    /// <summary>
+/// <summary>
     /// Substitutes type parameters in a type based on a generic resolution.
     /// For example, if genericType is List&lt;S32&gt; and type is T, returns S32.
     /// </summary>
