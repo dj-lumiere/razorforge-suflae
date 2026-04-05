@@ -2,6 +2,7 @@
 # Cannot be used as a generic type argument, except Result[Blank] and Lookup[Blank] for failable void routines
 module Core
 
+### Defines the record `Blank`.
 record Blank
   pass
 
@@ -9,8 +10,12 @@ record Blank
 # Text Representation
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine Blank.$represent() -> Text
   return "Blank"
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine Blank.$diagnose() -> Text
   return "Blank"

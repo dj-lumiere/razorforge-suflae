@@ -3,5 +3,6 @@
 # Provides: Diagnosable (-> Representable), Equatable, Identifiable
 module Core
 
+### Defines the protocol `EntityType`.
 protocol EntityType obeys Diagnosable, Equatable, Identifiable
   pass

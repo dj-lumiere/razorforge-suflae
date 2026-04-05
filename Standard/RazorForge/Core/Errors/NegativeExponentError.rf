@@ -1,7 +1,11 @@
 module Core
 
+### Defines the record `NegativeExponentError`.
 record NegativeExponentError obeys Crashable
+  ### Stores the exp member value.
   secret exp: S128
 
+### Returns the result of `crash message`.
+### :returns: The resulting `Text` value.
 routine NegativeExponentError.crash_message() -> Text
   return f"Negative exponent {me.exp} results in a fraction, which is not supported for integer types."

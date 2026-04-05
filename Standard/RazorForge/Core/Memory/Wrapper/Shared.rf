@@ -2,13 +2,17 @@
 # Supports Exclusive, MultiRead, and ReadOnly policies
 module Core
 
+### Defines the record `Shared`.
+### :typeparam T: The value used for `T`.
+### :typeparam P: The value used for `P`.
 record Shared[T, P]
 needs P obeys LockPolicy
   secret controller: Snatched[ShareController]
   secret data: Snatched[T]
   secret lock: Snatched[P]
 
-# Generic factory method - create Shared with any lock policy
+### Returns the result of `share`.
+### :returns: The resulting `Shared[T, P]` value.
 routine T.share[P]() -> Shared[T, P]
 needs P obeys LockPolicy
   danger!
@@ -26,13 +30,14 @@ needs P obeys LockPolicy
       lock: lock
     )
 
-# Clone the shared reference (increment atomic ref count)
+### Returns the result of `retain`.
+### :returns: The resulting `Shared[T, P]` value.
 routine Shared[T, P].retain() -> Shared[T, P]
   danger!
     me.controller.increase_strong_count!()  # Atomic increment
   return me
 
-# Release the shared reference (decrement atomic ref count)
+### Executes `release`.
 routine Shared[T, P].release!()
   danger!
     me.controller.decrease_strong_count!()  # Atomic decrement
@@ -52,11 +57,14 @@ routine Shared[T, P].release!()
       == false => pass  # Still has strong references
   return
 
-# Get atomic reference counts for debugging
+### Returns the result of `strong count`.
+### :returns: The resulting `S32` value.
 routine Shared[T, P].strong_count() -> S32
   danger!
     return me.controller.strong_count()
 
+### Returns the result of `weak count`.
+### :returns: The resulting `S32` value.
 routine Shared[T, P].weak_count() -> S32
   danger!
     return me.controller.weak_count()
@@ -68,10 +76,14 @@ routine Shared[T, P].weak_count() -> S32
 # Display (opaque - no inner value access without lock)
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 @readonly
 routine Shared[T, P].$represent() -> Text
   return me.type_name()
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 @readonly
 routine Shared[T, P].$diagnose() -> Text
   danger!

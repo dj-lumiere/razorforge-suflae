@@ -1,5 +1,6 @@
 # Numeric - Bundle protocol combining common numeric operations
 module Core
 
+### Defines the protocol `Numeric`.
 protocol Numeric obeys Addable, Subtractable, Multiplicable, Divisible, Negatable, Exponentiable
   pass

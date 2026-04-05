@@ -2,5 +2,6 @@
 # Extends Integral with Invertible (bitwise NOT) and overflow handling
 module Core
 
+### Defines the protocol `FixedIntegral`.
 protocol FixedIntegral obeys Integral, Invertible, WrappingArithmetic, ClampingArithmetic
   pass

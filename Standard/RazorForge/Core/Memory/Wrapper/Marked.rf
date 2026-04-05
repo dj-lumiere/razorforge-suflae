@@ -2,31 +2,38 @@
 # Multi-threaded weak references
 module Core
 
+### Defines the record `Marked`.
+### :typeparam T: The value used for `T`.
+### :typeparam P: The value used for `P`.
 record Marked[T, P]
 needs P obeys LockPolicy
   secret controller: Snatched[ShareController]
   secret data: Snatched[T]
   secret lock: Snatched[P]
 
-# Create weak reference from Shared[T, P]
+### Returns the result of `mark`.
+### :returns: The resulting `Marked[T, P]` value.
 routine Shared[T, P].mark() -> Marked[T, P]
   danger!
     me.controller.increase_weak_count!()
     return me
 
-# Check if the marked data is still alive
+### Returns true if this value is alive.
+### :returns: The resulting `Bool` value.
 routine Marked[T, P].is_alive() -> Bool
   danger!
     return me.controller.strong_count() > 0
 
-# Clone the weak reference
+### Returns the result of `mark`.
+### :returns: The resulting `Marked[T, P]` value.
 routine Marked[T, P].mark() -> Marked[T, P]
   danger!
     me.controller.increase_weak_count!()
     return me
 
-# Recover strong Shared[T, P] from weak Marked[T, P]
-# Absent if the referenced data has been deallocated
+### Returns the result of `recover`.
+### :returns: The resulting `Shared[T, P]` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine Marked[T, P].recover!() -> Shared[T, P]
   danger!
     if me.controller.strong_count() == 0
@@ -38,7 +45,7 @@ routine Marked[T, P].recover!() -> Shared[T, P]
       lock: me.lock
     )
 
-# Release the weak reference
+### Executes `release`.
 routine Marked[T, P].release!()
   danger!
     me.controller.decrease_weak_count!()
@@ -49,11 +56,14 @@ routine Marked[T, P].release!()
       == false => pass
   return
 
-# Get reference counts for debugging
+### Returns the result of `strong count`.
+### :returns: The resulting `S32` value.
 routine Marked[T, P].strong_count() -> S32
   danger!
     return me.controller.strong_count()
 
+### Returns the result of `weak count`.
+### :returns: The resulting `S32` value.
 routine Marked[T, P].weak_count() -> S32
   danger!
     return me.controller.weak_count()
@@ -62,10 +72,14 @@ routine Marked[T, P].weak_count() -> S32
 # Display (opaque - no inner value access without lock)
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 @readonly
 routine Marked[T, P].$represent() -> Text
   return me.type_name()
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 @readonly
 routine Marked[T, P].$diagnose() -> Text
   danger!

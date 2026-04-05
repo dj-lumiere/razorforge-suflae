@@ -13,16 +13,24 @@ module Collections
 
 import BuilderService
 
+### Defines the entity `Deque`.
+### :typeparam T: The value used for `T`.
 entity Deque[T] obeys Iterable[T]
+  ### Stores the data member value.
   secret data: Snatched[T]    # Circular buffer (raw storage for T elements)
+  ### Stores the start member value.
   secret start: U64          # Index of first element
+  ### Stores the count member value.
   secret count: U64          # Number of elements
+  ### Stores the capacity member value.
   secret capacity: U64       # Total allocated slots
 
 # ============================================================================
 # Creators
 # ============================================================================
 
+### Creates a new instance.
+### :returns: The resulting `Deque[T]` value.
 routine Deque[T].$create() -> Deque[T]
   return Deque[T](
     data: snatched_none[U8](),
@@ -31,6 +39,9 @@ routine Deque[T].$create() -> Deque[T]
     capacity: 0u64
   )
 
+### Creates a new instance.
+### :param capacity: The capacity value to use.
+### :returns: The resulting `Deque[T]` value.
 routine Deque[T].$create(capacity: U64) -> Deque[T]
   var byte_size = capacity * T.data_size()
   return Deque[T](
@@ -40,6 +51,9 @@ routine Deque[T].$create(capacity: U64) -> Deque[T]
     capacity: capacity
   )
 
+### Creates a new instance.
+### :param values...: The `values...` value.
+### :returns: The resulting `Deque[T]` value.
 routine Deque[T].$create(values...: T) -> Deque[T]
   var result = Deque[T]()
   for v in values
@@ -50,21 +64,33 @@ routine Deque[T].$create(values...: T) -> Deque[T]
 # Internal Helpers
 # ============================================================================
 
+### Returns the result of `wrap index`.
+### :param index: The zero-based position to use.
+### :returns: The resulting `U64` value.
 routine Deque[T].wrap_index(index: U64) -> U64
   # Wrap index around the circular buffer
   if me.capacity == 0u64
     return 0u64
   return index % me.capacity
 
+### Returns the result of `physical index`.
+### :param logical_index: The `logical_index` value.
+### :returns: The resulting `U64` value.
 routine Deque[T].physical_index(logical_index: U64) -> U64
   # Convert logical index (0 = front) to physical index in buffer
   return me.wrap_index(me.start + logical_index)
 
+### Returns the result of `read at`.
+### :param physical_idx: The `physical_idx` value.
+### :returns: The resulting `T` value.
 routine Deque[T].read_at(physical_idx: U64) -> T
   var byte_offset = physical_idx * T.data_size()
   var ptr = Snatched[T](me.data.get_address() + byte_offset)
   return ptr.read()
 
+### Performs `write at` on this value.
+### :param physical_idx: The `physical_idx` value.
+### :param value: The value to use.
 routine Deque[T].write_at(physical_idx: U64, value: T)
   var byte_offset = physical_idx * T.data_size()
   var ptr = Snatched[T](me.data.get_address() + byte_offset)
@@ -75,15 +101,23 @@ routine Deque[T].write_at(physical_idx: U64, value: T)
 # Core Operations
 # ============================================================================
 
+### Returns the number of stored values.
+### :returns: The resulting `U64` value.
 routine Deque[T].count() -> U64
   return me.count
 
+### Returns the current storage capacity.
+### :returns: The resulting `U64` value.
 routine Deque[T].capacity() -> U64
   return me.capacity
 
+### Returns true if this value is empty.
+### :returns: The resulting `Bool` value.
 routine Deque[T].is_empty() -> Bool
   return me.count == 0u64
 
+### Adds a value using `add_last`.
+### :param value: The value to use.
 routine Deque[T].add_last(value: T)
   # Add element to back - O(1) amortized
   if me.count >= me.capacity
@@ -93,6 +127,8 @@ routine Deque[T].add_last(value: T)
   me.count = me.count + 1u64
   return
 
+### Adds a value using `add_first`.
+### :param value: The value to use.
 routine Deque[T].add_first(value: T)
   # Add element to front - O(1) amortized
   if me.count >= me.capacity
@@ -106,6 +142,9 @@ routine Deque[T].add_first(value: T)
   me.count = me.count + 1u64
   return
 
+### Removes a value using `remove_last`.
+### :returns: The resulting `T` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine Deque[T].remove_last!() -> T
   # Remove and return back element - O(1)
   if me.is_empty()
@@ -114,6 +153,9 @@ routine Deque[T].remove_last!() -> T
   var idx = me.physical_index(me.count)
   return me.read_at(idx)
 
+### Removes a value using `remove_first`.
+### :returns: The resulting `T` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine Deque[T].remove_first!() -> T
   # Remove and return front element - O(1)
   if me.is_empty()
@@ -123,12 +165,18 @@ routine Deque[T].remove_first!() -> T
   me.count = me.count - 1u64
   return value
 
+### Returns the result of `first`.
+### :returns: The resulting `T` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine Deque[T].first!() -> T
   # Peek at front element without removing
   if me.is_empty()
     absent
   return me.read_at(me.start)
 
+### Returns the result of `last`.
+### :returns: The resulting `T` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine Deque[T].last!() -> T
   # Peek at back element without removing
   if me.is_empty()
@@ -136,6 +184,7 @@ routine Deque[T].last!() -> T
   var idx = me.physical_index(me.count - 1u64)
   return me.read_at(idx)
 
+### Removes all stored values.
 routine Deque[T].clear()
   me.start = 0u64
   me.count = 0u64
@@ -145,11 +194,14 @@ routine Deque[T].clear()
 # Growth
 # ============================================================================
 
+### Executes `grow`.
 routine Deque[T].grow()
   var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity * 2u64
   me.reserve(new_capacity)
   return
 
+### Ensures the storage capacity is at least `new_capacity`.
+### :param new_capacity: The minimum capacity to reserve.
 routine Deque[T].reserve(new_capacity: U64)
   if new_capacity <= me.capacity
     return
@@ -175,6 +227,10 @@ routine Deque[T].reserve(new_capacity: U64)
 # Indexing with Integral (forward index)
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
+### :param index: The zero-based position to use.
+### :returns: The resulting `T` value.
+### :throws: May throw {IndexOutOfBoundsError}.
 routine Deque[T].$getitem![I](index: I) -> T
 needs I obeys Integral
   var idx = index.U64()
@@ -183,6 +239,10 @@ needs I obeys Integral
   var physical_idx = me.physical_index(idx)
   return me.read_at(physical_idx)
 
+### Implements the wired routine behavior for this value.
+### :param index: The zero-based position to use.
+### :param value: The value to use.
+### :throws: May throw {IndexOutOfBoundsError}.
 routine Deque[T].$setitem![I](index: I, value: T)
 needs I obeys Integral
   var idx = index.U64()
@@ -196,12 +256,18 @@ needs I obeys Integral
 # Indexing with BackIndex (backward index using ^)
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
+### :param index: The zero-based position to use.
+### :returns: The resulting `T` value.
 routine Deque[T].$getitem![I](index: BackIndex[I]) -> T
 needs I obeys Integral
   var idx = index.resolve(me.count)
   var physical_idx = me.physical_index(idx)
   return me.read_at(physical_idx)
 
+### Implements the wired routine behavior for this value.
+### :param index: The zero-based position to use.
+### :param value: The value to use.
 routine Deque[T].$setitem![I](index: BackIndex[I], value: T)
 needs I obeys Integral
   var idx = index.resolve(me.count)
@@ -213,6 +279,8 @@ needs I obeys Integral
 # Rotation
 # ============================================================================
 
+### Performs `rotate left` on this value.
+### :param n: The `n` value.
 routine Deque[T].rotate_left(n: U64)
   # Rotate elements left by n positions
   # Front elements move to back
@@ -222,6 +290,8 @@ routine Deque[T].rotate_left(n: U64)
   me.start = me.wrap_index(me.start + shift)
   return
 
+### Performs `rotate right` on this value.
+### :param n: The `n` value.
 routine Deque[T].rotate_right(n: U64)
   # Rotate elements right by n positions
   # Back elements move to front
@@ -238,14 +308,23 @@ routine Deque[T].rotate_right(n: U64)
 # Iteration Support
 # ============================================================================
 
+### Creates an iterator for this value.
+### :returns: The resulting `DequeEmitter[T]` value.
 @readonly
 routine Deque[T].$iter() -> DequeEmitter[T]
   return DequeEmitter[T](deque: me, index: 0u64)
 
+### Defines the entity `DequeEmitter`.
+### :typeparam T: The value used for `T`.
 entity DequeEmitter[T] obeys Iterator[T]
+  ### Stores the deque member value.
   secret deque: Deque[T]
+  ### Stores the index member value.
   secret index: U64
 
+### Returns the next value from this iterator.
+### :returns: The resulting `T` value.
+### :absent: Returns absent when the requested value is unavailable.
 @writable
 emitting routine DequeEmitter[T].$next() -> T
   if me.index >= me.deque.count()
@@ -258,16 +337,25 @@ emitting routine DequeEmitter[T].$next() -> T
 # Utility Operations
 # ============================================================================
 
+### Returns the result of `first or default`.
+### :param default_value: The `default_value` value.
+### :returns: The resulting `T` value.
 routine Deque[T].first_or_default(default_value: T) -> T
   if me.is_empty()
     return default_value
   return me.first!()
 
+### Returns the result of `last or default`.
+### :param default_value: The `default_value` value.
+### :returns: The resulting `T` value.
 routine Deque[T].last_or_default(default_value: T) -> T
   if me.is_empty()
     return default_value
   return me.last!()
 
+### Returns whether this value contains `value`.
+### :param value: The value to use.
+### :returns: The resulting `Bool` value.
 @readonly
 routine Deque[T].$contains(value: T) -> Bool
   var i = 0u64
@@ -281,6 +369,8 @@ routine Deque[T].$contains(value: T) -> Bool
 # Comparison Operations
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine Deque[T].$represent() -> Text
   var result = "Deque["
   var i = 0u64
@@ -292,6 +382,8 @@ routine Deque[T].$represent() -> Text
   result = result + "]"
   return result
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine Deque[T].$diagnose() -> Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", ["
   var i = 0u64
@@ -303,6 +395,9 @@ routine Deque[T].$diagnose() -> Text
   result = result + "])"
   return result
 
+### Returns whether both values are equal.
+### :param other: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine Deque[T].$eq(other: Deque[T]) -> Bool
   if me.count != other.count
     return false

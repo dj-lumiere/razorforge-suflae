@@ -1,6 +1,7 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
+using SemanticAnalysis.Enums;
 using SemanticAnalysis.Symbols;
 using SemanticAnalysis.Types;
 using SyntaxTree;
@@ -303,7 +304,11 @@ public partial class LLVMCodeGenerator
             TypeInfo? operandType = GetExpressionType(expr: isPattern.Expression);
             string maybeType = operandType != null
                 ? GetLLVMType(type: operandType)
-                : "{ i64, ptr }";
+                : "{ i1, ptr }";
+            ErrorHandlingKind carrierKind = operandType is ErrorHandlingTypeInfo ehOp
+                ? ehOp.Kind
+                : ErrorHandlingKind.Maybe;
+            string tagType = GetCarrierTagType(kind: carrierKind);
 
             string allocaPtr = NextTemp();
             EmitEntryAlloca(llvmName: allocaPtr, llvmType: maybeType);
@@ -313,17 +318,17 @@ public partial class LLVMCodeGenerator
             string tag = NextTemp();
             EmitLine(sb: sb,
                 line: $"  {tagPtr} = getelementptr {maybeType}, ptr {allocaPtr}, i32 0, i32 0");
-            EmitLine(sb: sb, line: $"  {tag} = load i64, ptr {tagPtr}");
+            EmitLine(sb: sb, line: $"  {tag} = load {tagType}, ptr {tagPtr}");
 
             string result = NextTemp();
             if (isPattern.IsNegated)
             {
                 EmitLine(sb: sb,
-                    line: $"  {result} = icmp ne i64 {tag}, 0"); // isnot None → tag != 0
+                    line: $"  {result} = icmp ne {tagType} {tag}, 0"); // isnot None → tag != 0
             }
             else
             {
-                EmitLine(sb: sb, line: $"  {result} = icmp eq i64 {tag}, 0"); // is None → tag == 0
+                EmitLine(sb: sb, line: $"  {result} = icmp eq {tagType} {tag}, 0"); // is None → tag == 0
             }
 
             return result;

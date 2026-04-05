@@ -12,8 +12,8 @@ module Collections
 
 import BuilderService
 
-# Fixed-size bit vector with value semantics
-# Layout: ceil(N/8) bytes as [ceil(N/8) x i8]
+### Defines the record `ValueBitList`.
+### :typeparam N: The value used for `N`.
 @llvm("[{(N+7)//8} x i8]")
 record ValueBitList[N]
 needs N is U64
@@ -23,9 +23,13 @@ needs N is U64
 # Query Operations
 # ============================================================================
 
+### Returns the number of stored values.
+### :returns: The resulting `U64` value.
 routine ValueBitList[N].count() -> U64
   return N
 
+### Returns true if this value is empty.
+### :returns: The resulting `Bool` value.
 routine ValueBitList[N].is_empty() -> Bool
   return N == 0u64
 
@@ -33,6 +37,10 @@ routine ValueBitList[N].is_empty() -> Bool
 # Indexing (read-only, value semantics)
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
+### :param index: The zero-based position to use.
+### :returns: The resulting `Bool` value.
+### :throws: May throw {IndexOutOfBoundsError}.
 routine ValueBitList[N].$getitem![I](index: I) -> Bool
 needs I obeys Integral
   var idx = index.U64!()
@@ -44,6 +52,9 @@ needs I obeys Integral
   var byte_val = byte_at[ValueBitList[N]](me,byte_idx)
   return (byte_val & (1u8 << bit_off)) != 0u8
 
+### Implements the wired routine behavior for this value.
+### :param index: The zero-based position to use.
+### :returns: The resulting `Bool` value.
 routine ValueBitList[N].$getitem![I](index: BackIndex[I]) -> Bool
 needs I obeys Integral
   var idx = index.resolve(N)
@@ -53,6 +64,10 @@ needs I obeys Integral
 # Functional Modification (returns new copy)
 # ============================================================================
 
+### Returns the result of `with set`.
+### :param index: The zero-based position to use.
+### :param value: The value to use.
+### :returns: The resulting `ValueBitList[N]` value.
 routine ValueBitList[N].with_set(index: U64, value: Bool) -> ValueBitList[N]
   # Returns a new ValueBitList with the bit at index changed
   if index >= N
@@ -68,6 +83,9 @@ routine ValueBitList[N].with_set(index: U64, value: Bool) -> ValueBitList[N]
     result = set_byte_at[ValueBitList[N]](result,byte_idx, byte_val & ~(1u8 << bit_off))
   return result
 
+### Returns the result of `with flipped`.
+### :param index: The zero-based position to use.
+### :returns: The resulting `ValueBitList[N]` value.
 routine ValueBitList[N].with_flipped(index: U64) -> ValueBitList[N]
   # Returns a new ValueBitList with the bit at index toggled
   if index >= N
@@ -79,6 +97,8 @@ routine ValueBitList[N].with_flipped(index: U64) -> ValueBitList[N]
 # Bit Queries
 # ============================================================================
 
+### Returns the number of stored values.
+### :returns: The resulting `U64` value.
 routine ValueBitList[N].count_ones() -> U64
   var count = 0u64
   var i = 0u64
@@ -88,9 +108,13 @@ routine ValueBitList[N].count_ones() -> U64
     i = i + 1u64
   return count
 
+### Returns the number of stored values.
+### :returns: The resulting `U64` value.
 routine ValueBitList[N].count_zeros() -> U64
   return N - me.count_ones()
 
+### Returns true if `any` applies.
+### :returns: The resulting `Bool` value.
 routine ValueBitList[N].any() -> Bool
   var i = 0u64
   while i < N
@@ -99,6 +123,8 @@ routine ValueBitList[N].any() -> Bool
     i = i + 1u64
   return false
 
+### Returns true if `all` applies.
+### :returns: The resulting `Bool` value.
 routine ValueBitList[N].all() -> Bool
   var i = 0u64
   while i < N
@@ -107,9 +133,14 @@ routine ValueBitList[N].all() -> Bool
     i = i + 1u64
   return true
 
+### Returns true if `none` applies.
+### :returns: The resulting `Bool` value.
 routine ValueBitList[N].none() -> Bool
   return not me.any()
 
+### Returns whether this value contains `value`.
+### :param value: The value to use.
+### :returns: The resulting `Bool` value.
 @readonly
 routine ValueBitList[N].$contains(value: Bool) -> Bool
   if value
@@ -120,6 +151,8 @@ routine ValueBitList[N].$contains(value: Bool) -> Bool
 # Display
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine ValueBitList[N].$represent() -> Text
   var result = "ValueBitList["
   var i = 0u64
@@ -131,6 +164,8 @@ routine ValueBitList[N].$represent() -> Text
   result = result + "]"
   return result
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine ValueBitList[N].$diagnose() -> Text
   var result = me.type_name() + "(count: " + N.$represent() + ", ones: " + me.count_ones().$represent() + ", ["
   var i = 0u64

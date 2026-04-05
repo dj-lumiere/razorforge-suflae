@@ -1,6 +1,10 @@
 # WrappingAddable - Protocol for types that support wrapping addition (+%)
 module Core
 
+### Defines the protocol `WrappingAddable`.
 protocol WrappingAddable
+  ### Implements the wired routine behavior for this value.
+  ### :param you: The other value to compare against.
+  ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$add_wrap(you: Me) -> Me

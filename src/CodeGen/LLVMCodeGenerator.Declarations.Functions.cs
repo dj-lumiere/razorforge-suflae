@@ -81,12 +81,13 @@ public partial class LLVMCodeGenerator
         string returnType = routine.ReturnType != null
             ? GetLLVMType(type: routine.ReturnType)
             : "void";
-        // TODO C115: emitting routines should also return T directly once the for-loop
-        // is redesigned to call try_next() instead of $next() directly.
-        // For now, emitting routines use { i64, ptr } so the current for-loop codegen works.
+        // Emitting routines return a Maybe carrier at IR level.
+        // The carrier layout depends on the element type (record → inline, entity → ptr).
         if (routine.AsyncStatus == AsyncStatus.Emitting)
         {
-            returnType = "{ i64, ptr }";
+            returnType = routine.ReturnType != null
+                ? GetMaybeCarrierLLVMType(valueType: routine.ReturnType)
+                : "{ i1, ptr }";
         }
 
         if (isCExtern && returnType == "half")
@@ -266,11 +267,13 @@ public partial class LLVMCodeGenerator
         string returnType = routineInfo.ReturnType != null
             ? GetLLVMType(type: routineInfo.ReturnType)
             : "void";
-        // Emitting routines return { i64, ptr } carrier at IR level
-        // Failable routines return T directly — they crash on failure, never wrap
+        // Emitting routines return a Maybe carrier at IR level.
+        // Failable routines return T directly — they crash on failure, never wrap.
         if (routineInfo.AsyncStatus == AsyncStatus.Emitting)
         {
-            returnType = "{ i64, ptr }";
+            returnType = routineInfo.ReturnType != null
+                ? GetMaybeCarrierLLVMType(valueType: routineInfo.ReturnType)
+                : "{ i1, ptr }";
         }
 
         // Start function — save position so we can rollback on error

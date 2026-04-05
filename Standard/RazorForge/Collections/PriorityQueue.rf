@@ -13,12 +13,17 @@ module Collections
 
 import BuilderService
 
-# Element with priority
+### Defines the record `PQEntry`.
+### :typeparam TPriority: The value used for `TPriority`.
+### :typeparam TElement: The value used for `TElement`.
 record PQEntry[TPriority, TElement]
 needs TPriority obeys Comparable
   priority: TPriority
   element: TElement
 
+### Defines the entity `PriorityQueue`.
+### :typeparam TPriority: The value used for `TPriority`.
+### :typeparam TElement: The value used for `TElement`.
 entity PriorityQueue[TPriority, TElement] obeys Iterable[PQEntry[TPriority, TElement]]
 needs TPriority obeys Comparable
   secret heap: List[PQEntry[TPriority, TElement]]
@@ -27,16 +32,24 @@ needs TPriority obeys Comparable
 # Creators
 # ============================================================================
 
+### Creates a new instance.
+### :returns: The resulting `PriorityQueue[TPriority, TElement]` value.
 routine PriorityQueue[TPriority, TElement].$create() -> PriorityQueue[TPriority, TElement]
   return PriorityQueue[TPriority, TElement](
     heap: List[PQEntry[TPriority, TElement]]()
   )
 
+### Creates a new instance.
+### :param capacity: The capacity value to use.
+### :returns: The resulting `PriorityQueue[TPriority, TElement]` value.
 routine PriorityQueue[TPriority, TElement].$create(capacity: U64) -> PriorityQueue[TPriority, TElement]
   return PriorityQueue[TPriority, TElement](
     heap: List[PQEntry[TPriority, TElement]](capacity)
   )
 
+### Creates a new instance.
+### :param entries...: The `entries...` value.
+### :returns: The resulting `PriorityQueue[TPriority, TElement]` value.
 routine PriorityQueue[TPriority, TElement].$create(entries...: DictEntry[TPriority, TElement]) -> PriorityQueue[TPriority, TElement]
   var result = PriorityQueue[TPriority, TElement]()
   for e in entries
@@ -47,21 +60,35 @@ routine PriorityQueue[TPriority, TElement].$create(entries...: DictEntry[TPriori
 # Internal Heap Operations
 # ============================================================================
 
+### Returns the result of `parent index`.
+### :param index: The zero-based position to use.
+### :returns: The resulting `U64` value.
 routine PriorityQueue[TPriority, TElement].parent_index(index: U64) -> U64
   return (index - 1u64) // 2u64
 
+### Returns the result of `left child`.
+### :param index: The zero-based position to use.
+### :returns: The resulting `U64` value.
 routine PriorityQueue[TPriority, TElement].left_child(index: U64) -> U64
   return 2u64 * index + 1u64
 
+### Returns the result of `right child`.
+### :param index: The zero-based position to use.
+### :returns: The resulting `U64` value.
 routine PriorityQueue[TPriority, TElement].right_child(index: U64) -> U64
   return 2u64 * index + 2u64
 
+### Performs `swap` on this value.
+### :param i: The `i` value.
+### :param j: The `j` value.
 routine PriorityQueue[TPriority, TElement].swap(i: U64, j: U64)
   var temp = me.heap[i]
   me.heap[i] = me.heap[j]
   me.heap[j] = temp
   return
 
+### Performs `sift up` on this value.
+### :param index: The zero-based position to use.
 routine PriorityQueue[TPriority, TElement].sift_up(index: U64)
   var i = index
   while i > 0u64
@@ -73,6 +100,8 @@ routine PriorityQueue[TPriority, TElement].sift_up(index: U64)
       break
   return
 
+### Performs `sift down` on this value.
+### :param index: The zero-based position to use.
 routine PriorityQueue[TPriority, TElement].sift_down(index: U64)
   var i = index
   var size = me.heap.count()
@@ -99,22 +128,33 @@ routine PriorityQueue[TPriority, TElement].sift_down(index: U64)
 # Core Operations
 # ============================================================================
 
+### Returns the number of stored values.
+### :returns: The resulting `U64` value.
 routine PriorityQueue[TPriority, TElement].count() -> U64
   return me.heap.count()
 
+### Returns true if this value is empty.
+### :returns: The resulting `Bool` value.
 routine PriorityQueue[TPriority, TElement].is_empty() -> Bool
   return me.heap.is_empty()
 
+### Removes all stored values.
 routine PriorityQueue[TPriority, TElement].clear()
   me.heap.clear()
   return
 
+### Performs `add` on this value.
+### :param element: The `element` value.
+### :param priority: The `priority` value.
 routine PriorityQueue[TPriority, TElement].add(element: TElement, priority: TPriority)
   # Add element with priority - O(log n)
   me.heap.add_last(PQEntry[TPriority, TElement](priority: priority, element: element))
   me.sift_up(me.heap.count() - 1u64)
   return
 
+### Returns the result of `remove`.
+### :returns: The resulting `TElement` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine PriorityQueue[TPriority, TElement].remove!() -> TElement
   # Remove and return element with lowest priority - O(log n)
   if me.is_empty()
@@ -133,18 +173,27 @@ routine PriorityQueue[TPriority, TElement].remove!() -> TElement
 
   return result
 
+### Returns the result of `peek`.
+### :returns: The resulting `TElement` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine PriorityQueue[TPriority, TElement].peek!() -> TElement
   # View element with lowest priority without removing - O(1)
   if me.is_empty()
     absent
   return me.heap[0u64].element
 
+### Returns the result of `peek priority`.
+### :returns: The resulting `TPriority` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine PriorityQueue[TPriority, TElement].peek_priority!() -> TPriority
   # View lowest priority value without removing - O(1)
   if me.is_empty()
     absent
   return me.heap[0u64].priority
 
+### Returns the result of `peek entry`.
+### :returns: The resulting `PQEntry[TPriority, TElement]` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine PriorityQueue[TPriority, TElement].peek_entry!() -> PQEntry[TPriority, TElement]
   # View element and priority without removing - O(1)
   if me.is_empty()
@@ -155,6 +204,9 @@ routine PriorityQueue[TPriority, TElement].peek_entry!() -> PQEntry[TPriority, T
 # Bulk Operations
 # ============================================================================
 
+### Adds a value using `add_all`.
+### :param elements: The `elements` value.
+### :param priorities: The `priorities` value.
 routine PriorityQueue[TPriority, TElement].add_all(elements: List[TElement], priorities: List[TPriority])
   # Add multiple elements with their priorities
   var i = 0u64
@@ -164,6 +216,8 @@ routine PriorityQueue[TPriority, TElement].add_all(elements: List[TElement], pri
     i = i + 1u64
   return
 
+### Returns the result of `drain`.
+### :returns: The resulting `List[TElement]` value.
 routine PriorityQueue[TPriority, TElement].drain() -> List[TElement]
   # Remove all elements in priority order
   var result = List[TElement](me.count())
@@ -175,6 +229,9 @@ routine PriorityQueue[TPriority, TElement].drain() -> List[TElement]
 # Utility Operations
 # ============================================================================
 
+### Returns whether this value contains `element`.
+### :param element: The `element` value.
+### :returns: The resulting `Bool` value.
 @readonly
 routine PriorityQueue[TPriority, TElement].$contains(element: TElement) -> Bool
   # O(n) search - heap doesn't support efficient search
@@ -185,6 +242,9 @@ routine PriorityQueue[TPriority, TElement].$contains(element: TElement) -> Bool
     i = i + 1u64
   return false
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `List[PQEntry[TPriority, TElement]]` value.
 routine List[PQEntry[TPriority, TElement]].$create(from: PriorityQueue[TPriority, TElement]) -> List[PQEntry[TPriority, TElement]]
   # Get all entries (not in priority order, heap order)
   var result = List[PQEntry[TPriority, TElement]](from.count())
@@ -198,6 +258,8 @@ routine List[PQEntry[TPriority, TElement]].$create(from: PriorityQueue[TPriority
 # Iteration (heap order, NOT priority order)
 # ============================================================================
 
+### Creates an iterator for this value.
+### :returns: The resulting `PriorityQueueIterator[TPriority, TElement]` value.
 @readonly
 routine PriorityQueue[TPriority, TElement].$iter() -> PriorityQueueIterator[TPriority, TElement]
   return PriorityQueueIterator[TPriority, TElement](
@@ -205,6 +267,8 @@ routine PriorityQueue[TPriority, TElement].$iter() -> PriorityQueueIterator[TPri
     index: 0u64
   )
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine PriorityQueue[TPriority, TElement].$represent() -> Text
   var result = "PriorityQueue["
   var i = 0u64
@@ -216,6 +280,8 @@ routine PriorityQueue[TPriority, TElement].$represent() -> Text
   result = result + "]"
   return result
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine PriorityQueue[TPriority, TElement].$diagnose() -> Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", ["
   var i = 0u64
@@ -227,10 +293,18 @@ routine PriorityQueue[TPriority, TElement].$diagnose() -> Text
   result = result + "])"
   return result
 
+### Defines the entity `PriorityQueueIterator`.
+### :typeparam TPriority: The value used for `TPriority`.
+### :typeparam TElement: The value used for `TElement`.
 entity PriorityQueueIterator[TPriority, TElement] obeys Iterator[PQEntry[TPriority, TElement]]
+  ### Stores the queue member value.
   queue: PriorityQueue[TPriority, TElement]
+  ### Stores the index member value.
   index: U64
 
+### Returns the next value from this iterator.
+### :returns: The resulting `PQEntry[TPriority, TElement]` value.
+### :absent: Returns absent when the requested value is unavailable.
 @writable
 emitting routine PriorityQueueIterator[TPriority, TElement].$next() -> PQEntry[TPriority, TElement]
   if me.index >= me.queue.count()

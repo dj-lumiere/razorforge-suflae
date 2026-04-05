@@ -3,6 +3,7 @@
 module Core
 # Core S16 type definition - maps to LLVM i16
 
+### Defines the record `S16`.
 @llvm("i16")
 record S16 obeys SignedIntegral, Ordered, ConstCompatible
   pass
@@ -17,78 +18,126 @@ preset S16_ONE: S16 = 1_s16
 # Creators
 # ============================================================================
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `S16` value.
 routine S16.$create(from: S8) -> S16
   return sext[S8, S16](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `S16` value.
 routine S16.$create(from: S16) -> S16
   return from
 
-# From S32 - crashes if value out of S16 range
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S16` value.
+### :throws: May throw {IntegerOverflowError}.
 routine S16.$create!(from: S32) -> S16
   if not (S16_MIN <= from <= S16_MAX)
     throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
   return trunc[S32, S16](from)
 
-# From S64 - crashes if value out of S16 range
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S16` value.
+### :throws: May throw {IntegerOverflowError}.
 routine S16.$create!(from: S64) -> S16
   if not (S16_MIN <= from <= S16_MAX)
     throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
   return trunc[S64, S16](from)
 
-# From S128 - crashes if value out of S16 range
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S16` value.
+### :throws: May throw {IntegerOverflowError}.
 routine S16.$create!(from: S128) -> S16
   if not (S16_MIN <= from <= S16_MAX)
     throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
   return trunc[S128, S16](from)
 
-# From U8 - always fits, no check needed
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S16` value.
 routine S16.$create!(from: U8) -> S16
   return zext[U8, S16](from)
 
-# From U16 - crashes if value > S16_MAX (bit 15 set)
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S16` value.
+### :throws: May throw {IntegerOverflowError}.
 routine S16.$create!(from: U16) -> S16
   if from > 32767_u16
     throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
   return bitcast[U16, S16](from)
 
-# From U32 - crashes if value > S16_MAX
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S16` value.
+### :throws: May throw {IntegerOverflowError}.
 routine S16.$create!(from: U32) -> S16
   if from > 32767_u32
     throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
   return trunc[U32, S16](from)
 
-# From U64 - crashes if value > S16_MAX
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S16` value.
+### :throws: May throw {IntegerOverflowError}.
 routine S16.$create!(from: U64) -> S16
   if from > 32767_u64
     throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
   return trunc[U64, S16](from)
 
-# From U128 - crashes if value > S16_MAX
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S16` value.
+### :throws: May throw {IntegerOverflowError}.
 routine S16.$create!(from: U128) -> S16
   if from > 32767_u128
     throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
   return trunc[U128, S16](from)
 
-# From floating point - truncates fractional part and crashes if overflow
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S16` value.
 routine S16.$create!(from: F16) -> S16
   return from.S32!().S16!()
 
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S16` value.
 routine S16.$create!(from: F32) -> S16
   return from.S32!().S16!()
 
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S16` value.
 routine S16.$create!(from: F64) -> S16
   return from.S32!().S16!()
 
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S16` value.
 routine S16.$create!(from: F128) -> S16
   return from.S32!().S16!()
 
-# From decimal - truncates fractional part and crashes if overflow
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S16` value.
 routine S16.$create!(from: D32) -> S16
   return from.S32!().S16!()
 
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S16` value.
 routine S16.$create!(from: D64) -> S16
   return from.S32!().S16!()
 
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S16` value.
 routine S16.$create!(from: D128) -> S16
   return from.S32!().S16!()
 
@@ -96,23 +145,41 @@ routine S16.$create!(from: D128) -> S16
 # Arithmetic Operations (trapping on overflow by default)
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S16` value.
 routine S16.$add!(you: S16) -> S16
   return add[S16](me, you)
 
+### Returns the difference between this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S16` value.
 routine S16.$sub(you: S16) -> S16
   return sub[S16](me, you)
 
+### Returns the product of this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S16` value.
 routine S16.$mul(you: S16) -> S16
   return mul[S16](me, you)
 
+### Returns the quotient of this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S16` value.
+### :throws: May throw {DivisionByZeroError}.
 routine S16.$floordiv(you: S16) -> S16
   if you == 0
     throw DivisionByZeroError()
   return sdiv[S16](me, you)
 
+### Returns the remainder after division.
+### :param you: The other value to compare against.
+### :returns: The resulting `S16` value.
 routine S16.$mod(you: S16) -> S16
   return srem[S16](me, you)
 
+### Returns the negated value.
+### :returns: The resulting `S16` value.
 routine S16.$neg() -> S16
   return sub[S16](0, me)
 
@@ -120,12 +187,21 @@ routine S16.$neg() -> S16
 # Wrapping Arithmetic (+%, -%, *%)
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S16` value.
 routine S16.$add_wrap(you: S16) -> S16
   return add[S16](me, you)
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S16` value.
 routine S16.$sub_wrap(you: S16) -> S16
   return sub[S16](me, you)
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S16` value.
 routine S16.$mul_wrap(you: S16) -> S16
   return mul[S16](me, you)
 
@@ -133,12 +209,21 @@ routine S16.$mul_wrap(you: S16) -> S16
 # Clamping Arithmetic (+^, -^, *^)
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S16` value.
 routine S16.$add_clamp(you: S16) -> S16
   return sadd_sat[S16](me, you)
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S16` value.
 routine S16.$sub_clamp(you: S16) -> S16
   return ssub_sat[S16](me, you)
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S16` value.
 routine S16.$mul_clamp(you: S16) -> S16
   var wide = mul[S32](sext[S16, S32](me), sext[S16, S32](you))
   if icmp_sgt[S32](wide, 32767_s32)
@@ -151,7 +236,10 @@ routine S16.$mul_clamp(you: S16) -> S16
 # Power Operations (**)
 # ============================================================================
 
-# Power operator (**) - can overflow
+### Implements the wired routine behavior for this value.
+### :param exp: The exponent value.
+### :returns: The resulting `S16` value.
+### :throws: May throw {IndeterminateResultError}.
 routine S16.$pow!(exp: S16) -> S16
   var result: S16 = 1
   var base: S16 = me
@@ -167,7 +255,10 @@ routine S16.$pow!(exp: S16) -> S16
     e = e >> 1
   return result
 
-# Wrapping power (**%)
+### Implements the wired routine behavior for this value.
+### :param exp: The exponent value.
+### :returns: The resulting `S16` value.
+### :throws: May throw {IndeterminateResultError}.
 routine S16.$pow_wrap!(exp: S16) -> S16
   var result: S16 = 1
   var base: S16 = me
@@ -183,7 +274,10 @@ routine S16.$pow_wrap!(exp: S16) -> S16
     e = e >> 1
   return result
 
-# Clamping power (**^)
+### Implements the wired routine behavior for this value.
+### :param exp: The exponent value.
+### :returns: The resulting `S16` value.
+### :throws: May throw {IndeterminateResultError}.
 routine S16.$pow_clamp!(exp: S16) -> S16
   var result: S16 = 1
   var base: S16 = me
@@ -203,15 +297,26 @@ routine S16.$pow_clamp!(exp: S16) -> S16
 # Bitwise Operations
 # ============================================================================
 
+### Returns the result of the requested bitwise operation.
+### :param you: The other value to compare against.
+### :returns: The resulting `S16` value.
 routine S16.$bitand(you: S16) -> S16
   return bit_and[S16](me, you)
 
+### Returns the result of the requested bitwise operation.
+### :param you: The other value to compare against.
+### :returns: The resulting `S16` value.
 routine S16.$bitor(you: S16) -> S16
   return bit_or[S16](me, you)
 
+### Returns the result of the requested bitwise operation.
+### :param you: The other value to compare against.
+### :returns: The resulting `S16` value.
 routine S16.$bitxor(you: S16) -> S16
   return xor[S16](me, you)
 
+### Returns the result of the requested bitwise operation.
+### :returns: The resulting `S16` value.
 routine S16.$bitnot() -> S16
   return xor[S16](me, -1)
 
@@ -219,19 +324,27 @@ routine S16.$bitnot() -> S16
 # Shift Operations (<<, <<?>, >>, <<<, >>>)
 # ============================================================================
 
-# Arithmetic left shift (<<) - sign preserving
+### Implements the wired routine behavior for this value.
+### :param bits: The encoded bit pattern.
+### :returns: The resulting `S16` value.
 routine S16.$ashl(bits: U32) -> S16
   return shl[S16](me, bits)
 
-# Arithmetic right shift (>>) - preserves sign, always safe
+### Implements the wired routine behavior for this value.
+### :param bits: The encoded bit pattern.
+### :returns: The resulting `S16` value.
 routine S16.$ashr(bits: U32) -> S16
   return ashr[S16](me, bits)
 
-# Logical left shift (<<<) - same as << but explicit
+### Implements the wired routine behavior for this value.
+### :param bits: The encoded bit pattern.
+### :returns: The resulting `S16` value.
 routine S16.$lshl(bits: U32) -> S16
   return shl[S16](me, bits)
 
-# Logical right shift (>>>) - fills with zeros, ignores sign
+### Implements the wired routine behavior for this value.
+### :param bits: The encoded bit pattern.
+### :returns: The resulting `S16` value.
 routine S16.$lshr(bits: U32) -> S16
   return lshr[S16](me, bits)
 
@@ -239,9 +352,15 @@ routine S16.$lshr(bits: U32) -> S16
 # Comparison Operations
 # ============================================================================
 
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine S16.$eq(you: S16) -> Bool
   return icmp_eq[S16](me, you)
 
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
 routine S16.$cmp(you: S16) -> ComparisonSign
   if icmp_slt[S16](me, you)
     return ME_SMALL
@@ -253,15 +372,27 @@ routine S16.$cmp(you: S16) -> ComparisonSign
 # Math Operations
 # ============================================================================
 
+### Returns the absolute value.
+### :returns: The resulting `S16` value.
 routine S16.abs() -> S16
   return abs[S16](me)
 
+### Returns the result of `min`.
+### :param you: The other value to compare against.
+### :returns: The resulting `S16` value.
 routine S16.min(you: S16) -> S16
   return if me <= you then me else you
 
+### Returns the result of `max`.
+### :param you: The other value to compare against.
+### :returns: The resulting `S16` value.
 routine S16.max(you: S16) -> S16
   return if me >= you then me else you
 
+### Returns the result of `clamp`.
+### :param min_val: The `min_val` value.
+### :param max_val: The `max_val` value.
+### :returns: The resulting `S16` value.
 routine S16.clamp(min_val: S16, max_val: S16) -> S16
   return me.min(max_val).max(min_val)
 
@@ -269,27 +400,43 @@ routine S16.clamp(min_val: S16, max_val: S16) -> S16
 # Bit Manipulation
 # ============================================================================
 
+### Returns the number of stored values.
+### :returns: The resulting `S16` value.
 routine S16.count_ones() -> S16
   return ctpop[S16](me)
 
+### Returns the number of stored values.
+### :returns: The resulting `S16` value.
 routine S16.count_zeros() -> S16
   return 16_s16 - me.count_ones()
 
+### Returns the result of `leading zeros`.
+### :returns: The resulting `S16` value.
 routine S16.leading_zeros() -> S16
   return ctlz[S16](me)
 
+### Returns the result of `trailing zeros`.
+### :returns: The resulting `S16` value.
 routine S16.trailing_zeros() -> S16
   return cttz[S16](me)
 
+### Returns the result of `leading ones`.
+### :returns: The resulting `S16` value.
 routine S16.leading_ones() -> S16
   return me.$bitnot().leading_zeros()
 
+### Returns the result of `trailing ones`.
+### :returns: The resulting `S16` value.
 routine S16.trailing_ones() -> S16
   return me.$bitnot().trailing_zeros()
 
+### Returns the result of `reverse bits`.
+### :returns: The resulting `S16` value.
 routine S16.reverse_bits() -> S16
   return bitreverse[S16](me)
 
+### Returns the result of `swap bytes`.
+### :returns: The resulting `S16` value.
 routine S16.swap_bytes() -> S16
   return bswap[S16](me)
 
@@ -297,22 +444,34 @@ routine S16.swap_bytes() -> S16
 # Utility Methods
 # ============================================================================
 
+### Returns true if this value is positive.
+### :returns: The resulting `Bool` value.
 routine S16.is_positive() -> Bool
   return me > 0_s16
 
+### Returns true if this value is negative.
+### :returns: The resulting `Bool` value.
 routine S16.is_negative() -> Bool
   return me < 0_s16
 
+### Returns true if this value is zero.
+### :returns: The resulting `Bool` value.
 routine S16.is_zero() -> Bool
   return me == 0_s16
 
+### Returns true if this value is even.
+### :returns: The resulting `Bool` value.
 routine S16.is_even() -> Bool
   var result = bit_and[S16](me, 1_s16)
   return icmp_eq[S16](result, 0_s16)
 
+### Returns true if this value is odd.
+### :returns: The resulting `Bool` value.
 routine S16.is_odd() -> Bool
   return not me.is_even()
 
+### Returns the result of `signum`.
+### :returns: The resulting `S16` value.
 routine S16.signum() -> S16
   return when
     me > 0_s16 => 1_s16
@@ -323,12 +482,20 @@ routine S16.signum() -> S16
 # Text Representation and Parsing
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine S16.$represent() -> Text
   return S32(me).$represent()
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine S16.$diagnose() -> Text
   return "S16(" + me.$represent() + ")"
 
+### Implements the wired routine behavior for this value.
+### :param from_text: The `from_text` value.
+### :returns: The resulting `S16` value.
+### :throws: May throw {InvalidValueError}.
 routine S16.$create!(from_text: Text) -> S16
   if from_text.count() == 0u64
     throw InvalidValueError(input: from_text, target: "S16")

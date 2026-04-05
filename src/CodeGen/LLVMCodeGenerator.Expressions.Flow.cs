@@ -1,6 +1,7 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
+using SemanticAnalysis.Enums;
 using SemanticAnalysis.Symbols;
 using SemanticAnalysis.Types;
 using SyntaxTree;
@@ -348,15 +349,17 @@ public partial class LLVMCodeGenerator
         EmitLine(sb: sb, line: $"  store {maybeType} {left}, ptr {allocaPtr}");
 
         // Extract tag (field 0)
+        string tagType = GetCarrierTagType(kind: errorType.Kind);
+        string validTag = GetCarrierValidTag(errorType: errorType);
         string tagPtr = NextTemp();
         string tag = NextTemp();
         EmitLine(sb: sb,
             line: $"  {tagPtr} = getelementptr {maybeType}, ptr {allocaPtr}, i32 0, i32 0");
-        EmitLine(sb: sb, line: $"  {tag} = load i64, ptr {tagPtr}");
+        EmitLine(sb: sb, line: $"  {tag} = load {tagType}, ptr {tagPtr}");
 
-        // Check tag == 1 (VALID)
+        // Check tag == valid discriminant
         string isValid = NextTemp();
-        EmitLine(sb: sb, line: $"  {isValid} = icmp eq i64 {tag}, 1");
+        EmitLine(sb: sb, line: $"  {isValid} = icmp eq {tagType} {tag}, {validTag}");
 
         string valLabel = NextLabel(prefix: "coalesce_val");
         string rhsLabel = NextLabel(prefix: "coalesce_rhs");
@@ -365,22 +368,41 @@ public partial class LLVMCodeGenerator
 
         EmitLine(sb: sb, line: $"  br i1 {isValid}, label %{valLabel}, label %{rhsLabel}");
 
-        // Valid path: extract the value from the handle
+        // Valid path: extract the value
         EmitLine(sb: sb, line: $"{valLabel}:");
         _currentBlock = valLabel;
         string handlePtr = NextTemp();
-        string handleVal = NextTemp();
         EmitLine(sb: sb,
             line: $"  {handlePtr} = getelementptr {maybeType}, ptr {allocaPtr}, i32 0, i32 1");
-        EmitLine(sb: sb, line: $"  {handleVal} = load ptr, ptr {handlePtr}");
 
         // Determine the value type T
         TypeInfo valueType = errorType.ValueType;
         string llvmValueType = GetLLVMType(type: valueType);
 
-        // Load T from the handle pointer
-        string validValue = NextTemp();
-        EmitLine(sb: sb, line: $"  {validValue} = load {llvmValueType}, ptr {handleVal}");
+        string validValue;
+        if (valueType is EntityTypeInfo)
+        {
+            // Entity: field 1 is ptr — load it directly
+            validValue = NextTemp();
+            EmitLine(sb: sb, line: $"  {validValue} = load ptr, ptr {handlePtr}");
+        }
+        else if (errorType.Kind == ErrorHandlingKind.Maybe)
+        {
+            // Record Maybe: field 1 is inline T — load it from handlePtr
+            validValue = NextTemp();
+            EmitLine(sb: sb, line: $"  {validValue} = load {llvmValueType}, ptr {handlePtr}");
+        }
+        else
+        {
+            // Result/Lookup: field 1 is i64 address — load and inttoptr then load T
+            string addrVal = NextTemp();
+            string valuePtr = NextTemp();
+            validValue = NextTemp();
+            EmitLine(sb: sb, line: $"  {addrVal} = load i64, ptr {handlePtr}");
+            EmitLine(sb: sb, line: $"  {valuePtr} = inttoptr i64 {addrVal} to ptr");
+            EmitLine(sb: sb, line: $"  {validValue} = load {llvmValueType}, ptr {valuePtr}");
+        }
+
         string valBlock = _currentBlock;
         EmitLine(sb: sb, line: $"  br label %{endLabel}");
 
@@ -442,21 +464,30 @@ public partial class LLVMCodeGenerator
         // Alloca and store the maybe/error-handling value using its proper LLVM type
         string maybeType = operandType != null
             ? GetLLVMType(type: operandType)
-            : "{ i64, ptr }";
+            : "{ i1, ptr }";
         string allocaPtr = NextTemp();
         EmitEntryAlloca(llvmName: allocaPtr, llvmType: maybeType);
         EmitLine(sb: sb, line: $"  store {maybeType} {operand}, ptr {allocaPtr}");
+
+        // Determine tag type and valid discriminant
+        ErrorHandlingKind carrierKind = operandType is ErrorHandlingTypeInfo ehOp
+            ? ehOp.Kind
+            : ErrorHandlingKind.Maybe;
+        string tagType = GetCarrierTagType(kind: carrierKind);
+        string validTag = operandType is ErrorHandlingTypeInfo ehValid
+            ? GetCarrierValidTag(errorType: ehValid)
+            : "1";
 
         // Extract tag (field 0)
         string tagPtr = NextTemp();
         string tag = NextTemp();
         EmitLine(sb: sb,
             line: $"  {tagPtr} = getelementptr {maybeType}, ptr {allocaPtr}, i32 0, i32 0");
-        EmitLine(sb: sb, line: $"  {tag} = load i64, ptr {tagPtr}");
+        EmitLine(sb: sb, line: $"  {tag} = load {tagType}, ptr {tagPtr}");
 
-        // Check tag == 1 (VALID)
+        // Check tag == valid discriminant
         string isValid = NextTemp();
-        EmitLine(sb: sb, line: $"  {isValid} = icmp eq i64 {tag}, 1");
+        EmitLine(sb: sb, line: $"  {isValid} = icmp eq {tagType} {tag}, {validTag}");
 
         string okLabel = NextLabel(prefix: "unwrap_ok");
         string failLabel = NextLabel(prefix: "unwrap_fail");
@@ -469,27 +500,41 @@ public partial class LLVMCodeGenerator
         EmitLine(sb: sb, line: $"  call void @llvm.trap()");
         EmitLine(sb: sb, line: $"  unreachable");
 
-        // OK path: extract the value from the handle
+        // OK path: extract the value from field 1
         EmitLine(sb: sb, line: $"{okLabel}:");
         _currentBlock = okLabel;
         string handlePtr = NextTemp();
-        string handleVal = NextTemp();
         EmitLine(sb: sb,
             line: $"  {handlePtr} = getelementptr {maybeType}, ptr {allocaPtr}, i32 0, i32 1");
-        EmitLine(sb: sb, line: $"  {handleVal} = load ptr, ptr {handlePtr}");
 
         // For entity types, the value IS the pointer (no boxing) — return directly
         if (valueType is EntityTypeInfo)
         {
-            return handleVal;
+            string entityPtr = NextTemp();
+            EmitLine(sb: sb, line: $"  {entityPtr} = load ptr, ptr {handlePtr}");
+            return entityPtr;
         }
 
-        // For value types, load T from the handle pointer (heap-allocated storage)
-        string llvmValueType = GetLLVMType(type: valueType);
-        string result = NextTemp();
-        EmitLine(sb: sb, line: $"  {result} = load {llvmValueType}, ptr {handleVal}");
+        if (carrierKind != ErrorHandlingKind.Maybe)
+        {
+            // Result/Lookup: field 1 is i64 address — inttoptr then load T
+            string llvmValueType = GetLLVMType(type: valueType);
+            string addrVal = NextTemp();
+            string valuePtr = NextTemp();
+            string result = NextTemp();
+            EmitLine(sb: sb, line: $"  {addrVal} = load i64, ptr {handlePtr}");
+            EmitLine(sb: sb, line: $"  {valuePtr} = inttoptr i64 {addrVal} to ptr");
+            EmitLine(sb: sb, line: $"  {result} = load {llvmValueType}, ptr {valuePtr}");
+            return result;
+        }
 
-        return result;
+        // Maybe record: field 1 is inline T — load from handlePtr
+        {
+            string llvmValueType = GetLLVMType(type: valueType);
+            string result = NextTemp();
+            EmitLine(sb: sb, line: $"  {result} = load {llvmValueType}, ptr {handlePtr}");
+            return result;
+        }
     }
 
 
@@ -576,20 +621,23 @@ public partial class LLVMCodeGenerator
     private string EmitOptionalChainErrorHandling(StringBuilder sb, string obj,
         ErrorHandlingTypeInfo errorType, string propertyName)
     {
-        // Alloca and store the { i64, ptr } value
+        // Alloca and store the carrier value
+        string carrierType = GetCarrierLLVMType(errorType: errorType);
         string allocaPtr = NextTemp();
-        EmitEntryAlloca(llvmName: allocaPtr, llvmType: "{ i64, ptr }");
-        EmitLine(sb: sb, line: $"  store {{ i64, ptr }} {obj}, ptr {allocaPtr}");
+        EmitEntryAlloca(llvmName: allocaPtr, llvmType: carrierType);
+        EmitLine(sb: sb, line: $"  store {carrierType} {obj}, ptr {allocaPtr}");
 
         // Extract tag
+        string tagType = GetCarrierTagType(kind: errorType.Kind);
+        string validTag = GetCarrierValidTag(errorType: errorType);
         string tagPtr = NextTemp();
         string tag = NextTemp();
         EmitLine(sb: sb,
-            line: $"  {tagPtr} = getelementptr {{ i64, ptr }}, ptr {allocaPtr}, i32 0, i32 0");
-        EmitLine(sb: sb, line: $"  {tag} = load i64, ptr {tagPtr}");
+            line: $"  {tagPtr} = getelementptr {carrierType}, ptr {allocaPtr}, i32 0, i32 0");
+        EmitLine(sb: sb, line: $"  {tag} = load {tagType}, ptr {tagPtr}");
 
         string isValid = NextTemp();
-        EmitLine(sb: sb, line: $"  {isValid} = icmp eq i64 {tag}, 1");
+        EmitLine(sb: sb, line: $"  {isValid} = icmp eq {tagType} {tag}, {validTag}");
 
         string validLabel = NextLabel(prefix: "optchain_valid");
         string invalidLabel = NextLabel(prefix: "optchain_invalid");
@@ -600,16 +648,36 @@ public partial class LLVMCodeGenerator
         // Valid path: extract value and do member access
         EmitLine(sb: sb, line: $"{validLabel}:");
         _currentBlock = validLabel;
-        string handlePtr = NextTemp();
-        string handleVal = NextTemp();
-        EmitLine(sb: sb,
-            line: $"  {handlePtr} = getelementptr {{ i64, ptr }}, ptr {allocaPtr}, i32 0, i32 1");
-        EmitLine(sb: sb, line: $"  {handleVal} = load ptr, ptr {handlePtr}");
 
         TypeInfo valueType = errorType.ValueType;
         string llvmValueType = GetLLVMType(type: valueType);
-        string innerValue = NextTemp();
-        EmitLine(sb: sb, line: $"  {innerValue} = load {llvmValueType}, ptr {handleVal}");
+
+        string handlePtr = NextTemp();
+        EmitLine(sb: sb,
+            line: $"  {handlePtr} = getelementptr {carrierType}, ptr {allocaPtr}, i32 0, i32 1");
+
+        string innerValue;
+        if (valueType is EntityTypeInfo)
+        {
+            innerValue = NextTemp();
+            EmitLine(sb: sb, line: $"  {innerValue} = load ptr, ptr {handlePtr}");
+        }
+        else if (errorType.Kind != ErrorHandlingKind.Maybe)
+        {
+            // Result/Lookup: field 1 is i64 address
+            string addrVal = NextTemp();
+            string valuePtr = NextTemp();
+            innerValue = NextTemp();
+            EmitLine(sb: sb, line: $"  {addrVal} = load i64, ptr {handlePtr}");
+            EmitLine(sb: sb, line: $"  {valuePtr} = inttoptr i64 {addrVal} to ptr");
+            EmitLine(sb: sb, line: $"  {innerValue} = load {llvmValueType}, ptr {valuePtr}");
+        }
+        else
+        {
+            // Maybe record: inline T
+            innerValue = NextTemp();
+            EmitLine(sb: sb, line: $"  {innerValue} = load {llvmValueType}, ptr {handlePtr}");
+        }
 
         // Now do member access on the extracted value
         string memberValue = EmitMemberAccessOnType(sb: sb,

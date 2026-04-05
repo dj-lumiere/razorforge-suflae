@@ -1,6 +1,10 @@
 # WrappingExponentiable - Protocol for types that support wrapping exponentiation (**%)
 module Core
 
+### Defines the protocol `WrappingExponentiable`.
 protocol WrappingExponentiable
+  ### Implements the wired routine behavior for this value.
+  ### :param you: The other value to compare against.
+  ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$pow_wrap(you: Me) -> Me

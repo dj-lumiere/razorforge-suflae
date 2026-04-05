@@ -1,12 +1,11 @@
 # RazorForge Complex - Arbitrary precision complex number type
 module Numerics
 
-# Complex number backed by two Decimal values.
-#
-# This mirrors the fixed-precision complex types, but keeps the first pass
-# focused on the core arithmetic/property API.
+### Defines the entity `Complex`.
 entity Complex obeys Numeric, Equatable
+  ### Stores the real member value.
   secret real: Decimal
+  ### Stores the imag member value.
   secret imag: Decimal
 
 # Complex constants
@@ -18,15 +17,29 @@ preset COMPLEX_I: Complex = Complex(real: Decimal.zero(), imag: Decimal.one())
 # Creators
 # ============================================================================
 
+### Creates a new instance.
+### :returns: The resulting `Complex` value.
 routine Complex.$create() -> Complex
   return COMPLEX_ZERO
 
+### Creates a new instance.
+### :param real: The real component.
+### :returns: The resulting `Complex` value.
 routine Complex.$create(real: Decimal) -> Complex
   return Complex(real: real, imag: Decimal.zero())
 
+### Creates a new instance.
+### :param real: The real component.
+### :param imag: The imaginary component.
+### :returns: The resulting `Complex` value.
 routine Complex.$create(real: Decimal, imag: Decimal) -> Complex
   return Complex(real: real, imag: imag)
 
+### Creates a value from polar.
+### :param r: The radius value.
+### :param theta: The angle in radians.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
 routine Complex.from_polar(r: Decimal, theta: Decimal, precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
   return Complex(real: r * theta.cos(precision), imag: r * theta.sin(precision))
 
@@ -34,15 +47,27 @@ routine Complex.from_polar(r: Decimal, theta: Decimal, precision: S32 = DECIMAL_
 # Arithmetic Operations
 # ============================================================================
 
+### Returns the sum of this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `Complex` value.
 routine Complex.$add(you: Complex) -> Complex
   return Complex(real: me.real + you.real, imag: me.imag + you.imag)
 
+### Returns the difference between this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `Complex` value.
 routine Complex.$sub(you: Complex) -> Complex
   return Complex(real: me.real - you.real, imag: me.imag - you.imag)
 
+### Returns the product of this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `Complex` value.
 routine Complex.$mul(you: Complex) -> Complex
   return Complex(real: me.real * you.real - me.imag * you.imag, imag: me.real * you.imag + me.imag * you.real)
 
+### Returns the quotient of this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `Complex` value.
 routine Complex.$truediv(you: Complex) -> Complex
   var d = you.real * you.real + you.imag * you.imag
   return Complex(
@@ -50,9 +75,14 @@ routine Complex.$truediv(you: Complex) -> Complex
     imag: (me.imag * you.real - me.real * you.imag) / d
   )
 
+### Returns the negated value.
+### :returns: The resulting `Complex` value.
 routine Complex.$neg() -> Complex
   return Complex(real: -me.real, imag: -me.imag)
 
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine Complex.$eq(you: Complex) -> Bool
   return me.real == you.real and me.imag == you.imag
 
@@ -60,24 +90,40 @@ routine Complex.$eq(you: Complex) -> Bool
 # Components and Properties
 # ============================================================================
 
+### Returns the real component.
+### :returns: The resulting `Decimal` value.
 routine Complex.real_part() -> Decimal
   return me.real
 
+### Returns the imaginary component.
+### :returns: The resulting `Decimal` value.
 routine Complex.imag_part() -> Decimal
   return me.imag
 
+### Returns the absolute value.
+### :returns: The resulting `Decimal` value.
 routine Complex.abs() -> Decimal
   return (me.real * me.real + me.imag * me.imag).sqrt()
 
+### Returns the squared magnitude.
+### :returns: The resulting `Decimal` value.
 routine Complex.norm() -> Decimal
   return me.real * me.real + me.imag * me.imag
 
+### Returns the complex conjugate.
+### :returns: The resulting `Complex` value.
 routine Complex.conjugate() -> Complex
   return Complex(real: me.real, imag: -me.imag)
 
+### Returns the phase angle of this complex value.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Decimal` value.
 routine Complex.arg(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
   return me.imag.atan2(me.real, precision)
 
+### Returns the result of `sqrt`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
 routine Complex.sqrt(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
   var r = me.abs()
   if r.is_zero()
@@ -90,46 +136,74 @@ routine Complex.sqrt(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
     ip = -ip
   return Complex(real: rp, imag: ip)
 
+### Returns the result of `exp`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
 routine Complex.exp(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
   var ea = me.real.exp(precision)
   return Complex(real: ea * me.imag.cos(precision), imag: ea * me.imag.sin(precision))
 
+### Returns the result of `log`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
 routine Complex.log(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
   return Complex(real: me.abs().log(precision), imag: me.arg(precision))
 
+### Returns the result of `pow`.
+### :param exp: The exponent value.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
 routine Complex.pow(exp: Complex, precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
   return (exp * me.log(precision)).exp(precision)
 
+### Returns the result of `sin`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
 routine Complex.sin(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
   return Complex(
     real: me.real.sin(precision) * me.imag.cosh(precision),
     imag: me.real.cos(precision) * me.imag.sinh(precision)
   )
 
+### Returns the result of `cos`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
 routine Complex.cos(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
   return Complex(
     real: me.real.cos(precision) * me.imag.cosh(precision),
     imag: -(me.real.sin(precision) * me.imag.sinh(precision))
   )
 
+### Returns the result of `tan`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
 routine Complex.tan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
   var a2 = me.real + me.real
   var b2 = me.imag + me.imag
   var d = a2.cos(precision) + b2.cosh(precision)
   return Complex(real: a2.sin(precision).divide(d, precision), imag: b2.sinh(precision).divide(d, precision))
 
+### Returns the result of `asin`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
 routine Complex.asin(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
   var iz = Complex(real: -me.imag, imag: me.real)
   var w = iz + (COMPLEX_ONE - me * me).sqrt(precision)
   var v = w.log(precision)
   return Complex(real: v.imag_part(), imag: -v.real_part())
 
+### Returns the result of `acos`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
 routine Complex.acos(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
   var s = (COMPLEX_ONE - me * me).sqrt(precision)
   var w = me + Complex(real: -s.imag_part(), imag: s.real_part())
   var v = w.log(precision)
   return Complex(real: v.imag_part(), imag: -v.real_part())
 
+### Returns the result of `atan`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
 routine Complex.atan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
   var one = Decimal.one()
   var two = Decimal(2_s64)
@@ -138,35 +212,56 @@ routine Complex.atan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
   var v = (num / den).log(precision)
   return Complex(real: -v.imag_part().divide(two, precision), imag: v.real_part().divide(two, precision))
 
+### Returns the result of `sinh`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
 routine Complex.sinh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
   return Complex(
     real: me.real.sinh(precision) * me.imag.cos(precision),
     imag: me.real.cosh(precision) * me.imag.sin(precision)
   )
 
+### Returns the result of `cosh`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
 routine Complex.cosh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
   return Complex(
     real: me.real.cosh(precision) * me.imag.cos(precision),
     imag: me.real.sinh(precision) * me.imag.sin(precision)
   )
 
+### Returns the result of `tanh`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
 routine Complex.tanh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
   var a2 = me.real + me.real
   var b2 = me.imag + me.imag
   var d = a2.cosh(precision) + b2.cos(precision)
   return Complex(real: a2.sinh(precision).divide(d, precision), imag: b2.sin(precision).divide(d, precision))
 
+### Returns the result of `asinh`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
 routine Complex.asinh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
   return (me + (me * me + COMPLEX_ONE).sqrt(precision)).log(precision)
 
+### Returns the result of `acosh`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
 routine Complex.acosh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
   return (me + (me * me - COMPLEX_ONE).sqrt(precision)).log(precision)
 
+### Returns the result of `atanh`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
 routine Complex.atanh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
   var two = Decimal(2_s64)
   var v = ((COMPLEX_ONE + me) / (COMPLEX_ONE - me)).log(precision)
   return Complex(real: v.real_part().divide(two, precision), imag: v.imag_part().divide(two, precision))
 
+### Returns the result of `log10`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
 routine Complex.log10(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
   var v = me.log(precision)
   var ln10 = Decimal(10_s64).log(precision)
@@ -176,12 +271,18 @@ routine Complex.log10(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
 # Query Routines
 # ============================================================================
 
+### Returns true if this value is zero.
+### :returns: The resulting `Bool` value.
 routine Complex.is_zero() -> Bool
   return me.real.is_zero() and me.imag.is_zero()
 
+### Returns true if this value is real.
+### :returns: The resulting `Bool` value.
 routine Complex.is_real() -> Bool
   return me.imag.is_zero()
 
+### Returns true if this value is imaginary.
+### :returns: The resulting `Bool` value.
 routine Complex.is_imaginary() -> Bool
   return me.real.is_zero()
 
@@ -189,6 +290,9 @@ routine Complex.is_imaginary() -> Bool
 # Text Representation
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :param decimal_places: The number of decimal places to render.
+### :returns: The resulting `Text` value.
 routine Complex.$represent(decimal_places: S32 = 10) -> Text
   var real_text = me.real.$represent(decimal_places)
   var imag_abs = me.imag.abs().$represent(decimal_places)
@@ -196,5 +300,8 @@ routine Complex.$represent(decimal_places: S32 = 10) -> Text
     return real_text + " - " + imag_abs + "i"
   return real_text + " + " + imag_abs + "i"
 
+### Returns the textual representation of this value.
+### :param decimal_places: The number of decimal places to render.
+### :returns: The resulting `Text` value.
 routine Complex.$diagnose(decimal_places: S32 = 10) -> Text
   return "Complex(" + me.$represent(decimal_places) + ")"

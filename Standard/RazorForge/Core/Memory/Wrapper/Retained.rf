@@ -2,11 +2,16 @@
 # Equivalent to Rc[T] in Rust
 module Core
 
+### Defines the record `Retained`.
+### :typeparam T: The value used for `T`.
 record Retained[T]
+  ### Stores the controller member value.
   secret controller: Snatched[RetainController]
+  ### Stores the data member value.
   secret data: Snatched[T]
 
-# Create shared reference from owned value
+### Returns the result of `retain`.
+### :returns: The resulting `Retained[T]` value.
 routine T.retain() -> Retained[T]
   danger!
     # Allocate controller
@@ -19,13 +24,14 @@ routine T.retain() -> Retained[T]
       data: me.snatch()
     )
 
-# Clone the shared reference (increment ref count)
+### Returns the result of `retain`.
+### :returns: The resulting `Retained[T]` value.
 routine Retained[T].retain() -> Retained[T]
   danger!
     me.controller.increase_strong_count!()
   return me
 
-# Release the shared reference (decrement ref count)
+### Executes `release`.
 routine Retained[T].release!()
   danger!
     me.controller.decrease_strong_count!()
@@ -42,11 +48,14 @@ routine Retained[T].release!()
       == false => pass  # Still has strong references
   return
 
-# Get reference counts for debugging
+### Returns the result of `strong count`.
+### :returns: The resulting `S32` value.
 routine Retained[T].strong_count() -> S32
   danger!
     return me.controller.strong_count()
 
+### Returns the result of `weak count`.
+### :returns: The resulting `S32` value.
 routine Retained[T].weak_count() -> S32
   danger!
     return me.controller.weak_count()
@@ -59,11 +68,15 @@ routine Retained[T].weak_count() -> S32
 # Display (transparent - delegates to inner value)
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 @readonly
 routine Retained[T].$represent() -> Text
   danger!
     return me.data.read().$represent()
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 @readonly
 routine Retained[T].$diagnose() -> Text
   danger!

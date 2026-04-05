@@ -7,14 +7,23 @@ import IO/Errors
 # Existence checks (pure, no crash)
 # ============================================================================
 
+### Returns the result of `exists`.
+### :param path: The `path` value.
+### :returns: The resulting `Bool` value.
 routine exists(path: Text) -> Bool
   var cstr = CStr(from: path)
   return rf_fs_exists(cstr.ptr, cstr.count().S32())
 
+### Returns true if this value is file.
+### :param path: The `path` value.
+### :returns: The resulting `Bool` value.
 routine is_file(path: Text) -> Bool
   var cstr = CStr(from: path)
   return rf_fs_is_file(cstr.ptr, cstr.count().S32())
 
+### Returns true if this value is directory.
+### :param path: The `path` value.
+### :returns: The resulting `Bool` value.
 routine is_directory(path: Text) -> Bool
   var cstr = CStr(from: path)
   return rf_fs_is_directory(cstr.ptr, cstr.count().S32())
@@ -23,6 +32,9 @@ routine is_directory(path: Text) -> Bool
 # Directory operations (failable)
 # ============================================================================
 
+### Performs `create dir` on this value.
+### :param path: The `path` value.
+### :throws: May throw {IOError}.
 routine create_dir!(path: Text)
   var cstr = CStr(from: path)
   var result = rf_fs_create_dir(cstr.ptr, cstr.count().S32())
@@ -30,6 +42,9 @@ routine create_dir!(path: Text)
     throw IOError(message: f"Cannot create directory: {path}")
   return
 
+### Performs `create dir all` on this value.
+### :param path: The `path` value.
+### :throws: May throw {IOError}.
 routine create_dir_all!(path: Text)
   var cstr = CStr(from: path)
   var result = rf_fs_create_dir_all(cstr.ptr, cstr.count().S32())
@@ -41,6 +56,10 @@ routine create_dir_all!(path: Text)
 # File operations (failable)
 # ============================================================================
 
+### Performs `copy` on this value.
+### :param source: The `source` value.
+### :param destination: The `destination` value.
+### :throws: May throw {IOError}.
 routine copy!(source: Text, destination: Text)
   var src_cstr = CStr(from: source)
   var dst_cstr = CStr(from: destination)
@@ -49,6 +68,10 @@ routine copy!(source: Text, destination: Text)
     throw IOError(message: f"Cannot copy '{source}' to '{destination}'")
   return
 
+### Performs `move` on this value.
+### :param source: The `source` value.
+### :param destination: The `destination` value.
+### :throws: May throw {IOError}.
 routine move!(source: Text, destination: Text)
   var src_cstr = CStr(from: source)
   var dst_cstr = CStr(from: destination)
@@ -57,6 +80,9 @@ routine move!(source: Text, destination: Text)
     throw IOError(message: f"Cannot move '{source}' to '{destination}'")
   return
 
+### Performs `delete path` on this value.
+### :param path: The `path` value.
+### :throws: May throw {IOError}.
 routine delete_path!(path: Text)
   var cstr = CStr(from: path)
   var result = rf_fs_remove(cstr.ptr, cstr.count().S32())
@@ -64,6 +90,9 @@ routine delete_path!(path: Text)
     throw IOError(message: "Cannot remove path")
   return
 
+### Performs `delete path all` on this value.
+### :param path: The `path` value.
+### :throws: May throw {IOError}.
 routine delete_path_all!(path: Text)
   var cstr = CStr(from: path)
   var result = rf_fs_remove_all(cstr.ptr, cstr.count().S32())
@@ -75,6 +104,10 @@ routine delete_path_all!(path: Text)
 # Path utilities (pure, no OS calls)
 # ============================================================================
 
+### Returns the result of `join path`.
+### :param a: The left-hand value.
+### :param b: The right-hand value.
+### :returns: The resulting `Text` value.
 routine join_path(a: Text, b: Text) -> Text
   var a_cstr = CStr(from: a)
   var b_cstr = CStr(from: b)
@@ -83,6 +116,9 @@ routine join_path(a: Text, b: Text) -> Text
   var bytes = Bytes(ptr: ptr, count: len)
   return bytes.decode_as_utf8()
 
+### Returns the result of `parent path`.
+### :param path: The `path` value.
+### :returns: The resulting `Text` value.
 routine parent_path(path: Text) -> Text
   var cstr = CStr(from: path)
   var ptr = rf_fs_parent_path(cstr.ptr, cstr.count().S32())
@@ -90,6 +126,9 @@ routine parent_path(path: Text) -> Text
   var bytes = Bytes(ptr: ptr, count: len)
   return bytes.decode_as_utf8()
 
+### Returns the result of `file name`.
+### :param path: The `path` value.
+### :returns: The resulting `Text` value.
 routine file_name(path: Text) -> Text
   var cstr = CStr(from: path)
   var ptr = rf_fs_file_name(cstr.ptr, cstr.count().S32())
@@ -97,6 +136,9 @@ routine file_name(path: Text) -> Text
   var bytes = Bytes(ptr: ptr, count: len)
   return bytes.decode_as_utf8()
 
+### Returns the result of `file stem`.
+### :param path: The `path` value.
+### :returns: The resulting `Text` value.
 routine file_stem(path: Text) -> Text
   var cstr = CStr(from: path)
   var ptr = rf_fs_file_stem(cstr.ptr, cstr.count().S32())
@@ -104,6 +146,9 @@ routine file_stem(path: Text) -> Text
   var bytes = Bytes(ptr: ptr, count: len)
   return bytes.decode_as_utf8()
 
+### Returns the result of `extension`.
+### :param path: The `path` value.
+### :returns: The resulting `Text` value.
 routine extension(path: Text) -> Text
   var cstr = CStr(from: path)
   var ptr = rf_fs_extension(cstr.ptr, cstr.count().S32())
@@ -115,6 +160,10 @@ routine extension(path: Text) -> Text
 # Path resolution (OS calls, failable)
 # ============================================================================
 
+### Returns the result of `absolute path`.
+### :param path: The `path` value.
+### :returns: The resulting `Text` value.
+### :throws: May throw {IOError}.
 routine absolute_path!(path: Text) -> Text
   var cstr = CStr(from: path)
   var ptr = rf_fs_absolute_path(cstr.ptr, cstr.count().S32())
@@ -124,6 +173,10 @@ routine absolute_path!(path: Text) -> Text
   var bytes = Bytes(ptr: ptr, count: len)
   return bytes.decode_as_utf8()
 
+### Returns the result of `canonical path`.
+### :param path: The `path` value.
+### :returns: The resulting `Text` value.
+### :throws: May throw {IOError}.
 routine canonical_path!(path: Text) -> Text
   var cstr = CStr(from: path)
   var ptr = rf_fs_canonical_path(cstr.ptr, cstr.count().S32())
@@ -137,18 +190,31 @@ routine canonical_path!(path: Text) -> Text
 # Permissions
 # ============================================================================
 
+### Returns the result of `can read`.
+### :param path: The `path` value.
+### :returns: The resulting `Bool` value.
 routine can_read(path: Text) -> Bool
   var cstr = CStr(from: path)
   return rf_fs_can_read(cstr.ptr, cstr.count().S32())
 
+### Returns the result of `can write`.
+### :param path: The `path` value.
+### :returns: The resulting `Bool` value.
 routine can_write(path: Text) -> Bool
   var cstr = CStr(from: path)
   return rf_fs_can_write(cstr.ptr, cstr.count().S32())
 
+### Returns the result of `can execute`.
+### :param path: The `path` value.
+### :returns: The resulting `Bool` value.
 routine can_execute(path: Text) -> Bool
   var cstr = CStr(from: path)
   return rf_fs_can_execute(cstr.ptr, cstr.count().S32())
 
+### Sets the readonly component.
+### :param path: The `path` value.
+### :param readonly: The `readonly` value.
+### :throws: May throw {IOError}.
 routine set_readonly!(path: Text, readonly: Bool = true)
   var cstr = CStr(from: path)
   var result = rf_fs_set_readonly(cstr.ptr, cstr.count().S32(), readonly)

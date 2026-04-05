@@ -3,17 +3,29 @@
 
 module IterTools
 
+### Defines the entity `SkipIterator`.
+### :typeparam T: The value used for `T`.
 entity SkipIterator[T] obeys Iterable[T]
+  ### Stores the source member value.
   secret source: Iterable[T]
+  ### Stores the count member value.
   secret count: U64
 
+### Creates an iterator for this value.
+### :returns: The resulting `SkipEmitter[T]` value.
 routine SkipIterator[T].$iter() -> SkipEmitter[T]
   return SkipEmitter[T](source: me.source.$iter(), remaining: me.count)
 
+### Defines the entity `SkipEmitter`.
+### :typeparam T: The value used for `T`.
 entity SkipEmitter[T] obeys Iterator[T]
+  ### Stores the source member value.
   secret source: Iterator[T]
+  ### Stores the remaining member value.
   secret remaining: U64
 
+### Returns the next value from this iterator.
+### :returns: The resulting `T` value.
 emitting routine SkipEmitter[T].$next() -> T
   while me.remaining > 0u64
     me.source.$next()
@@ -21,5 +33,8 @@ emitting routine SkipEmitter[T].$next() -> T
   emit me.source.$next()
   return
 
+### Returns the result of `skip`.
+### :param count: The number of items to use.
+### :returns: The resulting `SkipIterator[T]` value.
 routine Iterable[T].skip(count: U64) -> SkipIterator[T]
   return SkipIterator[T](source: me, count: count)

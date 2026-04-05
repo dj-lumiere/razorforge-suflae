@@ -1,14 +1,24 @@
 ﻿module Core
 
+### Executes `stop`.
+### :throws: May throw {UserTerminationError}.
 routine stop!()
   throw UserTerminationError()
 
+### Performs `verify` on this value.
+### :param expr: The `expr` value.
+### :throws: May throw {VerificationFailure}.
 routine verify!(expr: Bool)
   throw VerificationFailure()
 
+### Executes `breach`.
+### :throws: May throw {LogicBreachError}.
 routine breach!()
   throw LogicBreachError()
 
+### Performs `max` on this value.
+### :param values...: The `values...` value.
+### :throws: May throw {NoSuchValueError}.
 routine max!(values...: T) needs T obeys Comparable
   if values.is_empty()
     throw NoSuchValueError()
@@ -17,6 +27,9 @@ routine max!(values...: T) needs T obeys Comparable
     result = result.max(value)
   return result
 
+### Performs `min` on this value.
+### :param values...: The `values...` value.
+### :throws: May throw {NoSuchValueError}.
 routine min!(values...: T) needs T obeys Comparable
   if values.is_empty()
     throw NoSuchValueError()

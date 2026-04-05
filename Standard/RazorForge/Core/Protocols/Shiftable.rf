@@ -1,15 +1,28 @@
 # Shiftable - Protocol for types that support shift operations (<<, >>, <<<, >>>)
 module Core
 
+### Defines the protocol `Shiftable`.
 protocol Shiftable
+  ### Implements the wired routine behavior for this value.
+  ### :param amount: The `amount` value.
+  ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$ashl(amount: Integral) -> Me
 
+  ### Implements the wired routine behavior for this value.
+  ### :param amount: The `amount` value.
+  ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$ashr(amount: Integral) -> Me
 
+  ### Implements the wired routine behavior for this value.
+  ### :param amount: The `amount` value.
+  ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$lshl(amount: Integral) -> Me
 
+  ### Implements the wired routine behavior for this value.
+  ### :param amount: The `amount` value.
+  ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$lshr(amount: Integral) -> Me

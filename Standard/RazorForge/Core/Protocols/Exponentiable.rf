@@ -1,6 +1,10 @@
 # Exponentiable - Protocol for types that support exponentiation (**)
 module Core
 
+### Defines the protocol `Exponentiable`.
 protocol Exponentiable
+  ### Returns the product of this value and the other value.
+  ### :param you: The other value to compare against.
+  ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$pow(you: Me) -> Me

@@ -1,9 +1,16 @@
 # Identifiable - Protocol for types that support identity comparison (===, !==)
 module Core
 
+### Defines the protocol `Identifiable`.
 protocol Identifiable
+  ### Implements the wired routine behavior for this value.
+  ### :param you: The other value to compare against.
+  ### :returns: The resulting `Bool` value.
   @[readonly, innate]
   routine Me.$same(you: Me) -> Bool
 
+  ### Implements the wired routine behavior for this value.
+  ### :param you: The other value to compare against.
+  ### :returns: The resulting `Bool` value.
   @[readonly, innate]
   routine Me.$notsame(you: Me) -> Bool

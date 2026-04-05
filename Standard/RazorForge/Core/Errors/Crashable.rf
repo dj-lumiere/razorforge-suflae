@@ -1,5 +1,8 @@
 module Core
 
+### Defines the protocol `Crashable`.
 protocol Crashable
+  ### Returns the result of `crash message`.
+  ### :returns: The resulting `Text` value.
   @readonly
   routine Me.crash_message() -> Text

@@ -2,5 +2,6 @@
 # Types that can be used as compile-time constant values in generic parameters
 module Core
 
+### Defines the protocol `ConstCompatible`.
 protocol ConstCompatible
   pass

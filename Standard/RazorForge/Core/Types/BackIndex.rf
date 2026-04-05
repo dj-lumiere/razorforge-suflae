@@ -10,31 +10,44 @@
 module Core
 
 
+### Defines the record `BackIndex`.
 record BackIndex[I obeys Integral]
+  ### Stores the offset member value.
   offset: I
 
-# Creator from any Integral type
+### Returns the result of `BackIndex`.
+### :param offset: The `offset` value.
+### :returns: The resulting `BackIndex[I]` value.
 routine BackIndex[I obeys Integral](offset: I) -> BackIndex[I]
   return BackIndex[I](offset: offset)
 
-# Resolve BackIndex to actual index given collection length
+### Returns the result of `resolve`.
+### :param length: The `length` value.
+### :returns: The resulting `U64` value.
 routine BackIndex[I obeys Integral].resolve(length: U64) -> U64
   var offset_u64 = me.offset.U64()
   if offset_u64 > length
     stop!("BackIndex out of bounds")
   return length - offset_u64
 
-# Get the offset value
+### Returns the offset component.
+### :returns: The resulting `I` value.
 routine BackIndex[I obeys Integral].get_offset() -> I
   return me.offset
 
-# Convert offset to U64
+### Returns the result of `offset u64`.
+### :returns: The resulting `U64` value.
 routine BackIndex[I obeys Integral].offset_u64() -> U64
   return me.offset.U64()
 
-# Comparison operations
+### Returns whether both values are equal.
+### :param other: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine BackIndex[I obeys Integral].$eq(other: BackIndex[I]) -> Bool
   return me.offset.U64() == other.offset.U64()
 
+### Compares this value with the other value.
+### :param other: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
 routine BackIndex[I obeys Integral].$cmp(other: BackIndex[I]) -> ComparisonSign
   return -me.offset <=> -other.offset

@@ -2,6 +2,9 @@
 # Primarily for entity types (records are value types with implicit copy)
 module Core
 
+### Defines the protocol `Copyable`.
 protocol Copyable
+  ### Returns the result of `copy`.
+  ### :returns: The resulting `Me` value.
   @readonly
   routine Me.copy() -> Me

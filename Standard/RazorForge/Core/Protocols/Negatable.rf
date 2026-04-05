@@ -1,6 +1,9 @@
 # Negatable - Protocol for types that support unary negation (-)
 module Core
 
+### Defines the protocol `Negatable`.
 protocol Negatable
+  ### Returns the negated value.
+  ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$neg() -> Me

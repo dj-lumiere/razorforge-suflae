@@ -1,9 +1,13 @@
 module Core
 
+### Defines the record `Bool`.
 @llvm("i1")
 record Bool obeys Equatable, ConstCompatible
   pass
 
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine Bool.$eq(you: Bool) -> Bool
   return icmp_eq[Bool](me, you)
 
@@ -11,11 +15,15 @@ routine Bool.$eq(you: Bool) -> Bool
 # Type Conversions
 # ============================================================================
 
+### Returns the result of `S32`.
+### :returns: The resulting `S32` value.
 routine Bool.S32() -> S32
   if me
     return 1_s32
   return 0_s32
 
+### Returns the result of `U8`.
+### :returns: The resulting `U8` value.
 routine Bool.U8() -> U8
   if me
     return U8(1)
@@ -25,11 +33,15 @@ routine Bool.U8() -> U8
 # Diagnostics and Hashing
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine Bool.$diagnose() -> Text
   if me
     return "Bool(true)"
   return "Bool(false)"
 
+### Returns the result of `hash`.
+### :returns: The resulting `U64` value.
 routine Bool.hash() -> U64
   if me
     return 1_u64
@@ -39,6 +51,8 @@ routine Bool.hash() -> U64
 # Text Representation
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine Bool.$represent() -> Text
   if me
     return "true"

@@ -1,6 +1,10 @@
 # Subtractable - Protocol for types that support subtraction (-)
 module Core
 
+### Defines the protocol `Subtractable`.
 protocol Subtractable
+  ### Returns the difference between this value and the other value.
+  ### :param you: The other value to compare against.
+  ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$sub(you: Me) -> Me

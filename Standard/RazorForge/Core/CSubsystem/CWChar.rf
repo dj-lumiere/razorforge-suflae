@@ -15,24 +15,33 @@ module Core
 # CWChar Record Definition (Platform-Dependent)
 # ============================================================================
 
-# Windows: wchar_t is 16-bit (UTF-16 code unit)
+### Defines the record `CWChar`.
 @config(target: "windows")
 record CWChar
+  ### Stores the value member value.
   value: U16
 
-# Unix/Linux: wchar_t is 32-bit (UTF-32 codepoint)
+### Defines the record `CWChar`.
 @config(target: "unix")
 record CWChar
+  ### Stores the value member value.
   value: U32
 
 # ============================================================================
 # Creators (Windows - U16)
 # ============================================================================
 
+### Creates a new instance.
+### :param value: The value to use.
+### :returns: The resulting `CWChar` value.
 @config(target: "windows")
 routine CWChar.$create(value: U16) -> CWChar
   return CWChar(value: value)
 
+### Implements the wired routine behavior for this value.
+### :param codepoint: The `codepoint` value.
+### :returns: The resulting `CWChar` value.
+### :throws: May throw {IntegerOverflowError}.
 @config(target: "windows")
 routine CWChar.$create!(codepoint: U32) -> CWChar
   if codepoint > 0xFFFFu32
@@ -43,6 +52,9 @@ routine CWChar.$create!(codepoint: U32) -> CWChar
 # Creators (Unix - U32)
 # ============================================================================
 
+### Creates a new instance.
+### :param value: The value to use.
+### :returns: The resulting `CWChar` value.
 @config(target: "unix")
 routine CWChar.$create(value: U32) -> CWChar
   return CWChar(value: value)
@@ -51,10 +63,16 @@ routine CWChar.$create(value: U32) -> CWChar
 # Comparison (Windows)
 # ============================================================================
 
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
 @config(target: "windows")
 routine CWChar.$eq(you: CWChar) -> Bool
   return me.value == you.value
 
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
 @config(target: "windows")
 routine CWChar.$cmp(you: CWChar) -> ComparisonSign
   return me.value.$cmp(you.value)
@@ -63,10 +81,16 @@ routine CWChar.$cmp(you: CWChar) -> ComparisonSign
 # Comparison (Unix)
 # ============================================================================
 
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
 @config(target: "unix")
 routine CWChar.$eq(you: CWChar) -> Bool
   return me.value == you.value
 
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
 @config(target: "unix")
 routine CWChar.$cmp(you: CWChar) -> ComparisonSign
   return me.value.$cmp(you.value)

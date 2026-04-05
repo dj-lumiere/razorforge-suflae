@@ -16,27 +16,40 @@ module Core
 # Record definition
 # ============================================================================
 
+### Defines the record `LocalMoment`.
 record LocalMoment obeys Ordered, DurationAddable, DurationSubtractable
+  ### Stores the moment member value.
   secret moment: Moment       # The UTC moment
+  ### Stores the offset member value.
   secret offset: Duration     # UTC offset (positive = east of UTC)
 
 # ============================================================================
 # Creators
 # ============================================================================
 
-# Create from a UTC Moment and an offset
+### Creates a new instance.
+### :param moment: The `moment` value.
+### :param offset: The `offset` value.
+### :returns: The resulting `LocalMoment` value.
 routine LocalMoment.$create(moment: Moment, offset: Duration) -> LocalMoment
   return LocalMoment(moment: moment, offset: offset)
 
-# Create from civil date components in local time + offset
-# The components describe the local time, and the offset is used to
-# convert back to UTC internally.
+### Creates a value from local.
+### :param year: The `year` value.
+### :param month: The `month` value.
+### :param day: The `day` value.
+### :param hour: The `hour` value.
+### :param minute: The `minute` value.
+### :param second: The `second` value.
+### :param offset: The `offset` value.
+### :returns: The resulting `LocalMoment` value.
 routine LocalMoment.from_local(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64, offset: Duration) -> LocalMoment
   var local_moment = Moment.$create(year, month, day, hour, minute, second)
   var utc_moment = local_moment.subtract_duration(offset)
   return LocalMoment(moment: utc_moment, offset: offset)
 
-# Create a LocalMoment at UTC (zero offset) from the current time
+### Returns the result of `now utc`.
+### :returns: The resulting `LocalMoment` value.
 routine LocalMoment.now_utc() -> LocalMoment
   return LocalMoment(moment: Moment.now(), offset: Duration.zero())
 
@@ -44,20 +57,26 @@ routine LocalMoment.now_utc() -> LocalMoment
 # Core accessors
 # ============================================================================
 
-# Get the underlying UTC moment
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `Moment` value.
 routine Moment.$create(from: LocalMoment) -> Moment
   return from.moment
 
+### Converts this value to moment.
+### :returns: The resulting `Moment` value.
 @readonly
 routine LocalMoment.to_moment() -> Moment
   return me.moment
 
-# Get the UTC offset
+### Returns the result of `utc offset`.
+### :returns: The resulting `Duration` value.
 @readonly
 routine LocalMoment.utc_offset() -> Duration
   return me.offset
 
-# Get the moment adjusted to local time (for date/time component extraction)
+### Returns the result of `local moment`.
+### :returns: The resulting `Moment` value.
 @readonly
 routine LocalMoment.local_moment() -> Moment
   return me.moment.add_duration(me.offset)
@@ -66,18 +85,26 @@ routine LocalMoment.local_moment() -> Moment
 # Date accessors (in local time)
 # ============================================================================
 
+### Returns the result of `year`.
+### :returns: The resulting `S64` value.
 @readonly
 routine LocalMoment.year() -> S64
   return me.local_moment().year()
 
+### Returns the result of `month`.
+### :returns: The resulting `S64` value.
 @readonly
 routine LocalMoment.month() -> S64
   return me.local_moment().month()
 
+### Returns the result of `day`.
+### :returns: The resulting `S64` value.
 @readonly
 routine LocalMoment.day() -> S64
   return me.local_moment().day()
 
+### Returns the result of `day of week`.
+### :returns: The resulting `S64` value.
 @readonly
 routine LocalMoment.day_of_week() -> S64
   return me.local_moment().day_of_week()
@@ -86,26 +113,38 @@ routine LocalMoment.day_of_week() -> S64
 # Time accessors (in local time)
 # ============================================================================
 
+### Returns the result of `hour`.
+### :returns: The resulting `S64` value.
 @readonly
 routine LocalMoment.hour() -> S64
   return me.local_moment().hour()
 
+### Returns the result of `minute`.
+### :returns: The resulting `S64` value.
 @readonly
 routine LocalMoment.minute() -> S64
   return me.local_moment().minute()
 
+### Returns the result of `second`.
+### :returns: The resulting `S64` value.
 @readonly
 routine LocalMoment.second() -> S64
   return me.local_moment().second()
 
+### Returns the result of `millisecond`.
+### :returns: The resulting `S64` value.
 @readonly
 routine LocalMoment.millisecond() -> S64
   return me.local_moment().millisecond()
 
+### Returns the result of `microsecond`.
+### :returns: The resulting `S64` value.
 @readonly
 routine LocalMoment.microsecond() -> S64
   return me.local_moment().microsecond()
 
+### Returns the result of `nanosecond`.
+### :returns: The resulting `S64` value.
 @readonly
 routine LocalMoment.nanosecond() -> S64
   return me.local_moment().nanosecond()
@@ -114,22 +153,27 @@ routine LocalMoment.nanosecond() -> S64
 # Conversion
 # ============================================================================
 
-# Unix timestamp in seconds (always UTC)
+### Returns the result of `timestamp`.
+### :returns: The resulting `S64` value.
 @readonly
 routine LocalMoment.timestamp() -> S64
   return me.moment.timestamp()
 
-# Unix timestamp in milliseconds (always UTC)
+### Returns the result of `timestamp ms`.
+### :returns: The resulting `S64` value.
 @readonly
 routine LocalMoment.timestamp_ms() -> S64
   return me.moment.timestamp_ms()
 
-# Convert to a different offset (same instant, different local representation)
+### Converts this value to offset.
+### :param new_offset: The `new_offset` value.
+### :returns: The resulting `LocalMoment` value.
 @readonly
 routine LocalMoment.to_offset(new_offset: Duration) -> LocalMoment
   return LocalMoment(moment: me.moment, offset: new_offset)
 
-# Convert to UTC (zero offset)
+### Converts this value to utc.
+### :returns: The resulting `LocalMoment` value.
 @readonly
 routine LocalMoment.to_utc() -> LocalMoment
   return LocalMoment(moment: me.moment, offset: Duration.zero())
@@ -138,27 +182,44 @@ routine LocalMoment.to_utc() -> LocalMoment
 # Arithmetic with Duration
 # ============================================================================
 
+### Adds a value using `add_duration`.
+### :param duration: The `duration` value.
+### :returns: The resulting `LocalMoment` value.
 @readonly
 routine LocalMoment.add_duration(duration: Duration) -> LocalMoment
   return LocalMoment(moment: me.moment.add_duration(duration), offset: me.offset)
 
+### Returns the result of `subtract duration`.
+### :param duration: The `duration` value.
+### :returns: The resulting `LocalMoment` value.
 @readonly
 routine LocalMoment.subtract_duration(duration: Duration) -> LocalMoment
   return LocalMoment(moment: me.moment.subtract_duration(duration), offset: me.offset)
 
-# LocalMoment - LocalMoment -> Duration (always based on UTC moments)
+### Returns the result of `elapsed since`.
+### :param earlier: The `earlier` value.
+### :returns: The resulting `Duration` value.
 @readonly
 routine LocalMoment.elapsed_since(earlier: LocalMoment) -> Duration
   return me.moment.elapsed_since(earlier.moment)
 
+### Returns the sum of this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `LocalMoment` value.
 @readonly
 routine LocalMoment.$add(you: Duration) -> LocalMoment
   return me.add_duration(you)
 
+### Returns the difference between this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `LocalMoment` value.
 @readonly
 routine LocalMoment.$sub(you: Duration) -> LocalMoment
   return me.subtract_duration(you)
 
+### Returns the difference between this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `Duration` value.
 @readonly
 routine LocalMoment.$sub(you: LocalMoment) -> Duration
   return me.elapsed_since(you)
@@ -167,10 +228,16 @@ routine LocalMoment.$sub(you: LocalMoment) -> Duration
 # Comparison operators (compare UTC moments, offset is irrelevant)
 # ============================================================================
 
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
 @readonly
 routine LocalMoment.$eq(you: LocalMoment) -> Bool
   return me.moment.$eq(you.moment)
 
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
 @readonly
 routine LocalMoment.$cmp(you: LocalMoment) -> ComparisonSign
   return me.moment.$cmp(you.moment)
@@ -179,6 +246,8 @@ routine LocalMoment.$cmp(you: LocalMoment) -> ComparisonSign
 # Text representation
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine LocalMoment.$represent() -> Text
   var local = me.local_moment()
   var y = local.year()
@@ -198,5 +267,7 @@ routine LocalMoment.$represent() -> Text
   var sign = if off.is_negative() then "-" else "+"
   return f"{y}-{mo}-{d} {h}:{mi}:{s}{sign}{off_hours.abs()}:{off_minutes}"
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine LocalMoment.$diagnose() -> Text
   return "LocalMoment(moment: " + me.moment.$diagnose() + ", offset: " + me.offset.$diagnose() + ")"

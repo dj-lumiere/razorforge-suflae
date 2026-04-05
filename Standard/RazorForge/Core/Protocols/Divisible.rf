@@ -1,6 +1,10 @@
 # Divisible - Protocol for types that support true division (/)
 module Core
 
+### Defines the protocol `Divisible`.
 protocol Divisible
+  ### Returns the quotient of this value and the other value.
+  ### :param you: The other value to compare against.
+  ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$truediv(you: Me) -> Me

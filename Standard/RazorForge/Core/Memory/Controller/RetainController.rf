@@ -3,44 +3,57 @@ module Core
 # RazorForge Single-threaded Share Controller
 # Core reference counting mechanism for single-threaded Retained[T] memory management
 
+### Defines the entity `RetainController`.
 entity RetainController
+  ### Stores the strong count member value.
   secret strong_count: S32
+  ### Stores the weak count member value.
   secret weak_count: S32
 
-# Create new reference count controller with initial counts of 0
+### Creates a new instance.
+### :returns: The resulting `RetainController` value.
 routine RetainController.$create() -> RetainController
   return RetainController(
     strong_count: 0,
     weak_count: 0
   )
 
-# Simple non-atomic operations (single-threaded)
+### Executes `increase strong count`.
 routine RetainController.increase_strong_count()
   me.strong_count = me.strong_count + 1
   return
 
+### Executes `decrease strong count`.
 routine RetainController.decrease_strong_count()
   me.strong_count = me.strong_count - 1
   return
 
+### Executes `increase weak count`.
 routine RetainController.increase_weak_count()
   me.weak_count = me.weak_count + 1
   return
 
+### Executes `decrease weak count`.
 routine RetainController.decrease_weak_count()
   me.weak_count = me.weak_count - 1
   return
 
-# Read-only access to counts
+### Returns the result of `strong count`.
+### :returns: The resulting `S32` value.
 routine RetainController.strong_count() -> S32
   return me.strong_count
 
+### Returns the result of `weak count`.
+### :returns: The resulting `S32` value.
 routine RetainController.weak_count() -> S32
   return me.weak_count
 
-# Check if the controller should be deallocated
+### Returns the result of `should deallocate data`.
+### :returns: The resulting `Bool` value.
 routine RetainController.should_deallocate_data() -> Bool
   return me.strong_count() == 0
 
+### Returns the result of `should deallocate controller`.
+### :returns: The resulting `Bool` value.
 routine RetainController.should_deallocate_controller() -> Bool
   return me.strong_count() == 0 and me.weak_count() == 0

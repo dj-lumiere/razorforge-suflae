@@ -3,19 +3,33 @@
 
 module IterTools
 
+### Defines the entity `WhereIterator`.
+### :typeparam T: The value used for `T`.
 entity WhereIterator[T] obeys Iterable[T]
+  ### Stores the source member value.
   secret source: Iterable[T]
+  ### Stores the predicate member value.
   secret predicate: Routine[(T,), Bool]
+  ### Stores the inverted member value.
   secret inverted: Bool
 
+### Creates an iterator for this value.
+### :returns: The resulting `WhereEmitter[T]` value.
 routine WhereIterator[T].$iter() -> WhereEmitter[T]
   return WhereEmitter[T](source: me.source.$iter(), predicate: me.predicate, inverted: me.inverted)
 
+### Defines the entity `WhereEmitter`.
+### :typeparam T: The value used for `T`.
 entity WhereEmitter[T] obeys Iterator[T]
+  ### Stores the source member value.
   secret source: Iterator[T]
+  ### Stores the predicate member value.
   secret predicate: Routine[(T,), Bool]
+  ### Stores the inverted member value.
   secret inverted: Bool
 
+### Returns the next value from this iterator.
+### :returns: The resulting `T` value.
 emitting routine WhereEmitter[T].$next() -> T
   loop
     var item = me.source.$next()
@@ -26,8 +40,14 @@ emitting routine WhereEmitter[T].$next() -> T
       emit item
       return
 
+### Returns the result of `where`.
+### :param predicate: The `predicate` value.
+### :returns: The resulting `WhereIterator[T]` value.
 routine Iterable[T].where(predicate: Routine[(T,), Bool]) -> WhereIterator[T]
   return WhereIterator[T](source: me, predicate: predicate, inverted: false)
 
+### Returns the result of `where not`.
+### :param predicate: The `predicate` value.
+### :returns: The resulting `WhereIterator[T]` value.
 routine Iterable[T].where_not(predicate: Routine[(T,), Bool]) -> WhereIterator[T]
   return WhereIterator[T](source: me, predicate: predicate, inverted: true)

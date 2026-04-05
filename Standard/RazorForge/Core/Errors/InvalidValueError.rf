@@ -1,9 +1,13 @@
 module Core
 
-# InvalidValueError - thrown when text cannot be parsed as the target type
+### Defines the entity `InvalidValueError`.
 entity InvalidValueError obeys Crashable
+  ### Stores the input member value.
   input: Text
+  ### Stores the target member value.
   target: Text
 
+### Returns the result of `crash message`.
+### :returns: The resulting `Text` value.
 routine InvalidValueError.crash_message() -> Text
   return f"Cannot parse \"{me.input}\" as {me.target}."

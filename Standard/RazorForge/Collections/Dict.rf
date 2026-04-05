@@ -21,6 +21,9 @@ preset DICT_INITIAL_BUCKETS: U64 = 16u64
 # Load factor threshold for rehashing (as percentage)
 preset DICT_LOAD_FACTOR: U64 = 75u64
 
+### Defines the entity `Dict`.
+### :typeparam K: The value used for `K`.
+### :typeparam V: The value used for `V`.
 entity Dict[K, V] obeys Iterable[DictEntry[K, V]]
 needs K obeys Hashable, Comparable
   secret buckets: List[SortedDict[K, V]]
@@ -30,6 +33,8 @@ needs K obeys Hashable, Comparable
 # Creators
 # ============================================================================
 
+### Creates a new instance.
+### :returns: The resulting `Dict[K, V]` value.
 routine Dict[K, V].$create() -> Dict[K, V]
   var buckets = List[SortedDict[K, V]](DICT_INITIAL_BUCKETS)
   var dict = Dict[K, V](
@@ -43,6 +48,9 @@ routine Dict[K, V].$create() -> Dict[K, V]
     i = i + 1u64
   return dict
 
+### Creates a new instance.
+### :param capacity: The capacity value to use.
+### :returns: The resulting `Dict[K, V]` value.
 routine Dict[K, V].$create(capacity: U64) -> Dict[K, V]
   var bucket_count = if capacity < DICT_INITIAL_BUCKETS then DICT_INITIAL_BUCKETS else capacity
   var buckets = List[SortedDict[K, V]](bucket_count)
@@ -57,6 +65,9 @@ routine Dict[K, V].$create(capacity: U64) -> Dict[K, V]
     i = i + 1u64
   return dict
 
+### Creates a new instance.
+### :param entries...: The `entries...` value.
+### :returns: The resulting `Dict[K, V]` value.
 routine Dict[K, V].$create(entries...: DictEntry[K, V]) -> Dict[K, V]
   var result = Dict[K, V]()
   for e in entries
@@ -67,14 +78,20 @@ routine Dict[K, V].$create(entries...: DictEntry[K, V]) -> Dict[K, V]
 # Internal Operations
 # ============================================================================
 
+### Returns the result of `bucket index`.
+### :param key: The `key` value.
+### :returns: The resulting `U64` value.
 routine Dict[K, V].bucket_index(key: K) -> U64
   var hash = key.$hash()
   return hash % me.buckets.count()
 
+### Returns the result of `should rehash`.
+### :returns: The resulting `Bool` value.
 routine Dict[K, V].should_rehash() -> Bool
   var load = (me.count * 100u64) // me.buckets.count()
   return load > DICT_LOAD_FACTOR
 
+### Executes `rehash`.
 routine Dict[K, V].rehash()
   var old_buckets = me.buckets
   var new_bucket_count = old_buckets.count() * 2u64
@@ -105,12 +122,17 @@ routine Dict[K, V].rehash()
 # Core Operations
 # ============================================================================
 
+### Returns the number of stored values.
+### :returns: The resulting `U64` value.
 routine Dict[K, V].count() -> U64
   return me.count
 
+### Returns true if this value is empty.
+### :returns: The resulting `Bool` value.
 routine Dict[K, V].is_empty() -> Bool
   return me.count == 0u64
 
+### Removes all stored values.
 routine Dict[K, V].clear()
   var i = 0u64
   while i < me.buckets.count()
@@ -119,11 +141,18 @@ routine Dict[K, V].clear()
   me.count = 0u64
   return
 
+### Returns whether this value contains `key`.
+### :param key: The `key` value.
+### :returns: The resulting `Bool` value.
 @readonly
 routine Dict[K, V].$contains(key: K) -> Bool
   var idx = me.bucket_index(key)
   return key in me.buckets[idx]
 
+### Returns the result of `add`.
+### :param key: The `key` value.
+### :param value: The value to use.
+### :returns: The resulting `Bool` value.
 routine Dict[K, V].add(key: K, value: V) -> Bool
   # Returns true if inserted new, false if updated existing
   if me.should_rehash()
@@ -137,6 +166,9 @@ routine Dict[K, V].add(key: K, value: V) -> Bool
     return true
   return false
 
+### Returns the result of `remove`.
+### :param key: The `key` value.
+### :returns: The resulting `Bool` value.
 routine Dict[K, V].remove(key: K) -> Bool
   # Returns true if removed, false if not found
   var idx = me.bucket_index(key)
@@ -145,6 +177,10 @@ routine Dict[K, V].remove(key: K) -> Bool
     return true
   return false
 
+### Returns the or default component.
+### :param key: The `key` value.
+### :param default_value: The `default_value` value.
+### :returns: The resulting `V` value.
 routine Dict[K, V].get_or_default(key: K, default_value: V) -> V
   var idx = me.bucket_index(key)
   if key in me.buckets[idx]
@@ -155,10 +191,16 @@ routine Dict[K, V].get_or_default(key: K, default_value: V) -> V
 # Indexing
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
+### :param key: The `key` value.
+### :returns: The resulting `V` value.
 routine Dict[K, V].$getitem!(key: K) -> V
   var idx = me.bucket_index(key)
   return me.buckets[idx][key]
 
+### Sets the element at the requested position.
+### :param key: The `key` value.
+### :param value: The value to use.
 routine Dict[K, V].$setitem(key: K, value: V)
   var idx = me.bucket_index(key)
   me.buckets[idx][key] = value
@@ -168,6 +210,8 @@ routine Dict[K, V].$setitem(key: K, value: V)
 # Keys/Values/Entries
 # ============================================================================
 
+### Returns the result of `keys`.
+### :returns: The resulting `List[K]` value.
 routine Dict[K, V].keys() -> List[K]
   var result = List[K](me.count)
   var i = 0u64
@@ -180,6 +224,8 @@ routine Dict[K, V].keys() -> List[K]
     i = i + 1u64
   return result
 
+### Returns the result of `values`.
+### :returns: The resulting `List[V]` value.
 routine Dict[K, V].values() -> List[V]
   var result = List[V](me.count)
   var i = 0u64
@@ -192,6 +238,8 @@ routine Dict[K, V].values() -> List[V]
     i = i + 1u64
   return result
 
+### Returns the result of `entries`.
+### :returns: The resulting `List[DictEntry[K, V]]` value.
 routine Dict[K, V].entries() -> List[DictEntry[K, V]]
   var result = List[DictEntry[K, V]](me.count)
   var i = 0u64
@@ -210,6 +258,8 @@ routine Dict[K, V].entries() -> List[DictEntry[K, V]]
 # Iteration
 # ============================================================================
 
+### Creates an iterator for this value.
+### :returns: The resulting `DictIterator[K, V]` value.
 @readonly
 routine Dict[K, V].$iter() -> DictIterator[K, V]
   return DictIterator[K, V](
@@ -219,12 +269,22 @@ routine Dict[K, V].$iter() -> DictIterator[K, V]
     current_keys: List[K]()
   )
 
+### Defines the entity `DictIterator`.
+### :typeparam K: The value used for `K`.
+### :typeparam V: The value used for `V`.
 entity DictIterator[K, V] obeys Iterator[DictEntry[K, V]]
+  ### Stores the dict member value.
   dict: Dict[K, V]
+  ### Stores the bucket idx member value.
   bucket_idx: U64
+  ### Stores the entry idx member value.
   entry_idx: U64
+  ### Stores the current keys member value.
   current_keys: List[K]
 
+### Returns the next value from this iterator.
+### :returns: The resulting `DictEntry[K, V]` value.
+### :absent: Returns absent when the requested value is unavailable.
 @writable
 emitting routine DictIterator[K, V].$next() -> DictEntry[K, V]
   while me.entry_idx >= me.current_keys.count()
@@ -244,6 +304,8 @@ emitting routine DictIterator[K, V].$next() -> DictEntry[K, V]
 # Comparison
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine Dict[K, V].$represent() -> Text
   if me.is_empty()
     return "{:}"
@@ -259,6 +321,8 @@ routine Dict[K, V].$represent() -> Text
   result = result + "}"
   return result
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine Dict[K, V].$diagnose() -> Text
   if me.is_empty()
     return me.type_name() + "(count: 0, {:})"
@@ -274,6 +338,9 @@ routine Dict[K, V].$diagnose() -> Text
   result = result + "})"
   return result
 
+### Returns whether both values are equal.
+### :param other: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine Dict[K, V].$eq(other: Dict[K, V]) -> Bool
   if me.count != other.count
     return false

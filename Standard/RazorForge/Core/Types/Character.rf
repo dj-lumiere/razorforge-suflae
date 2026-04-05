@@ -12,15 +12,22 @@
 # For legacy 32-bit encodings, use List[U32] instead.
 module Core
 
+### Defines the record `Character`.
 @llvm("i32")
 record Character obeys ConstCompatible
   pass
 
 # Creators
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `Character` value.
 routine Character.$create(from: Character) -> Character
   return from
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `Character` value.
 routine Character.$create(from: U32) -> Character
   return bitcast[Character](from)
 
@@ -40,17 +47,25 @@ preset CHARACTER_SURROGATE_END: U32 = 0xDFFF
 # Character protocol implementation
 # ============================================================================
 
+### Returns the result of `codepoint`.
+### :returns: The resulting `U32` value.
 routine Character.codepoint() -> U32
   return U32(me)
 
+### Returns true if this value is valid.
+### :returns: The resulting `Bool` value.
 routine Character.is_valid() -> Bool
   var cp = U32(me)
   # Valid if within Unicode range and not a surrogate
   return cp <= 0x10FFFFu32 and not (CHARACTER_SURROGATE_START <= cp <= CHARACTER_SURROGATE_END)
 
+### Returns true if this value is ascii.
+### :returns: The resulting `Bool` value.
 routine Character.is_ascii() -> Bool
   return U32(me) <= 0x007Fu32
 
+### Returns true if this value is alphabetic.
+### :returns: The resulting `Bool` value.
 routine Character.is_alphabetic() -> Bool
   var v = U32(me)
   var is_ascii_upper = 0x0041u32 <= v <= 0x005Au32
@@ -60,21 +75,31 @@ routine Character.is_alphabetic() -> Bool
   var is_latin_ext_b = 0x0180u32 <= v <= 0x024Fu32
   return is_ascii_upper or is_ascii_lower or is_latin_ext or is_latin_ext_a or is_latin_ext_b
 
+### Returns true if this value is numeric.
+### :returns: The resulting `Bool` value.
 routine Character.is_numeric() -> Bool
   var v = U32(me)
   return 0x0030u32 <= v <= 0x0039u32  # 0-9
 
+### Returns true if this value is alphanumeric.
+### :returns: The resulting `Bool` value.
 routine Character.is_alphanumeric() -> Bool
   return me.is_alphabetic() or me.is_numeric()
 
+### Returns true if this value is uppercase.
+### :returns: The resulting `Bool` value.
 routine Character.is_uppercase() -> Bool
   var v = U32(me)
   return 0x0041u32 <= v <= 0x005Au32  # A-Z (ASCII only)
 
+### Returns true if this value is lowercase.
+### :returns: The resulting `Bool` value.
 routine Character.is_lowercase() -> Bool
   var v = U32(me)
   return 0x0061u32 <= v <= 0x007Au32  # a-z (ASCII only)
 
+### Returns true if this value is whitespace.
+### :returns: The resulting `Bool` value.
 routine Character.is_whitespace() -> Bool
   var v = U32(me)
   var is_space = v == 0x0020u32
@@ -89,15 +114,21 @@ routine Character.is_whitespace() -> Bool
   var is_em_space = v == 0x2003u32
   return is_space or is_tab or is_lf or is_cr or is_ff or is_nbsp or is_en_quad or is_em_quad or is_en_space or is_em_space
 
+### Returns true if this value is control.
+### :returns: The resulting `Bool` value.
 routine Character.is_control() -> Bool
   var v = U32(me)
   return (v <= 0x001Fu32) or (0x007Fu32 <= v <= 0x009Fu32)
 
+### Converts this value to uppercase.
+### :returns: The resulting `Character` value.
 routine Character.to_uppercase() -> Character
   if me.is_lowercase()
     return Character(U32(me) - 32u32)
   return me
 
+### Converts this value to lowercase.
+### :returns: The resulting `Character` value.
 routine Character.to_lowercase() -> Character
   if me.is_uppercase()
     return Character(U32(me) + 32u32)
@@ -107,9 +138,15 @@ routine Character.to_lowercase() -> Character
 # Comparison operations
 # ============================================================================
 
+### Returns whether both values are equal.
+### :param other: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine Character.$eq(other: Character) -> Bool
   return U32(me) == U32(other)
 
+### Compares this value with the other value.
+### :param other: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
 routine Character.$cmp(other: Character) -> ComparisonSign
   return U32(me) <=> U32(other)
 
@@ -117,9 +154,13 @@ routine Character.$cmp(other: Character) -> ComparisonSign
 # Type conversions
 # ============================================================================
 
+### Returns the result of `codepoint`.
+### :returns: The resulting `U32` value.
 routine Character.codepoint() -> U32
   return U32(me)
 
+### Converts this value to byte.
+### :returns: The resulting `Byte` value.
 routine Character.to_byte() -> Byte
   # Only valid for ASCII range - truncates
   return Byte(U8(U32(me) & 0x7Fu32))
@@ -128,11 +169,15 @@ routine Character.to_byte() -> Byte
 # Display — shows the character itself
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine Character.$represent() -> Text
   var list = List[Character]()
   list.add_last(me)
   return Text(from_list: list)
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine Character.$diagnose() -> Text
   return "Character(" + me.$represent() + ", " + U32(me).$represent() + ")"
 
@@ -140,25 +185,37 @@ routine Character.$diagnose() -> Text
 # Utility methods
 # ============================================================================
 
+### Returns true if this value is digit.
+### :returns: The resulting `Bool` value.
 routine Character.is_digit() -> Bool
   return me.is_numeric()
 
+### Returns the result of `digit value`.
+### :returns: The resulting `S32` value.
 routine Character.digit_value() -> S32
   if me.is_numeric()
     return S32(U32(me) - 0x0030u32)
   return -1s32
 
+### Returns true if this value is printable.
+### :returns: The resulting `Bool` value.
 routine Character.is_printable() -> Bool
   return me.is_valid() and not me.is_control()
 
+### Returns true if this value is bmp.
+### :returns: The resulting `Bool` value.
 routine Character.is_bmp() -> Bool
   # Basic Multilingual Plane: U+0000 to U+FFFF (excluding surrogates)
   return U32(me) <= 0xFFFFu32 and not (CHARACTER_SURROGATE_START <= U32(me) <= CHARACTER_SURROGATE_END)
 
+### Returns true if this value is supplementary.
+### :returns: The resulting `Bool` value.
 routine Character.is_supplementary() -> Bool
   # Supplementary planes: U+10000 to U+10FFFF
   return 0x10000u32 <= U32(me) <= 0x10FFFFu32
 
+### Returns true if this value is cjk.
+### :returns: The resulting `Bool` value.
 routine Character.is_cjk() -> Bool
   var v = U32(me)
   var is_unified = 0x4E00u32 <= v <= 0x9FFFu32
@@ -167,6 +224,8 @@ routine Character.is_cjk() -> Bool
   var is_ext_c = 0x2A700u32 <= v <= 0x2B73Fu32
   return is_unified or is_ext_a or is_ext_b or is_ext_c
 
+### Returns true if this value is latin.
+### :returns: The resulting `Bool` value.
 routine Character.is_latin() -> Bool
   var v = U32(me)
   var is_basic = 0x0000u32 <= v <= 0x007Fu32
@@ -175,6 +234,8 @@ routine Character.is_latin() -> Bool
   var is_ext_b = 0x0180u32 <= v <= 0x024Fu32
   return is_basic or is_supplement or is_ext_a or is_ext_b
 
+### Returns true if this value is emoji.
+### :returns: The resulting `Bool` value.
 routine Character.is_emoji() -> Bool
   var v = U32(me)
   var is_emoticons = 0x1F600u32 <= v <= 0x1F64Fu32
@@ -187,6 +248,9 @@ routine Character.is_emoji() -> Bool
 # Codepoint offset
 # ============================================================================
 
+### Returns the result of `offset`.
+### :param delta: The amount to add or subtract.
+### :returns: The resulting `Character` value.
 routine Character.offset![I obeys Integral](delta: I) -> Character
   var new_value = S64(U32(me)) + delta.to_s64()
   return Character(U32(new_value))

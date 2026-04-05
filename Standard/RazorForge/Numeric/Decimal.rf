@@ -8,45 +8,54 @@ module Numerics
 # Default precision for operations (decimal places)
 preset DECIMAL_DEFAULT_PRECISION: S32 = 50
 
-# Opaque handle to MAPM M_APM structure
-# The actual memory is managed by the native runtime
+### Defines the entity `Decimal`.
 entity Decimal obeys Numeric, Ordered
+  ### Stores the handle member value.
   secret handle: Address
 
 # ============================================================================
 # Lifecycle Management
 # ============================================================================
 
-# Create a new Decimal initialized to zero
+### Creates a new instance.
+### :returns: The resulting `Decimal` value.
 routine Decimal.$create() -> Decimal
   var dec = Decimal(handle: rf_bigdec_new())
   rf_bigdec_set_i64(dec.handle, 0)
   return dec
 
-# Create Decimal from S64
+### Creates a new instance.
+### :param value: The value to use.
+### :returns: The resulting `Decimal` value.
 routine Decimal.$create(value: S64) -> Decimal
   var dec = Decimal(handle: rf_bigdec_new())
   rf_bigdec_set_i64(dec.handle, value)
   return dec
 
-# Create Decimal from F64
+### Creates a new instance.
+### :param value: The value to use.
+### :returns: The resulting `Decimal` value.
 routine Decimal.$create(value: F64) -> Decimal
   var dec = Decimal(handle: rf_bigdec_new())
   rf_bigdec_set_f64(dec.handle, value)
   return dec
 
-# Create Decimal from string
+### Implements the wired routine behavior for this value.
+### :param text: The `text` value.
+### :returns: The resulting `Decimal` value.
 routine Decimal.$create!(text: Text) -> Decimal
   var dec = Decimal(handle: rf_bigdec_new())
   rf_bigdec_set_str(dec.handle, text.to_cstr())
   return dec
 
-# Destructor - frees the MAPM structure
+### Releases the resources owned by this value.
 routine Decimal.$destroy()
   rf_bigdec_free(me.handle)
   return
 
-# Copy creator
+### Implements the wired routine behavior for this value.
+### :param other: The other value to compare against.
+### :returns: The resulting `Decimal` value.
 routine Decimal.$copy(other: Decimal) -> Decimal
   var dec = Decimal(handle: rf_bigdec_copy(other.handle))
   return dec
@@ -55,33 +64,49 @@ routine Decimal.$copy(other: Decimal) -> Decimal
 # Arithmetic Operations
 # ============================================================================
 
+### Returns the sum of this value and the other value.
+### :param other: The other value to compare against.
+### :returns: The resulting `Decimal` value.
 routine Decimal.$add(other: Decimal) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_add(result.handle, me.handle, other.handle)
   return result
 
+### Returns the difference between this value and the other value.
+### :param other: The other value to compare against.
+### :returns: The resulting `Decimal` value.
 routine Decimal.$sub(other: Decimal) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_sub(result.handle, me.handle, other.handle)
   return result
 
+### Returns the product of this value and the other value.
+### :param other: The other value to compare against.
+### :returns: The resulting `Decimal` value.
 routine Decimal.$mul(other: Decimal) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_mul(result.handle, me.handle, other.handle)
   return result
 
-# Division with default precision
+### Returns the quotient of this value and the other value.
+### :param other: The other value to compare against.
+### :returns: The resulting `Decimal` value.
 routine Decimal.$truediv(other: Decimal) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_div(result.handle, DECIMAL_DEFAULT_PRECISION, me.handle, other.handle)
   return result
 
-# Division with specified precision
+### Returns the result of `divide`.
+### :param other: The other value to compare against.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Decimal` value.
 routine Decimal.divide(other: Decimal, precision: S32) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_div(result.handle, precision, me.handle, other.handle)
   return result
 
+### Returns the negated value.
+### :returns: The resulting `Decimal` value.
 routine Decimal.$neg() -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_neg(result.handle, me.handle)
@@ -91,9 +116,15 @@ routine Decimal.$neg() -> Decimal
 # Comparison Operations
 # ============================================================================
 
+### Returns whether both values are equal.
+### :param other: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine Decimal.$eq(other: Decimal) -> Bool
   return rf_bigdec_cmp(me.handle, other.handle) == 0
 
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
 routine Decimal.$cmp(you: Decimal) -> ComparisonSign
   var value = rf_bigdec_cmp(me.handle, other.handle)
   if value < 0
@@ -106,31 +137,49 @@ routine Decimal.$cmp(you: Decimal) -> ComparisonSign
 # Math Operations (with precision parameter)
 # ============================================================================
 
+### Returns the absolute value.
+### :returns: The resulting `Decimal` value.
 routine Decimal.abs() -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_abs(result.handle, me.handle)
   return result
 
+### Returns the result of `sqrt`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Decimal` value.
 routine Decimal.sqrt(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_sqrt(result.handle, precision, me.handle)
   return result
 
+### Returns the result of `pow`.
+### :param exp: The exponent value.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Decimal` value.
 routine Decimal.pow(exp: Decimal, precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_pow(result.handle, precision, me.handle, exp.handle)
   return result
 
+### Returns the result of `exp`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Decimal` value.
 routine Decimal.exp(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_exp(result.handle, precision, me.handle)
   return result
 
+### Returns the result of `log`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Decimal` value.
 routine Decimal.log(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_log(result.handle, precision, me.handle)
   return result
 
+### Returns the result of `log10`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Decimal` value.
 routine Decimal.log10(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_log10(result.handle, precision, me.handle)
@@ -140,36 +189,58 @@ routine Decimal.log10(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
 # Trigonometric Functions (with precision parameter)
 # ============================================================================
 
+### Returns the result of `sin`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Decimal` value.
 routine Decimal.sin(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_sin(result.handle, precision, me.handle)
   return result
 
+### Returns the result of `cos`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Decimal` value.
 routine Decimal.cos(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_cos(result.handle, precision, me.handle)
   return result
 
+### Returns the result of `tan`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Decimal` value.
 routine Decimal.tan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_tan(result.handle, precision, me.handle)
   return result
 
+### Returns the result of `asin`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Decimal` value.
 routine Decimal.asin(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_asin(result.handle, precision, me.handle)
   return result
 
+### Returns the result of `acos`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Decimal` value.
 routine Decimal.acos(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_acos(result.handle, precision, me.handle)
   return result
 
+### Returns the result of `atan`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Decimal` value.
 routine Decimal.atan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_atan(result.handle, precision, me.handle)
   return result
 
+### Returns the result of `atan2`.
+### :param x: The x value.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Decimal` value.
 routine Decimal.atan2(x: Decimal, precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
   if x.is_zero()
     return when
@@ -186,17 +257,25 @@ routine Decimal.atan2(x: Decimal, precision: S32 = DECIMAL_DEFAULT_PRECISION) ->
     return theta - pi
   return theta + pi
 
-# Hyperbolic functions
+### Returns the result of `sinh`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Decimal` value.
 routine Decimal.sinh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_sinh(result.handle, precision, me.handle)
   return result
 
+### Returns the result of `cosh`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Decimal` value.
 routine Decimal.cosh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_cosh(result.handle, precision, me.handle)
   return result
 
+### Returns the result of `tanh`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Decimal` value.
 routine Decimal.tanh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_tanh(result.handle, precision, me.handle)
@@ -206,21 +285,31 @@ routine Decimal.tanh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
 # Rounding Operations
 # ============================================================================
 
+### Returns the result of `ceil`.
+### :returns: The resulting `Decimal` value.
 routine Decimal.ceil() -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_ceil(result.handle, me.handle)
   return result
 
+### Returns the result of `floor`.
+### :returns: The resulting `Decimal` value.
 routine Decimal.floor() -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_floor(result.handle, me.handle)
   return result
 
+### Returns the result of `round`.
+### :param decimal_places: The number of decimal places to render.
+### :returns: The resulting `Decimal` value.
 routine Decimal.round(decimal_places: S32 = 0) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_round(result.handle, decimal_places, me.handle)
   return result
 
+### Returns the result of `trunc`.
+### :param decimal_places: The number of decimal places to render.
+### :returns: The resulting `Decimal` value.
 routine Decimal.trunc(decimal_places: S32 = 0) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_trunc(result.handle, decimal_places, me.handle)
@@ -230,15 +319,23 @@ routine Decimal.trunc(decimal_places: S32 = 0) -> Decimal
 # Utility Methods
 # ============================================================================
 
+### Returns true if this value is zero.
+### :returns: The resulting `Bool` value.
 routine Decimal.is_zero() -> Bool
   return rf_bigdec_is_zero(me.handle) != 0
 
+### Returns true if this value is negative.
+### :returns: The resulting `Bool` value.
 routine Decimal.is_negative() -> Bool
   return rf_bigdec_is_neg(me.handle) != 0
 
+### Returns true if this value is positive.
+### :returns: The resulting `Bool` value.
 routine Decimal.is_positive() -> Bool
   return not me.is_zero() and not me.is_negative()
 
+### Returns the result of `signum`.
+### :returns: The resulting `S32` value.
 routine Decimal.signum() -> S32
   return when
     me.is_positive() => 1
@@ -249,15 +346,21 @@ routine Decimal.signum() -> S32
 # Conversions
 # ============================================================================
 
-# Convert to S64 (truncates decimal part)
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `S64` value.
 routine S64.$create(from: Decimal) -> S64
   return rf_bigdec_get_i64(from.handle)
 
-# Convert to F64 (may lose precision)
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F64` value.
 routine F64.$create(from: Decimal) -> F64
   return rf_bigdec_get_f64(from.handle)
 
-# String representation with specified decimal places
+### Returns the textual representation of this value.
+### :param decimal_places: The number of decimal places to render.
+### :returns: The resulting `Text` value.
 routine Decimal.$represent(decimal_places: S32 = 10) -> Text
   var CStr = rf_bigdec_get_str(me.handle, decimal_places)
   var text = Text.from_cstr(CStr)
@@ -268,13 +371,17 @@ routine Decimal.$represent(decimal_places: S32 = 10) -> Text
 # Constants (computed with high precision)
 # ============================================================================
 
-# Pi constant
+### Returns the result of `pi`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Decimal` value.
 routine Decimal.pi(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_pi(result.handle, precision)
   return result
 
-# Euler's number e
+### Returns the result of `e`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Decimal` value.
 routine Decimal.e(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_e(result.handle, precision)
@@ -284,19 +391,22 @@ routine Decimal.e(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
 # Factory Methods
 # ============================================================================
 
-# Parse from string - returns None on failure
-# Note: MAPM is lenient with parsing, so most strings will succeed
+### Returns the result of `parse`.
+### :param text: The `text` value.
+### :returns: The resulting `Maybe[Decimal]` value.
 routine Decimal.parse(text: Text) -> Maybe[Decimal]
   var dec = Decimal(handle: rf_bigdec_new())
   rf_bigdec_set_str(dec.handle, text.to_cstr())
   # MAPM doesn't return error codes for parsing, so we just return the result
   return dec
 
-# Zero constant
+### Returns the zero value.
+### :returns: The resulting `Decimal` value.
 routine Decimal.zero() -> Decimal
   return Decimal(0_s64)
 
-# One constant
+### Returns the result of `one`.
+### :returns: The resulting `Decimal` value.
 routine Decimal.one() -> Decimal
   return Decimal(1_s64)
 
@@ -304,8 +414,11 @@ routine Decimal.one() -> Decimal
 # Examples
 # ============================================================================
 
-# Compute e^x with arbitrary precision using Taylor series
-# (This is just for demonstration - MAPM has a better implementation)
+### Returns the result of `exp taylor`.
+### :param x: The x value.
+### :param terms: The `terms` value.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Decimal` value.
 routine exp_taylor(x: Decimal, terms: S32 = 20, precision: S32 = 50) -> Decimal
   var result = Decimal.one()
   var term = Decimal.one()
@@ -319,8 +432,11 @@ routine exp_taylor(x: Decimal, terms: S32 = 20, precision: S32 = 50) -> Decimal
 
   return result
 
-# Compute square root using Newton-Raphson method
-# (This is just for demonstration - MAPM has a better implementation)
+### Returns the result of `sqrt newton`.
+### :param x: The x value.
+### :param iterations: The `iterations` value.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Decimal` value.
 routine sqrt_newton(x: Decimal, iterations: S32 = 20, precision: S32 = 50) -> Decimal
   if x.is_zero() or x.is_negative()
     return Decimal.zero()
@@ -338,8 +454,9 @@ routine sqrt_newton(x: Decimal, iterations: S32 = 20, precision: S32 = 50) -> De
 
   return guess
 
-# Calculate pi using Machin's formula
-# pi/4 = 4*arctan(1/5) - arctan(1/239)
+### Returns the result of `compute pi`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Decimal` value.
 routine compute_pi(precision: S32 = 50) -> Decimal
   var one = Decimal.one()
   var four = Decimal(4_s64)

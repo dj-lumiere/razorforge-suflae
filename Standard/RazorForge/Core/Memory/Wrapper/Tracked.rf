@@ -2,29 +2,37 @@
 # Single-threaded weak references
 module Core
 
+### Defines the record `Tracked`.
+### :typeparam T: The value used for `T`.
 record Tracked[T]
+  ### Stores the controller member value.
   secret controller: Snatched[RetainController]
+  ### Stores the data member value.
   secret data: Snatched[T]
 
-# Create weak reference from Retained[T]
+### Returns the result of `track`.
+### :returns: The resulting `Tracked[T]` value.
 routine Retained[T].track() -> Tracked[T]
   danger!
     me.controller.increase_weak_count!()
     return me
 
-# Check if the tracked data is still alive
+### Returns true if this value is alive.
+### :returns: The resulting `Bool` value.
 routine Tracked[T].is_alive() -> Bool
   danger!
     return me.controller.strong_count() > 0
 
-# Clone the weak reference
+### Returns the result of `track`.
+### :returns: The resulting `Tracked[T]` value.
 routine Tracked[T].track() -> Tracked[T]
   danger!
     me.controller.increase_weak_count!()
     return me
 
-# Recover strong Retained[T] from weak Tracked[T]
-# Absent if the referenced data has been deallocated
+### Returns the result of `recover`.
+### :returns: The resulting `Retained[T]` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine Tracked[T].recover!() -> Retained[T]
   danger!
     if me.controller.strong_count() == 0
@@ -35,7 +43,7 @@ routine Tracked[T].recover!() -> Retained[T]
       data: me.data
     )
 
-# Release the weak reference
+### Executes `release`.
 routine Tracked[T].release!()
   danger!
     me.controller.decrease_weak_count!()
@@ -46,11 +54,14 @@ routine Tracked[T].release!()
       == false => pass
   return
 
-# Get reference counts for debugging
+### Returns the result of `strong count`.
+### :returns: The resulting `S32` value.
 routine Tracked[T].strong_count() -> S32
   danger!
     return me.controller.strong_count()
 
+### Returns the result of `weak count`.
+### :returns: The resulting `S32` value.
 routine Tracked[T].weak_count() -> S32
   danger!
     return me.controller.weak_count()
@@ -59,10 +70,14 @@ routine Tracked[T].weak_count() -> S32
 # Display (opaque - no inner value access)
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 @readonly
 routine Tracked[T].$represent() -> Text
   return me.type_name()
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 @readonly
 routine Tracked[T].$diagnose() -> Text
   danger!

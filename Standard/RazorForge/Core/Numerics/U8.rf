@@ -1,7 +1,7 @@
 # RazorForge U8 (unsigned 8-bit integer) native type implementation
 # Maps directly to LLVM i8 type using compiler intrinsics
 module Core
-# Core U8 type definition - maps to LLVM i8
+### Defines the record `U8`.
 @llvm("i8")
 record U8 obeys UnsignedIntegral, Ordered, ConstCompatible
   pass
@@ -16,83 +16,132 @@ preset U8_ONE: U8 = 1_u8
 # Checked Creators (crash on overflow)
 # ============================================================================
 
-# From S8 - crashes if value is negative
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `U8` value.
+### :throws: May throw {IntegerOverflowError}.
 routine U8.$create!(from: S8) -> U8
   if from < 0_s8
     throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
   return bitcast[S8, U8](from)
 
-# From S16 - crashes if value out of U8 range
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `U8` value.
+### :throws: May throw {IntegerOverflowError}.
 routine U8.$create!(from: S16) -> U8
   if not (0_s16 <= from <= 255_s16)
     throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
   return trunc[S16, U8](from)
 
-# From S32 - crashes if value out of U8 range
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `U8` value.
+### :throws: May throw {IntegerOverflowError}.
 routine U8.$create!(from: S32) -> U8
   if not (0_s32 <= from <= 255_s32)
     throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
   return trunc[S32, U8](from)
 
-# From S64 - crashes if value out of U8 range
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `U8` value.
+### :throws: May throw {IntegerOverflowError}.
 routine U8.$create!(from: S64) -> U8
   if not (0_s64 <= from <= 255_s64)
     throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
   return trunc[S64, U8](from)
 
-# From S128 - crashes if value out of U8 range
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `U8` value.
+### :throws: May throw {IntegerOverflowError}.
 routine U8.$create!(from: S128) -> U8
   if not (0_s128 <= from <= 255_s128)
     throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
   return trunc[S128, U8](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `U8` value.
 routine U8.$create(from: U8) -> U8
   return from
 
-# From U16 - crashes if value > U8_MAX
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `U8` value.
+### :throws: May throw {IntegerOverflowError}.
 routine U8.$create!(from: U16) -> U8
   if from > 255_u16
     throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
   return trunc[U16, U8](from)
 
-# From U32 - crashes if value > U8_MAX
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `U8` value.
+### :throws: May throw {IntegerOverflowError}.
 routine U8.$create!(from: U32) -> U8
   if from > 255_u32
     throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
   return trunc[U32, U8](from)
 
-# From U64 - crashes if value > U8_MAX
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `U8` value.
+### :throws: May throw {IntegerOverflowError}.
 routine U8.$create!(from: U64) -> U8
   if from > 255_u64
     throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
   return trunc[U64, U8](from)
 
-# From U128 - crashes if value > U8_MAX
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `U8` value.
+### :throws: May throw {IntegerOverflowError}.
 routine U8.$create!(from: U128) -> U8
   if from > 255_u128
     throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
   return trunc[U128, U8](from)
 
-# From floating point - truncates fractional part and crashes if overflow
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `U8` value.
 routine U8.$create!(from: F16) -> U8
   return from.U32!().U8!()
 
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `U8` value.
 routine U8.$create!(from: F32) -> U8
   return from.U32!().U8!()
 
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `U8` value.
 routine U8.$create!(from: F64) -> U8
   return from.U32!().U8!()
 
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `U8` value.
 routine U8.$create!(from: F128) -> U8
   return from.U32!().U8!()
 
-# From decimal - truncates fractional part and crashes if overflow
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `U8` value.
 routine U8.$create!(from: D32) -> U8
   return from.U32!().U8!()
 
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `U8` value.
 routine U8.$create!(from: D64) -> U8
   return from.U32!().U8!()
 
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `U8` value.
 routine U8.$create!(from: D128) -> U8
   return from.U32!().U8!()
 
@@ -100,20 +149,36 @@ routine U8.$create!(from: D128) -> U8
 # Arithmetic Operations (trapping on overflow by default)
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U8` value.
 routine U8.$add!(you: U8) -> U8
   return add[U8](me, you)
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U8` value.
 routine U8.$sub!(you: U8) -> U8
   return sub[U8](me, you)
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U8` value.
 routine U8.$mul!(you: U8) -> U8
   return mul[U8](me, you)
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U8` value.
+### :throws: May throw {DivisionByZeroError}.
 routine U8.$floordiv!(you: U8) -> U8
   if you == 0
     throw DivisionByZeroError()
   return udiv[U8](me, you)
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U8` value.
 routine U8.$mod!(you: U8) -> U8
   return urem[U8](me, you)
 
@@ -121,12 +186,21 @@ routine U8.$mod!(you: U8) -> U8
 # Wrapping Arithmetic (+%, -%, *%)
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U8` value.
 routine U8.$add_wrap(you: U8) -> U8
   return add[U8](me, you)
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U8` value.
 routine U8.$sub_wrap(you: U8) -> U8
   return sub[U8](me, you)
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U8` value.
 routine U8.$mul_wrap(you: U8) -> U8
   return mul[U8](me, you)
 
@@ -134,12 +208,21 @@ routine U8.$mul_wrap(you: U8) -> U8
 # Clamping Arithmetic (+^, -^, *^)
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U8` value.
 routine U8.$add_clamp(you: U8) -> U8
   return uadd_sat[U8](me, you)
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U8` value.
 routine U8.$sub_clamp(you: U8) -> U8
   return usub_sat[U8](me, you)
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U8` value.
 routine U8.$mul_clamp(you: U8) -> U8
   var wide = mul[U16](zext[U8, U16](me), zext[U8, U16](you))
   if icmp_ugt[U16](wide, 255_u16)
@@ -150,7 +233,10 @@ routine U8.$mul_clamp(you: U8) -> U8
 # Power Operations (**)
 # ============================================================================
 
-# Power operator (**) - can overflow
+### Implements the wired routine behavior for this value.
+### :param exp: The exponent value.
+### :returns: The resulting `U8` value.
+### :throws: May throw {IndeterminateResultError}.
 routine U8.$pow!(exp: U8) -> U8
   var result: U8 = 1
   var base: U8 = me
@@ -164,7 +250,10 @@ routine U8.$pow!(exp: U8) -> U8
     e = e >> 1
   return result
 
-# Wrapping power (**%)
+### Implements the wired routine behavior for this value.
+### :param exp: The exponent value.
+### :returns: The resulting `U8` value.
+### :throws: May throw {IndeterminateResultError}.
 routine U8.$pow_wrap!(exp: U8) -> U8
   var result: U8 = 1
   var base: U8 = me
@@ -178,7 +267,10 @@ routine U8.$pow_wrap!(exp: U8) -> U8
     e = e >> 1
   return result
 
-# Clamping power (**^)
+### Implements the wired routine behavior for this value.
+### :param exp: The exponent value.
+### :returns: The resulting `U8` value.
+### :throws: May throw {IndeterminateResultError}.
 routine U8.$pow_clamp!(exp: U8) -> U8
   var result: U8 = 1
   var base: U8 = me
@@ -196,15 +288,26 @@ routine U8.$pow_clamp!(exp: U8) -> U8
 # Bitwise Operations
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U8` value.
 routine U8.$and(you: U8) -> U8
   return bit_and[U8](me, you)
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U8` value.
 routine U8.$or(you: U8) -> U8
   return bit_or[U8](me, you)
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U8` value.
 routine U8.$xor(you: U8) -> U8
   return xor[U8](me, you)
 
+### Implements the wired routine behavior for this value.
+### :returns: The resulting `U8` value.
 routine U8.$not() -> U8
   return xor[U8](me, -1)
 
@@ -213,19 +316,27 @@ routine U8.$not() -> U8
 # For unsigned types, arithmetic and logical shifts behave identically
 # ============================================================================
 
-# Arithmetic left shift (<<) - sign preserving (for unsigned, same as logical)
+### Implements the wired routine behavior for this value.
+### :param bits: The encoded bit pattern.
+### :returns: The resulting `U8` value.
 routine U8.$ashl(bits: U32) -> U8
   return shl[U8](me, bits)
 
-# Arithmetic right shift (>>) - for unsigned, same as logical
+### Implements the wired routine behavior for this value.
+### :param bits: The encoded bit pattern.
+### :returns: The resulting `U8` value.
 routine U8.$ashr(bits: U32) -> U8
   return lshr[U8](me, bits)
 
-# Logical left shift (<<<) - same as <<
+### Implements the wired routine behavior for this value.
+### :param bits: The encoded bit pattern.
+### :returns: The resulting `U8` value.
 routine U8.$lshl(bits: U32) -> U8
   return shl[U8](me, bits)
 
-# Logical right shift (>>>) - fills with zeros
+### Implements the wired routine behavior for this value.
+### :param bits: The encoded bit pattern.
+### :returns: The resulting `U8` value.
 routine U8.$lshr(bits: U32) -> U8
   return lshr[U8](me, bits)
 
@@ -233,9 +344,15 @@ routine U8.$lshr(bits: U32) -> U8
 # Comparison Operations
 # ============================================================================
 
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine U8.$eq(you: U8) -> Bool
   return icmp_eq[U8](me, you)
 
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
 routine U8.$cmp(you: U8) -> ComparisonSign
   if icmp_ult[U8](me, you)
     return ME_SMALL
@@ -247,12 +364,22 @@ routine U8.$cmp(you: U8) -> ComparisonSign
 # Math Operations
 # ============================================================================
 
+### Returns the result of `min`.
+### :param you: The other value to compare against.
+### :returns: The resulting `U8` value.
 routine U8.min(you: U8) -> U8
   return if me <= you then me else you
 
+### Returns the result of `max`.
+### :param you: The other value to compare against.
+### :returns: The resulting `U8` value.
 routine U8.max(you: U8) -> U8
   return if me >= you then me else you
 
+### Returns the result of `clamp`.
+### :param min_val: The `min_val` value.
+### :param max_val: The `max_val` value.
+### :returns: The resulting `U8` value.
 routine U8.clamp(min_val: U8, max_val: U8) -> U8
   return me.min(max_val).max(min_val)
 
@@ -260,27 +387,43 @@ routine U8.clamp(min_val: U8, max_val: U8) -> U8
 # Bit Manipulation
 # ============================================================================
 
+### Returns the number of stored values.
+### :returns: The resulting `U8` value.
 routine U8.count_ones() -> U8
   return ctpop[U8](me)
 
+### Returns the number of stored values.
+### :returns: The resulting `U8` value.
 routine U8.count_zeros() -> U8
   return 8_u8 - me.count_ones()
 
+### Returns the result of `leading zeros`.
+### :returns: The resulting `U8` value.
 routine U8.leading_zeros() -> U8
   return ctlz[U8](me)
 
+### Returns the result of `trailing zeros`.
+### :returns: The resulting `U8` value.
 routine U8.trailing_zeros() -> U8
   return cttz[U8](me)
 
+### Returns the result of `leading ones`.
+### :returns: The resulting `U8` value.
 routine U8.leading_ones() -> U8
   return me.$not().leading_zeros()
 
+### Returns the result of `trailing ones`.
+### :returns: The resulting `U8` value.
 routine U8.trailing_ones() -> U8
   return me.$not().trailing_zeros()
 
+### Returns the result of `reverse bits`.
+### :returns: The resulting `U8` value.
 routine U8.reverse_bits() -> U8
   return bitreverse[U8](me)
 
+### Returns true if this value is power of two.
+### :returns: The resulting `Bool` value.
 routine U8.is_power_of_two() -> Bool
   return me != 0_u8 and (me & (me - 1_u8)) == 0_u8
 
@@ -288,31 +431,51 @@ routine U8.is_power_of_two() -> Bool
 # Type Conversions (creator syntax)
 # ============================================================================
 
-# Bitcast to signed
+### Returns the result of `S8`.
+### :param from: The source value to convert.
+### :returns: The resulting `S8` value.
 routine S8(from: U8) -> S8
   return bitcast[U8, S8](from)
 
-# Zero-extend to larger types
+### Returns the result of `U16`.
+### :param from: The source value to convert.
+### :returns: The resulting `U16` value.
 routine U16(from: U8) -> U16
   return zext[U8, U16](from)
 
+### Returns the result of `U32`.
+### :param from: The source value to convert.
+### :returns: The resulting `U32` value.
 routine U32(from: U8) -> U32
   return zext[U8, U32](from)
 
+### Returns the result of `U64`.
+### :param from: The source value to convert.
+### :returns: The resulting `U64` value.
 routine U64(from: U8) -> U64
   return zext[U8, U64](from)
 
+### Returns the result of `U128`.
+### :param from: The source value to convert.
+### :returns: The resulting `U128` value.
 routine U128(from: U8) -> U128
   return zext[U8, U128](from)
 
-# Convert to floating point
+### Returns the result of `F32`.
+### :param from: The source value to convert.
+### :returns: The resulting `F32` value.
 routine F32(from: U8) -> F32
   return uitofp[U8, F32](from)
 
+### Returns the result of `F64`.
+### :param from: The source value to convert.
+### :returns: The resulting `F64` value.
 routine F64(from: U8) -> F64
   return uitofp[U8, F64](from)
 
-# Convert to boolean
+### Returns the result of `Bool`.
+### :param from: The source value to convert.
+### :returns: The resulting `Bool` value.
 routine Bool(from: U8) -> Bool
   return icmp_ne[U8](from, 0_u8)
 
@@ -320,13 +483,19 @@ routine Bool(from: U8) -> Bool
 # Utility Methods
 # ============================================================================
 
+### Returns true if this value is zero.
+### :returns: The resulting `Bool` value.
 routine U8.is_zero() -> Bool
   return me == 0_u8
 
+### Returns true if this value is even.
+### :returns: The resulting `Bool` value.
 routine U8.is_even() -> Bool
   var result = bit_and[U8](me, 1_u8)
   return icmp_eq[U8](result, 0_u8)
 
+### Returns true if this value is odd.
+### :returns: The resulting `Bool` value.
 routine U8.is_odd() -> Bool
   return not me.is_even()
 
@@ -334,12 +503,20 @@ routine U8.is_odd() -> Bool
 # Text Representation and Parsing
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine U8.$represent() -> Text
   return U32(me).$represent()
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine U8.$diagnose() -> Text
   return "U8(" + me.$represent() + ")"
 
+### Implements the wired routine behavior for this value.
+### :param from_text: The `from_text` value.
+### :returns: The resulting `U8` value.
+### :throws: May throw {InvalidValueError}.
 routine U8.$create!(from_text: Text) -> U8
   if from_text.count() == 0u64
     throw InvalidValueError(input: from_text, target: "U8")

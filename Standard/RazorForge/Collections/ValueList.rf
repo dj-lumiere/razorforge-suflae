@@ -11,8 +11,9 @@ module Collections
 
 import BuilderService
 
-# Fixed-size array with value semantics
-# Layout: N elements of T inline as [N x <T>]
+### Defines the record `ValueList`.
+### :typeparam T: The value used for `T`.
+### :typeparam N: The value used for `N`.
 @llvm("[{N} x {T}]")
 record ValueList[T, N]
 needs T is RecordType
@@ -24,6 +25,10 @@ needs N is U64
 # Indexing with Integral (forward index)
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
+### :param index: The zero-based position to use.
+### :returns: The resulting `T` value.
+### :throws: May throw {IndexOutOfBoundsError}.
 routine ValueList[T, N].$getitem![I](index: I) -> T
 needs I obeys Integral
   var idx = index.U64!()
@@ -31,6 +36,10 @@ needs I obeys Integral
     throw IndexOutOfBoundsError(index: idx, count: N)
   return element_at[ValueList[T, N], T](me, idx)
 
+### Implements the wired routine behavior for this value.
+### :param index: The zero-based position to use.
+### :param value: The value to use.
+### :throws: May throw {IndexOutOfBoundsError}.
 routine ValueList[T, N].$setitem![I](index: I, value: T)
 needs I obeys Integral
   var idx = index.U64!()
@@ -42,6 +51,9 @@ needs I obeys Integral
 # Indexing with BackIndex (backward index using ^)
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
+### :param index: The zero-based position to use.
+### :returns: The resulting `T` value.
 routine ValueList[T, N].$getitem![I](index: BackIndex[I]) -> T
 needs I obeys Integral
   var idx = index.resolve(N)
@@ -51,22 +63,35 @@ needs I obeys Integral
 # Query Operations
 # ============================================================================
 
+### Returns the number of stored values.
+### :returns: The resulting `U64` value.
 routine ValueList[T, N].count() -> U64
   return N
 
+### Returns true if this value is empty.
+### :returns: The resulting `Bool` value.
 routine ValueList[T, N].is_empty() -> Bool
   return N == 0u64
 
+### Returns the result of `first`.
+### :returns: The resulting `T` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine ValueList[T, N].first!() -> T
   if N == 0u64
     absent
   return element_at[ValueList[T, N], T](me, 0u64)
 
+### Returns the result of `last`.
+### :returns: The resulting `T` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine ValueList[T, N].last!() -> T
   if N == 0u64
     absent
   return element_at[ValueList[T, N], T](me, N - 1u64)
 
+### Returns whether this value contains `value`.
+### :param value: The value to use.
+### :returns: The resulting `Bool` value.
 @readonly
 routine ValueList[T, N].$contains(value: T) -> Bool
   for i in 0 til N
@@ -74,6 +99,10 @@ routine ValueList[T, N].$contains(value: T) -> Bool
       return true
   return false
 
+### Returns the result of `index of`.
+### :param value: The value to use.
+### :returns: The resulting `U64` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine ValueList[T, N].index_of!(value: T) -> U64
   for i in 0 til N
     if me[i] == value
@@ -84,13 +113,23 @@ routine ValueList[T, N].index_of!(value: T) -> U64
 # Iteration Support
 # ============================================================================
 
+### Returns the result of `iter`.
+### :returns: The resulting `ValueListIterator[T, N]` value.
 routine ValueList[T, N].iter() -> ValueListIterator[T, N]
   return ValueListIterator[T, N](list: me, index: 0u64)
 
+### Defines the record `ValueListIterator`.
+### :typeparam T: The value used for `T`.
+### :typeparam N: The value used for `N`.
 record ValueListIterator[T, N]
+  ### Stores the list member value.
   list: ValueList[T, N]
+  ### Stores the index member value.
   index: U64
 
+### Returns the next value from this iterator.
+### :returns: The resulting `T` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine ValueListIterator[T, N].$next!() -> T
   if me.index >= N
     absent
@@ -102,6 +141,8 @@ routine ValueListIterator[T, N].$next!() -> T
 # Display
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine ValueList[T, N].$represent() -> Text
   var result = "ValueList["
   for i in 0 til N
@@ -111,6 +152,8 @@ routine ValueList[T, N].$represent() -> Text
   result = result + "]"
   return result
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine ValueList[T, N].$diagnose() -> Text
   var result = me.type_name() + "(count: " + N.$represent() + ", ["
   for i in 0 til N

@@ -525,27 +525,28 @@ public partial class LLVMCodeGenerator
                 string loaded = NextTemp();
                 EmitLine(sb: sb, line: $"  {loaded} = load {_emitSlotType}, ptr {_emitSlotAddr}");
 
-                // Allocate a Snatched handle and store the value
-                int size = _currentFunctionReturnType != null
-                    ? GetTypeSize(type: _currentFunctionReturnType)
-                    : GetTypeSizeFromLlvmType(llvmType: _emitSlotType);
-                string handle = NextTemp();
-                EmitLine(sb: sb, line: $"  {handle} = call ptr @rf_allocate_dynamic(i64 {size})");
-                EmitLine(sb: sb, line: $"  store {_emitSlotType} {loaded}, ptr {handle}");
+                TypeInfo? emitElemType = _currentEmittingRoutine?.ReturnType;
+                string emitCarrierType = emitElemType != null
+                    ? GetMaybeCarrierLLVMType(valueType: emitElemType)
+                    : "{ i1, ptr }";
 
-                // Build { i64 1, ptr handle } — DataState.VALID
+                // Build { i1 1, <value> } — VALID
                 string v0 = NextTemp();
-                EmitLine(sb: sb, line: $"  {v0} = insertvalue {{ i64, ptr }} undef, i64 1, 0");
+                EmitLine(sb: sb, line: $"  {v0} = insertvalue {emitCarrierType} undef, i1 1, 0");
                 string v1 = NextTemp();
-                EmitLine(sb: sb,
-                    line: $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr {handle}, 1");
+                if (emitElemType is EntityTypeInfo)
+                    EmitLine(sb: sb,
+                        line: $"  {v1} = insertvalue {emitCarrierType} {v0}, ptr {loaded}, 1");
+                else
+                    EmitLine(sb: sb,
+                        line: $"  {v1} = insertvalue {emitCarrierType} {v0}, {_emitSlotType} {loaded}, 1");
 
                 EmitUsingCleanup(sb: sb);
                 EmitRCRecordCleanup(sb: sb);
                 EmitEntityCleanup(sb: sb, returnedVarName: null);
                 if (ShouldEmitTrace)
                     EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
-                EmitLine(sb: sb, line: $"  ret {{ i64, ptr }} {v1}");
+                EmitLine(sb: sb, line: $"  ret {emitCarrierType} {v1}");
             }
             else
             {
@@ -589,34 +590,27 @@ public partial class LLVMCodeGenerator
                 TypeInfo? exprType = GetExpressionType(expr: ret.Value);
                 if (exprType == null || !IsMaybeType(type: exprType))
                 {
-                    // Wrap: build { i64 1, ptr handle }
                     TypeInfo innerType = retType is ErrorHandlingTypeInfo eh ? eh.ValueType :
                         retType.TypeArguments is { Count: > 0 } ? retType.TypeArguments[index: 0] :
                         retType;
+                    string carrierType = GetLLVMType(type: retType);
                     string v0 = NextTemp();
-                    EmitLine(sb: sb, line: $"  {v0} = insertvalue {{ i64, ptr }} undef, i64 1, 0");
-
+                    EmitLine(sb: sb, line: $"  {v0} = insertvalue {carrierType} undef, i1 1, 0");
+                    string v1 = NextTemp();
                     if (innerType is EntityTypeInfo)
                     {
-                        // Entity types are already pointers — store directly, no heap allocation
-                        string v1 = NextTemp();
+                        // Entity types are already pointers — insert directly
                         EmitLine(sb: sb,
-                            line: $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr {value}, 1");
-                        EmitLine(sb: sb, line: $"  ret {{ i64, ptr }} {v1}");
+                            line: $"  {v1} = insertvalue {carrierType} {v0}, ptr {value}, 1");
                     }
                     else
                     {
                         string innerLlvm = GetLLVMType(type: innerType);
-                        int size = GetTypeSize(type: innerType);
-                        string handle = NextTemp();
                         EmitLine(sb: sb,
-                            line: $"  {handle} = call ptr @rf_allocate_dynamic(i64 {size})");
-                        EmitLine(sb: sb, line: $"  store {innerLlvm} {value}, ptr {handle}");
-                        string v1 = NextTemp();
-                        EmitLine(sb: sb,
-                            line: $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr {handle}, 1");
-                        EmitLine(sb: sb, line: $"  ret {{ i64, ptr }} {v1}");
+                            line: $"  {v1} = insertvalue {carrierType} {v0}, {innerLlvm} {value}, 1");
                     }
+
+                    EmitLine(sb: sb, line: $"  ret {carrierType} {v1}");
                 }
                 else
                 {
@@ -884,15 +878,15 @@ public partial class LLVMCodeGenerator
             return;
         }
 
-        // Build { i64 0, ptr null } — DataState.ABSENT (for emitting routines)
-        string v0 = NextTemp();
-        EmitLine(sb: sb, line: $"  {v0} = insertvalue {{ i64, ptr }} undef, i64 0, 0");
-        string v1 = NextTemp();
-        EmitLine(sb: sb, line: $"  {v1} = insertvalue {{ i64, ptr }} {v0}, ptr null, 1");
+        // Return zeroinitializer — tag=0 means ABSENT for any carrier layout
+        TypeInfo? absentElemType = _currentEmittingRoutine?.ReturnType;
+        string absentCarrierType = absentElemType != null
+            ? GetMaybeCarrierLLVMType(valueType: absentElemType)
+            : "{ i1, ptr }";
         // Clean up active scopes before returning absent
         EmitUsingCleanup(sb: sb);
         EmitRCRecordCleanup(sb: sb);
-        EmitLine(sb: sb, line: $"  ret {{ i64, ptr }} {v1}");
+        EmitLine(sb: sb, line: $"  ret {absentCarrierType} zeroinitializer");
     }
 
     /// <summary>

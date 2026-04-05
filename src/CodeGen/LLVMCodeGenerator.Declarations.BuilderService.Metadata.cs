@@ -180,6 +180,10 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private static ulong ComputeTypeId(string fullName)
     {
+        // Blank is the unit type; type_id 0 is reserved for it (represents "absent" in carriers)
+        if (fullName is "Blank" || fullName.EndsWith(value: ".Blank"))
+            return 0UL;
+
         ulong hash = 14695981039346656037UL; // FNV-1a offset basis
         foreach (byte b in Encoding.UTF8.GetBytes(s: fullName))
         {

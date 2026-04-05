@@ -5,10 +5,17 @@ module Core
 # Each record represents a single routine call in the call history.
 # All member variables are U32 IDs that reference builder-generated lookup tables.
 
+### Defines the record `RoutineRecord`.
 record RoutineRecord
+  ### Stores the file id member value.
   file_id: U32
+  ### Stores the routine id member value.
   routine_id: U32
+  ### Stores the namespace id member value.
   namespace_id: U32
+  ### Stores the type id member value.
   type_id: U32
+  ### Stores the line no member value.
   line_no: U32
+  ### Stores the column no member value.
   column_no: U32

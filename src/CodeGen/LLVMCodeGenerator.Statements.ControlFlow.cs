@@ -410,6 +410,11 @@ public partial class LLVMCodeGenerator
 
         string maybeResult;
 
+        // Emitting routines return a Maybe carrier — layout depends on element type
+        string maybeRetType = elemType != null
+            ? GetMaybeCarrierLLVMType(valueType: elemType)
+            : "{ i1, ptr }";
+
         if (nextMethod != null)
         {
             // Handle monomorphization for generic emitter types
@@ -431,9 +436,6 @@ public partial class LLVMCodeGenerator
             }
 
             GenerateFunctionDeclaration(routine: nextMethod);
-
-            // Emitting routines always return { i64, ptr } at IR level
-            string maybeRetType = "{ i64, ptr }";
 
             // Emit declaration for the monomorphized name
             if (!_generatedFunctions.Contains(item: nextMangled))
@@ -458,33 +460,44 @@ public partial class LLVMCodeGenerator
             maybeResult = NextTemp();
             EmitLine(sb: sb,
                 line:
-                $"  {maybeResult} = call {{ i64, ptr }} @{fallbackName}({emitterLlvmType} {emitterLoad})");
+                $"  {maybeResult} = call {maybeRetType} @{fallbackName}({emitterLlvmType} {emitterLoad})");
         }
 
-        // Extract tag from Maybe result (field 0 = DataState i64)
+        // Extract tag from Maybe result (field 0 = i1 for Maybe)
         string maybeTagPtr = NextTemp();
-        EmitEntryAlloca(llvmName: maybeTagPtr, llvmType: "{ i64, ptr }");
-        EmitLine(sb: sb, line: $"  store {{ i64, ptr }} {maybeResult}, ptr {maybeTagPtr}");
+        EmitEntryAlloca(llvmName: maybeTagPtr, llvmType: maybeRetType);
+        EmitLine(sb: sb, line: $"  store {maybeRetType} {maybeResult}, ptr {maybeTagPtr}");
         string tagFieldPtr = NextTemp();
         string tagVal = NextTemp();
         EmitLine(sb: sb,
             line:
-            $"  {tagFieldPtr} = getelementptr {{ i64, ptr }}, ptr {maybeTagPtr}, i32 0, i32 0");
-        EmitLine(sb: sb, line: $"  {tagVal} = load i64, ptr {tagFieldPtr}");
+            $"  {tagFieldPtr} = getelementptr {maybeRetType}, ptr {maybeTagPtr}, i32 0, i32 0");
+        EmitLine(sb: sb, line: $"  {tagVal} = load i1, ptr {tagFieldPtr}");
 
         // tag == 1 (VALID) → has value → body, else → end
         string hasValue = NextTemp();
-        EmitLine(sb: sb, line: $"  {hasValue} = icmp eq i64 {tagVal}, 1");
+        EmitLine(sb: sb, line: $"  {hasValue} = icmp eq i1 {tagVal}, 1");
         EmitLine(sb: sb, line: $"  br i1 {hasValue}, label %{bodyLabel}, label %{endLabel}");
 
-        // Body block: extract payload (field 1 = ptr handle), store in loop var
+        // Body block: extract payload (field 1)
         EmitLine(sb: sb, line: $"{bodyLabel}:");
         string handlePtr = NextTemp();
-        string handleVal = NextTemp();
         EmitLine(sb: sb,
             line:
-            $"  {handlePtr} = getelementptr {{ i64, ptr }}, ptr {maybeTagPtr}, i32 0, i32 1");
-        EmitLine(sb: sb, line: $"  {handleVal} = load ptr, ptr {handlePtr}");
+            $"  {handlePtr} = getelementptr {maybeRetType}, ptr {maybeTagPtr}, i32 0, i32 1");
+
+        string handleVal;
+        if (elemType is EntityTypeInfo)
+        {
+            // Entity: field 1 is a ptr — load it directly
+            handleVal = NextTemp();
+            EmitLine(sb: sb, line: $"  {handleVal} = load ptr, ptr {handlePtr}");
+        }
+        else
+        {
+            // Record/value: field 1 IS the inline value — handlePtr is already the address
+            handleVal = handlePtr;
+        }
 
         // Load element value from the Snatched handle pointer
         if (forStmt.VariablePattern != null && elemType is TupleTypeInfo bodyTupleType)
@@ -521,9 +534,18 @@ public partial class LLVMCodeGenerator
         }
         else if (varAddr != null)
         {
-            string elemVal = NextTemp();
-            EmitLine(sb: sb, line: $"  {elemVal} = load {elemLlvmType}, ptr {handleVal}");
-            EmitLine(sb: sb, line: $"  store {elemLlvmType} {elemVal}, ptr {varAddr}");
+            if (elemType is EntityTypeInfo)
+            {
+                // Entity: handleVal is the ptr — store it directly
+                EmitLine(sb: sb, line: $"  store ptr {handleVal}, ptr {varAddr}");
+            }
+            else
+            {
+                // Record/value: handleVal is ptr to inline T — load then store
+                string elemVal = NextTemp();
+                EmitLine(sb: sb, line: $"  {elemVal} = load {elemLlvmType}, ptr {handleVal}");
+                EmitLine(sb: sb, line: $"  store {elemLlvmType} {elemVal}, ptr {varAddr}");
+            }
         }
 
         bool bodyTerminated = EmitStatement(sb: sb, stmt: forStmt.Body);

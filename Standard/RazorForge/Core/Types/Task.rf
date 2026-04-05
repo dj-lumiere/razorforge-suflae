@@ -1,28 +1,45 @@
 module Core
 
+### Defines the record `Task`.
+### :typeparam T: The value used for `T`.
 @llvm("ptr")
 record Task[T]
   pass
 
+### Returns the address component.
+### :returns: The resulting `Address` value.
 dangerous routine Task[T].get_address() -> Address
   return ptrtoint[Task[T], Address](me)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `Task[T]` value.
 dangerous routine Task[T].$create(from: Address) -> Task[T]
   return inttoptr[Address, Task[T]](from)
 
+### Returns the result of `task none`.
+### :returns: The resulting `Task[T]` value.
 routine task_none[T]() -> Task[T]
   return Task[T](0_addr)
 
+### Returns true if this value is none.
+### :returns: The resulting `Bool` value.
 routine Task[T].is_none() -> Bool
   return icmp_eq[Task[T]](me, task_none[T]())
 
+### Returns the result of `id`.
+### :returns: The resulting `U64` value.
 routine Task[T].id() -> U64
   return rf_task_id(me.get_address())
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 @readonly
 routine Task[T].$represent() -> Text
   return me.type_name()
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 @readonly
 routine Task[T].$diagnose() -> Text
   return me.full_type_name() + "(id: " + me.id().$represent() + ")"

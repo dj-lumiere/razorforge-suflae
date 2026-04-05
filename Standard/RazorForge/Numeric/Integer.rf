@@ -4,33 +4,42 @@ module Numerics
 # Powered by LibTomMath (https://github.com/libtom/libtommath)
 # License: Public Domain (Unlicense)
 
-# Opaque handle to LibTomMath mp_int structure
-# The actual memory is managed by the native runtime
+### Defines the entity `Integer`.
 entity Integer obeys Integral, Divisible, Negatable, Ordered
+  ### Stores the handle member value.
   secret handle: Address
 
 # ============================================================================
 # Lifecycle Management
 # ============================================================================
 
-# Create a new Integer initialized to zero
+### Creates a new instance.
+### :returns: The resulting `Integer` value.
 routine Integer.$create() -> Integer
   var int = Integer(handle: rf_bigint_new())
   return int
 
-# Create Integer from S64
+### Creates a new instance.
+### :param value: The value to use.
+### :returns: The resulting `Integer` value.
 routine Integer.$create(value: S64) -> Integer
   var int = Integer(handle: rf_bigint_new())
   rf_bigint_set_i64(int.handle, value)
   return int
 
-# Create Integer from U64
+### Creates a new instance.
+### :param value: The value to use.
+### :returns: The resulting `Integer` value.
 routine Integer.$create(value: U64) -> Integer
   var int = Integer(handle: rf_bigint_new())
   rf_bigint_set_u64(int.handle, value)
   return int
 
-# Create Integer from string with base (2-36)
+### Implements the wired routine behavior for this value.
+### :param text: The `text` value.
+### :param radix: The numeric base to use.
+### :returns: The resulting `Integer` value.
+### :throws: May throw {ValueError}.
 routine Integer.$create!(text: Text, radix: S32 = 10) -> Integer
   var int = Integer(handle: rf_bigint_new())
   var result = rf_bigint_set_str(int.handle, text.to_cstr(), radix)
@@ -38,12 +47,14 @@ routine Integer.$create!(text: Text, radix: S32 = 10) -> Integer
     throw ValueError(f"Invalid integer string: {text}")
   return int
 
-# Destructor - frees the LibTomMath structure
+### Releases the resources owned by this value.
 routine Integer.$destroy()
   rf_bigint_clear(me.handle)
   return
 
-# Copy creator
+### Implements the wired routine behavior for this value.
+### :param other: The other value to compare against.
+### :returns: The resulting `Integer` value.
 routine Integer.$copy(other: Integer) -> Integer
   var int = Integer(handle: rf_bigint_new())
   rf_bigint_copy(int.handle, other.handle)
@@ -53,21 +64,33 @@ routine Integer.$copy(other: Integer) -> Integer
 # Arithmetic Operations
 # ============================================================================
 
+### Returns the sum of this value and the other value.
+### :param other: The other value to compare against.
+### :returns: The resulting `Integer` value.
 routine Integer.$add(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_add(result.handle, me.handle, other.handle)
   return result
 
+### Returns the difference between this value and the other value.
+### :param other: The other value to compare against.
+### :returns: The resulting `Integer` value.
 routine Integer.$sub(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_sub(result.handle, me.handle, other.handle)
   return result
 
+### Returns the product of this value and the other value.
+### :param other: The other value to compare against.
+### :returns: The resulting `Integer` value.
 routine Integer.$mul(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_mul(result.handle, me.handle, other.handle)
   return result
 
+### Returns the quotient of this value and the other value.
+### :param other: The other value to compare against.
+### :returns: The resulting `Integer` value.
 routine Integer.$floordiv(other: Integer) -> Integer
   var quotient = Integer(handle: rf_bigint_new())
   var remainder = Integer(handle: rf_bigint_new())
@@ -75,11 +98,16 @@ routine Integer.$floordiv(other: Integer) -> Integer
   rf_bigint_clear(remainder.handle)
   return quotient
 
+### Implements the wired routine behavior for this value.
+### :param other: The other value to compare against.
+### :returns: The resulting `Integer` value.
 routine Integer.$rem(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_mod(result.handle, me.handle, other.handle)
   return result
 
+### Returns the negated value.
+### :returns: The resulting `Integer` value.
 routine Integer.$neg() -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_neg(result.handle, me.handle)
@@ -89,9 +117,15 @@ routine Integer.$neg() -> Integer
 # Comparison Operations
 # ============================================================================
 
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine Integer.$eq(you: Integer) -> Bool
   return rf_bigint_cmp(me.handle, other.handle) == 0
 
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `CompareSign` value.
 routine Integer.$cmp(you: Integer) -> CompareSign
   var comparison_value = rf_bigint_cmp(me.handle, other.handle)
   if comparison_value < 0
@@ -105,26 +139,41 @@ routine Integer.$cmp(you: Integer) -> CompareSign
 # Bitwise Operations
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
+### :param other: The other value to compare against.
+### :returns: The resulting `Integer` value.
 routine Integer.$and(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_and(result.handle, me.handle, other.handle)
   return result
 
+### Implements the wired routine behavior for this value.
+### :param other: The other value to compare against.
+### :returns: The resulting `Integer` value.
 routine Integer.$or(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_or(result.handle, me.handle, other.handle)
   return result
 
+### Implements the wired routine behavior for this value.
+### :param other: The other value to compare against.
+### :returns: The resulting `Integer` value.
 routine Integer.$xor(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_xor(result.handle, me.handle, other.handle)
   return result
 
+### Implements the wired routine behavior for this value.
+### :param bits: The encoded bit pattern.
+### :returns: The resulting `Integer` value.
 routine Integer.$shl(bits: S32) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_shl(result.handle, me.handle, bits)
   return result
 
+### Implements the wired routine behavior for this value.
+### :param bits: The encoded bit pattern.
+### :returns: The resulting `Integer` value.
 routine Integer.$shr(bits: S32) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_shr(result.handle, me.handle, bits)
@@ -134,26 +183,39 @@ routine Integer.$shr(bits: S32) -> Integer
 # Math Operations
 # ============================================================================
 
+### Returns the absolute value.
+### :returns: The resulting `Integer` value.
 routine Integer.abs() -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_abs(result.handle, me.handle)
   return result
 
+### Returns the product of this value and the other value.
+### :param exp: The exponent value.
+### :returns: The resulting `Integer` value.
 routine Integer.$pow(exp: U32) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_pow(result.handle, me.handle, exp)
   return result
 
+### Returns the result of `sqrt`.
+### :returns: The resulting `Integer` value.
 routine Integer.sqrt() -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_sqrt(result.handle, me.handle)
   return result
 
+### Returns the result of `gcd`.
+### :param other: The other value to compare against.
+### :returns: The resulting `Integer` value.
 routine Integer.gcd(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_gcd(result.handle, me.handle, other.handle)
   return result
 
+### Returns the result of `lcm`.
+### :param other: The other value to compare against.
+### :returns: The resulting `Integer` value.
 routine Integer.lcm(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_lcm(result.handle, me.handle, other.handle)
@@ -163,15 +225,23 @@ routine Integer.lcm(other: Integer) -> Integer
 # Utility Methods
 # ============================================================================
 
+### Returns true if this value is zero.
+### :returns: The resulting `Bool` value.
 routine Integer.is_zero() -> Bool
   return rf_bigint_is_zero(me.handle) != 0
 
+### Returns true if this value is negative.
+### :returns: The resulting `Bool` value.
 routine Integer.is_negative() -> Bool
   return rf_bigint_is_neg(me.handle) != 0
 
+### Returns true if this value is positive.
+### :returns: The resulting `Bool` value.
 routine Integer.is_positive() -> Bool
   return not me.is_zero() and not me.is_negative()
 
+### Returns the result of `signum`.
+### :returns: The resulting `S32` value.
 routine Integer.signum() -> S32
   return when
     me.is_positive() => 1
@@ -182,15 +252,21 @@ routine Integer.signum() -> S32
 # Conversions
 # ============================================================================
 
-# Convert to S64 (may overflow/truncate for large values)
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S64` value.
 routine S64.$create!(from: Integer) -> S64
   return rf_bigint_get_i64(from.handle)
 
-# Convert to U64 (may overflow/truncate for large values)
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `U64` value.
 routine U64.$create!(from: Integer) -> U64
   return rf_bigint_get_u64(from.handle)
 
-# String representation with specified radix (2-36)
+### Returns the textual representation of this value.
+### :param radix: The numeric base to use.
+### :returns: The resulting `Text` value.
 routine Integer.$represent(radix: S32 = 10) -> Text
   var CStr = rf_bigint_get_str(me.handle, radix)
   var text = Text.from_cstr(CStr)
@@ -201,7 +277,10 @@ routine Integer.$represent(radix: S32 = 10) -> Text
 # Factory Methods
 # ============================================================================
 
-# Parse from decimal string - returns None on failure
+### Implements the wired routine behavior for this value.
+### :param text: The `text` value.
+### :returns: The resulting `Integer` value.
+### :throws: May throw {ParseError}.
 routine Integer.$create!(text: Text) -> Integer
   var int = Integer(handle: rf_bigint_new())
   var result = rf_bigint_set_str(int.handle, text.to_cstr(), 10)
@@ -210,7 +289,10 @@ routine Integer.$create!(text: Text) -> Integer
     throw ParseError("Invalid integer form")
   return int
 
-# Parse from binary string (without 0b prefix) - returns None on failure
+### Creates a value from binary.
+### :param text: The `text` value.
+### :returns: The resulting `Integer` value.
+### :throws: May throw {ParseError}.
 routine Integer.from_binary!(text: Text) -> Integer
   var int = Integer(handle: rf_bigint_new())
   var result = rf_bigint_set_str(int.handle, text.to_cstr(), 2)
@@ -219,7 +301,10 @@ routine Integer.from_binary!(text: Text) -> Integer
     throw ParseError("Invalid integer form")
   return int
 
-# Parse from hexadecimal string (without 0x prefix) - returns None on failure
+### Creates a value from hex.
+### :param text: The `text` value.
+### :returns: The resulting `Integer` value.
+### :throws: May throw {ParseError}.
 routine Integer.from_hex!(text: Text) -> Integer
   var int = Integer(handle: rf_bigint_new())
   var result = rf_bigint_set_str(int.handle, text.to_cstr(), 16)
@@ -228,11 +313,13 @@ routine Integer.from_hex!(text: Text) -> Integer
     throw ParseError("Invalid integer form")
   return int
 
-# Zero constant
+### Returns the zero value.
+### :returns: The resulting `Integer` value.
 routine Integer.zero() -> Integer
   return Integer(0_s64)
 
-# One constant
+### Returns the result of `one`.
+### :returns: The resulting `Integer` value.
 routine Integer.one() -> Integer
   return Integer(1_s64)
 
@@ -240,7 +327,9 @@ routine Integer.one() -> Integer
 # Examples
 # ============================================================================
 
-# Factorial of large numbers
+### Returns the result of `factorial`.
+### :param n: The `n` value.
+### :returns: The resulting `Integer` value.
 routine factorial(n: Integer) -> Integer
   if n.is_zero() or n == Integer.one()
     return Integer.one()
@@ -254,7 +343,9 @@ routine factorial(n: Integer) -> Integer
 
   return result
 
-# Fibonacci with arbitrary precision
+### Returns the result of `fibonacci big`.
+### :param n: The `n` value.
+### :returns: The resulting `Integer` value.
 routine fibonacci_big(n: S64) -> Integer
   if n <= 1
     return Integer(n)

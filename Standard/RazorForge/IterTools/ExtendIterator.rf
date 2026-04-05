@@ -3,18 +3,31 @@
 
 module IterTools
 
+### Defines the entity `ExtendIterator`.
+### :typeparam T: The value used for `T`.
 entity ExtendIterator[T] obeys Iterable[T]
+  ### Stores the first member value.
   secret first: Iterable[T]
+  ### Stores the second member value.
   secret second: Iterable[T]
 
+### Creates an iterator for this value.
+### :returns: The resulting `ExtendEmitter[T]` value.
 routine ExtendIterator[T].$iter() -> ExtendEmitter[T]
   return ExtendEmitter[T](first: me.first.$iter(), second: me.second.$iter(), in_second: false)
 
+### Defines the entity `ExtendEmitter`.
+### :typeparam T: The value used for `T`.
 entity ExtendEmitter[T] obeys Iterator[T]
+  ### Stores the first member value.
   secret first: Iterator[T]
+  ### Stores the second member value.
   secret second: Iterator[T]
+  ### Stores the in second member value.
   secret in_second: Bool
 
+### Returns the next value from this iterator.
+### :returns: The resulting `T` value.
 emitting routine ExtendEmitter[T].$next() -> T
   if not me.in_second
     var result = me.first.try_next()
@@ -26,5 +39,8 @@ emitting routine ExtendEmitter[T].$next() -> T
   emit me.second.$next()
   return
 
+### Returns the result of `extend`.
+### :param other: The other value to compare against.
+### :returns: The resulting `ExtendIterator[T]` value.
 routine Iterable[T].extend(other: Iterable[T]) -> ExtendIterator[T]
   return ExtendIterator[T](first: me, second: other)

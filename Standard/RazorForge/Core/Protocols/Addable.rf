@@ -1,6 +1,10 @@
 # Addable - Protocol for types that support addition (+)
 module Core
 
+### Defines the protocol `Addable`.
 protocol Addable
+  ### Implements the wired routine behavior for this value.
+  ### :param you: The other value to compare against.
+  ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$add!(you: Me) -> Me

@@ -3,5 +3,6 @@
 # Does NOT include Negatable - unsigned integers can't negate
 module Core
 
+### Defines the protocol `Integral`.
 protocol Integral obeys Addable, Subtractable, Multiplicable, FloorDivisible, Exponentiable, Bitwiseable, Shiftable
   pass

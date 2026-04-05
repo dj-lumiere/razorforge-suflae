@@ -1,6 +1,9 @@
 # Diagnosable - Protocol for types that provide debug text representation
 module Core
 
+### Defines the protocol `Diagnosable`.
 protocol Diagnosable obeys Representable
+  ### Returns the textual representation of this value.
+  ### :returns: The resulting `Text` value.
   @[readonly, generated]
   routine Me.$diagnose() -> Text

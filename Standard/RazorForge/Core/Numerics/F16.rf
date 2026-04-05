@@ -3,6 +3,7 @@
 module Core
 # Core F16 type definition - maps to LLVM half
 
+### Defines the record `F16`.
 @llvm("half")
 record F16 obeys Numeric, Ordered
   pass
@@ -20,59 +21,107 @@ preset F16_PI: F16 = 3.140625_f16
 preset F16_E: F16 = 2.71875_f16
 preset F16_SQRT_2: F16 = 1.414063_f16
 
-# Convert integers to F16 using LLVM intrinsics
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F16` value.
 routine F16.$create(from: S8) -> F16
   return sitofp[S8, F16](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F16` value.
 routine F16.$create(from: S16) -> F16
   return sitofp[S16, F16](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F16` value.
 routine F16.$create(from: S32) -> F16
   return sitofp[S32, F16](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F16` value.
 routine F16.$create(from: S64) -> F16
   return sitofp[S64, F16](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F16` value.
 routine F16.$create(from: S128) -> F16
   return sitofp[S128, F16](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F16` value.
 routine F16.$create(from: U8) -> F16
   return uitofp[U8, F16](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F16` value.
 routine F16.$create(from: U16) -> F16
   return uitofp[U16, F16](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F16` value.
 routine F16.$create(from: U32) -> F16
   return uitofp[U32, F16](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F16` value.
 routine F16.$create(from: U64) -> F16
   return uitofp[U64, F16](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F16` value.
 routine F16.$create(from: U128) -> F16
   return uitofp[U128, F16](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F16` value.
 routine F16.$create(from: F16) -> F16
   return from
 
-# Truncate from larger float types using LLVM intrinsics
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F16` value.
 routine F16.$create(from: F32) -> F16
   return fptrunc[F32, F16](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F16` value.
 routine F16.$create(from: F64) -> F16
   return fptrunc[F64, F16](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F16` value.
 routine F16.$create(from: F128) -> F16
   return fptrunc[F128, F16](from)
 
-# Convert from decimal types via native (no LLVM intrinsic for decimal)
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F16` value.
 routine F16.$create(from: D32) -> F16
   var f32_val = rf_d32_to_f32(from.to_bits())
   return fptrunc[F32, F16](f32_val)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F16` value.
 routine F16.$create(from: D64) -> F16
   var f32_val = rf_d64_to_f32(from.to_bits())
   return fptrunc[F32, F16](f32_val)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F16` value.
 routine F16.$create(from: D128) -> F16
   var f32_val = rf_d128_to_f32(from.low_bits(), from.high_bits())
   return fptrunc[F32, F16](f32_val)
@@ -81,18 +130,32 @@ routine F16.$create(from: D128) -> F16
 # Arithmetic Operations (IEEE 754 semantics)
 # ============================================================================
 
+### Returns the sum of this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `F16` value.
 routine F16.$add(you: F16) -> F16
   return fadd[F16](me, you)
 
+### Returns the difference between this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `F16` value.
 routine F16.$sub(you: F16) -> F16
   return fsub[F16](me, you)
 
+### Returns the product of this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `F16` value.
 routine F16.$mul(you: F16) -> F16
   return fmul[F16](me, you)
 
+### Returns the quotient of this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `F16` value.
 routine F16.$truediv(you: F16) -> F16
   return fdiv[F16](me, you)
 
+### Returns the negated value.
+### :returns: The resulting `F16` value.
 routine F16.$neg() -> F16
   return fneg[F16](me)
 
@@ -100,9 +163,15 @@ routine F16.$neg() -> F16
 # Comparison Operations (ordered - false if NaN)
 # ============================================================================
 
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine F16.$eq(you: F16) -> Bool
   return fcmp_oeq[F16](me, you)
 
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
 routine F16.$cmp(you: F16) -> ComparisonSign
   if fcmp_olt[F16](me, you)
     return ME_SMALL
@@ -114,24 +183,39 @@ routine F16.$cmp(you: F16) -> ComparisonSign
 # Math Operations using intrinsics
 # ============================================================================
 
+### Returns the result of `sqrt`.
+### :returns: The resulting `F16` value.
 routine F16.sqrt() -> F16
   return sqrt[F16](me)
 
+### Returns the absolute value.
+### :returns: The resulting `F16` value.
 routine F16.abs() -> F16
   return fabs[F16](me)
 
+### Returns the result of `floor`.
+### :returns: The resulting `F16` value.
 routine F16.floor() -> F16
   return floor[F16](me)
 
+### Returns the result of `ceil`.
+### :returns: The resulting `F16` value.
 routine F16.ceil() -> F16
   return ceil[F16](me)
 
+### Returns the result of `round`.
+### :returns: The resulting `F16` value.
 routine F16.round() -> F16
   return round[F16](me)
 
+### Returns the result of `trunc`.
+### :returns: The resulting `F16` value.
 routine F16.trunc() -> F16
   return trunc_float[F16](me)
 
+### Returns the result of `copysign`.
+### :param sign: The `sign` value.
+### :returns: The resulting `F16` value.
 routine F16.copysign(sign: F16) -> F16
   return copysign[F16](me, sign)
 
@@ -139,24 +223,42 @@ routine F16.copysign(sign: F16) -> F16
 # Utility Methods
 # ============================================================================
 
+### Returns the result of `min`.
+### :param you: The other value to compare against.
+### :returns: The resulting `F16` value.
 routine F16.min(you: F16) -> F16
   return if me <= you then me else you
 
+### Returns the result of `max`.
+### :param you: The other value to compare against.
+### :returns: The resulting `F16` value.
 routine F16.max(you: F16) -> F16
   return if me >= you then me else you
 
+### Returns the result of `clamp`.
+### :param min_val: The `min_val` value.
+### :param max_val: The `max_val` value.
+### :returns: The resulting `F16` value.
 routine F16.clamp(min_val: F16, max_val: F16) -> F16
   return me.min(max_val).max(min_val)
 
+### Returns true if this value is positive.
+### :returns: The resulting `Bool` value.
 routine F16.is_positive() -> Bool
   return me > 0.0_f16
 
+### Returns true if this value is negative.
+### :returns: The resulting `Bool` value.
 routine F16.is_negative() -> Bool
   return me < 0.0_f16
 
+### Returns true if this value is zero.
+### :returns: The resulting `Bool` value.
 routine F16.is_zero() -> Bool
   return me == 0.0_f16
 
+### Returns the result of `signum`.
+### :returns: The resulting `F16` value.
 routine F16.signum() -> F16
   return when
     me > 0.0_f16 => 1.0_f16
@@ -167,11 +269,14 @@ routine F16.signum() -> F16
 # Type Conversions
 # ============================================================================
 
-# Reinterpret bits as U16 (type punning)
+### Converts this value to bits.
+### :returns: The resulting `U16` value.
 routine F16.to_bits() -> U16
   return bitcast[F16, U16](me)
 
-# Create F16 from U16 bits (type punning)
+### Creates a value from bits.
+### :param bits: The encoded bit pattern.
+### :returns: The resulting `F16` value.
 routine F16.from_bits(bits: U16) -> F16
   return bitcast[U16, F16](bits)
 
@@ -179,13 +284,21 @@ routine F16.from_bits(bits: U16) -> F16
 # Text Representation and Parsing
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine F16.$represent() -> Text
   var cstr_result = rf_format_F16(me)
   return Text(from: CStr(from_ptr: cstr_result))
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine F16.$diagnose() -> Text
   return "F16(" + me.$represent() + ")"
 
+### Implements the wired routine behavior for this value.
+### :param from_text: The `from_text` value.
+### :returns: The resulting `F16` value.
+### :throws: May throw {InvalidValueError}.
 routine F16.$create!(from_text: Text) -> F16
   var len = from_text.count()
   if len == 0u64

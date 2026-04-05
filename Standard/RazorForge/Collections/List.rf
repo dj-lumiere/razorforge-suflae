@@ -1,18 +1,21 @@
-# RazorForge List[T] - Dynamic growable array
-# Entity type with heap allocation
-# Grows by doubling capacity for O(1) amortized add_last
-
 module Core
 
 import BuilderService
 
+### Defines the entity `List`.
+### :typeparam T: The value used for `T`.
 entity List[T] obeys Iterable[T]
-  secret data: Snatched[T]       # Pointer to heap-allocated array
-  secret count: U64              # Current number of elements
-  secret capacity: U64           # Total allocated capacity
+  ### Stores the data member value.
+  secret data: Snatched[T]
+  ### Stores the count member value.
+  secret count: U64
+  ### Stores the capacity member value.
+  secret capacity: U64
 
 # Creators
 
+### Creates a new instance.
+### :returns: The resulting `List[T]` value.
 routine List[T].$create() -> List[T]
   return List[T](
     data: snatched_none[T](),
@@ -20,6 +23,9 @@ routine List[T].$create() -> List[T]
     capacity: 0u64
   )
 
+### Creates a new instance.
+### :param capacity: The capacity value to use.
+### :returns: The resulting `List[T]` value.
 routine List[T].$create(capacity: U64) -> List[T]
   var byte_size = capacity * T.data_size()
   var ptr = rf_allocate_dynamic(byte_size)
@@ -29,13 +35,7 @@ routine List[T].$create(capacity: U64) -> List[T]
     capacity: capacity
   )
 
-routine List[T].$create(values...: T) -> List[T]
-  var result = List[T]()
-  for v in values
-    result.add_last(v)
-  return result
-
-# Destructor
+### Releases the resources owned by this value.
 routine List[T].$destroy()
   if not me.data.is_none()
     danger!
@@ -44,15 +44,23 @@ routine List[T].$destroy()
 
 # Core operations
 
+### Returns the number of stored values.
+### :returns: The resulting `U64` value.
 routine List[T].count() -> U64
   return me.count
 
+### Returns the current storage capacity.
+### :returns: The resulting `U64` value.
 routine List[T].capacity() -> U64
   return me.capacity
 
+### Returns true if this value is empty.
+### :returns: The resulting `Bool` value.
 routine List[T].is_empty() -> Bool
   return me.count == 0u64
 
+### Adds a value using `add_last`.
+### :param value: The value to use.
 routine List[T].add_last(value: T)
   if me.count >= me.capacity
     var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity * 2u64
@@ -63,6 +71,9 @@ routine List[T].add_last(value: T)
   me.count = me.count + 1u64
   return
 
+### Removes a value using `remove_last`.
+### :returns: The resulting `T` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine List[T].remove_last!() -> T
   if me.is_empty()
     absent
@@ -71,10 +82,16 @@ routine List[T].remove_last!() -> T
   var byte_offset = me.count * T.data_size()
   return me.data.offset(byte_offset).read()
 
+### Adds a value using `add_first`.
+### :param value: The value to use.
 routine List[T].add_first(value: T)
   me.add_at!(0u64, value)
   return
 
+### Adds a value using `add_at`.
+### :param index: The zero-based position to use.
+### :param value: The value to use.
+### :throws: May throw {IndexOutOfBoundsError}.
 routine List[T].add_at!(index: U64, value: T)
   if index > me.count
     throw IndexOutOfBoundsError(index: index.U64(), count: me.count.U64())
@@ -99,9 +116,15 @@ routine List[T].add_at!(index: U64, value: T)
   me.count = me.count + 1u64
   return
 
+### Removes a value using `remove_first`.
+### :returns: The resulting `T` value.
 routine List[T].remove_first!() -> T
   return me.remove_at!(0u64)
 
+### Removes a value using `remove_at`.
+### :param index: The zero-based position to use.
+### :returns: The resulting `T` value.
+### :throws: May throw {IndexOutOfBoundsError}.
 routine List[T].remove_at!(index: U64) -> T
   if index >= me.count
     throw IndexOutOfBoundsError(index: index.U64(), count: me.count.U64())
@@ -127,6 +150,10 @@ routine List[T].remove_at!(index: U64) -> T
 # Indexing with Integral (forward index)
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
+### :param index: The zero-based position to use.
+### :returns: The resulting `T` value.
+### :throws: May throw {IndexOutOfBoundsError}.
 routine List[T].$getitem![I](index: I) -> T
 needs I obeys Integral
   var idx = index.U64()
@@ -135,6 +162,10 @@ needs I obeys Integral
   var byte_offset = idx * T.data_size()
   return me.data.offset(byte_offset).read()
 
+### Implements the wired routine behavior for this value.
+### :param index: The zero-based position to use.
+### :param value: The value to use.
+### :throws: May throw {IndexOutOfBoundsError}.
 routine List[T].$setitem![I](index: I, value: T)
 needs I obeys Integral
   var idx = index.U64()
@@ -148,12 +179,18 @@ needs I obeys Integral
 # Indexing with BackIndex (backward index using ^)
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
+### :param index: The zero-based position to use.
+### :returns: The resulting `T` value.
 routine List[T].$getitem![I](index: BackIndex[I]) -> T
 needs I obeys Integral
   var idx = index.resolve(me.count)
   var byte_offset = idx * T.data_size()
   return me.data.offset(byte_offset).read()
 
+### Implements the wired routine behavior for this value.
+### :param index: The zero-based position to use.
+### :param value: The value to use.
 routine List[T].$setitem![I](index: BackIndex[I], value: T)
 needs I obeys Integral
   var idx = index.resolve(me.count)
@@ -165,6 +202,11 @@ needs I obeys Integral
 # Slicing with [a to b] syntax (forward index)
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
+### :param start: The inclusive starting position.
+### :param end: The exclusive ending position.
+### :returns: The resulting `List[T]` value.
+### :throws: May throw {IndexOutOfBoundsError}.
 routine List[T].$getslice![I](start: I, end: I) -> List[T]
 needs I obeys Integral
   var s = start.U64()
@@ -188,6 +230,10 @@ needs I obeys Integral
 # Slicing with [a to b] syntax (backward index using ^)
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
+### :param start: The inclusive starting position.
+### :param end: The exclusive ending position.
+### :returns: The resulting `List[T]` value.
 routine List[T].$getslice![I](start: BackIndex[I], end: BackIndex[I]) -> List[T]
 needs I obeys Integral
   var s = start.resolve(me.count)
@@ -204,6 +250,8 @@ needs I obeys Integral
 
   return result
 
+### Ensures the storage capacity is at least `new_capacity`.
+### :param new_capacity: The minimum capacity to reserve.
 routine List[T].reserve(new_capacity: U64)
   if new_capacity > me.capacity
     var new_byte_size = new_capacity * T.data_size()
@@ -220,6 +268,7 @@ routine List[T].reserve(new_capacity: U64)
     me.capacity = new_capacity
   return
 
+### Removes all stored values.
 routine List[T].clear()
   me.count = 0u64
   return
@@ -228,14 +277,23 @@ routine List[T].clear()
 # Iterable protocol support
 # ============================================================================
 
+### Defines the entity `ListEmitter`.
+### :typeparam T: The value used for `T`.
 entity ListEmitter[T] obeys Iterator[T]
+  ### Stores the list member value.
   secret list: List[T]
+  ### Stores the index member value.
   secret index: U64
 
+### Creates an iterator for this value.
+### :returns: The resulting `ListEmitter[T]` value.
 @readonly
 routine List[T].$iter() -> ListEmitter[T]
   return ListEmitter[T](list: me, index: 0u64)
 
+### Returns the next value from this iterator.
+### :returns: The resulting `T` value.
+### :absent: Returns absent when the requested value is unavailable.
 @writable
 emitting routine ListEmitter[T].$next() -> T
   if me.index >= me.list.count()
@@ -245,6 +303,9 @@ emitting routine ListEmitter[T].$next() -> T
   me.index = me.index + 1u64
   return
 
+### Returns whether this value contains `value`.
+### :param value: The value to use.
+### :returns: The resulting `Bool` value.
 @readonly
 routine List[T].$contains(value: T) -> Bool
   var i = 0u64
@@ -254,6 +315,8 @@ routine List[T].$contains(value: T) -> Bool
     i = i + 1u64
   return false
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine List[T].$represent() -> Text
   var result = "["
   var i = 0u64
@@ -265,6 +328,8 @@ routine List[T].$represent() -> Text
   result = result + "]"
   return result
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine List[T].$diagnose() -> Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", ["
   var i = 0u64

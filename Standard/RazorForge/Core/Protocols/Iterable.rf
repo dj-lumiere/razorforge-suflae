@@ -1,6 +1,10 @@
 # Iterable - Protocol for types that can be iterated over in for-in loops
 module Core
 
+### Defines the protocol `Iterable`.
+### :typeparam T: The value used for `T`.
 protocol Iterable[T]
+  ### Creates an iterator for this value.
+  ### :returns: The resulting `Iterator[T]` value.
   @readonly
   routine Me.$iter() -> Iterator[T]

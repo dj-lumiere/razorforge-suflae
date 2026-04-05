@@ -18,14 +18,21 @@ module Core
 # Record definition
 # ============================================================================
 
+### Defines the record `Moment`.
 record Moment obeys Ordered, DurationAddable, DurationSubtractable
+  ### Stores the seconds member value.
   secret seconds: S64      # Seconds since Unix epoch (1970-01-01), negative for dates before
+  ### Stores the nanoseconds member value.
   secret nanoseconds: U32  # Nanoseconds within second [0, 1_000_000_000)
 
 # ============================================================================
 # Normalization helper
 # ============================================================================
 
+### Returns the result of `normalize moment`.
+### :param seconds: The whole-second component.
+### :param nanoseconds: The nanosecond component within the current second.
+### :returns: The resulting `Moment` value.
 routine normalize_moment(seconds: S64, nanoseconds: S64) -> Moment
   var s = seconds
   var ns = nanoseconds
@@ -44,8 +51,11 @@ routine normalize_moment(seconds: S64, nanoseconds: S64) -> Moment
 # Civil calendar helpers (proleptic Gregorian)
 # ============================================================================
 
-# Convert civil date (year, month, day) to days since epoch.
-# Algorithm: shift March-based year so leap day falls at end of year.
+### Returns the result of `ymd to days`.
+### :param year: The `year` value.
+### :param month: The `month` value.
+### :param day: The `day` value.
+### :returns: The resulting `S64` value.
 routine ymd_to_days(year: S64, month: S64, day: S64) -> S64
   # Shift year so March is month 0
   var y = year
@@ -70,8 +80,9 @@ routine ymd_to_days(year: S64, month: S64, day: S64) -> S64
   # Days since epoch (epoch = 1970-01-01 = era 4, doe 719468 from era 0)
   return era *% 146097_s64 + doe - 719468_s64
 
-# Convert days since epoch to civil date (year, month, day).
-# Uses the same March-based algorithm in reverse.
+### Returns the result of `days to year`.
+### :param days_since_epoch: The `days_since_epoch` value.
+### :returns: The resulting `S64` value.
 routine days_to_year(days_since_epoch: S64) -> S64
   var z = days_since_epoch + 719468_s64
   var era = (if z >= 0_s64 then z else z - 146096_s64) // 146097_s64
@@ -85,6 +96,9 @@ routine days_to_year(days_since_epoch: S64) -> S64
     return y + 1_s64
   return y
 
+### Returns the result of `days to month`.
+### :param days_since_epoch: The `days_since_epoch` value.
+### :returns: The resulting `S64` value.
 routine days_to_month(days_since_epoch: S64) -> S64
   var z = days_since_epoch + 719468_s64
   var era = (if z >= 0_s64 then z else z - 146096_s64) // 146097_s64
@@ -94,6 +108,9 @@ routine days_to_month(days_since_epoch: S64) -> S64
   var mp = (5_s64 *% doy + 2_s64) // 153_s64
   return mp + (if mp < 10_s64 then 3_s64 else 0_s64 - 9_s64)
 
+### Returns the result of `days to day`.
+### :param days_since_epoch: The `days_since_epoch` value.
+### :returns: The resulting `S64` value.
 routine days_to_day(days_since_epoch: S64) -> S64
   var z = days_since_epoch + 719468_s64
   var era = (if z >= 0_s64 then z else z - 146096_s64) // 146097_s64
@@ -107,17 +124,32 @@ routine days_to_day(days_since_epoch: S64) -> S64
 # Creators
 # ============================================================================
 
+### Creates a new instance.
+### :param year: The `year` value.
+### :param month: The `month` value.
+### :param day: The `day` value.
+### :param hour: The `hour` value.
+### :param minute: The `minute` value.
+### :param second: The `second` value.
+### :returns: The resulting `Moment` value.
 routine Moment.$create(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64) -> Moment
   var d = ymd_to_days(year, month, day)
   var s = d *% SECONDS_PER_DAY + hour *% SECONDS_PER_HOUR + minute *% SECONDS_PER_MINUTE + second
   return Moment(seconds: s, nanoseconds: 0_u32)
 
+### Returns the result of `epoch`.
+### :returns: The resulting `Moment` value.
 routine Moment.epoch() -> Moment
   return Moment(seconds: 0_s64, nanoseconds: 0_u32)
 
+### Creates a value from timestamp.
+### :param seconds: The whole-second component.
+### :returns: The resulting `Moment` value.
 routine Moment.from_timestamp(seconds: S64) -> Moment
   return Moment(seconds: seconds, nanoseconds: 0_u32)
 
+### Returns the result of `now`.
+### :returns: The resulting `Moment` value.
 routine Moment.now() -> Moment
   # Implemented by compiler intrinsic / native runtime
   return rf_moment_now()
@@ -126,18 +158,26 @@ routine Moment.now() -> Moment
 # Date accessors (derived from seconds member variable)
 # ============================================================================
 
+### Returns the result of `year`.
+### :returns: The resulting `S64` value.
 @readonly
 routine Moment.year() -> S64
   return days_to_year(me.seconds // SECONDS_PER_DAY)
 
+### Returns the result of `month`.
+### :returns: The resulting `S64` value.
 @readonly
 routine Moment.month() -> S64
   return days_to_month(me.seconds // SECONDS_PER_DAY)
 
+### Returns the result of `day`.
+### :returns: The resulting `S64` value.
 @readonly
 routine Moment.day() -> S64
   return days_to_day(me.seconds // SECONDS_PER_DAY)
 
+### Returns the result of `day of week`.
+### :returns: The resulting `S64` value.
 @readonly
 routine Moment.day_of_week() -> S64
   # 1970-01-01 was Thursday (3). Result: 0=Monday .. 6=Sunday
@@ -151,26 +191,38 @@ routine Moment.day_of_week() -> S64
 # Time accessors (derived from seconds and nanoseconds member variables)
 # ============================================================================
 
+### Returns the result of `hour`.
+### :returns: The resulting `S64` value.
 @readonly
 routine Moment.hour() -> S64
   return (me.seconds % SECONDS_PER_DAY) // SECONDS_PER_HOUR
 
+### Returns the result of `minute`.
+### :returns: The resulting `S64` value.
 @readonly
 routine Moment.minute() -> S64
   return (me.seconds % SECONDS_PER_HOUR) // SECONDS_PER_MINUTE
 
+### Returns the result of `second`.
+### :returns: The resulting `S64` value.
 @readonly
 routine Moment.second() -> S64
   return me.seconds % SECONDS_PER_MINUTE
 
+### Returns the result of `millisecond`.
+### :returns: The resulting `S64` value.
 @readonly
 routine Moment.millisecond() -> S64
   return S64(me.nanoseconds) // NS_PER_MILLISECOND
 
+### Returns the result of `microsecond`.
+### :returns: The resulting `S64` value.
 @readonly
 routine Moment.microsecond() -> S64
   return (S64(me.nanoseconds) % NS_PER_MILLISECOND) // NS_PER_MICROSECOND
 
+### Returns the result of `nanosecond`.
+### :returns: The resulting `S64` value.
 @readonly
 routine Moment.nanosecond() -> S64
   return S64(me.nanoseconds) % NS_PER_MICROSECOND
@@ -179,12 +231,14 @@ routine Moment.nanosecond() -> S64
 # Conversion
 # ============================================================================
 
-# Unix timestamp in seconds
+### Returns the result of `timestamp`.
+### :returns: The resulting `S64` value.
 @readonly
 routine Moment.timestamp() -> S64
   return me.seconds
 
-# Unix timestamp in milliseconds
+### Returns the result of `timestamp ms`.
+### :returns: The resulting `S64` value.
 @readonly
 routine Moment.timestamp_ms() -> S64
   return me.seconds *% 1_000_s64 + S64(me.nanoseconds) // NS_PER_MILLISECOND
@@ -193,27 +247,44 @@ routine Moment.timestamp_ms() -> S64
 # Arithmetic with Duration
 # ============================================================================
 
+### Adds a value using `add_duration`.
+### :param duration: The `duration` value.
+### :returns: The resulting `Moment` value.
 @readonly
 routine Moment.add_duration(duration: Duration) -> Moment
   return normalize_moment(me.seconds + duration.total_seconds(), S64(me.nanoseconds) + S64(duration.subsec_nanoseconds()))
 
+### Returns the result of `subtract duration`.
+### :param duration: The `duration` value.
+### :returns: The resulting `Moment` value.
 @readonly
 routine Moment.subtract_duration(duration: Duration) -> Moment
   return me.add_duration(duration.$neg())
 
-# Moment - Moment -> Duration
+### Returns the result of `elapsed since`.
+### :param earlier: The `earlier` value.
+### :returns: The resulting `Duration` value.
 @readonly
 routine Moment.elapsed_since(earlier: Moment) -> Duration
   return normalize_duration(me.seconds - earlier.seconds, S64(me.nanoseconds) - S64(earlier.nanoseconds))
 
+### Returns the sum of this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `Moment` value.
 @readonly
 routine Moment.$add(you: Duration) -> Moment
   return me.add_duration(you)
 
+### Returns the difference between this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `Moment` value.
 @readonly
 routine Moment.$sub(you: Duration) -> Moment
   return me.subtract_duration(you)
 
+### Returns the difference between this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `Duration` value.
 @readonly
 routine Moment.$sub(you: Moment) -> Duration
   return me.elapsed_since(you)
@@ -222,10 +293,16 @@ routine Moment.$sub(you: Moment) -> Duration
 # Comparison operators
 # ============================================================================
 
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
 @readonly
 routine Moment.$eq(you: Moment) -> Bool
   return me.seconds == you.seconds and me.nanoseconds == you.nanoseconds
 
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
 @readonly
 routine Moment.$cmp(you: Moment) -> ComparisonSign
   if me.seconds < you.seconds
@@ -242,6 +319,8 @@ routine Moment.$cmp(you: Moment) -> ComparisonSign
 # Text representation
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine Moment.$represent() -> Text
   var y = me.year()
   var mo = me.month()
@@ -251,5 +330,7 @@ routine Moment.$represent() -> Text
   var s = me.second()
   return f"{y}-{mo}-{d} {h}:{mi}:{s}"
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine Moment.$diagnose() -> Text
   return "Moment(seconds: " + me.seconds.$represent() + ", nanoseconds: " + me.nanoseconds.$represent() + ")"

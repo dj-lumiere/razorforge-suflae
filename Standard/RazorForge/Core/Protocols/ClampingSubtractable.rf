@@ -1,6 +1,10 @@
 # ClampingSubtractable - Protocol for types that support clamping subtraction (-^)
 module Core
 
+### Defines the protocol `ClampingSubtractable`.
 protocol ClampingSubtractable
+  ### Implements the wired routine behavior for this value.
+  ### :param you: The other value to compare against.
+  ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$sub_clamp(you: Me) -> Me

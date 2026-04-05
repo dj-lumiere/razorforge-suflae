@@ -4,6 +4,11 @@
 
 module Core
 
+### Defines the record `DictEntry`.
+### :typeparam K: The value used for `K`.
+### :typeparam V: The value used for `V`.
 record DictEntry[K, V]
+  ### Stores the key member value.
   key: K
+  ### Stores the value member value.
   value: V

@@ -3,5 +3,6 @@
 # Provides: Diagnosable (-> Representable), Equatable, Hashable
 module Core
 
+### Defines the protocol `RecordType`.
 protocol RecordType obeys Diagnosable, Equatable, Hashable, Copyable
   pass

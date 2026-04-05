@@ -1,7 +1,11 @@
 module IO/Errors
 
+### Defines the entity `IOError`.
 entity IOError obeys Crashable
+  ### Stores the message member value.
   message: Text
 
+### Returns the result of `crash message`.
+### :returns: The resulting `Text` value.
 routine IOError.crash_message() -> Text
   return me.message

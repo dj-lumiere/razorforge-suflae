@@ -3,21 +3,38 @@
 
 module IterTools
 
+### Defines the entity `SelectIterator`.
+### :typeparam T: The value used for `T`.
+### :typeparam U: The value used for `U`.
 entity SelectIterator[T, U] obeys Iterable[U]
+  ### Stores the source member value.
   secret source: Iterable[T]
+  ### Stores the transform member value.
   secret transform: Routine[(T,), U]
 
+### Creates an iterator for this value.
+### :returns: The resulting `SelectEmitter[T, U]` value.
 routine SelectIterator[T, U].$iter() -> SelectEmitter[T, U]
   return SelectEmitter[T, U](source: me.source.$iter(), transform: me.transform)
 
+### Defines the entity `SelectEmitter`.
+### :typeparam T: The value used for `T`.
+### :typeparam U: The value used for `U`.
 entity SelectEmitter[T, U] obeys Iterator[U]
+  ### Stores the source member value.
   secret source: Iterator[T]
+  ### Stores the transform member value.
   secret transform: Routine[(T,), U]
 
+### Returns the next value from this iterator.
+### :returns: The resulting `U` value.
 emitting routine SelectEmitter[T, U].$next() -> U
   var item = me.source.$next()
   emit me.transform(item)
   return
 
+### Returns the result of `select`.
+### :param transform: The `transform` value.
+### :returns: The resulting `SelectIterator[T, U]` value.
 routine Iterable[T].select[U](transform: Routine[(T,), U]) -> SelectIterator[T, U]
   return SelectIterator[T, U](source: me, transform: transform)

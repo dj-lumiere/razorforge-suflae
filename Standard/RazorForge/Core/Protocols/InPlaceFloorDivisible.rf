@@ -1,9 +1,14 @@
 # InPlaceFloorDivisible - Protocol for types that support in-place floor division and modulo
 module Core
 
+### Defines the protocol `InPlaceFloorDivisible`.
 protocol InPlaceFloorDivisible
+  ### Implements the wired routine behavior for this value.
+  ### :param you: The other value to compare against.
   @writable
   routine Me.$ifloordiv(you: Me)
 
+  ### Implements the wired routine behavior for this value.
+  ### :param you: The other value to compare against.
   @writable
   routine Me.$imod(you: Me)

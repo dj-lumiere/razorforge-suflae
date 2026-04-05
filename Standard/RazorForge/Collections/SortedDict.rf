@@ -20,13 +20,18 @@ import BuilderService
 # B-tree order
 preset B_DICT: U64 = 32u64
 
-# B-tree node for SortedDict
+### Defines the entity `BTreeDictNode`.
+### :typeparam K: The value used for `K`.
+### :typeparam V: The value used for `V`.
 entity BTreeDictNode[K, V]
 needs K obeys Comparable
   entries: List[DictEntry[K, V]]              # Key-value pairs in this node
   children: List[BTreeDictNode[K, V]]      # Child pointers (empty for leaf)
   is_leaf: Bool
 
+### Defines the entity `SortedDict`.
+### :typeparam K: The value used for `K`.
+### :typeparam V: The value used for `V`.
 entity SortedDict[K, V] obeys Iterable[DictEntry[K, V]]
 needs K obeys Comparable
   secret root: BTreeDictNode[K, V]?
@@ -36,6 +41,9 @@ needs K obeys Comparable
 # Node Creators
 # ============================================================================
 
+### Creates a new instance.
+### :param is_leaf: The `is_leaf` value.
+### :returns: The resulting `BTreeDictNode[K, V]` value.
 routine BTreeDictNode[K, V].$create(is_leaf: Bool) -> BTreeDictNode[K, V]
   return BTreeDictNode[K, V](
     entries: List[DictEntry[K, V]](),
@@ -47,12 +55,17 @@ routine BTreeDictNode[K, V].$create(is_leaf: Bool) -> BTreeDictNode[K, V]
 # SortedDict Creators
 # ============================================================================
 
+### Creates a new instance.
+### :returns: The resulting `SortedDict[K, V]` value.
 routine SortedDict[K, V].$create() -> SortedDict[K, V]
   return SortedDict[K, V](
     root: None,
     count: 0u64
   )
 
+### Creates a new instance.
+### :param entries...: The `entries...` value.
+### :returns: The resulting `SortedDict[K, V]` value.
 routine SortedDict[K, V].$create(entries...: DictEntry[K, V]) -> SortedDict[K, V]
   var result = SortedDict[K, V]()
   for e in entries
@@ -63,12 +76,17 @@ routine SortedDict[K, V].$create(entries...: DictEntry[K, V]) -> SortedDict[K, V
 # Core Operations
 # ============================================================================
 
+### Returns the number of stored values.
+### :returns: The resulting `U64` value.
 routine SortedDict[K, V].count() -> U64
   return me.count
 
+### Returns true if this value is empty.
+### :returns: The resulting `Bool` value.
 routine SortedDict[K, V].is_empty() -> Bool
   return me.count == 0u64
 
+### Removes all stored values.
 routine SortedDict[K, V].clear()
   me.root = None
   me.count = 0u64
@@ -78,12 +96,20 @@ routine SortedDict[K, V].clear()
 # Search
 # ============================================================================
 
+### Returns whether this value contains `key`.
+### :param key: The `key` value.
+### :returns: The resulting `Bool` value.
 @readonly
 routine SortedDict[K, V].$contains(key: K) -> Bool
   if me.root is None
     return false
   return me.try_search_node(me.root!!, key) isnot None
 
+### Returns the result of `search node`.
+### :param node: The `node` value.
+### :param key: The `key` value.
+### :returns: The resulting `V` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine SortedDict[K, V].search_node!(node: BTreeDictNode[K, V], key: K) -> V
   var i = 0u64
   while i < node.entries.count() and key > node.entries[i].key
@@ -97,6 +123,10 @@ routine SortedDict[K, V].search_node!(node: BTreeDictNode[K, V], key: K) -> V
 
   return me.search_node!(node.children[i], key)
 
+### Returns the result of `try search node`.
+### :param node: The `node` value.
+### :param key: The `key` value.
+### :returns: The resulting `Maybe[V]` value.
 routine SortedDict[K, V].try_search_node(node: BTreeDictNode[K, V], key: K) -> Maybe[V]
   var i = 0u64
   while i < node.entries.count() and key > node.entries[i].key
@@ -114,6 +144,10 @@ routine SortedDict[K, V].try_search_node(node: BTreeDictNode[K, V], key: K) -> M
 # Indexing (by key)
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
+### :param key: The `key` value.
+### :returns: The resulting `V` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine SortedDict[K, V].$getitem!(key: K) -> V
   if me.root is None
     absent
@@ -122,6 +156,9 @@ routine SortedDict[K, V].$getitem!(key: K) -> V
     absent
   return result!!
 
+### Sets the element at the requested position.
+### :param key: The `key` value.
+### :param value: The value to use.
 routine SortedDict[K, V].$setitem(key: K, value: V)
   me.add(key, value)
   return
@@ -130,6 +167,10 @@ routine SortedDict[K, V].$setitem(key: K, value: V)
 # Insert
 # ============================================================================
 
+### Returns the result of `add`.
+### :param key: The `key` value.
+### :param value: The value to use.
+### :returns: The resulting `Bool` value.
 routine SortedDict[K, V].add(key: K, value: V) -> Bool
   # Returns true if new key inserted, false if key updated
 
@@ -156,6 +197,11 @@ routine SortedDict[K, V].add(key: K, value: V) -> Bool
   me.count = me.count + 1u64
   return true
 
+### Returns the result of `find and update`.
+### :param node: The `node` value.
+### :param key: The `key` value.
+### :param value: The value to use.
+### :returns: The resulting `Bool` value.
 routine SortedDict[K, V].find_and_update(node: BTreeDictNode[K, V], key: K, value: V) -> Bool
   var i = 0u64
   while i < node.entries.count() and key > node.entries[i].key
@@ -170,6 +216,10 @@ routine SortedDict[K, V].find_and_update(node: BTreeDictNode[K, V], key: K, valu
 
   return me.find_and_update(node.children[i], key, value)
 
+### Performs `insert non full` on this value.
+### :param node: The `node` value.
+### :param key: The `key` value.
+### :param value: The value to use.
 routine SortedDict[K, V].insert_non_full(node: BTreeDictNode[K, V], key: K, value: V)
   var i = node.entries.count()
 
@@ -198,6 +248,9 @@ routine SortedDict[K, V].insert_non_full(node: BTreeDictNode[K, V], key: K, valu
     me.insert_non_full(node.children[i], key, value)
   return
 
+### Performs `split child` on this value.
+### :param parent_node: The `parent_node` value.
+### :param child_idx: The `child_idx` value.
 routine SortedDict[K, V].split_child(parent_node: BTreeDictNode[K, V], child_idx: U64)
   var child = parent_node.children[child_idx]
   var mid = (B_DICT - 1u64) / 2u64
@@ -259,6 +312,9 @@ routine SortedDict[K, V].split_child(parent_node: BTreeDictNode[K, V], child_idx
 # Remove
 # ============================================================================
 
+### Returns the result of `remove`.
+### :param key: The `key` value.
+### :returns: The resulting `Bool` value.
 routine SortedDict[K, V].remove(key: K) -> Bool
   if me.root is None
     return false
@@ -277,6 +333,9 @@ routine SortedDict[K, V].remove(key: K) -> Bool
 
   return true
 
+### Removes a value using `remove_from_node`.
+### :param node: The `node` value.
+### :param key: The `key` value.
 routine SortedDict[K, V].remove_from_node(node: BTreeDictNode[K, V], key: K)
   var i = 0u64
   while i < node.entries.count() and key > node.entries[i].key
@@ -301,6 +360,10 @@ routine SortedDict[K, V].remove_from_node(node: BTreeDictNode[K, V], key: K)
     me.remove_from_node(node.children[i], key)
   return
 
+### Returns the predecessor component.
+### :param node: The `node` value.
+### :param idx: The `idx` value.
+### :returns: The resulting `DictEntry[K, V]` value.
 routine SortedDict[K, V].get_predecessor(node: BTreeDictNode[K, V], idx: U64) -> DictEntry[K, V]
   var current = node.children[idx]
   while not current.is_leaf
@@ -311,6 +374,8 @@ routine SortedDict[K, V].get_predecessor(node: BTreeDictNode[K, V], idx: U64) ->
 # Keys and Values
 # ============================================================================
 
+### Returns the result of `keys`.
+### :returns: The resulting `List[K]` value.
 routine SortedDict[K, V].keys() -> List[K]
   var result = List[K](me.count)
   if me.root is None
@@ -318,6 +383,9 @@ routine SortedDict[K, V].keys() -> List[K]
   me.collect_keys(me.root!!, result)
   return result
 
+### Performs `collect keys` on this value.
+### :param node: The `node` value.
+### :param result: The result storage location.
 routine SortedDict[K, V].collect_keys(node: BTreeDictNode[K, V], result: List[K])
   var i = 0u64
   while i < node.entries.count()
@@ -329,6 +397,8 @@ routine SortedDict[K, V].collect_keys(node: BTreeDictNode[K, V], result: List[K]
     me.collect_keys(node.children[node.children.count() - 1u64], result)
   return
 
+### Returns the result of `values`.
+### :returns: The resulting `List[V]` value.
 routine SortedDict[K, V].values() -> List[V]
   var result = List[V](me.count)
   if me.root is None
@@ -336,6 +406,9 @@ routine SortedDict[K, V].values() -> List[V]
   me.collect_values(me.root!!, result)
   return result
 
+### Performs `collect values` on this value.
+### :param node: The `node` value.
+### :param result: The result storage location.
 routine SortedDict[K, V].collect_values(node: BTreeDictNode[K, V], result: List[V])
   var i = 0u64
   while i < node.entries.count()
@@ -351,6 +424,9 @@ routine SortedDict[K, V].collect_values(node: BTreeDictNode[K, V], result: List[
 # Min/Max Keys
 # ============================================================================
 
+### Returns the result of `min key`.
+### :returns: The resulting `K` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine SortedDict[K, V].min_key!() -> K
   if me.is_empty()
     absent
@@ -359,6 +435,9 @@ routine SortedDict[K, V].min_key!() -> K
     node = node.children[0]
   return node.entries[0].key
 
+### Returns the result of `max key`.
+### :returns: The resulting `K` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine SortedDict[K, V].max_key!() -> K
   if me.is_empty()
     absent
@@ -367,6 +446,9 @@ routine SortedDict[K, V].max_key!() -> K
     node = node.children[node.children.count() - 1u64]
   return node.entries[node.entries.count() - 1u64].key
 
+### Returns the result of `first`.
+### :returns: The resulting `DictEntry[K, V]` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine SortedDict[K, V].first!() -> DictEntry[K, V]
   if me.is_empty()
     absent
@@ -375,6 +457,9 @@ routine SortedDict[K, V].first!() -> DictEntry[K, V]
     node = node.children[0]
   return node.entries[0]
 
+### Returns the result of `last`.
+### :returns: The resulting `DictEntry[K, V]` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine SortedDict[K, V].last!() -> DictEntry[K, V]
   if me.is_empty()
     absent
@@ -387,6 +472,10 @@ routine SortedDict[K, V].last!() -> DictEntry[K, V]
 # Range Queries
 # ============================================================================
 
+### Returns the result of `range`.
+### :param min_key: The `min_key` value.
+### :param max_key: The `max_key` value.
+### :returns: The resulting `List[DictEntry[K, V]]` value.
 routine SortedDict[K, V].range(min_key: K, max_key: K) -> List[DictEntry[K, V]]
   var result = List[DictEntry[K, V]]()
   if me.root is None
@@ -394,6 +483,11 @@ routine SortedDict[K, V].range(min_key: K, max_key: K) -> List[DictEntry[K, V]]
   me.range_collect(me.root!!, min_key, max_key, result)
   return result
 
+### Performs `range collect` on this value.
+### :param node: The `node` value.
+### :param min_key: The `min_key` value.
+### :param max_key: The `max_key` value.
+### :param result: The result storage location.
 routine SortedDict[K, V].range_collect(node: BTreeDictNode[K, V], min_key: K, max_key: K, result: List[DictEntry[K, V]])
   var i = 0u64
 
@@ -415,6 +509,8 @@ routine SortedDict[K, V].range_collect(node: BTreeDictNode[K, V], min_key: K, ma
 # Iteration (in key order)
 # ============================================================================
 
+### Creates an iterator for this value.
+### :returns: The resulting `SortedDictIterator[K, V]` value.
 @readonly
 routine SortedDict[K, V].$iter() -> SortedDictIterator[K, V]
   return SortedDictIterator[K, V](
@@ -422,6 +518,9 @@ routine SortedDict[K, V].$iter() -> SortedDictIterator[K, V]
     index: 0u64
   )
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `List[DictEntry[K, V]]` value.
 routine List[DictEntry[K, V]].$create(from: SortedDict[K, V]) -> List[DictEntry[K, V]]
   var result = List[DictEntry[K, V]](from.count)
   if from.root is None
@@ -429,6 +528,9 @@ routine List[DictEntry[K, V]].$create(from: SortedDict[K, V]) -> List[DictEntry[
   from.collect_inorder(from.root!!, result)
   return result
 
+### Performs `collect inorder` on this value.
+### :param node: The `node` value.
+### :param result: The result storage location.
 routine SortedDict[K, V].collect_inorder(node: BTreeDictNode[K, V], result: List[DictEntry[K, V]])
   var i = 0u64
   while i < node.entries.count()
@@ -440,10 +542,18 @@ routine SortedDict[K, V].collect_inorder(node: BTreeDictNode[K, V], result: List
     me.collect_inorder(node.children[node.children.count() - 1u64], result)
   return
 
+### Defines the entity `SortedDictIterator`.
+### :typeparam K: The value used for `K`.
+### :typeparam V: The value used for `V`.
 entity SortedDictIterator[K, V] obeys Iterator[DictEntry[K, V]]
+  ### Stores the entries member value.
   entries: List[DictEntry[K, V]]
+  ### Stores the index member value.
   index: U64
 
+### Returns the next value from this iterator.
+### :returns: The resulting `DictEntry[K, V]` value.
+### :absent: Returns absent when the requested value is unavailable.
 @writable
 emitting routine SortedDictIterator[K, V].$next() -> DictEntry[K, V]
   if me.index >= me.entries.count()
@@ -456,6 +566,8 @@ emitting routine SortedDictIterator[K, V].$next() -> DictEntry[K, V]
 # Comparison
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine SortedDict[K, V].$represent() -> Text
   if me.is_empty()
     return "SortedDict{:}"
@@ -471,6 +583,8 @@ routine SortedDict[K, V].$represent() -> Text
   result = result + "}"
   return result
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine SortedDict[K, V].$diagnose() -> Text
   if me.is_empty()
     return me.type_name() + "(count: 0, {:})"
@@ -486,6 +600,9 @@ routine SortedDict[K, V].$diagnose() -> Text
   result = result + "})"
   return result
 
+### Returns whether both values are equal.
+### :param other: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine SortedDict[K, V].$eq(other: SortedDict[K, V]) -> Bool
   if me.count != other.count
     return false

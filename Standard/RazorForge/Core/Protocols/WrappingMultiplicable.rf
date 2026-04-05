@@ -1,6 +1,10 @@
 # WrappingMultiplicable - Protocol for types that support wrapping multiplication (*%)
 module Core
 
+### Defines the protocol `WrappingMultiplicable`.
 protocol WrappingMultiplicable
+  ### Implements the wired routine behavior for this value.
+  ### :param you: The other value to compare against.
+  ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$mul_wrap(you: Me) -> Me

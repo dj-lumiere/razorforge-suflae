@@ -1,6 +1,9 @@
 # Representable - Protocol for types that can be converted to Text
 module Core
 
+### Defines the protocol `Representable`.
 protocol Representable
+  ### Returns the textual representation of this value.
+  ### :returns: The resulting `Text` value.
   @[readonly, generated]
   routine Me.$represent() -> Text

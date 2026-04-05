@@ -3,6 +3,7 @@
 module Core
 # Core F128 type definition - maps to LLVM fp128
 
+### Defines the record `F128`.
 @llvm("fp128")
 record F128 obeys Numeric, Ordered
   pass
@@ -22,57 +23,105 @@ preset F128_SQRT_2: F128 = 1.414213562373095048801688724209698079_f128
 preset F128_LN_2: F128 = 0.693147180559945309417232121458176568_f128
 preset F128_LN_10: F128 = 2.302585092994045684017991454684364208_f128
 
-# Convert integers to F128 using LLVM intrinsics (lossless for all integer sizes)
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F128` value.
 routine F128.$create(from: S8) -> F128
   return sitofp[S8, F128](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F128` value.
 routine F128.$create(from: S16) -> F128
   return sitofp[S16, F128](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F128` value.
 routine F128.$create(from: S32) -> F128
   return sitofp[S32, F128](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F128` value.
 routine F128.$create(from: S64) -> F128
   return sitofp[S64, F128](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F128` value.
 routine F128.$create(from: S128) -> F128
   return sitofp[S128, F128](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F128` value.
 routine F128.$create(from: U8) -> F128
   return uitofp[U8, F128](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F128` value.
 routine F128.$create(from: U16) -> F128
   return uitofp[U16, F128](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F128` value.
 routine F128.$create(from: U32) -> F128
   return uitofp[U32, F128](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F128` value.
 routine F128.$create(from: U64) -> F128
   return uitofp[U64, F128](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F128` value.
 routine F128.$create(from: U128) -> F128
   return uitofp[U128, F128](from)
 
-# Extend from smaller float types using LLVM intrinsics (lossless widening)
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F128` value.
 routine F128.$create(from: F16) -> F128
   return fpext[F16, F128](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F128` value.
 routine F128.$create(from: F32) -> F128
   return fpext[F32, F128](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F128` value.
 routine F128.$create(from: F64) -> F128
   return fpext[F64, F128](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F128` value.
 routine F128.$create(from: F128) -> F128
   return from
 
-# Convert from decimal types via native runtime (no LLVM intrinsic for decimal)
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F128` value.
 routine F128.$create(from: D32) -> F128
   return rf_d32_to_f128(from.to_bits())
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F128` value.
 routine F128.$create(from: D64) -> F128
   return rf_d64_to_f128(from.to_bits())
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F128` value.
 routine F128.$create(from: D128) -> F128
   return rf_d128_to_f128(from.low_bits(), from.high_bits())
 
@@ -80,18 +129,32 @@ routine F128.$create(from: D128) -> F128
 # Arithmetic Operations (IEEE 754 semantics)
 # ============================================================================
 
+### Returns the sum of this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `F128` value.
 routine F128.$add(you: F128) -> F128
   return fadd[F128](me, you)
 
+### Returns the difference between this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `F128` value.
 routine F128.$sub(you: F128) -> F128
   return fsub[F128](me, you)
 
+### Returns the product of this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `F128` value.
 routine F128.$mul(you: F128) -> F128
   return fmul[F128](me, you)
 
+### Returns the quotient of this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `F128` value.
 routine F128.$truediv(you: F128) -> F128
   return fdiv[F128](me, you)
 
+### Returns the negated value.
+### :returns: The resulting `F128` value.
 routine F128.$neg() -> F128
   return fneg[F128](me)
 
@@ -99,9 +162,15 @@ routine F128.$neg() -> F128
 # Comparison Operations (ordered - false if NaN)
 # ============================================================================
 
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine F128.$eq(you: F128) -> Bool
   return fcmp_oeq[F128](me, you)
 
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
 routine F128.$cmp(you: F128) -> ComparisonSign
   if fcmp_olt[F128](me, you)
     return ME_SMALL
@@ -113,21 +182,33 @@ routine F128.$cmp(you: F128) -> ComparisonSign
 # Math Operations using intrinsics
 # ============================================================================
 
+### Returns the result of `sqrt`.
+### :returns: The resulting `F128` value.
 routine F128.sqrt() -> F128
   return sqrt[F128](me)
 
+### Returns the absolute value.
+### :returns: The resulting `F128` value.
 routine F128.abs() -> F128
   return fabs[F128](me)
 
+### Returns the result of `floor`.
+### :returns: The resulting `F128` value.
 routine F128.floor() -> F128
   return floor[F128](me)
 
+### Returns the result of `ceil`.
+### :returns: The resulting `F128` value.
 routine F128.ceil() -> F128
   return ceil[F128](me)
 
+### Returns the result of `round`.
+### :returns: The resulting `F128` value.
 routine F128.round() -> F128
   return round[F128](me)
 
+### Returns the result of `trunc`.
+### :returns: The resulting `F128` value.
 routine F128.trunc() -> F128
   return trunc_float[F128](me)
 
@@ -135,24 +216,39 @@ routine F128.trunc() -> F128
 # Trigonometric Functions (via LibBF native runtime)
 # ============================================================================
 
+### Returns the result of `sin`.
+### :returns: The resulting `F128` value.
 routine F128.sin() -> F128
   return rf_f128_sin(me)
 
+### Returns the result of `cos`.
+### :returns: The resulting `F128` value.
 routine F128.cos() -> F128
   return rf_f128_cos(me)
 
+### Returns the result of `tan`.
+### :returns: The resulting `F128` value.
 routine F128.tan() -> F128
   return rf_f128_tan(me)
 
+### Returns the result of `asin`.
+### :returns: The resulting `F128` value.
 routine F128.asin() -> F128
   return rf_f128_asin(me)
 
+### Returns the result of `acos`.
+### :returns: The resulting `F128` value.
 routine F128.acos() -> F128
   return rf_f128_acos(me)
 
+### Returns the result of `atan`.
+### :returns: The resulting `F128` value.
 routine F128.atan() -> F128
   return rf_f128_atan(me)
 
+### Returns the result of `atan2`.
+### :param x: The x value.
+### :returns: The resulting `F128` value.
 routine F128.atan2(x: F128) -> F128
   return rf_f128_atan2(me, x)
 
@@ -160,21 +256,33 @@ routine F128.atan2(x: F128) -> F128
 # Hyperbolic Functions (via LibBF native runtime)
 # ============================================================================
 
+### Returns the result of `sinh`.
+### :returns: The resulting `F128` value.
 routine F128.sinh() -> F128
   return rf_f128_sinh(me)
 
+### Returns the result of `cosh`.
+### :returns: The resulting `F128` value.
 routine F128.cosh() -> F128
   return rf_f128_cosh(me)
 
+### Returns the result of `tanh`.
+### :returns: The resulting `F128` value.
 routine F128.tanh() -> F128
   return rf_f128_tanh(me)
 
+### Returns the result of `asinh`.
+### :returns: The resulting `F128` value.
 routine F128.asinh() -> F128
   return rf_f128_asinh(me)
 
+### Returns the result of `acosh`.
+### :returns: The resulting `F128` value.
 routine F128.acosh() -> F128
   return rf_f128_acosh(me)
 
+### Returns the result of `atanh`.
+### :returns: The resulting `F128` value.
 routine F128.atanh() -> F128
   return rf_f128_atanh(me)
 
@@ -182,24 +290,38 @@ routine F128.atanh() -> F128
 # Exponential and Logarithmic Functions (via LibBF native runtime)
 # ============================================================================
 
+### Returns the result of `exp`.
+### :returns: The resulting `F128` value.
 routine F128.exp() -> F128
   return rf_f128_exp(me)
 
+### Returns the result of `exp2`.
+### :returns: The resulting `F128` value.
 routine F128.exp2() -> F128
   return rf_f128_exp2(me)
 
+### Returns the result of `expm1`.
+### :returns: The resulting `F128` value.
 routine F128.expm1() -> F128
   return rf_f128_expm1(me)
 
+### Returns the result of `log`.
+### :returns: The resulting `F128` value.
 routine F128.log() -> F128
   return rf_f128_log(me)
 
+### Returns the result of `log2`.
+### :returns: The resulting `F128` value.
 routine F128.log2() -> F128
   return rf_f128_log2(me)
 
+### Returns the result of `log10`.
+### :returns: The resulting `F128` value.
 routine F128.log10() -> F128
   return rf_f128_log10(me)
 
+### Returns the result of `log1p`.
+### :returns: The resulting `F128` value.
 routine F128.log1p() -> F128
   return rf_f128_log1p(me)
 
@@ -207,15 +329,26 @@ routine F128.log1p() -> F128
 # Power Functions (via LibBF native runtime)
 # ============================================================================
 
+### Returns the result of `pow`.
+### :param exp: The exponent value.
+### :returns: The resulting `F128` value.
 routine F128.pow(exp: F128) -> F128
   return rf_f128_pow(me, exp)
 
+### Returns the result of `cbrt`.
+### :returns: The resulting `F128` value.
 routine F128.cbrt() -> F128
   return rf_f128_cbrt(me)
 
+### Returns the result of `hypot`.
+### :param y: The y value.
+### :returns: The resulting `F128` value.
 routine F128.hypot(y: F128) -> F128
   return rf_f128_hypot(me, y)
 
+### Returns the result of `copysign`.
+### :param sign: The `sign` value.
+### :returns: The resulting `F128` value.
 routine F128.copysign(sign: F128) -> F128
   return rf_f128_copysign(me, sign)
 
@@ -223,43 +356,66 @@ routine F128.copysign(sign: F128) -> F128
 # Utility Methods
 # ============================================================================
 
+### Returns the result of `min`.
+### :param you: The other value to compare against.
+### :returns: The resulting `F128` value.
 routine F128.min(you: F128) -> F128
   return if me <= you then me else you
 
+### Returns the result of `max`.
+### :param you: The other value to compare against.
+### :returns: The resulting `F128` value.
 routine F128.max(you: F128) -> F128
   return if me >= you then me else you
 
+### Returns the result of `clamp`.
+### :param min_val: The `min_val` value.
+### :param max_val: The `max_val` value.
+### :returns: The resulting `F128` value.
 routine F128.clamp(min_val: F128, max_val: F128) -> F128
   return me.min(max_val).max(min_val)
 
+### Returns true if this value is positive.
+### :returns: The resulting `Bool` value.
 routine F128.is_positive() -> Bool
   return me > 0.0_f128
 
+### Returns true if this value is negative.
+### :returns: The resulting `Bool` value.
 routine F128.is_negative() -> Bool
   return me < 0.0_f128
 
+### Returns true if this value is zero.
+### :returns: The resulting `Bool` value.
 routine F128.is_zero() -> Bool
   return me == 0.0_f128
 
+### Returns the result of `signum`.
+### :returns: The resulting `F128` value.
 routine F128.signum() -> F128
   return when
     me > 0.0_f128 => 1.0_f128
     me < 0.0_f128 => -1.0_f128
     else => 0.0_f128
 
-# Reinterpret bits as U128 (type punning)
+### Converts this value to bits.
+### :returns: The resulting `U128` value.
 routine F128.to_bits() -> U128
   return bitcast[F128, U128](me)
 
-# Low 64 bits of the IEEE binary128 representation
+### Returns the result of `low bits`.
+### :returns: The resulting `U64` value.
 routine F128.low_bits() -> U64
   return trunc[U128, U64](me.to_bits())
 
-# High 64 bits of the IEEE binary128 representation (sign + exponent + high significand)
+### Returns the result of `high bits`.
+### :returns: The resulting `U64` value.
 routine F128.high_bits() -> U64
   return trunc[U128, U64](me.to_bits() >>> 64u32)
 
-# Create F128 from U128 bits (type punning)
+### Creates a value from bits.
+### :param bits: The encoded bit pattern.
+### :returns: The resulting `F128` value.
 routine F128.from_bits(bits: U128) -> F128
   return bitcast[U128, F128](bits)
 
@@ -267,18 +423,28 @@ routine F128.from_bits(bits: U128) -> F128
 # Classification
 # ============================================================================
 
+### Returns true if this value is nan.
+### :returns: The resulting `Bool` value.
 routine F128.is_nan() -> Bool
   return fcmp_uno[F128](me, me)
 
+### Returns true if this value is infinite.
+### :returns: The resulting `Bool` value.
 routine F128.is_infinite() -> Bool
   return fcmp_oeq[F128](me.abs(), F128_INFINITY)
 
+### Returns true if this value is finite.
+### :returns: The resulting `Bool` value.
 routine F128.is_finite() -> Bool
   return not me.is_nan() and not me.is_infinite()
 
+### Returns true if this value is normal.
+### :returns: The resulting `Bool` value.
 routine F128.is_normal() -> Bool
   return me.is_finite() and not me.is_zero() and not me.is_subnormal()
 
+### Returns true if this value is subnormal.
+### :returns: The resulting `Bool` value.
 routine F128.is_subnormal() -> Bool
   var bits = me.to_bits()
   var hi = trunc[U128, U64](lshr[U128](bits, 64_u32))
@@ -289,30 +455,45 @@ routine F128.is_subnormal() -> Bool
 # Clamping Arithmetic
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `F128` value.
 routine F128.$add_clamp(you: F128) -> F128
   var result = fadd[F128](me, you)
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else fneg[F128](F128_MAX)
   return result
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `F128` value.
 routine F128.$sub_clamp(you: F128) -> F128
   var result = fsub[F128](me, you)
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else fneg[F128](F128_MAX)
   return result
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `F128` value.
 routine F128.$mul_clamp(you: F128) -> F128
   var result = fmul[F128](me, you)
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else fneg[F128](F128_MAX)
   return result
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `F128` value.
 routine F128.$truediv_clamp(you: F128) -> F128
   var result = fdiv[F128](me, you)
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else fneg[F128](F128_MAX)
   return result
 
+### Implements the wired routine behavior for this value.
+### :param exp: The exponent value.
+### :returns: The resulting `F128` value.
 routine F128.$pow_clamp(exp: F128) -> F128
   var result = rf_f128_pow(me, exp)
   if result.is_infinite()
@@ -323,9 +504,13 @@ routine F128.$pow_clamp(exp: F128) -> F128
 # Integer Conversions
 # ============================================================================
 
+### Returns the result of `S64`.
+### :returns: The resulting `S64` value.
 routine F128.S64!() -> S64
   return me.F64!().S64!()
 
+### Returns the result of `S128`.
+### :returns: The resulting `S128` value.
 routine F128.S128!() -> S128
   return me.F64!().S128!()
 
@@ -333,9 +518,13 @@ routine F128.S128!() -> S128
 # Float Precision Conversions
 # ============================================================================
 
+### Returns the result of `F32`.
+### :returns: The resulting `F32` value.
 routine F128.F32() -> F32
   return fptrunc[F128, F32](me)
 
+### Returns the result of `F64`.
+### :returns: The resulting `F64` value.
 routine F128.F64() -> F64
   return fptrunc[F128, F64](me)
 
@@ -343,9 +532,13 @@ routine F128.F64() -> F64
 # Diagnostics and Hashing
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine F128.$diagnose() -> Text
   return Text(from: me)
 
+### Returns the result of `hash`.
+### :returns: The resulting `U64` value.
 routine F128.hash() -> U64
   var bits = me.to_bits()
   var lo = trunc[U128, U64](bits)
@@ -362,10 +555,16 @@ routine F128.hash() -> U64
 # Text Representation and Parsing
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine F128.$represent() -> Text
   var cstr_result = rf_format_F128(me)
   return Text(from: CStr(from_ptr: cstr_result))
 
+### Implements the wired routine behavior for this value.
+### :param from_text: The `from_text` value.
+### :returns: The resulting `F128` value.
+### :throws: May throw {InvalidValueError}.
 routine F128.$create!(from_text: Text) -> F128
   var len = from_text.count()
   if len == 0u64

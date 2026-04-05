@@ -4,10 +4,12 @@
 
 module Core
 
+### Defines the record `Exclusive`.
 record Exclusive obeys LockPolicy
+  ### Stores the locked member value.
   secret locked: Atomic[Bool]
 
-# Acquire exclusive lock (blocking)
+### Executes `acquire`.
 routine Exclusive.acquire()
   # Spin until we can acquire the lock
   loop
@@ -16,19 +18,23 @@ routine Exclusive.acquire()
       == false => pass  # Someone else has it, keep trying
   return
 
-# Acquire lock (non-blocking, can fail)
+### Returns the result of `acquire`.
+### :returns: The resulting `Bool` value.
 routine Exclusive.acquire!() -> Bool
   return me.locked.compare_exchange(expected: false, desired: true)
 
-# Release exclusive lock
+### Executes `release`.
 routine Exclusive.release()
   me.locked.store(false)
   return
 
-# Check if locked (for debugging)
+### Returns true if this value is locked.
+### :returns: The resulting `Bool` value.
 routine Exclusive.is_locked() -> Bool
   return me.locked.load()
 
+### Returns the result of `state`.
+### :returns: The resulting `LockState` value.
 routine Exclusive.state() -> LockState
   if me.locked.load()
     return WRITING

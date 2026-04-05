@@ -1,27 +1,13 @@
-### RazorForge Hijacked[T] - Scoped exclusive access token
-###
-### Hijacked[T] is created by `.hijack()` and is intended for temporary exclusive access.
-### It provides modifiable access to entities and modifiable records within an inline use or scoped block.
-###
-### Syntax:
-###   using <entity_or_record>.hijack() as h
-###     h.member variable = 42  # Exclusive write access
-###   # h destroyed here, cannot escape scope
-###
-### Properties:
-### - Created through `.hijack()`
-### - Scope-bound: cannot be stored, returned, or escape
-### - Exclusive: cannot be copied (only one handle at a time)
-### - Temporary: source is preserved and usable again when access ends
-### - Single-threaded: for multi-threaded use, see Seized[T]
-###
-### This type is a marker for the type system - the compiler handles all operations.
 module Core
 
+### Defines the record `Hijacked`.
+### :typeparam T: The value used for `T`.
 @llvm("ptr")
 record Hijacked[T]
   pass
 
+### Returns the result of `hijack`.
+### :returns: The resulting `Hijacked[T]` value.
 routine T.hijack() -> Hijacked[T]
   return Hijacked[T](me.snatch())
 
@@ -33,9 +19,11 @@ routine T.hijack() -> Hijacked[T]
 # Resource management — enables `using entity.hijack() as h`
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
 routine Hijacked[T].$enter()
   return
 
+### Implements the wired routine behavior for this value.
 routine Hijacked[T].$exit()
   return
 
@@ -43,12 +31,16 @@ routine Hijacked[T].$exit()
 # Display (transparent - delegates to inner value)
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 @readonly
 routine Hijacked[T].$represent() -> Text
   danger!
     var snatched = Snatched[T](me)
     return snatched.read().$represent()
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 @readonly
 routine Hijacked[T].$diagnose() -> Text
   danger!

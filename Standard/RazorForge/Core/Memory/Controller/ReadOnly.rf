@@ -5,14 +5,19 @@
 
 module Core
 
+### Defines the record `ReadOnly`.
 record ReadOnly obeys LockPolicy
   pass # Empty - no lock state needed for unmodifiable data
 
+### Creates a new instance.
+### :returns: The resulting `ReadOnly` value.
 routine ReadOnly.$create() -> ReadOnly
   return ReadOnly()
 
 # No lock/unlock methods needed - data is unmodifiable
 # Direct member variable access is allowed for Shared[T, ReadOnly]
 
+### Returns the result of `state`.
+### :returns: The resulting `LockState` value.
 routine ReadOnly.state() -> LockState
   return IDLE

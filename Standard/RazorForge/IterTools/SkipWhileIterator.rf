@@ -3,18 +3,31 @@
 
 module IterTools
 
+### Defines the entity `SkipWhileIterator`.
+### :typeparam T: The value used for `T`.
 entity SkipWhileIterator[T] obeys Iterable[T]
+  ### Stores the source member value.
   secret source: Iterable[T]
+  ### Stores the predicate member value.
   secret predicate: Routine[(T,), Bool]
 
+### Creates an iterator for this value.
+### :returns: The resulting `SkipWhileEmitter[T]` value.
 routine SkipWhileIterator[T].$iter() -> SkipWhileEmitter[T]
   return SkipWhileEmitter[T](source: me.source.$iter(), predicate: me.predicate, skipping: true)
 
+### Defines the entity `SkipWhileEmitter`.
+### :typeparam T: The value used for `T`.
 entity SkipWhileEmitter[T] obeys Iterator[T]
+  ### Stores the source member value.
   secret source: Iterator[T]
+  ### Stores the predicate member value.
   secret predicate: Routine[(T,), Bool]
+  ### Stores the skipping member value.
   secret skipping: Bool
 
+### Returns the next value from this iterator.
+### :returns: The resulting `T` value.
 emitting routine SkipWhileEmitter[T].$next() -> T
   if me.skipping
     loop
@@ -26,5 +39,8 @@ emitting routine SkipWhileEmitter[T].$next() -> T
   emit me.source.$next()
   return
 
+### Returns the result of `skip while`.
+### :param predicate: The `predicate` value.
+### :returns: The resulting `SkipWhileIterator[T]` value.
 routine Iterable[T].skip_while(predicate: Routine[(T,), Bool]) -> SkipWhileIterator[T]
   return SkipWhileIterator[T](source: me, predicate: predicate)

@@ -405,16 +405,23 @@ public partial class LLVMCodeGenerator
                 return;
             }
 
-            // Error handling layout: { i64 (DataState), ptr (Snatched handle) }
-            // DataState: VALID=1, ABSENT=0, ERROR=-1
-            // CrashablePattern matches the ERROR case (tag == -1)
+            // Result/Lookup carrier layout: { i64 (type_id), i64 (address) }
+            // type_id == 0 → ABSENT (Blank), ComputeTypeId(T) → VALID, ComputeTypeId(Error) → ERROR
+            // CrashablePattern matches the ERROR case: tag != 0 && tag != ComputeTypeId(valueType)
             string tagPtr = NextTemp();
             string tag = NextTemp();
             EmitLine(sb: sb,
-                line: $"  {tagPtr} = getelementptr {{ i64, ptr }}, ptr {subject}, i32 0, i32 0");
+                line: $"  {tagPtr} = getelementptr {{ i64, i64 }}, ptr {subject}, i32 0, i32 0");
             EmitLine(sb: sb, line: $"  {tag} = load i64, ptr {tagPtr}");
+
+            // tag != 0 (not absent) && tag != ComputeTypeId(T) (not valid) → error
+            ulong validId = ComputeTypeId(fullName: errorInfo.ValueType.FullName);
+            string notAbsent = NextTemp();
+            string notValid = NextTemp();
             string cmp = NextTemp();
-            EmitLine(sb: sb, line: $"  {cmp} = icmp eq i64 {tag}, -1");
+            EmitLine(sb: sb, line: $"  {notAbsent} = icmp ne i64 {tag}, 0");
+            EmitLine(sb: sb, line: $"  {notValid} = icmp ne i64 {tag}, {validId}");
+            EmitLine(sb: sb, line: $"  {cmp} = and i1 {notAbsent}, {notValid}");
 
             // Bind error value to variable if specified
             if (crashable.VariableName != null)
@@ -424,13 +431,15 @@ public partial class LLVMCodeGenerator
                     line: $"  br i1 {cmp}, label %{extractLabel}, label %{failLabel}");
 
                 EmitLine(sb: sb, line: $"{extractLabel}:");
-                // Extract ptr from field 1 (Snatched handle)
-                string handlePtr = NextTemp();
+                // Extract address from field 1 (i64) and convert to ptr
+                string addrFieldPtr = NextTemp();
+                string addrVal = NextTemp();
                 string handleVal = NextTemp();
                 EmitLine(sb: sb,
                     line:
-                    $"  {handlePtr} = getelementptr {{ i64, ptr }}, ptr {subject}, i32 0, i32 1");
-                EmitLine(sb: sb, line: $"  {handleVal} = load ptr, ptr {handlePtr}");
+                    $"  {addrFieldPtr} = getelementptr {{ i64, i64 }}, ptr {subject}, i32 0, i32 1");
+                EmitLine(sb: sb, line: $"  {addrVal} = load i64, ptr {addrFieldPtr}");
+                EmitLine(sb: sb, line: $"  {handleVal} = inttoptr i64 {addrVal} to ptr");
 
                 string varAddr = $"%{crashable.VariableName}.addr";
                 EmitEntryAlloca(llvmName: varAddr, llvmType: "ptr");
@@ -469,15 +478,16 @@ public partial class LLVMCodeGenerator
                 return;
             }
 
-            // Maybe and Lookup: check DataState tag == 0 (ABSENT)
-            // Error handling layout: { i64 (DataState), ptr (Snatched handle) }
+            // Maybe: { i1, T } tag is i1; Lookup: { i64, i64 } tag is i64 — both absent when tag == 0
+            string carrierType = GetCarrierLLVMType(errorType: errorInfo);
+            string tagType = GetCarrierTagType(kind: errorInfo.Kind);
             string tagPtr = NextTemp();
             string tag = NextTemp();
             EmitLine(sb: sb,
-                line: $"  {tagPtr} = getelementptr {{ i64, ptr }}, ptr {subject}, i32 0, i32 0");
-            EmitLine(sb: sb, line: $"  {tag} = load i64, ptr {tagPtr}");
+                line: $"  {tagPtr} = getelementptr {carrierType}, ptr {subject}, i32 0, i32 0");
+            EmitLine(sb: sb, line: $"  {tag} = load {tagType}, ptr {tagPtr}");
             string cmp = NextTemp();
-            EmitLine(sb: sb, line: $"  {cmp} = icmp eq i64 {tag}, 0");
+            EmitLine(sb: sb, line: $"  {cmp} = icmp eq {tagType} {tag}, 0");
             EmitLine(sb: sb, line: $"  br i1 {cmp}, label %{matchLabel}, label %{failLabel}");
         }
         else

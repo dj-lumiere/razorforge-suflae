@@ -1,6 +1,10 @@
 # ScalarDivisible - Protocol for unit-like types that support true division by a scalar
 module Core
 
+### Defines the protocol `ScalarDivisible`.
 protocol ScalarDivisible
+  ### Returns the quotient of this value and the other value.
+  ### :param you: The other value to compare against.
+  ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$truediv(you: Numeric) -> Me

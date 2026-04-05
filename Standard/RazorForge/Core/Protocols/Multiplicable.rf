@@ -1,6 +1,10 @@
 # Multiplicable - Protocol for types that support multiplication (*)
 module Core
 
+### Defines the protocol `Multiplicable`.
 protocol Multiplicable
+  ### Returns the product of this value and the other value.
+  ### :param you: The other value to compare against.
+  ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$mul(you: Me) -> Me

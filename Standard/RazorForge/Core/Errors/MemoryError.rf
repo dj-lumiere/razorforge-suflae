@@ -2,24 +2,40 @@ module Core
 
 # MemoryError - Error types for memory operations
 
+### Defines the record `MemoryAllocationError`.
 record MemoryAllocationError obeys Crashable
+  ### Stores the requested bytes member value.
   requested_bytes: U64
 
+### Returns the result of `crash message`.
+### :returns: The resulting `Text` value.
 routine MemoryAllocationError.crash_message() -> Text
   return f"Failed to allocate {me.requested_bytes} bytes"
 
+### Defines the record `MemoryBoundsError`.
 record MemoryBoundsError obeys Crashable
+  ### Stores the offset member value.
   offset: U64
+  ### Stores the size member value.
   size: U64
+  ### Stores the allocated member value.
   allocated: U64
 
+### Returns the result of `crash message`.
+### :returns: The resulting `Text` value.
 routine MemoryBoundsError.crash_message() -> Text
   return f"Memory access at offset {me.offset} with size {me.size} exceeds allocated {me.allocated} bytes"
 
+### Defines the record `SliceBoundsError`.
 record SliceBoundsError obeys Crashable
+  ### Stores the offset member value.
   offset: U64
+  ### Stores the length member value.
   length: U64
+  ### Stores the allocated member value.
   allocated: U64
 
+### Returns the result of `crash message`.
+### :returns: The resulting `Text` value.
 routine SliceBoundsError.crash_message() -> Text
   return f"Slice from {me.offset} with length {me.length} exceeds allocated {me.allocated} bytes"

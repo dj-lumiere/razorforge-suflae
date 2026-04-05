@@ -3,17 +3,30 @@
 
 module IterTools
 
+### Defines the entity `TakeIterator`.
+### :typeparam T: The value used for `T`.
 entity TakeIterator[T] obeys Iterable[T]
+  ### Stores the source member value.
   secret source: Iterable[T]
+  ### Stores the limit member value.
   secret limit: U64
 
+### Creates an iterator for this value.
+### :returns: The resulting `TakeEmitter[T]` value.
 routine TakeIterator[T].$iter() -> TakeEmitter[T]
   return TakeEmitter[T](source: me.source.$iter(), remaining: me.limit)
 
+### Defines the entity `TakeEmitter`.
+### :typeparam T: The value used for `T`.
 entity TakeEmitter[T] obeys Iterator[T]
+  ### Stores the source member value.
   secret source: Iterator[T]
+  ### Stores the remaining member value.
   secret remaining: U64
 
+### Returns the next value from this iterator.
+### :returns: The resulting `T` value.
+### :absent: Returns absent when the requested value is unavailable.
 emitting routine TakeEmitter[T].$next() -> T
   if me.remaining == 0u64
     absent
@@ -21,5 +34,8 @@ emitting routine TakeEmitter[T].$next() -> T
   me.remaining = me.remaining - 1u64
   return
 
+### Returns the result of `take`.
+### :param count: The number of items to use.
+### :returns: The resulting `TakeIterator[T]` value.
 routine Iterable[T].take(count: U64) -> TakeIterator[T]
   return TakeIterator[T](source: me, limit: count)

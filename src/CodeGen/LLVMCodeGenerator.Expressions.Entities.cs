@@ -396,7 +396,7 @@ public partial class LLVMCodeGenerator
         // Determine the wrapper LLVM type (Maybe[T]) and inner value type
         string wrapperLlvmType = memberType != null
             ? GetLLVMType(type: memberType)
-            : "{ i64, ptr }";
+            : "{ i1, ptr }";
         TypeInfo? valueType = memberType switch
         {
             ErrorHandlingTypeInfo eh => eh.ValueType,
@@ -417,15 +417,15 @@ public partial class LLVMCodeGenerator
         EmitEntryAlloca(llvmName: allocaPtr, llvmType: wrapperLlvmType);
         EmitLine(sb: sb, line: $"  store {wrapperLlvmType} {maybeValue}, ptr {allocaPtr}");
 
-        // Extract tag
+        // Extract tag (i1 for Maybe)
         string tagPtr = NextTemp();
         string tag = NextTemp();
         EmitLine(sb: sb,
             line: $"  {tagPtr} = getelementptr {wrapperLlvmType}, ptr {allocaPtr}, i32 0, i32 0");
-        EmitLine(sb: sb, line: $"  {tag} = load i64, ptr {tagPtr}");
+        EmitLine(sb: sb, line: $"  {tag} = load i1, ptr {tagPtr}");
 
         string isValid = NextTemp();
-        EmitLine(sb: sb, line: $"  {isValid} = icmp eq i64 {tag}, 1");
+        EmitLine(sb: sb, line: $"  {isValid} = icmp eq i1 {tag}, 1");
 
         string okLabel = NextLabel(prefix: "unwrap_ok");
         string failLabel = NextLabel(prefix: "unwrap_fail");
@@ -437,27 +437,28 @@ public partial class LLVMCodeGenerator
         EmitLine(sb: sb, line: "  call void @llvm.trap()");
         EmitLine(sb: sb, line: "  unreachable");
 
-        // OK: extract value from handle
+        // OK: extract value from field 1
         EmitLine(sb: sb, line: $"{okLabel}:");
         _currentBlock = okLabel;
         string handlePtr = NextTemp();
-        string handleVal = NextTemp();
         EmitLine(sb: sb,
             line:
             $"  {handlePtr} = getelementptr {wrapperLlvmType}, ptr {allocaPtr}, i32 0, i32 1");
-        EmitLine(sb: sb, line: $"  {handleVal} = load ptr, ptr {handlePtr}");
 
-        // For entity types, the value IS the pointer; for records, load from the pointer
+        // Entity: field 1 is ptr — return it directly
         if (valueType is EntityTypeInfo)
         {
-            return handleVal;
+            string entityPtr = NextTemp();
+            EmitLine(sb: sb, line: $"  {entityPtr} = load ptr, ptr {handlePtr}");
+            return entityPtr;
         }
 
+        // Record: field 1 is inline T — load from handlePtr
         string llvmValueType = valueType != null
             ? GetLLVMType(type: valueType)
             : "ptr";
         string result = NextTemp();
-        EmitLine(sb: sb, line: $"  {result} = load {llvmValueType}, ptr {handleVal}");
+        EmitLine(sb: sb, line: $"  {result} = load {llvmValueType}, ptr {handlePtr}");
         return result;
     }
 
@@ -604,11 +605,16 @@ public partial class LLVMCodeGenerator
         if (IsMaybeType(type: memberVariable.Type) &&
             !(valueType != null && IsMaybeType(type: valueType)) && value != "zeroinitializer")
         {
+            string memberCarrierType = GetLLVMType(type: memberVariable.Type);
             string wrapped = NextTemp();
             EmitLine(sb: sb,
                 line:
-                $"  {wrapped} = insertvalue {{ i64, ptr }} {{ i64 1, ptr null }}, ptr {value}, 1");
-            value = wrapped;
+                $"  {wrapped} = insertvalue {memberCarrierType} undef, i1 1, 0");
+            string wrapped2 = NextTemp();
+            EmitLine(sb: sb,
+                line:
+                $"  {wrapped2} = insertvalue {memberCarrierType} {wrapped}, ptr {value}, 1");
+            value = wrapped2;
         }
 
         // GEP to get member variable pointer

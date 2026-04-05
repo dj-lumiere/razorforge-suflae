@@ -1,29 +1,13 @@
-### RazorForge Viewed[T] - Scoped read-only access token
-###
-### Viewed[T] is created by `.view()` and is intended for temporary read-only access.
-### It provides read-only access to entities and records within an inline use or scoped block.
-###
-### Syntax:
-###   using <entity_or_record>.view() as v
-###     show(v.member variable)  # Read-only access
-###     var copy = v   # OK - Viewed can be copied
-###   # v destroyed here, cannot escape scope
-###
-### Properties:
-### - Created through `.view()`
-### - Scope-bound: cannot be stored, returned, or escape
-### - Copyable: multiple Viewed[T] handles can coexist
-### - Read-only: cannot modify through this handle
-### - Temporary: source is preserved and usable again when access ends
-### - Single-threaded: for multi-threaded use, see Inspected[T]
-###
-### This type is a marker for the type system - the compiler handles all operations.
 module Core
 
+### Defines the record `Viewed`.
+### :typeparam T: The value used for `T`.
 @llvm("ptr")
 record Viewed[T]
   pass
 
+### Returns the result of `view`.
+### :returns: The resulting `Viewed[T]` value.
 routine T.view() -> Viewed[T]
   return Viewed[T](me.snatch())
 
@@ -35,9 +19,11 @@ routine T.view() -> Viewed[T]
 # Resource management — enables `using entity.view() as v`
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
 routine Viewed[T].$enter()
   return
 
+### Implements the wired routine behavior for this value.
 routine Viewed[T].$exit()
   return
 
@@ -45,12 +31,16 @@ routine Viewed[T].$exit()
 # Display (transparent - delegates to inner value)
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 @readonly
 routine Viewed[T].$represent() -> Text
   danger!
     var snatched = Snatched[T](me)
     return snatched.read().$represent()
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 @readonly
 routine Viewed[T].$diagnose() -> Text
   danger!

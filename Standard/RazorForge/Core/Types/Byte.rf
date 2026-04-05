@@ -12,15 +12,22 @@
 # For text processing, use Character (Unicode codepoint) and Text types.
 module Core
 
+### Defines the record `Byte`.
 @llvm("i8")
 record Byte obeys ConstCompatible
   pass
 
 # Creators
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `Byte` value.
 routine Byte.$create(from: Byte) -> Byte
   return from
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `Byte` value.
 routine Byte.$create(from: U8) -> Byte
   return bitcast[Byte](from)
 
@@ -34,15 +41,25 @@ preset BYTE_TAB: Byte = Byte(0x09u8)
 # Comparison operations
 # ============================================================================
 
+### Returns the result of `byte value`.
+### :returns: The resulting `U8` value.
 routine Character.byte_value() -> U8
   return U8(U32(me))
 
+### Returns the result of `codepoint`.
+### :returns: The resulting `U32` value.
 routine Byte.codepoint() -> U32
   return U32(U8(me))
 
+### Returns whether both values are equal.
+### :param other: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine Byte.$eq(other: Byte) -> Bool
   return U8(me) == U8(other)
 
+### Compares this value with the other value.
+### :param other: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
 routine Byte.$cmp(other: Byte) -> ComparisonSign
   return U8(me) <=> U8(other)
 
@@ -50,6 +67,10 @@ routine Byte.$cmp(other: Byte) -> ComparisonSign
 # Range check
 # ============================================================================
 
+### Returns the result of `in range`.
+### :param low: The `low` value.
+### :param high: The `high` value.
+### :returns: The resulting `Bool` value.
 routine Byte.in_range(low: U8, high: U8) -> Bool
   return low <= U8(me) <= high
 
@@ -57,17 +78,26 @@ routine Byte.in_range(low: U8, high: U8) -> Bool
 # Parsing helpers (useful for binary protocols)
 # ============================================================================
 
+### Returns true if this value is ascii.
+### :returns: The resulting `Bool` value.
 routine Byte.is_ascii() -> Bool
   return U8(me) <= 0x7F
 
+### Returns true if this value is digit.
+### :returns: The resulting `Bool` value.
 routine Byte.is_digit() -> Bool
   return 0x30u8 <= U8(me) <= 0x39u8  # ASCII 0-9
 
+### Returns the result of `digit value`.
+### :returns: The resulting `U8` value.
+### :throws: May throw {InvalidDigitError}.
 routine Byte.digit_value!() -> U8
   if not me.is_digit()
     throw InvalidDigitError()
   return U8(me) - 0x30u8
 
+### Returns true if this value is hex digit.
+### :returns: The resulting `Bool` value.
 routine Byte.is_hex_digit() -> Bool
   var v = U8(me)
   var is_digit = 0x30u8 <= v <= 0x39u8
@@ -75,6 +105,9 @@ routine Byte.is_hex_digit() -> Bool
   var is_lower_hex = 0x61u8 <= v <= 0x66u8
   return is_digit or is_upper_hex or is_lower_hex
 
+### Returns the result of `hex value`.
+### :returns: The resulting `U8` value.
+### :throws: May throw {InvalidHexDigitError}.
 routine Byte.hex_value!() -> U8
   var v = U8(me)
   when true
@@ -87,6 +120,8 @@ routine Byte.hex_value!() -> U8
 # Display — always \xHH format (raw bytes have no encoding)
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine Byte.$represent() -> Text
   var digits = List[Character]()
   digits.add_last(Character(0x005Cu32))  # \
@@ -104,5 +139,7 @@ routine Byte.$represent() -> Text
     digits.add_last(Character(0x0041u32 + low - 10u32))
   return Text(from_list: digits)
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine Byte.$diagnose() -> Text
   return "Byte(" + U8(me).$represent() + ", " + me.$represent() + ")"

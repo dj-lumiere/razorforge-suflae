@@ -1,12 +1,22 @@
 # Bitwiseable - Protocol for types that support bitwise operations (&, |, ^)
 module Core
 
+### Defines the protocol `Bitwiseable`.
 protocol Bitwiseable
+  ### Returns the result of the requested bitwise operation.
+  ### :param you: The other value to compare against.
+  ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$bitand(you: Me) -> Me
 
+  ### Returns the result of the requested bitwise operation.
+  ### :param you: The other value to compare against.
+  ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$bitor(you: Me) -> Me
 
+  ### Returns the result of the requested bitwise operation.
+  ### :param you: The other value to compare against.
+  ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$bitxor(you: Me) -> Me

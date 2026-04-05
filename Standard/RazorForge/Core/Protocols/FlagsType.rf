@@ -3,15 +3,25 @@
 # Provides: Diagnosable (-> Representable), Hashable, plus flags-specific routines
 module Core
 
+### Defines the protocol `FlagsType`.
 protocol FlagsType obeys Diagnosable, Hashable
+  ### Creates a new instance.
+  ### :param from: The source value to convert.
+  ### :returns: The resulting `U64` value.
   @[readonly, innate]
   routine U64.$create(from: Me) -> U64
 
+  ### Returns the result of `all cases`.
+  ### :returns: The resulting `List[Me]` value.
   @[readonly, innate]
   routine Me.all_cases() -> List[Me]
 
+  ### Returns the result of `all on`.
+  ### :returns: The resulting `Me` value.
   @[readonly, innate]
   routine Me.all_on() -> Me
 
+  ### Returns the result of `all off`.
+  ### :returns: The resulting `Me` value.
   @[readonly, innate]
   routine Me.all_off() -> Me

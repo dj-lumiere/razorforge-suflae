@@ -17,7 +17,8 @@ import BuilderService
 # B-tree order (max children per node)
 preset B_LIST: U64 = 32u64
 
-# B-tree node for SortedList
+### Defines the entity `BTreeListNode`.
+### :typeparam T: The value used for `T`.
 entity BTreeListNode[T]
 needs T obeys Comparable
   keys: List[T]                        # Keys in this node
@@ -25,6 +26,8 @@ needs T obeys Comparable
   subtree_size: U64                  # Total elements in this subtree
   is_leaf: Bool
 
+### Defines the entity `SortedList`.
+### :typeparam T: The value used for `T`.
 entity SortedList[T] obeys Iterable[T]
 needs T obeys Comparable
   secret root: BTreeListNode[T]?
@@ -34,6 +37,9 @@ needs T obeys Comparable
 # Node Creators
 # ============================================================================
 
+### Creates a new instance.
+### :param is_leaf: The `is_leaf` value.
+### :returns: The resulting `BTreeListNode[T]` value.
 routine BTreeListNode[T].$create(is_leaf: Bool) -> BTreeListNode[T]
   return BTreeListNode[T](
     keys: List[T](),
@@ -46,12 +52,17 @@ routine BTreeListNode[T].$create(is_leaf: Bool) -> BTreeListNode[T]
 # SortedList Creators
 # ============================================================================
 
+### Creates a new instance.
+### :returns: The resulting `SortedList[T]` value.
 routine SortedList[T].$create() -> SortedList[T]
   return SortedList[T](
     root: None,
     count: 0u64
   )
 
+### Creates a new instance.
+### :param values...: The `values...` value.
+### :returns: The resulting `SortedList[T]` value.
 routine SortedList[T].$create(values...: T) -> SortedList[T]
   var result = SortedList[T]()
   for v in values
@@ -62,12 +73,17 @@ routine SortedList[T].$create(values...: T) -> SortedList[T]
 # Core Operations
 # ============================================================================
 
+### Returns the number of stored values.
+### :returns: The resulting `U64` value.
 routine SortedList[T].count() -> U64
   return me.count
 
+### Returns true if this value is empty.
+### :returns: The resulting `Bool` value.
 routine SortedList[T].is_empty() -> Bool
   return me.count == 0u64
 
+### Removes all stored values.
 routine SortedList[T].clear()
   me.root = None
   me.count = 0u64
@@ -77,12 +93,19 @@ routine SortedList[T].clear()
 # Search
 # ============================================================================
 
+### Returns whether this value contains `value`.
+### :param value: The value to use.
+### :returns: The resulting `Bool` value.
 @readonly
 routine SortedList[T].$contains(value: T) -> Bool
   if me.root is None
     return false
   return me.search_node(me.root!!, value)
 
+### Returns the result of `search node`.
+### :param node: The `node` value.
+### :param value: The value to use.
+### :returns: The resulting `Bool` value.
 routine SortedList[T].search_node(node: BTreeListNode[T], value: T) -> Bool
   var i = 0u64
   while i < node.keys.count() and value > node.keys[i]
@@ -96,12 +119,19 @@ routine SortedList[T].search_node(node: BTreeListNode[T], value: T) -> Bool
 
   return me.search_node(node.children[i], value)
 
+### Returns the number of matching values.
+### :param value: The value to use.
+### :returns: The resulting `U64` value.
 routine SortedList[T].count_of(value: T) -> U64
   # Count occurrences of value
   if me.root is None
     return 0u64
   return me.count_in_node(me.root!!, value)
 
+### Returns the number of matching values.
+### :param node: The `node` value.
+### :param value: The value to use.
+### :returns: The resulting `U64` value.
 routine SortedList[T].count_in_node(node: BTreeListNode[T], value: T) -> U64
   var count = 0u64
   var i = 0u64
@@ -122,6 +152,8 @@ routine SortedList[T].count_in_node(node: BTreeListNode[T], value: T) -> U64
 # Insert (allows duplicates)
 # ============================================================================
 
+### Performs `add` on this value.
+### :param value: The value to use.
 routine SortedList[T].add(value: T)
   if me.root is None
     me.root = BTreeListNode[T](is_leaf: true)
@@ -143,6 +175,9 @@ routine SortedList[T].add(value: T)
   me.count = me.count + 1u64
   return
 
+### Performs `insert non full` on this value.
+### :param node: The `node` value.
+### :param value: The value to use.
 routine SortedList[T].insert_non_full(node: BTreeListNode[T], value: T)
   var i = node.keys.count()
 
@@ -177,6 +212,9 @@ routine SortedList[T].insert_non_full(node: BTreeListNode[T], value: T)
     node.subtree_size = node.subtree_size + 1u64
   return
 
+### Performs `split child` on this value.
+### :param parent_node: The `parent_node` value.
+### :param child_idx: The `child_idx` value.
 routine SortedList[T].split_child(parent_node: BTreeListNode[T], child_idx: U64)
   var child = parent_node.children[child_idx]
   var mid = (B_LIST - 1u64) / 2u64
@@ -242,6 +280,8 @@ routine SortedList[T].split_child(parent_node: BTreeListNode[T], child_idx: U64)
   parent_node.children = new_children
   return
 
+### Performs `update subtree size` on this value.
+### :param node: The `node` value.
 routine SortedList[T].update_subtree_size(node: BTreeListNode[T])
   if node.is_leaf
     node.subtree_size = node.keys.count()
@@ -258,6 +298,9 @@ routine SortedList[T].update_subtree_size(node: BTreeListNode[T])
 # Remove (removes first occurrence)
 # ============================================================================
 
+### Returns the result of `remove`.
+### :param value: The value to use.
+### :returns: The resulting `Bool` value.
 routine SortedList[T].remove(value: T) -> Bool
   if me.root is None
     return false
@@ -276,6 +319,9 @@ routine SortedList[T].remove(value: T) -> Bool
 
   return true
 
+### Removes a value using `remove_from_node`.
+### :param node: The `node` value.
+### :param value: The value to use.
 routine SortedList[T].remove_from_node(node: BTreeListNode[T], value: T)
   var i = 0u64
   while i < node.keys.count() and value > node.keys[i]
@@ -304,12 +350,19 @@ routine SortedList[T].remove_from_node(node: BTreeListNode[T], value: T)
     node.subtree_size = node.subtree_size - 1u64
   return
 
+### Returns the predecessor component.
+### :param node: The `node` value.
+### :param idx: The `idx` value.
+### :returns: The resulting `T` value.
 routine SortedList[T].get_predecessor(node: BTreeListNode[T], idx: U64) -> T
   var current = node.children[idx]
   while not current.is_leaf
     current = current.children[current.children.count() - 1u64]
   return current.keys[current.keys.count() - 1u64]
 
+### Removes a value using `remove_all`.
+### :param value: The value to use.
+### :returns: The resulting `U64` value.
 routine SortedList[T].remove_all(value: T) -> U64
   # Remove all occurrences of value, return count removed
   var removed = 0u64
@@ -321,6 +374,10 @@ routine SortedList[T].remove_all(value: T) -> U64
 # Indexing - O(log n) access by position
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
+### :param index: The zero-based position to use.
+### :returns: The resulting `T` value.
+### :throws: May throw {IndexOutOfBoundsError}.
 routine SortedList[T].$getitem![I](index: I) -> T
 needs I obeys Integral
   var idx = index.U64()
@@ -328,11 +385,18 @@ needs I obeys Integral
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   return me.get_by_rank(me.root!!, idx)
 
+### Implements the wired routine behavior for this value.
+### :param index: The zero-based position to use.
+### :returns: The resulting `T` value.
 routine SortedList[T].$getitem![I](index: BackIndex[I]) -> T
 needs I obeys Integral
   var idx = index.resolve(me.count)
   return me.get_by_rank(me.root!!, idx)
 
+### Returns the by rank component.
+### :param node: The `node` value.
+### :param rank: The `rank` value.
+### :returns: The resulting `T` value.
 routine SortedList[T].get_by_rank(node: BTreeListNode[T], rank: U64) -> T
   if node.is_leaf
     return node.keys[rank]
@@ -361,6 +425,10 @@ routine SortedList[T].get_by_rank(node: BTreeListNode[T], rank: U64) -> T
 # Range Queries
 # ============================================================================
 
+### Returns the result of `range`.
+### :param min_val: The `min_val` value.
+### :param max_val: The `max_val` value.
+### :returns: The resulting `List[T]` value.
 routine SortedList[T].range(min_val: T, max_val: T) -> List[T]
   var result = List[T]()
   if me.root is None
@@ -368,6 +436,11 @@ routine SortedList[T].range(min_val: T, max_val: T) -> List[T]
   me.range_collect(me.root!!, min_val, max_val, result)
   return result
 
+### Performs `range collect` on this value.
+### :param node: The `node` value.
+### :param min_val: The `min_val` value.
+### :param max_val: The `max_val` value.
+### :param result: The result storage location.
 routine SortedList[T].range_collect(node: BTreeListNode[T], min_val: T, max_val: T, result: List[T])
   var i = 0u64
 
@@ -389,6 +462,9 @@ routine SortedList[T].range_collect(node: BTreeListNode[T], min_val: T, max_val:
 # Min/Max
 # ============================================================================
 
+### Returns the result of `min`.
+### :returns: The resulting `T` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine SortedList[T].min!() -> T
   if me.is_empty()
     absent
@@ -397,6 +473,9 @@ routine SortedList[T].min!() -> T
     node = node.children[0]
   return node.keys[0]
 
+### Returns the result of `max`.
+### :returns: The resulting `T` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine SortedList[T].max!() -> T
   if me.is_empty()
     absent
@@ -405,9 +484,13 @@ routine SortedList[T].max!() -> T
     node = node.children[node.children.count() - 1u64]
   return node.keys[node.keys.count() - 1u64]
 
+### Returns the result of `first`.
+### :returns: The resulting `T` value.
 routine SortedList[T].first!() -> T
   return me.min!()
 
+### Returns the result of `last`.
+### :returns: The resulting `T` value.
 routine SortedList[T].last!() -> T
   return me.max!()
 
@@ -415,10 +498,15 @@ routine SortedList[T].last!() -> T
 # Iteration
 # ============================================================================
 
+### Creates an iterator for this value.
+### :returns: The resulting `SortedListIterator[T]` value.
 @readonly
 routine SortedList[T].$iter() -> SortedListIterator[T]
   return SortedListIterator[T](list: me, index: 0u64)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `List[T]` value.
 routine List[T].$create(from: SortedList[T]) -> List[T]
   var result = List[T](from.count)
   if from.root is None
@@ -426,6 +514,9 @@ routine List[T].$create(from: SortedList[T]) -> List[T]
   from.collect_inorder(from.root!!, result)
   return result
 
+### Performs `collect inorder` on this value.
+### :param node: The `node` value.
+### :param result: The result storage location.
 routine SortedList[T].collect_inorder(node: BTreeListNode[T], result: List[T])
   var i = 0u64
   while i < node.keys.count()
@@ -437,10 +528,17 @@ routine SortedList[T].collect_inorder(node: BTreeListNode[T], result: List[T])
     me.collect_inorder(node.children[node.children.count() - 1u64], result)
   return
 
+### Defines the entity `SortedListIterator`.
+### :typeparam T: The value used for `T`.
 entity SortedListIterator[T] obeys Iterator[T]
+  ### Stores the list member value.
   list: SortedList[T]
+  ### Stores the index member value.
   index: U64
 
+### Returns the next value from this iterator.
+### :returns: The resulting `T` value.
+### :absent: Returns absent when the requested value is unavailable.
 @writable
 emitting routine SortedListIterator[T].$next() -> T
   if me.index >= me.list.count()
@@ -453,6 +551,8 @@ emitting routine SortedListIterator[T].$next() -> T
 # Comparison
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine SortedList[T].$represent() -> Text
   var result = "SortedList["
   var i = 0u64
@@ -464,6 +564,8 @@ routine SortedList[T].$represent() -> Text
   result = result + "]"
   return result
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine SortedList[T].$diagnose() -> Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", ["
   var i = 0u64
@@ -475,6 +577,9 @@ routine SortedList[T].$diagnose() -> Text
   result = result + "])"
   return result
 
+### Returns whether both values are equal.
+### :param other: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine SortedList[T].$eq(other: SortedList[T]) -> Bool
   if me.count != other.count
     return false

@@ -21,6 +21,8 @@ preset SET_INITIAL_BUCKETS: U64 = 16u64
 # Load factor threshold for rehashing (as percentage)
 preset SET_LOAD_FACTOR: U64 = 75u64
 
+### Defines the entity `Set`.
+### :typeparam T: The value used for `T`.
 entity Set[T] obeys Iterable[T]
 needs T obeys Hashable, Comparable
   secret buckets: List[SortedSet[T]]
@@ -30,6 +32,8 @@ needs T obeys Hashable, Comparable
 # Creators
 # ============================================================================
 
+### Creates a new instance.
+### :returns: The resulting `Set[T]` value.
 routine Set[T].$create() -> Set[T]
   var set = Set[T](
     buckets: List[SortedSet[T]](SET_INITIAL_BUCKETS),
@@ -43,6 +47,9 @@ routine Set[T].$create() -> Set[T]
     i = i + 1u64
   return set
 
+### Creates a new instance.
+### :param capacity: The capacity value to use.
+### :returns: The resulting `Set[T]` value.
 routine Set[T].$create(capacity: U64) -> Set[T]
   # Calculate bucket count for desired capacity
   var bucket_count = if capacity < SET_INITIAL_BUCKETS then SET_INITIAL_BUCKETS else capacity
@@ -57,6 +64,9 @@ routine Set[T].$create(capacity: U64) -> Set[T]
     i = i + 1u64
   return set
 
+### Creates a new instance.
+### :param values...: The `values...` value.
+### :returns: The resulting `Set[T]` value.
 routine Set[T].$create(values...: T) -> Set[T]
   var result = Set[T]()
   for v in values
@@ -67,16 +77,22 @@ routine Set[T].$create(values...: T) -> Set[T]
 # Internal Operations
 # ============================================================================
 
+### Returns the result of `bucket index`.
+### :param value: The value to use.
+### :returns: The resulting `U64` value.
 routine Set[T].bucket_index(value: T) -> U64
   # Get bucket index for value using hash
   var hash = value.$hash()
   return hash % me.buckets.count()
 
+### Returns the result of `should rehash`.
+### :returns: The resulting `Bool` value.
 routine Set[T].should_rehash() -> Bool
   # Check if load factor exceeds threshold
   var load = (me.count * 100u64) // me.buckets.count()
   return load > SET_LOAD_FACTOR
 
+### Executes `rehash`.
 routine Set[T].rehash()
   # Double the bucket count and redistribute
   var old_buckets = me.buckets
@@ -106,12 +122,17 @@ routine Set[T].rehash()
 # Core Operations
 # ============================================================================
 
+### Returns the number of stored values.
+### :returns: The resulting `U64` value.
 routine Set[T].count() -> U64
   return me.count
 
+### Returns true if this value is empty.
+### :returns: The resulting `Bool` value.
 routine Set[T].is_empty() -> Bool
   return me.count == 0u64
 
+### Removes all stored values.
 routine Set[T].clear()
   var i = 0u64
   while i < me.buckets.count()
@@ -120,11 +141,17 @@ routine Set[T].clear()
   me.count = 0u64
   return
 
+### Returns whether this value contains `value`.
+### :param value: The value to use.
+### :returns: The resulting `Bool` value.
 @readonly
 routine Set[T].$contains(value: T) -> Bool
   var idx = me.bucket_index(value)
   return value in me.buckets[idx]
 
+### Returns the result of `add`.
+### :param value: The value to use.
+### :returns: The resulting `Bool` value.
 routine Set[T].add(value: T) -> Bool
   # Returns true if inserted, false if already exists
   if me.should_rehash()
@@ -136,6 +163,9 @@ routine Set[T].add(value: T) -> Bool
     return true
   return false
 
+### Returns the result of `remove`.
+### :param value: The value to use.
+### :returns: The resulting `Bool` value.
 routine Set[T].remove(value: T) -> Bool
   # Returns true if removed, false if not found
   var idx = me.bucket_index(value)
@@ -148,6 +178,9 @@ routine Set[T].remove(value: T) -> Bool
 # Set Operations
 # ============================================================================
 
+### Returns the result of `union`.
+### :param other: The other value to compare against.
+### :returns: The resulting `Set[T]` value.
 routine Set[T].union(other: Set[T]) -> Set[T]
   # Return new set with all elements from both
   var result = Set[T](me.count + other.count)
@@ -174,6 +207,9 @@ routine Set[T].union(other: Set[T]) -> Set[T]
 
   return result
 
+### Returns the result of `intersection`.
+### :param other: The other value to compare against.
+### :returns: The resulting `Set[T]` value.
 routine Set[T].intersection(other: Set[T]) -> Set[T]
   # Return new set with elements in both
   var result = Set[T]()
@@ -194,6 +230,9 @@ routine Set[T].intersection(other: Set[T]) -> Set[T]
 
   return result
 
+### Returns the result of `difference`.
+### :param other: The other value to compare against.
+### :returns: The resulting `Set[T]` value.
 routine Set[T].difference(other: Set[T]) -> Set[T]
   # Return new set with elements in me but not in other
   var result = Set[T]()
@@ -210,6 +249,9 @@ routine Set[T].difference(other: Set[T]) -> Set[T]
 
   return result
 
+### Returns the result of `symmetric difference`.
+### :param other: The other value to compare against.
+### :returns: The resulting `Set[T]` value.
 routine Set[T].symmetric_difference(other: Set[T]) -> Set[T]
   # Return new set with elements in either but not both
   var result = Set[T]()
@@ -238,6 +280,9 @@ routine Set[T].symmetric_difference(other: Set[T]) -> Set[T]
 
   return result
 
+### Returns true if this value is subset.
+### :param other: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine Set[T].is_subset(other: Set[T]) -> Bool
   # Check if all elements of me are in other
   if me.count > other.count
@@ -254,9 +299,15 @@ routine Set[T].is_subset(other: Set[T]) -> Bool
     i = i + 1u64
   return true
 
+### Returns true if this value is superset.
+### :param other: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine Set[T].is_superset(other: Set[T]) -> Bool
   return other.is_subset(me)
 
+### Returns true if this value is disjoint.
+### :param other: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine Set[T].is_disjoint(other: Set[T]) -> Bool
   # Check if no elements in common
   var smaller = if me.count < other.count then me else other
@@ -277,6 +328,9 @@ routine Set[T].is_disjoint(other: Set[T]) -> Bool
 # Conversion
 # ============================================================================
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `List[T]` value.
 routine List[T].$create(from: Set[T]) -> List[T]
   var result = List[T](from.count)
   var i = 0u64
@@ -293,6 +347,8 @@ routine List[T].$create(from: Set[T]) -> List[T]
 # Iteration
 # ============================================================================
 
+### Creates an iterator for this value.
+### :returns: The resulting `SetIterator[T]` value.
 @readonly
 routine Set[T].$iter() -> SetIterator[T]
   return SetIterator[T](
@@ -302,12 +358,21 @@ routine Set[T].$iter() -> SetIterator[T]
     current_elements: List[T]()
   )
 
+### Defines the entity `SetIterator`.
+### :typeparam T: The value used for `T`.
 entity SetIterator[T] obeys Iterator[T]
+  ### Stores the set member value.
   set: Set[T]
+  ### Stores the bucket idx member value.
   bucket_idx: U64
+  ### Stores the element idx member value.
   element_idx: U64
+  ### Stores the current elements member value.
   current_elements: List[T]
 
+### Returns the next value from this iterator.
+### :returns: The resulting `T` value.
+### :absent: Returns absent when the requested value is unavailable.
 @writable
 emitting routine SetIterator[T].$next() -> T
   while me.element_idx >= me.current_elements.count()
@@ -325,6 +390,8 @@ emitting routine SetIterator[T].$next() -> T
 # Comparison
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine Set[T].$represent() -> Text
   var result = "{"
   var i = 0u64
@@ -336,6 +403,8 @@ routine Set[T].$represent() -> Text
   result = result + "}"
   return result
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine Set[T].$diagnose() -> Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
   var i = 0u64
@@ -347,6 +416,9 @@ routine Set[T].$diagnose() -> Text
   result = result + "})"
   return result
 
+### Returns whether both values are equal.
+### :param other: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine Set[T].$eq(other: Set[T]) -> Bool
   if me.count != other.count
     return false

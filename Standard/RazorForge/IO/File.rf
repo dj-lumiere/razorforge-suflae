@@ -8,6 +8,7 @@ import IO/Errors
 # FileMode choice
 # ============================================================================
 
+### Defines the choice `FileMode`.
 choice FileMode
   READ
   WRITE
@@ -17,15 +18,22 @@ choice FileMode
 # FileHandle entity
 # ============================================================================
 
+### Defines the entity `FileHandle`.
 entity FileHandle
+  ### Stores the fd member value.
   secret fd: S32
+  ### Stores the mode member value.
   secret mode: FileMode
 
 # ============================================================================
 # Core operations
 # ============================================================================
 
-# Open file — failable (crash on failure)
+### Returns the result of `open`.
+### :param path: The `path` value.
+### :param mode: The `mode` value.
+### :returns: The resulting `FileHandle` value.
+### :throws: May throw {IOError}.
 routine open!(path: Text, mode: FileMode = FileMode.READ) -> FileHandle
   var cstr = CStr(from: path)
   var mode_val = mode.S32()
@@ -34,32 +42,38 @@ routine open!(path: Text, mode: FileMode = FileMode.READ) -> FileHandle
     throw IOError(message: f"Cannot open file: {path}")
   return FileHandle(fd: fd, mode: mode)
 
-# Close file
+### Executes `close`.
 routine FileHandle.close()
   rf_file_close(me.fd)
   return
 
-# Read entire file as Text
+### Returns the result of `read all`.
+### :returns: The resulting `Text` value.
 routine FileHandle.read_all() -> Text
   var ptr = rf_file_read_all(me.fd)
   var len = rf_get_result_len()
   var bytes = Bytes(ptr: ptr, count: len)
   return bytes.decode_as_utf8()
 
-# Read one line
+### Returns the result of `read line`.
+### :returns: The resulting `Text` value.
 routine FileHandle.read_line() -> Text
   var ptr = rf_file_read_line(me.fd)
   var len = rf_get_result_len()
   var bytes = Bytes(ptr: ptr, count: len)
   return bytes.decode_as_utf8()
 
-# Read up to n bytes
+### Returns the result of `read bytes`.
+### :param count: The number of items to use.
+### :returns: The resulting `Bytes` value.
 routine FileHandle.read_bytes(count: U64) -> Bytes
   var ptr = rf_file_read_bytes(me.fd, count)
   var len = rf_get_result_len()
   return Bytes(ptr: ptr, count: len)
 
-# Write text to file
+### Performs `write` on this value.
+### :param value: The value to use.
+### :param end: The exclusive ending position.
 routine FileHandle.write(value: Text, end: Text = "\n")
   var cstr = CStr(from: value)
   rf_file_write(me.fd, cstr.ptr, cstr.count())
@@ -67,13 +81,17 @@ routine FileHandle.write(value: Text, end: Text = "\n")
   rf_file_write(me.fd, end_cstr.ptr, end_cstr.count())
   return
 
-# Write generic representable
+### Performs `write` on this value.
+### :param value: The value to use.
+### :param end: The exclusive ending position.
 routine FileHandle.write[T](value: T, end: Text = "\n")
   var text = value.$represent()
   me.write(text, end: end)
   return
 
-# Write bytes directly
+### Performs `write` on this value.
+### :param value: The value to use.
+### :param end: The exclusive ending position.
 routine FileHandle.write(value: Bytes, end: Text = "")
   rf_file_write(me.fd, value.ptr, value.count())
   if end.count() > 0
@@ -81,12 +99,13 @@ routine FileHandle.write(value: Bytes, end: Text = "")
     rf_file_write(me.fd, end_cstr.ptr, end_cstr.count())
   return
 
-# Flush
+### Executes `flush`.
 routine FileHandle.flush()
   rf_file_flush(me.fd)
   return
 
-# Check EOF
+### Returns true if this value is eof.
+### :returns: The resulting `Bool` value.
 routine FileHandle.is_eof() -> Bool
   return rf_file_is_eof(me.fd)
 
@@ -94,9 +113,11 @@ routine FileHandle.is_eof() -> Bool
 # Resource management — enables `using open!(path) as f`
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
 routine FileHandle.$enter()
   return
 
+### Implements the wired routine behavior for this value.
 routine FileHandle.$exit()
   me.close()
   return
@@ -105,18 +126,27 @@ routine FileHandle.$exit()
 # Convenience one-shot functions
 # ============================================================================
 
+### Returns the result of `read all`.
+### :param path: The `path` value.
+### :returns: The resulting `Text` value.
 routine read_all!(path: Text) -> Text
   var file = open!(path, mode: FileMode.READ)
   var content = file.read_all()
   file.close()
   return content
 
+### Performs `write all` on this value.
+### :param path: The `path` value.
+### :param content: The `content` value.
 routine write_all!(path: Text, content: Text)
   var file = open!(path, mode: FileMode.WRITE)
   file.write(content, end: "")
   file.close()
   return
 
+### Performs `append all` on this value.
+### :param path: The `path` value.
+### :param content: The `content` value.
 routine append_all!(path: Text, content: Text)
   var file = open!(path, mode: FileMode.APPEND)
   file.write(content, end: "")

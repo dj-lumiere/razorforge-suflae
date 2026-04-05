@@ -1,6 +1,10 @@
 # DurationSubtractable - Protocol for types that support subtracting a Duration (- Duration)
 module Core
 
+### Defines the protocol `DurationSubtractable`.
 protocol DurationSubtractable
+  ### Returns the difference between this value and the other value.
+  ### :param you: The other value to compare against.
+  ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$sub(you: Duration) -> Me

@@ -2,5 +2,6 @@
 # Extends FixedIntegral with Negatable (unary -)
 module Core
 
+### Defines the protocol `SignedIntegral`.
 protocol SignedIntegral obeys FixedIntegral, Negatable
   pass

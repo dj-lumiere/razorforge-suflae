@@ -26,9 +26,9 @@ module Core
 # CStr Record Definition
 # ============================================================================
 
-# C string record (null-terminated char*)
-# Value type wrapper around raw pointer - no heap allocation for wrapper
+### Defines the record `CStr`.
 record CStr
+  ### Stores the ptr member value.
   ptr: Address  # Raw pointer to null-terminated Byte sequence
 
 # Null pointer constant for CStr comparisons
@@ -38,13 +38,15 @@ preset CSTR_NULL: CStr = CStr(ptr: 0_addr)
 # Creators
 # ============================================================================
 
-# Create CStr from raw pointer (wraps existing memory, does NOT copy)
-# WARNING: The pointed-to memory must remain valid for the lifetime of this CStr
+### Creates a new instance.
+### :param from_ptr: The `from_ptr` value.
+### :returns: The resulting `CStr` value.
 routine CStr.$create(from_ptr: Address) -> CStr
   return CStr(ptr: from_ptr)
 
-# Create CStr from Bytes (allocates NEW memory with null terminator)
-# The caller is responsible for freeing this memory when done
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `CStr` value.
 routine CStr.$create(from: Bytes) -> CStr
   var len = from.count()
   var buffer = Snatched[Byte](rf_allocate_dynamic(len + 1u64))
@@ -60,8 +62,9 @@ routine CStr.$create(from: Bytes) -> CStr
 
   return CStr(ptr: buffer.get_address())
 
-# Create CStr from Text (encodes UTF-32 codepoints to UTF-8 with null terminator)
-# The caller is responsible for freeing this memory when done
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `CStr` value.
 routine CStr.$create(from: Text) -> CStr
   var len = from.count()
   if len == 0u64
@@ -112,16 +115,18 @@ routine CStr.$create(from: Text) -> CStr
 # Core Methods
 # ============================================================================
 
-# Get length of C string (excluding null terminator)
-# O(n) - must scan for null terminator
+### Returns the number of stored values.
+### :returns: The resulting `U64` value.
 routine CStr.count() -> U64
   return rf_cstr_count(me.ptr)
 
-# Check if C string pointer is null
+### Returns true if this value is null.
+### :returns: The resulting `Bool` value.
 routine CStr.is_null() -> Bool
   return me.ptr == 0_addr
 
-# Check if C string is empty (null or zero-length)
+### Returns true if this value is empty.
+### :returns: The resulting `Bool` value.
 routine CStr.is_empty() -> Bool
   return me.is_null() or me.count() == 0u64
 
@@ -129,7 +134,9 @@ routine CStr.is_empty() -> Bool
 # Indexing
 # ============================================================================
 
-# Get Byte at index (no bounds checking in danger zone)
+### Implements the wired routine behavior for this value.
+### :param index: The zero-based position to use.
+### :returns: The resulting `Byte` value.
 routine CStr.$getitem!(index: U64) -> Byte
   return Snatched[Byte](me.ptr + index).read()
 
@@ -137,9 +144,15 @@ routine CStr.$getitem!(index: U64) -> Byte
 # Comparison
 # ============================================================================
 
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine CStr.$eq(you: CStr) -> Bool
   return rf_cstr_compare(me.ptr, you.ptr) == 0s32
 
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
 routine CStr.$cmp(you: CStr) -> ComparisonSign
   var cmp = rf_cstr_compare(me.ptr, you.ptr)
   if cmp < 0s32
@@ -152,8 +165,8 @@ routine CStr.$cmp(you: CStr) -> ComparisonSign
 # Copying
 # ============================================================================
 
-# Copy C string to new allocated memory
-# The caller is responsible for freeing the returned memory
+### Returns the result of `copy`.
+### :returns: The resulting `CStr` value.
 routine CStr.copy() -> CStr
   var len = me.count()
   var buffer = Snatched[Byte](rf_allocate_dynamic(len + 1u64))
@@ -164,7 +177,9 @@ routine CStr.copy() -> CStr
 # Conversion to RazorForge Types
 # ============================================================================
 
-# Convert CStr to Bytes (copies raw bytes)
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `Bytes` value.
 routine Bytes.$create(from: Cstr) -> Bytes
   var len = from.count()
   var list = List[Byte](len)
@@ -181,10 +196,14 @@ routine Bytes.$create(from: Cstr) -> Bytes
 # Pointer Arithmetic (Danger Zone)
 # ============================================================================
 
-# Get pointer offset by n bytes
+### Returns the result of `offset`.
+### :param n: The `n` value.
+### :returns: The resulting `CStr` value.
 routine CStr.offset(n: U64) -> CStr
   return CStr(ptr: me.ptr + n)
 
-# Get pointer to substring starting at index
+### Creates a value from index.
+### :param start: The inclusive starting position.
+### :returns: The resulting `CStr` value.
 routine CStr.from_index(start: U64) -> CStr
   return CStr(ptr: me.ptr + start)

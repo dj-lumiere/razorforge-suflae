@@ -5,20 +5,32 @@ module Core
 
 import Text.Text
 
+### Defines the record `IndexOutOfBoundsError`.
 record IndexOutOfBoundsError obeys Crashable
+  ### Stores the index member value.
   index: U64
+  ### Stores the count member value.
   count: U64
 
+### Returns the result of `crash message`.
+### :returns: The resulting `Text` value.
 routine IndexOutOfBoundsError.crash_message() -> Text
   return f"Index {me.index} is out of bounds for collection with {me.count} elements"
 
+### Defines the record `EmptyCollectionError`.
 record EmptyCollectionError obeys Crashable
+  ### Stores the operation member value.
   operation: Text
 
+### Returns the result of `crash message`.
+### :returns: The resulting `Text` value.
 routine EmptyCollectionError.crash_message() -> Text
   return f"Cannot {me.operation} on empty collection"
 
+### Defines the record `ElementNotFoundError`.
 record ElementNotFoundError obeys Crashable
 
+### Returns the result of `crash message`.
+### :returns: The resulting `Text` value.
 routine ElementNotFoundError.crash_message() -> Text
   return "No matching element found"

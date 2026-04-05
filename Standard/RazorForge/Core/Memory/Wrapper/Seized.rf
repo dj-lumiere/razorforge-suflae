@@ -29,8 +29,12 @@
 # This type is a marker for the type system - the compiler handles lock operations.
 module Core
 
+### Defines the record `Seized`.
+### :typeparam T: The value used for `T`.
 record Seized[T]
+  ### Stores the ptr member value.
   secret ptr: Snatched[T]    # Generic type - use Snatched[T]
+  ### Stores the lock guard member value.
   secret lock_guard: Address  # Fixed type - opaque lock handle
 
 # NOTE: No creators, no manual methods - all operations handled by compiler
@@ -44,9 +48,11 @@ record Seized[T]
 # Resource management — enables `using shared.seize!() as s`
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
 routine Seized[T].$enter()
   return
 
+### Implements the wired routine behavior for this value.
 routine Seized[T].$exit()
   # TODO: release lock_guard when lock runtime is implemented
   return
@@ -55,11 +61,15 @@ routine Seized[T].$exit()
 # Display (transparent - delegates to inner value, lock already held)
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 @readonly
 routine Seized[T].$represent() -> Text
   danger!
     return me.ptr.read().$represent()
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 @readonly
 routine Seized[T].$diagnose() -> Text
   danger!

@@ -12,7 +12,7 @@
 
 module Core
 
-# Core Address type definition - maps to LLVM i64
+### Defines the record `Address`.
 @llvm("i64")
 record Address
 obeys UnsignedIntegral, Ordered, ConstCompatible, WrappingAddable, WrappingSubtractable,
@@ -24,7 +24,9 @@ WrappingMultiplicable, FloorDivisible
 # Use Snatched[T] for converting between Address and other types.
 # ============================================================================
 
-# Identity conversion for protocol compatibility
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `Address` value.
 routine Address.$create(from: Address) -> Address
   return from
 
@@ -33,12 +35,21 @@ routine Address.$create(from: Address) -> Address
 # These explicitly wrap on overflow - the only arithmetic allowed on Address
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `Address` value.
 routine Address.$add_wrap(you: Address) -> Address
   return add[Address](me, you)
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `Address` value.
 routine Address.$sub_wrap(you: Address) -> Address
   return sub[Address](me, you)
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `Address` value.
 routine Address.$mul_wrap(you: Address) -> Address
   return mul[Address](me, you)
 
@@ -47,6 +58,9 @@ routine Address.$mul_wrap(you: Address) -> Address
 # Address supports // (Euclidean quotient) but NOT %
 # ============================================================================
 
+### Returns the quotient of this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `Address` value.
 routine Address.$floordiv(you: Address) -> Address
   return udiv[Address](me, you)
 
@@ -54,9 +68,15 @@ routine Address.$floordiv(you: Address) -> Address
 # Comparison Operations
 # ============================================================================
 
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine Address.$eq(you: Address) -> Bool
   return icmp_eq[Address](me, you)
 
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
 routine Address.$cmp(you: Address) -> ComparisonSign
   if icmp_ult[Address](me, you)
     return ME_SMALL
@@ -68,16 +88,24 @@ routine Address.$cmp(you: Address) -> ComparisonSign
 # Utility Methods
 # ============================================================================
 
+### Returns the result of `min`.
+### :param you: The other value to compare against.
+### :returns: The resulting `Address` value.
 routine Address.min(you: Address) -> Address
   if me <= you
     return me
   return you
 
+### Returns the result of `max`.
+### :param you: The other value to compare against.
+### :returns: The resulting `Address` value.
 routine Address.max(you: Address) -> Address
   if me >= you
     return me
   return you
 
+### Returns true if this value is power of two.
+### :returns: The resulting `Bool` value.
 routine Address.is_power_of_two() -> Bool
   return me != 0_addr and (me & (me -% 1_addr)) == 0_addr
 
@@ -85,6 +113,8 @@ routine Address.is_power_of_two() -> Bool
 # Text Representation and Parsing
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine Address.$represent() -> Text
   # Format as 0xXXXX_XXXX_XXXX_XXXX (64-bit hex with underscore groups)
   var digits = List[Character]()
@@ -103,9 +133,15 @@ routine Address.$represent() -> Text
     i = i + 1u32
   return Text(from_list: digits)
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine Address.$diagnose() -> Text
   return "Address(" + me.$represent() + ")"
 
+### Implements the wired routine behavior for this value.
+### :param from_text: The `from_text` value.
+### :returns: The resulting `Address` value.
+### :throws: May throw {InvalidValueError}.
 routine Address.$create!(from_text: Text) -> Address
   # Parses hex format: 0xXXXX_XXXX_XXXX_XXXX
   if from_text.count() == 0u64

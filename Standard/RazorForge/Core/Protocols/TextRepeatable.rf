@@ -1,6 +1,10 @@
 # TextRepeatable - Protocol for text-like types that support repetition with an integer
 module Core
 
+### Defines the protocol `TextRepeatable`.
 protocol TextRepeatable
+  ### Returns the product of this value and the other value.
+  ### :param you: The other value to compare against.
+  ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$mul(you: Integral) -> Me

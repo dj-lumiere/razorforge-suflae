@@ -6,6 +6,7 @@
 
 module BuilderService
 
+### Defines the choice `TypeKind`.
 choice TypeKind
   RECORD
   ENTITY
@@ -16,32 +17,51 @@ choice TypeKind
   MEMBER_ROUTINE
   PROTOCOL
 
+### Defines the choice `Visibility`.
 choice Visibility
   OPEN
   POSTED
   SECRET
 
+### Defines the choice `BuildMode`.
 choice BuildMode
   DEBUG
   RELEASE
   TEST
 
+### Defines the entity `FieldInfo`.
 entity FieldInfo
+  ### Stores the name member value.
   name: Text
+  ### Stores the type name member value.
   type_name: Text
+  ### Stores the visibility member value.
   visibility: Visibility
+  ### Stores the offset member value.
   offset: U64
 
+### Defines the entity `ProtocolInfo`.
 entity ProtocolInfo
+  ### Stores the name member value.
   name: Text
+  ### Stores the routine names member value.
   routine_names: List[Text]
+  ### Stores the is generated member value.
   is_generated: Bool
 
+### Defines the entity `RoutineInfo`.
 entity RoutineInfo
+  ### Stores the name member value.
   name: Text
+  ### Stores the param types member value.
   param_types: List[Text]
+  ### Stores the param names member value.
   param_names: List[Text]
+  ### Stores the return type member value.
   return_type: Text
+  ### Stores the is crashable member value.
   is_crashable: Bool
+  ### Stores the is generated member value.
   is_generated: Bool
+  ### Stores the visibility member value.
   visibility: Visibility

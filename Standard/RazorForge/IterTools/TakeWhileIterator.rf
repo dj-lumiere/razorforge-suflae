@@ -3,18 +3,32 @@
 
 module IterTools
 
+### Defines the entity `TakeWhileIterator`.
+### :typeparam T: The value used for `T`.
 entity TakeWhileIterator[T] obeys Iterable[T]
+  ### Stores the source member value.
   secret source: Iterable[T]
+  ### Stores the predicate member value.
   secret predicate: Routine[(T,), Bool]
 
+### Creates an iterator for this value.
+### :returns: The resulting `TakeWhileEmitter[T]` value.
 routine TakeWhileIterator[T].$iter() -> TakeWhileEmitter[T]
   return TakeWhileEmitter[T](source: me.source.$iter(), predicate: me.predicate, done: false)
 
+### Defines the entity `TakeWhileEmitter`.
+### :typeparam T: The value used for `T`.
 entity TakeWhileEmitter[T] obeys Iterator[T]
+  ### Stores the source member value.
   secret source: Iterator[T]
+  ### Stores the predicate member value.
   secret predicate: Routine[(T,), Bool]
+  ### Stores the done member value.
   secret done: Bool
 
+### Returns the next value from this iterator.
+### :returns: The resulting `T` value.
+### :absent: Returns absent when the requested value is unavailable.
 emitting routine TakeWhileEmitter[T].$next() -> T
   if me.done
     absent
@@ -25,5 +39,8 @@ emitting routine TakeWhileEmitter[T].$next() -> T
   emit item
   return
 
+### Returns the result of `take while`.
+### :param predicate: The `predicate` value.
+### :returns: The resulting `TakeWhileIterator[T]` value.
 routine Iterable[T].take_while(predicate: Routine[(T,), Bool]) -> TakeWhileIterator[T]
   return TakeWhileIterator[T](source: me, predicate: predicate)

@@ -1,4 +1,5 @@
-﻿using SemanticAnalysis.Symbols;
+﻿using SemanticAnalysis.Enums;
+using SemanticAnalysis.Symbols;
 
 namespace Compiler.CodeGen;
 
@@ -93,10 +94,13 @@ public partial class LLVMCodeGenerator
                 GenericDefinition: { HasDirectBackendType: true } baseRecord
             } => baseRecord.LlvmType,
 
-            // Error handling records (Maybe[T], Result[T], Lookup[T]) → always anonymous { i64, ptr }
-            // This ensures consistency between RecordTypeInfo and ErrorHandlingTypeInfo representations.
-            RecordTypeInfo record when GetGenericBaseName(type: record) is "Maybe" or "Result"
-                or "Lookup" => "{ i64, ptr }",
+            // Error handling records (Maybe[T], Result[T], Lookup[T]) — split by kind
+            RecordTypeInfo record when GetGenericBaseName(type: record) is "Maybe" =>
+                record.TypeArguments is { Count: 1 }
+                    ? GetMaybeCarrierLLVMType(valueType: record.TypeArguments[index: 0])
+                    : GetMaybeCarrierLLVMType(valueType: new GenericParameterTypeInfo(name: "T")),
+            RecordTypeInfo when GetGenericBaseName(type: type) is "Result" or "Lookup" =>
+                GetResultLookupCarrierType(),
 
             // Multi-member-variable records → LLVM struct type
             RecordTypeInfo record => GetRecordTypeName(record: record),
@@ -204,12 +208,64 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Gets the LLVM struct type name for an error handling type.
     /// </summary>
-    private static string GetErrorHandlingTypeName(ErrorHandlingTypeInfo errorType)
+    private string GetErrorHandlingTypeName(ErrorHandlingTypeInfo errorType) =>
+        GetCarrierLLVMType(errorType: errorType);
+
+    /// <summary>
+    /// Returns the correct LLVM struct type for an error-handling carrier.
+    /// Maybe → { i1, T_inline } or { i1, ptr }; Result/Lookup → { i64, i64 }.
+    /// </summary>
+    private string GetCarrierLLVMType(ErrorHandlingTypeInfo errorType) =>
+        errorType.Kind == ErrorHandlingKind.Maybe
+            ? GetMaybeCarrierLLVMType(valueType: errorType.ValueType)
+            : GetResultLookupCarrierType();
+
+    /// <summary>
+    /// Returns the LLVM struct type for Result and Lookup carriers.
+    /// Layout is derived from Result[T]'s stdlib definition: { U64 type_id, Address data_address }.
+    /// </summary>
+    private string GetResultLookupCarrierType()
     {
-        // All error handling types (Maybe, Result, Lookup) share the same { i64, ptr } layout.
-        // Using the anonymous struct avoids naming conflicts between Record and ErrorHandling prefixes.
-        return "{ i64, ptr }";
+        var def = (RecordTypeInfo)_registry.LookupType(name: "Result")!;
+        return $"{{ {GetLLVMType(type: def.MemberVariables[index: 0].Type)}, {GetLLVMType(type: def.MemberVariables[index: 1].Type)} }}";
     }
+
+    /// <summary>
+    /// Returns the LLVM struct for a Maybe carrier.
+    /// Tag is derived from Maybe[T]'s Bool present field; value is inline T or ptr for entities.
+    /// </summary>
+    private string GetMaybeCarrierLLVMType(TypeInfo valueType)
+    {
+        var def = (RecordTypeInfo)_registry.LookupType(name: "Maybe")!;
+        string tagLlvm = GetLLVMType(type: def.MemberVariables[index: 0].Type);
+        // Value layout: entity/wrapper/unresolved generic → ptr (Snatched[T] is a WrapperTypeInfo)
+        // Record/value → inline T (field 1 is T directly)
+        string valueLlvm = valueType is EntityTypeInfo or WrapperTypeInfo or GenericParameterTypeInfo
+                                       or TypeParameterPlaceholder
+            ? "ptr"
+            : GetLLVMType(type: valueType);
+        return $"{{ {tagLlvm}, {valueLlvm} }}";
+    }
+
+    /// <summary>Returns the LLVM type of the tag field for a carrier (Bool for Maybe, U64 for Result/Lookup).</summary>
+    private string GetCarrierTagType(ErrorHandlingKind kind)
+    {
+        string defName = kind == ErrorHandlingKind.Maybe ? "Maybe" : "Result";
+        var def = (RecordTypeInfo)_registry.LookupType(name: defName)!;
+        return GetLLVMType(type: def.MemberVariables[index: 0].Type);
+    }
+
+    /// <summary>
+    /// Returns the discriminant value that represents a valid (present) carrier.
+    /// Maybe → "1"; Result/Lookup → ComputeTypeId of value type.
+    /// </summary>
+    private string GetCarrierValidTag(ErrorHandlingTypeInfo errorType) =>
+        errorType.Kind == ErrorHandlingKind.Maybe
+            ? "1"
+            : ComputeTypeId(fullName: errorType.ValueType.FullName).ToString();
+
+    /// <summary>Returns the discriminant value that represents an absent carrier (always 0).</summary>
+    private static string GetCarrierAbsentTag() => "0";
 
     /// <summary>
     /// Gets the LLVM struct type name for a choice.

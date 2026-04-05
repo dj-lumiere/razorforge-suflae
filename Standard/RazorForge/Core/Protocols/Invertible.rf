@@ -1,6 +1,9 @@
 # Invertible - Protocol for types that support bitwise not (~)
 module Core
 
+### Defines the protocol `Invertible`.
 protocol Invertible
+  ### Returns the result of the requested bitwise operation.
+  ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$bitnot() -> Me

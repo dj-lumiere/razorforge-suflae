@@ -3,6 +3,7 @@
 module Core
 # Core F32 type definition - maps to LLVM float
 
+### Defines the record `F32`.
 @llvm("float")
 record F32 obeys Numeric, Ordered
   pass
@@ -22,56 +23,107 @@ preset F32_SQRT_2: F32 = 1.4142135_f32
 preset F32_LN_2: F32 = 0.6931472_f32
 preset F32_LN_10: F32 = 2.3025851_f32
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F32` value.
 routine F32.$create(from: S8) -> F32
   return sitofp[S8, F32](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F32` value.
 routine F32.$create(from: S16) -> F32
   return sitofp[S16, F32](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F32` value.
 routine F32.$create(from: S32) -> F32
   return sitofp[S32, F32](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F32` value.
 routine F32.$create(from: S64) -> F32
   return sitofp[S64, F32](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F32` value.
 routine F32.$create(from: S128) -> F32
   return sitofp[S128, F32](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F32` value.
 routine F32.$create(from: U8) -> F32
   return uitofp[U8, F32](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F32` value.
 routine F32.$create(from: U16) -> F32
   return uitofp[U16, F32](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F32` value.
 routine F32.$create(from: U32) -> F32
   return uitofp[U32, F32](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F32` value.
 routine F32.$create(from: U64) -> F32
   return uitofp[U64, F32](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F32` value.
 routine F32.$create(from: U128) -> F32
   return uitofp[U128, F32](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F32` value.
 routine F32.$create(from: F16) -> F32
   return fpext[F16, F32](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F32` value.
 routine F32.$create(from: F32) -> F32
   return from
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F32` value.
 routine F32.$create(from: F64) -> F32
   return fptrunc[F64, F32](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F32` value.
 routine F32.$create(from: F128) -> F32
   return fptrunc[F128, F32](from)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F32` value.
 routine F32.$create(from: D32) -> F32
   var bits = bitcast[D32, U32](from)
   return rf_d32_to_f32(bits)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F32` value.
 routine F32.$create(from: D64) -> F32
   var bits = bitcast[D64, U64](from)
   return rf_d64_to_f32(bits)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `F32` value.
 routine F32.$create(from: D128) -> F32
   return rf_d128_to_f32(from.low_bits(), from.high_bits())
 
@@ -79,18 +131,32 @@ routine F32.$create(from: D128) -> F32
 # Arithmetic Operations (IEEE 754 semantics)
 # ============================================================================
 
+### Returns the sum of this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `F32` value.
 routine F32.$add(you: F32) -> F32
   return fadd[F32](me, you)
 
+### Returns the difference between this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `F32` value.
 routine F32.$sub(you: F32) -> F32
   return fsub[F32](me, you)
 
+### Returns the product of this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `F32` value.
 routine F32.$mul(you: F32) -> F32
   return fmul[F32](me, you)
 
+### Returns the quotient of this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `F32` value.
 routine F32.$truediv(you: F32) -> F32
   return fdiv[F32](me, you)
 
+### Returns the negated value.
+### :returns: The resulting `F32` value.
 routine F32.$neg() -> F32
   return fneg[F32](me)
 
@@ -98,9 +164,15 @@ routine F32.$neg() -> F32
 # Comparison Operations (ordered - false if NaN)
 # ============================================================================
 
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine F32.$eq(you: F32) -> Bool
   return fcmp_oeq[F32](me, you)
 
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
 routine F32.$cmp(you: F32) -> ComparisonSign
   if fcmp_olt[F32](me, you)
     return ME_SMALL
@@ -112,44 +184,70 @@ routine F32.$cmp(you: F32) -> ComparisonSign
 # Math Operations using intrinsics
 # ============================================================================
 
+### Returns the result of `sqrt`.
+### :returns: The resulting `F32` value.
 routine F32.sqrt() -> F32
   return sqrt[F32](me)
 
+### Returns the absolute value.
+### :returns: The resulting `F32` value.
 routine F32.abs() -> F32
   return fabs[F32](me)
 
+### Returns the result of `floor`.
+### :returns: The resulting `F32` value.
 routine F32.floor() -> F32
   return floor[F32](me)
 
+### Returns the result of `ceil`.
+### :returns: The resulting `F32` value.
 routine F32.ceil() -> F32
   return ceil[F32](me)
 
+### Returns the result of `round`.
+### :returns: The resulting `F32` value.
 routine F32.round() -> F32
   return round[F32](me)
 
+### Returns the result of `trunc`.
+### :returns: The resulting `F32` value.
 routine F32.trunc() -> F32
   return trunc_float[F32](me)
 
-# Trigonometric functions
+### Returns the result of `sin`.
+### :returns: The resulting `F32` value.
 routine F32.sin() -> F32
   return sin[F32](me)
 
+### Returns the result of `cos`.
+### :returns: The resulting `F32` value.
 routine F32.cos() -> F32
   return cos[F32](me)
 
-# Exponential and logarithmic
+### Returns the result of `exp`.
+### :returns: The resulting `F32` value.
 routine F32.exp() -> F32
   return exp[F32](me)
 
+### Returns the result of `log`.
+### :returns: The resulting `F32` value.
 routine F32.log() -> F32
   return log[F32](me)
 
+### Returns the result of `log10`.
+### :returns: The resulting `F32` value.
 routine F32.log10() -> F32
   return log10[F32](me)
 
+### Returns the result of `pow`.
+### :param exp: The exponent value.
+### :returns: The resulting `F32` value.
 routine F32.pow(exp: F32) -> F32
   return pow[F32](me, exp)
 
+### Returns the result of `copysign`.
+### :param sign: The `sign` value.
+### :returns: The resulting `F32` value.
 routine F32.copysign(sign: F32) -> F32
   return copysign[F32](me, sign)
 
@@ -157,24 +255,42 @@ routine F32.copysign(sign: F32) -> F32
 # Utility Methods
 # ============================================================================
 
+### Returns the result of `min`.
+### :param you: The other value to compare against.
+### :returns: The resulting `F32` value.
 routine F32.min(you: F32) -> F32
   return if me <= you then me else you
 
+### Returns the result of `max`.
+### :param you: The other value to compare against.
+### :returns: The resulting `F32` value.
 routine F32.max(you: F32) -> F32
   return if me >= you then me else you
 
+### Returns the result of `clamp`.
+### :param min_val: The `min_val` value.
+### :param max_val: The `max_val` value.
+### :returns: The resulting `F32` value.
 routine F32.clamp(min_val: F32, max_val: F32) -> F32
   return me.min(max_val).max(min_val)
 
+### Returns true if this value is positive.
+### :returns: The resulting `Bool` value.
 routine F32.is_positive() -> Bool
   return me > 0.0_f32
 
+### Returns true if this value is negative.
+### :returns: The resulting `Bool` value.
 routine F32.is_negative() -> Bool
   return me < 0.0_f32
 
+### Returns true if this value is zero.
+### :returns: The resulting `Bool` value.
 routine F32.is_zero() -> Bool
   return me == 0.0_f32
 
+### Returns the result of `signum`.
+### :returns: The resulting `F32` value.
 routine F32.signum() -> F32
   return when
     me > 0.0_f32 => 1.0_f32
@@ -185,11 +301,14 @@ routine F32.signum() -> F32
 # Type Conversions
 # ============================================================================
 
-# Reinterpret bits as U32 (type punning)
+### Converts this value to bits.
+### :returns: The resulting `U32` value.
 routine F32.to_bits() -> U32
   return bitcast[F32, U32](me)
 
-# Create F32 from U32 bits (type punning)
+### Creates a value from bits.
+### :param bits: The encoded bit pattern.
+### :returns: The resulting `F32` value.
 routine F32.from_bits(bits: U32) -> F32
   return bitcast[U32, F32](bits)
 
@@ -197,14 +316,22 @@ routine F32.from_bits(bits: U32) -> F32
 # Text Representation and Parsing
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine F32.$represent() -> Text
   var cstr_result = rf_format_F32(me)
   return Text(from: CStr(from_ptr: cstr_result))
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine F32.$diagnose() -> Text
   var cstr_result = rf_format_F32(me)
   return "F32(" + Text(from: CStr(from_ptr: cstr_result)) + ")"
 
+### Implements the wired routine behavior for this value.
+### :param from_text: The `from_text` value.
+### :returns: The resulting `F32` value.
+### :throws: May throw {InvalidValueError}.
 routine F32.$create!(from_text: Text) -> F32
   var len = from_text.count()
   if len == 0u64

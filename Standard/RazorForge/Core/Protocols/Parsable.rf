@@ -2,5 +2,9 @@
 # Compiler auto-generates create! (-> Maybe[Me]) and check_create (-> Result[Me])
 module Core
 
+### Defines the protocol `Parsable`.
 protocol Parsable
+  ### Implements the wired routine behavior for this value.
+  ### :param from: The source value to convert.
+  ### :returns: The resulting `Me` value.
   routine Me.$create!(from: Text) -> Me

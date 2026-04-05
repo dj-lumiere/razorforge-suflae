@@ -1,9 +1,13 @@
 module Core
 
+### Defines the choice `LockState`.
 choice LockState
   IDLE
   READING
   WRITING
 
+### Defines the protocol `LockPolicy`.
 protocol LockPolicy
+  ### Returns the result of `state`.
+  ### :returns: The resulting `LockState` value.
   routine Me.state() -> LockState

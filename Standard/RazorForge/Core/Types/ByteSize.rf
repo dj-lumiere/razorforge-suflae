@@ -33,27 +33,43 @@ preset BYTES_PER_PB: U64 = 1_000_000_000_000_000_u64
 # Record definition
 # ============================================================================
 
+### Defines the record `ByteSize`.
 record ByteSize obeys Ordered, Addable, Subtractable, FloorDivisible, Scalable, ScalarFloorDivisible
+  ### Stores the value member value.
   secret value: U64
 
 # ============================================================================
 # Creators
 # ============================================================================
 
+### Creates a new instance.
+### :param bytes: The `bytes` value.
+### :returns: The resulting `ByteSize` value.
 routine ByteSize.$create(bytes: U64) -> ByteSize
   me.value = bytes
   return
 
-# Factory methods for larger sizes (no literal support)
+### Returns the result of `terabytes`.
+### :param n: The `n` value.
+### :returns: The resulting `ByteSize` value.
 routine ByteSize.terabytes(n: U64) -> ByteSize
   return ByteSize(n *% BYTES_PER_TB)
 
+### Returns the result of `tebibytes`.
+### :param n: The `n` value.
+### :returns: The resulting `ByteSize` value.
 routine ByteSize.tebibytes(n: U64) -> ByteSize
   return ByteSize(n *% BYTES_PER_TIB)
 
+### Returns the result of `petabytes`.
+### :param n: The `n` value.
+### :returns: The resulting `ByteSize` value.
 routine ByteSize.petabytes(n: U64) -> ByteSize
   return ByteSize(n *% BYTES_PER_PB)
 
+### Returns the result of `pebibytes`.
+### :param n: The `n` value.
+### :returns: The resulting `ByteSize` value.
 routine ByteSize.pebibytes(n: U64) -> ByteSize
   return ByteSize(n *% BYTES_PER_PIB)
 
@@ -61,12 +77,14 @@ routine ByteSize.pebibytes(n: U64) -> ByteSize
 # Size accessors
 # ============================================================================
 
-# Gets the raw byte count
+### Returns the result of `byte size`.
+### :returns: The resulting `U64` value.
 @readonly
 routine ByteSize.byte_size() -> U64
   return me.value
 
-# Gets the size in bits
+### Returns the result of `bit size`.
+### :returns: The resulting `U64` value.
 @readonly
 routine ByteSize.bit_size() -> U64
   return me.value * 8_u64
@@ -75,14 +93,20 @@ routine ByteSize.bit_size() -> U64
 # Binary unit conversions (powers of 1024)
 # ============================================================================
 
+### Returns the result of `kib size`.
+### :returns: The resulting `F64` value.
 @readonly
 routine ByteSize.kib_size() -> F64
   return F64(me.value) / 1024.0
 
+### Returns the result of `mib size`.
+### :returns: The resulting `F64` value.
 @readonly
 routine ByteSize.mib_size() -> F64
   return F64(me.value) / 1048576.0
 
+### Returns the result of `gib size`.
+### :returns: The resulting `F64` value.
 @readonly
 routine ByteSize.gib_size() -> F64
   return F64(me.value) / 1073741824.0
@@ -91,14 +115,20 @@ routine ByteSize.gib_size() -> F64
 # Decimal unit conversions (powers of 1000)
 # ============================================================================
 
+### Returns the result of `kb size`.
+### :returns: The resulting `F64` value.
 @readonly
 routine ByteSize.kb_size() -> F64
   return F64(me.value) / 1000.0
 
+### Returns the result of `mb size`.
+### :returns: The resulting `F64` value.
 @readonly
 routine ByteSize.mb_size() -> F64
   return F64(me.value) / 1000000.0
 
+### Returns the result of `gb size`.
+### :returns: The resulting `F64` value.
 @readonly
 routine ByteSize.gb_size() -> F64
   return F64(me.value) / 1000000000.0
@@ -107,30 +137,44 @@ routine ByteSize.gb_size() -> F64
 # Arithmetic operators
 # ============================================================================
 
+### Returns the sum of this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ByteSize` value.
 @readonly
 routine ByteSize.$add(you: ByteSize) -> ByteSize
   return ByteSize(me.value + you.value)
 
+### Returns the difference between this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ByteSize` value.
 @readonly
 routine ByteSize.$sub(you: ByteSize) -> ByteSize
   return ByteSize(me.value - you.value)
 
-# Scale by integer
+### Returns the product of this value and the other value.
+### :param factor: The scale factor to apply.
+### :returns: The resulting `ByteSize` value.
 @readonly
 routine ByteSize.$mul(factor: U64) -> ByteSize
   return ByteSize(me.value *% factor)
 
-# Floor division: how many units fit
+### Returns the quotient of this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U64` value.
 @readonly
 routine ByteSize.$floordiv(you: ByteSize) -> U64
   return me.value // you.value
 
-# Divide size evenly by integer
+### Returns this duration divided by `divisor`.
+### :param divisor: The divisor to apply.
+### :returns: The resulting `ByteSize` value.
 @readonly
 routine ByteSize.div_by(divisor: U64) -> ByteSize
   return ByteSize(me.value // divisor)
 
-# Remainder after floor division
+### Returns the remainder after division.
+### :param you: The other value to compare against.
+### :returns: The resulting `ByteSize` value.
 @readonly
 routine ByteSize.$mod(you: ByteSize) -> ByteSize
   return ByteSize(me.value % you.value)
@@ -139,10 +183,16 @@ routine ByteSize.$mod(you: ByteSize) -> ByteSize
 # Comparison operators
 # ============================================================================
 
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
 @readonly
 routine ByteSize.$eq(you: ByteSize) -> Bool
   return me.value == you.value
 
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
 @readonly
 routine ByteSize.$cmp(you: ByteSize) -> ComparisonSign
   if me.value < you.value
@@ -155,6 +205,8 @@ routine ByteSize.$cmp(you: ByteSize) -> ComparisonSign
 # Display
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine ByteSize.$represent() -> Text
   if me.value >= BYTES_PER_GIB
     var gib = F64(me.value) / 1073741824.0
@@ -167,5 +219,7 @@ routine ByteSize.$represent() -> Text
     return f"{kib} KiB"
   return f"{me.value} bytes"
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine ByteSize.$diagnose() -> Text
   return "ByteSize(" + me.value.$represent() + ")"

@@ -6,12 +6,16 @@ import Collections.Set
 
 module IterTools
 
+### Returns the result of `List`.
+### :returns: The resulting `List[T]` value.
 routine Iterable[T].List() -> List[T]
   var result = List[T]()
   for item in me
     result.add_last(item)
   return result
 
+### Returns the result of `Set`.
+### :returns: The resulting `Set[T]` value.
 routine Iterable[T].Set() -> Set[T]
 needs T obeys Hashable, Comparable
   var result = Set[T]()
@@ -19,16 +23,22 @@ needs T obeys Hashable, Comparable
     result.add(item)
   return result
 
+### Returns the number of stored values.
+### :returns: The resulting `U64` value.
 routine Iterable[T].count() -> U64
   var n = 0u64
   for _ in me
     n = n + 1u64
   return n
 
+### Returns the result of `first`.
+### :returns: The resulting `T` value.
 routine Iterable[T].first!() -> T
   var emitter = me.$iter()
   return emitter.$next()
 
+### Returns the result of `last`.
+### :returns: The resulting `T` value.
 routine Iterable[T].last!() -> T
   var emitter = me.$iter()
   var latest = emitter.$next()
@@ -38,18 +48,28 @@ routine Iterable[T].last!() -> T
       is None => return latest
       else value => latest = value
 
+### Returns true if `any` applies.
+### :param predicate: The `predicate` value.
+### :returns: The resulting `Bool` value.
 routine Iterable[T].any(predicate: Routine[(T,), Bool]) -> Bool
   for item in me
     if predicate(item)
       return true
   return false
 
+### Returns true if `all` applies.
+### :param predicate: The `predicate` value.
+### :returns: The resulting `Bool` value.
 routine Iterable[T].all(predicate: Routine[(T,), Bool]) -> Bool
   for item in me
     if not predicate(item)
       return false
   return true
 
+### Returns the result of `accumulate`.
+### :param start: The inclusive starting position.
+### :param combiner: The `combiner` value.
+### :returns: The resulting `U` value.
 routine Iterable[T].accumulate[U](start: U, combiner: Routine[(U, T), U]) -> U
   var result = start
   for item in me

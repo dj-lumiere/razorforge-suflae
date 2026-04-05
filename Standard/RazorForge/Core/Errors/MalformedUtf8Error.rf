@@ -1,8 +1,13 @@
 module Core
 
+### Defines the entity `MalformedUtf8Error`.
 entity MalformedUtf8Error obeys Crashable
+  ### Stores the index member value.
   index: U64
+  ### Stores the reason member value.
   reason: Text
 
+### Returns the result of `crash message`.
+### :returns: The resulting `Text` value.
 routine MalformedUtf8Error.crash_message() -> Text
   return f"Malformed UTF-8 at byte {me.index}: {me.reason}."

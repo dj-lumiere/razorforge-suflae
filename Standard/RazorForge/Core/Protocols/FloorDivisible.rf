@@ -1,9 +1,16 @@
 # FloorDivisible - Protocol for types that support floor division (//) and modulo (%)
 module Core
 
+### Defines the protocol `FloorDivisible`.
 protocol FloorDivisible
+  ### Returns the quotient of this value and the other value.
+  ### :param you: The other value to compare against.
+  ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$floordiv(you: Me) -> Me
 
+  ### Returns the remainder after division.
+  ### :param you: The other value to compare against.
+  ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$mod(you: Me) -> Me

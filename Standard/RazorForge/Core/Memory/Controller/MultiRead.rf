@@ -4,18 +4,22 @@
 
 module Core
 
+### Defines the record `MultiRead`.
 record MultiRead obeys LockPolicy
+  ### Stores the readers member value.
   secret readers: Atomic[S32]  # Number of active readers
+  ### Stores the writer member value.
   secret writer: Atomic[Bool]  # Is a writer active?
 
+### Creates a new instance.
+### :returns: The resulting `MultiRead` value.
 routine MultiRead.$create() -> MultiRead
   return MultiRead(
     readers: Atomic(0),
     writer: Atomic(false)
   )
 
-# Acquire shared read lock (blocking)
-# Multiple readers can hold this simultaneously
+### Executes `acquire read`.
 routine MultiRead.acquire_read()
   loop
     # Wait for no writer
@@ -33,7 +37,8 @@ routine MultiRead.acquire_read()
       == true => pass  # Writer active, keep waiting
   return
 
-# Acquire shared read lock (non-blocking, can fail)
+### Returns the result of `acquire read`.
+### :returns: The resulting `Bool` value.
 routine MultiRead.acquire_read!() -> Bool
   when me.writer.load()
     == false =>
@@ -45,13 +50,12 @@ routine MultiRead.acquire_read!() -> Bool
           return false
     == true => return false
 
-# Release shared read lock
+### Executes `release read`.
 routine MultiRead.release_read()
   me.readers.fetch_sub(1)
   return
 
-# Acquire exclusive write lock (blocking)
-# Only one writer can hold this, blocks all readers
+### Executes `acquire write`.
 routine MultiRead.acquire_write()
   # First, acquire writer flag
   loop
@@ -66,7 +70,8 @@ routine MultiRead.acquire_write()
       else => pass    # Wait for readers to finish
   return
 
-# Acquire exclusive write lock (non-blocking, can fail)
+### Returns the result of `acquire write`.
+### :returns: The resulting `Bool` value.
 routine MultiRead.acquire_write!() -> Bool
   # Try to acquire writer flag
   when me.writer.compare_exchange(expected: false, desired: true)
@@ -80,18 +85,23 @@ routine MultiRead.acquire_write!() -> Bool
           return false
     == false => return false  # Another writer has it
 
-# Release exclusive write lock
+### Executes `release write`.
 routine MultiRead.release_write()
   me.writer.store(false)
   return
 
-# Check status (for debugging)
+### Returns the result of `reader count`.
+### :returns: The resulting `S32` value.
 routine MultiRead.reader_count() -> S32
   return me.readers.load()
 
+### Returns true if this value is write locked.
+### :returns: The resulting `Bool` value.
 routine MultiRead.is_write_locked() -> Bool
   return me.writer.load()
 
+### Returns the result of `state`.
+### :returns: The resulting `LockState` value.
 routine MultiRead.state() -> LockState
   if me.writer.load()
     return WRITING

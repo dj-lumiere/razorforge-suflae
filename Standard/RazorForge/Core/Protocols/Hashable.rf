@@ -2,6 +2,9 @@
 # Required for use as keys in Dict, Set, and other hash-based collections
 module Core
 
+### Defines the protocol `Hashable`.
 protocol Hashable
+  ### Returns the result of `hash`.
+  ### :returns: The resulting `U64` value.
   @readonly
   routine Me.hash() -> U64

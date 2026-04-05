@@ -1,18 +1,34 @@
 # Comparable - Protocol for types that support ordering (<, <=, >, >=, <=>)
 module Core
 
+### Defines the protocol `Comparable`.
 protocol Comparable obeys Equatable
+  ### Compares this value with the other value.
+  ### :param you: The other value to compare against.
+  ### :returns: The resulting `ComparisonSign` value.
   @readonly
   routine Me.$cmp(you: Me) -> ComparisonSign
 
+  ### Implements the wired routine behavior for this value.
+  ### :param you: The other value to compare against.
+  ### :returns: The resulting `Bool` value.
   @[readonly, generated]
   routine Me.$lt(you: Me) -> Bool
 
+  ### Implements the wired routine behavior for this value.
+  ### :param you: The other value to compare against.
+  ### :returns: The resulting `Bool` value.
   @[readonly, generated]
   routine Me.$le(you: Me) -> Bool
 
+  ### Implements the wired routine behavior for this value.
+  ### :param you: The other value to compare against.
+  ### :returns: The resulting `Bool` value.
   @[readonly, generated]
   routine Me.$gt(you: Me) -> Bool
 
+  ### Implements the wired routine behavior for this value.
+  ### :param you: The other value to compare against.
+  ### :returns: The resulting `Bool` value.
   @[readonly, generated]
   routine Me.$ge(you: Me) -> Bool

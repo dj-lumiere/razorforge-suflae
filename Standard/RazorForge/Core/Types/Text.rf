@@ -16,22 +16,35 @@ module Core
 # Text - UTF-32 unmodifiable text
 # ============================================================================
 
+### Defines the entity `Text`.
 entity Text obeys Addable, Ordered, TextRepeatable
+  ### Stores the characters member value.
   secret characters: List[Character]
 
 # Creators
 
+### Creates a new instance.
+### :returns: The resulting `Text` value.
 routine Text.$create() -> Text
   return Text(characters: List[Character]())
 
+### Creates a new instance.
+### :param from_list: The list value to convert.
+### :returns: The resulting `Text` value.
 routine Text.$create(from_list: List[Character]) -> Text
   return Text(characters: from_list)
 
+### Creates a new instance.
+### :param from_character: The character value to convert.
+### :returns: The resulting `Text` value.
 routine Text.$create(from_character: Character) -> Text
   var list = List[Character]()
   list.add_last(from_character)
   return Text(characters: list)
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `Text` value.
 routine Text.$create(from: CStr) -> Text
   if from.is_null()
     return Text()
@@ -78,8 +91,9 @@ routine Text.$create(from: CStr) -> Text
         i = i + 1u64
     return Text(from_list: list)
 
-# Convert CWStr to Text (decodes UTF-16 surrogate pairs to codepoints)
-# Handles surrogate pairs correctly for supplementary characters
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `Text` value.
 routine Text.$create(from: CWStr) -> Text
   danger!
     var len = from.count()
@@ -120,30 +134,51 @@ routine Text.$create(from: CWStr) -> Text
 
 # Core operations
 
+### Returns the number of stored values.
+### :returns: The resulting `U64` value.
 routine Text.count() -> U64
   return me.characters.count()
 
+### Returns true if this value is empty.
+### :returns: The resulting `Bool` value.
 routine Text.is_empty() -> Bool
   return me.characters.is_empty()
 
 # Indexing
 
+### Implements the wired routine behavior for this value.
+### :param index: The zero-based position to use.
+### :returns: The resulting `Character` value.
 routine Text.$getitem![I obeys Integral](index: I) -> Character
   return me.characters[index]
 
+### Implements the wired routine behavior for this value.
+### :param index: The zero-based position to use.
+### :returns: The resulting `Character` value.
 routine Text.$getitem![I obeys Integral](index: BackIndex[I]) -> Character
   return me.characters[index]
 
+### Implements the wired routine behavior for this value.
+### :param start: The inclusive starting position.
+### :param end: The exclusive ending position.
+### :returns: The resulting `Text` value.
 routine Text.$getslice![I obeys Integral](start: I, end: I) -> Text
   var sliced_list = me.characters[start til end]
   return Text(from_list: sliced_list)
 
+### Implements the wired routine behavior for this value.
+### :param start: The inclusive starting position.
+### :param end: The exclusive ending position.
+### :returns: The resulting `Text` value.
 routine Text.$getslice![I obeys Integral](start: BackIndex[I], end: BackIndex[I]) -> Text
   var sliced_list = me.characters[start til end]
   return Text(from_list: sliced_list)
 
 # String operations
 
+### Returns a new value with `other` appended.
+### :param other: The other value to compare against.
+### :returns: The resulting `Text` value.
 routine Text.concat(other: Text) -> Text
   var result = List[Character]()
   var i: U64 = 0u64
@@ -160,9 +195,15 @@ routine Text.concat(other: Text) -> Text
     i += 1u64
   return Text(from_list: result)
 
+### Returns the sum of this value and the other value.
+### :param other: The other value to compare against.
+### :returns: The resulting `Text` value.
 routine Text.$add(other: Text) -> Text
   return me.concat(other)
 
+### Returns the product of this value and the other value.
+### :param count: The number of items to use.
+### :returns: The resulting `Text` value.
 routine Text.$mul[I obeys Integral](count: I) -> Text
   var times = U64(count)
   var result = List[Character]()
@@ -173,6 +214,9 @@ routine Text.$mul[I obeys Integral](count: I) -> Text
 
   return Text(from_list: result)
 
+### Returns whether both values are equal.
+### :param other: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine Text.$eq(other: Text) -> Bool
   if me.count() != other.count()
     return false
@@ -187,6 +231,9 @@ routine Text.$eq(other: Text) -> Bool
 
 # Comparison
 
+### Compares this value with the other value.
+### :param other: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
 routine Text.$cmp(other: Text) -> ComparisonSign
   var min_len = me.count()
   if other.count() < min_len
@@ -204,12 +251,18 @@ routine Text.$cmp(other: Text) -> ComparisonSign
 
 # Search
 
+### Returns true if this value contains the requested value.
+### :param character: The character to test.
+### :returns: The resulting `Bool` value.
 routine Text.contains(character: Character) -> Bool
   for i in 0 til me.count()
     if me[i] == character
       return true
   return false
 
+### Returns true if this value contains the requested value.
+### :param other: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine Text.contains(other: Text) -> Bool
   if other.is_empty()
     return true
@@ -226,6 +279,9 @@ routine Text.contains(other: Text) -> Bool
       return true
   return false
 
+### Returns true if this value starts with the requested value.
+### :param prefix: The prefix to test or remove.
+### :returns: The resulting `Bool` value.
 routine Text.starts_with(prefix: Text) -> Bool
   if prefix.count() > me.count()
     return false
@@ -234,6 +290,9 @@ routine Text.starts_with(prefix: Text) -> Bool
       return false
   return true
 
+### Returns true if this value ends with the requested value.
+### :param suffix: The suffix to test or remove.
+### :returns: The resulting `Bool` value.
 routine Text.ends_with(suffix: Text) -> Bool
   if suffix.count() > me.count()
     return false
@@ -243,12 +302,20 @@ routine Text.ends_with(suffix: Text) -> Bool
       return false
   return true
 
+### Returns the position of the requested value.
+### :param letter: The character to search for.
+### :returns: The resulting `U64` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine Text.find!(letter: Character) -> U64
   for i in 0 til me.count()
     if me[i] == letter
       return i
   absent
 
+### Returns the position of the requested value.
+### :param other: The other value to compare against.
+### :returns: The resulting `U64` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine Text.find!(other: Text) -> U64
   if other.is_empty()
     return 0u64
@@ -265,6 +332,9 @@ routine Text.find!(other: Text) -> U64
       return i
   absent
 
+### Returns the number of matching values.
+### :param letter: The character to search for.
+### :returns: The resulting `U64` value.
 routine Text.count(letter: Character) -> U64
   var result: U64 = 0u64
   for i in 0 til me.count()
@@ -274,18 +344,24 @@ routine Text.count(letter: Character) -> U64
 
 # Transform
 
+### Converts this value to uppercase.
+### :returns: The resulting `Text` value.
 routine Text.to_uppercase() -> Text
   var result = List[Character]()
   for i in 0 til me.count()
     result.add_last(me[i].to_uppercase())
   return Text(from_list: result)
 
+### Converts this value to lowercase.
+### :returns: The resulting `Text` value.
 routine Text.to_lowercase() -> Text
   var result = List[Character]()
   for i in 0 til me.count()
     result.add_last(me[i].to_lowercase())
   return Text(from_list: result)
 
+### Returns a copy with leading and trailing whitespace removed.
+### :returns: The resulting `Text` value.
 routine Text.trim() -> Text
   var start: U64 = 0u64
   loop
@@ -303,6 +379,8 @@ routine Text.trim() -> Text
     end_idx -= 1u64
   return me[start til end_idx]
 
+### Returns a copy with leading whitespace removed.
+### :returns: The resulting `Text` value.
 routine Text.trim_start() -> Text
   var start: U64 = 0u64
   loop
@@ -313,6 +391,8 @@ routine Text.trim_start() -> Text
     start += 1u64
   return me[start til me.count()]
 
+### Returns a copy with trailing whitespace removed.
+### :returns: The resulting `Text` value.
 routine Text.trim_end() -> Text
   if me.is_empty()
     return me
@@ -325,6 +405,10 @@ routine Text.trim_end() -> Text
     end_idx -= 1u64
   return me[0 til end_idx]
 
+### Returns a copy with each `old` value replaced by `new`.
+### :param old: The value to replace.
+### :param new: The replacement value.
+### :returns: The resulting `Text` value.
 routine Text.replace(old: Text, new: Text) -> Text
   if old.is_empty()
     return me
@@ -349,16 +433,25 @@ routine Text.replace(old: Text, new: Text) -> Text
       i += 1u64
   return Text(from_list: result)
 
+### Returns a copy without the matching prefix.
+### :param prefix: The prefix to test or remove.
+### :returns: The resulting `Text` value.
 routine Text.remove_prefix(prefix: Text) -> Text
   if me.starts_with(prefix)
     return me[prefix.count() til me.count()]
   return me
 
+### Returns a copy without the matching suffix.
+### :param suffix: The suffix to test or remove.
+### :returns: The resulting `Text` value.
 routine Text.remove_suffix(suffix: Text) -> Text
   if me.ends_with(suffix)
     return me[0 til me.count() - suffix.count()]
   return me
 
+### Returns a repeated copy of this value.
+### :param times: The number of repetitions to produce.
+### :returns: The resulting `Text` value.
 routine Text.repeat(times: U64) -> Text
   if times == 0u64
     return Text()
@@ -368,6 +461,8 @@ routine Text.repeat(times: U64) -> Text
       result.add_last(me[i])
   return Text(from_list: result)
 
+### Returns a copy with the value order reversed.
+### :returns: The resulting `Text` value.
 routine Text.reverse() -> Text
   var result = List[Character]()
   var i = me.count()
@@ -378,6 +473,10 @@ routine Text.reverse() -> Text
     result.add_last(me[i])
   return Text(from_list: result)
 
+### Returns a copy padded on the left.
+### :param width: The total width to target.
+### :param fill: The fill character to use.
+### :returns: The resulting `Text` value.
 routine Text.pad_start(width: U64, fill: Character) -> Text
   if me.count() >= width
     return me
@@ -389,6 +488,10 @@ routine Text.pad_start(width: U64, fill: Character) -> Text
     result.add_last(me[i])
   return Text(from_list: result)
 
+### Returns a copy padded on the right.
+### :param width: The total width to target.
+### :param fill: The fill character to use.
+### :returns: The resulting `Text` value.
 routine Text.pad_end(width: U64, fill: Character) -> Text
   if me.count() >= width
     return me
@@ -402,6 +505,9 @@ routine Text.pad_end(width: U64, fill: Character) -> Text
 
 # Split/Join
 
+### Splits this value into parts.
+### :param separator: The separator to use.
+### :returns: The resulting `List[Text]` value.
 routine Text.split(separator: Character) -> List[Text]
   var parts = List[Text]()
   var current = List[Character]()
@@ -414,6 +520,9 @@ routine Text.split(separator: Character) -> List[Text]
   parts.add_last(Text(from_list: current))
   return parts
 
+### Splits this value into parts.
+### :param separator: The separator to use.
+### :returns: The resulting `List[Text]` value.
 routine Text.split(separator: Text) -> List[Text]
   if separator.is_empty()
     var parts = List[Text]()
@@ -440,6 +549,9 @@ routine Text.split(separator: Text) -> List[Text]
   parts.add_last(me[start til me.count()])
   return parts
 
+### Returns a new text formed by joining `parts` with this separator.
+### :param parts: The parts to combine.
+### :returns: The resulting `Text` value.
 routine Text.join(parts: List[Text]) -> Text
   if parts.is_empty()
     return Text()
@@ -454,10 +566,14 @@ routine Text.join(parts: List[Text]) -> Text
     first = false
   return Text(from_list: result)
 
+### Returns the lines in this text.
+### :returns: The resulting `List[Text]` value.
 routine Text.lines() -> List[Text]
   var normalized = me.replace("\r\n", "\n")
   return normalized.split(CHARACTER_NEWLINE)
 
+### Returns the whitespace-delimited words in this text.
+### :returns: The resulting `List[Text]` value.
 routine Text.words() -> List[Text]
   var parts = List[Text]()
   var current = List[Character]()
@@ -474,24 +590,39 @@ routine Text.words() -> List[Text]
 
 # Conversion to modifiable list
 
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `List[Character]` value.
 routine List[Character].$create(from: Text) -> List[Character]
   return from.characters
 
 # Iteration
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine Text.$represent() -> Text
   return me
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine Text.$diagnose() -> Text
   return f"Text(count: {me.count()}, \"{me}\")"
 
+### Defines the entity `TextIterator`.
 entity TextIterator
+  ### Stores the text member value.
   text: Text
+  ### Stores the index member value.
   index: U64
 
+### Creates an iterator for this value.
+### :returns: The resulting `TextIterator` value.
 routine Text.$iter() -> TextIterator
   return TextIterator(text: me, index: 0u64)
 
+### Returns the next value from this iterator.
+### :returns: The resulting `Character` value.
+### :absent: Returns absent when the requested value is unavailable.
 routine TextIterator.$next!() -> Character
   if me.index >= me.text.count()
     absent

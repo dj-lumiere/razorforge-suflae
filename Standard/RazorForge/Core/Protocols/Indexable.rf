@@ -1,9 +1,18 @@
 # Indexable - Protocol for types that support indexing ([])
 module Core
 
+### Defines the protocol `Indexable`.
+### :typeparam K: The value used for `K`.
+### :typeparam V: The value used for `V`.
 protocol Indexable[K, V]
+  ### Implements the wired routine behavior for this value.
+  ### :param key: The `key` value.
+  ### :returns: The resulting `V` value.
   @readonly
   routine Me.$getitem!(key: K) -> V
 
+  ### Implements the wired routine behavior for this value.
+  ### :param key: The `key` value.
+  ### :param value: The value to use.
   @writable
   routine Me.$setitem!(key: K, value: V)

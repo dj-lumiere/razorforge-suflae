@@ -2,5 +2,6 @@
 # Same as FixedIntegral but without Negatable
 module Core
 
+### Defines the protocol `UnsignedIntegral`.
 protocol UnsignedIntegral obeys FixedIntegral
   pass

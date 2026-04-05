@@ -3,9 +3,15 @@
 # Provides: Diagnosable (-> Representable), Hashable, plus choice-specific routines
 module Core
 
+### Defines the protocol `ChoiceType`.
 protocol ChoiceType obeys Diagnosable, Hashable
+  ### Creates a new instance.
+  ### :param from: The source value to convert.
+  ### :returns: The resulting `S64` value.
   @[readonly, innate, generated]
   routine S64.$create(from: Me) -> S64
 
+  ### Returns the result of `all cases`.
+  ### :returns: The resulting `List[Me]` value.
   @[readonly, innate, generated]
   routine Me.all_cases() -> List[Me]

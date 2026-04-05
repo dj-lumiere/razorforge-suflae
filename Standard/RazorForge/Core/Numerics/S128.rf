@@ -1,7 +1,7 @@
 # RazorForge S128 (signed 128-bit integer) native type implementation
 # Maps directly to LLVM i128 type using compiler intrinsics
 module Core
-# Core S128 type definition - maps to LLVM i128
+### Defines the record `S128`.
 @llvm("i128")
 record S128 obeys SignedIntegral, Ordered, ConstCompatible
   pass
@@ -16,91 +16,149 @@ preset S128_ONE: S128 = 1_s128
 # Checked Creators (crash on overflow)
 # ============================================================================
 
-# From S8 - always fits, no check needed
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S128` value.
 routine S128.$create!(from: S8) -> S128
   return sext[S8, S128](from)
 
-# From S16 - always fits, no check needed
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S128` value.
 routine S128.$create!(from: S16) -> S128
   return sext[S16, S128](from)
 
-# From S32 - always fits, no check needed
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S128` value.
 routine S128.$create!(from: S32) -> S128
   return sext[S32, S128](from)
 
-# From S64 - always fits, no check needed
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S128` value.
 routine S128.$create!(from: S64) -> S128
   return sext[S64, S128](from)
 
-# From S128 - identity conversion
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S128` value.
 routine S128.$create!(from: S128) -> S128
   return from
 
-# From U8 - always fits, no check needed
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S128` value.
 routine S128.$create!(from: U8) -> S128
   return zext[U8, S128](from)
 
-# From U16 - always fits, no check needed
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S128` value.
 routine S128.$create!(from: U16) -> S128
   return zext[U16, S128](from)
 
-# From U32 - always fits, no check needed
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S128` value.
 routine S128.$create!(from: U32) -> S128
   return zext[U32, S128](from)
 
-# From U64 - always fits, no check needed
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S128` value.
 routine S128.$create!(from: U64) -> S128
   return zext[U64, S128](from)
 
-# From U128 - crashes if value > S128_MAX (bit 127 set)
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S128` value.
+### :throws: May throw {IntegerOverflowError}.
 routine S128.$create!(from: U128) -> S128
   if from > 170141183460469231731687303715884105727_u128
     throw IntegerOverflowError(f"Cannot convert {from} to S128: value out of range [{S128_MIN}, {S128_MAX}]")
   return bitcast[U128, S128](from)
 
-# From floating point - truncates fractional part and crashes if overflow
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S128` value.
 routine S128.$create!(from: F16) -> S128
   return from.S64!().S128()
 
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S128` value.
 routine S128.$create!(from: F32) -> S128
   return from.S64!().S128()
 
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S128` value.
 routine S128.$create!(from: F64) -> S128
   return from.S64!().S128()
 
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S128` value.
 routine S128.$create!(from: F128) -> S128
   return from.S64!().S128()
 
-# From decimal - truncates fractional part and crashes if overflow
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S128` value.
 routine S128.$create!(from: D32) -> S128
   return from.S64!().S128()
 
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S128` value.
 routine S128.$create!(from: D64) -> S128
   return from.S64!().S128()
 
+### Implements the wired routine behavior for this value.
+### :param from: The source value to convert.
+### :returns: The resulting `S128` value.
 routine S128.$create!(from: D128) -> S128
   return from.S64!().S128()
 
 # ============================================================================
 # Arithmetic Operations (trapping on overflow by default)
 # ============================================================================
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S128` value.
 routine S128.$add!(you: S128) -> S128
   return add[S128](me, you)
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S128` value.
 routine S128.$sub!(you: S128) -> S128
   return sub[S128](me, you)
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S128` value.
 routine S128.$mul!(you: S128) -> S128
   return mul[S128](me, you)
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S128` value.
+### :throws: May throw {DivisionByZeroError}.
 routine S128.$floordiv!(you: S128) -> S128
   if you == 0
     throw DivisionByZeroError()
   return sdiv[S128](me, you)
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S128` value.
 routine S128.$mod!(you: S128) -> S128
   return srem[S128](me, you)
 
+### Implements the wired routine behavior for this value.
+### :returns: The resulting `S128` value.
 routine S128.$neg!() -> S128
   return sub[S128](0, me)
 
@@ -108,12 +166,21 @@ routine S128.$neg!() -> S128
 # Wrapping Arithmetic (+%, -%, *%)
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S128` value.
 routine S128.$add_wrap(you: S128) -> S128
   return add[S128](me, you)
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S128` value.
 routine S128.$sub_wrap(you: S128) -> S128
   return sub[S128](me, you)
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S128` value.
 routine S128.$mul_wrap(you: S128) -> S128
   return mul[S128](me, you)
 
@@ -121,12 +188,21 @@ routine S128.$mul_wrap(you: S128) -> S128
 # Clamping Arithmetic (+^, -^, *^)
 # ============================================================================
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S128` value.
 routine S128.$add_clamp(you: S128) -> S128
   return sadd_sat[S128](me, you)
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S128` value.
 routine S128.$sub_clamp(you: S128) -> S128
   return ssub_sat[S128](me, you)
 
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S128` value.
 routine S128.$mul_clamp(you: S128) -> S128
   # Can't widen to 256-bit, use division-based overflow check
   if icmp_eq[S128](me, 0_s128) or icmp_eq[S128](you, 0_s128)
@@ -144,7 +220,10 @@ routine S128.$mul_clamp(you: S128) -> S128
 # Power Operations (**)
 # ============================================================================
 
-# Power operator (**) - can overflow
+### Implements the wired routine behavior for this value.
+### :param exp: The exponent value.
+### :returns: The resulting `S128` value.
+### :throws: May throw {IndeterminateResultError}.
 routine S128.$pow!(exp: S128) -> S128
   var result: S128 = 1
   var base: S128 = me
@@ -160,7 +239,10 @@ routine S128.$pow!(exp: S128) -> S128
     e = e >> 1
   return result
 
-# Wrapping power (**%)
+### Implements the wired routine behavior for this value.
+### :param exp: The exponent value.
+### :returns: The resulting `S128` value.
+### :throws: May throw {IndeterminateResultError}.
 routine S128.$pow_wrap!(exp: S128) -> S128
   var result: S128 = 1
   var base: S128 = me
@@ -176,7 +258,10 @@ routine S128.$pow_wrap!(exp: S128) -> S128
     e = e >> 1
   return result
 
-# Clamping power (**^)
+### Implements the wired routine behavior for this value.
+### :param exp: The exponent value.
+### :returns: The resulting `S128` value.
+### :throws: May throw {IndeterminateResultError}.
 routine S128.$pow_clamp!(exp: S128) -> S128
   var result: S128 = 1
   var base: S128 = me
@@ -196,15 +281,26 @@ routine S128.$pow_clamp!(exp: S128) -> S128
 # Bitwise Operations
 # ============================================================================
 
+### Returns the result of the requested bitwise operation.
+### :param you: The other value to compare against.
+### :returns: The resulting `S128` value.
 routine S128.$bitand(you: S128) -> S128
   return bit_and[S128](me, you)
 
+### Returns the result of the requested bitwise operation.
+### :param you: The other value to compare against.
+### :returns: The resulting `S128` value.
 routine S128.$bitor(you: S128) -> S128
   return bit_or[S128](me, you)
 
+### Returns the result of the requested bitwise operation.
+### :param you: The other value to compare against.
+### :returns: The resulting `S128` value.
 routine S128.$bitxor(you: S128) -> S128
   return xor[S128](me, you)
 
+### Returns the result of the requested bitwise operation.
+### :returns: The resulting `S128` value.
 routine S128.$bitnot() -> S128
   return xor[S128](me, -1)
 
@@ -212,19 +308,27 @@ routine S128.$bitnot() -> S128
 # Shift Operations (<<, <<?>, >>, <<<, >>>)
 # ============================================================================
 
-# Arithmetic left shift (<<) - sign preserving
+### Implements the wired routine behavior for this value.
+### :param bits: The encoded bit pattern.
+### :returns: The resulting `S128` value.
 routine S128.$ashl(bits: U32) -> S128
   return shl[S128](me, bits)
 
-# Arithmetic right shift (>>) - preserves sign, always safe
+### Implements the wired routine behavior for this value.
+### :param bits: The encoded bit pattern.
+### :returns: The resulting `S128` value.
 routine S128.$ashr(bits: U32) -> S128
   return ashr[S128](me, bits)
 
-# Logical left shift (<<<) - same as << but explicit
+### Implements the wired routine behavior for this value.
+### :param bits: The encoded bit pattern.
+### :returns: The resulting `S128` value.
 routine S128.$lshl(bits: U32) -> S128
   return shl[S128](me, bits)
 
-# Logical right shift (>>>) - fills with zeros, ignores sign
+### Implements the wired routine behavior for this value.
+### :param bits: The encoded bit pattern.
+### :returns: The resulting `S128` value.
 routine S128.$lshr(bits: U32) -> S128
   return lshr[S128](me, bits)
 
@@ -232,9 +336,15 @@ routine S128.$lshr(bits: U32) -> S128
 # Comparison Operations
 # ============================================================================
 
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
 routine S128.$eq(you: S128) -> Bool
   return icmp_eq[S128](me, you)
 
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
 routine S128.$cmp(you: S128) -> ComparisonSign
   if icmp_slt[S128](me, you)
     return ME_SMALL
@@ -246,15 +356,27 @@ routine S128.$cmp(you: S128) -> ComparisonSign
 # Math Operations
 # ============================================================================
 
+### Returns the absolute value.
+### :returns: The resulting `S128` value.
 routine S128.abs() -> S128
   return abs[S128](me)
 
+### Returns the result of `min`.
+### :param you: The other value to compare against.
+### :returns: The resulting `S128` value.
 routine S128.min(you: S128) -> S128
   return if me <= you then me else you
 
+### Returns the result of `max`.
+### :param you: The other value to compare against.
+### :returns: The resulting `S128` value.
 routine S128.max(you: S128) -> S128
   return if me >= you then me else you
 
+### Returns the result of `clamp`.
+### :param min_val: The `min_val` value.
+### :param max_val: The `max_val` value.
+### :returns: The resulting `S128` value.
 routine S128.clamp(min_val: S128, max_val: S128) -> S128
   return me.min(max_val).max(min_val)
 
@@ -262,27 +384,43 @@ routine S128.clamp(min_val: S128, max_val: S128) -> S128
 # Bit Manipulation
 # ============================================================================
 
+### Returns the number of stored values.
+### :returns: The resulting `S128` value.
 routine S128.count_ones() -> S128
   return ctpop[S128](me)
 
+### Returns the number of stored values.
+### :returns: The resulting `S128` value.
 routine S128.count_zeros() -> S128
   return 128_s128 - me.count_ones()
 
+### Returns the result of `leading zeros`.
+### :returns: The resulting `S128` value.
 routine S128.leading_zeros() -> S128
   return ctlz[S128](me)
 
+### Returns the result of `trailing zeros`.
+### :returns: The resulting `S128` value.
 routine S128.trailing_zeros() -> S128
   return cttz[S128](me)
 
+### Returns the result of `leading ones`.
+### :returns: The resulting `S128` value.
 routine S128.leading_ones() -> S128
   return me.$bitnot().leading_zeros()
 
+### Returns the result of `trailing ones`.
+### :returns: The resulting `S128` value.
 routine S128.trailing_ones() -> S128
   return me.$bitnot().trailing_zeros()
 
+### Returns the result of `reverse bits`.
+### :returns: The resulting `S128` value.
 routine S128.reverse_bits() -> S128
   return bitreverse[S128](me)
 
+### Returns the result of `swap bytes`.
+### :returns: The resulting `S128` value.
 routine S128.swap_bytes() -> S128
   return bswap[S128](me)
 
@@ -290,22 +428,34 @@ routine S128.swap_bytes() -> S128
 # Utility Methods
 # ============================================================================
 
+### Returns true if this value is positive.
+### :returns: The resulting `Bool` value.
 routine S128.is_positive() -> Bool
   return me > 0_s128
 
+### Returns true if this value is negative.
+### :returns: The resulting `Bool` value.
 routine S128.is_negative() -> Bool
   return me < 0_s128
 
+### Returns true if this value is zero.
+### :returns: The resulting `Bool` value.
 routine S128.is_zero() -> Bool
   return me == 0_s128
 
+### Returns true if this value is even.
+### :returns: The resulting `Bool` value.
 routine S128.is_even() -> Bool
   var result = bit_and[S128](me, 1_s128)
   return icmp_eq[S128](result, 0_s128)
 
+### Returns true if this value is odd.
+### :returns: The resulting `Bool` value.
 routine S128.is_odd() -> Bool
   return not me.is_even()
 
+### Returns the result of `signum`.
+### :returns: The resulting `S128` value.
 routine S128.signum() -> S128
   return when
     me > 0_s128 => 1_s128
@@ -316,6 +466,8 @@ routine S128.signum() -> S128
 # Text Representation and Parsing
 # ============================================================================
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine S128.$represent() -> Text
   if me == 0s128
     return "0"
@@ -323,9 +475,15 @@ routine S128.$represent() -> Text
     return U128(me).$represent()
   return "-" + U128(0u128 - U128(me)).$represent()
 
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
 routine S128.$diagnose() -> Text
   return "S128(" + me.$represent() + ")"
 
+### Implements the wired routine behavior for this value.
+### :param from_text: The `from_text` value.
+### :returns: The resulting `S128` value.
+### :throws: May throw {InvalidValueError}.
 routine S128.$create!(from_text: Text) -> S128
   if from_text.count() == 0u64
     throw InvalidValueError(input: from_text, target: "S128")

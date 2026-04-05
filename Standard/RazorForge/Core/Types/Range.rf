@@ -18,35 +18,56 @@
 #   list[^3 til ^0]    # last 3 elements
 module Core
 
+### Defines the record `Range`.
+### :typeparam T: The value used for `T`.
 record Range[T] obeys Iterable needs T obeys FixedNumeric
+  ### Stores the start member value.
   start: T
+  ### Stores the end member value.
   end: T
+  ### Stores the step member value.
   step: T
+  ### Stores the inclusive member value.
   inclusive: Bool  # true for 'to', false for 'til'
 
-# Creator for inclusive range (a to b) with default step 1
+### Returns the result of `Range`.
+### :param start: The inclusive starting position.
+### :param end: The exclusive ending position.
+### :returns: The resulting `Range[T]` value.
 routine Range[T](start: T, end: T) -> Range[T]
   return Range[T](start: start, end: end, step: 1, inclusive: true)
 
-# Creator for range with inclusivity flag (a to b or a til b) with default step 1
+### Returns the result of `Range`.
+### :param start: The inclusive starting position.
+### :param end: The exclusive ending position.
+### :param inclusive: The `inclusive` value.
+### :returns: The resulting `Range[T]` value.
 routine Range[T](start: T, end: T, inclusive: Bool) -> Range[T]
   return Range[T](start: start, end: end, step: 1, inclusive: inclusive)
 
-# Creator with step (a to b by c or a til b by c)
+### Returns the result of `Range`.
+### :param start: The inclusive starting position.
+### :param end: The exclusive ending position.
+### :param step: The `step` value.
+### :param inclusive: The `inclusive` value.
+### :returns: The resulting `Range[T]` value.
 routine Range[T](start: T, end: T, step: T, inclusive: Bool) -> Range[T]
   if step == 0
     stop!("Range step cannot be zero")
   return Range[T](start: start, end: end, step: step, inclusive: inclusive)
 
-# Check if range is ascending (start <= end for to, start < end for til)
+### Returns true if this value is ascending.
+### :returns: The resulting `Bool` value.
 routine Range[T].is_ascending() -> Bool
   return me.start <= me.end
 
-# Get the step size
+### Returns the step component.
+### :returns: The resulting `T` value.
 routine Range[T].get_step() -> T
   return me.step
 
-# Check if range is empty
+### Returns true if this value is empty.
+### :returns: The resulting `Bool` value.
 routine Range[T].is_empty() -> Bool
   if me.inclusive and me.is_ascending()
     return me.start > me.end
@@ -58,14 +79,24 @@ routine Range[T].is_empty() -> Bool
 # Iterable protocol support
 # ============================================================================
 
+### Defines the entity `RangeEmitter`.
+### :typeparam T: The value used for `T`.
 entity RangeEmitter[T] needs T obeys FixedNumeric
+  ### Stores the current member value.
   current: T
+  ### Stores the end member value.
   end: T
+  ### Stores the step member value.
   step: T
+  ### Stores the ascending member value.
   ascending: Bool
+  ### Stores the inclusive member value.
   inclusive: Bool
+  ### Stores the done member value.
   done: Bool
 
+### Creates an iterator for this value.
+### :returns: The resulting `RangeEmitter[T]` value.
 @readonly
 routine Range[T].$iter() -> RangeEmitter[T]
   return RangeEmitter[T](
@@ -77,6 +108,9 @@ routine Range[T].$iter() -> RangeEmitter[T]
     done: me.is_empty()
   )
 
+### Returns the next value from this iterator.
+### :returns: The resulting `T` value.
+### :absent: Returns absent when the requested value is unavailable.
 @writable
 emitting routine RangeEmitter[T].$next() -> T
   if me.done

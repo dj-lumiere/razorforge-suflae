@@ -1213,21 +1213,24 @@ public partial class LLVMCodeGenerator
     private string EmitEmittingCallUnwrap(StringBuilder sb, string maybeResult,
         TypeInfo? valueType)
     {
-        // Store Maybe { i64, ptr } to memory for field extraction
+        // Store Maybe carrier to memory for field extraction
+        string maybeCarrierType = valueType != null
+            ? GetMaybeCarrierLLVMType(valueType: valueType)
+            : "{ i1, ptr }";
         string maybeAddr = NextTemp();
-        EmitEntryAlloca(llvmName: maybeAddr, llvmType: "{ i64, ptr }");
-        EmitLine(sb: sb, line: $"  store {{ i64, ptr }} {maybeResult}, ptr {maybeAddr}");
+        EmitEntryAlloca(llvmName: maybeAddr, llvmType: maybeCarrierType);
+        EmitLine(sb: sb, line: $"  store {maybeCarrierType} {maybeResult}, ptr {maybeAddr}");
 
-        // Extract tag (field 0 = DataState)
+        // Extract tag (field 0 = i1 for Maybe)
         string tagPtr = NextTemp();
         EmitLine(sb: sb,
-            line: $"  {tagPtr} = getelementptr {{ i64, ptr }}, ptr {maybeAddr}, i32 0, i32 0");
+            line: $"  {tagPtr} = getelementptr {maybeCarrierType}, ptr {maybeAddr}, i32 0, i32 0");
         string tag = NextTemp();
-        EmitLine(sb: sb, line: $"  {tag} = load i64, ptr {tagPtr}");
+        EmitLine(sb: sb, line: $"  {tag} = load i1, ptr {tagPtr}");
 
         // Branch: tag == 1 (VALID) → extract value, else → propagate ABSENT
         string isValid = NextTemp();
-        EmitLine(sb: sb, line: $"  {isValid} = icmp eq i64 {tag}, 1");
+        EmitLine(sb: sb, line: $"  {isValid} = icmp eq i1 {tag}, 1");
 
         string validLabel = NextLabel(prefix: "emit_unwrap_valid");
         string absentLabel = NextLabel(prefix: "emit_unwrap_absent");
@@ -1237,10 +1240,14 @@ public partial class LLVMCodeGenerator
         EmitLine(sb: sb, line: $"{absentLabel}:");
         if (_currentEmittingRoutine?.AsyncStatus == AsyncStatus.Emitting)
         {
-            // Inside an emitting routine: propagate absence to caller via { i64, ptr } carrier
+            // Inside an emitting routine: propagate absence via zeroinitializer
+            TypeInfo? callerElemType = _currentEmittingRoutine.ReturnType;
+            string callerCarrierType = callerElemType != null
+                ? GetMaybeCarrierLLVMType(valueType: callerElemType)
+                : "{ i1, ptr }";
             if (ShouldEmitTrace)
                 EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
-            EmitLine(sb: sb, line: "  ret { i64, ptr } { i64 0, ptr null }");
+            EmitLine(sb: sb, line: $"  ret {callerCarrierType} zeroinitializer");
         }
         else
         {
@@ -1248,27 +1255,28 @@ public partial class LLVMCodeGenerator
             EmitLine(sb: sb, line: "  unreachable");
         }
 
-        // VALID branch: extract handle pointer (field 1) and load the value
+        // VALID branch: extract field 1 and return the value
         EmitLine(sb: sb, line: $"{validLabel}:");
         _currentBlock = validLabel;
 
         string handlePtr = NextTemp();
         EmitLine(sb: sb,
-            line: $"  {handlePtr} = getelementptr {{ i64, ptr }}, ptr {maybeAddr}, i32 0, i32 1");
-        string handleVal = NextTemp();
-        EmitLine(sb: sb, line: $"  {handleVal} = load ptr, ptr {handlePtr}");
+            line: $"  {handlePtr} = getelementptr {maybeCarrierType}, ptr {maybeAddr}, i32 0, i32 1");
 
-        // For entity types, the value IS the pointer (no boxing) — return directly
+        // For entity types, field 1 is ptr — return it directly
         if (valueType is EntityTypeInfo)
         {
-            return handleVal;
+            string entityPtr = NextTemp();
+            EmitLine(sb: sb, line: $"  {entityPtr} = load ptr, ptr {handlePtr}");
+            return entityPtr;
         }
 
+        // Record/value: field 1 is inline T — load from handlePtr
         string unwrappedType = valueType != null
             ? GetLLVMType(type: valueType)
             : "i64";
         string unwrappedVal = NextTemp();
-        EmitLine(sb: sb, line: $"  {unwrappedVal} = load {unwrappedType}, ptr {handleVal}");
+        EmitLine(sb: sb, line: $"  {unwrappedVal} = load {unwrappedType}, ptr {handlePtr}");
 
         return unwrappedVal;
     }

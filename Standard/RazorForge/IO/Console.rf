@@ -9,9 +9,15 @@ module IO/Console
 # ============================================================================
 # Output: show() - Standard Output (stdout)
 # ============================================================================
-# Signature (when variadic is supported):
+### Performs `show` on this value.
+### :param value...: The `value...` value.
+### :param sep: The `sep` value.
+### :param end: The exclusive ending position.
 #   routine show(value...: Representable, sep: Text = " ", end: Text = "\n")           # Automatic dispatch
 
+### Performs `show` on this value.
+### :param value: The value to use.
+### :param end: The exclusive ending position.
 routine show(value: Text, end: Text = "\n")
   var value_cstr = CStr(from: value)
   rf_console_show(value_cstr.ptr, value_cstr.count())
@@ -19,6 +25,9 @@ routine show(value: Text, end: Text = "\n")
   rf_console_show(end_cstr.ptr, end_cstr.count())
   return
 
+### Performs `show` on this value.
+### :param value: The value to use.
+### :param end: The exclusive ending position.
 routine show(value: Bytes, end: Text = "\n")
   var value_cstr = CStr(from: value)
   rf_console_show(value_cstr.ptr, value_cstr.count())
@@ -26,6 +35,9 @@ routine show(value: Bytes, end: Text = "\n")
   rf_console_show(end_cstr.ptr, end_cstr.count())
   return
 
+### Performs `show` on this value.
+### :param value: The value to use.
+### :param end: The exclusive ending position.
 routine show[T](value: T, end: Text = "\n")
   var text = value.$represent()
   var value_cstr = CStr(from: text)
@@ -34,6 +46,10 @@ routine show[T](value: T, end: Text = "\n")
   rf_console_show(end_cstr.ptr, end_cstr.count())
   return
 
+### Performs `show` on this value.
+### :param values...: The `values...` value.
+### :param sep: The `sep` value.
+### :param end: The exclusive ending position.
 routine show[T](values...: T, sep: Text = " ", end: Text = "\n")
   var first = true
   for v in values
@@ -48,7 +64,9 @@ routine show[T](values...: T, sep: Text = " ", end: Text = "\n")
 # Output: alert() - Standard Error (stderr)
 # ============================================================================
 
-# alert for Text
+### Performs `alert` on this value.
+### :param value: The value to use.
+### :param end: The exclusive ending position.
 routine alert(value: Text, end: Text = "\n")
   var value_cstr = CStr(from: value)
   rf_console_alert(value_cstr.ptr, value_cstr.count())
@@ -56,7 +74,9 @@ routine alert(value: Text, end: Text = "\n")
   rf_console_alert(end_cstr.ptr, end_cstr.count())
   return
 
-# alert for Bytes (writes raw bytes directly)
+### Performs `alert` on this value.
+### :param value: The value to use.
+### :param end: The exclusive ending position.
 routine alert(value: Bytes, end: Text = "\n")
   var value_cstr = CStr(from: value)
   rf_console_alert(value_cstr.ptr, value_cstr.count())
@@ -64,6 +84,9 @@ routine alert(value: Bytes, end: Text = "\n")
   rf_console_alert(end_cstr.ptr, end_cstr.count())
   return
 
+### Performs `alert` on this value.
+### :param value: The value to use.
+### :param end: The exclusive ending position.
 routine alert[T](value: T, end: Text = "\n")
   var text = value.$diagnose()
   var value_cstr = CStr(from: text)
@@ -72,6 +95,10 @@ routine alert[T](value: T, end: Text = "\n")
   rf_console_alert(end_cstr.ptr, end_cstr.count())
   return
 
+### Performs `alert` on this value.
+### :param values...: The `values...` value.
+### :param sep: The `sep` value.
+### :param end: The exclusive ending position.
 routine alert[T](values...: T, sep: Text = " ", end: Text = "\n")
   var first = true
   for v in values
@@ -86,7 +113,8 @@ routine alert[T](values...: T, sep: Text = " ", end: Text = "\n")
 # Input: Text functions (default)
 # ============================================================================
 
-# Read text until newline (single line)
+### Returns the result of `ask line`.
+### :returns: The resulting `Text` value.
 routine ask_line() -> Text
   var addr = rf_console_ask_line()
   var ptr = Snatched[Byte](addr)
@@ -95,7 +123,8 @@ routine ask_line() -> Text
   var bytes = Bytes(ptr: ptr)
   return bytes.decode_as_utf8()
 
-# Read text until whitespace (single word)
+### Returns the result of `ask word`.
+### :returns: The resulting `Text` value.
 routine ask_word() -> Text
   var addr = rf_console_ask_word()
   var ptr = Snatched[Byte](addr)
@@ -104,7 +133,8 @@ routine ask_word() -> Text
   var bytes = Bytes(ptr: ptr)
   return bytes.decode_as_utf8()
 
-# Read all text until EOF
+### Returns the result of `ask all`.
+### :returns: The resulting `Text` value.
 routine ask_all() -> Text
   var addr = rf_console_ask_all()
   var ptr = Snatched[Byte](addr)
@@ -113,13 +143,15 @@ routine ask_all() -> Text
   var bytes = Bytes(ptr: ptr)
   return bytes.decode_as_utf8()
 
-# Read all lines separated by newline
+### Returns the result of `ask lines`.
+### :returns: The resulting `List[Text]` value.
 routine ask_lines() -> List[Text]
   var all = ask_all()
   var normalized = all.replace("\r\n", "\n")
   return normalized.split(CHARACTER_NEWLINE)
 
-# Read all words separated by whitespace
+### Returns the result of `ask words`.
+### :returns: The resulting `List[Text]` value.
 routine ask_words() -> List[Text]
   var all = ask_all()
   return all.words()
@@ -128,7 +160,8 @@ routine ask_words() -> List[Text]
 # Input: Bytes functions (opt-in)
 # ============================================================================
 
-# Read all remaining input as raw bytes
+### Returns the result of `ask raw`.
+### :returns: The resulting `Bytes` value.
 routine ask_raw() -> Bytes
   var addr = rf_console_ask_all()
   var ptr = Snatched[Byte](addr)
@@ -136,7 +169,9 @@ routine ask_raw() -> Bytes
     return Bytes()
   return Bytes(ptr: ptr)
 
-# Read up to n bytes
+### Returns the result of `ask bytes`.
+### :param count: The number of items to use.
+### :returns: The resulting `Bytes` value.
 routine ask_bytes(count: U64) -> Bytes
   var addr = rf_console_ask_bytes(count)
   var ptr = Snatched[Byte](addr)

@@ -1,15 +1,24 @@
 # InPlaceShiftable - Protocol for types that support in-place shift operations
 module Core
 
+### Defines the protocol `InPlaceShiftable`.
 protocol InPlaceShiftable
+  ### Implements the wired routine behavior for this value.
+  ### :param amount: The `amount` value.
   @writable
   routine Me.$iashl(amount: Integral)
 
+  ### Implements the wired routine behavior for this value.
+  ### :param amount: The `amount` value.
   @writable
   routine Me.$iashr(amount: Integral)
 
+  ### Implements the wired routine behavior for this value.
+  ### :param amount: The `amount` value.
   @writable
   routine Me.$ilshl(amount: Integral)
 
+  ### Implements the wired routine behavior for this value.
+  ### :param amount: The `amount` value.
   @writable
   routine Me.$ilshr(amount: Integral)

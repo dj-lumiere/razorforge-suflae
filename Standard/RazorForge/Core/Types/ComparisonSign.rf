@@ -5,6 +5,7 @@
 
 module Core
 
+### Defines the choice `ComparisonSign`.
 choice ComparisonSign
   ME_SMALL: -1
   SAME: 0

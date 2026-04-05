@@ -1,6 +1,11 @@
 # Container - Protocol for types that support membership testing (in, notin)
 module Core
 
+### Defines the protocol `Container`.
+### :typeparam T: The value used for `T`.
 protocol Container[T]
+  ### Returns whether this value contains `value`.
+  ### :param value: The value to use.
+  ### :returns: The resulting `Bool` value.
   @readonly
   routine Me.$contains(value: T) -> Bool
