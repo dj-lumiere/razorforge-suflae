@@ -1157,20 +1157,21 @@ internal partial class Program
             path3: "build",
             path4: "lib");
 
-        string optLevel = buildMode switch
+        string optPipelineLevel = buildMode switch
         {
-            RfBuildMode.Release => "-O2",
-            RfBuildMode.ReleaseTime => "-O3",
-            RfBuildMode.ReleaseSpace => "-Os",
-            _ => "-O0"
+            RfBuildMode.Release => "O2",
+            RfBuildMode.ReleaseTime => "O3",
+            RfBuildMode.ReleaseSpace => "Os",
+            _ => "O0"
         };
 
         // Debug: run mem2reg+sroa at O0 (improves readability without changing semantics).
-        // Optimized builds: run opt at the requested level (which includes mem2reg+sroa).
-        string optPasses = buildMode == RfBuildMode.Debug
-            ? $"{optLevel} -passes=mem2reg,sroa"
-            : optLevel;
-        string optArgs = $"-S {optPasses} \"{llFile}\" -o \"{optFile}\"";
+        // Optimized builds: run the full pipeline at the requested level (includes mem2reg+sroa).
+        // Use -passes='default<Ox>,...' syntax (LLVM 14+; replaces the -Ox -passes=... split form).
+        string optPipeline = buildMode == RfBuildMode.Debug
+            ? $"default<{optPipelineLevel}>,mem2reg,sroa"
+            : $"default<{optPipelineLevel}>";
+        string optArgs = $"-S -passes={optPipeline} \"{llFile}\" -o \"{optFile}\"";
         var optPsi = new ProcessStartInfo
         {
             FileName = "opt",
@@ -1206,12 +1207,13 @@ internal partial class Program
             optFile = llFile;
         }
 
-        // Compile .ll → .exe using clang
+        // Compile .ll → .exe using clang (clang uses -Ox flag style, not opt's -passes= form)
+        string clangOptLevel = $"-{optPipelineLevel}";
         string windowsThreadingLibs = OperatingSystem.IsWindows()
             ? " -lucrt -lmsvcrt -lkernel32"
             : "";
         string clangArgs =
-            $"{optLevel} -o \"{exeFile}\" \"{optFile}\" -L\"{runtimeLibDir}\" -lrazorforge_runtime{windowsThreadingLibs}";
+            $"{clangOptLevel} -o \"{exeFile}\" \"{optFile}\" -L\"{runtimeLibDir}\" -lrazorforge_runtime{windowsThreadingLibs}";
 
         var clangPsi = new ProcessStartInfo
         {
