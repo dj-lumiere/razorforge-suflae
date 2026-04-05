@@ -84,9 +84,25 @@ public partial class Tokenizer
             return;
         }
 
-        // Skip lines with only comments (don't change indentation state)
+        int newIndentLevel = spaces / 2;
+
+        // Skip lines with only comments (don't change indentation state).
+        // Exception: if a doc comment (###) opens a new block (indentation increases), still
+        // emit the Indent token so the parser can enter the block. This handles ### doc comments
+        // as the first content in entity/record/choice/etc. bodies.
+        // Regular comments (# or ##) are never treated as block openers.
         if (Peek() == '#')
         {
+            bool isDocComment = Peek(offset: 1) == '#' && Peek(offset: 2) == '#';
+            if (isDocComment && newIndentLevel > _currentIndentLevel)
+            {
+                if (_tokens.Count == 0 || _tokens[^1].Type != TokenType.Newline)
+                {
+                    AddToken(type: TokenType.Newline, text: "\\n");
+                }
+                AddToken(type: TokenType.Indent, text: "");
+                _currentIndentLevel = newIndentLevel;
+            }
             return;
         }
 
@@ -95,8 +111,6 @@ public partial class Tokenizer
         {
             return;
         }
-
-        int newIndentLevel = spaces / 2;
 
         // Validate indentation alignment
         if (spaces % 2 != 0)

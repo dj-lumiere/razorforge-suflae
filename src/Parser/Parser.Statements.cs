@@ -355,8 +355,8 @@ public partial class Parser
 
         while (!AtClauseEnd())
         {
-            // Skip newlines between clauses
-            if (Match(type: TokenType.Newline))
+            // Skip newlines and doc comments between clauses
+            if (Match(TokenType.Newline, TokenType.DocComment))
             {
                 continue;
             }

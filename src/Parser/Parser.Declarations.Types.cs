@@ -293,7 +293,7 @@ public partial class Parser
 
         while (!Check(type: TokenType.Dedent) && !IsAtEnd)
         {
-            if (Match(type: TokenType.Newline))
+            if (Match(TokenType.Newline, TokenType.DocComment))
             {
                 continue;
             }
