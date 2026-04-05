@@ -583,7 +583,7 @@ public partial class LLVMCodeGenerator
                 EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
 
             // Auto-wrap bare values in Maybe when function returns Maybe[T] but expression is T
-            else if (IsMaybeType(type: retType) && value != "zeroinitializer")
+            if (IsMaybeType(type: retType) && value != "zeroinitializer")
             {
                 TypeInfo? exprType = GetExpressionType(expr: ret.Value);
                 if (exprType == null || !IsMaybeType(type: exprType))
