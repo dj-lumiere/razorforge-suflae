@@ -7,4 +7,4 @@ protocol Iterator[T]
   ### Returns the next value from this iterator.
   ### :returns: The resulting `T` value.
   @writable
-  emitting routine Me.$next() -> T
+  emitting routine Me.$next!() -> T
