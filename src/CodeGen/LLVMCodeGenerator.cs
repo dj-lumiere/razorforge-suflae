@@ -285,7 +285,6 @@ public partial class LLVMCodeGenerator
             RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
             EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
             ProtocolTypeInfo { GenericDefinition: not null } p => p.GenericDefinition,
-            ErrorHandlingTypeInfo { GenericDefinition: not null } eh => eh.GenericDefinition,
             VariantTypeInfo { GenericDefinition: not null } v => v.GenericDefinition,
             _ => null
         };

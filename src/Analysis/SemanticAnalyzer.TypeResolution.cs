@@ -208,12 +208,11 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Reject Blank as a type argument (except Result<Blank> and Lookup<Blank> for failable void routines)
+        string? genericDefCarrierName = GetCarrierBaseName(type: genericDef);
         foreach (TypeSymbol arg in typeArgs)
         {
-            if (arg is not { Name: "Blank" } || genericDef is ErrorHandlingTypeInfo
-                {
-                    Kind: ErrorHandlingKind.Result or ErrorHandlingKind.Lookup
-                })
+            if (arg is not { Name: "Blank" } ||
+                genericDefCarrierName is "Result" or "Lookup")
             {
                 continue;
             }
@@ -226,8 +225,7 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Reject Maybe<Data> — Data already supports None
-        if (genericDef is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Maybe } &&
-            typeArgs[index: 0] is { Name: "Data" })
+        if (genericDefCarrierName == "Maybe" && typeArgs[index: 0] is { Name: "Data" })
         {
             ReportError(code: SemanticDiagnosticCode.NullableDataProhibited,
                 message: "'Data?' is not allowed. 'Data' already supports 'None' natively.",
@@ -235,8 +233,7 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Reject nested Maybe types (#83): Maybe[Maybe[T]] / T??
-        if (genericDef is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Maybe } &&
-            typeArgs[index: 0] is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Maybe })
+        if (genericDefCarrierName == "Maybe" && IsMaybeType(type: typeArgs[index: 0]))
         {
             ReportError(code: SemanticDiagnosticCode.NestedMaybeProhibited,
                 message:

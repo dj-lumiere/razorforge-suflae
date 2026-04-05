@@ -49,6 +49,36 @@ internal enum NumericTypeKind
 /// </summary>
 public sealed partial class SemanticAnalyzer
 {
+    #region Carrier Type Helpers
+
+    /// <summary>
+    /// Returns the base name ("Maybe", "Result", or "Lookup") for a carrier type,
+    /// or null if the type is not a carrier type.
+    /// Works for both generic definitions (name == "Maybe") and resolved instances (GenericDefinition.Name == "Maybe").
+    /// </summary>
+    private static string? GetCarrierBaseName(TypeSymbol type)
+    {
+        if (type is not RecordTypeInfo r)
+        {
+            return null;
+        }
+
+        string baseName = r.GenericDefinition?.Name ?? r.Name;
+        return baseName is "Maybe" or "Result" or "Lookup" ? baseName : null;
+    }
+
+    /// <summary>
+    /// Returns true if the type is a carrier type (Maybe, Result, or Lookup).
+    /// </summary>
+    private static bool IsCarrierType(TypeSymbol type) => GetCarrierBaseName(type: type) != null;
+
+    /// <summary>
+    /// Returns true if the type is a Maybe carrier type.
+    /// </summary>
+    private static bool IsMaybeType(TypeSymbol type) => GetCarrierBaseName(type: type) == "Maybe";
+
+    #endregion
+
     #region Helper Methods for Analysis
 
     /// <summary>
@@ -730,4 +760,5 @@ public sealed partial class SemanticAnalyzer
     }
 
     #endregion
+
 }

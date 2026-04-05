@@ -446,10 +446,7 @@ public sealed partial class SemanticAnalyzer
                     message: $"Variant member '{memberTypeName}' cannot be a nested variant type.",
                     location: member.Location);
             }
-            else if (memberType is ErrorHandlingTypeInfo
-                     {
-                         Kind: ErrorHandlingKind.Result or ErrorHandlingKind.Lookup
-                     })
+            else if (IsCarrierType(type: memberType) && !IsMaybeType(type: memberType))
             {
                 ReportError(code: SemanticDiagnosticCode.VariantCaseContainsInvalidType,
                     message: $"Variant member '{memberTypeName}' cannot be '{memberType.Name}'. " +

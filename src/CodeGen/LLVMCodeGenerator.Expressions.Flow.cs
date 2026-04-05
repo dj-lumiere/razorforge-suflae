@@ -326,7 +326,7 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Emits the ?? (none coalesce) operator.
-    /// If the left operand (ErrorHandlingTypeInfo) is VALID, extracts its value.
+    /// If the left operand (carrier type) is VALID, extracts its value.
     /// Otherwise evaluates and returns the right operand as default.
     /// </summary>
     private string EmitNoneCoalesce(StringBuilder sb, BinaryExpression binary)
@@ -334,10 +334,10 @@ public partial class LLVMCodeGenerator
         string left = EmitExpression(sb: sb, expr: binary.Left);
         TypeInfo? leftType = GetExpressionType(expr: binary.Left);
 
-        if (leftType is not ErrorHandlingTypeInfo errorType)
+        if (leftType == null || !IsCarrierType(type: leftType))
         {
             throw new InvalidOperationException(
-                message: "'??' operator requires ErrorHandlingTypeInfo on the left");
+                message: "'??' operator requires a carrier type (Maybe/Result/Lookup) on the left");
         }
 
         // Use proper LLVM type for the maybe/error-handling value
@@ -349,8 +349,8 @@ public partial class LLVMCodeGenerator
         EmitLine(sb: sb, line: $"  store {maybeType} {left}, ptr {allocaPtr}");
 
         // Extract tag (field 0)
-        string tagType = GetCarrierTagType(kind: errorType.Kind);
-        string validTag = GetCarrierValidTag(errorType: errorType);
+        string tagType = GetCarrierTagType(kind: GetCarrierKind(type: leftType));
+        string validTag = GetCarrierValidTag(type: leftType);
         string tagPtr = NextTemp();
         string tag = NextTemp();
         EmitLine(sb: sb,
@@ -376,7 +376,7 @@ public partial class LLVMCodeGenerator
             line: $"  {handlePtr} = getelementptr {maybeType}, ptr {allocaPtr}, i32 0, i32 1");
 
         // Determine the value type T
-        TypeInfo valueType = errorType.ValueType;
+        TypeInfo valueType = leftType.TypeArguments![0];
         string llvmValueType = GetLLVMType(type: valueType);
 
         string validValue;
@@ -386,7 +386,7 @@ public partial class LLVMCodeGenerator
             validValue = NextTemp();
             EmitLine(sb: sb, line: $"  {validValue} = load ptr, ptr {handlePtr}");
         }
-        else if (errorType.Kind == ErrorHandlingKind.Maybe)
+        else if (IsMaybeType(type: leftType))
         {
             // Record Maybe: field 1 is inline T — load it from handlePtr
             validValue = NextTemp();
@@ -426,7 +426,7 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Emits the !! (force unwrap) operator.
-    /// If the operand (ErrorHandlingTypeInfo) is VALID, extracts its value.
+    /// If the operand (carrier type) is VALID, extracts its value.
     /// Otherwise traps (crashes the program).
     /// </summary>
     private string EmitForceUnwrap(StringBuilder sb, UnaryExpression unary)
@@ -434,24 +434,16 @@ public partial class LLVMCodeGenerator
         string operand = EmitExpression(sb: sb, expr: unary.Operand);
         TypeInfo? operandType = GetExpressionType(expr: unary.Operand);
 
-        // Determine the value type inside the Maybe/ErrorHandling wrapper
-        TypeInfo? valueType = null;
-        if (operandType is ErrorHandlingTypeInfo errorType)
-        {
-            valueType = errorType.ValueType;
-        }
-        else if (operandType != null && GetGenericBaseName(type: operandType) == "Maybe" &&
-                 operandType.TypeArguments is { Count: 1 })
-        {
-            // Handle Maybe types that were resolved as RecordTypeInfo by the registry cache
-            valueType = operandType.TypeArguments[index: 0];
-        }
+        // Determine the value type inside the Maybe/Result/Lookup wrapper
+        TypeInfo? valueType = operandType != null && IsCarrierType(type: operandType)
+            ? operandType.TypeArguments![0]
+            : null;
 
         if (valueType == null)
         {
             throw new InvalidOperationException(
                 message:
-                $"'!!' operator requires Maybe/ErrorHandling operand, got {operandType?.GetType().Name ?? "null"}: {operandType?.Name ?? "null"}");
+                $"'!!' operator requires Maybe/Result/Lookup operand, got {operandType?.GetType().Name ?? "null"}: {operandType?.Name ?? "null"}");
         }
 
         // Declare llvm.trap if not already declared
@@ -470,9 +462,7 @@ public partial class LLVMCodeGenerator
         // Determine tag type and valid discriminant from the carrier kind
         ErrorHandlingKind carrierKind = GetCarrierKind(type: operandType!);
         string tagType = GetCarrierTagType(kind: carrierKind);
-        string validTag = operandType is ErrorHandlingTypeInfo ehValid
-            ? GetCarrierValidTag(errorType: ehValid)
-            : "1"; // Maybe[T] from RecordTypeInfo: valid = Bool true = 1
+        string validTag = GetCarrierValidTag(type: operandType!);
 
         // Extract tag (field 0)
         string tagPtr = NextTemp();
@@ -511,7 +501,7 @@ public partial class LLVMCodeGenerator
             return entityPtr;
         }
 
-        if (carrierKind != ErrorHandlingKind.Maybe)
+        if (!IsMaybeType(type: operandType!))
         {
             // Result/Lookup: field 1 is i64 address — inttoptr then load T
             string llvmValueType = GetLLVMType(type: valueType);
@@ -543,11 +533,11 @@ public partial class LLVMCodeGenerator
         string obj = EmitExpression(sb: sb, expr: optMember.Object);
         TypeInfo? objType = GetExpressionType(expr: optMember.Object);
 
-        if (objType is ErrorHandlingTypeInfo errorType)
+        if (objType != null && IsCarrierType(type: objType))
         {
             return EmitOptionalChainErrorHandling(sb: sb,
                 obj: obj,
-                errorType: errorType,
+                carrierType: objType,
                 propertyName: optMember.PropertyName);
         }
 
@@ -612,24 +602,24 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Optional chaining on an ErrorHandlingTypeInfo: check VALID → extract value → member access, or zero.
+    /// Optional chaining on a carrier type (Maybe/Result/Lookup): check VALID → extract value → member access, or zero.
     /// </summary>
     private string EmitOptionalChainErrorHandling(StringBuilder sb, string obj,
-        ErrorHandlingTypeInfo errorType, string propertyName)
+        TypeInfo carrierType, string propertyName)
     {
         // Alloca and store the carrier value
-        string carrierType = GetCarrierLLVMType(errorType: errorType);
+        string carrierLlvmType = GetCarrierLLVMType(type: carrierType);
         string allocaPtr = NextTemp();
-        EmitEntryAlloca(llvmName: allocaPtr, llvmType: carrierType);
-        EmitLine(sb: sb, line: $"  store {carrierType} {obj}, ptr {allocaPtr}");
+        EmitEntryAlloca(llvmName: allocaPtr, llvmType: carrierLlvmType);
+        EmitLine(sb: sb, line: $"  store {carrierLlvmType} {obj}, ptr {allocaPtr}");
 
         // Extract tag
-        string tagType = GetCarrierTagType(kind: errorType.Kind);
-        string validTag = GetCarrierValidTag(errorType: errorType);
+        string tagType = GetCarrierTagType(kind: GetCarrierKind(type: carrierType));
+        string validTag = GetCarrierValidTag(type: carrierType);
         string tagPtr = NextTemp();
         string tag = NextTemp();
         EmitLine(sb: sb,
-            line: $"  {tagPtr} = getelementptr {carrierType}, ptr {allocaPtr}, i32 0, i32 0");
+            line: $"  {tagPtr} = getelementptr {carrierLlvmType}, ptr {allocaPtr}, i32 0, i32 0");
         EmitLine(sb: sb, line: $"  {tag} = load {tagType}, ptr {tagPtr}");
 
         string isValid = NextTemp();
@@ -645,12 +635,12 @@ public partial class LLVMCodeGenerator
         EmitLine(sb: sb, line: $"{validLabel}:");
         _currentBlock = validLabel;
 
-        TypeInfo valueType = errorType.ValueType;
+        TypeInfo valueType = carrierType.TypeArguments![0];
         string llvmValueType = GetLLVMType(type: valueType);
 
         string handlePtr = NextTemp();
         EmitLine(sb: sb,
-            line: $"  {handlePtr} = getelementptr {carrierType}, ptr {allocaPtr}, i32 0, i32 1");
+            line: $"  {handlePtr} = getelementptr {carrierLlvmType}, ptr {allocaPtr}, i32 0, i32 1");
 
         string innerValue;
         if (valueType is EntityTypeInfo)
@@ -658,7 +648,7 @@ public partial class LLVMCodeGenerator
             innerValue = NextTemp();
             EmitLine(sb: sb, line: $"  {innerValue} = load ptr, ptr {handlePtr}");
         }
-        else if (errorType.Kind != ErrorHandlingKind.Maybe)
+        else if (!IsMaybeType(type: carrierType))
         {
             // Result/Lookup: field 1 is i64 address
             string addrVal = NextTemp();

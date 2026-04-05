@@ -3,7 +3,6 @@ using SemanticAnalysis.Symbols;
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis.Enums;
 using SemanticAnalysis.Types;
 using SyntaxTree;
 
@@ -308,10 +307,12 @@ public partial class LLVMCodeGenerator
             RoutineInfo? nextLookup =
                 _registry.LookupMethod(type: emitterType, methodName: "try_next");
             // Skip protocol-typed return values — they need further resolution
-            if (nextLookup?.ReturnType is ErrorHandlingTypeInfo { ValueType: not null } errType &&
-                errType.ValueType is not ProtocolTypeInfo)
+            if (nextLookup?.ReturnType != null &&
+                IsCarrierType(type: nextLookup.ReturnType) &&
+                nextLookup.ReturnType.TypeArguments is { Count: > 0 } &&
+                nextLookup.ReturnType.TypeArguments[index: 0] is not ProtocolTypeInfo)
             {
-                elemType = errType.ValueType;
+                elemType = nextLookup.ReturnType.TypeArguments[index: 0];
             }
             else if (nextLookup?.ReturnType != null &&
                      nextLookup.ReturnType is not ProtocolTypeInfo)
@@ -464,7 +465,7 @@ public partial class LLVMCodeGenerator
         }
 
         // Extract tag from Maybe result (field 0 = Bool present)
-        string maybeTagType = GetCarrierTagType(kind: ErrorHandlingKind.Maybe);
+        string maybeTagType = "i1";
         string maybeTagPtr = NextTemp();
         EmitEntryAlloca(llvmName: maybeTagPtr, llvmType: maybeRetType);
         EmitLine(sb: sb, line: $"  store {maybeRetType} {maybeResult}, ptr {maybeTagPtr}");

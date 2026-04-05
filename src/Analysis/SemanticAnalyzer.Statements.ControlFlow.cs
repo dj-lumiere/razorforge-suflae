@@ -232,10 +232,10 @@ public sealed partial class SemanticAnalyzer
 
             switch (clause.Pattern)
             {
-                case ElsePattern elsePat when matchedType is ErrorHandlingTypeInfo ehType:
+                case ElsePattern elsePat when IsCarrierType(type: matchedType):
                 {
                     // Compute narrowed type for else clause binding
-                    TypeSymbol? narrowedType = ComputeNarrowedType(type: ehType,
+                    TypeSymbol? narrowedType = ComputeNarrowedType(type: matchedType,
                         eliminateNone: handledNone,
                         eliminateCrashable: handledCrashable);
 
@@ -264,7 +264,7 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Check exhaustiveness for enumerable types (choice, variant, error-handling)
-        if (matchedType is ChoiceTypeInfo or VariantTypeInfo or ErrorHandlingTypeInfo)
+        if (matchedType is ChoiceTypeInfo or VariantTypeInfo || IsCarrierType(type: matchedType))
         {
             bool hasCatchAll = whenStmt.Clauses.Any(predicate: c =>
                 c.Pattern is WildcardPattern or ElsePattern or IdentifierPattern);
@@ -282,10 +282,8 @@ public sealed partial class SemanticAnalyzer
                         : "";
 
                     // #89: Result/Lookup missing Crashable catch-all is an error, not a warning
-                    if (matchedType is ErrorHandlingTypeInfo
-                        {
-                            Kind: ErrorHandlingKind.Result or ErrorHandlingKind.Lookup
-                        } && exhaustiveness.MissingCases.Contains(item: "Crashable"))
+                    if (IsCarrierType(type: matchedType) && !IsMaybeType(type: matchedType) &&
+                        exhaustiveness.MissingCases.Contains(item: "Crashable"))
                     {
                         ReportError(code: SemanticDiagnosticCode.NonExhaustiveMatch,
                             message:

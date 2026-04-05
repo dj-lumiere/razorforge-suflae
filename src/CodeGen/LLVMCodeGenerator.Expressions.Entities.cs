@@ -1,7 +1,6 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis.Enums;
 using SemanticAnalysis.Symbols;
 using SemanticAnalysis.Types;
 using SyntaxTree;
@@ -397,8 +396,7 @@ public partial class LLVMCodeGenerator
         string wrapperLlvmType = GetLLVMType(type: memberType!);
         TypeInfo? valueType = memberType switch
         {
-            ErrorHandlingTypeInfo eh => eh.ValueType,
-            RecordTypeInfo r when GetGenericBaseName(type: r) == "Maybe" &&
+            RecordTypeInfo r when IsCarrierType(type: r) &&
                                   r.TypeArguments is { Count: > 0 } => r.TypeArguments[index: 0],
             _ => null
         };
@@ -415,8 +413,8 @@ public partial class LLVMCodeGenerator
         EmitEntryAlloca(llvmName: allocaPtr, llvmType: wrapperLlvmType);
         EmitLine(sb: sb, line: $"  store {wrapperLlvmType} {maybeValue}, ptr {allocaPtr}");
 
-        // Extract tag
-        string tagType = GetCarrierTagType(kind: ErrorHandlingKind.Maybe);
+        // Extract tag (Maybe always uses i1 tag)
+        string tagType = "i1";
         string tagPtr = NextTemp();
         string tag = NextTemp();
         EmitLine(sb: sb,
@@ -729,13 +727,6 @@ public partial class LLVMCodeGenerator
         value = 0;
         return false;
     }
-
-    private static bool IsMaybeType(TypeInfo type)
-    {
-        return type is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Maybe } ||
-               type is RecordTypeInfo r && GetGenericBaseName(type: r) == "Maybe";
-    }
-
 
     /// <summary>
     /// Refreshes entity member variables for resolved generic types that may have stale or empty members.

@@ -398,8 +398,9 @@ public sealed partial class SemanticAnalyzer
         {
             TypeSymbol depType = AnalyzeExpression(expression: dep.DependencyExpr);
 
-            // Dependency must be Lookup<T> type
-            if (depType is not ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Lookup } lookupType)
+            // Dependency must be Lookup[T] type
+            if (GetCarrierBaseName(type: depType) != "Lookup" ||
+                depType.TypeArguments is not { Count: > 0 })
             {
                 ReportError(code: SemanticDiagnosticCode.DependencyNotLookupType,
                     message: $"Task dependency must be a Lookup[T] type, got '{depType.Name}'.",
@@ -413,8 +414,9 @@ public sealed partial class SemanticAnalyzer
             }
             else if (dep.BindingName != null)
             {
-                // Introduce the binding variable with the unwrapped type T from Lookup<T>
-                _registry.DeclareVariable(name: dep.BindingName, type: lookupType.ValueType);
+                // Introduce the binding variable with the unwrapped type T from Lookup[T]
+                _registry.DeclareVariable(name: dep.BindingName,
+                    type: depType.TypeArguments[index: 0]);
             }
         }
 
@@ -460,8 +462,14 @@ public sealed partial class SemanticAnalyzer
                 location: depWaitfor.Location);
         }
 
-        // Result type is Lookup<R> where R is the operand type
-        return ErrorHandlingTypeInfo.WellKnown.LookupDefinition.CreateInstance(typeArguments:
-            [operandType]);
+        // Result type is Lookup[R] where R is the operand type
+        TypeSymbol? lookupDef = _registry.LookupType(name: "Lookup");
+        if (lookupDef == null)
+        {
+            return ErrorTypeInfo.Instance;
+        }
+
+        return _registry.GetOrCreateResolution(genericDef: lookupDef,
+            typeArguments: [operandType]);
     }
 }

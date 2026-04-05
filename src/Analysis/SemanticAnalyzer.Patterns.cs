@@ -51,8 +51,7 @@ public sealed partial class SemanticAnalyzer
                 // None is a keyword, not a registered type — handle it directly
                 if (typePat.Type.Name == "None")
                 {
-                    if (matchedType is not ErrorTypeInfo &&
-                        matchedType.Category != TypeCategory.ErrorHandling)
+                    if (matchedType is not ErrorTypeInfo && !IsCarrierType(type: matchedType))
                     {
                         ReportError(code: SemanticDiagnosticCode.PatternTypeMismatch,
                             message:
@@ -529,8 +528,8 @@ public sealed partial class SemanticAnalyzer
             return ImplementsProtocol(type: matchedType, protocolName: patternType.Name);
         }
 
-        // Error handling types (Maybe<T>, Result<T>, Lookup<T>) - allow matching inner types
-        if (matchedType.Category == TypeCategory.ErrorHandling)
+        // Carrier types (Maybe<T>, Result<T>, Lookup<T>) - allow matching inner types
+        if (IsCarrierType(type: matchedType))
         {
             return true;
         }
@@ -572,19 +571,35 @@ public sealed partial class SemanticAnalyzer
             }
         }
 
-        return matchedType switch
+        if (matchedType is ChoiceTypeInfo choice)
         {
-            ChoiceTypeInfo choice => CheckChoiceExhaustiveness(clauses: clauses, choice: choice),
-            VariantTypeInfo variant => CheckVariantExhaustiveness(clauses: clauses,
+            return CheckChoiceExhaustiveness(clauses: clauses, choice: choice);
+        }
+
+        if (matchedType is VariantTypeInfo variant)
+        {
+            return CheckVariantExhaustiveness(clauses: clauses,
                 members: variant.Members,
-                typeName: variant.Name),
-            ErrorHandlingTypeInfo eh => CheckErrorHandlingExhaustiveness(clauses: clauses,
-                ehType: eh),
+                typeName: variant.Name);
+        }
+
+        if (IsCarrierType(type: matchedType))
+        {
+            return CheckErrorHandlingExhaustiveness(clauses: clauses, carrierType: matchedType);
+        }
+
+        if (matchedType is FlagsTypeInfo)
+        {
             // #129: Flags when always requires else — too many combinations to exhaustively check
-            FlagsTypeInfo => new ExhaustivenessResult(IsExhaustive: false, MissingCases: ["else"]),
-            _ when matchedType.Name == "Bool" => CheckBoolExhaustiveness(clauses: clauses),
-            _ => new ExhaustivenessResult(IsExhaustive: false, MissingCases: [])
-        };
+            return new ExhaustivenessResult(IsExhaustive: false, MissingCases: ["else"]);
+        }
+
+        if (matchedType.Name == "Bool")
+        {
+            return CheckBoolExhaustiveness(clauses: clauses);
+        }
+
+        return new ExhaustivenessResult(IsExhaustive: false, MissingCases: []);
     }
 
     /// <summary>
@@ -741,7 +756,7 @@ public sealed partial class SemanticAnalyzer
     /// Checks whether Maybe/Result/Lookup error handling types are exhaustively matched.
     /// </summary>
     private ExhaustivenessResult CheckErrorHandlingExhaustiveness(
-        IReadOnlyList<WhenClause> clauses, ErrorHandlingTypeInfo ehType)
+        IReadOnlyList<WhenClause> clauses, TypeSymbol carrierType)
     {
         bool hasNone = false;
         bool hasCrashableCatchAll = false;
@@ -766,10 +781,11 @@ public sealed partial class SemanticAnalyzer
         }
 
         var missing = new List<string>();
+        string? carrierBaseName = GetCarrierBaseName(type: carrierType);
 
-        switch (ehType.Kind)
+        switch (carrierBaseName)
         {
-            case ErrorHandlingKind.Maybe:
+            case "Maybe":
                 if (!hasNone)
                 {
                     missing.Add(item: "None");
@@ -781,7 +797,7 @@ public sealed partial class SemanticAnalyzer
                 }
 
                 break;
-            case ErrorHandlingKind.Result:
+            case "Result":
                 if (!hasCrashableCatchAll)
                 {
                     missing.Add(item: "Crashable");
@@ -793,7 +809,7 @@ public sealed partial class SemanticAnalyzer
                 }
 
                 break;
-            case ErrorHandlingKind.Lookup:
+            case "Lookup":
                 if (!hasNone)
                 {
                     missing.Add(item: "None");

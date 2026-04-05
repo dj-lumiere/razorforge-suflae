@@ -3,7 +3,6 @@ using SemanticAnalysis.Symbols;
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis.Enums;
 using SemanticAnalysis.Types;
 using SyntaxTree;
 
@@ -323,17 +322,17 @@ public partial class LLVMCodeGenerator
             : matchLabel;
 
         // Error-handling carriers: Maybe checks i1 tag, Result/Lookup compare i64 type_id
-        if (subjectType is ErrorHandlingTypeInfo errorInfo)
+        if (subjectType != null && IsCarrierType(type: subjectType))
         {
-            string carrierType = GetCarrierLLVMType(errorType: errorInfo);
-            string tagType = GetCarrierTagType(kind: errorInfo.Kind);
+            string carrierLlvmType = GetCarrierLLVMType(type: subjectType);
+            string tagType = GetCarrierTagType(kind: GetCarrierKind(type: subjectType));
             string tagPtr = NextTemp();
             string tag = NextTemp();
             EmitLine(sb: sb,
-                line: $"  {tagPtr} = getelementptr {carrierType}, ptr {subject}, i32 0, i32 0");
+                line: $"  {tagPtr} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 0");
             EmitLine(sb: sb, line: $"  {tag} = load {tagType}, ptr {tagPtr}");
 
-            string expectedTag = errorInfo.Kind == ErrorHandlingKind.Maybe
+            string expectedTag = IsMaybeType(type: subjectType)
                 ? "1"
                 : (targetType != null
                     ? ComputeTypeId(fullName: targetType.FullName).ToString()
@@ -347,11 +346,11 @@ public partial class LLVMCodeGenerator
                 EmitLine(sb: sb, line: $"{branchTarget}:");
                 string varAddr = $"%{typePattern.VariableName}.addr";
 
-                if (errorInfo.Kind == ErrorHandlingKind.Maybe)
+                if (IsMaybeType(type: subjectType))
                 {
                     string valPtr = NextTemp();
                     EmitLine(sb: sb,
-                        line: $"  {valPtr} = getelementptr {carrierType}, ptr {subject}, i32 0, i32 1");
+                        line: $"  {valPtr} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 1");
                     if (targetType is EntityTypeInfo or WrapperTypeInfo)
                     {
                         string ptrVal = NextTemp();
@@ -375,7 +374,7 @@ public partial class LLVMCodeGenerator
                     string addrVal = NextTemp();
                     string handleVal = NextTemp();
                     EmitLine(sb: sb,
-                        line: $"  {addrPtr} = getelementptr {carrierType}, ptr {subject}, i32 0, i32 1");
+                        line: $"  {addrPtr} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 1");
                     EmitLine(sb: sb, line: $"  {addrVal} = load i64, ptr {addrPtr}");
                     EmitLine(sb: sb, line: $"  {handleVal} = inttoptr i64 {addrVal} to ptr");
                     EmitEntryAlloca(llvmName: varAddr, llvmType: "ptr");
@@ -463,10 +462,10 @@ public partial class LLVMCodeGenerator
         CrashablePattern crashable, string matchLabel, string failLabel,
         TypeInfo? subjectType)
     {
-        if (subjectType is ErrorHandlingTypeInfo errorInfo)
+        if (subjectType != null && IsCarrierType(type: subjectType))
         {
             // Maybe has no error case — CrashablePattern cannot match
-            if (errorInfo.Kind == ErrorHandlingKind.Maybe)
+            if (IsMaybeType(type: subjectType))
             {
                 EmitLine(sb: sb, line: $"  br label %{failLabel}");
                 return;
@@ -482,7 +481,8 @@ public partial class LLVMCodeGenerator
             EmitLine(sb: sb, line: $"  {tag} = load i64, ptr {tagPtr}");
 
             // tag != 0 (not absent) && tag != ComputeTypeId(T) (not valid) → error
-            ulong validId = ComputeTypeId(fullName: errorInfo.ValueType.FullName);
+            TypeInfo valueType = subjectType.TypeArguments![0];
+            ulong validId = ComputeTypeId(fullName: valueType.FullName);
             string notAbsent = NextTemp();
             string notValid = NextTemp();
             string cmp = NextTemp();
@@ -512,8 +512,7 @@ public partial class LLVMCodeGenerator
                 EmitEntryAlloca(llvmName: varAddr, llvmType: "ptr");
                 EmitLine(sb: sb, line: $"  store ptr {handleVal}, ptr {varAddr}");
 
-                TypeInfo errorType = errorInfo.ErrorType ?? errorInfo;
-                _localVariables[key: crashable.VariableName] = errorType;
+                _localVariables[key: crashable.VariableName] = subjectType;
                 EmitLine(sb: sb, line: $"  br label %{matchLabel}");
             }
             else
@@ -523,7 +522,7 @@ public partial class LLVMCodeGenerator
         }
         else
         {
-            // Not an error handling type — cannot match crashable pattern
+            // Not a carrier type — cannot match crashable pattern
             EmitLine(sb: sb, line: $"  br label %{failLabel}");
         }
     }
@@ -536,22 +535,23 @@ public partial class LLVMCodeGenerator
     private void EmitNonePatternMatch(StringBuilder sb, string subject, string matchLabel,
         string failLabel, TypeInfo? subjectType)
     {
-        if (subjectType is ErrorHandlingTypeInfo errorInfo)
+        if (subjectType != null && IsCarrierType(type: subjectType))
         {
             // Result has no None case
-            if (errorInfo.Kind == ErrorHandlingKind.Result)
+            if (!IsMaybeType(type: subjectType) &&
+                GetGenericBaseName(type: subjectType) == "Result")
             {
                 EmitLine(sb: sb, line: $"  br label %{failLabel}");
                 return;
             }
 
             // Maybe: { i1, T } tag is i1; Lookup: { i64, i64 } tag is i64 — both absent when tag == 0
-            string carrierType = GetCarrierLLVMType(errorType: errorInfo);
-            string tagType = GetCarrierTagType(kind: errorInfo.Kind);
+            string carrierLlvmType = GetCarrierLLVMType(type: subjectType);
+            string tagType = GetCarrierTagType(kind: GetCarrierKind(type: subjectType));
             string tagPtr = NextTemp();
             string tag = NextTemp();
             EmitLine(sb: sb,
-                line: $"  {tagPtr} = getelementptr {carrierType}, ptr {subject}, i32 0, i32 0");
+                line: $"  {tagPtr} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 0");
             EmitLine(sb: sb, line: $"  {tag} = load {tagType}, ptr {tagPtr}");
             string cmp = NextTemp();
             EmitLine(sb: sb, line: $"  {cmp} = icmp eq {tagType} {tag}, 0");

@@ -1,7 +1,6 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis.Enums;
 using SemanticAnalysis.Symbols;
 using SemanticAnalysis.Types;
 using SyntaxTree;
@@ -1215,7 +1214,7 @@ public partial class LLVMCodeGenerator
     {
         // Store Maybe carrier to memory for field extraction
         string maybeCarrierType = GetMaybeCarrierLLVMType(valueType: valueType!);
-        string maybeTagType = GetCarrierTagType(kind: ErrorHandlingKind.Maybe);
+        string maybeTagType = "i1"; // Maybe always uses i1 tag
         string maybeAddr = NextTemp();
         EmitEntryAlloca(llvmName: maybeAddr, llvmType: maybeCarrierType);
         EmitLine(sb: sb, line: $"  store {maybeCarrierType} {maybeResult}, ptr {maybeAddr}");

@@ -172,11 +172,6 @@ public sealed class EntityTypeInfo : TypeInfo
             return protocolType.GenericDefinition.CreateInstance(typeArguments: newArgs);
         }
 
-        if (type is ErrorHandlingTypeInfo { GenericDefinition: not null } errorType)
-        {
-            return errorType.GenericDefinition.CreateInstance(typeArguments: newArgs);
-        }
-
         return type;
     }
 }

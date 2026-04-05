@@ -217,12 +217,12 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Validate that Result<T> and Lookup<T> are not used as member variable types
-        if (memberVariableType is ErrorHandlingTypeInfo errorHandlingType &&
-            errorHandlingType.Kind is ErrorHandlingKind.Result or ErrorHandlingKind.Lookup)
+        if (IsCarrierType(type: memberVariableType) && !IsMaybeType(type: memberVariableType))
         {
+            string carrierName = GetCarrierBaseName(type: memberVariableType)!;
             ReportError(code: SemanticDiagnosticCode.ErrorHandlingTypeAsMemberVariable,
                 message:
-                $"'{errorHandlingType.Kind}[T]' cannot be used as a member variable type. " +
+                $"'{carrierName}[T]' cannot be used as a member variable type. " +
                 "Error handling types are internal for error propagation and should not be stored.",
                 location: memberVariable.Location);
         }

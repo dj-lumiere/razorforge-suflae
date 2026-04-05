@@ -162,14 +162,8 @@ public partial class LLVMCodeGenerator
         TypeInfo? operandType = GetExpressionType(expr: unary.Operand);
         if (unary.Operator == UnaryOperator.ForceUnwrap && operandType != null)
         {
-            // Force-unwrap: return the value type inside the Maybe/ErrorHandling wrapper
-            if (operandType is ErrorHandlingTypeInfo eh)
-            {
-                return eh.ValueType;
-            }
-
-            if (GetGenericBaseName(type: operandType) == "Maybe" &&
-                operandType.TypeArguments is { Count: 1 })
+            // Force-unwrap: return the value type inside the Maybe/Result/Lookup wrapper
+            if (IsCarrierType(type: operandType) && operandType.TypeArguments is { Count: 1 })
             {
                 return operandType.TypeArguments[index: 0];
             }

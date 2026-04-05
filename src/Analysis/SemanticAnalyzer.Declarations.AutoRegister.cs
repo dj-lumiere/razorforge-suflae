@@ -310,7 +310,7 @@ public sealed partial class SemanticAnalyzer
                 }
 
                 // Skip non-boxable types
-                if (type is ErrorHandlingTypeInfo or VariantTypeInfo or WrapperTypeInfo)
+                if (IsCarrierType(type: type) || type is VariantTypeInfo or WrapperTypeInfo)
                 {
                     continue;
                 }

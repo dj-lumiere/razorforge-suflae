@@ -137,7 +137,7 @@ public sealed partial class SemanticAnalyzer
         if (id.Name == "None")
         {
             // None represents Maybe.None - return a generic Maybe type
-            return ErrorHandlingTypeInfo.WellKnown.MaybeDefinition;
+            return _registry.LookupType(name: "Maybe") ?? ErrorTypeInfo.Instance;
         }
 
         // Try to look up as variable first
@@ -355,9 +355,9 @@ public sealed partial class SemanticAnalyzer
         // Not desugared because it needs short-circuit evaluation for built-in types
         if (binary.Operator == BinaryOperator.NoneCoalesce)
         {
-            if (leftType is ErrorHandlingTypeInfo coalesceError)
+            if (IsCarrierType(type: leftType) && leftType.TypeArguments is { Count: > 0 })
             {
-                return coalesceError.ValueType;
+                return leftType.TypeArguments[index: 0];
             }
 
             // User type — look up $unwrap_or method
@@ -580,9 +580,10 @@ public sealed partial class SemanticAnalyzer
         // narrow the variable to T after the coalescing assignment.
         if (target is IdentifierExpression narrowId &&
             value is BinaryExpression { Operator: BinaryOperator.NoneCoalesce } &&
-            targetType is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Maybe } maybeType)
+            IsMaybeType(type: targetType) && targetType.TypeArguments is { Count: > 0 })
         {
-            _registry.NarrowVariable(name: narrowId.Name, narrowedType: maybeType.ValueType);
+            _registry.NarrowVariable(name: narrowId.Name,
+                narrowedType: targetType.TypeArguments[index: 0]);
         }
 
         // Assignment expression returns the target type
@@ -787,9 +788,9 @@ public sealed partial class SemanticAnalyzer
                 return operandType;
 
             case UnaryOperator.ForceUnwrap:
-                if (operandType is ErrorHandlingTypeInfo forceUnwrapError)
+                if (IsCarrierType(type: operandType) && operandType.TypeArguments is { Count: > 0 })
                 {
-                    return forceUnwrapError.ValueType;
+                    return operandType.TypeArguments[index: 0];
                 }
 
                 // User type — look up $unwrap method

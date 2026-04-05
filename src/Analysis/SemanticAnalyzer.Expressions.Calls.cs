@@ -241,10 +241,7 @@ public sealed partial class SemanticAnalyzer
                 if (id.Name == "Data" && argTypes.Count > 0)
                 {
                     TypeSymbol argType = argTypes[index: 0];
-                    if (argType is ErrorHandlingTypeInfo
-                            {
-                                Kind: ErrorHandlingKind.Result or ErrorHandlingKind.Lookup
-                            } or VariantTypeInfo
+                    if ((IsCarrierType(type: argType) && !IsMaybeType(type: argType)) || argType is VariantTypeInfo
                             or WrapperTypeInfo { IsReadOnly: true } // Viewed, Inspected
                         || argType is WrapperTypeInfo wrapper && wrapper.InnerType != null &&
                         wrapper.Name is "Hijacked" or "Seized")

@@ -121,12 +121,12 @@ public sealed partial class SemanticAnalyzer
             }
 
             // Validate that Result<T> and Lookup<T> are not used as parameter types
-            if (paramType is ErrorHandlingTypeInfo errorHandlingType &&
-                errorHandlingType.Kind is ErrorHandlingKind.Result or ErrorHandlingKind.Lookup)
+            if (IsCarrierType(type: paramType) && !IsMaybeType(type: paramType))
             {
+                string carrierName = GetCarrierBaseName(type: paramType)!;
                 ReportError(code: SemanticDiagnosticCode.ErrorHandlingTypeAsParameter,
                     message:
-                    $"'{errorHandlingType.Kind}[T]' cannot be used as a parameter type. " +
+                    $"'{carrierName}[T]' cannot be used as a parameter type. " +
                     "Error handling types are internal for error propagation and should not be passed as arguments.",
                     location: param.Location);
             }
@@ -173,12 +173,12 @@ public sealed partial class SemanticAnalyzer
 
         // Validate that Maybe<T>/Result<T>/Lookup<T> are not used as return types
         // These are builder-generated wrapper types for failable routines (!)
-        if (returnType is ErrorHandlingTypeInfo errorHandlingReturn &&
-            errorHandlingReturn.Kind is ErrorHandlingKind.Maybe or ErrorHandlingKind.Result
-                or ErrorHandlingKind.Lookup && !IsStdlibFile(filePath: _currentFilePath))
+        if (returnType != null && IsCarrierType(type: returnType) &&
+            !IsStdlibFile(filePath: _currentFilePath))
         {
+            string carrierName = GetCarrierBaseName(type: returnType)!;
             ReportError(code: SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType,
-                message: $"Routine cannot return '{errorHandlingReturn.Kind}[T]'. " +
+                message: $"Routine cannot return '{carrierName}[T]'. " +
                          "These types are builder-generated for failable routines. " +
                          "Use a failable routine (!) with 'throw'/'absent' instead.",
                 location: routine.ReturnType?.Location ?? routine.Location);

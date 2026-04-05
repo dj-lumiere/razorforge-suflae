@@ -3,7 +3,6 @@ using SemanticAnalysis.Symbols;
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis.Enums;
 using SemanticAnalysis.Types;
 using SyntaxTree;
 
@@ -588,9 +587,9 @@ public partial class LLVMCodeGenerator
                 TypeInfo? exprType = GetExpressionType(expr: ret.Value);
                 if (exprType == null || !IsMaybeType(type: exprType))
                 {
-                    TypeInfo innerType = retType is ErrorHandlingTypeInfo eh ? eh.ValueType :
-                        retType.TypeArguments is { Count: > 0 } ? retType.TypeArguments[index: 0] :
-                        retType;
+                    TypeInfo innerType = retType.TypeArguments is { Count: > 0 }
+                        ? retType.TypeArguments[index: 0]
+                        : retType;
                     string carrierType = GetLLVMType(type: retType);
                     string v0 = NextTemp();
                     EmitLine(sb: sb, line: $"  {v0} = insertvalue {carrierType} undef, i1 1, 0");

@@ -1,7 +1,6 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis.Enums;
 using SemanticAnalysis.Symbols;
 using SemanticAnalysis.Types;
 using SyntaxTree;
@@ -745,21 +744,15 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Checks if a type is a built-in error handling type (Maybe/Result/Lookup).
-    /// Handles both direct ErrorHandlingTypeInfo and generic instances resolved as RecordTypeInfo.
     /// </summary>
-    private bool IsErrorHandlingType(TypeInfo? type)
+    private static bool IsErrorHandlingType(TypeInfo? type)
     {
-        if (type is ErrorHandlingTypeInfo)
+        if (type == null)
         {
-            return true;
+            return false;
         }
 
-        if (type != null)
-        {
-            string? baseName = GetGenericBaseName(type: type);
-            return baseName is "Maybe" or "Result" or "Lookup";
-        }
-
-        return false;
+        string? baseName = GetGenericBaseName(type: type);
+        return baseName is "Maybe" or "Result" or "Lookup";
     }
 }

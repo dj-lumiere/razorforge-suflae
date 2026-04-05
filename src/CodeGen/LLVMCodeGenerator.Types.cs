@@ -123,10 +123,6 @@ public partial class LLVMCodeGenerator
             // Variants → struct { tag, payload }
             VariantTypeInfo variant => GetVariantTypeName(variant: variant),
 
-            // Error handling types → struct { tag, payload }
-            ErrorHandlingTypeInfo errorHandling => GetErrorHandlingTypeName(
-                errorType: errorHandling),
-
             // Protocols → type-erased pointer (protocol-typed fields/params hold a handle to a concrete object)
             ProtocolTypeInfo => "ptr",
 
@@ -206,90 +202,72 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Gets the LLVM struct type name for an error handling type.
-    /// </summary>
-    private string GetErrorHandlingTypeName(ErrorHandlingTypeInfo errorType) =>
-        GetCarrierLLVMType(errorType: errorType);
-
-    /// <summary>
     /// Returns the correct LLVM struct type for an error-handling carrier.
     /// Maybe → { i1, T_inline } or { i1, ptr }; Result/Lookup → { i64, i64 }.
     /// </summary>
-    private string GetCarrierLLVMType(ErrorHandlingTypeInfo errorType) =>
-        errorType.Kind == ErrorHandlingKind.Maybe
-            ? GetMaybeCarrierLLVMType(valueType: errorType.ValueType)
+    private string GetCarrierLLVMType(TypeInfo type) =>
+        IsMaybeType(type: type)
+            ? GetMaybeCarrierLLVMType(valueType: type.TypeArguments![index: 0])
             : GetResultLookupCarrierType();
 
     /// <summary>
     /// Returns the LLVM struct type for Result and Lookup carriers.
-    /// Layout is derived from Result[T]'s stdlib definition: { U64 type_id, Address data_address }.
+    /// Fixed layout: { U64 type_id, Address data_address } = { i64, i64 }.
     /// </summary>
-    private string GetResultLookupCarrierType()
-    {
-        var def = (RecordTypeInfo)_registry.LookupType(name: "Result")!;
-        return
-            $"{{ {GetLLVMType(type: def.MemberVariables[index: 0].Type)}, {GetLLVMType(type: def.MemberVariables[index: 1].Type)} }}";
-    }
+    private static string GetResultLookupCarrierType() => "{ i64, i64 }";
 
     /// <summary>
     /// Returns the LLVM struct for a Maybe carrier.
-    /// Tag is derived from Maybe[T]'s Bool present field; value is inline T or ptr for entities.
+    /// Tag is always i1; value is inline T or ptr for entities/wrappers/unresolved generics.
     /// </summary>
     private string GetMaybeCarrierLLVMType(TypeInfo valueType)
     {
-        var def = (RecordTypeInfo)_registry.LookupType(name: "Maybe")!;
-        string tagLlvm = GetLLVMType(type: def.MemberVariables[index: 0].Type);
         // Value layout: entity/wrapper/unresolved generic → ptr (Snatched[T] is a WrapperTypeInfo)
         // Record/value → inline T (field 1 is T directly)
         string valueLlvm = valueType is EntityTypeInfo or WrapperTypeInfo
             or GenericParameterTypeInfo or TypeParameterPlaceholder
             ? "ptr"
             : GetLLVMType(type: valueType);
-        return $"{{ {tagLlvm}, {valueLlvm} }}";
+        return $"{{ i1, {valueLlvm} }}";
     }
 
-    /// <summary>Returns the LLVM type of the tag field for a carrier (Bool for Maybe, U64 for Result/Lookup).</summary>
-    private string GetCarrierTagType(ErrorHandlingKind kind)
-    {
-        string defName = kind switch
-        {
-            ErrorHandlingKind.Maybe => "Maybe",
-            ErrorHandlingKind.Result => "Result",
-            ErrorHandlingKind.Lookup => "Lookup",
-            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
-        };
-        var def = (RecordTypeInfo)_registry.LookupType(name: defName)!;
-        return GetLLVMType(type: def.MemberVariables[index: 0].Type);
-    }
+    /// <summary>Returns the LLVM type of the tag field for a carrier (i1 for Maybe, i64 for Result/Lookup).</summary>
+    private static string GetCarrierTagType(ErrorHandlingKind kind) =>
+        kind == ErrorHandlingKind.Maybe ? "i1" : "i64";
 
     /// <summary>
     /// Returns the discriminant value that represents a valid (present) carrier.
     /// Maybe → "1" (Bool true); Result/Lookup → ComputeTypeId of value type.
     /// </summary>
-    private string GetCarrierValidTag(ErrorHandlingTypeInfo errorType) =>
-        errorType.Kind == ErrorHandlingKind.Maybe
+    private string GetCarrierValidTag(TypeInfo type) =>
+        IsMaybeType(type: type)
             ? "1"
-            : ComputeTypeId(fullName: errorType.ValueType.FullName)
+            : ComputeTypeId(fullName: type.TypeArguments![index: 0].FullName)
                .ToString();
 
     /// <summary>Returns the discriminant value that represents an absent carrier (always 0).</summary>
     private static string GetCarrierAbsentTag() => "0";
 
+    /// <summary>Returns true if <paramref name="type"/> is a Maybe[T], Result[T], or Lookup[T] carrier.</summary>
+    private static bool IsCarrierType(TypeInfo type) =>
+        GetGenericBaseName(type: type) is "Maybe" or "Result" or "Lookup";
+
+    /// <summary>Returns true if <paramref name="type"/> is a Maybe[T] carrier.</summary>
+    private static bool IsMaybeType(TypeInfo type) =>
+        GetGenericBaseName(type: type) is "Maybe";
+
     /// <summary>
-    /// Resolves the carrier kind from any TypeInfo — handles both ErrorHandlingTypeInfo
-    /// and RecordTypeInfo representations of Maybe/Result/Lookup.
+    /// Resolves the carrier kind from a carrier TypeInfo (Maybe, Result, or Lookup record).
     /// </summary>
-    private ErrorHandlingKind GetCarrierKind(TypeInfo type) =>
-        type is ErrorHandlingTypeInfo eh
-            ? eh.Kind
-            : GetGenericBaseName(type: type) switch
-            {
-                "Maybe" => ErrorHandlingKind.Maybe,
-                "Result" => ErrorHandlingKind.Result,
-                "Lookup" => ErrorHandlingKind.Lookup,
-                _ => throw new InvalidOperationException(
-                    message: $"Cannot determine carrier kind for type '{type.Name}'")
-            };
+    private static ErrorHandlingKind GetCarrierKind(TypeInfo type) =>
+        GetGenericBaseName(type: type) switch
+        {
+            "Maybe"  => ErrorHandlingKind.Maybe,
+            "Result" => ErrorHandlingKind.Result,
+            "Lookup" => ErrorHandlingKind.Lookup,
+            _ => throw new InvalidOperationException(
+                message: $"Cannot determine carrier kind for type '{type.Name}'")
+        };
 
     /// <summary>
     /// Gets the LLVM struct type name for a choice.

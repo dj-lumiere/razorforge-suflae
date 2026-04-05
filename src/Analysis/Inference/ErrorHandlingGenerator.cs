@@ -193,8 +193,10 @@ public sealed class ErrorHandlingGenerator
                 message:
                 "Failable function must have a return type and Blank type must be registered");
 
+        TypeInfo maybeDef = _registry.LookupType(name: "Maybe") ??
+            throw new InvalidOperationException(message: "Maybe type not registered");
         TypeInfo maybeType = _registry.GetOrCreateResolution(
-            genericDef: ErrorHandlingTypeInfo.WellKnown.MaybeDefinition,
+            genericDef: maybeDef,
             typeArguments: [returnType]);
 
         return new
@@ -229,8 +231,10 @@ public sealed class ErrorHandlingGenerator
                 message:
                 "Failable function must have a return type and Blank type must be registered");
 
+        TypeInfo resultDef = _registry.LookupType(name: "Result") ??
+            throw new InvalidOperationException(message: "Result type not registered");
         TypeInfo resultType = _registry.GetOrCreateResolution(
-            genericDef: ErrorHandlingTypeInfo.WellKnown.ResultDefinition,
+            genericDef: resultDef,
             typeArguments: [returnType]);
 
         return new
@@ -266,8 +270,10 @@ public sealed class ErrorHandlingGenerator
                 message:
                 "Failable function must have a return type and Blank type must be registered");
 
+        TypeInfo lookupDef = _registry.LookupType(name: "Lookup") ??
+            throw new InvalidOperationException(message: "Lookup type not registered");
         TypeInfo lookupType = _registry.GetOrCreateResolution(
-            genericDef: ErrorHandlingTypeInfo.WellKnown.LookupDefinition,
+            genericDef: lookupDef,
             typeArguments: [returnType]);
 
         return new

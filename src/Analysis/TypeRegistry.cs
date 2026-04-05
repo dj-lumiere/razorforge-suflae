@@ -278,13 +278,41 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
-    /// Registers all well-known error handling types (Maybe, Result, Lookup).
+    /// Registers all well-known error handling types (Maybe, Result, Lookup) as ordinary generic records.
     /// </summary>
     private void RegisterErrorHandlingTypes()
     {
-        RegisterType(type: ErrorHandlingTypeInfo.WellKnown.MaybeDefinition);
-        RegisterType(type: ErrorHandlingTypeInfo.WellKnown.ResultDefinition);
-        RegisterType(type: ErrorHandlingTypeInfo.WellKnown.LookupDefinition);
+        TypeInfo boolType = LookupType(name: "Bool")!;
+        TypeInfo u64Type  = LookupType(name: "U64")!;
+        TypeInfo addrType = LookupType(name: "Address")!;
+        var tPlaceholder  = new TypeParameterPlaceholder(name: "T");
+
+        // Maybe[T]: { Bool present, T value }
+        var maybe = new RecordTypeInfo(name: "Maybe") { GenericParameters = ["T"] };
+        maybe.MemberVariables =
+        [
+            new MemberVariableInfo(name: "present", type: boolType) { Index = 0 },
+            new MemberVariableInfo(name: "value",   type: tPlaceholder) { Index = 1 },
+        ];
+        RegisterType(type: maybe);
+
+        // Result[T]: { U64 type_id, Address data_address }
+        var result = new RecordTypeInfo(name: "Result") { GenericParameters = ["T"] };
+        result.MemberVariables =
+        [
+            new MemberVariableInfo(name: "type_id",      type: u64Type)  { Index = 0 },
+            new MemberVariableInfo(name: "data_address", type: addrType) { Index = 1 },
+        ];
+        RegisterType(type: result);
+
+        // Lookup[T]: same layout as Result
+        var lookup = new RecordTypeInfo(name: "Lookup") { GenericParameters = ["T"] };
+        lookup.MemberVariables =
+        [
+            new MemberVariableInfo(name: "type_id",      type: u64Type)  { Index = 0 },
+            new MemberVariableInfo(name: "data_address", type: addrType) { Index = 1 },
+        ];
+        RegisterType(type: lookup);
     }
 
     #endregion

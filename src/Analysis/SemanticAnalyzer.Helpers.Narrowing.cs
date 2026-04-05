@@ -133,21 +133,24 @@ public sealed partial class SemanticAnalyzer
     private static TypeSymbol? ComputeNarrowedType(TypeSymbol type, bool eliminateNone,
         bool eliminateCrashable)
     {
-        if (type is not ErrorHandlingTypeInfo ehType)
+        string? baseName = GetCarrierBaseName(type: type);
+        if (baseName == null || type.TypeArguments is not { Count: > 0 })
         {
             return null;
         }
 
-        return ehType.Kind switch
+        TypeSymbol valueType = type.TypeArguments[index: 0];
+
+        return baseName switch
         {
             // Maybe<T>: eliminate None → T
-            ErrorHandlingKind.Maybe when eliminateNone => ehType.ValueType,
+            "Maybe" when eliminateNone => valueType,
 
             // Result<T>: eliminate Crashable → T
-            ErrorHandlingKind.Result when eliminateCrashable => ehType.ValueType,
+            "Result" when eliminateCrashable => valueType,
 
             // Lookup<T>: must eliminate both None and Crashable → T
-            ErrorHandlingKind.Lookup when eliminateNone && eliminateCrashable => ehType.ValueType,
+            "Lookup" when eliminateNone && eliminateCrashable => valueType,
 
             // Partial elimination on Lookup is not sufficient
             _ => null

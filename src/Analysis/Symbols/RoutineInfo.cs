@@ -360,11 +360,6 @@ public sealed class RoutineInfo
                 return protocolType.GenericDefinition.CreateInstance(typeArguments: newArgs);
             }
 
-            if (type is Types.ErrorHandlingTypeInfo { GenericDefinition: not null } errorType)
-            {
-                return errorType.GenericDefinition.CreateInstance(typeArguments: newArgs);
-            }
-
             return type.CreateInstance(typeArguments: newArgs);
         }
 

@@ -465,10 +465,8 @@ public sealed partial class SemanticAnalyzer
         // #81: Result/Lookup cannot be copied from variable to variable
         // `var r = check_parse!(data)` then `when r` is allowed (call result)
         // `var r2 = r1` where r1: Result[T] is not allowed (variable copy)
-        if (varDecl.Initializer is IdentifierExpression && varType is ErrorHandlingTypeInfo
-            {
-                Kind: ErrorHandlingKind.Result or ErrorHandlingKind.Lookup
-            })
+        if (varDecl.Initializer is IdentifierExpression &&
+            IsCarrierType(type: varType) && !IsMaybeType(type: varType))
         {
             ReportError(code: SemanticDiagnosticCode.ErrorHandlingTypeStoredInVariable,
                 message: $"'{varType.Name}' cannot be copied to another variable. " +
@@ -513,7 +511,7 @@ public sealed partial class SemanticAnalyzer
         }
 
         // #161: Track Lookup variables that must be dismantled before scope exit
-        if (varType is ErrorHandlingTypeInfo { Kind: ErrorHandlingKind.Lookup } &&
+        if (GetCarrierBaseName(type: varType) == "Lookup" &&
             varDecl.Initializer is not IdentifierExpression)
         {
             _pendingLookupVars.Add(item: (varDecl.Name, varDecl.Location));
@@ -676,10 +674,8 @@ public sealed partial class SemanticAnalyzer
         }
 
         // #81: Result/Lookup cannot be copied from variable to variable via assignment
-        if (assign.Value is IdentifierExpression && valueType is ErrorHandlingTypeInfo
-            {
-                Kind: ErrorHandlingKind.Result or ErrorHandlingKind.Lookup
-            })
+        if (assign.Value is IdentifierExpression &&
+            IsCarrierType(type: valueType) && !IsMaybeType(type: valueType))
         {
             ReportError(code: SemanticDiagnosticCode.ErrorHandlingTypeStoredInVariable,
                 message: $"'{valueType.Name}' cannot be copied to another variable. " +
