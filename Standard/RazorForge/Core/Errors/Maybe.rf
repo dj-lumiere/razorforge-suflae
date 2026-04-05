@@ -1,26 +1,49 @@
 module Core
 
-record Maybe[T]
-  secret state: DataState
-  secret handle: Snatched[T]
+### Defines the record `Maybe` for record types.
+### :typeparam T: The optional value type.
+record Maybe[T] needs T is RecordType
+  ### True if a value is present.
+  secret present: Bool
+  ### The stored value, valid only when present.
+  secret value: T
 
-# Query
-routine Maybe[T].is_valid() -> Bool
-  return me.state is VALID
+### Defines the record `Maybe` for entity types.
+### :typeparam T: The optional value type.
+record Maybe[T] needs T is EntityType
+  ### True if a value is present.
+  secret present: Bool
+  ### The stored value, valid only when present.
+  secret value: Snatched[T]
 
-routine Maybe[T].is_none() -> Bool
-  return me.state is ABSENT
-
-routine Maybe[T].state() -> DataState
-  return me.state
-
-# Coalescing (?? operator)
-routine Maybe[T].$unwrap_or(default: T) -> T
-  if me.is_none()
+### Returns the stored value or a fallback.
+### :param default: The fallback value to return.
+### :returns: The resulting `T` value.
+routine Maybe[T].$unwrap_or(default: T) -> T needs T is RecordType
+  if not me.present
     return default
-  return me.handle.read()
+  return me.value
 
-routine Maybe[T].$unwrap_or(or_else: Routine[Me, T]) -> T
-  if me.is_none()
+### Returns the stored value or a fallback.
+### :param or_else: The fallback routine to call.
+### :returns: The resulting `T` value.
+routine Maybe[T].$unwrap_or(or_else: Routine[Me, T]) -> T needs T is RecordType
+  if not me.present
     return or_else()
-  return me.handle.read()
+  return me.value
+
+### Returns the stored value or a fallback.
+### :param default: The fallback value to return.
+### :returns: The resulting `T` value.
+routine Maybe[T].$unwrap_or(default: T) -> T needs T is EntityType
+  if not me.present
+    return default
+  return me.value.read()
+
+### Returns the stored value or a fallback.
+### :param or_else: The fallback routine to call.
+### :returns: The resulting `T` value.
+routine Maybe[T].$unwrap_or(or_else: Routine[Me, T]) -> T needs T is EntityType
+  if not me.present
+    return or_else()
+  return me.value.read()

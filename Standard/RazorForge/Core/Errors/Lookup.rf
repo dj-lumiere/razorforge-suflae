@@ -1,5 +1,9 @@
 module Core
 
+### Defines the record `Lookup`.
+### :typeparam T: The success value type.
 record Lookup[T]
-  secret state: DataState
-  secret handle: Snatched[T]
+  ### The type identifier of the stored value; matches the success type, a crashable type, or 0 (Blank) for absent.
+  secret type_id: U64
+  ### The address of the heap-allocated value or crashable.
+  secret data_address: Address
