@@ -325,6 +325,22 @@ public partial class LLVMCodeGenerator
 
         string containsFuncName = Q(name: $"{routine.OwnerType.FullName}.$contains");
 
+        // For generic resolutions, ensure $contains is also monomorphized.
+        // $notcontains calls $contains in its IR body, but $contains is never registered
+        // for monomorphization unless the user also uses the `in` operator directly.
+        if (routine.OwnerType.IsGenericResolution)
+        {
+            RoutineInfo? containsMethod =
+                _registry.LookupMethod(type: routine.OwnerType, methodName: "$contains");
+            if (containsMethod != null)
+            {
+                RecordMonomorphization(
+                    mangledName: containsFuncName,
+                    genericMethod: containsMethod,
+                    resolvedOwnerType: routine.OwnerType);
+            }
+        }
+
         EmitLine(sb: _functionDefinitions,
             line: $"define i1 @{funcName}({meType} %me, {itemType} %{itemName}) {{");
         EmitLine(sb: _functionDefinitions, line: "entry:");
