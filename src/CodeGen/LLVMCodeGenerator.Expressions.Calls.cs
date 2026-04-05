@@ -1102,8 +1102,9 @@ public partial class LLVMCodeGenerator
         string mangledName;
         if (method != null && inferredMethodTypeArgs != null)
         {
-            // Method-level generics: use concrete param types in mangled name
-            var resolvedParamNames = new List<string> { receiverType.Name };
+            // Method-level generics: use concrete explicit argument types in mangled name
+            // (receiver is already encoded in ownerName — do NOT include it in the param suffix)
+            var resolvedParamNames = new List<string>();
             foreach (Expression arg in arguments)
             {
                 TypeInfo? t = GetExpressionType(expr: arg);
