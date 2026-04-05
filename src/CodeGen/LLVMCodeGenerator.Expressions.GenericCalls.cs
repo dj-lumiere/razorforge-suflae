@@ -139,7 +139,7 @@ public partial class LLVMCodeGenerator
                             {
                                 funcName =
                                     Q(name:
-                                        $"{resolvedFullType.FullName}.$create#{firstParamType}");
+                                        $"{resolvedFullType.FullName}.$create({firstParamType})");
                                 RecordMonomorphization(mangledName: funcName,
                                     genericMethod: creator,
                                     resolvedOwnerType: resolvedFullType);

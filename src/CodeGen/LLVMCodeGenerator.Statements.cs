@@ -412,8 +412,9 @@ public partial class LLVMCodeGenerator
 
                     string ownerName = setItem.OwnerType?.FullName ?? targetType.FullName;
                     mangledName =
-                        Q(name:
-                            $"{ownerName}.{SanitizeLLVMName(name: setItem.Name)}#{string.Join(separator: ",", values: resolvedParamNames)}");
+                        Q(name: DecorateRoutineSymbolName(
+                            baseName: $"{ownerName}.{SanitizeLLVMName(name: setItem.Name)}({string.Join(separator: ",", values: resolvedParamNames)})",
+                            isFailable: setItem.IsFailable));
                     RecordMonomorphization(mangledName: mangledName,
                         genericMethod: setItem,
                         resolvedOwnerType: targetType,

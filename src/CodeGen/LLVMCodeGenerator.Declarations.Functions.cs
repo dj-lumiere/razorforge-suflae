@@ -521,7 +521,7 @@ public partial class LLVMCodeGenerator
                 string variadicMarker = routine.IsVariadic
                     ? "..."
                     : "";
-                fullName = $"{fullName}{variadicMarker}#{typeArgSuffix}";
+                fullName = $"{fullName}({typeArgSuffix}{variadicMarker})";
             }
 
             return Q(name: DecorateRoutineSymbolName(baseName: fullName,
@@ -536,7 +536,7 @@ public partial class LLVMCodeGenerator
         if (name == "$create" && routine.Parameters.Count > 0)
         {
             string firstParamType = routine.Parameters[index: 0].Type.Name;
-            baseName = $"{baseName}#{firstParamType}";
+            baseName = $"{baseName}({firstParamType})";
         }
 
         return Q(name: DecorateRoutineSymbolName(baseName: baseName,
@@ -546,7 +546,7 @@ public partial class LLVMCodeGenerator
     private static string DecorateRoutineSymbolName(string baseName, bool isFailable)
     {
         return isFailable
-            ? $"{baseName}$f"
+            ? $"{baseName}!"
             : baseName;
     }
 

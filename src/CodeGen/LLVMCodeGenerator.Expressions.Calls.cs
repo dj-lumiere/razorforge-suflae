@@ -636,7 +636,7 @@ public partial class LLVMCodeGenerator
                     TypeInfo resolvedParamType =
                         ResolveSubstitutedType(type: routine.Parameters[index: 0].Type,
                             subs: _typeSubstitutions);
-                    paramSuffix = $"#{resolvedParamType.Name}";
+                    paramSuffix = $"({resolvedParamType.Name})";
                 }
 
                 mangledName =
@@ -870,7 +870,7 @@ public partial class LLVMCodeGenerator
                             argTypes2.Select(selector: t => t.Name);
                         string creatorMangledName = Q(name: DecorateRoutineSymbolName(
                             baseName:
-                            $"{creator.OwnerType?.FullName ?? conversionTypeName}.$create#{string.Join(separator: ",", values: resolvedParamNames)}",
+                            $"{creator.OwnerType?.FullName ?? conversionTypeName}.$create({string.Join(separator: ",", values: resolvedParamNames)})",
                             isFailable: creator.IsFailable));
 
                         GenerateFunctionDeclaration(routine: creator);
@@ -944,7 +944,7 @@ public partial class LLVMCodeGenerator
                                 _registry.GetOrCreateResolution(genericDef: creator.OwnerType,
                                     typeArguments: resolvedOwnerArgs);
                             string resolvedFuncName = Q(name: DecorateRoutineSymbolName(
-                                baseName: $"{resolvedOwner.FullName}.$create#{receiverType.Name}",
+                                baseName: $"{resolvedOwner.FullName}.$create({receiverType.Name})",
                                 isFailable: creator.IsFailable));
 
                             GenerateFunctionDeclaration(routine: creator);
@@ -1116,7 +1116,7 @@ public partial class LLVMCodeGenerator
             string ownerName = method.OwnerType?.FullName ?? receiverType.FullName;
             mangledName = Q(name: DecorateRoutineSymbolName(
                 baseName:
-                $"{ownerName}.{SanitizeLLVMName(name: method.Name)}#{string.Join(separator: ",", values: resolvedParamNames)}",
+                $"{ownerName}.{SanitizeLLVMName(name: method.Name)}({string.Join(separator: ",", values: resolvedParamNames)})",
                 isFailable: method.IsFailable));
             RecordMonomorphization(mangledName: mangledName,
                 genericMethod: method,

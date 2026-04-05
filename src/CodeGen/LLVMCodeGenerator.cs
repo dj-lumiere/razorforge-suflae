@@ -727,16 +727,27 @@ public partial class LLVMCodeGenerator
                 // Skip declare lines for functions that have definitions
                 if (line.StartsWith(value: "declare ") && _generatedFunctionDefs.Count > 0)
                 {
-                    // Extract function name from "declare ... @funcName(...)"
+                    // Extract function name from "declare ... @funcName(...)" or "declare ... @"quoted name"(...)"
                     int atIdx = line.IndexOf(value: '@');
-                    int parenIdx = line.IndexOf(value: '(',
-                        startIndex: atIdx > 0
-                            ? atIdx
-                            : 0);
-                    if (atIdx > 0 && parenIdx > atIdx)
+                    if (atIdx > 0)
                     {
-                        string declaredName = line[(atIdx + 1)..parenIdx];
-                        if (_generatedFunctionDefs.Contains(item: declaredName))
+                        string declaredName;
+                        if (atIdx + 1 < line.Length && line[atIdx + 1] == '"')
+                        {
+                            // Quoted identifier: @"..." — find closing quote
+                            int closeQuoteIdx = line.IndexOf(value: '"', startIndex: atIdx + 2);
+                            declaredName = closeQuoteIdx > atIdx + 1
+                                ? line[(atIdx + 1)..(closeQuoteIdx + 1)]
+                                : "";
+                        }
+                        else
+                        {
+                            // Unquoted identifier: find first (
+                            int parenIdx = line.IndexOf(value: '(', startIndex: atIdx);
+                            declaredName = parenIdx > atIdx ? line[(atIdx + 1)..parenIdx] : "";
+                        }
+
+                        if (declaredName != "" && _generatedFunctionDefs.Contains(item: declaredName))
                         {
                             continue; // Skip — this function has a define
                         }
@@ -973,7 +984,7 @@ public partial class LLVMCodeGenerator
             // Disambiguate $create overloads by first parameter type (mirrors MangleFunctionName)
             if (method.Name == "$create" && method.Parameters.Count > 0)
             {
-                baseName = $"{baseName}#{method.Parameters[index: 0].Type.Name}";
+                baseName = $"{baseName}({method.Parameters[index: 0].Type.Name})";
             }
 
             mangledName = Q(name: DecorateRoutineSymbolName(baseName: baseName,
