@@ -1,256 +1,362 @@
-# RazorForge Dict[K, V] - Hash map with separate chaining
-# Entity type with heap allocation
-# O(1) average insert, delete, lookup
-# Uses hash buckets with SortedDict for collision chains
-#
-# Usage:
-#   var ages = Dict[Text, S32]()
-#   ages.add("Alice", 30)
-#   ages["Bob"] = 25
-#   var alice_age = ages["Alice"]
-#   if ages.contains_key("Charlie") { }
-
-import Collections.SortedDict
+# RazorForge Dict[K, V] — Robin Hood open-addressing hash map
+# O(1) average insert / delete / lookup
+# Requires K obeys Hashable, Equatable (no ordering needed)
+# 75% load factor; capacity always a power of two
 
 module Core
 
 import BuilderService
 
-# Initial number of buckets
-preset DICT_INITIAL_BUCKETS: U64 = 16u64
-# Load factor threshold for rehashing (as percentage)
-preset DICT_LOAD_FACTOR: U64 = 75u64
+preset DICT_INITIAL_CAPACITY: U64 = 16u64
 
-### Defines the entity `Dict`.
-### :typeparam K: The value used for `K`.
-### :typeparam V: The value used for `V`.
+### Hash map from K to V.
+### :typeparam K: The key type.
+### :typeparam V: The value type.
 entity Dict[K, V] obeys Iterable[DictEntry[K, V]]
-needs K obeys Hashable, Comparable
-  secret buckets: List[SortedDict[K, V]]
+needs K obeys Hashable, Equatable
+  secret hashes: List[U64]    # 0 = empty; otherwise normalized hash of stored key
+  secret keys: Snatched[K]    # raw key storage, capacity slots
+  secret vals: Snatched[V]    # raw value storage, capacity slots
   secret count: U64
+  secret capacity: U64        # always a power of two
 
 # ============================================================================
 # Creators
 # ============================================================================
 
-### Creates a new instance.
+### Creates a new empty instance.
 ### :returns: The resulting `Dict[K, V]` value.
 routine Dict[K, V].$create() -> Dict[K, V]
-  var buckets = List[SortedDict[K, V]](DICT_INITIAL_BUCKETS)
+  var cap = DICT_INITIAL_CAPACITY
   var dict = Dict[K, V](
-    buckets: buckets,
-    count: 0u64
+    hashes: List[U64](cap),
+    keys: snatched_none[K](),
+    vals: snatched_none[V](),
+    count: 0u64,
+    capacity: cap
   )
   var i = 0u64
-  while i < DICT_INITIAL_BUCKETS
-    var empty_dict = SortedDict[K, V]()
-    dict.buckets.add_last(empty_dict)
+  while i < cap
+    dict.hashes.add_last(0u64)
     i = i + 1u64
+  danger!
+    dict.keys = Snatched[K](rf_allocate_dynamic(cap * K.data_size()))
+    dict.vals = Snatched[V](rf_allocate_dynamic(cap * V.data_size()))
   return dict
 
-### Creates a new instance.
-### :param capacity: The capacity value to use.
+### Creates a new instance pre-sized to hold at least `capacity` entries.
+### :param capacity: The minimum number of entries before the first rehash.
 ### :returns: The resulting `Dict[K, V]` value.
 routine Dict[K, V].$create(capacity: U64) -> Dict[K, V]
-  var bucket_count = if capacity < DICT_INITIAL_BUCKETS then DICT_INITIAL_BUCKETS else capacity
-  var buckets = List[SortedDict[K, V]](bucket_count)
+  var cap = DICT_INITIAL_CAPACITY
+  while cap < capacity
+    cap = cap * 2u64
   var dict = Dict[K, V](
-    buckets: buckets,
-    count: 0u64
+    hashes: List[U64](cap),
+    keys: snatched_none[K](),
+    vals: snatched_none[V](),
+    count: 0u64,
+    capacity: cap
   )
   var i = 0u64
-  while i < bucket_count
-    var empty_dict = SortedDict[K, V]()
-    dict.buckets.add_last(empty_dict)
+  while i < cap
+    dict.hashes.add_last(0u64)
     i = i + 1u64
+  danger!
+    dict.keys = Snatched[K](rf_allocate_dynamic(cap * K.data_size()))
+    dict.vals = Snatched[V](rf_allocate_dynamic(cap * V.data_size()))
   return dict
 
-### Creates a new instance.
-### :param entries...: The `entries...` value.
+### Creates a new instance from varargs entries.
+### :param entries...: The initial key-value pairs to insert.
 ### :returns: The resulting `Dict[K, V]` value.
 routine Dict[K, V].$create(entries...: DictEntry[K, V]) -> Dict[K, V]
   var result = Dict[K, V]()
   for e in entries
-    result.add(e.key, e.value)
+    result.add(key: e.key, value: e.value)
   return result
 
+### Releases raw key and value storage.
+routine Dict[K, V].$destroy()
+  danger!
+    if not me.keys.is_none()
+      rf_invalidate(ptrtoint[K, Address](me.keys))
+    if not me.vals.is_none()
+      rf_invalidate(ptrtoint[V, Address](me.vals))
+  return
+
 # ============================================================================
-# Internal Operations
+# Internal Helpers
 # ============================================================================
 
-### Returns the result of `bucket index`.
-### :param key: The `key` value.
+### Returns `h` normalized to never be zero (0 is the empty sentinel).
+### :param h: The raw hash.
 ### :returns: The resulting `U64` value.
-routine Dict[K, V].bucket_index(key: K) -> U64
-  var hash = key.$hash()
-  return hash % me.buckets.count()
+routine Dict[K, V].normalize_hash(h: U64) -> U64
+  return if h == 0u64 then 1u64 else h
 
-### Returns the result of `should rehash`.
+### Returns the probe distance of a slot given its stored hash.
+### :param hash: The stored hash value.
+### :param slot: The slot index.
+### :returns: The resulting `U64` value.
+routine Dict[K, V].probe_dist(hash: U64, slot: U64) -> U64
+  return (slot + me.capacity - (hash & (me.capacity - 1u64))) & (me.capacity - 1u64)
+
+### Reads the key at `slot`.
+### :param slot: The slot index.
+### :returns: The resulting `K` value.
+routine Dict[K, V].read_key(slot: U64) -> K
+  return me.keys.offset(slot * K.data_size()).read()
+
+### Writes `key` to `slot`.
+### :param slot: The slot index.
+### :param key: The key to store.
+routine Dict[K, V].write_key(slot: U64, key: K)
+  me.keys.offset(slot * K.data_size()).write(key)
+  return
+
+### Reads the value at `slot`.
+### :param slot: The slot index.
+### :returns: The resulting `V` value.
+routine Dict[K, V].read_val(slot: U64) -> V
+  return me.vals.offset(slot * V.data_size()).read()
+
+### Writes `val` to `slot`.
+### :param slot: The slot index.
+### :param val: The value to store.
+routine Dict[K, V].write_val(slot: U64, val: V)
+  me.vals.offset(slot * V.data_size()).write(val)
+  return
+
+### Linear-probes for `key` using the Robin Hood invariant.
+### Returns `capacity` when `key` is absent.
+### :param key: The key to find.
+### :returns: The resulting `U64` value.
+routine Dict[K, V].find_slot(key: K) -> U64
+  var h = me.normalize_hash(key.$hash())
+  var mask = me.capacity - 1u64
+  var i = h & mask
+  var dist = 0u64
+  while me.hashes[i] != 0u64 and me.probe_dist(hash: me.hashes[i], slot: i) >= dist
+    if me.hashes[i] == h and me.read_key(i) == key
+      return i
+    i = (i + 1u64) & mask
+    dist = dist + 1u64
+  return me.capacity
+
+### Inserts a pre-normalized hash + key + value using Robin Hood probing.
+### Does not check for duplicates and does not update `count`.
+### :param h: The normalized hash.
+### :param key: The key to insert.
+### :param val: The value to insert.
+routine Dict[K, V].insert_raw(h: U64, key: K, val: V)
+  var mask = me.capacity - 1u64
+  var i = h & mask
+  var dist = 0u64
+  var cur_h = h
+  var cur_key = key
+  var cur_val = val
+  while me.hashes[i] != 0u64
+    var occ_dist = me.probe_dist(hash: me.hashes[i], slot: i)
+    if occ_dist < dist
+      var tmp_h = me.hashes[i]
+      me.hashes[i] = cur_h
+      cur_h = tmp_h
+      var tmp_key = me.read_key(i)
+      me.write_key(slot: i, key: cur_key)
+      cur_key = tmp_key
+      var tmp_val = me.read_val(i)
+      me.write_val(slot: i, val: cur_val)
+      cur_val = tmp_val
+      dist = occ_dist
+    i = (i + 1u64) & mask
+    dist = dist + 1u64
+  me.hashes[i] = cur_h
+  me.write_key(slot: i, key: cur_key)
+  me.write_val(slot: i, val: cur_val)
+  return
+
+### Removes the entry at `slot` using backward-shift deletion (no tombstones).
+### :param slot: The occupied slot to vacate.
+routine Dict[K, V].delete_at(slot: U64)
+  var mask = me.capacity - 1u64
+  var i = slot
+  var j = (i + 1u64) & mask
+  while me.hashes[j] != 0u64 and me.probe_dist(hash: me.hashes[j], slot: j) > 0u64
+    me.hashes[i] = me.hashes[j]
+    me.write_key(slot: i, key: me.read_key(j))
+    me.write_val(slot: i, val: me.read_val(j))
+    i = j
+    j = (i + 1u64) & mask
+  me.hashes[i] = 0u64
+  return
+
+### Returns true if the next insert would exceed 75% load.
 ### :returns: The resulting `Bool` value.
 routine Dict[K, V].should_rehash() -> Bool
-  var load = (me.count * 100u64) // me.buckets.count()
-  return load > DICT_LOAD_FACTOR
+  return me.count * 4u64 >= me.capacity * 3u64
 
-### Executes `rehash`.
+### Doubles capacity and reinserts all live entries.
 routine Dict[K, V].rehash()
-  var old_buckets = me.buckets
-  var new_bucket_count = old_buckets.count() * 2u64
+  var old_cap = me.capacity
+  var old_hashes = me.hashes
+  var old_keys = me.keys
+  var old_vals = me.vals
+  var new_cap = old_cap * 2u64
 
-  me.buckets = List[SortedDict[K, V]](new_bucket_count)
+  me.hashes = List[U64](new_cap)
   var i = 0u64
-  while i < new_bucket_count
-    var empty_dict = SortedDict[K, V]()
-    me.buckets.add_last(empty_dict)
+  while i < new_cap
+    me.hashes.add_last(0u64)
     i = i + 1u64
+  danger!
+    me.keys = Snatched[K](rf_allocate_dynamic(new_cap * K.data_size()))
+    me.vals = Snatched[V](rf_allocate_dynamic(new_cap * V.data_size()))
+  me.capacity = new_cap
   me.count = 0u64
 
-  # Reinsert all entries
   i = 0u64
-  while i < old_buckets.count()
-    var bucket = old_buckets[i]
-    var keys = bucket.keys()
-    var j = 0u64
-    while j < keys.count()
-      var key = keys[j]
-      var value = bucket[key]
-      me.add(key, value)
-      j = j + 1u64
+  while i < old_cap
+    if old_hashes[i] != 0u64
+      me.insert_raw(h: old_hashes[i], key: old_keys.offset(i * K.data_size()).read(), val: old_vals.offset(i * V.data_size()).read())
+      me.count = me.count + 1u64
     i = i + 1u64
+
+  danger!
+    if not old_keys.is_none()
+      rf_invalidate(ptrtoint[K, Address](old_keys))
+    if not old_vals.is_none()
+      rf_invalidate(ptrtoint[V, Address](old_vals))
   return
 
 # ============================================================================
 # Core Operations
 # ============================================================================
 
-### Returns the number of stored values.
+### Returns the number of stored entries.
 ### :returns: The resulting `U64` value.
 routine Dict[K, V].count() -> U64
   return me.count
 
-### Returns true if this value is empty.
+### Returns true if this dict contains no entries.
 ### :returns: The resulting `Bool` value.
 routine Dict[K, V].is_empty() -> Bool
   return me.count == 0u64
 
-### Removes all stored values.
+### Removes all entries, keeping current capacity.
 routine Dict[K, V].clear()
   var i = 0u64
-  while i < me.buckets.count()
-    me.buckets[i].clear()
+  while i < me.capacity
+    me.hashes[i] = 0u64
     i = i + 1u64
   me.count = 0u64
   return
 
-### Returns whether this value contains `key`.
-### :param key: The `key` value.
+### Returns whether this dict contains `key`.
+### :param key: The key to look up.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Dict[K, V].$contains(key: K) -> Bool
-  var idx = me.bucket_index(key)
-  return key in me.buckets[idx]
+  return me.find_slot(key) < me.capacity
 
-### Returns the result of `add`.
-### :param key: The `key` value.
-### :param value: The value to use.
-### :returns: The resulting `Bool` value.
+### Inserts or updates a key-value entry.
+### :param key: The key to insert or update.
+### :param value: The value to associate.
+### :returns: `true` if a new entry was inserted, `false` if an existing entry was updated.
 routine Dict[K, V].add(key: K, value: V) -> Bool
-  # Returns true if inserted new, false if updated existing
   if me.should_rehash()
     me.rehash()
+  var slot = me.find_slot(key)
+  if slot < me.capacity
+    me.write_val(slot: slot, val: value)
+    return false
+  me.insert_raw(h: me.normalize_hash(key.$hash()), key: key, val: value)
+  me.count = me.count + 1u64
+  return true
 
-  var idx = me.bucket_index(key)
-  var existed = key in me.buckets[idx]
-  me.buckets[idx].add(key, value)
-  if not existed
-    me.count = me.count + 1u64
-    return true
-  return false
-
-### Returns the result of `remove`.
-### :param key: The `key` value.
-### :returns: The resulting `Bool` value.
+### Removes the entry with `key`.
+### :param key: The key to remove.
+### :returns: `true` if removed, `false` if not found.
 routine Dict[K, V].remove(key: K) -> Bool
-  # Returns true if removed, false if not found
-  var idx = me.bucket_index(key)
-  if me.buckets[idx].remove(key)
-    me.count = me.count - 1u64
-    return true
-  return false
+  var slot = me.find_slot(key)
+  if slot >= me.capacity
+    return false
+  me.delete_at(slot)
+  me.count = me.count - 1u64
+  return true
 
-### Returns the or default component.
-### :param key: The `key` value.
-### :param default_value: The `default_value` value.
+### Returns the value for `key`, or `default_value` if not found.
+### :param key: The key to look up.
+### :param default_value: The fallback value.
 ### :returns: The resulting `V` value.
 routine Dict[K, V].get_or_default(key: K, default_value: V) -> V
-  var idx = me.bucket_index(key)
-  if key in me.buckets[idx]
-    return me.buckets[idx][key]
-  return default_value
+  var slot = me.find_slot(key)
+  if slot >= me.capacity
+    return default_value
+  return me.read_val(slot)
 
 # ============================================================================
 # Indexing
 # ============================================================================
 
-### Implements the wired routine behavior for this value.
-### :param key: The `key` value.
+### Returns the value for `key`.
+### :param key: The key to look up.
 ### :returns: The resulting `V` value.
+### :absent: Returns absent when the key is not found.
 routine Dict[K, V].$getitem!(key: K) -> V
-  var idx = me.bucket_index(key)
-  return me.buckets[idx][key]
+  var slot = me.find_slot(key)
+  if slot >= me.capacity
+    absent
+  return me.read_val(slot)
 
-### Sets the element at the requested position.
-### :param key: The `key` value.
-### :param value: The value to use.
-routine Dict[K, V].$setitem(key: K, value: V)
-  var idx = me.bucket_index(key)
-  me.buckets[idx][key] = value
+### Sets the value for `key`, inserting a new entry if needed.
+### :param key: The key to set.
+### :param value: The value to associate.
+routine Dict[K, V].$setitem!(key: K, value: V)
+  if me.should_rehash()
+    me.rehash()
+  var slot = me.find_slot(key)
+  if slot < me.capacity
+    me.write_val(slot: slot, val: value)
+    return
+  me.insert_raw(h: me.normalize_hash(key.$hash()), key: key, val: value)
+  me.count = me.count + 1u64
   return
 
 # ============================================================================
-# Keys/Values/Entries
+# Keys / Values / Entries
 # ============================================================================
 
-### Returns the result of `keys`.
+### Returns all keys as a list.
 ### :returns: The resulting `List[K]` value.
 routine Dict[K, V].keys() -> List[K]
   var result = List[K](me.count)
   var i = 0u64
-  while i < me.buckets.count()
-    var bucket_keys = me.buckets[i].keys()
-    var j = 0u64
-    while j < bucket_keys.count()
-      result.add_last(bucket_keys[j])
-      j = j + 1u64
+  while i < me.capacity
+    if me.hashes[i] != 0u64
+      result.add_last(me.read_key(i))
     i = i + 1u64
   return result
 
-### Returns the result of `values`.
+### Returns all values as a list.
 ### :returns: The resulting `List[V]` value.
 routine Dict[K, V].values() -> List[V]
   var result = List[V](me.count)
   var i = 0u64
-  while i < me.buckets.count()
-    var bucket_values = me.buckets[i].values()
-    var j = 0u64
-    while j < bucket_values.count()
-      result.add_last(bucket_values[j])
-      j = j + 1u64
+  while i < me.capacity
+    if me.hashes[i] != 0u64
+      result.add_last(me.read_val(i))
     i = i + 1u64
   return result
 
-### Returns the result of `entries`.
+### Returns all key-value entries as a list.
 ### :returns: The resulting `List[DictEntry[K, V]]` value.
 routine Dict[K, V].entries() -> List[DictEntry[K, V]]
   var result = List[DictEntry[K, V]](me.count)
   var i = 0u64
-  while i < me.buckets.count()
-    var bucket_keys = me.buckets[i].keys()
-    var j = 0u64
-    while j < bucket_keys.count()
-      var key = bucket_keys[j]
-      var value = me.buckets[i].get!(key)
-      result.add_last(DictEntry[K, V](key: key, value: value))
-      j = j + 1u64
+  while i < me.capacity
+    if me.hashes[i] != 0u64
+      result.add_last(DictEntry[K, V](key: me.read_key(i), value: me.read_val(i)))
     i = i + 1u64
   return result
 
@@ -258,50 +364,36 @@ routine Dict[K, V].entries() -> List[DictEntry[K, V]]
 # Iteration
 # ============================================================================
 
-### Creates an iterator for this value.
+### Creates an iterator over this dict's entries.
 ### :returns: The resulting `DictIterator[K, V]` value.
 @readonly
 routine Dict[K, V].$iter() -> DictIterator[K, V]
-  return DictIterator[K, V](
-    dict: me,
-    bucket_idx: 0u64,
-    entry_idx: 0u64,
-    current_keys: List[K]()
-  )
+  return DictIterator[K, V](dict: me, slot: 0u64)
 
 ### Defines the entity `DictIterator`.
-### :typeparam K: The value used for `K`.
-### :typeparam V: The value used for `V`.
+### :typeparam K: The key type.
+### :typeparam V: The value type.
 entity DictIterator[K, V] obeys Iterator[DictEntry[K, V]]
-  ### Stores the dict member value.
+  ### The dict being iterated.
   dict: Dict[K, V]
-  ### Stores the bucket idx member value.
-  bucket_idx: U64
-  ### Stores the entry idx member value.
-  entry_idx: U64
-  ### Stores the current keys member value.
-  current_keys: List[K]
+  ### The current slot index.
+  slot: U64
 
-### Returns the next value from this iterator.
+### Returns the next entry from this iterator.
 ### :returns: The resulting `DictEntry[K, V]` value.
-### :absent: Returns absent when the requested value is unavailable.
+### :absent: Returns absent when the iterator is exhausted.
 @writable
-emitting routine DictIterator[K, V].$next() -> DictEntry[K, V]
-  while me.entry_idx >= me.current_keys.count()
-    if me.bucket_idx >= me.dict.buckets.count()
-      absent
-    me.current_keys = me.dict.buckets[me.bucket_idx].keys()
-    me.entry_idx = 0u64
-    me.bucket_idx = me.bucket_idx + 1u64
-
-  var key = me.current_keys[me.entry_idx]
-  var value = me.dict.get!(key)
-  me.entry_idx = me.entry_idx + 1u64
-  emit DictEntry[K, V](key: key, value: value)
-  return
+emitting routine DictIterator[K, V].$next!() -> DictEntry[K, V]
+  while me.slot < me.dict.capacity
+    var s = me.slot
+    me.slot = me.slot + 1u64
+    if me.dict.hashes[s] != 0u64
+      emit DictEntry[K, V](key: me.dict.read_key(s), value: me.dict.read_val(s))
+      return
+  absent
 
 # ============================================================================
-# Comparison
+# Display
 # ============================================================================
 
 ### Returns the textual representation of this value.
@@ -310,51 +402,45 @@ routine Dict[K, V].$represent() -> Text
   if me.is_empty()
     return "{:}"
   var result = "{"
-  var ks = me.keys()
-  var i = 0u64
-  while i < ks.count()
-    if i > 0u64
+  var first = true
+  for entry in me
+    if not first
       result = result + ", "
-    var key = ks[i]
-    result = result + key.$represent() + ": " + me[key].$represent()
-    i = i + 1u64
+    result = result + entry.key.$represent() + ": " + entry.value.$represent()
+    first = false
   result = result + "}"
   return result
 
-### Returns the textual representation of this value.
+### Returns the diagnostic representation of this value.
 ### :returns: The resulting `Text` value.
 routine Dict[K, V].$diagnose() -> Text
-  if me.is_empty()
-    return me.type_name() + "(count: 0, {:})"
   var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
-  var ks = me.keys()
-  var i = 0u64
-  while i < ks.count()
-    if i > 0u64
+  var first = true
+  for entry in me
+    if not first
       result = result + ", "
-    var key = ks[i]
-    result = result + key.$represent() + ": " + me[key].$represent()
-    i = i + 1u64
+    result = result + entry.key.$represent() + ": " + entry.value.$represent()
+    first = false
   result = result + "})"
   return result
 
-### Returns whether both values are equal.
-### :param other: The other value to compare against.
+# ============================================================================
+# Comparison
+# ============================================================================
+
+### Returns whether both dicts contain the same key-value entries.
+### :param other: The other dict to compare against.
 ### :returns: The resulting `Bool` value.
 routine Dict[K, V].$eq(other: Dict[K, V]) -> Bool
   if me.count != other.count
     return false
-
   var i = 0u64
-  while i < me.buckets.count()
-    var bucket_keys = me.buckets[i].keys()
-    var j = 0u64
-    while j < bucket_keys.count()
-      var key = bucket_keys[j]
-      if key notin other
+  while i < me.capacity
+    if me.hashes[i] != 0u64
+      var slot = other.find_slot(me.read_key(i))
+      if slot >= other.capacity
         return false
-      if me.get!(key) != other.get!(key)
+      if me.read_val(i) != other.read_val(slot)
         return false
-      j = j + 1u64
     i = i + 1u64
   return true

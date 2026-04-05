@@ -1,423 +1,411 @@
-# RazorForge Set[T] - Hash set with separate chaining
-# Entity type with heap allocation
-# O(1) average insert, delete, contains
-# Uses hash buckets with SortedSet for collision chains
-#
-# Usage:
-#   var names = Set[Text]()
-#   names.add("Alice")
-#   names.add("Bob")
-#   if names.contains("Alice") { }
-#   names.remove("Bob")
-
-import Collections.SortedSet
+# RazorForge Set[T] — Robin Hood open-addressing hash set
+# O(1) average insert / delete / contains
+# Requires T obeys Hashable, Equatable (no ordering needed)
+# 75% load factor; capacity always a power of two
 
 module Core
 
 import BuilderService
 
-# Initial number of buckets
-preset SET_INITIAL_BUCKETS: U64 = 16u64
-# Load factor threshold for rehashing (as percentage)
-preset SET_LOAD_FACTOR: U64 = 75u64
+preset SET_INITIAL_CAPACITY: U64 = 16u64
 
-### Defines the entity `Set`.
-### :typeparam T: The value used for `T`.
+### Hash set of unique T values.
+### :typeparam T: The element type.
 entity Set[T] obeys Iterable[T]
-needs T obeys Hashable, Comparable
-  secret buckets: List[SortedSet[T]]
+needs T obeys Hashable, Equatable
+  secret hashes: List[U64]    # 0 = empty; otherwise normalized hash of stored element
+  secret slots: Snatched[T]   # raw element storage, capacity slots
   secret count: U64
+  secret capacity: U64        # always a power of two
 
 # ============================================================================
 # Creators
 # ============================================================================
 
-### Creates a new instance.
+### Creates a new empty instance.
 ### :returns: The resulting `Set[T]` value.
 routine Set[T].$create() -> Set[T]
+  var cap = SET_INITIAL_CAPACITY
   var set = Set[T](
-    buckets: List[SortedSet[T]](SET_INITIAL_BUCKETS),
-    count: 0u64
+    hashes: List[U64](cap),
+    slots: snatched_none[T](),
+    count: 0u64,
+    capacity: cap
   )
-  # Initialize empty buckets
   var i = 0u64
-  while i < SET_INITIAL_BUCKETS
-    var empty_set = SortedSet[T]()
-    set.buckets.add_last(empty_set)
+  while i < cap
+    set.hashes.add_last(0u64)
     i = i + 1u64
+  danger!
+    set.slots = Snatched[T](rf_allocate_dynamic(cap * T.data_size()))
   return set
 
-### Creates a new instance.
-### :param capacity: The capacity value to use.
+### Creates a new instance pre-sized to hold at least `capacity` elements.
+### :param capacity: The minimum number of elements before the first rehash.
 ### :returns: The resulting `Set[T]` value.
 routine Set[T].$create(capacity: U64) -> Set[T]
-  # Calculate bucket count for desired capacity
-  var bucket_count = if capacity < SET_INITIAL_BUCKETS then SET_INITIAL_BUCKETS else capacity
+  var cap = SET_INITIAL_CAPACITY
+  while cap < capacity
+    cap = cap * 2u64
   var set = Set[T](
-    buckets: List[SortedSet[T]](bucket_count),
-    count: 0u64
+    hashes: List[U64](cap),
+    slots: snatched_none[T](),
+    count: 0u64,
+    capacity: cap
   )
   var i = 0u64
-  while i < bucket_count
-    var empty_set = SortedSet[T]()
-    set.buckets.add_last(empty_set)
+  while i < cap
+    set.hashes.add_last(0u64)
     i = i + 1u64
+  danger!
+    set.slots = Snatched[T](rf_allocate_dynamic(cap * T.data_size()))
   return set
 
-### Creates a new instance.
-### :param values...: The `values...` value.
+### Creates a new instance from varargs values.
+### :param values...: The initial elements to insert.
 ### :returns: The resulting `Set[T]` value.
 routine Set[T].$create(values...: T) -> Set[T]
   var result = Set[T]()
   for v in values
-    result.add(v)
+    discard result.add(v)
   return result
 
+### Releases raw element storage.
+routine Set[T].$destroy()
+  danger!
+    if not me.slots.is_none()
+      rf_invalidate(ptrtoint[T, Address](me.slots))
+  return
+
 # ============================================================================
-# Internal Operations
+# Internal Helpers
 # ============================================================================
 
-### Returns the result of `bucket index`.
-### :param value: The value to use.
+### Returns `h` normalized to never be zero.
+### :param h: The raw hash.
 ### :returns: The resulting `U64` value.
-routine Set[T].bucket_index(value: T) -> U64
-  # Get bucket index for value using hash
-  var hash = value.$hash()
-  return hash % me.buckets.count()
+routine Set[T].normalize_hash(h: U64) -> U64
+  return if h == 0u64 then 1u64 else h
 
-### Returns the result of `should rehash`.
+### Returns the probe distance of a slot given its stored hash.
+### :param hash: The stored hash value.
+### :param slot: The slot index.
+### :returns: The resulting `U64` value.
+routine Set[T].probe_dist(hash: U64, slot: U64) -> U64
+  return (slot + me.capacity - (hash & (me.capacity - 1u64))) & (me.capacity - 1u64)
+
+### Reads the element at `slot`.
+### :param slot: The slot index.
+### :returns: The resulting `T` value.
+routine Set[T].read_slot(slot: U64) -> T
+  return me.slots.offset(slot * T.data_size()).read()
+
+### Writes `val` to `slot`.
+### :param slot: The slot index.
+### :param val: The element to store.
+routine Set[T].write_slot(slot: U64, val: T)
+  me.slots.offset(slot * T.data_size()).write(val)
+  return
+
+### Linear-probes for `value` using the Robin Hood invariant.
+### Returns `capacity` when `value` is absent.
+### :param value: The element to find.
+### :returns: The resulting `U64` value.
+routine Set[T].find_slot(value: T) -> U64
+  var h = me.normalize_hash(value.$hash())
+  var mask = me.capacity - 1u64
+  var i = h & mask
+  var dist = 0u64
+  while me.hashes[i] != 0u64 and me.probe_dist(hash: me.hashes[i], slot: i) >= dist
+    if me.hashes[i] == h and me.read_slot(i) == value
+      return i
+    i = (i + 1u64) & mask
+    dist = dist + 1u64
+  return me.capacity
+
+### Inserts a pre-normalized hash + value using Robin Hood probing.
+### Does not check for duplicates and does not update `count`.
+### :param h: The normalized hash.
+### :param val: The element to insert.
+routine Set[T].insert_raw(h: U64, val: T)
+  var mask = me.capacity - 1u64
+  var i = h & mask
+  var dist = 0u64
+  var cur_h = h
+  var cur_val = val
+  while me.hashes[i] != 0u64
+    var occ_dist = me.probe_dist(hash: me.hashes[i], slot: i)
+    if occ_dist < dist
+      var tmp_h = me.hashes[i]
+      me.hashes[i] = cur_h
+      cur_h = tmp_h
+      var tmp_val = me.read_slot(i)
+      me.write_slot(slot: i, val: cur_val)
+      cur_val = tmp_val
+      dist = occ_dist
+    i = (i + 1u64) & mask
+    dist = dist + 1u64
+  me.hashes[i] = cur_h
+  me.write_slot(slot: i, val: cur_val)
+  return
+
+### Removes the element at `slot` using backward-shift deletion (no tombstones).
+### :param slot: The occupied slot to vacate.
+routine Set[T].delete_at(slot: U64)
+  var mask = me.capacity - 1u64
+  var i = slot
+  var j = (i + 1u64) & mask
+  while me.hashes[j] != 0u64 and me.probe_dist(hash: me.hashes[j], slot: j) > 0u64
+    me.hashes[i] = me.hashes[j]
+    me.write_slot(slot: i, val: me.read_slot(j))
+    i = j
+    j = (i + 1u64) & mask
+  me.hashes[i] = 0u64
+  return
+
+### Returns true if the next insert would exceed 75% load.
 ### :returns: The resulting `Bool` value.
 routine Set[T].should_rehash() -> Bool
-  # Check if load factor exceeds threshold
-  var load = (me.count * 100u64) // me.buckets.count()
-  return load > SET_LOAD_FACTOR
+  return me.count * 4u64 >= me.capacity * 3u64
 
-### Executes `rehash`.
+### Doubles capacity and reinserts all live elements.
 routine Set[T].rehash()
-  # Double the bucket count and redistribute
-  var old_buckets = me.buckets
-  var new_bucket_count = old_buckets.count() * 2u64
+  var old_cap = me.capacity
+  var old_hashes = me.hashes
+  var old_slots = me.slots
+  var new_cap = old_cap * 2u64
 
-  me.buckets = List[SortedSet[T]](new_bucket_count)
+  me.hashes = List[U64](new_cap)
   var i = 0u64
-  while i < new_bucket_count
-    var empty_set = SortedSet[T]()
-    me.buckets.add_last(empty_set)
+  while i < new_cap
+    me.hashes.add_last(0u64)
     i = i + 1u64
+  danger!
+    me.slots = Snatched[T](rf_allocate_dynamic(new_cap * T.data_size()))
+  me.capacity = new_cap
   me.count = 0u64
 
-  # Reinsert all elements
   i = 0u64
-  while i < old_buckets.count()
-    var bucket = old_buckets[i]
-    var elements = bucket.List()
-    var j = 0u64
-    while j < elements.count()
-      me.add(elements[j])
-      j = j + 1u64
+  while i < old_cap
+    if old_hashes[i] != 0u64
+      me.insert_raw(h: old_hashes[i], val: old_slots.offset(i * T.data_size()).read())
+      me.count = me.count + 1u64
     i = i + 1u64
+
+  danger!
+    if not old_slots.is_none()
+      rf_invalidate(ptrtoint[T, Address](old_slots))
   return
 
 # ============================================================================
 # Core Operations
 # ============================================================================
 
-### Returns the number of stored values.
+### Returns the number of stored elements.
 ### :returns: The resulting `U64` value.
 routine Set[T].count() -> U64
   return me.count
 
-### Returns true if this value is empty.
+### Returns true if this set contains no elements.
 ### :returns: The resulting `Bool` value.
 routine Set[T].is_empty() -> Bool
   return me.count == 0u64
 
-### Removes all stored values.
+### Removes all elements, keeping current capacity.
 routine Set[T].clear()
   var i = 0u64
-  while i < me.buckets.count()
-    me.buckets[i].clear()
+  while i < me.capacity
+    me.hashes[i] = 0u64
     i = i + 1u64
   me.count = 0u64
   return
 
-### Returns whether this value contains `value`.
-### :param value: The value to use.
+### Returns whether this set contains `value`.
+### :param value: The element to look up.
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Set[T].$contains(value: T) -> Bool
-  var idx = me.bucket_index(value)
-  return value in me.buckets[idx]
+  return me.find_slot(value) < me.capacity
 
-### Returns the result of `add`.
-### :param value: The value to use.
-### :returns: The resulting `Bool` value.
+### Inserts `value` if not already present.
+### :param value: The element to insert.
+### :returns: `true` if inserted, `false` if already present.
 routine Set[T].add(value: T) -> Bool
-  # Returns true if inserted, false if already exists
   if me.should_rehash()
     me.rehash()
+  if me.find_slot(value) < me.capacity
+    return false
+  me.insert_raw(h: me.normalize_hash(value.$hash()), val: value)
+  me.count = me.count + 1u64
+  return true
 
-  var idx = me.bucket_index(value)
-  if me.buckets[idx].add(value)
-    me.count = me.count + 1u64
-    return true
-  return false
-
-### Returns the result of `remove`.
-### :param value: The value to use.
-### :returns: The resulting `Bool` value.
+### Removes `value` if present.
+### :param value: The element to remove.
+### :returns: `true` if removed, `false` if not found.
 routine Set[T].remove(value: T) -> Bool
-  # Returns true if removed, false if not found
-  var idx = me.bucket_index(value)
-  if me.buckets[idx].remove(value)
-    me.count = me.count - 1u64
-    return true
-  return false
+  var slot = me.find_slot(value)
+  if slot >= me.capacity
+    return false
+  me.delete_at(slot)
+  me.count = me.count - 1u64
+  return true
 
 # ============================================================================
 # Set Operations
 # ============================================================================
 
-### Returns the result of `union`.
-### :param other: The other value to compare against.
+### Returns a new set containing all elements from both sets.
+### :param other: The other set.
 ### :returns: The resulting `Set[T]` value.
 routine Set[T].union(other: Set[T]) -> Set[T]
-  # Return new set with all elements from both
   var result = Set[T](me.count + other.count)
-
-  # Add all from me
-  var i = 0u64
-  while i < me.buckets.count()
-    var elements = me.buckets[i].List()
-    var j = 0u64
-    while j < elements.count()
-      result.add(elements[j])
-      j = j + 1u64
-    i = i + 1u64
-
-  # Add all from other
-  i = 0u64
-  while i < other.buckets.count()
-    var elements = other.buckets[i].List()
-    var j = 0u64
-    while j < elements.count()
-      result.add(elements[j])
-      j = j + 1u64
-    i = i + 1u64
-
+  for val in me
+    discard result.add(val)
+  for val in other
+    discard result.add(val)
   return result
 
-### Returns the result of `intersection`.
-### :param other: The other value to compare against.
+### Returns a new set containing only elements present in both sets.
+### :param other: The other set.
 ### :returns: The resulting `Set[T]` value.
 routine Set[T].intersection(other: Set[T]) -> Set[T]
-  # Return new set with elements in both
   var result = Set[T]()
-
-  # Use smaller set for iteration
-  var smaller = if me.count < other.count then me else other
-  var larger = if me.count < other.count then other else me
-
-  var i = 0u64
-  while i < smaller.buckets.count()
-    var elements = smaller.buckets[i].List()
-    var j = 0u64
-    while j < elements.count()
-      if elements[j] in larger
-        result.add(elements[j])
-      j = j + 1u64
-    i = i + 1u64
-
+  for val in me
+    if val in other
+      discard result.add(val)
   return result
 
-### Returns the result of `difference`.
-### :param other: The other value to compare against.
+### Returns a new set containing elements in this set but not in `other`.
+### :param other: The other set.
 ### :returns: The resulting `Set[T]` value.
 routine Set[T].difference(other: Set[T]) -> Set[T]
-  # Return new set with elements in me but not in other
   var result = Set[T]()
-
-  var i = 0u64
-  while i < me.buckets.count()
-    var elements = me.buckets[i].List()
-    var j = 0u64
-    while j < elements.count()
-      if elements[j] notin other
-        result.add(elements[j])
-      j = j + 1u64
-    i = i + 1u64
-
+  for val in me
+    if val notin other
+      discard result.add(val)
   return result
 
-### Returns the result of `symmetric difference`.
-### :param other: The other value to compare against.
+### Returns a new set containing elements in either set but not both.
+### :param other: The other set.
 ### :returns: The resulting `Set[T]` value.
 routine Set[T].symmetric_difference(other: Set[T]) -> Set[T]
-  # Return new set with elements in either but not both
   var result = Set[T]()
-
-  # Add elements from me not in other
-  var i = 0u64
-  while i < me.buckets.count()
-    var elements = me.buckets[i].List()
-    var j = 0u64
-    while j < elements.count()
-      if elements[j] notin other
-        result.add(elements[j])
-      j = j + 1u64
-    i = i + 1u64
-
-  # Add elements from other not in me
-  i = 0u64
-  while i < other.buckets.count()
-    var elements = other.buckets[i].List()
-    var j = 0u64
-    while j < elements.count()
-      if elements[j] notin me
-        result.add(elements[j])
-      j = j + 1u64
-    i = i + 1u64
-
+  for val in me
+    if val notin other
+      discard result.add(val)
+  for val in other
+    if val notin me
+      discard result.add(val)
   return result
 
-### Returns true if this value is subset.
-### :param other: The other value to compare against.
+### Returns true if every element of this set is also in `other`.
+### :param other: The other set.
 ### :returns: The resulting `Bool` value.
 routine Set[T].is_subset(other: Set[T]) -> Bool
-  # Check if all elements of me are in other
   if me.count > other.count
     return false
-
-  var i = 0u64
-  while i < me.buckets.count()
-    var elements = me.buckets[i].List()
-    var j = 0u64
-    while j < elements.count()
-      if elements[j] notin other
-        return false
-      j = j + 1u64
-    i = i + 1u64
+  for val in me
+    if val notin other
+      return false
   return true
 
-### Returns true if this value is superset.
-### :param other: The other value to compare against.
+### Returns true if every element of `other` is also in this set.
+### :param other: The other set.
 ### :returns: The resulting `Bool` value.
 routine Set[T].is_superset(other: Set[T]) -> Bool
   return other.is_subset(me)
 
-### Returns true if this value is disjoint.
-### :param other: The other value to compare against.
+### Returns true if this set and `other` share no elements.
+### :param other: The other set.
 ### :returns: The resulting `Bool` value.
 routine Set[T].is_disjoint(other: Set[T]) -> Bool
-  # Check if no elements in common
-  var smaller = if me.count < other.count then me else other
-  var larger = if me.count < other.count then other else me
-
-  var i = 0u64
-  while i < smaller.buckets.count()
-    var elements = smaller.buckets[i].List()
-    var j = 0u64
-    while j < elements.count()
-      if elements[j] in larger
-        return false
-      j = j + 1u64
-    i = i + 1u64
+  for val in me
+    if val in other
+      return false
   return true
 
 # ============================================================================
 # Conversion
 # ============================================================================
 
-### Creates a new instance.
-### :param from: The source value to convert.
+### Creates a new instance from a set.
+### :param from: The source set.
 ### :returns: The resulting `List[T]` value.
 routine List[T].$create(from: Set[T]) -> List[T]
   var result = List[T](from.count)
-  var i = 0u64
-  while i < from.buckets.count()
-    var elements = from.buckets[i].List()
-    var j = 0u64
-    while j < elements.count()
-      result.add_last(elements[j])
-      j = j + 1u64
-    i = i + 1u64
+  for val in from
+    result.add_last(val)
   return result
 
 # ============================================================================
 # Iteration
 # ============================================================================
 
-### Creates an iterator for this value.
+### Creates an iterator over this set's elements.
 ### :returns: The resulting `SetIterator[T]` value.
 @readonly
 routine Set[T].$iter() -> SetIterator[T]
-  return SetIterator[T](
-    set: me,
-    bucket_idx: 0u64,
-    element_idx: 0u64,
-    current_elements: List[T]()
-  )
+  return SetIterator[T](set: me, slot: 0u64)
 
 ### Defines the entity `SetIterator`.
-### :typeparam T: The value used for `T`.
+### :typeparam T: The element type.
 entity SetIterator[T] obeys Iterator[T]
-  ### Stores the set member value.
+  ### The set being iterated.
   set: Set[T]
-  ### Stores the bucket idx member value.
-  bucket_idx: U64
-  ### Stores the element idx member value.
-  element_idx: U64
-  ### Stores the current elements member value.
-  current_elements: List[T]
+  ### The current slot index.
+  slot: U64
 
-### Returns the next value from this iterator.
+### Returns the next element from this iterator.
 ### :returns: The resulting `T` value.
-### :absent: Returns absent when the requested value is unavailable.
+### :absent: Returns absent when the iterator is exhausted.
 @writable
-emitting routine SetIterator[T].$next() -> T
-  while me.element_idx >= me.current_elements.count()
-    if me.bucket_idx >= me.set.buckets.count()
-      absent
-    me.current_elements = me.set.buckets[me.bucket_idx].List()
-    me.element_idx = 0u64
-    me.bucket_idx = me.bucket_idx + 1u64
-
-  emit me.current_elements[me.element_idx]
-  me.element_idx = me.element_idx + 1u64
-  return
+emitting routine SetIterator[T].$next!() -> T
+  while me.slot < me.set.capacity
+    var s = me.slot
+    me.slot = me.slot + 1u64
+    if me.set.hashes[s] != 0u64
+      emit me.set.read_slot(s)
+      return
+  absent
 
 # ============================================================================
-# Comparison
+# Display
 # ============================================================================
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 routine Set[T].$represent() -> Text
+  if me.is_empty()
+    return "{}"
   var result = "{"
-  var i = 0u64
-  for v in me
-    if i > 0u64
+  var first = true
+  for val in me
+    if not first
       result = result + ", "
-    result = result + v.$represent()
-    i = i + 1u64
+    result = result + val.$represent()
+    first = false
   result = result + "}"
   return result
 
-### Returns the textual representation of this value.
+### Returns the diagnostic representation of this value.
 ### :returns: The resulting `Text` value.
 routine Set[T].$diagnose() -> Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
-  var i = 0u64
-  for v in me
-    if i > 0u64
+  var first = true
+  for val in me
+    if not first
       result = result + ", "
-    result = result + v.$represent()
-    i = i + 1u64
+    result = result + val.$represent()
+    first = false
   result = result + "})"
   return result
 
-### Returns whether both values are equal.
-### :param other: The other value to compare against.
+# ============================================================================
+# Comparison
+# ============================================================================
+
+### Returns whether both sets contain the same elements.
+### :param other: The other set to compare against.
 ### :returns: The resulting `Bool` value.
 routine Set[T].$eq(other: Set[T]) -> Bool
   if me.count != other.count
