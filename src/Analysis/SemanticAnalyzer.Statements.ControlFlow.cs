@@ -214,6 +214,7 @@ public sealed partial class SemanticAnalyzer
 
         // Track handled patterns for narrowing the else clause
         bool handledNone = false;
+        bool handledBlank = false;
         bool handledCrashable = false;
 
         foreach (WhenClause clause in whenStmt.Clauses)
@@ -221,9 +222,13 @@ public sealed partial class SemanticAnalyzer
             _registry.EnterScope(kind: ScopeKind.Block, name: "when_clause");
 
             // Track which patterns are handled (before the else clause)
-            if (IsNonePattern(pattern: clause.Pattern))
+            if (IsMaybeType(type: matchedType) && IsNonePattern(pattern: clause.Pattern))
             {
                 handledNone = true;
+            }
+            else if (!IsMaybeType(type: matchedType) && IsBlankPattern(pattern: clause.Pattern))
+            {
+                handledBlank = true;
             }
             else if (IsCrashablePattern(pattern: clause.Pattern))
             {
@@ -237,6 +242,7 @@ public sealed partial class SemanticAnalyzer
                     // Compute narrowed type for else clause binding
                     TypeSymbol? narrowedType = ComputeNarrowedType(type: matchedType,
                         eliminateNone: handledNone,
+                        eliminateBlank: handledBlank,
                         eliminateCrashable: handledCrashable);
 
                     if (narrowedType != null && elsePat.VariableName != null)

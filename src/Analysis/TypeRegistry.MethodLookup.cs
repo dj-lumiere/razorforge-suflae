@@ -626,7 +626,8 @@ public sealed partial class TypeRegistry
             IsDangerous = method.IsDangerous,
             IsSynthesized = method.IsSynthesized,
             Storage = method.Storage,
-            AsyncStatus = method.AsyncStatus
+            AsyncStatus = method.AsyncStatus,
+            OriginalName = method.OriginalName
         };
     }
 

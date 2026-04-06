@@ -31,24 +31,33 @@ public sealed class ErrorHandlingGenerator
     }
 
     /// <summary>
-    /// Generates a variant name from an original routine name.
-    /// For qualified names like "Cache.get", produces "Cache.try_get".
-    /// For simple names like "get", produces "try_get".
+    /// Generates a variant name for an original routine.
+    /// Strips the leading '$' from wired routine names so that "$next" → "try_next" (not "try_$next").
     /// </summary>
     /// <param name="prefix">The variant prefix (try, check, lookup).</param>
-    /// <param name="originalName">The original routine name.</param>
+    /// <param name="original">The original routine.</param>
     /// <returns>The variant name.</returns>
-    private static string GenerateVariantName(string prefix, string originalName)
+    private static string GenerateVariantName(string prefix, RoutineInfo original)
     {
-        int lastDot = originalName.LastIndexOf(value: '.');
-        if (lastDot >= 0)
+        string baseName = original.Name.TrimStart(trimChar: '$');
+        return $"{prefix}_{baseName}";
+    }
+
+    /// <summary>
+    /// Generates a try_ alias for a non-failable emitting routine (e.g., "$next" → "try_next").
+    /// The alias exposes the iteration-safe interface uniformly, so EmitFor can always call try_next.
+    /// Returns null if the routine is failable or not an emitting routine.
+    /// </summary>
+    /// <param name="original">The non-failable emitting routine.</param>
+    /// <returns>The try_ alias, or null if not applicable.</returns>
+    public RoutineInfo? GenerateTryAlias(RoutineInfo original)
+    {
+        if (original.IsFailable || original.AsyncStatus != AsyncStatus.Emitting)
         {
-            // Qualified name: "Type.method" -> "Type.prefix_method"
-            return $"{originalName[..(lastDot + 1)]}{prefix}_{originalName[(lastDot + 1)..]}";
+            return null;
         }
 
-        // Simple name: "method" -> "prefix_method"
-        return $"{prefix}_{originalName}";
+        return GenerateTryVariant(original: original);
     }
 
     /// <summary>
@@ -128,6 +137,16 @@ public sealed class ErrorHandlingGenerator
     }
 
     /// <summary>
+    /// Quick check: returns true if the body contains at least one throw or absent statement.
+    /// Used to filter bodies before storing them for variant generation.
+    /// </summary>
+    public bool BodyHasThrowOrAbsent(Statement body)
+    {
+        ErrorHandlingAnalysis analysis = AnalyzeBody(body);
+        return analysis.HasThrow || analysis.HasAbsent;
+    }
+
+    /// <summary>
     /// Recursively analyzes statements for throw/absent keywords.
     /// </summary>
     /// <param name="statement">The statement to analyze.</param>
@@ -200,7 +219,7 @@ public sealed class ErrorHandlingGenerator
             typeArguments: [returnType]);
 
         return new
-            RoutineInfo(name: GenerateVariantName(prefix: "try", originalName: original.Name))
+            RoutineInfo(name: GenerateVariantName(prefix: "try", original: original))
             {
                 Kind = original.Kind,
                 OwnerType = original.OwnerType,
@@ -214,7 +233,8 @@ public sealed class ErrorHandlingGenerator
                 Visibility = original.Visibility,
                 Location = original.Location,
                 Module = original.Module,
-                Annotations = original.Annotations
+                Annotations = original.Annotations,
+                OriginalName = original.Name
             };
     }
 
@@ -238,7 +258,7 @@ public sealed class ErrorHandlingGenerator
             typeArguments: [returnType]);
 
         return new
-            RoutineInfo(name: GenerateVariantName(prefix: "check", originalName: original.Name))
+            RoutineInfo(name: GenerateVariantName(prefix: "check", original: original))
             {
                 Kind = original.Kind,
                 OwnerType = original.OwnerType,
@@ -252,7 +272,8 @@ public sealed class ErrorHandlingGenerator
                 Visibility = original.Visibility,
                 Location = original.Location,
                 Module = original.Module,
-                Annotations = original.Annotations
+                Annotations = original.Annotations,
+                OriginalName = original.Name
             };
     }
 
@@ -277,7 +298,7 @@ public sealed class ErrorHandlingGenerator
             typeArguments: [returnType]);
 
         return new
-            RoutineInfo(name: GenerateVariantName(prefix: "lookup", originalName: original.Name))
+            RoutineInfo(name: GenerateVariantName(prefix: "lookup", original: original))
             {
                 Kind = original.Kind,
                 OwnerType = original.OwnerType,
@@ -291,7 +312,8 @@ public sealed class ErrorHandlingGenerator
                 Visibility = original.Visibility,
                 Location = original.Location,
                 Module = original.Module,
-                Annotations = original.Annotations
+                Annotations = original.Annotations,
+                OriginalName = original.Name
             };
     }
 }

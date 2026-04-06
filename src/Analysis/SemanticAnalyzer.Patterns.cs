@@ -51,11 +51,11 @@ public sealed partial class SemanticAnalyzer
                 // None is a keyword, not a registered type — handle it directly
                 if (typePat.Type.Name == "None")
                 {
-                    if (matchedType is not ErrorTypeInfo && !IsCarrierType(type: matchedType))
+                    if (matchedType is not ErrorTypeInfo && !IsMaybeType(type: matchedType))
                     {
                         ReportError(code: SemanticDiagnosticCode.PatternTypeMismatch,
                             message:
-                            $"Type pattern 'is None' can never match a value of type '{matchedType.Name}'.",
+                            $"Type pattern 'is None' can only match Maybe[T], not '{matchedType.Name}'.",
                             location: typePat.Location);
                     }
 
@@ -758,22 +758,22 @@ public sealed partial class SemanticAnalyzer
     private ExhaustivenessResult CheckErrorHandlingExhaustiveness(
         IReadOnlyList<WhenClause> clauses, TypeSymbol carrierType)
     {
-        bool hasNone = false;
+        bool hasAbsent = false;
         bool hasCrashableCatchAll = false;
         bool hasValue = false;
 
         foreach (WhenClause clause in clauses)
         {
-            if (IsNonePattern(pattern: clause.Pattern))
+            if (IsAbsentPattern(pattern: clause.Pattern, carrierType: carrierType))
             {
-                hasNone = true;
+                hasAbsent = true;
             }
             else if (IsCrashableCatchAll(pattern: clause.Pattern))
             {
                 // Only generic 'is Crashable e' counts as catch-all, not specific error types (#89)
                 hasCrashableCatchAll = true;
             }
-            else if (clause.Pattern is not (NonePattern or CrashablePattern))
+            else if (!IsNonePattern(pattern: clause.Pattern) && clause.Pattern is not CrashablePattern)
             {
                 // Any other pattern (type check, literal, etc.) counts as value arm
                 hasValue = true;
@@ -786,7 +786,7 @@ public sealed partial class SemanticAnalyzer
         switch (carrierBaseName)
         {
             case "Maybe":
-                if (!hasNone)
+                if (!hasAbsent)
                 {
                     missing.Add(item: "None");
                 }
@@ -810,9 +810,9 @@ public sealed partial class SemanticAnalyzer
 
                 break;
             case "Lookup":
-                if (!hasNone)
+                if (!hasAbsent)
                 {
-                    missing.Add(item: "None");
+                    missing.Add(item: "Blank");
                 }
 
                 if (!hasCrashableCatchAll)

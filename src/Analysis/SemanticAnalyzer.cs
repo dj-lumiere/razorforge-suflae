@@ -160,11 +160,17 @@ public sealed partial class SemanticAnalyzer
         // Phase 3: Analyze routine bodies and expressions
         AnalyzeBodies(program: program);
 
+        // Phase 3b: Analyze stdlib bodies to populate _routineBodies for variant generation.
+        CollectStdlibBodiesForVariantGeneration();
+
         // Phase 4: Modification inference (call graph propagation)
         InferModificationCategories();
 
         // Phase 5: Error handling variant generation
         GenerateErrorHandlingVariants();
+
+        // Phase 6: Finalize return types — any routine still null gets Blank
+        FinalizeReturnTypes();
 
         return new AnalysisResult(Registry: _registry,
             Errors: _errors.AsReadOnly(),
@@ -243,6 +249,128 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
+    /// Runs body analysis on all stdlib programs solely to populate <c>_routineBodies</c>
+    /// for error-handling variant generation (Phase 5). Any errors produced are discarded —
+    /// stdlib correctness is validated separately by the <c>ValidateStdlib</c> command.
+    /// </summary>
+    /// <summary>
+    /// Lightweight scan of stdlib programs to populate <c>_routineBodies</c> for variant generation
+    /// (Phase 5). Unlike <see cref="ValidateStdlibBodies"/>, this performs no type-checking —
+    /// it only walks AST nodes looking for failable routines whose bodies contain throw/absent.
+    /// This avoids corrupting SA state with stdlib-specific resolution errors.
+    /// </summary>
+    /// <remarks>
+    /// HACK — tracked as S220. The real fix is to integrate stdlib body analysis into the normal
+    /// Pass 3 pipeline so <c>_routineBodies</c> is always populated for all routines regardless
+    /// of whether they come from stdlib or user files.
+    /// </remarks>
+    private void CollectStdlibBodiesForVariantGeneration()
+    {
+        if (_registry.StdlibPrograms.Count == 0)
+        {
+            return;
+        }
+
+        // TODO: This doesn't work for any modules beside Core.
+        string previousFilePath = _currentFilePath;
+        var previousImports = new HashSet<string>(collection: _importedModules,
+            comparer: StringComparer.OrdinalIgnoreCase);
+        string? previousModuleName = _currentModuleName;
+
+        var scanner = new Inference.ErrorHandlingGenerator(registry: _registry);
+
+        foreach ((Program program, string filePath, string module) in _registry.StdlibPrograms)
+        {
+            _currentFilePath = filePath;
+            _currentModuleName = module;
+            _importedModules.Clear();
+
+            _importedModules.Add(item: "Core");
+            if (!string.IsNullOrEmpty(value: module))
+            {
+                _importedModules.Add(item: module);
+            }
+
+            foreach (IAstNode node in program.Declarations)
+            {
+                if (node is ImportDeclaration import)
+                {
+                    string importModule = import.ModulePath;
+                    int dotIdx = importModule.IndexOf(value: '.');
+                    if (dotIdx > 0)
+                    {
+                        _importedModules.Add(item: importModule[..dotIdx]);
+                    }
+
+                    _importedModules.Add(item: importModule);
+                }
+            }
+
+            ScanFallibleBodiesForVariantGeneration(program: program, scanner: scanner);
+        }
+
+        // Restore state
+        _currentFilePath = previousFilePath;
+        _currentModuleName = previousModuleName;
+        _importedModules.Clear();
+        foreach (string ns in previousImports)
+        {
+            _importedModules.Add(item: ns);
+        }
+    }
+
+    /// <summary>
+    /// Scans a single program's failable routine declarations and stores those with
+    /// throw/absent bodies in <c>_routineBodies</c> for error-handling variant generation.
+    /// No type-checking is performed — only AST structure is examined.
+    /// </summary>
+    private void ScanFallibleBodiesForVariantGeneration(Program program,
+        Inference.ErrorHandlingGenerator scanner)
+    {
+        // TODO: This should be done AFTER all the generic resolved routine has been added.
+        foreach (IAstNode node in program.Declarations)
+        {
+            if (node is RoutineDeclaration routine && routine.IsFailable && routine.Body != null)
+            {
+                // Only store bodies that have throw/absent — LLVM IR routines don't
+                if (!scanner.BodyHasThrowOrAbsent(body: routine.Body))
+                {
+                    continue;
+                }
+
+                // Compute registry key (same logic as AnalyzeFunctionBody)
+                string baseName;
+                if (routine.Name.Contains(value: '.'))
+                {
+                    int dotIndex = routine.Name.IndexOf(value: '.');
+                    string typeName = routine.Name[..dotIndex];
+                    string methodName = routine.Name[(dotIndex + 1)..];
+                    string lookupName = typeName.Contains(value: '[')
+                        ? typeName[..typeName.IndexOf(value: '[')]
+                        : typeName;
+                    TypeSymbol? ownerType = LookupTypeWithImports(name: lookupName);
+                    baseName = ownerType != null
+                        ? $"{ownerType.Name}.{methodName}"
+                        : routine.Name;
+                }
+                else
+                {
+                    string? mod = GetCurrentModuleName();
+                    baseName = string.IsNullOrEmpty(value: mod)
+                        ? routine.Name
+                        : $"{mod}.{routine.Name}";
+                }
+
+                RoutineInfo? routineInfo = _registry.LookupRoutine(fullName: baseName);
+                if (routineInfo is { IsFailable: true })
+                {
+                    StoreRoutineBody(routine: routineInfo, body: routine.Body);
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// Analyzes multiple program ASTs from a multi-file build.
     /// Phases are split so per-file phases run with correct import scoping,
     /// while global phases run once across the combined registry.
@@ -310,12 +438,42 @@ public sealed partial class SemanticAnalyzer
 
         // Global passes (once, consume accumulated call graph + routine bodies)
         InferModificationCategories();
+
+        // Pass 3b: Analyze stdlib bodies to populate _routineBodies for variant generation.
+        // Stdlib routines ($next!, $getitem!, etc.) are failable and need try_/check_/lookup_
+        // variants. Their bodies are not in 'files' (user code only), so we scan them separately
+        // and discard any errors (stdlib errors are handled by the ValidateStdlib command).
+        CollectStdlibBodiesForVariantGeneration();
+
         GenerateErrorHandlingVariants();
+
+        // Phase 6: Finalize return types — any routine still null gets Blank
+        FinalizeReturnTypes();
 
         return new AnalysisResult(Registry: _registry,
             Errors: _errors.AsReadOnly(),
             Warnings: _warnings.AsReadOnly(),
             ParsedLiterals: _parsedLiterals);
+    }
+
+    /// <summary>
+    /// Phase 6: Sets ReturnType = Blank for every routine still carrying null after all analysis.
+    /// Null is a transient "not yet inferred" state. Stdlib routines without a return type
+    /// annotation never go through AnalyzeFunctionBody, so they keep null permanently unless
+    /// this pass runs.
+    /// </summary>
+    private void FinalizeReturnTypes()
+    {
+        TypeSymbol? blank = _registry.LookupType(name: "Blank");
+        if (blank == null)
+        {
+            return;
+        }
+
+        foreach (RoutineInfo routine in _registry.GetAllRoutines())
+        {
+            routine.ReturnType ??= blank;
+        }
     }
 
     /// <summary>

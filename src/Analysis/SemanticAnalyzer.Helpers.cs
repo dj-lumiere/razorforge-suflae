@@ -77,6 +77,38 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private static bool IsMaybeType(TypeSymbol type) => GetCarrierBaseName(type: type) == "Maybe";
 
+    /// <summary>
+    /// Checks if a pattern represents a None check.
+    /// The parser creates TypePattern(type: "None") rather than NonePattern.
+    /// </summary>
+    private static bool IsNonePattern(Pattern pattern)
+    {
+        return pattern is NonePattern or TypePattern { Type.Name: "None" };
+    }
+
+    /// <summary>
+    /// Checks if a pattern represents a Blank check.
+    /// Blank is parsed as a regular type pattern.
+    /// </summary>
+    private static bool IsBlankPattern(Pattern pattern)
+    {
+        return pattern is TypePattern { Type.Name: "Blank" };
+    }
+
+    /// <summary>
+    /// Checks if a pattern is the absent arm for a carrier type.
+    /// Maybe[T] uses None. Result[T]/Lookup[T] use Blank in the type_id carrier model.
+    /// </summary>
+    private static bool IsAbsentPattern(Pattern pattern, TypeSymbol carrierType)
+    {
+        return GetCarrierBaseName(type: carrierType) switch
+        {
+            "Maybe" => IsNonePattern(pattern: pattern),
+            "Result" or "Lookup" => IsBlankPattern(pattern: pattern),
+            _ => false
+        };
+    }
+
     #endregion
 
     #region Helper Methods for Analysis

@@ -171,8 +171,12 @@ public sealed partial class SemanticAnalyzer
             _dangerBlockDepth = 0;
         }
 
+        // Infer Blank return type if no annotation was given and no return value was found.
+        // null is a transient "not yet inferred" state — after body analysis it must be resolved.
+        routineInfo.ReturnType ??= _registry.LookupType(name: "Blank");
+
         // Validate that non-void routines return on all paths (#144)
-        if (routineInfo.ReturnType != null && routineInfo.ReturnType.Name != "Blank" &&
+        if (routineInfo.ReturnType is { IsBlank: false } &&
             !StatementAlwaysTerminates(statement: routine.Body))
         {
             ReportError(code: SemanticDiagnosticCode.MissingReturn,
@@ -192,8 +196,11 @@ public sealed partial class SemanticAnalyzer
                 location: routine.Location);
         }
 
-        // Store routine body for error handling variant generation (Phase 5)
-        if (routineInfo.IsFailable)
+        // Store routine body for error handling variant generation (Phase 5).
+        // Only store if the body actually has throw/absent/failable-calls — routines
+        // implemented via @llvm_ir have no such AST nodes and can't have variants generated.
+        if (routineInfo.IsFailable &&
+            (routineInfo.HasThrow || routineInfo.HasAbsent || routineInfo.HasFailableCalls))
         {
             StoreRoutineBody(routine: routineInfo, body: routine.Body);
         }

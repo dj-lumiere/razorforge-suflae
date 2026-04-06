@@ -107,13 +107,13 @@ public class TypeProhibitionTests
             filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
     }
     /// <summary>
-    /// Tests Analyze_LookupBlank_NoErrors.
+    /// Tests Analyze_LookupBlank_ReportsError.
     /// </summary>
 
     [Fact]
-    public void Analyze_LookupBlank_NoErrors()
+    public void Analyze_LookupBlank_ReportsError()
     {
-        // Lookup<Blank> is allowed for failable void routines
+        // Lookup<Blank> is ambiguous: Blank is also the absent sentinel in the type_id carrier.
         string source = """
                         routine foo(x: Lookup[Blank])
                           pass
@@ -121,7 +121,7 @@ public class TypeProhibitionTests
                         """;
 
         AnalysisResult result = Analyze(source: source);
-        Assert.DoesNotContain(collection: result.Errors,
+        Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
     }
 

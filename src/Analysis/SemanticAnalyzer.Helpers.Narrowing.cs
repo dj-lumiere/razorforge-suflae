@@ -67,16 +67,18 @@ public sealed partial class SemanticAnalyzer
         // Check for existing narrowing
         TypeSymbol varType = _registry.GetNarrowedType(name: id.Name) ?? varInfo.Type;
 
-        bool eliminateNone = IsNonePattern(pattern: isPat.Pattern);
+        bool eliminateNone = IsMaybeType(type: varType) && IsNonePattern(pattern: isPat.Pattern);
+        bool eliminateBlank = !IsMaybeType(type: varType) && IsBlankPattern(pattern: isPat.Pattern);
         bool eliminateCrashable = IsCrashablePattern(pattern: isPat.Pattern);
 
-        if (!eliminateNone && !eliminateCrashable)
+        if (!eliminateNone && !eliminateBlank && !eliminateCrashable)
         {
             return null;
         }
 
         TypeSymbol? narrowedType = ComputeNarrowedType(type: varType,
             eliminateNone: eliminateNone,
+            eliminateBlank: eliminateBlank,
             eliminateCrashable: eliminateCrashable);
 
         if (narrowedType == null)
@@ -96,15 +98,6 @@ public sealed partial class SemanticAnalyzer
         return new NarrowingInfo(VariableName: id.Name,
             ThenBranchType: null,
             ElseBranchType: narrowedType);
-    }
-
-    /// <summary>
-    /// Checks if a pattern represents a None check.
-    /// The parser creates TypePattern(type: "None") rather than NonePattern.
-    /// </summary>
-    private static bool IsNonePattern(Pattern pattern)
-    {
-        return pattern is NonePattern or TypePattern { Type.Name: "None" };
     }
 
     /// <summary>
@@ -131,6 +124,7 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     /// <returns>The narrowed type, or null if narrowing is not possible.</returns>
     private static TypeSymbol? ComputeNarrowedType(TypeSymbol type, bool eliminateNone,
+        bool eliminateBlank,
         bool eliminateCrashable)
     {
         string? baseName = GetCarrierBaseName(type: type);
@@ -149,8 +143,8 @@ public sealed partial class SemanticAnalyzer
             // Result<T>: eliminate Crashable → T
             "Result" when eliminateCrashable => valueType,
 
-            // Lookup<T>: must eliminate both None and Crashable → T
-            "Lookup" when eliminateNone && eliminateCrashable => valueType,
+            // Lookup<T>: must eliminate both absent (Blank) and Crashable → T
+            "Lookup" when eliminateBlank && eliminateCrashable => valueType,
 
             // Partial elimination on Lookup is not sufficient
             _ => null

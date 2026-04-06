@@ -207,12 +207,13 @@ public sealed partial class SemanticAnalyzer
             return ErrorTypeInfo.Instance;
         }
 
-        // Reject Blank as a type argument (except Result<Blank> and Lookup<Blank> for failable void routines)
+        // Reject Blank as a type argument except Result<Blank>.
+        // Lookup<Blank> is ambiguous in the type_id carrier model because Blank is also the absent sentinel.
         string? genericDefCarrierName = GetCarrierBaseName(type: genericDef);
         foreach (TypeSymbol arg in typeArgs)
         {
             if (arg is not { Name: "Blank" } ||
-                genericDefCarrierName is "Result" or "Lookup")
+                genericDefCarrierName is "Result")
             {
                 continue;
             }

@@ -3,7 +3,6 @@
 using Inference;
 using Symbols;
 using SyntaxTree;
-using Diagnostics;
 
 /// <summary>
 /// Phase 5: Error handling variant generation.
@@ -62,6 +61,18 @@ public sealed partial class SemanticAnalyzer
 
             GenerateVariantsForRoutine(routine: routine, body: body);
         }
+
+        // Also generate try_ aliases for non-failable emitting routines so that EmitFor can always
+        // call try_next uniformly. Failable emitters already have try_next from the loop above.
+        foreach (RoutineInfo routine in routines)
+        {
+            RoutineInfo? alias = _errorHandlingGenerator!.GenerateTryAlias(original: routine);
+            if (alias != null)
+            {
+                _registry.RegisterRoutine(routine: alias);
+            }
+        }
+
     }
 
     /// <summary>
@@ -84,15 +95,11 @@ public sealed partial class SemanticAnalyzer
         ErrorHandlingResult result =
             _errorHandlingGenerator!.GenerateVariants(routine: routine, body: body);
 
-        // Report any errors from variant generation
+        // If variant generation fails (e.g., @llvm_ir routines with no throw/absent AST nodes),
+        // just skip — no error reported. These are external implementations that don't need
+        // generated safe variants.
         if (result.Error != null)
         {
-            ReportError(code: SemanticDiagnosticCode.VariantGenerationError,
-                message: result.Error,
-                location: routine.Location ?? new SourceLocation(FileName: "<unknown>",
-                    Line: 0,
-                    Column: 0,
-                    Position: 0));
             return;
         }
 

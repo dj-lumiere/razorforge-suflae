@@ -108,8 +108,8 @@ public sealed class RoutineInfo
     /// <summary>Parameters of this routine.</summary>
     public IReadOnlyList<ParameterInfo> Parameters { get; init; } = [];
 
-    /// <summary>Return type, or null for void.</summary>
-    public TypeSymbol? ReturnType { get; init; }
+    /// <summary>Return type. Null means "not yet inferred" (transient during analysis). After body analysis, always Blank or a concrete type.</summary>
+    public TypeSymbol? ReturnType { get; set; }
 
     /// <summary>Whether this routine can fail (has ! suffix).</summary>
     public bool IsFailable { get; init; }
@@ -235,6 +235,12 @@ public sealed class RoutineInfo
     /// For generic definitions, the original generic routine this was resolved from.
     /// </summary>
     public RoutineInfo? GenericDefinition { get; init; }
+
+    /// <summary>
+    /// For generated error-handling variants (try_, check_, lookup_), the original routine name
+    /// they were generated from (e.g., "$next" for "try_next", "parse" for "try_parse").
+    /// </summary>
+    public string? OriginalName { get; init; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RoutineInfo"/> class.
