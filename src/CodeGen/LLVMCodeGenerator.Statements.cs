@@ -429,11 +429,12 @@ public partial class LLVMCodeGenerator
                         resolvedOwnerType: targetType);
                 }
             }
-            else if (targetType.IsGenericResolution &&
-                     setItem.OwnerType is { IsGenericDefinition: true })
+            else if (targetType.IsGenericResolution)
             {
                 mangledName =
-                    Q(name: $"{targetType.FullName}.{SanitizeLLVMName(name: setItem.Name)}");
+                    Q(name: DecorateRoutineSymbolName(
+                        baseName: $"{targetType.FullName}.{SanitizeLLVMName(name: setItem.Name)}",
+                        isFailable: setItem.IsFailable));
                 RecordMonomorphization(mangledName: mangledName,
                     genericMethod: setItem,
                     resolvedOwnerType: targetType);
