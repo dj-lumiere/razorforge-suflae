@@ -28,8 +28,8 @@ entity SelectEmitter[T, U] obeys Iterator[U]
 
 ### Returns the next value from this iterator.
 ### :returns: The resulting `U` value.
-emitting routine SelectEmitter[T, U].$next() -> U
-  var item = me.source.$next()
+emitting routine SelectEmitter[T, U].$next!() -> U
+  var item = me.source.$next!()
   emit me.transform(item)
   return
 

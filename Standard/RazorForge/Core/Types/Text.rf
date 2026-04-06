@@ -623,6 +623,7 @@ routine Text.$iter() -> TextIterator
 ### Returns the next value from this iterator.
 ### :returns: The resulting `Character` value.
 ### :absent: Returns absent when the requested value is unavailable.
+# TODO: This should be emitting routine
 routine TextIterator.$next!() -> Character
   if me.index >= me.text.count()
     absent

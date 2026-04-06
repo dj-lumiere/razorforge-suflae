@@ -30,9 +30,9 @@ entity WhereEmitter[T] obeys Iterator[T]
 
 ### Returns the next value from this iterator.
 ### :returns: The resulting `T` value.
-emitting routine WhereEmitter[T].$next() -> T
+emitting routine WhereEmitter[T].$next!() -> T
   loop
-    var item = me.source.$next()
+    var item = me.source.$next!()
     var matches = me.predicate(item)
     if me.inverted
       matches = not matches

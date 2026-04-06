@@ -112,7 +112,7 @@ routine Range[T].$iter() -> RangeEmitter[T]
 ### :returns: The resulting `T` value.
 ### :absent: Returns absent when the requested value is unavailable.
 @writable
-emitting routine RangeEmitter[T].$next() -> T
+emitting routine RangeEmitter[T].$next!() -> T
   if me.done
     absent
 

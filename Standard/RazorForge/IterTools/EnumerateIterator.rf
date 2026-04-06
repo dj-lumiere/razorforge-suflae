@@ -27,8 +27,8 @@ entity EnumerateEmitter[T] obeys Iterator[Tuple[S64, T]]
 
 ### Returns the next value from this iterator.
 ### :returns: The resulting `Tuple[S64, T]` value.
-emitting routine EnumerateEmitter[T].$next() -> Tuple[S64, T]
-  var item = me.source.$next()
+emitting routine EnumerateEmitter[T].$next!() -> Tuple[S64, T]
+  var item = me.source.$next!()
   emit (me.index, item)
   me.index = me.index + 1s64
   return

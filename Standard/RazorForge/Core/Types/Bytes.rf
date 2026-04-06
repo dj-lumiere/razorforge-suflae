@@ -278,6 +278,7 @@ routine Bytes.$iter() -> BytesIterator
 ### Returns the next value from this iterator.
 ### :returns: The resulting `Byte` value.
 ### :absent: Returns absent when the requested value is unavailable.
+# TODO: This should be emitting routine
 routine BytesIterator.$next!() -> Byte
   if me.index >= me.bytes.count()
     absent
@@ -507,7 +508,7 @@ routine BytesUtf8View.$iter() -> BytesUtf8Iterator
 ### Returns the next value from this iterator.
 ### :returns: The resulting `Character` value.
 ### :absent: Returns absent when the requested value is unavailable.
-emitting routine BytesUtf8Iterator.$next() -> Character
+emitting routine BytesUtf8Iterator.$next!() -> Character
   if me.index >= me.bytes.count()
     absent
 

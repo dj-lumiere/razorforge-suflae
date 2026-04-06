@@ -35,13 +35,13 @@ routine Iterable[T].count() -> U64
 ### :returns: The resulting `T` value.
 routine Iterable[T].first!() -> T
   var emitter = me.$iter()
-  return emitter.$next()
+  return emitter.$next!()
 
 ### Returns the result of `last`.
 ### :returns: The resulting `T` value.
 routine Iterable[T].last!() -> T
   var emitter = me.$iter()
-  var latest = emitter.$next()
+  var latest = emitter.$next!()
   loop
     var item = emitter.try_next()
     when item
