@@ -292,21 +292,40 @@ public partial class LLVMCodeGenerator
     {
         string operand = EmitExpression(sb: sb, expr: isPattern.Expression);
 
-        // Handle NonePattern or TypePattern with type name "None" — check Maybe tag == 0
         bool isNoneCheck = isPattern.Pattern is NonePattern or TypePattern { Type.Name: "None" };
+        bool isBlankCheck = isPattern.Pattern is TypePattern { Type.Name: "Blank" };
 
-        if (!isNoneCheck)
+        if (!isNoneCheck && !isBlankCheck)
         {
             throw new NotImplementedException(
                 message:
                 $"IsPatternExpression pattern type not implemented: {isPattern.Pattern.GetType().Name}");
         }
 
-        // For Maybe types, check tag == 0 (ABSENT/None)
-        // Use the proper LLVM type for the operand (named or anonymous)
         TypeInfo? operandType = GetExpressionType(expr: isPattern.Expression);
+        if (operandType == null || !IsCarrierType(type: operandType))
+        {
+            throw new NotImplementedException(
+                message: "'is None'/'is Blank' expressions currently require Maybe/Result/Lookup operands.");
+        }
+
+        if (isNoneCheck && !IsMaybeType(type: operandType))
+        {
+            throw new NotImplementedException(
+                message: "'is None' is only valid for Maybe[T] carriers.");
+        }
+
+        if (isBlankCheck && IsMaybeType(type: operandType))
+        {
+            throw new NotImplementedException(
+                message: "'is Blank' is only valid for Result[T]/Lookup[T] carriers.");
+        }
+
         string maybeType = GetLLVMType(type: operandType!);
         string tagType = GetCarrierTagType(kind: GetCarrierKind(type: operandType!));
+        string expectedTag = isNoneCheck
+            ? "0"
+            : ComputeTypeId(fullName: "Blank").ToString();
 
         string allocaPtr = NextTemp();
         EmitEntryAlloca(llvmName: allocaPtr, llvmType: maybeType);
@@ -321,9 +340,8 @@ public partial class LLVMCodeGenerator
         string result = NextTemp();
         EmitLine(sb: sb,
             line: isPattern.IsNegated
-                ? $"  {result} = icmp ne {tagType} {tag}, 0"
-                : $"  {result} = icmp eq {tagType} {tag}, 0"); // is None → tag == 0
-        // isnot None → tag != 0
+                ? $"  {result} = icmp ne {tagType} {tag}, {expectedTag}"
+                : $"  {result} = icmp eq {tagType} {tag}, {expectedTag}");
         return result;
 
     }

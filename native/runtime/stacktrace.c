@@ -1,6 +1,10 @@
 /*
- * RazorForge Runtime - Routine Trace Support
- * Provides runtime routine record tracking for error reporting
+ * RazorForge Runtime - Stack Trace Support
+ *
+ * Three modes, selected at startup via __rf_set_trace_mode():
+ *   RF_TRACE_NONE     (0) - release-time/release-space: no trace, just exit
+ *   RF_TRACE_PLATFORM (1) - release: backtrace/RtlCaptureStackBackTrace, function names only
+ *   RF_TRACE_SHADOW   (2) - debug: manual push/pop shadow stack, full RF-level detail
  */
 
 #include <stdlib.h>
@@ -10,13 +14,36 @@
 #include <stdio.h>
 
 // ============================================================================
-// Type Definitions
+// Platform detection
+// ============================================================================
+
+#ifdef _WIN32
+#  define RF_PLATFORM_WINDOWS 1
+#  include <windows.h>
+#  include <dbghelp.h>
+#else
+#  define RF_PLATFORM_POSIX 1
+#  include <execinfo.h>
+#  include <signal.h>
+#endif
+
+// ============================================================================
+// Trace mode
+// ============================================================================
+
+#define RF_TRACE_NONE     0
+#define RF_TRACE_PLATFORM 1
+#define RF_TRACE_SHADOW   2
+
+static volatile int rf_trace_mode = RF_TRACE_PLATFORM;
+
+// ============================================================================
+// Type definitions (shared with codegen layout)
 // ============================================================================
 
 typedef uint32_t rf_U32;
 typedef uintptr_t rf_address;
 
-// RoutineRecord - matches RazorForge layout (5 x u32 = 20 bytes)
 typedef struct
 {
     rf_U32 file_id;
@@ -26,7 +53,6 @@ typedef struct
     rf_U32 column_no;
 } rf_RoutineRecord;
 
-// RoutineTrace - 10 records + depth (10 x 20 + 4 = 204 bytes)
 #define RF_ROUTINE_TRACE_MAX_RECORDS 10
 
 typedef struct
@@ -35,13 +61,11 @@ typedef struct
     rf_U32 depth;
 } rf_RoutineTrace;
 
-// MessageHandle record - 1 x address = 8 bytes on 64-bit
 typedef struct
 {
     rf_address ptr;
 } rf_MessageHandle;
 
-// Error record - matches RazorForge layout
 typedef struct
 {
     rf_MessageHandle message_handle;
@@ -53,302 +77,379 @@ typedef struct
 } rf_Error;
 
 // ============================================================================
-// Thread-Local Stack Storage
+// Shadow stack (debug mode only)
 // ============================================================================
 
-// Maximum runtime call stack depth for tracking
 #define RF_RUNTIME_STACK_MAX 256
 
-// Thread-local storage for the runtime call stack
 #ifdef _WIN32
-#define RF_THREAD_LOCAL __declspec(thread)
+#  define RF_THREAD_LOCAL __declspec(thread)
 #else
-#define RF_THREAD_LOCAL __thread
+#  define RF_THREAD_LOCAL __thread
 #endif
 
 static RF_THREAD_LOCAL rf_RoutineRecord rf_runtime_stack[RF_RUNTIME_STACK_MAX];
 static RF_THREAD_LOCAL rf_U32 rf_runtime_stack_depth = 0;
 
 // ============================================================================
-// Symbol Tables (set by builder-generated code)
+// Symbol tables (set by builder-generated code at startup)
 // ============================================================================
 
-// Pointers to builder-generated symbol tables
-static const char** rf_file_table = NULL;
-static rf_U32 rf_file_table_count = 0;
-
+static const char** rf_file_table    = NULL;
+static rf_U32       rf_file_count    = 0;
 static const char** rf_routine_table = NULL;
-static rf_U32 rf_routine_table_count = 0;
+static rf_U32       rf_routine_count = 0;
+static const char** rf_type_table    = NULL;
+static rf_U32       rf_type_count    = 0;
 
-static const char** rf_type_table = NULL;
-static rf_U32 rf_type_table_count = 0;
-
-// Initialize symbol tables (called by builder-generated code at startup)
 void __rf_init_symbol_tables(
-    const char** file_table, rf_U32 file_count,
+    const char** file_table,    rf_U32 file_count,
     const char** routine_table, rf_U32 routine_count,
-    const char** type_table, rf_U32 type_count)
+    const char** type_table,    rf_U32 type_count)
 {
-    rf_file_table = file_table;
-    rf_file_table_count = file_count;
-    rf_routine_table = routine_table;
-    rf_routine_table_count = routine_count;
-    rf_type_table = type_table;
-    rf_type_table_count = type_count;
+    rf_file_table    = file_table;    rf_file_count    = file_count;
+    rf_routine_table = routine_table; rf_routine_count = routine_count;
+    rf_type_table    = type_table;    rf_type_count    = type_count;
 }
 
 // ============================================================================
-// Routine Record Push/Pop
+// Platform stack trace (release mode)
 // ============================================================================
 
-// Push a routine record at routine entry
-void __rf_stack_push(rf_U32 file_id, rf_U32 routine_id, rf_U32 type_id, rf_U32 line_no, rf_U32 column_no)
+#ifdef RF_PLATFORM_WINDOWS
+
+static void print_platform_stack(void)
 {
-    if (rf_runtime_stack_depth >= RF_RUNTIME_STACK_MAX)
+    void*  stack[64];
+    USHORT frames = RtlCaptureStackBackTrace(
+        1,           // skip this helper frame
+        64, stack, NULL);
+
+    HANDLE process = GetCurrentProcess();
+    SymInitialize(process, NULL, TRUE);
+
+    char         sym_buf[sizeof(SYMBOL_INFO) + MAX_SYM_NAME];
+    SYMBOL_INFO* sym = (SYMBOL_INFO*)sym_buf;
+    sym->SizeOfStruct = sizeof(SYMBOL_INFO);
+    sym->MaxNameLen   = MAX_SYM_NAME;
+
+    fprintf(stderr, "Stack trace:\n");
+    for (USHORT i = 0; i < frames; i++)
     {
-        // Stack overflow - print error and exit
-        fprintf(stderr, "\033[31m\nRazorForge Runtime Error: Stack overflow (depth > %d)\n\033[0m", RF_RUNTIME_STACK_MAX);
-        fflush(stderr);
-        exit(1);
+        DWORD64 addr = (DWORD64)(uintptr_t)stack[i];
+        if (SymFromAddr(process, addr, 0, sym))
+        {
+            fprintf(stderr, "  %u: at %s\n", (unsigned)i, sym->Name);
+        }
+        else
+        {
+            fprintf(stderr, "  %u: at 0x%016llx\n", (unsigned)i, (unsigned long long)addr);
+        }
     }
-
-    rf_RoutineRecord* record = &rf_runtime_stack[rf_runtime_stack_depth];
-    record->file_id = file_id;
-    record->routine_id = routine_id;
-    record->type_id = type_id;
-    record->line_no = line_no;
-    record->column_no = column_no;
-
-    rf_runtime_stack_depth++;
 }
 
-// Pop a routine record at routine exit
-void __rf_stack_pop(void)
+#else  /* POSIX */
+
+static void print_platform_stack(void)
 {
-    if (rf_runtime_stack_depth > 0)
+    void*  stack[64];
+    int    frames  = backtrace(stack, 64);
+    char** symbols = backtrace_symbols(stack, frames);
+
+    fprintf(stderr, "Stack trace:\n");
+    if (symbols)
     {
-        rf_runtime_stack_depth--;
-    }
-}
-
-// ============================================================================
-// Routine Trace Capture
-// ============================================================================
-
-// Capture current stack into a RoutineTrace record
-void __rf_stack_capture(rf_RoutineTrace* out_trace)
-{
-    if (!out_trace) return;
-
-    // Copy up to RF_ROUTINE_TRACE_MAX_RECORDS records from the runtime stack
-    rf_U32 records_to_copy = rf_runtime_stack_depth;
-    if (records_to_copy > RF_ROUTINE_TRACE_MAX_RECORDS)
-    {
-        records_to_copy = RF_ROUTINE_TRACE_MAX_RECORDS;
-    }
-
-    // Copy records in reverse order (most recent first)
-    for (rf_U32 i = 0; i < records_to_copy; i++)
-    {
-        rf_U32 src_idx = rf_runtime_stack_depth - 1 - i;
-        out_trace->records[i] = rf_runtime_stack[src_idx];
-    }
-
-    // Zero out remaining records
-    for (rf_U32 i = records_to_copy; i < RF_ROUTINE_TRACE_MAX_RECORDS; i++)
-    {
-        memset(&out_trace->records[i], 0, sizeof(rf_RoutineRecord));
-    }
-
-    out_trace->depth = records_to_copy;
-}
-
-// ============================================================================
-// Symbol Lookup
-// ============================================================================
-
-static const char* get_file_name(rf_U32 file_id)
-{
-    if (rf_file_table && file_id < rf_file_table_count)
-    {
-        return rf_file_table[file_id];
-    }
-    return "<unknown file>";
-}
-
-static const char* get_routine_name(rf_U32 routine_id)
-{
-    if (rf_routine_table && routine_id < rf_routine_table_count)
-    {
-        return rf_routine_table[routine_id];
-    }
-    return "<unknown routine>";
-}
-
-static const char* get_type_name(rf_U32 type_id)
-{
-    if (type_id == 0)
-    {
-        return NULL; // Free routine, no type
-    }
-    if (rf_type_table && type_id < rf_type_table_count)
-    {
-        return rf_type_table[type_id];
-    }
-    return "<unknown type>";
-}
-
-// ============================================================================
-// Error Printing
-// ============================================================================
-
-// Print a single routine record
-static void print_routine_record(const rf_RoutineRecord* record, int index)
-{
-    const char* file = get_file_name(record->file_id);
-    const char* routine = get_routine_name(record->routine_id);
-    const char* type = get_type_name(record->type_id);
-
-    if (type)
-    {
-        fprintf(stderr, "  %d: at %s.%s (%s:%u:%u)\n",
-                index, type, routine, file, record->line_no, record->column_no);
+        // Skip frame 0 (this helper) and frame 1 (__rf_throw / signal handler)
+        for (int i = 2; i < frames; i++)
+        {
+            fprintf(stderr, "  %d: %s\n", i - 2, symbols[i]);
+        }
+        free(symbols);
     }
     else
     {
-        fprintf(stderr, "  %d: at %s (%s:%u:%u)\n",
-                index, routine, file, record->line_no, record->column_no);
+        for (int i = 2; i < frames; i++)
+        {
+            fprintf(stderr, "  %d: %p\n", i - 2, stack[i]);
+        }
     }
 }
 
-// Print a full routine trace
-void __rf_print_routine_trace(const rf_RoutineTrace* trace)
+#endif
+
+// ============================================================================
+// Signal / exception handlers (release mode)
+// ============================================================================
+
+#ifdef RF_PLATFORM_WINDOWS
+
+static LONG WINAPI rf_exception_handler(EXCEPTION_POINTERS* ep)
 {
-    if (!trace || trace->depth == 0)
-    {
-        fprintf(stderr, "  <no routine trace available>\n");
-        return;
-    }
+    if (rf_trace_mode == RF_TRACE_NONE) return EXCEPTION_CONTINUE_SEARCH;
 
-    fprintf(stderr, "Routine trace:\n");
-    for (rf_U32 i = 0; i < trace->depth; i++)
+    const char* name = "Exception";
+    switch (ep->ExceptionRecord->ExceptionCode)
     {
-        print_routine_record(&trace->records[i], i);
+        case EXCEPTION_ACCESS_VIOLATION:    name = "AccessViolation";    break;
+        case EXCEPTION_INT_DIVIDE_BY_ZERO:  name = "DivisionByZero";     break;
+        case EXCEPTION_ILLEGAL_INSTRUCTION: name = "IllegalInstruction"; break;
+        case EXCEPTION_STACK_OVERFLOW:      name = "StackOverflow";      break;
+    }
+    fprintf(stderr, "\033[91m\n%s (code 0x%08lX)\n\033[0m",
+            name, ep->ExceptionRecord->ExceptionCode);
+    fflush(stderr);
+    print_platform_stack();
+    fflush(stderr);
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+static void install_signal_handlers(void)
+{
+    AddVectoredExceptionHandler(1, rf_exception_handler);
+}
+
+#else  /* POSIX */
+
+static void rf_signal_handler(int sig)
+{
+    if (rf_trace_mode == RF_TRACE_NONE) { signal(sig, SIG_DFL); raise(sig); return; }
+    const char* name = "Signal";
+    switch (sig)
+    {
+        case SIGSEGV: name = "SegmentationFault"; break;
+        case SIGFPE:  name = "FloatingPointException / DivisionByZero"; break;
+        case SIGILL:  name = "IllegalInstruction"; break;
+        case SIGBUS:  name = "BusError"; break;
+        case SIGABRT: name = "Abort"; break;
+    }
+    fprintf(stderr, "\033[91m\n%s\n\033[0m", name);
+    fflush(stderr);
+    print_platform_stack();
+    fflush(stderr);
+
+    // Restore default handler and re-raise so the process exits with the right code
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
+
+static void install_signal_handlers(void)
+{
+    signal(SIGSEGV, rf_signal_handler);
+    signal(SIGFPE,  rf_signal_handler);
+    signal(SIGILL,  rf_signal_handler);
+#ifdef SIGBUS
+    signal(SIGBUS,  rf_signal_handler);
+#endif
+    signal(SIGABRT, rf_signal_handler);
+}
+
+#endif
+
+// ============================================================================
+// Public API — mode selection
+// ============================================================================
+
+void __rf_set_trace_mode(int mode)
+{
+    rf_trace_mode = mode;
+    if (mode != RF_TRACE_NONE)
+    {
+        install_signal_handlers();
     }
 }
 
-// Print current runtime stack (for debugging)
-void __rf_print_current_stack(void)
+// ============================================================================
+// Shadow stack push/pop (debug mode)
+// ============================================================================
+
+void __rf_stack_push(rf_U32 file_id, rf_U32 routine_id, rf_U32 type_id,
+                     rf_U32 line_no, rf_U32 column_no)
+{
+    if (rf_runtime_stack_depth >= RF_RUNTIME_STACK_MAX)
+    {
+        fprintf(stderr, "\033[31m\nRazorForge Runtime Error: Stack overflow (depth > %d)\n\033[0m",
+                RF_RUNTIME_STACK_MAX);
+        fflush(stderr);
+        exit(1);
+    }
+    rf_RoutineRecord* r = &rf_runtime_stack[rf_runtime_stack_depth++];
+    r->file_id    = file_id;
+    r->routine_id = routine_id;
+    r->type_id    = type_id;
+    r->line_no    = line_no;
+    r->column_no  = column_no;
+}
+
+void __rf_stack_pop(void)
+{
+    if (rf_runtime_stack_depth > 0) rf_runtime_stack_depth--;
+}
+
+// ============================================================================
+// Shadow stack capture / print (debug mode)
+// ============================================================================
+
+void __rf_stack_capture(rf_RoutineTrace* out)
+{
+    if (!out) return;
+    rf_U32 n = rf_runtime_stack_depth < RF_ROUTINE_TRACE_MAX_RECORDS
+               ? rf_runtime_stack_depth : RF_ROUTINE_TRACE_MAX_RECORDS;
+    for (rf_U32 i = 0; i < n; i++)
+        out->records[i] = rf_runtime_stack[rf_runtime_stack_depth - 1 - i];
+    for (rf_U32 i = n; i < RF_ROUTINE_TRACE_MAX_RECORDS; i++)
+        memset(&out->records[i], 0, sizeof(rf_RoutineRecord));
+    out->depth = n;
+}
+
+static const char* get_file_name(rf_U32 id)
+{
+    return (rf_file_table && id < rf_file_count) ? rf_file_table[id] : "<unknown>";
+}
+static const char* get_routine_name(rf_U32 id)
+{
+    return (rf_routine_table && id < rf_routine_count) ? rf_routine_table[id] : "<unknown>";
+}
+static const char* get_type_name(rf_U32 id)
+{
+    if (id == 0) return NULL;
+    return (rf_type_table && id < rf_type_count) ? rf_type_table[id] : "<unknown>";
+}
+
+static void print_shadow_stack(void)
 {
     if (rf_runtime_stack_depth == 0)
     {
         fprintf(stderr, "  <stack empty>\n");
         return;
     }
-
-    fprintf(stderr, "Current stack (depth=%u):\n", rf_runtime_stack_depth);
+    fprintf(stderr, "Stack trace:\n");
     for (rf_U32 i = 0; i < rf_runtime_stack_depth; i++)
     {
         rf_U32 idx = rf_runtime_stack_depth - 1 - i;
-        print_routine_record(&rf_runtime_stack[idx], i);
+        const rf_RoutineRecord* r = &rf_runtime_stack[idx];
+        const char* file    = get_file_name(r->file_id);
+        const char* routine = get_routine_name(r->routine_id);
+        const char* type    = get_type_name(r->type_id);
+        if (type)
+            fprintf(stderr, "  %u: at %s.%s (%s:%u:%u)\n",
+                    (unsigned)i, type, routine, file, r->line_no, r->column_no);
+        else
+            fprintf(stderr, "  %u: at %s (%s:%u:%u)\n",
+                    (unsigned)i, routine, file, r->line_no, r->column_no);
     }
 }
 
+void __rf_print_routine_trace(const rf_RoutineTrace* trace)
+{
+    if (!trace || trace->depth == 0) { fprintf(stderr, "  <no trace>\n"); return; }
+    fprintf(stderr, "Stack trace:\n");
+    for (rf_U32 i = 0; i < trace->depth; i++)
+    {
+        const rf_RoutineRecord* r = &trace->records[i];
+        const char* type = get_type_name(r->type_id);
+        if (type)
+            fprintf(stderr, "  %u: at %s.%s (%s:%u:%u)\n", (unsigned)i,
+                    type, get_routine_name(r->routine_id),
+                    get_file_name(r->file_id), r->line_no, r->column_no);
+        else
+            fprintf(stderr, "  %u: at %s (%s:%u:%u)\n", (unsigned)i,
+                    get_routine_name(r->routine_id),
+                    get_file_name(r->file_id), r->line_no, r->column_no);
+    }
+}
+
+void __rf_print_current_stack(void) { print_shadow_stack(); }
+
 // ============================================================================
-// Throw Functions
+// Core throw — dispatches based on trace mode
 // ============================================================================
 
-// Throw an error with message and captured routine trace
+static void print_stack_for_mode(void)
+{
+    switch (rf_trace_mode)
+    {
+        case RF_TRACE_SHADOW:   print_shadow_stack();   break;
+        case RF_TRACE_PLATFORM: print_platform_stack(); break;
+        default: break; /* RF_TRACE_NONE */
+    }
+}
+
+void __rf_print_stack_for_mode(void)  { print_stack_for_mode(); }
+int  __rf_get_trace_mode(void)        { return rf_trace_mode; }
+
 void __rf_throw(const char* error_type, const char* message)
 {
-    fprintf(stderr, "\033[91m\n%s: %s\n", error_type ? error_type : "Error", message ? message : "");
-    __rf_print_current_stack();
+    fprintf(stderr, "\033[91m\n%s: %s\n",
+            error_type ? error_type : "Error",
+            message    ? message    : "");
+    print_stack_for_mode();
     fprintf(stderr, "\033[0m\n");
     fflush(stderr);
     exit(1);
 }
 
-// Throw AbsentValueError
 void __rf_throw_absent(void)
 {
     __rf_throw("AbsentValueError", "Attempted to access an absent value");
 }
 
-// Throw DivisionByZeroError
 void __rf_throw_division_by_zero(void)
 {
-    __rf_throw("DivisionByZeroError", "You tried to divide by zero, which is not allowed.");
+    __rf_throw("DivisionByZeroError", "Division by zero");
 }
 
-// Throw IndexOutOfBoundsError
 void __rf_throw_index_out_of_bounds(rf_U32 index, rf_U32 count)
 {
-    char buffer[128];
-    snprintf(buffer, sizeof(buffer), "Index %u is out of bounds for collection with %u elements", index, count);
-    __rf_throw("IndexOutOfBoundsError", buffer);
+    char buf[128];
+    snprintf(buf, sizeof(buf),
+             "Index %u is out of bounds for collection with %u elements", index, count);
+    __rf_throw("IndexOutOfBoundsError", buf);
 }
 
-// Throw IntegerOverflowError with custom message
 void __rf_throw_integer_overflow(const char* message)
 {
-    __rf_throw("IntegerOverflowError", message ? message : "An integer overflow occurred during arithmetic operation.");
+    __rf_throw("IntegerOverflowError",
+               message ? message : "An integer overflow occurred");
 }
 
-// Throw EmptyCollectionError with operation name
 void __rf_throw_empty_collection(const char* operation)
 {
-    char buffer[128];
-    snprintf(buffer, sizeof(buffer), "Cannot %s on empty collection", operation ? operation : "perform operation");
-    __rf_throw("EmptyCollectionError", buffer);
+    char buf[128];
+    snprintf(buf, sizeof(buf), "Cannot %s on empty collection",
+             operation ? operation : "perform operation");
+    __rf_throw("EmptyCollectionError", buf);
 }
 
-// Throw ElementNotFoundError
 void __rf_throw_element_not_found(void)
 {
     __rf_throw("ElementNotFoundError", "No matching element found");
 }
 
 // ============================================================================
-// Error Record Creation
+// Error record (used by failable routines)
 // ============================================================================
 
-// Create an Error record with current routine trace
 void __rf_create_error(
-    rf_Error* out_error,
-    const char* message,
-    rf_U32 file_id,
-    rf_U32 routine_id,
-    rf_U32 line_no,
-    rf_U32 column_no)
+    rf_Error* out, const char* message,
+    rf_U32 file_id, rf_U32 routine_id, rf_U32 line_no, rf_U32 column_no)
 {
-    if (!out_error) return;
-
-    out_error->message_handle.ptr = (rf_address)message;
-    __rf_stack_capture(&out_error->routine_trace);
-    out_error->file_id = file_id;
-    out_error->routine_id = routine_id;
-    out_error->line_no = line_no;
-    out_error->column_no = column_no;
+    if (!out) return;
+    out->message_handle.ptr = (rf_address)message;
+    __rf_stack_capture(&out->routine_trace);
+    out->file_id    = file_id;
+    out->routine_id = routine_id;
+    out->line_no    = line_no;
+    out->column_no  = column_no;
 }
 
-// Print an Error record
 void __rf_print_error(const rf_Error* error)
 {
     if (!error) return;
-
-    const char* file = get_file_name(error->file_id);
-    const char* routine = get_routine_name(error->routine_id);
-    const char* message = (const char*)error->message_handle.ptr;
-
     fprintf(stderr, "\033[91m\nError at %s:%u:%u in %s\n",
-            file, error->line_no, error->column_no, routine);
-
-    if (message)
-    {
-        fprintf(stderr, "  %s\n", message);
-    }
-
-    fprintf(stderr, "\n");
+            get_file_name(error->file_id), error->line_no, error->column_no,
+            get_routine_name(error->routine_id));
+    const char* msg = (const char*)error->message_handle.ptr;
+    if (msg) fprintf(stderr, "  %s\n\n", msg);
     __rf_print_routine_trace(&error->routine_trace);
     fprintf(stderr, "\033[0m");
 }

@@ -180,6 +180,10 @@ public partial class LLVMCodeGenerator
     /// <summary>Whether the current function being generated is failable (has ! suffix, can return absent).</summary>
     private bool _currentRoutineIsFailable;
 
+    /// <summary>Whether the current function is a generated try_/check_/lookup_ variant body.
+    /// In this context, throw statements return Maybe[T] with present=false (zeroinitializer) instead of crashing.</summary>
+    private bool _currentVariantIsTry;
+
     /// <summary>The routine currently being emitted (for source_routine() / source_module() injection).</summary>
     private RoutineInfo? _currentEmittingRoutine;
 
@@ -251,8 +255,15 @@ public partial class LLVMCodeGenerator
     #region Helpers
 
     /// <summary>Whether to emit rf_trace_push/rf_trace_pop calls for stack trace diagnostics.</summary>
-    private bool ShouldEmitTrace =>
-        _buildMode is RfBuildMode.Debug or RfBuildMode.Release;
+    private bool ShouldEmitTrace => _buildMode is RfBuildMode.Debug or RfBuildMode.Release;
+
+    /// <summary>
+    /// Whether to emit trace push/pop for the currently-compiled routine.
+    /// In Release, @inline routines are excluded — they are implementation details
+    /// that inflate the shadow stack without adding navigable frames.
+    /// In Debug, all routines are traced.
+    /// </summary>
+    private bool _traceCurrentRoutine;
 
     /// <summary>
     /// Looks up a type by name, trying the current routine's module-qualified name first,
@@ -757,6 +768,55 @@ public partial class LLVMCodeGenerator
             }
         }
 
+        // Inline shadow-stack helpers (only when tracing is on)
+        if (ShouldEmitTrace)
+        {
+            output.AppendLine(value: "; Shadow stack (inline — no DLL call)");
+            // 32-entry ring (power-of-2) — index masked with AND, no branch needed in push.
+            // The printer clamps to the actual depth so only valid frames are shown.
+            output.AppendLine(value: "@_rf_trace_stack = thread_local global [32 x { ptr, ptr, i32, i32 }] zeroinitializer");
+            output.AppendLine(value: "@_rf_trace_depth = thread_local global i32 0");
+            output.AppendLine();
+            // push helper — branchless: mask index to [0,31] with AND
+            output.AppendLine(value: "define private void @_rf_trace_push(ptr %r, ptr %f, i32 %ln, i32 %col) alwaysinline {");
+            output.AppendLine(value: "entry:");
+            output.AppendLine(value: "  %d = load i32, ptr @_rf_trace_depth");
+            output.AppendLine(value: "  %idx32 = and i32 %d, 31");
+            output.AppendLine(value: "  %idx = zext i32 %idx32 to i64");
+            output.AppendLine(value: "  %slot = getelementptr inbounds [32 x { ptr, ptr, i32, i32 }], ptr @_rf_trace_stack, i64 0, i64 %idx");
+            output.AppendLine(value: "  %p0 = getelementptr inbounds { ptr, ptr, i32, i32 }, ptr %slot, i32 0, i32 0");
+            output.AppendLine(value: "  store ptr %r, ptr %p0");
+            output.AppendLine(value: "  %p1 = getelementptr inbounds { ptr, ptr, i32, i32 }, ptr %slot, i32 0, i32 1");
+            output.AppendLine(value: "  store ptr %f, ptr %p1");
+            output.AppendLine(value: "  %p2 = getelementptr inbounds { ptr, ptr, i32, i32 }, ptr %slot, i32 0, i32 2");
+            output.AppendLine(value: "  store i32 %ln, ptr %p2");
+            output.AppendLine(value: "  %p3 = getelementptr inbounds { ptr, ptr, i32, i32 }, ptr %slot, i32 0, i32 3");
+            output.AppendLine(value: "  store i32 %col, ptr %p3");
+            output.AppendLine(value: "  %nd = add i32 %d, 1");
+            output.AppendLine(value: "  store i32 %nd, ptr @_rf_trace_depth");
+            output.AppendLine(value: "  ret void");
+            output.AppendLine(value: "}");
+            output.AppendLine();
+            // pop helper — branchless: depth is always > 0 when pop is called (paired with push)
+            output.AppendLine(value: "define private void @_rf_trace_pop() alwaysinline {");
+            output.AppendLine(value: "entry:");
+            output.AppendLine(value: "  %d = load i32, ptr @_rf_trace_depth");
+            output.AppendLine(value: "  %nd = add i32 %d, -1");
+            output.AppendLine(value: "  store i32 %nd, ptr @_rf_trace_depth");
+            output.AppendLine(value: "  ret void");
+            output.AppendLine(value: "}");
+            output.AppendLine();
+            // printer helper — passes exe TLS data to the DLL
+            output.AppendLine(value: "declare void @rf_print_shadow_stack_data(ptr, i32)");
+            output.AppendLine(value: "define private void @_rf_print_trace_stack() {");
+            output.AppendLine(value: "entry:");
+            output.AppendLine(value: "  %depth = load i32, ptr @_rf_trace_depth");
+            output.AppendLine(value: "  call void @rf_print_shadow_stack_data(ptr @_rf_trace_stack, i32 %depth)");
+            output.AppendLine(value: "  ret void");
+            output.AppendLine(value: "}");
+            output.AppendLine();
+        }
+
         // Auxiliary helper definitions
         if (_auxFunctionDefinitions.Length > 0)
         {
@@ -776,10 +836,24 @@ public partial class LLVMCodeGenerator
             f == "start" || f.EndsWith(value: ".start") || f.EndsWith(value: ".start\""));
         if (startFunc != null)
         {
+            // Select trace mode: 2=shadow (debug+release), 1=platform (hardware faults only), 0=none (release-time/space)
+            int traceMode = _buildMode switch
+            {
+                RfBuildMode.Debug or RfBuildMode.Release => 2,
+                _ => 0
+            };
+
+            output.AppendLine(value: "declare void @__rf_set_trace_mode(i32)");
+            if (ShouldEmitTrace)
+                output.AppendLine(value: "declare void @rf_set_stack_printer(ptr)");
+            output.AppendLine();
             output.AppendLine(value: "; Entry point");
             output.AppendLine(value: "define i32 @main(i32 %argc, ptr %argv) {");
             output.AppendLine(value: "entry:");
             output.AppendLine(value: "  call void @rf_runtime_init()");
+            output.AppendLine(handler: $"  call void @__rf_set_trace_mode(i32 {traceMode})");
+            if (ShouldEmitTrace)
+                output.AppendLine(value: "  call void @rf_set_stack_printer(ptr @_rf_print_trace_stack)");
             output.AppendLine(handler: $"  call void @{startFunc}()");
             output.AppendLine(value: "  ret i32 0");
             output.AppendLine(value: "}");

@@ -142,6 +142,11 @@ if(UNIX AND NOT APPLE)
     target_link_libraries(razorforge_runtime m)
 endif()
 
+# Link DbgHelp for stack trace symbol resolution on Windows
+if(WIN32)
+    target_link_libraries(razorforge_runtime dbghelp)
+endif()
+
 # Link LibBF (f128 support with transcendentals)
 if(HAVE_LIBBF)
     target_compile_definitions(razorforge_runtime PRIVATE HAVE_LIBBF)

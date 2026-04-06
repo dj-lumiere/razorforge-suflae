@@ -41,8 +41,9 @@ public partial class LLVMCodeGenerator
             if (thenTerminated && elseTerminated)
             {
                 // Both branches return - the if statement as a whole terminates
-                // Still emit end label but mark that we terminated
+                // Emit end label + unreachable (dead block must still have a terminator)
                 EmitLine(sb: sb, line: $"{endLabel}:");
+                EmitLine(sb: sb, line: $"  unreachable");
                 return true;
             }
 
@@ -119,7 +120,7 @@ public partial class LLVMCodeGenerator
     /// Emits code for a for loop.
     /// for x in iterable { body } becomes:
     ///   iterator = iterable.$iter()
-    ///   while iterator.$has_next() { x = iterator.$next(); body }
+    ///   while iterator.$has_next() { x = iterator.$next!(); body }
     /// </summary>
     private void EmitFor(StringBuilder sb, ForStatement forStmt)
     {
@@ -298,9 +299,11 @@ public partial class LLVMCodeGenerator
         EmitEntryAlloca(llvmName: emitterAddr, llvmType: emitterLlvmType);
         EmitLine(sb: sb, line: $"  store {emitterLlvmType} {emitterValue}, ptr {emitterAddr}");
 
-        // Determine element type from $next() return type (preferred) or emitter type arguments (fallback).
-        // $next() is preferred because the yielded type may differ from the emitter's type argument
-        // (e.g., EnumerateEmitter[S64].$next() yields Tuple[U64, S64], not S64).
+        // Determine element type from try_next() return type (preferred) or emitter type arguments (fallback).
+        // try_next is preferred because the yielded type may differ from the emitter's type argument
+        // (e.g., EnumerateEmitter[S64].$next!() yields Tuple[U64, S64], not S64).
+        // All emitting routines have try_next registered (failable → via ErrorHandlingGenerator;
+        // non-failable → via GenerateTryAlias). try_next always returns Maybe[T].
         TypeInfo? elemType = null;
         if (emitterType != null)
         {
@@ -405,11 +408,13 @@ public partial class LLVMCodeGenerator
         string emitterLoad = NextTemp();
         EmitLine(sb: sb, line: $"  {emitterLoad} = load {emitterLlvmType}, ptr {emitterAddr}");
 
-        // Call try_next() on the emitter — returns Maybe[T] carrier
-        // LookupMethod handles generic type fallback (e.g., RangeEmitter[S64] → RangeEmitter[T])
+        // Call try_next() on the emitter — returns Maybe[T] carrier.
+        // All emitting routines have try_next registered (failable via ErrorHandlingGenerator,
+        // non-failable via GenerateTryAlias). LookupMethod handles generic type fallback.
         RoutineInfo? nextMethod = emitterType != null
             ? _registry.LookupMethod(type: emitterType, methodName: "try_next")
             : null;
+
 
         string maybeResult;
 
@@ -426,7 +431,7 @@ public partial class LLVMCodeGenerator
                  nextMethod.OwnerType is ProtocolTypeInfo or GenericParameterTypeInfo) &&
                 emitterType != null && emitterType.IsGenericResolution)
             {
-                nextMangled = Q(name: $"{emitterType.FullName}.try_next");
+                nextMangled = Q(name: $"{emitterType.FullName}.{nextMethod.Name}");
                 RecordMonomorphization(mangledName: nextMangled,
                     genericMethod: nextMethod,
                     resolvedOwnerType: emitterType);

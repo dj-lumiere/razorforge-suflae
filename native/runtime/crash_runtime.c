@@ -1,10 +1,10 @@
-// crash_runtime.c - Lightweight crash reporting and trace stack
+// crash_runtime.c - Crash reporting with exe-registered shadow stack printer
 
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#define RF_TRACE_MAX 10
+#define RF_TRACE_MAX 32
 
 typedef struct
 {
@@ -14,25 +14,37 @@ typedef struct
     int32_t col;
 } rf_TraceFrame;
 
-static rf_TraceFrame rf_trace_stack[RF_TRACE_MAX];
-static int32_t rf_trace_depth = 0;
+// Stack printer registered by the exe at startup (reads exe-local TLS shadow stack)
+static void (*g_stack_printer)(void) = NULL;
 
-void rf_trace_push(const char* routine, const char* file, int32_t line, int32_t col)
+void rf_set_stack_printer(void (*fn)(void))
 {
-    if (rf_trace_depth < RF_TRACE_MAX)
-    {
-        rf_trace_stack[rf_trace_depth] = (rf_TraceFrame){ routine, file, line, col };
-    }
-
-    rf_trace_depth++;
+    g_stack_printer = fn;
 }
 
-void rf_trace_pop(void)
+// Called by the exe's @_rf_print_trace_stack helper — prints the shadow stack
+// data that lives in the exe's TLS globals.
+void rf_print_shadow_stack_data(const rf_TraceFrame* stack, int32_t depth)
 {
-    if (rf_trace_depth > 0)
+    if (depth <= 0) return;
+
+    // Stack is a ring of RF_TRACE_MAX entries; depth may exceed RF_TRACE_MAX.
+    // Print up to RF_TRACE_MAX most-recent frames, most recent first.
+    int frames = depth < RF_TRACE_MAX ? (int)depth : RF_TRACE_MAX;
+    fprintf(stderr, "Stack trace:\n");
+    for (int i = 0; i < frames; i++)
     {
-        rf_trace_depth--;
+        // Most recent frame is at index (depth - 1) & (RF_TRACE_MAX - 1)
+        int idx = (depth - 1 - i) & (RF_TRACE_MAX - 1);
+        fprintf(stderr, "  %d: at %s (%s:%d:%d)\n",
+                i,
+                stack[idx].routine,
+                stack[idx].file,
+                stack[idx].line,
+                stack[idx].col);
     }
+    if (depth > RF_TRACE_MAX)
+        fprintf(stderr, "  ... (%d frames total)\n", depth);
 }
 
 void rf_crash(const char* type_name, int64_t type_len,
@@ -74,26 +86,10 @@ void rf_crash(const char* type_name, int64_t type_len,
 
     fprintf(stderr, "\nat %.*s:%d:%d\n", (int)file_len, file, line, col);
 
-    int frames = rf_trace_depth < RF_TRACE_MAX ? rf_trace_depth : RF_TRACE_MAX;
-    if (frames > 0)
-    {
-        fprintf(stderr, "\nStack trace (most recent first):\n");
-        for (int i = frames - 1; i >= 0; i--)
-        {
-            fprintf(stderr, "  [%d] %s (%s:%d:%d)\n",
-                    frames - 1 - i,
-                    rf_trace_stack[i].routine,
-                    rf_trace_stack[i].file,
-                    rf_trace_stack[i].line,
-                    rf_trace_stack[i].col);
-        }
-
-        if (rf_trace_depth > RF_TRACE_MAX)
-        {
-            fprintf(stderr, "  ... %d more frames\n", rf_trace_depth - RF_TRACE_MAX);
-        }
-    }
+    if (g_stack_printer)
+        g_stack_printer();
 
     fprintf(stderr, "\033[0m");
+    fflush(stderr);
     exit(1);
 }

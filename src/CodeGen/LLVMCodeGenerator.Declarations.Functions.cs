@@ -277,8 +277,10 @@ public partial class LLVMCodeGenerator
         int savedLength = _functionDefinitions.Length;
         int savedTempCounter = _tempCounter;
 
+        bool isInline = routineInfo.Annotations.Contains(value: "inline");
+        string funcAttrs = isInline ? " alwaysinline" : "";
         EmitLine(sb: _functionDefinitions,
-            line: $"define {returnType} @{funcName}({parameters}) {{");
+            line: $"define {returnType} @{funcName}({parameters}){funcAttrs} {{");
         EmitLine(sb: _functionDefinitions, line: "entry:");
         var bodyBuilder = new StringBuilder();
 
@@ -338,6 +340,7 @@ public partial class LLVMCodeGenerator
         // Set current function return type for use in EmitReturn
         _currentFunctionReturnType = routine.ReturnType;
         _currentRoutineIsFailable = routine.IsFailable;
+        _currentVariantIsTry = routine.OriginalName != null;
 
         // Track current routine for source_routine() / source_module() injection
         _currentEmittingRoutine = routine;
@@ -373,7 +376,11 @@ public partial class LLVMCodeGenerator
         }
 
         // Emit stack trace push
-        if (ShouldEmitTrace)
+        // In Release, skip @inline routines — they are implementation helpers that
+        // add noise to the shadow stack without being meaningful call frames.
+        bool isInline = routine.Annotations.Contains(value: "inline");
+        _traceCurrentRoutine = ShouldEmitTrace && !(_buildMode is RfBuildMode.Release && isInline);
+        if (_traceCurrentRoutine)
         {
             string paramTypes = string.Join(separator: ", ",
                 values: routine.Parameters.Select(selector: p => p.Type.Name));
@@ -384,15 +391,8 @@ public partial class LLVMCodeGenerator
             int col = routine.Location?.Column ?? 0;
             string routineCStr = EmitCStringConstant(value: routineName);
             string fileCStr = EmitCStringConstant(value: fileName);
-            string routineAsInt = NextTemp();
-            string fileAsInt = NextTemp();
             EmitLine(sb: sb,
-                line: $"  {routineAsInt} = ptrtoint ptr {routineCStr} to i64");
-            EmitLine(sb: sb,
-                line: $"  {fileAsInt} = ptrtoint ptr {fileCStr} to i64");
-            EmitLine(sb: sb,
-                line:
-                $"  call void @rf_trace_push(i64 {routineAsInt}, i64 {fileAsInt}, i32 {line}, i32 {col})");
+                line: $"  call void @_rf_trace_push(ptr {routineCStr}, ptr {fileCStr}, i32 {line}, i32 {col})");
         }
 
         // Emit the body statements
@@ -409,8 +409,8 @@ public partial class LLVMCodeGenerator
         EmitUsingCleanup(sb: sb);
         EmitRCRecordCleanup(sb: sb);
         EmitEntityCleanup(sb: sb, returnedVarName: null);
-        if (ShouldEmitTrace)
-            EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
+        if (_traceCurrentRoutine)
+            EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
         if (routine.ReturnType == null)
         {
             EmitLine(sb: sb, line: "  ret void");
@@ -618,11 +618,87 @@ public partial class LLVMCodeGenerator
                         _generatedFunctionDefs.Add(item: mangledName);
                     }
 
-                    continue;
+                    // Generated variants (try_/check_/lookup_) have no AST of their own —
+                    // fall back to the original failable routine's AST body.
+                    if (entry.GenericMethod.OriginalName != null)
+                    {
+                        // Build fallback name from owner type + OriginalName (no string parsing)
+                        TypeInfo? variantOwner = entry.GenericMethod.OwnerType;
+                        // Variants on resolved generic types (e.g., DequeEmitter[S64]) have OwnerType
+                        // set to the substituted resolution. We need the generic definition to build
+                        // the AST name (e.g., "DequeEmitter[T].$next" not "DequeEmitter[S64].$next").
+                        if (variantOwner is EntityTypeInfo { IsGenericDefinition: false } eOwner &&
+                            eOwner.GenericDefinition != null)
+                        {
+                            variantOwner = eOwner.GenericDefinition;
+                        }
+                        else if (variantOwner is RecordTypeInfo { IsGenericDefinition: false } rOwner &&
+                                 rOwner.GenericDefinition != null)
+                        {
+                            variantOwner = rOwner.GenericDefinition;
+                        }
+
+                        string fallbackAstName;
+                        if (variantOwner is { IsGenericDefinition: true, GenericParameters: not null })
+                        {
+                            string paramList = string.Join(separator: ", ",
+                                values: variantOwner.GenericParameters);
+                            fallbackAstName =
+                                $"{variantOwner.Name}[{paramList}].{entry.GenericMethod.OriginalName}";
+                        }
+                        else if (variantOwner != null)
+                        {
+                            fallbackAstName =
+                                $"{variantOwner.Name}.{entry.GenericMethod.OriginalName}";
+                        }
+                        else
+                        {
+                            fallbackAstName = entry.GenericMethod.OriginalName;
+                        }
+
+                        astRoutine = FindGenericAstRoutine(
+                            genericAstName: fallbackAstName,
+                            expectedParamCount: entry.GenericMethod.Parameters.Count,
+                            firstParamTypeHint: firstParamGenericType);
+                    }
+
+                    if (astRoutine == null)
+                        continue;
                 }
 
                 // Build a resolved RoutineInfo with the correct owner type and substituted types
                 RoutineInfo resolvedInfo = BuildResolvedRoutineInfo(entry: entry);
+
+                // For generated variants (try_/check_/lookup_), compile using emitting-routine
+                // infrastructure: unwrap the Maybe[T] return type to T and set AsyncStatus.Emitting
+                // so the emit slot and absent path work correctly. The _currentVariantIsTry flag
+                // makes EmitThrow return zeroinitializer (present=false) instead of crashing.
+                if (resolvedInfo.OriginalName != null && resolvedInfo.ReturnType != null &&
+                    IsMaybeType(type: resolvedInfo.ReturnType) &&
+                    resolvedInfo.ReturnType.TypeArguments is { Count: > 0 })
+                {
+                    TypeInfo innerType = resolvedInfo.ReturnType.TypeArguments[index: 0];
+                    resolvedInfo = new RoutineInfo(name: resolvedInfo.Name)
+                    {
+                        Kind = resolvedInfo.Kind,
+                        OwnerType = resolvedInfo.OwnerType,
+                        Parameters = resolvedInfo.Parameters,
+                        ReturnType = innerType,
+                        IsFailable = resolvedInfo.IsFailable,
+                        DeclaredModification = resolvedInfo.DeclaredModification,
+                        ModificationCategory = resolvedInfo.ModificationCategory,
+                        Visibility = resolvedInfo.Visibility,
+                        Location = resolvedInfo.Location,
+                        Module = resolvedInfo.Module,
+                        Annotations = resolvedInfo.Annotations,
+                        CallingConvention = resolvedInfo.CallingConvention,
+                        IsVariadic = resolvedInfo.IsVariadic,
+                        IsDangerous = resolvedInfo.IsDangerous,
+                        Storage = resolvedInfo.Storage,
+                        AsyncStatus = AsyncStatus.Emitting,
+                        OriginalName = resolvedInfo.OriginalName
+                    };
+                }
 
                 // Build string substitution map and rewrite AST with concrete types
                 var astSubs = new Dictionary<string, string>();
@@ -871,7 +947,8 @@ public partial class LLVMCodeGenerator
             IsVariadic = generic.IsVariadic,
             IsDangerous = generic.IsDangerous,
             Storage = generic.Storage,
-            AsyncStatus = generic.AsyncStatus
+            AsyncStatus = generic.AsyncStatus,
+            OriginalName = generic.OriginalName
         };
     }
 }

@@ -195,6 +195,23 @@ public partial class LLVMCodeGenerator
             return null;
         }
 
+        // Refresh stale generic entity resolutions (same as GetMemberType).
+        // EntityTypeInfo.CreateInstance uses cycle detection that returns a shell with empty
+        // MemberVariables when recursion is detected. The shell has GenericDefinition set,
+        // so we can refresh it from the definition with the same type arguments.
+        if (objType is EntityTypeInfo
+            {
+                IsGenericResolution: true, MemberVariables.Count: 0,
+                GenericDefinition: { MemberVariables.Count: > 0 } genDef
+            } staleEntity && staleEntity.TypeArguments != null)
+        {
+            var refreshed = genDef.CreateInstance(typeArguments: staleEntity.TypeArguments) as EntityTypeInfo;
+            if (refreshed is { MemberVariables.Count: > 0 })
+            {
+                objType = refreshed;
+            }
+        }
+
         // Find the member variable
         IReadOnlyList<MemberVariableInfo>? memberVars = objType switch
         {

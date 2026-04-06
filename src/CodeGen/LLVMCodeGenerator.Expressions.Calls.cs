@@ -1190,8 +1190,8 @@ public partial class LLVMCodeGenerator
             EmitLine(sb: sb, line: $"  {result} = call {returnType} @{mangledName}({args})");
 
             // Unwrap { i64, ptr } from emitting routine calls (C74).
-            // EmitFor handles $next() unwrapping directly, so this only fires for
-            // direct calls like `var item = me.source.$next()` inside emitting bodies.
+            // EmitFor handles $next!() unwrapping directly, so this only fires for
+            // direct calls like `var item = me.source.$next!()` inside emitting bodies.
             if (isEmittingCall)
             {
                 return EmitEmittingCallUnwrap(sb: sb,
@@ -1240,8 +1240,8 @@ public partial class LLVMCodeGenerator
         {
             // Inside an emitting routine: propagate absence via zeroinitializer
             string callerCarrierType = GetMaybeCarrierLLVMType(valueType: _currentEmittingRoutine.ReturnType!);
-            if (ShouldEmitTrace)
-                EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
+            if (_traceCurrentRoutine)
+                EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
             EmitLine(sb: sb, line: $"  ret {callerCarrierType} zeroinitializer");
         }
         else

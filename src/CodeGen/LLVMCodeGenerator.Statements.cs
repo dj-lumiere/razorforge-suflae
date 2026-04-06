@@ -541,8 +541,8 @@ public partial class LLVMCodeGenerator
                 EmitUsingCleanup(sb: sb);
                 EmitRCRecordCleanup(sb: sb);
                 EmitEntityCleanup(sb: sb, returnedVarName: null);
-                if (ShouldEmitTrace)
-                    EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
+                if (_traceCurrentRoutine)
+                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
                 EmitLine(sb: sb, line: $"  ret {emitCarrierType} {v1}");
             }
             else
@@ -550,9 +550,16 @@ public partial class LLVMCodeGenerator
                 EmitUsingCleanup(sb: sb);
                 EmitRCRecordCleanup(sb: sb);
                 EmitEntityCleanup(sb: sb, returnedVarName: null);
-                if (ShouldEmitTrace)
-                    EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
-                EmitLine(sb: sb, line: "  ret void");
+                if (_traceCurrentRoutine)
+                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+                if (_currentFunctionReturnType == null)
+                    EmitLine(sb: sb, line: "  ret void");
+                else
+                {
+                    string retLlvmType = GetLLVMType(type: _currentFunctionReturnType);
+                    string retZero = GetZeroValue(type: _currentFunctionReturnType);
+                    EmitLine(sb: sb, line: $"  ret {retLlvmType} {retZero}");
+                }
             }
         }
         else
@@ -578,8 +585,8 @@ public partial class LLVMCodeGenerator
             EmitRCRecordCleanup(sb: sb);
             EmitEntityCleanup(sb: sb, returnedVarName: returnedVarName);
 
-            if (ShouldEmitTrace)
-                EmitLine(sb: sb, line: "  call void @rf_trace_pop()");
+            if (_traceCurrentRoutine)
+                EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
 
             // Auto-wrap bare values in Maybe when function returns Maybe[T] but expression is T
             if (IsMaybeType(type: retType) && value != "zeroinitializer")
@@ -831,6 +838,16 @@ public partial class LLVMCodeGenerator
         // Clean up active scopes before crashing
         EmitUsingCleanup(sb: sb);
         EmitRCRecordCleanup(sb: sb);
+
+        // In a try_/check_/lookup_ variant, throw → return Maybe[T] with present=false
+        if (_currentVariantIsTry)
+        {
+            string carrierType = GetMaybeCarrierLLVMType(valueType: _currentEmittingRoutine!.ReturnType!);
+            if (_traceCurrentRoutine)
+                EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+            EmitLine(sb: sb, line: $"  ret {carrierType} zeroinitializer");
+            return;
+        }
 
         // Call rf_crash — never returns
         EmitLine(sb: sb,
