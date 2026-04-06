@@ -1209,11 +1209,16 @@ internal partial class Program
 
         // Compile .ll → .exe using clang (clang uses -Ox flag style, not opt's -passes= form)
         string clangOptLevel = $"-{optPipelineLevel}";
+        // Preserve frame pointers in debug/release for accurate platform stack unwinding.
+        // release-time/release-space omit frame pointers for maximum performance.
+        string framePointerFlag = buildMode is RfBuildMode.Debug or RfBuildMode.Release
+            ? " -fno-omit-frame-pointer"
+            : "";
         string windowsThreadingLibs = OperatingSystem.IsWindows()
             ? " -lucrt -lmsvcrt -lkernel32"
             : "";
         string clangArgs =
-            $"{clangOptLevel} -o \"{exeFile}\" \"{optFile}\" -L\"{runtimeLibDir}\" -lrazorforge_runtime{windowsThreadingLibs}";
+            $"{clangOptLevel}{framePointerFlag} -o \"{exeFile}\" \"{optFile}\" -L\"{runtimeLibDir}\" -lrazorforge_runtime{windowsThreadingLibs}";
 
         var clangPsi = new ProcessStartInfo
         {
