@@ -326,7 +326,7 @@ entity DequeEmitter[T] obeys Iterator[T]
 ### :returns: The resulting `T` value.
 ### :absent: Returns absent when the requested value is unavailable.
 @writable
-emitting routine DequeEmitter[T].$next() -> T
+emitting routine DequeEmitter[T].$next!() -> T
   if me.index >= me.deque.count()
     absent
   emit me.deque[me.index]

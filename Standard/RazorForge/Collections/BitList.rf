@@ -397,7 +397,7 @@ entity BitListIterator obeys Iterator[Bool]
 ### :returns: The resulting `Bool` value.
 ### :absent: Returns absent when the requested value is unavailable.
 @writable
-emitting routine BitListIterator.$next() -> Bool
+emitting routine BitListIterator.$next!() -> Bool
   if me.index >= me.list.count()
     absent
   emit me.list[me.index]

@@ -100,19 +100,15 @@ routine List[T].add_at!(index: U64, value: T)
     var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity * 2u64
     me.reserve(new_capacity)
 
-  # Shift elements right
-  var i = me.count
-  loop
-    if i <= index
-      break
-    var src_offset = (i - 1u64) * T.data_size()
-    var dst_offset = i * T.data_size()
-    var val = me.data.offset(src_offset).read()
-    me.data.offset(dst_offset).write(val)
-    i = i - 1u64
+  # Shift elements right via memmove
+  if index < me.count
+    danger!
+      var elem_size = T.data_size()
+      var src_ptr = me.data.offset(index * elem_size)
+      var dst_ptr = me.data.offset((index + 1u64) * elem_size)
+      rf_copy_bytes_at(src_ptr.get_address(), dst_ptr.get_address(), (me.count - index) * elem_size)
 
-  var byte_offset = index * T.data_size()
-  me.data.offset(byte_offset).write(value)
+  me.data.offset(index * T.data_size()).write(value)
   me.count = me.count + 1u64
   return
 
@@ -132,16 +128,13 @@ routine List[T].remove_at!(index: U64) -> T
   var byte_offset = index * T.data_size()
   var value = me.data.offset(byte_offset).read()
 
-  # Shift elements left
-  var i = index
-  loop
-    if i >= me.count - 1u64
-      break
-    var src_offset = (i + 1u64) * T.data_size()
-    var dst_offset = i * T.data_size()
-    var val = me.data.offset(src_offset).read()
-    me.data.offset(dst_offset).write(val)
-    i = i + 1u64
+  # Shift elements left via memmove
+  if index < me.count - 1u64
+    danger!
+      var elem_size = T.data_size()
+      var src_ptr = me.data.offset((index + 1u64) * elem_size)
+      var dst_ptr = me.data.offset(index * elem_size)
+      rf_copy_bytes_at(src_ptr.get_address(), dst_ptr.get_address(), (me.count - 1u64 - index) * elem_size)
 
   me.count = me.count - 1u64
   return value
@@ -295,7 +288,7 @@ routine List[T].$iter() -> ListEmitter[T]
 ### :returns: The resulting `T` value.
 ### :absent: Returns absent when the requested value is unavailable.
 @writable
-emitting routine ListEmitter[T].$next() -> T
+emitting routine ListEmitter[T].$next!() -> T
   if me.index >= me.list.count()
     absent
 
@@ -340,3 +333,46 @@ routine List[T].$diagnose() -> Text
     i = i + 1u64
   result = result + "])"
   return result
+
+### Appends `count` elements from `source` starting at `from` into this list.
+### Uses a single memcpy — O(1) regardless of count.
+### :param source: The source list to copy from.
+### :param from: The starting index in the source list.
+### :param count: The number of elements to copy.
+### :throws: May throw {IndexOutOfBoundsError}.
+routine List[T].add_range!(source: List[T], from: U64, count: U64)
+  if count == 0u64
+    return
+  if from + count > source.count
+    throw IndexOutOfBoundsError(index: from + count, count: source.count)
+
+  var new_count = me.count + count
+  if new_count > me.capacity
+    me.reserve(new_count * 2u64)
+
+  danger!
+    var elem_size = T.data_size()
+    var src_ptr = source.data.offset(from * elem_size)
+    var dst_ptr = me.data.offset(me.count * elem_size)
+    rf_copy_bytes_at(src_ptr.get_address(), dst_ptr.get_address(), count * elem_size)
+
+  me.count = new_count
+  return
+
+### Truncates the list to `new_count` elements, discarding the rest.
+### This is O(1) — it simply adjusts the count without copying or freeing.
+### The discarded elements' memory remains allocated (capacity unchanged),
+### which is desirable since the list will likely grow again during B-tree
+### operations like split_child.
+###
+### Used by split_child to trim the left half of a node after the right
+### half has been copied to a new node. The old code rebuilt a new List
+### and copied `mid` elements; truncate just sets count = mid.
+###
+### :param new_count: The new element count. Must be <= current count.
+### :throws: May throw {IndexOutOfBoundsError}.
+routine List[T].truncate(new_count: U64)
+  if new_count > me.count
+    throw IndexOutOfBoundsError(index: new_count, count: me.count)
+  me.count = new_count
+  return

@@ -78,50 +78,43 @@ routine PriorityQueue[TPriority, TElement].left_child(index: U64) -> U64
 routine PriorityQueue[TPriority, TElement].right_child(index: U64) -> U64
   return 2u64 * index + 2u64
 
-### Performs `swap` on this value.
-### :param i: The `i` value.
-### :param j: The `j` value.
-routine PriorityQueue[TPriority, TElement].swap(i: U64, j: U64)
-  var temp = me.heap[i]
-  me.heap[i] = me.heap[j]
-  me.heap[j] = temp
-  return
-
 ### Performs `sift up` on this value.
 ### :param index: The zero-based position to use.
 routine PriorityQueue[TPriority, TElement].sift_up(index: U64)
-  var i = index
-  while i > 0u64
-    var p = me.parent_index(i)
-    if me.heap[i].priority < me.heap[p].priority
-      me.swap(i, p)
-      i = p
+  var hole_idx = index
+  var hole = me.heap[index]
+  while hole_idx > 0u64
+    var p = me.parent_index(hole_idx)
+    if hole.priority < me.heap[p].priority
+      me.heap[hole_idx] = me.heap[p]
+      hole_idx = p
     else
       break
+  me.heap[hole_idx] = hole
   return
 
 ### Performs `sift down` on this value.
 ### :param index: The zero-based position to use.
 routine PriorityQueue[TPriority, TElement].sift_down(index: U64)
-  var i = index
   var size = me.heap.count()
+  var hole_idx = index
+  var hole = me.heap[index]
 
   loop
-    var left = me.left_child(i)
-    var right = me.right_child(i)
-    var smallest = i
-
-    if left < size and me.heap[left].priority < me.heap[smallest].priority
-      smallest = left
-
-    if right < size and me.heap[right].priority < me.heap[smallest].priority
-      smallest = right
-
-    if smallest == i
+    var left = me.left_child(hole_idx)
+    if left >= size
       break
 
-    me.swap(i, smallest)
-    i = smallest
+    var right = me.right_child(hole_idx)
+    var child = if right < size and me.heap[right].priority < me.heap[left].priority then right else left
+
+    if hole.priority <= me.heap[child].priority
+      break
+
+    me.heap[hole_idx] = me.heap[child]
+    hole_idx = child
+
+  me.heap[hole_idx] = hole
   return
 
 # ============================================================================
@@ -306,7 +299,7 @@ entity PriorityQueueIterator[TPriority, TElement] obeys Iterator[PQEntry[TPriori
 ### :returns: The resulting `PQEntry[TPriority, TElement]` value.
 ### :absent: Returns absent when the requested value is unavailable.
 @writable
-emitting routine PriorityQueueIterator[TPriority, TElement].$next() -> PQEntry[TPriority, TElement]
+emitting routine PriorityQueueIterator[TPriority, TElement].$next!() -> PQEntry[TPriority, TElement]
   if me.index >= me.queue.count()
     absent
   emit me.queue.heap[me.index]

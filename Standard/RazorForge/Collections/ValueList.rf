@@ -130,6 +130,7 @@ record ValueListIterator[T, N]
 ### Returns the next value from this iterator.
 ### :returns: The resulting `T` value.
 ### :absent: Returns absent when the requested value is unavailable.
+# TODO: This should be emitting routine
 routine ValueListIterator[T, N].$next!() -> T
   if me.index >= N
     absent
