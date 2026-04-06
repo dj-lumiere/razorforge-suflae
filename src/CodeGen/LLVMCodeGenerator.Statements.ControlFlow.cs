@@ -684,9 +684,9 @@ public partial class LLVMCodeGenerator
         // Evaluate range bounds
         string start = EmitExpression(sb: sb, expr: range.Start);
         string end = EmitExpression(sb: sb, expr: range.End);
-        string userStep = (range.Step != null
+        string? userStep = range.Step != null
             ? EmitExpression(sb: sb, expr: range.Step)
-            : null) ?? "";
+            : null;
 
         // Allocate loop variable (uniquify name to avoid conflicts with repeated loops)
         string varName = forStmt.Variable ?? "_iter";
@@ -720,7 +720,7 @@ public partial class LLVMCodeGenerator
         // Compute direction at runtime: is_desc = start > end
         // For float ranges or explicitly descending (downto), keep compile-time behavior
         string? isDescReg = null;
-        string step;
+        string? step = null;
         if (isFloat || range.IsDescending)
         {
             step = userStep;
