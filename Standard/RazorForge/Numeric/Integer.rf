@@ -7,7 +7,7 @@ module Numerics
 ### Defines the entity `Integer`.
 entity Integer obeys Integral, Divisible, Negatable, Ordered
   ### Stores the handle member value.
-  secret handle: Address
+  secret handle: BigIntHandle
 
 # ============================================================================
 # Lifecycle Management
@@ -270,7 +270,7 @@ routine U64.$create!(from: Integer) -> U64
 routine Integer.$represent(radix: S32 = 10) -> Text
   var CStr = rf_bigint_get_str(me.handle, radix)
   var text = Text.from_cstr(CStr)
-  rf_invalidate(CStr)
+  rf_invalidate[Byte](CStr.ptr)
   return text
 
 # ============================================================================

@@ -46,8 +46,7 @@ record ByteSize obeys Ordered, Addable, Subtractable, FloorDivisible, Scalable, 
 ### :param bytes: The `bytes` value.
 ### :returns: The resulting `ByteSize` value.
 routine ByteSize.$create(bytes: U64) -> ByteSize
-  me.value = bytes
-  return
+  return ByteSize(value: bytes)
 
 ### Returns the result of `terabytes`.
 ### :param n: The `n` value.

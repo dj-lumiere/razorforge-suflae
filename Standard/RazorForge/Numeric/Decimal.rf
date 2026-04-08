@@ -11,7 +11,7 @@ preset DECIMAL_DEFAULT_PRECISION: S32 = 50
 ### Defines the entity `Decimal`.
 entity Decimal obeys Numeric, Ordered
   ### Stores the handle member value.
-  secret handle: Address
+  secret handle: BigDecHandle
 
 # ============================================================================
 # Lifecycle Management
@@ -364,7 +364,7 @@ routine F64.$create(from: Decimal) -> F64
 routine Decimal.$represent(decimal_places: S32 = 10) -> Text
   var CStr = rf_bigdec_get_str(me.handle, decimal_places)
   var text = Text.from_cstr(CStr)
-  rf_invalidate(CStr)
+  rf_invalidate[Byte](CStr.ptr)
   return text
 
 # ============================================================================

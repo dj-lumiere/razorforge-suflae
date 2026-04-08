@@ -459,6 +459,11 @@ routine U64.is_even() -> Bool
 routine U64.is_odd() -> Bool
   return not me.is_even()
 
+### Returns this value as a `ByteSize`.
+### :returns: The resulting `ByteSize` value.
+routine U64.bytes() -> ByteSize
+  return ByteSize(me)
+
 # ============================================================================
 # Text Representation and Parsing
 # ============================================================================

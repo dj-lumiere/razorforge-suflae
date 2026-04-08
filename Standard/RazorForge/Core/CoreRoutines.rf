@@ -7,14 +7,14 @@ routine stop!()
 
 ### Performs `verify` on this value.
 ### :param expr: The `expr` value.
-### :throws: May throw {VerificationFailure}.
+### :throws: May throw {VerificationFailedError}.
 routine verify!(expr: Bool)
-  throw VerificationFailure()
+  throw VerificationFailedError()
 
 ### Executes `breach`.
-### :throws: May throw {LogicBreachError}.
+### :throws: May throw {LogicBreachedError}.
 routine breach!()
-  throw LogicBreachError()
+  throw LogicBreachedError()
 
 ### Performs `max` on this value.
 ### :param values...: The `values...` value.

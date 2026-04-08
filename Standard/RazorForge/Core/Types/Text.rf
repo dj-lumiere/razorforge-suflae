@@ -105,11 +105,11 @@ routine Text.$create(from: CWStr) -> Text
     loop
       if i >= len
         break
-      var high = Snatched[U16](from.ptr + (i * 2u64)).read()
+      var high = Snatched[U16](from.ptr.get_address() + (i * 2u64)).read()
 
       # Check for high surrogate (U+D800 to U+DBFF)
       if high >= 0xD800u16 and high <= 0xDBFFu16 and i + 1u64 < len
-        var low = Snatched[U16](from.ptr + ((i + 1u64) * 2u64)).read()
+        var low = Snatched[U16](from.ptr.get_address() + ((i + 1u64) * 2u64)).read()
         # Check for low surrogate (U+DC00 to U+DFFF)
         if low >= 0xDC00u16 and low <= 0xDFFFu16
           # Valid surrogate pair - decode to codepoint
@@ -138,6 +138,16 @@ routine Text.$create(from: CWStr) -> Text
 ### :returns: The resulting `U64` value.
 routine Text.count() -> U64
   return me.characters.count()
+
+### Returns the number of occurrences of a character.
+### :param character: The character to search for.
+### :returns: The resulting `U64` value.
+routine Text.count_of(character: Character) -> U64
+  var result: U64 = 0u64
+  for ch in me
+    if ch == character
+      result += 1u64
+  return result
 
 ### Returns true if this value is empty.
 ### :returns: The resulting `Bool` value.
@@ -331,16 +341,6 @@ routine Text.find!(other: Text) -> U64
     if found
       return i
   absent
-
-### Returns the number of matching values.
-### :param letter: The character to search for.
-### :returns: The resulting `U64` value.
-routine Text.count(letter: Character) -> U64
-  var result: U64 = 0u64
-  for i in 0 til me.count()
-    if me[i] == letter
-      result += 1u64
-  return result
 
 # Transform
 

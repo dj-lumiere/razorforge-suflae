@@ -3,6 +3,7 @@
 module Core
 
 ### Defines the record `Blank`.
+@llvm("void")
 record Blank
   pass
 

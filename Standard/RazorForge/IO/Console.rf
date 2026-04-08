@@ -116,8 +116,7 @@ routine alert[T](values...: T, sep: Text = " ", end: Text = "\n")
 ### Returns the result of `ask line`.
 ### :returns: The resulting `Text` value.
 routine ask_line() -> Text
-  var addr = rf_console_ask_line()
-  var ptr = Snatched[Byte](addr)
+  var ptr = rf_console_ask_line()
   if ptr.is_none()
     return ""
   var bytes = Bytes(ptr: ptr)
@@ -126,8 +125,7 @@ routine ask_line() -> Text
 ### Returns the result of `ask word`.
 ### :returns: The resulting `Text` value.
 routine ask_word() -> Text
-  var addr = rf_console_ask_word()
-  var ptr = Snatched[Byte](addr)
+  var ptr = rf_console_ask_word()
   if ptr.is_none()
     return ""
   var bytes = Bytes(ptr: ptr)
@@ -136,8 +134,7 @@ routine ask_word() -> Text
 ### Returns the result of `ask all`.
 ### :returns: The resulting `Text` value.
 routine ask_all() -> Text
-  var addr = rf_console_ask_all()
-  var ptr = Snatched[Byte](addr)
+  var ptr = rf_console_ask_all()
   if ptr.is_none()
     return ""
   var bytes = Bytes(ptr: ptr)
@@ -163,8 +160,7 @@ routine ask_words() -> List[Text]
 ### Returns the result of `ask raw`.
 ### :returns: The resulting `Bytes` value.
 routine ask_raw() -> Bytes
-  var addr = rf_console_ask_all()
-  var ptr = Snatched[Byte](addr)
+  var ptr = rf_console_ask_all()
   if ptr.is_none()
     return Bytes()
   return Bytes(ptr: ptr)
@@ -173,8 +169,7 @@ routine ask_raw() -> Bytes
 ### :param count: The number of items to use.
 ### :returns: The resulting `Bytes` value.
 routine ask_bytes(count: U64) -> Bytes
-  var addr = rf_console_ask_bytes(count)
-  var ptr = Snatched[Byte](addr)
+  var ptr = rf_console_ask_bytes(count)
   if ptr.is_none()
     return Bytes()
   return Bytes(ptr: ptr)

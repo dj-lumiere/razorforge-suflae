@@ -782,20 +782,16 @@ external("C") routine rf_moment_now() -> Moment
 ### Returns the result of `rf cstr count`.
 ### :param ptr: The pointer value to use.
 ### :returns: The resulting `U64` value.
-external("C") routine rf_cstr_count(ptr: Address) -> U64
+external("C") routine rf_cstr_count(ptr: CStr) -> U64
 ### Returns the result of `rf cstr compare`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `S32` value.
-external("C") routine rf_cstr_compare(a: Address, b: Address) -> S32
+external("C") routine rf_cstr_compare(a: CStr, b: CStr) -> S32
 ### Performs `rf cstr copy` on this value.
 ### :param dest: The destination location.
 ### :param src: The source location.
-external("C") routine rf_cstr_copy(dest: Address, src: Address)
-### Returns the result of `rf cstr count`.
-### :param ptr: The pointer value to use.
-### :returns: The resulting `U64` value.
-external("C") routine rf_cstr_count(ptr: CStr) -> U64
+external("C") routine rf_cstr_copy(dest: CStr, src: CStr) -> CStr
 
 # ============================================================================
 # Wide C String Operations (CWStr / wchar_t*)
@@ -845,361 +841,356 @@ external("C") routine rf_crash(type_name: Address, type_len: U64, file: Address,
 ### Performs `rf console show` on this value.
 ### :param ptr: The pointer value to use.
 ### :param len: The `len` value.
-external("C") routine rf_console_show(ptr: Address, len: U64)
+external("C") routine rf_console_show(ptr: Snatched[Byte], len: U64)
 ### Performs `rf console alert` on this value.
 ### :param ptr: The pointer value to use.
 ### :param len: The `len` value.
-external("C") routine rf_console_alert(ptr: Address, len: U64)
+external("C") routine rf_console_alert(ptr: Snatched[Byte], len: U64)
 
 ### Returns the result of `rf console ask line`.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_console_ask_line() -> Address
+external("C") routine rf_console_ask_line() -> Snatched[Byte]
 ### Returns the result of `rf console ask word`.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_console_ask_word() -> Address
+external("C") routine rf_console_ask_word() -> Snatched[Byte]
 ### Returns the result of `rf console ask all`.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_console_ask_all() -> Address
+external("C") routine rf_console_ask_all() -> Snatched[Byte]
 ### Returns the result of `rf console ask bytes`.
 ### :param count: The number of items to use.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_console_ask_bytes(count: U64) -> Address
-
-### Executes `rf console flush`.
-external("C") routine rf_console_flush()
-### Executes `rf console clear`.
-external("C") routine rf_console_clear()
+external("C") routine rf_console_ask_bytes(count: U64) -> Snatched[Byte]
 
 # ============================================================================
 # Integer (Arbitrary Precision) - LibTomMath
-# All functions use opaque handles (Address) to mp_int structures
+# All functions use opaque handles to mp_int structures
 # ============================================================================
 
 ### Returns the result of `rf bigint new`.
-### :returns: The resulting `Address` value.
-external("C") routine rf_bigint_new() -> Address
+### :returns: The resulting `BigIntHandle` value.
+external("C") routine rf_bigint_new() -> BigIntHandle
 ### Performs `rf bigint clear` on this value.
 ### :param handle: The native handle to use.
-external("C") routine rf_bigint_clear(handle: Address)
+external("C") routine rf_bigint_clear(handle: BigIntHandle)
 ### Performs `rf bigint copy` on this value.
 ### :param dest: The destination location.
 ### :param src: The source location.
-external("C") routine rf_bigint_copy(dest: Address, src: Address)
+external("C") routine rf_bigint_copy(dest: BigIntHandle, src: BigIntHandle)
 
 ### Performs `rf bigint set i64` on this value.
 ### :param handle: The native handle to use.
 ### :param value: The value to use.
-external("C") routine rf_bigint_set_i64(handle: Address, value: S64)
+external("C") routine rf_bigint_set_i64(handle: BigIntHandle, value: S64)
 ### Performs `rf bigint set u64` on this value.
 ### :param handle: The native handle to use.
 ### :param value: The value to use.
-external("C") routine rf_bigint_set_u64(handle: Address, value: U64)
+external("C") routine rf_bigint_set_u64(handle: BigIntHandle, value: U64)
 ### Returns the result of `rf bigint set str`.
 ### :param handle: The native handle to use.
 ### :param str: The `str` value.
 ### :param radix: The numeric base to use.
 ### :returns: The resulting `S32` value.
-external("C") routine rf_bigint_set_str(handle: Address, str: Address, radix: S32) -> S32
+external("C") routine rf_bigint_set_str(handle: BigIntHandle, str: CStr, radix: S32) -> S32
 
 ### Returns the result of `rf bigint get i64`.
 ### :param handle: The native handle to use.
 ### :returns: The resulting `S64` value.
-external("C") routine rf_bigint_get_i64(handle: Address) -> S64
+external("C") routine rf_bigint_get_i64(handle: BigIntHandle) -> S64
 ### Returns the result of `rf bigint get u64`.
 ### :param handle: The native handle to use.
 ### :returns: The resulting `U64` value.
-external("C") routine rf_bigint_get_u64(handle: Address) -> U64
+external("C") routine rf_bigint_get_u64(handle: BigIntHandle) -> U64
 ### Returns the result of `rf bigint get str`.
 ### :param handle: The native handle to use.
 ### :param radix: The numeric base to use.
-### :returns: The resulting `Address` value.
-external("C") routine rf_bigint_get_str(handle: Address, radix: S32) -> Address
+### :returns: The resulting `CStr` value.
+external("C") routine rf_bigint_get_str(handle: BigIntHandle, radix: S32) -> CStr
 
 ### Performs `rf bigint add` on this value.
 ### :param result: The result storage location.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-external("C") routine rf_bigint_add(result: Address, a: Address, b: Address)
+external("C") routine rf_bigint_add(result: BigIntHandle, a: BigIntHandle, b: BigIntHandle)
 ### Performs `rf bigint sub` on this value.
 ### :param result: The result storage location.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-external("C") routine rf_bigint_sub(result: Address, a: Address, b: Address)
+external("C") routine rf_bigint_sub(result: BigIntHandle, a: BigIntHandle, b: BigIntHandle)
 ### Performs `rf bigint mul` on this value.
 ### :param result: The result storage location.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-external("C") routine rf_bigint_mul(result: Address, a: Address, b: Address)
+external("C") routine rf_bigint_mul(result: BigIntHandle, a: BigIntHandle, b: BigIntHandle)
 ### Performs `rf bigint div` on this value.
 ### :param quotient: The quotient storage location.
 ### :param remainder: The remainder storage location.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-external("C") routine rf_bigint_div(quotient: Address, remainder: Address, a: Address, b: Address)
+external("C") routine rf_bigint_div(quotient: BigIntHandle, remainder: BigIntHandle, a: BigIntHandle, b: BigIntHandle)
 ### Performs `rf bigint mod` on this value.
 ### :param result: The result storage location.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-external("C") routine rf_bigint_mod(result: Address, a: Address, b: Address)
+external("C") routine rf_bigint_mod(result: BigIntHandle, a: BigIntHandle, b: BigIntHandle)
 ### Performs `rf bigint neg` on this value.
 ### :param result: The result storage location.
 ### :param a: The left-hand value.
-external("C") routine rf_bigint_neg(result: Address, a: Address)
+external("C") routine rf_bigint_neg(result: BigIntHandle, a: BigIntHandle)
 
 ### Returns the result of `rf bigint cmp`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `S32` value.
-external("C") routine rf_bigint_cmp(a: Address, b: Address) -> S32
+external("C") routine rf_bigint_cmp(a: BigIntHandle, b: BigIntHandle) -> S32
 
 ### Performs `rf bigint and` on this value.
 ### :param result: The result storage location.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-external("C") routine rf_bigint_and(result: Address, a: Address, b: Address)
+external("C") routine rf_bigint_and(result: BigIntHandle, a: BigIntHandle, b: BigIntHandle)
 ### Performs `rf bigint or` on this value.
 ### :param result: The result storage location.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-external("C") routine rf_bigint_or(result: Address, a: Address, b: Address)
+external("C") routine rf_bigint_or(result: BigIntHandle, a: BigIntHandle, b: BigIntHandle)
 ### Performs `rf bigint xor` on this value.
 ### :param result: The result storage location.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-external("C") routine rf_bigint_xor(result: Address, a: Address, b: Address)
+external("C") routine rf_bigint_xor(result: BigIntHandle, a: BigIntHandle, b: BigIntHandle)
 ### Performs `rf bigint shl` on this value.
 ### :param result: The result storage location.
 ### :param a: The left-hand value.
 ### :param bits: The encoded bit pattern.
-external("C") routine rf_bigint_shl(result: Address, a: Address, bits: S32)
+external("C") routine rf_bigint_shl(result: BigIntHandle, a: BigIntHandle, bits: S32)
 ### Performs `rf bigint shr` on this value.
 ### :param result: The result storage location.
 ### :param a: The left-hand value.
 ### :param bits: The encoded bit pattern.
-external("C") routine rf_bigint_shr(result: Address, a: Address, bits: S32)
+external("C") routine rf_bigint_shr(result: BigIntHandle, a: BigIntHandle, bits: S32)
 
 ### Performs `rf bigint abs` on this value.
 ### :param result: The result storage location.
 ### :param a: The left-hand value.
-external("C") routine rf_bigint_abs(result: Address, a: Address)
+external("C") routine rf_bigint_abs(result: BigIntHandle, a: BigIntHandle)
 ### Performs `rf bigint pow` on this value.
 ### :param result: The result storage location.
 ### :param base: The base value.
 ### :param exp: The exponent value.
-external("C") routine rf_bigint_pow(result: Address, base: Address, exp: U32)
+external("C") routine rf_bigint_pow(result: BigIntHandle, base: BigIntHandle, exp: U32)
 ### Performs `rf bigint sqrt` on this value.
 ### :param result: The result storage location.
 ### :param a: The left-hand value.
-external("C") routine rf_bigint_sqrt(result: Address, a: Address)
+external("C") routine rf_bigint_sqrt(result: BigIntHandle, a: BigIntHandle)
 ### Performs `rf bigint gcd` on this value.
 ### :param result: The result storage location.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-external("C") routine rf_bigint_gcd(result: Address, a: Address, b: Address)
+external("C") routine rf_bigint_gcd(result: BigIntHandle, a: BigIntHandle, b: BigIntHandle)
 ### Performs `rf bigint lcm` on this value.
 ### :param result: The result storage location.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-external("C") routine rf_bigint_lcm(result: Address, a: Address, b: Address)
+external("C") routine rf_bigint_lcm(result: BigIntHandle, a: BigIntHandle, b: BigIntHandle)
 
 ### Returns the result of `rf bigint is zero`.
 ### :param handle: The native handle to use.
 ### :returns: The resulting `S32` value.
-external("C") routine rf_bigint_is_zero(handle: Address) -> S32
+external("C") routine rf_bigint_is_zero(handle: BigIntHandle) -> S32
 ### Returns the result of `rf bigint is neg`.
 ### :param handle: The native handle to use.
 ### :returns: The resulting `S32` value.
-external("C") routine rf_bigint_is_neg(handle: Address) -> S32
+external("C") routine rf_bigint_is_neg(handle: BigIntHandle) -> S32
 
 # ============================================================================
 # Decimal (Arbitrary Precision) - MAPM Library
-# All functions use opaque handles (Address) to M_APM structures
+# All functions use opaque handles to M_APM structures
 # ============================================================================
 
 ### Returns the result of `rf bigdec new`.
-### :returns: The resulting `Address` value.
-external("C") routine rf_bigdec_new() -> Address
+### :returns: The resulting `BigDecHandle` value.
+external("C") routine rf_bigdec_new() -> BigDecHandle
 ### Performs `rf bigdec free` on this value.
 ### :param handle: The native handle to use.
-external("C") routine rf_bigdec_free(handle: Address)
+external("C") routine rf_bigdec_free(handle: BigDecHandle)
 ### Returns the result of `rf bigdec copy`.
 ### :param src: The source location.
-### :returns: The resulting `Address` value.
-external("C") routine rf_bigdec_copy(src: Address) -> Address
+### :returns: The resulting `BigDecHandle` value.
+external("C") routine rf_bigdec_copy(src: BigDecHandle) -> BigDecHandle
 
 ### Performs `rf bigdec set i64` on this value.
 ### :param handle: The native handle to use.
 ### :param value: The value to use.
-external("C") routine rf_bigdec_set_i64(handle: Address, value: S64)
+external("C") routine rf_bigdec_set_i64(handle: BigDecHandle, value: S64)
 ### Performs `rf bigdec set f64` on this value.
 ### :param handle: The native handle to use.
 ### :param value: The value to use.
-external("C") routine rf_bigdec_set_f64(handle: Address, value: F64)
+external("C") routine rf_bigdec_set_f64(handle: BigDecHandle, value: F64)
 ### Performs `rf bigdec set str` on this value.
 ### :param handle: The native handle to use.
 ### :param str: The `str` value.
-external("C") routine rf_bigdec_set_str(handle: Address, str: Address)
+external("C") routine rf_bigdec_set_str(handle: BigDecHandle, str: CStr)
 
 ### Returns the result of `rf bigdec get i64`.
 ### :param handle: The native handle to use.
 ### :returns: The resulting `S64` value.
-external("C") routine rf_bigdec_get_i64(handle: Address) -> S64
+external("C") routine rf_bigdec_get_i64(handle: BigDecHandle) -> S64
 ### Returns the result of `rf bigdec get f64`.
 ### :param handle: The native handle to use.
 ### :returns: The resulting `F64` value.
-external("C") routine rf_bigdec_get_f64(handle: Address) -> F64
+external("C") routine rf_bigdec_get_f64(handle: BigDecHandle) -> F64
 ### Returns the result of `rf bigdec get str`.
 ### :param handle: The native handle to use.
 ### :param decimal_places: The number of decimal places to render.
-### :returns: The resulting `Address` value.
-external("C") routine rf_bigdec_get_str(handle: Address, decimal_places: S32) -> Address
+### :returns: The resulting `CStr` value.
+external("C") routine rf_bigdec_get_str(handle: BigDecHandle, decimal_places: S32) -> CStr
 
 ### Performs `rf bigdec add` on this value.
 ### :param result: The result storage location.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-external("C") routine rf_bigdec_add(result: Address, a: Address, b: Address)
+external("C") routine rf_bigdec_add(result: BigDecHandle, a: BigDecHandle, b: BigDecHandle)
 ### Performs `rf bigdec sub` on this value.
 ### :param result: The result storage location.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-external("C") routine rf_bigdec_sub(result: Address, a: Address, b: Address)
+external("C") routine rf_bigdec_sub(result: BigDecHandle, a: BigDecHandle, b: BigDecHandle)
 ### Performs `rf bigdec mul` on this value.
 ### :param result: The result storage location.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-external("C") routine rf_bigdec_mul(result: Address, a: Address, b: Address)
+external("C") routine rf_bigdec_mul(result: BigDecHandle, a: BigDecHandle, b: BigDecHandle)
 ### Performs `rf bigdec div` on this value.
 ### :param result: The result storage location.
 ### :param precision: The decimal precision to use.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-external("C") routine rf_bigdec_div(result: Address, precision: S32, a: Address, b: Address)
+external("C") routine rf_bigdec_div(result: BigDecHandle, precision: S32, a: BigDecHandle, b: BigDecHandle)
 ### Performs `rf bigdec neg` on this value.
 ### :param result: The result storage location.
 ### :param a: The left-hand value.
-external("C") routine rf_bigdec_neg(result: Address, a: Address)
+external("C") routine rf_bigdec_neg(result: BigDecHandle, a: BigDecHandle)
 
 ### Returns the result of `rf bigdec cmp`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `S32` value.
-external("C") routine rf_bigdec_cmp(a: Address, b: Address) -> S32
+external("C") routine rf_bigdec_cmp(a: BigDecHandle, b: BigDecHandle) -> S32
 
 ### Performs `rf bigdec abs` on this value.
 ### :param result: The result storage location.
 ### :param a: The left-hand value.
-external("C") routine rf_bigdec_abs(result: Address, a: Address)
+external("C") routine rf_bigdec_abs(result: BigDecHandle, a: BigDecHandle)
 ### Performs `rf bigdec sqrt` on this value.
 ### :param result: The result storage location.
 ### :param precision: The decimal precision to use.
 ### :param a: The left-hand value.
-external("C") routine rf_bigdec_sqrt(result: Address, precision: S32, a: Address)
+external("C") routine rf_bigdec_sqrt(result: BigDecHandle, precision: S32, a: BigDecHandle)
 ### Performs `rf bigdec pow` on this value.
 ### :param result: The result storage location.
 ### :param precision: The decimal precision to use.
 ### :param base: The base value.
 ### :param exp: The exponent value.
-external("C") routine rf_bigdec_pow(result: Address, precision: S32, base: Address, exp: Address)
+external("C") routine rf_bigdec_pow(result: BigDecHandle, precision: S32, base: BigDecHandle, exp: BigDecHandle)
 ### Performs `rf bigdec exp` on this value.
 ### :param result: The result storage location.
 ### :param precision: The decimal precision to use.
 ### :param a: The left-hand value.
-external("C") routine rf_bigdec_exp(result: Address, precision: S32, a: Address)
+external("C") routine rf_bigdec_exp(result: BigDecHandle, precision: S32, a: BigDecHandle)
 ### Performs `rf bigdec log` on this value.
 ### :param result: The result storage location.
 ### :param precision: The decimal precision to use.
 ### :param a: The left-hand value.
-external("C") routine rf_bigdec_log(result: Address, precision: S32, a: Address)
+external("C") routine rf_bigdec_log(result: BigDecHandle, precision: S32, a: BigDecHandle)
 ### Performs `rf bigdec log10` on this value.
 ### :param result: The result storage location.
 ### :param precision: The decimal precision to use.
 ### :param a: The left-hand value.
-external("C") routine rf_bigdec_log10(result: Address, precision: S32, a: Address)
+external("C") routine rf_bigdec_log10(result: BigDecHandle, precision: S32, a: BigDecHandle)
 
 ### Performs `rf bigdec sin` on this value.
 ### :param result: The result storage location.
 ### :param precision: The decimal precision to use.
 ### :param a: The left-hand value.
-external("C") routine rf_bigdec_sin(result: Address, precision: S32, a: Address)
+external("C") routine rf_bigdec_sin(result: BigDecHandle, precision: S32, a: BigDecHandle)
 ### Performs `rf bigdec cos` on this value.
 ### :param result: The result storage location.
 ### :param precision: The decimal precision to use.
 ### :param a: The left-hand value.
-external("C") routine rf_bigdec_cos(result: Address, precision: S32, a: Address)
+external("C") routine rf_bigdec_cos(result: BigDecHandle, precision: S32, a: BigDecHandle)
 ### Performs `rf bigdec tan` on this value.
 ### :param result: The result storage location.
 ### :param precision: The decimal precision to use.
 ### :param a: The left-hand value.
-external("C") routine rf_bigdec_tan(result: Address, precision: S32, a: Address)
+external("C") routine rf_bigdec_tan(result: BigDecHandle, precision: S32, a: BigDecHandle)
 ### Performs `rf bigdec asin` on this value.
 ### :param result: The result storage location.
 ### :param precision: The decimal precision to use.
 ### :param a: The left-hand value.
-external("C") routine rf_bigdec_asin(result: Address, precision: S32, a: Address)
+external("C") routine rf_bigdec_asin(result: BigDecHandle, precision: S32, a: BigDecHandle)
 ### Performs `rf bigdec acos` on this value.
 ### :param result: The result storage location.
 ### :param precision: The decimal precision to use.
 ### :param a: The left-hand value.
-external("C") routine rf_bigdec_acos(result: Address, precision: S32, a: Address)
+external("C") routine rf_bigdec_acos(result: BigDecHandle, precision: S32, a: BigDecHandle)
 ### Performs `rf bigdec atan` on this value.
 ### :param result: The result storage location.
 ### :param precision: The decimal precision to use.
 ### :param a: The left-hand value.
-external("C") routine rf_bigdec_atan(result: Address, precision: S32, a: Address)
+external("C") routine rf_bigdec_atan(result: BigDecHandle, precision: S32, a: BigDecHandle)
 
 ### Performs `rf bigdec sinh` on this value.
 ### :param result: The result storage location.
 ### :param precision: The decimal precision to use.
 ### :param a: The left-hand value.
-external("C") routine rf_bigdec_sinh(result: Address, precision: S32, a: Address)
+external("C") routine rf_bigdec_sinh(result: BigDecHandle, precision: S32, a: BigDecHandle)
 ### Performs `rf bigdec cosh` on this value.
 ### :param result: The result storage location.
 ### :param precision: The decimal precision to use.
 ### :param a: The left-hand value.
-external("C") routine rf_bigdec_cosh(result: Address, precision: S32, a: Address)
+external("C") routine rf_bigdec_cosh(result: BigDecHandle, precision: S32, a: BigDecHandle)
 ### Performs `rf bigdec tanh` on this value.
 ### :param result: The result storage location.
 ### :param precision: The decimal precision to use.
 ### :param a: The left-hand value.
-external("C") routine rf_bigdec_tanh(result: Address, precision: S32, a: Address)
+external("C") routine rf_bigdec_tanh(result: BigDecHandle, precision: S32, a: BigDecHandle)
 
 ### Performs `rf bigdec ceil` on this value.
 ### :param result: The result storage location.
 ### :param a: The left-hand value.
-external("C") routine rf_bigdec_ceil(result: Address, a: Address)
+external("C") routine rf_bigdec_ceil(result: BigDecHandle, a: BigDecHandle)
 ### Performs `rf bigdec floor` on this value.
 ### :param result: The result storage location.
 ### :param a: The left-hand value.
-external("C") routine rf_bigdec_floor(result: Address, a: Address)
+external("C") routine rf_bigdec_floor(result: BigDecHandle, a: BigDecHandle)
 ### Performs `rf bigdec round` on this value.
 ### :param result: The result storage location.
 ### :param decimal_places: The number of decimal places to render.
 ### :param a: The left-hand value.
-external("C") routine rf_bigdec_round(result: Address, decimal_places: S32, a: Address)
+external("C") routine rf_bigdec_round(result: BigDecHandle, decimal_places: S32, a: BigDecHandle)
 ### Performs `rf bigdec trunc` on this value.
 ### :param result: The result storage location.
 ### :param decimal_places: The number of decimal places to render.
 ### :param a: The left-hand value.
-external("C") routine rf_bigdec_trunc(result: Address, decimal_places: S32, a: Address)
+external("C") routine rf_bigdec_trunc(result: BigDecHandle, decimal_places: S32, a: BigDecHandle)
 
 ### Returns the result of `rf bigdec is zero`.
 ### :param handle: The native handle to use.
 ### :returns: The resulting `S32` value.
-external("C") routine rf_bigdec_is_zero(handle: Address) -> S32
+external("C") routine rf_bigdec_is_zero(handle: BigDecHandle) -> S32
 ### Returns the result of `rf bigdec is neg`.
 ### :param handle: The native handle to use.
 ### :returns: The resulting `S32` value.
-external("C") routine rf_bigdec_is_neg(handle: Address) -> S32
+external("C") routine rf_bigdec_is_neg(handle: BigDecHandle) -> S32
 
 ### Performs `rf bigdec pi` on this value.
 ### :param result: The result storage location.
 ### :param precision: The decimal precision to use.
-external("C") routine rf_bigdec_pi(result: Address, precision: S32)
+external("C") routine rf_bigdec_pi(result: BigDecHandle, precision: S32)
 ### Performs `rf bigdec e` on this value.
 ### :param result: The result storage location.
 ### :param precision: The decimal precision to use.
-external("C") routine rf_bigdec_e(result: Address, precision: S32)
+external("C") routine rf_bigdec_e(result: BigDecHandle, precision: S32)
 
 # ============================================================================
 # Text Parsing (CStr -> primitive values)
@@ -1259,29 +1250,29 @@ external("C") routine rf_get_result_len() -> U64
 ### :param path_len: The `path_len` value.
 ### :param mode: The `mode` value.
 ### :returns: The resulting `S32` value.
-external("C") routine rf_file_open(path: Address, path_len: S32, mode: S32) -> S32
+external("C") routine rf_file_open(path: CStr, path_len: S32, mode: S32) -> S32
 ### Performs `rf file close` on this value.
 ### :param fd: The `fd` value.
 external("C") routine rf_file_close(fd: S32)
 ### Returns the result of `rf file read all`.
 ### :param fd: The `fd` value.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_file_read_all(fd: S32) -> Address
+external("C") routine rf_file_read_all(fd: S32) -> Snatched[Byte]
 ### Returns the result of `rf file read line`.
 ### :param fd: The `fd` value.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_file_read_line(fd: S32) -> Address
+external("C") routine rf_file_read_line(fd: S32) -> Snatched[Byte]
 ### Returns the result of `rf file read bytes`.
 ### :param fd: The `fd` value.
 ### :param count: The number of items to use.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_file_read_bytes(fd: S32, count: U64) -> Address
+external("C") routine rf_file_read_bytes(fd: S32, count: U64) -> Snatched[Byte]
 ### Returns the result of `rf file write`.
 ### :param fd: The `fd` value.
 ### :param ptr: The pointer value to use.
 ### :param len: The `len` value.
 ### :returns: The resulting `U64` value.
-external("C") routine rf_file_write(fd: S32, ptr: Address, len: U64) -> U64
+external("C") routine rf_file_write(fd: S32, ptr: Snatched[Byte], len: U64) -> U64
 ### Performs `rf file flush` on this value.
 ### :param fd: The `fd` value.
 external("C") routine rf_file_flush(fd: S32)
@@ -1298,111 +1289,111 @@ external("C") routine rf_file_is_eof(fd: S32) -> Bool
 ### :param path: The `path` value.
 ### :param len: The `len` value.
 ### :returns: The resulting `Bool` value.
-external("C") routine rf_fs_exists(path: Address, len: S32) -> Bool
+external("C") routine rf_fs_exists(path: CStr, len: S32) -> Bool
 ### Returns the result of `rf fs is file`.
 ### :param path: The `path` value.
 ### :param len: The `len` value.
 ### :returns: The resulting `Bool` value.
-external("C") routine rf_fs_is_file(path: Address, len: S32) -> Bool
+external("C") routine rf_fs_is_file(path: CStr, len: S32) -> Bool
 ### Returns the result of `rf fs is directory`.
 ### :param path: The `path` value.
 ### :param len: The `len` value.
 ### :returns: The resulting `Bool` value.
-external("C") routine rf_fs_is_directory(path: Address, len: S32) -> Bool
+external("C") routine rf_fs_is_directory(path: CStr, len: S32) -> Bool
 ### Returns the result of `rf fs create dir`.
 ### :param path: The `path` value.
 ### :param len: The `len` value.
 ### :returns: The resulting `S32` value.
-external("C") routine rf_fs_create_dir(path: Address, len: S32) -> S32
+external("C") routine rf_fs_create_dir(path: CStr, len: S32) -> S32
 ### Returns the result of `rf fs create dir all`.
 ### :param path: The `path` value.
 ### :param len: The `len` value.
 ### :returns: The resulting `S32` value.
-external("C") routine rf_fs_create_dir_all(path: Address, len: S32) -> S32
+external("C") routine rf_fs_create_dir_all(path: CStr, len: S32) -> S32
 ### Returns the result of `rf fs remove`.
 ### :param path: The `path` value.
 ### :param len: The `len` value.
 ### :returns: The resulting `S32` value.
-external("C") routine rf_fs_remove(path: Address, len: S32) -> S32
+external("C") routine rf_fs_remove(path: CStr, len: S32) -> S32
 ### Returns the result of `rf fs remove all`.
 ### :param path: The `path` value.
 ### :param len: The `len` value.
 ### :returns: The resulting `S32` value.
-external("C") routine rf_fs_remove_all(path: Address, len: S32) -> S32
+external("C") routine rf_fs_remove_all(path: CStr, len: S32) -> S32
 ### Returns the result of `rf fs copy`.
 ### :param src: The source location.
 ### :param src_len: The `src_len` value.
 ### :param dst: The `dst` value.
 ### :param dst_len: The `dst_len` value.
 ### :returns: The resulting `S32` value.
-external("C") routine rf_fs_copy(src: Address, src_len: S32, dst: Address, dst_len: S32) -> S32
+external("C") routine rf_fs_copy(src: CStr, src_len: S32, dst: CStr, dst_len: S32) -> S32
 ### Returns the result of `rf fs move`.
 ### :param src: The source location.
 ### :param src_len: The `src_len` value.
 ### :param dst: The `dst` value.
 ### :param dst_len: The `dst_len` value.
 ### :returns: The resulting `S32` value.
-external("C") routine rf_fs_move(src: Address, src_len: S32, dst: Address, dst_len: S32) -> S32
+external("C") routine rf_fs_move(src: CStr, src_len: S32, dst: CStr, dst_len: S32) -> S32
 ### Returns the result of `rf fs file size`.
 ### :param path: The `path` value.
 ### :param len: The `len` value.
 ### :returns: The resulting `S64` value.
-external("C") routine rf_fs_file_size(path: Address, len: S32) -> S64
+external("C") routine rf_fs_file_size(path: CStr, len: S32) -> S64
 ### Returns the result of `rf fs join path`.
 ### :param a: The left-hand value.
 ### :param a_len: The `a_len` value.
 ### :param b: The right-hand value.
 ### :param b_len: The `b_len` value.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_fs_join_path(a: Address, a_len: S32, b: Address, b_len: S32) -> Address
+external("C") routine rf_fs_join_path(a: CStr, a_len: S32, b: CStr, b_len: S32) -> Snatched[Byte]
 ### Returns the result of `rf fs parent path`.
 ### :param path: The `path` value.
 ### :param len: The `len` value.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_fs_parent_path(path: Address, len: S32) -> Address
+external("C") routine rf_fs_parent_path(path: CStr, len: S32) -> Snatched[Byte]
 ### Returns the result of `rf fs file name`.
 ### :param path: The `path` value.
 ### :param len: The `len` value.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_fs_file_name(path: Address, len: S32) -> Address
+external("C") routine rf_fs_file_name(path: CStr, len: S32) -> Snatched[Byte]
 ### Returns the result of `rf fs file stem`.
 ### :param path: The `path` value.
 ### :param len: The `len` value.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_fs_file_stem(path: Address, len: S32) -> Address
+external("C") routine rf_fs_file_stem(path: CStr, len: S32) -> Snatched[Byte]
 ### Returns the result of `rf fs extension`.
 ### :param path: The `path` value.
 ### :param len: The `len` value.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_fs_extension(path: Address, len: S32) -> Address
+external("C") routine rf_fs_extension(path: CStr, len: S32) -> Snatched[Byte]
 ### Returns the result of `rf fs absolute path`.
 ### :param path: The `path` value.
 ### :param len: The `len` value.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_fs_absolute_path(path: Address, len: S32) -> Address
+external("C") routine rf_fs_absolute_path(path: CStr, len: S32) -> Snatched[Byte]
 ### Returns the result of `rf fs canonical path`.
 ### :param path: The `path` value.
 ### :param len: The `len` value.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_fs_canonical_path(path: Address, len: S32) -> Address
+external("C") routine rf_fs_canonical_path(path: CStr, len: S32) -> Snatched[Byte]
 ### Returns the result of `rf fs can read`.
 ### :param path: The `path` value.
 ### :param len: The `len` value.
 ### :returns: The resulting `Bool` value.
-external("C") routine rf_fs_can_read(path: Address, len: S32) -> Bool
+external("C") routine rf_fs_can_read(path: CStr, len: S32) -> Bool
 ### Returns the result of `rf fs can write`.
 ### :param path: The `path` value.
 ### :param len: The `len` value.
 ### :returns: The resulting `Bool` value.
-external("C") routine rf_fs_can_write(path: Address, len: S32) -> Bool
+external("C") routine rf_fs_can_write(path: CStr, len: S32) -> Bool
 ### Returns the result of `rf fs can execute`.
 ### :param path: The `path` value.
 ### :param len: The `len` value.
 ### :returns: The resulting `Bool` value.
-external("C") routine rf_fs_can_execute(path: Address, len: S32) -> Bool
+external("C") routine rf_fs_can_execute(path: CStr, len: S32) -> Bool
 ### Returns the result of `rf fs set readonly`.
 ### :param path: The `path` value.
 ### :param len: The `len` value.
 ### :param readonly_flag: The `readonly_flag` value.
 ### :returns: The resulting `S32` value.
-external("C") routine rf_fs_set_readonly(path: Address, len: S32, readonly_flag: Bool) -> S32
+external("C") routine rf_fs_set_readonly(path: CStr, len: S32, readonly_flag: Bool) -> S32

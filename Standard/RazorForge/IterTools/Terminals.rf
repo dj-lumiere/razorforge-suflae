@@ -1,8 +1,5 @@
 # RazorForge IterTools Terminals - Eager collection materialization and scalar operations
-# List(), Set(), count(), first!(), last!(), any(), all(), accumulate()
-
-import Collections.List
-import Collections.Set
+# List(), Set(), get_count(), first!(), last!(), any(), all(), accumulate()
 
 module IterTools
 
@@ -25,7 +22,7 @@ needs T obeys Hashable, Comparable
 
 ### Returns the number of stored values.
 ### :returns: The resulting `U64` value.
-routine Iterable[T].count() -> U64
+routine Iterable[T].get_count() -> U64
   var n = 0u64
   for _ in me
     n = n + 1u64

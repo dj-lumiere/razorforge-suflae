@@ -60,7 +60,7 @@ routine Bytes.$create(ptr: CStr) -> Bytes
   loop
     if i >= len
       break
-    var byte_val = Snatched[Byte](ptr.ptr + i).read()
+    var byte_val = ptr.ptr.offset(i.bytes()).read()
     list.add_last(byte_val)
     i += 1u64
   return Bytes(from_list: list)
@@ -82,12 +82,39 @@ routine Bytes.$create(ptr: Address, count: U64) -> Bytes
     i += 1u64
   return Bytes(from_list: list)
 
+### Creates a new instance.
+### :param ptr: The pointer value to use.
+### :param count: The number of items to use.
+### :returns: The resulting `Bytes` value.
+routine Bytes.$create(ptr: Snatched[Byte], count: U64) -> Bytes
+  if count == 0u64
+    return Bytes()
+  var list = List[Byte]()
+  var i: U64 = 0u64
+  loop
+    if i >= count
+      break
+    var byte_val = ptr.offset(i.bytes()).read()
+    list.add_last(byte_val)
+    i += 1u64
+  return Bytes(from_list: list)
+
 # Core operations
 
 ### Returns the number of stored values.
 ### :returns: The resulting `U64` value.
 routine Bytes.count() -> U64
   return me.bytes.count()
+
+### Returns the number of occurrences of a byte.
+### :param byte: The byte to search for.
+### :returns: The resulting `U64` value.
+routine Bytes.count_of(byte: Byte) -> U64
+  var result: U64 = 0u64
+  for b in me
+    if b == byte
+      result += 1u64
+  return result
 
 ### Returns true if this value is empty.
 ### :returns: The resulting `Bool` value.
@@ -199,16 +226,6 @@ routine Bytes.find!(byte: Byte) -> U64
     if me[i] == byte
       return i
   absent
-
-### Returns the number of matching values.
-### :param byte: The `byte` value.
-### :returns: The resulting `U64` value.
-routine Bytes.count(byte: Byte) -> U64
-  var result: U64 = 0u64
-  for i in 0 til me.count()
-    if me[i] == byte
-      result += 1u64
-  return result
 
 # Split
 

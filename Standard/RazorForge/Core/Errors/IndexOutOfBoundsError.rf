@@ -3,7 +3,6 @@ module Core
 # IndexOutOfBoundsError - Error for invalid index access in collections
 # Used by List[T] and other indexed collections
 
-import Text.Text
 
 ### Defines the record `IndexOutOfBoundsError`.
 record IndexOutOfBoundsError obeys Crashable

@@ -11,9 +11,7 @@ record Maybe[T] needs T is RecordType
 ### Defines the record `Maybe` for entity types.
 ### :typeparam T: The optional value type.
 record Maybe[T] needs T is EntityType
-  ### True if a value is present.
-  secret present: Bool
-  ### The stored value, valid only when present.
+  ### The stored value, valid only when it is not null.
   secret value: Snatched[T]
 
 ### Returns the stored value or a fallback.
@@ -36,7 +34,7 @@ routine Maybe[T].$unwrap_or(or_else: Routine[Me, T]) -> T needs T is RecordType
 ### :param default: The fallback value to return.
 ### :returns: The resulting `T` value.
 routine Maybe[T].$unwrap_or(default: T) -> T needs T is EntityType
-  if not me.present
+  if me.value == Snatched[T](0addr)
     return default
   return me.value.read()
 
@@ -44,6 +42,6 @@ routine Maybe[T].$unwrap_or(default: T) -> T needs T is EntityType
 ### :param or_else: The fallback routine to call.
 ### :returns: The resulting `T` value.
 routine Maybe[T].$unwrap_or(or_else: Routine[Me, T]) -> T needs T is EntityType
-  if not me.present
+  if me.value == Snatched[T](0addr)
     return or_else()
   return me.value.read()

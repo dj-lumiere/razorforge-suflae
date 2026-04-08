@@ -1,9 +1,9 @@
 # RazorForge C String Type (CStr)
 # Null-terminated char* wrapper for C FFI interop
 #
-# CStr is a value type that wraps a raw pointer (Address) to a null-terminated
-# sequence of bytes. It provides safe access to C strings without copying
-# unless explicitly requested.
+# CStr is a value type that wraps a raw pointer (Snatched[Byte]) to a
+# null-terminated sequence of bytes. It provides safe access to C strings
+# without copying unless explicitly requested.
 #
 # Key characteristics:
 # - Value semantics (no heap allocation for the wrapper itself)
@@ -12,7 +12,7 @@
 # - Encoding-agnostic (typically ASCII or UTF-8 in modern code)
 #
 # Memory ownership:
-# - CStr(from_ptr: Address) - wraps existing memory, does NOT take ownership
+# - CStr(from_ptr: Snatched[Byte]) - wraps existing memory, does NOT take ownership
 # - CStr(from_text: Bytes) - allocates NEW memory, caller owns it
 # - CStr.copy() - allocates NEW memory, caller owns it
 #
@@ -22,27 +22,24 @@ import Bytes.Bytes
 
 module Core
 
-# ============================================================================
-# CStr Record Definition
-# ============================================================================
-
 ### Defines the record `CStr`.
 record CStr
   ### Stores the ptr member value.
-  ptr: Address  # Raw pointer to null-terminated Byte sequence
+  ptr: Snatched[Byte]
 
-# Null pointer constant for CStr comparisons
-preset CSTR_NULL: CStr = CStr(ptr: 0_addr)
+preset CSTR_NULL: CStr = CStr(ptr: snatched_none[Byte]())
 
-# ============================================================================
-# Creators
-# ============================================================================
+### Creates a new instance.
+### :param from_ptr: The `from_ptr` value.
+### :returns: The resulting `CStr` value.
+routine CStr.$create(from_ptr: Snatched[Byte]) -> CStr
+  return CStr(ptr: from_ptr)
 
 ### Creates a new instance.
 ### :param from_ptr: The `from_ptr` value.
 ### :returns: The resulting `CStr` value.
 routine CStr.$create(from_ptr: Address) -> CStr
-  return CStr(ptr: from_ptr)
+  return CStr(ptr: Snatched[Byte](from_ptr))
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
@@ -55,12 +52,11 @@ routine CStr.$create(from: Bytes) -> CStr
   loop
     if i >= len
       break
-    Snatched[Byte](buffer.get_address() + i).write(from[i])
+    buffer.offset(i.bytes()).write(from[i])
     i = i + 1u64
-  # Null terminator
-  Snatched[Byte](buffer.get_address() + len).write(BYTE_NULL)
+  buffer.offset(len.bytes()).write(BYTE_NULL)
 
-  return CStr(ptr: buffer.get_address())
+  return CStr(ptr: buffer)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
@@ -68,14 +64,12 @@ routine CStr.$create(from: Bytes) -> CStr
 routine CStr.$create(from: Text) -> CStr
   var len = from.count()
   if len == 0u64
-    var buffer = Snatched[Byte](rf_allocate_dynamic(1u64))
-    Snatched[Byte](buffer.get_address()).write(BYTE_NULL)
-    return CStr(ptr: buffer.get_address())
+    var empty_buffer = Snatched[Byte](rf_allocate_dynamic(1u64))
+    empty_buffer.write(BYTE_NULL)
+    return CStr(ptr: empty_buffer)
 
-  # Worst case: each codepoint needs 4 bytes + null terminator
   var max_bytes = len * 4u64 + 1u64
   var buffer = Snatched[Byte](rf_allocate_dynamic(max_bytes))
-  var buffer_address = buffer.get_address()
   var write_pos: U64 = 0u64
   var i: U64 = 0u64
 
@@ -83,99 +77,74 @@ routine CStr.$create(from: Text) -> CStr
     var cp = from[i].codepoint()
 
     if cp <= 0x7Fu32
-      # 1-byte ASCII
-      Snatched[Byte](buffer_address + write_pos).write(Byte(U8(cp)))
+      buffer.offset(write_pos.bytes()).write(Byte(U8(cp)))
       write_pos = write_pos + 1u64
     elseif cp <= 0x7FFu32
-      # 2-byte sequence
-      Snatched[Byte](buffer_address + write_pos).write(Byte(U8(0xC0u32 | (cp >> 6u32))))
-      Snatched[Byte](buffer_address + write_pos + 1u64).write(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
+      buffer.offset(write_pos.bytes()).write(Byte(U8(0xC0u32 | (cp >> 6u32))))
+      buffer.offset((write_pos + 1u64).bytes()).write(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
       write_pos = write_pos + 2u64
     elseif cp <= 0xFFFFu32
-      # 3-byte sequence
-      Snatched[Byte](buffer_address + write_pos).write(Byte(U8(0xE0u32 | (cp >> 12u32))))
-      Snatched[Byte](buffer_address + write_pos + 1u64).write(Byte(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32))))
-      Snatched[Byte](buffer_address + write_pos + 2u64).write(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
+      buffer.offset(write_pos.bytes()).write(Byte(U8(0xE0u32 | (cp >> 12u32))))
+      buffer.offset((write_pos + 1u64).bytes()).write(Byte(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32))))
+      buffer.offset((write_pos + 2u64).bytes()).write(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
       write_pos = write_pos + 3u64
     else
-      # 4-byte sequence
-      Snatched[Byte](buffer_address + write_pos).write(Byte(U8(0xF0u32 | (cp >> 18u32))))
-      Snatched[Byte](buffer_address + write_pos + 1u64).write(Byte(U8(0x80u32 | ((cp >> 12u32) & 0x3Fu32))))
-      Snatched[Byte](buffer_address + write_pos + 2u64).write(Byte(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32))))
-      Snatched[Byte](buffer_address + write_pos + 3u64).write(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
+      buffer.offset(write_pos.bytes()).write(Byte(U8(0xF0u32 | (cp >> 18u32))))
+      buffer.offset((write_pos + 1u64).bytes()).write(Byte(U8(0x80u32 | ((cp >> 12u32) & 0x3Fu32))))
+      buffer.offset((write_pos + 2u64).bytes()).write(Byte(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32))))
+      buffer.offset((write_pos + 3u64).bytes()).write(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
       write_pos = write_pos + 4u64
 
     i = i + 1u64
 
-  # Null terminator
-  Snatched[Byte](buffer.get_address() + write_pos).write(BYTE_NULL)
-  return CStr(ptr: buffer.get_address())
-
-# ============================================================================
-# Core Methods
-# ============================================================================
+  buffer.offset(write_pos.bytes()).write(BYTE_NULL)
+  return CStr(ptr: buffer)
 
 ### Returns the number of stored values.
 ### :returns: The resulting `U64` value.
 routine CStr.count() -> U64
-  return rf_cstr_count(me.ptr)
+  return rf_cstr_count(me)
 
 ### Returns true if this value is null.
 ### :returns: The resulting `Bool` value.
 routine CStr.is_null() -> Bool
-  return me.ptr == 0_addr
+  return me.ptr.is_none()
 
 ### Returns true if this value is empty.
 ### :returns: The resulting `Bool` value.
 routine CStr.is_empty() -> Bool
   return me.is_null() or me.count() == 0u64
 
-# ============================================================================
-# Indexing
-# ============================================================================
-
 ### Implements the wired routine behavior for this value.
 ### :param index: The zero-based position to use.
 ### :returns: The resulting `Byte` value.
 routine CStr.$getitem!(index: U64) -> Byte
-  return Snatched[Byte](me.ptr + index).read()
-
-# ============================================================================
-# Comparison
-# ============================================================================
+  return me.ptr.offset(index.bytes()).read()
 
 ### Returns whether both values are equal.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine CStr.$eq(you: CStr) -> Bool
-  return rf_cstr_compare(me.ptr, you.ptr) == 0s32
+  return rf_cstr_compare(me, you) == 0s32
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine CStr.$cmp(you: CStr) -> ComparisonSign
-  var cmp = rf_cstr_compare(me.ptr, you.ptr)
+  var cmp = rf_cstr_compare(me, you)
   if cmp < 0s32
     return ME_SMALL
   if cmp > 0s32
     return ME_LARGE
   return SAME
 
-# ============================================================================
-# Copying
-# ============================================================================
-
 ### Returns the result of `copy`.
 ### :returns: The resulting `CStr` value.
 routine CStr.copy() -> CStr
   var len = me.count()
   var buffer = Snatched[Byte](rf_allocate_dynamic(len + 1u64))
-  rf_cstr_copy(buffer.get_address(), me.ptr)
-  return CStr(ptr: buffer.get_address())
-
-# ============================================================================
-# Conversion to RazorForge Types
-# ============================================================================
+  rf_cstr_copy(CStr(from_ptr: buffer), me)
+  return CStr(ptr: buffer)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
@@ -187,23 +156,18 @@ routine Bytes.$create(from: Cstr) -> Bytes
   loop
     if i >= len
       break
-    var byte_val = Snatched[Byte](from.ptr + i).read()
-    list.add_last(byte_val)
+    list.add_last(from.ptr.offset(i.bytes()).read())
     i = i + 1u64
   return Bytes(from_list: list)
-
-# ============================================================================
-# Pointer Arithmetic (Danger Zone)
-# ============================================================================
 
 ### Returns the result of `offset`.
 ### :param n: The `n` value.
 ### :returns: The resulting `CStr` value.
 routine CStr.offset(n: U64) -> CStr
-  return CStr(ptr: me.ptr + n)
+  return CStr(ptr: me.ptr.offset(n.bytes()))
 
 ### Creates a value from index.
 ### :param start: The inclusive starting position.
 ### :returns: The resulting `CStr` value.
 routine CStr.from_index(start: U64) -> CStr
-  return CStr(ptr: me.ptr + start)
+  return CStr(ptr: me.ptr.offset(start.bytes()))

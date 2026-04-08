@@ -1,0 +1,56 @@
+module Core
+
+# Opaque native-library/runtime handles.
+# These are pointer-backed values, but they are not numeric addresses.
+
+### Defines the record `BigIntHandle`.
+@llvm("ptr")
+record BigIntHandle
+  pass
+
+### Returns the address component.
+### :returns: The resulting `Address` value.
+dangerous routine BigIntHandle.get_address() -> Address
+  return ptrtoint[BigIntHandle, Address](me)
+
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `BigIntHandle` value.
+dangerous routine BigIntHandle.$create(from: Address) -> BigIntHandle
+  return inttoptr[Address, BigIntHandle](from)
+
+### Returns the result of `bigint handle none`.
+### :returns: The resulting `BigIntHandle` value.
+routine bigint_handle_none() -> BigIntHandle
+  return BigIntHandle(0_addr)
+
+### Returns true if this value is none.
+### :returns: The resulting `Bool` value.
+routine BigIntHandle.is_none() -> Bool
+  return icmp_eq[BigIntHandle](me, bigint_handle_none())
+
+### Defines the record `BigDecHandle`.
+@llvm("ptr")
+record BigDecHandle
+  pass
+
+### Returns the address component.
+### :returns: The resulting `Address` value.
+dangerous routine BigDecHandle.get_address() -> Address
+  return ptrtoint[BigDecHandle, Address](me)
+
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `BigDecHandle` value.
+dangerous routine BigDecHandle.$create(from: Address) -> BigDecHandle
+  return inttoptr[Address, BigDecHandle](from)
+
+### Returns the result of `bigdec handle none`.
+### :returns: The resulting `BigDecHandle` value.
+routine bigdec_handle_none() -> BigDecHandle
+  return BigDecHandle(0_addr)
+
+### Returns true if this value is none.
+### :returns: The resulting `Bool` value.
+routine BigDecHandle.is_none() -> Bool
+  return icmp_eq[BigDecHandle](me, bigdec_handle_none())

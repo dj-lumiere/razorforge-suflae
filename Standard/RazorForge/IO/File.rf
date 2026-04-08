@@ -37,7 +37,7 @@ entity FileHandle
 routine open!(path: Text, mode: FileMode = FileMode.READ) -> FileHandle
   var cstr = CStr(from: path)
   var mode_val = mode.S32()
-  var fd = rf_file_open(cstr.ptr, cstr.count().S32(), mode_val)
+  var fd = rf_file_open(cstr, cstr.count().S32(), mode_val)
   if fd == -1
     throw IOError(message: f"Cannot open file: {path}")
   return FileHandle(fd: fd, mode: mode)

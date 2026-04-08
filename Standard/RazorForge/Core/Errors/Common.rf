@@ -40,3 +40,12 @@ record LogicBreachedError obeys Crashable
 ### :returns: The resulting `Text` value.
 routine LogicBreachedError.crash_message() -> Text
   return "A logic breach was detected."
+
+### Defines the record `KeyNotFoundError`.
+record KeyNotFoundError obeys Crashable
+  key: Text
+
+### Returns the result of `crash message`.
+### :returns: The resulting `Text` value.
+routine KeyNotFoundError.crash_message() -> Text
+  return f"Key not found: {me.key}"
