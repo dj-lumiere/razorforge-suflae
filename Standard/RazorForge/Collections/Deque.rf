@@ -43,12 +43,15 @@ routine Deque[T].$create() -> Deque[T]
 ### :param capacity: The capacity value to use.
 ### :returns: The resulting `Deque[T]` value.
 routine Deque[T].$create(capacity: U64) -> Deque[T]
-  var byte_size = capacity * T.data_size()
+  var actual = 1u64
+  while actual < capacity
+    actual = actual * 2u64
+  var byte_size = actual * T.data_size()
   return Deque[T](
     data: Snatched[T](rf_allocate_dynamic(byte_size)),
     start: 0u64,
     count: 0u64,
-    capacity: capacity
+    capacity: actual
   )
 
 ### Creates a new instance.
@@ -68,10 +71,10 @@ routine Deque[T].$create(values...: T) -> Deque[T]
 ### :param index: The zero-based position to use.
 ### :returns: The resulting `U64` value.
 routine Deque[T].wrap_index(index: U64) -> U64
-  # Wrap index around the circular buffer
+  # Capacity is always a power of 2 — use bitmask instead of modulo.
   if me.capacity == 0u64
     return 0u64
-  return index % me.capacity
+  return index & (me.capacity - 1u64)
 
 ### Returns the result of `physical index`.
 ### :param logical_index: The `logical_index` value.
@@ -133,11 +136,8 @@ routine Deque[T].add_first(value: T)
   # Add element to front - O(1) amortized
   if me.count >= me.capacity
     me.grow()
-  # Decrement start (with wrap)
-  if me.start == 0u64
-    me.start = me.capacity - 1u64
-  else
-    me.start = me.start - 1u64
+  # Decrement start with wrap: (start + cap - 1) & (cap - 1) — branchless
+  me.start = me.wrap_index(me.start + me.capacity - 1u64)
   me.write_at(me.start, value)
   me.count = me.count + 1u64
   return
@@ -203,10 +203,13 @@ routine Deque[T].grow()
 ### Ensures the storage capacity is at least `new_capacity`.
 ### :param new_capacity: The minimum capacity to reserve.
 routine Deque[T].reserve(new_capacity: U64)
-  if new_capacity <= me.capacity
+  var actual = 1u64
+  while actual < new_capacity
+    actual = actual * 2u64
+  if actual <= me.capacity
     return
 
-  var new_byte_size = new_capacity * T.data_size()
+  var new_byte_size = actual * T.data_size()
   var new_data = Snatched[T]( rf_allocate_dynamic(new_byte_size))
 
   # Copy elements in logical order (unwrap the ring)
@@ -220,7 +223,7 @@ routine Deque[T].reserve(new_capacity: U64)
 
   me.data = new_data
   me.start = 0u64
-  me.capacity = new_capacity
+  me.capacity = actual
   return
 
 # ============================================================================

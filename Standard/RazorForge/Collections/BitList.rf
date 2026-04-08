@@ -43,7 +43,7 @@ routine BitList.$create(capacity: U64) -> BitList
   # Create bit list with pre-allocated capacity (in bits)
   var byte_size = (capacity + 7u64) // 8u64  # Round up to nearest byte
   return BitList(
-    data: Snatched[Byte]( rf_allocate_dynamic(byte_size)),
+    data: Snatched[Byte](rf_allocate_dynamic(byte_size)),
     count: 0u64,
     capacity: capacity
   )

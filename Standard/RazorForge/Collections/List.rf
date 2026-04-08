@@ -192,6 +192,23 @@ needs I obeys Integral
   return
 
 # ============================================================================
+# Unchecked internal access — no bounds check, for stdlib use only
+# ============================================================================
+
+### Returns the element at `index` without bounds checking.
+### Caller must guarantee index < count.
+@inline
+routine List[T].get_raw(index: U64) -> T
+  return me.data.offset(index * T.data_size()).read()
+
+### Sets the element at `index` without bounds checking.
+### Caller must guarantee index < count.
+@inline
+routine List[T].set_raw(index: U64, value: T)
+  me.data.offset(index * T.data_size()).write(value)
+  return
+
+# ============================================================================
 # Slicing with [a to b] syntax (forward index)
 # ============================================================================
 
