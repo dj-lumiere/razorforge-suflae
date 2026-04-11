@@ -30,7 +30,7 @@
         {
           "comment": "Type declarations",
           "name": "storage.type.sf",
-          "match": "\\b(routine|entity|record|variant|choice|protocol|flags)\\b"
+          "match": "\\b(routine|entity|record|variant|choice|protocol|flags|crashable)\\b"
         },
         {
           "comment": "Variable declarations",

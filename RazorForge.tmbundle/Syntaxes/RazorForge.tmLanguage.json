@@ -30,7 +30,7 @@
         {
           "comment": "Type declarations",
           "name": "storage.type.razorforge",
-          "match": "\\b(routine|entity|record|resident|choice|variant|protocol|flags)\\b"
+          "match": "\\b(routine|entity|record|choice|variant|protocol|flags|crashable)\\b"
         },
         {
           "comment": "Variable declarations",
