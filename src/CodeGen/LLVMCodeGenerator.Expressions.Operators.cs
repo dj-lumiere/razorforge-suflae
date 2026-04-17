@@ -1,8 +1,8 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis.Symbols;
-using SemanticAnalysis.Types;
+using SemanticVerification.Symbols;
+using SemanticVerification.Types;
 using SyntaxTree;
 
 /// <summary>
@@ -64,9 +64,6 @@ public partial class LLVMCodeGenerator
             BinaryOperator.IsNot => EmitChoiceIs(sb: sb, binary: binary, cmpOp: "ne"),
             BinaryOperator.Obeys => EmitCompileTimeConstant(value: "true"),
             BinaryOperator.Disobeys => EmitCompileTimeConstant(value: "false"),
-            BinaryOperator.NoneCoalesce => IsErrorHandlingType(type: GetExpressionType(expr: binary.Left))
-                ? EmitNoneCoalesce(sb: sb, binary: binary)
-                : EmitUserUnwrapOr(sb: sb, binary: binary),
             // Arithmetic, comparison, bitwise operators — normally desugared to method
             // calls by the semantic analyzer, but stdlib bodies are raw AST, so we
             // handle them directly for primitive types.
@@ -81,7 +78,6 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private string EmitPrimitiveBinaryOp(StringBuilder sb, BinaryExpression binary)
     {
-        // TODO: This is going to be stdlib operator overloading and thus does not need hardcoding
         string left = EmitExpression(sb: sb, expr: binary.Left);
         string right = EmitExpression(sb: sb, expr: binary.Right);
         TypeInfo? leftType = GetExpressionType(expr: binary.Left);
@@ -118,11 +114,76 @@ public partial class LLVMCodeGenerator
                 _ => null
             };
 
+        TypeInfo? rightType = GetExpressionType(expr: binary.Right);
+
         if (cmpInstr != null)
         {
+            // Coerce operands to a common type when widths differ.
+            // LLVM requires both icmp/fcmp operands to have identical types.
+            string rightLlvmTypeCmp = rightType != null ? GetLLVMType(type: rightType) : llvmType;
+            string cmpType = llvmType;
+            if (rightLlvmTypeCmp != llvmType && !isFloat)
+            {
+                int leftBitsCmp = GetTypeBitWidth(llvmType: llvmType);
+                int rightBitsCmp = GetTypeBitWidth(llvmType: rightLlvmTypeCmp);
+                if (rightBitsCmp > leftBitsCmp)
+                {
+                    // Widen left to right's type
+                    cmpType = rightLlvmTypeCmp;
+                    string widened = NextTemp();
+                    string widenOp = isUnsigned ? "zext" : "sext";
+                    EmitLine(sb: sb, line: $"  {widened} = {widenOp} {llvmType} {left} to {cmpType}");
+                    left = widened;
+                }
+                else if (leftBitsCmp > rightBitsCmp)
+                {
+                    // Widen right to left's type
+                    bool rightUnsigned = IsUnsignedIntegerType(type: rightType);
+                    string widenOp = rightUnsigned ? "zext" : "sext";
+                    string widened = NextTemp();
+                    EmitLine(sb: sb, line: $"  {widened} = {widenOp} {rightLlvmTypeCmp} {right} to {cmpType}");
+                    right = widened;
+                }
+            }
+
             string cmpResult = NextTemp();
-            EmitLine(sb: sb, line: $"  {cmpResult} = {cmpInstr} {llvmType} {left}, {right}");
+            EmitLine(sb: sb, line: $"  {cmpResult} = {cmpInstr} {cmpType} {left}, {right}");
             return cmpResult;
+        }
+
+        // Dispatch checked integer arithmetic through the registered failable wired method.
+        // Wrapping operators (AddWrap/SubtractWrap/MultiplyWrap), floats, and software types
+        // (D32/D64/D128) all bypass this path.
+        if (!isFloat && !isSoftwareType)
+        {
+            string? checkedName = binary.Operator switch
+            {
+                BinaryOperator.Add => "$add",
+                BinaryOperator.Subtract => "$sub",
+                BinaryOperator.Multiply => "$mul",
+                BinaryOperator.Power => "$pow",
+                BinaryOperator.FloorDivide => "$floordiv",
+                BinaryOperator.Modulo => "$mod",
+                _ => null
+            };
+
+            if (checkedName != null && leftType != null)
+            {
+                RoutineInfo? method = _registry.LookupMethod(type: leftType,
+                                         methodName: checkedName,
+                                         isFailable: true);
+                if (method != null)
+                {
+                    string funcName = MangleFunctionName(routine: method);
+                    GenerateFunctionDeclaration(routine: method, nameOverride: funcName);
+                    string retType = method.ReturnType != null
+                        ? GetLLVMType(type: method.ReturnType) : llvmType;
+                    string result = NextTemp();
+                    EmitLine(sb: sb,
+                        line: $"  {result} = call {retType} @{funcName}({llvmType} {left}, {llvmType} {right})");
+                    return result;
+                }
+            }
         }
 
         // Arithmetic and bitwise operators (skip for software-implemented types like D32, D64, D128)
@@ -136,6 +197,8 @@ public partial class LLVMCodeGenerator
                 BinaryOperator.Subtract => "sub",
                 BinaryOperator.Multiply when isFloat => "fmul",
                 BinaryOperator.Multiply => "mul",
+                // TrueDivide (/): floats desugar to $truediv! via OperatorLoweringPass; for
+                // integer types (no $truediv method), the raw BinaryExpression still reaches here.
                 BinaryOperator.TrueDivide when isFloat => "fdiv",
                 BinaryOperator.TrueDivide when isUnsigned => "udiv",
                 BinaryOperator.TrueDivide => "sdiv",
@@ -157,8 +220,6 @@ public partial class LLVMCodeGenerator
                 BinaryOperator.LogicalRightShift => "lshr",
                 _ => null
             };
-
-        TypeInfo? rightType = GetExpressionType(expr: binary.Right);
 
         if (arithInstr != null)
         {
@@ -197,6 +258,7 @@ public partial class LLVMCodeGenerator
         }
 
         // Fall back to method call for types with software-implemented arithmetic (e.g., D32, D64, D128)
+        // and for unchecked operators (which dispatch through stdlib methods with nsw/nuw IR).
         string? methodName = binary.Operator switch
         {
             BinaryOperator.Add => "$add",
@@ -211,6 +273,13 @@ public partial class LLVMCodeGenerator
             BinaryOperator.LessEqual => "$le",
             BinaryOperator.Greater => "$gt",
             BinaryOperator.GreaterEqual => "$ge",
+            // Unchecked operators dispatch through stdlib methods
+            BinaryOperator.AddUnchecked => "$add_unchecked",
+            BinaryOperator.SubtractUnchecked => "$sub_unchecked",
+            BinaryOperator.MultiplyUnchecked => "$mul_unchecked",
+            BinaryOperator.TrueDivideUnchecked => "$truediv_unchecked",
+            BinaryOperator.FloorDivideUnchecked => "$floordiv_unchecked",
+            BinaryOperator.ModuloUnchecked => "$mod_unchecked",
             _ => null
         };
         if (methodName != null && leftType != null)
@@ -225,7 +294,7 @@ public partial class LLVMCodeGenerator
                 // and record monomorphization so the specialized function body gets generated
                 string funcName;
                 if (leftType.IsGenericResolution && method.OwnerType is
-                        { IsGenericDefinition: true })
+                        { IsGenericDefinition: true } or { IsGenericResolution: true })
                 {
                     funcName =
                         Q(name: $"{leftType.FullName}.{SanitizeLLVMName(name: methodName)}");
@@ -259,35 +328,6 @@ public partial class LLVMCodeGenerator
     /// Emits an 'is' pattern expression (e.g., 'value is None', 'value isnot None').
     /// For Maybe/ErrorHandling types, checks the tag field.
     /// </summary>
-    /// <summary>
-    /// Handles GenericMemberExpression — the parser produces this for ambiguous expr.member[args]
-    /// patterns. In most cases this is actually member access followed by indexing (e.g.,
-    /// me.buckets[i].clear()), not a generic type reference. Desugar to member access + index access.
-    /// </summary>
-    private string EmitGenericMemberExpression(StringBuilder sb, GenericMemberExpression gme)
-    {
-        // Build the member access: gme.Object.gme.MemberName
-        var memberExpr = new MemberExpression(Object: gme.Object,
-            PropertyName: gme.MemberName,
-            Location: gme.Location);
-
-        // The "type arguments" are actually index expressions. Use the first one.
-        if (gme.TypeArguments.Count > 0)
-        {
-            var indexExpr = new IdentifierExpression(Name: gme.TypeArguments[index: 0].Name,
-                Location: gme.TypeArguments[index: 0].Location);
-
-            var indexAccess = new IndexExpression(Object: memberExpr,
-                Index: indexExpr,
-                Location: gme.Location);
-
-            return EmitIndexAccess(sb: sb, index: indexAccess);
-        }
-
-        // No type arguments — just emit as member access
-        return EmitMemberVariableAccess(sb: sb, expr: memberExpr);
-    }
-
     private string EmitIsPattern(StringBuilder sb, IsPatternExpression isPattern)
     {
         string operand = EmitExpression(sb: sb, expr: isPattern.Expression);
@@ -322,97 +362,48 @@ public partial class LLVMCodeGenerator
         }
 
         string maybeType = GetLLVMType(type: operandType!);
-        string tagType = GetCarrierTagType(kind: GetCarrierKind(type: operandType!));
-        string expectedTag = isNoneCheck
-            ? "0"
-            : ComputeTypeId(fullName: "Blank").ToString();
-
         string allocaPtr = NextTemp();
         EmitEntryAlloca(llvmName: allocaPtr, llvmType: maybeType);
         EmitLine(sb: sb, line: $"  store {maybeType} {operand}, ptr {allocaPtr}");
 
-        string tagPtr = NextTemp();
-        string tag = NextTemp();
+        string field0PtrIS = NextTemp();
         EmitLine(sb: sb,
-            line: $"  {tagPtr} = getelementptr {maybeType}, ptr {allocaPtr}, i32 0, i32 0");
-        EmitLine(sb: sb, line: $"  {tag} = load {tagType}, ptr {tagPtr}");
+            line: $"  {field0PtrIS} = getelementptr {maybeType}, ptr {allocaPtr}, i32 0, i32 0");
 
-        string result = NextTemp();
-        EmitLine(sb: sb,
-            line: isPattern.IsNegated
-                ? $"  {result} = icmp ne {tagType} {tag}, {expectedTag}"
-                : $"  {result} = icmp eq {tagType} {tag}, {expectedTag}");
-        return result;
+        // Entity Maybe { Snatched[T] }: field 0 is ptr; null = None.
+        // Record Maybe { i1 present, T } / Result / Lookup: field 0 is a tag integer.
+        bool isEntityMaybeIS = isNoneCheck
+            && operandType!.TypeArguments?.Count > 0
+            && operandType.TypeArguments[0] is EntityTypeInfo;
 
-    }
-
-    /// <summary>
-    /// Emits a chained comparison (e.g., 0xC0u8 &lt;= b0 &lt;= 0xDFu8).
-    /// Evaluates middle operands once and ANDs all pairwise comparisons.
-    /// </summary>
-    private string EmitChainedComparison(StringBuilder sb, ChainedComparisonExpression chain)
-    {
-        // Evaluate all operands (middle ones evaluated only once)
-        var values = new List<string>();
-        foreach (Expression operand in chain.Operands)
+        string result;
+        if (isEntityMaybeIS)
         {
-            values.Add(item: EmitExpression(sb: sb, expr: operand));
-        }
-
-        // Emit pairwise comparisons, AND results together
-        string result = "";
-        for (int i = 0; i < chain.Operators.Count; i++)
-        {
-            TypeInfo? leftType = GetExpressionType(expr: chain.Operands[index: i]);
-            string llvmType = leftType != null
-                ? GetLLVMType(type: leftType)
-                : "i64";
-            bool isUnsigned = IsUnsignedIntegerType(type: leftType);
-            bool isFloat = llvmType is "half" or "float" or "double" or "fp128";
-
-            string cmpInstr = chain.Operators[index: i] switch
-            {
-                BinaryOperator.Less when isFloat => "fcmp olt",
-                BinaryOperator.Less when isUnsigned => "icmp ult",
-                BinaryOperator.Less => "icmp slt",
-                BinaryOperator.LessEqual when isFloat => "fcmp ole",
-                BinaryOperator.LessEqual when isUnsigned => "icmp ule",
-                BinaryOperator.LessEqual => "icmp sle",
-                BinaryOperator.Greater when isFloat => "fcmp ogt",
-                BinaryOperator.Greater when isUnsigned => "icmp ugt",
-                BinaryOperator.Greater => "icmp sgt",
-                BinaryOperator.GreaterEqual when isFloat => "fcmp oge",
-                BinaryOperator.GreaterEqual when isUnsigned => "icmp uge",
-                BinaryOperator.GreaterEqual => "icmp sge",
-                BinaryOperator.Equal => isFloat
-                    ? "fcmp oeq"
-                    : "icmp eq",
-                BinaryOperator.NotEqual => isFloat
-                    ? "fcmp une"
-                    : "icmp ne",
-                _ => throw new InvalidOperationException(
-                    message:
-                    $"Unsupported chained comparison operator: {chain.Operators[index: i]}")
-            };
-
-            string cmp = NextTemp();
+            string ptrValIS = NextTemp();
+            EmitLine(sb: sb, line: $"  {ptrValIS} = load ptr, ptr {field0PtrIS}");
+            result = NextTemp();
             EmitLine(sb: sb,
-                line:
-                $"  {cmp} = {cmpInstr} {llvmType} {values[index: i]}, {values[index: i + 1]}");
-
-            if (result == "")
-            {
-                result = cmp;
-            }
-            else
-            {
-                string andResult = NextTemp();
-                EmitLine(sb: sb, line: $"  {andResult} = and i1 {result}, {cmp}");
-                result = andResult;
-            }
+                line: isPattern.IsNegated
+                    ? $"  {result} = icmp ne ptr {ptrValIS}, null"
+                    : $"  {result} = icmp eq ptr {ptrValIS}, null");
+        }
+        else
+        {
+            string tagTypeIS = GetCarrierTagType(kind: GetCarrierKind(type: operandType!));
+            string expectedTagIS = isNoneCheck
+                ? "0"
+                : ComputeTypeId(fullName: "Blank").ToString();
+            string tagIS = NextTemp();
+            EmitLine(sb: sb, line: $"  {tagIS} = load {tagTypeIS}, ptr {field0PtrIS}");
+            result = NextTemp();
+            EmitLine(sb: sb,
+                line: isPattern.IsNegated
+                    ? $"  {result} = icmp ne {tagTypeIS} {tagIS}, {expectedTagIS}"
+                    : $"  {result} = icmp eq {tagTypeIS} {tagIS}, {expectedTagIS}");
         }
 
         return result;
+
     }
 
     /// <summary>
@@ -605,7 +596,13 @@ public partial class LLVMCodeGenerator
 
         if (resolved != null)
         {
-            GenerateFunctionDeclaration(routine: resolved.Routine);
+            GenerateFunctionDeclaration(routine: resolved.Routine, nameOverride: resolved.MangledName);
+            if (collectionType.IsGenericResolution)
+            {
+                RecordMonomorphization(mangledName: resolved.MangledName,
+                    genericMethod: resolved.Routine,
+                    resolvedOwnerType: collectionType);
+            }
         }
 
         var argValues = new List<string> { collection, element };
@@ -632,8 +629,9 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Generates code for a unary operation.
-    /// Minus and BitwiseNot are emitted as method calls to $neg / $bitnot
-    /// so the stdlib bodies (which call LLVM intrinsics) do the actual work.
+    /// ForceUnwrap (!!) is fully desugared to $unwrap() by OperatorLoweringPass and
+    /// never reaches this method. Minus and BitwiseNot fall through here only for
+    /// stdlib bodies where OperatorLoweringPass cannot resolve the method (no ResolvedType).
     /// </summary>
     private string EmitUnaryOp(StringBuilder sb, UnaryExpression unary)
     {
@@ -643,9 +641,6 @@ public partial class LLVMCodeGenerator
             UnaryOperator.Minus => EmitUnaryMethodCall(sb: sb, unary: unary, methodName: "$neg"),
             UnaryOperator.BitwiseNot => EmitBitwiseNot(sb: sb, unary: unary),
             UnaryOperator.Steal => EmitExpression(sb: sb, expr: unary.Operand),
-            UnaryOperator.ForceUnwrap => IsErrorHandlingType(type: GetExpressionType(expr: unary.Operand))
-                ? EmitForceUnwrap(sb: sb, unary: unary)
-                : EmitUnaryMethodCall(sb: sb, unary: unary, methodName: "$unwrap"),
             _ => throw new NotImplementedException(
                 message: $"Unary operator '{unary.Operator}' codegen not implemented")
         };
@@ -683,51 +678,6 @@ public partial class LLVMCodeGenerator
         return EmitUnaryMethodCall(sb: sb, unary: unary, methodName: "$bitnot");
     }
 
-    /// <summary>
-    /// Emits user-type none coalescing: left.$unwrap_or(right) — eager evaluation.
-    /// </summary>
-    private string EmitUserUnwrapOr(StringBuilder sb, BinaryExpression binary)
-    {
-        string left = EmitExpression(sb: sb, expr: binary.Left);
-        string right = EmitExpression(sb: sb, expr: binary.Right);
-        TypeInfo? leftType = GetExpressionType(expr: binary.Left);
-
-        if (leftType == null)
-        {
-            throw new InvalidOperationException(
-                message: "Cannot determine left operand type for '??' operator");
-        }
-
-        RoutineInfo? method = _registry.LookupMethod(type: leftType, methodName: "$unwrap_or");
-
-        var argValues = new List<string> { left, right };
-        var argTypes = new List<string> { GetParameterLLVMType(type: leftType) };
-
-        TypeInfo? rightType = GetExpressionType(expr: binary.Right);
-        argTypes.Add(item: rightType != null
-            ? GetLLVMType(type: rightType)
-            : "i64");
-
-        string mangledName = method != null
-            ? MangleFunctionName(routine: method)
-            : Q(name: $"{leftType.FullName}.{SanitizeLLVMName(name: "$unwrap_or")}");
-
-        string returnType = method?.ReturnType != null
-            ? GetLLVMType(type: method.ReturnType)
-            : rightType != null
-                ? GetLLVMType(type: rightType)
-                : "i64";
-
-        if (method != null)
-        {
-            GenerateFunctionDeclaration(routine: method);
-        }
-
-        string result = NextTemp();
-        string args = BuildCallArgs(types: argTypes, values: argValues);
-        EmitLine(sb: sb, line: $"  {result} = call {returnType} @{mangledName}({args})");
-        return result;
-    }
 
     /// <summary>
     /// Emits a unary operator as a method call (e.g., -x → x.$neg(), ~x → x.$bitnot()).

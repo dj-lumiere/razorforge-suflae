@@ -1,9 +1,10 @@
-using SemanticAnalysis.Symbols;
+using Compiler.Synthesis;
+using SemanticVerification.Symbols;
 
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis.Types;
+using SemanticVerification.Types;
 using SyntaxTree;
 
 /// <summary>
@@ -50,6 +51,10 @@ public partial class LLVMCodeGenerator
                 EmitWhile(sb: sb, whileStmt: whileStmt);
                 return false;
 
+            case LoopStatement loopStmt:
+                EmitLoop(sb: sb, loopStmt: loopStmt);
+                return false;
+
             case ForStatement forStmt:
                 EmitFor(sb: sb, forStmt: forStmt);
                 return false;
@@ -71,11 +76,11 @@ public partial class LLVMCodeGenerator
                 return EmitBlock(sb: sb, block: danger.Body);
 
             case WhenStatement whenStmt:
-                EmitWhen(sb: sb, whenStmt: whenStmt);
-                return false;
+                return EmitWhen(sb: sb, whenStmt: whenStmt);
 
             case DiscardStatement discard:
-                // Discard: evaluate the expression and ignore the result (including creators, for side effects)
+                // TODO(C43): for creator expressions, skip evaluation entirely — creators have no
+                // observable side effects and their result is being discarded, so the allocation is wasted.
                 EmitExpression(sb: sb, expr: discard.Expression);
                 return false;
 
@@ -91,13 +96,13 @@ public partial class LLVMCodeGenerator
                 EmitAbsent(sb: sb);
                 return true; // Absent terminates the block
 
-            case EmitStatement emitStmt:
-                EmitEmit(sb: sb, emitStmt: emitStmt);
-                return false;
-
             case BecomesStatement becomesStmt:
                 EmitBecomes(sb: sb, becomesStmt: becomesStmt);
                 return false;
+
+            case VariantReturnStatement variantRet:
+                EmitVariantReturn(sb: sb, variantRet: variantRet);
+                return true; // Always a terminator
 
             default:
                 throw new NotImplementedException(
@@ -142,9 +147,14 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Emits code for a variable declaration.
     /// Creates stack allocation and optionally stores initial value.
+    /// Global declarations (Storage == Global) are emitted at module level in
+    /// GenerateGlobalVariableDeclarations and are skipped here.
     /// </summary>
     private void EmitVariableDeclaration(StringBuilder sb, VariableDeclaration varDecl)
     {
+        // Global variables are declared at module level — no local alloca needed.
+        if (varDecl.Storage == StorageClass.Global) return;
+
         // Determine the type
         TypeInfo? varType = null;
         if (varDecl.Type != null)
@@ -202,6 +212,22 @@ public partial class LLVMCodeGenerator
         if (varDecl.Initializer != null)
         {
             string value = EmitExpression(sb: sb, expr: varDecl.Initializer);
+
+            // When the declaration has an explicit type annotation, the initializer may have a
+            // different LLVM type (e.g., var e: U32 = exp where exp: S128 → trunc i128 to i32).
+            // Emit an inline type cast so the store type always matches the alloca type.
+            if (varDecl.Type != null)
+            {
+                TypeInfo? initType = GetExpressionType(expr: varDecl.Initializer);
+                if (initType != null)
+                {
+                    string initLlvm = GetLLVMType(type: initType);
+                    if (initLlvm != llvmType)
+                        value = EmitPrimitiveCast(sb: sb, value: value, fromLlvm: initLlvm,
+                            toLlvm: llvmType);
+                }
+            }
+
             EmitLine(sb: sb, line: $"  store {llvmType} {value}, ptr {varPtr}");
 
             // Retain RC fields on initial copy
@@ -263,6 +289,15 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private void EmitVariableAssignment(StringBuilder sb, string varName, string value)
     {
+        // Check if this is a module-level global variable
+        if (_globalVariables.TryGetValue(key: varName, value: out TypeInfo? globalType) &&
+            _globalVariableLlvmNames.TryGetValue(key: varName, value: out string? globalLlvm))
+        {
+            string globalLlvmType = GetLLVMType(type: globalType);
+            EmitLine(sb: sb, line: $"  store {globalLlvmType} {value}, ptr {globalLlvm}");
+            return;
+        }
+
         if (!_localVariables.TryGetValue(key: varName, value: out TypeInfo? varType))
         {
             throw new InvalidOperationException(message: $"Variable '{varName}' not found");
@@ -405,7 +440,7 @@ public partial class LLVMCodeGenerator
                     if (setItem.Parameters.Count >= 2)
                     {
                         TypeInfo valParamType =
-                            ResolveSubstitutedType(type: setItem.Parameters[^1].Type,
+                            _planner.ResolveSubstitutedType(type: setItem.Parameters[^1].Type,
                                 subs: methodTypeArgs);
                         resolvedParamNames.Add(item: valParamType.Name);
                     }
@@ -512,52 +547,25 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Emits code for a return statement.
-    /// In emitting routines, a bare return (no value) after an emit delivers the stored value
-    /// wrapped in a Snatched handle: { i64 1, ptr handle }.
     /// </summary>
     private void EmitReturn(StringBuilder sb, ReturnStatement ret)
     {
         if (ret.Value == null)
         {
-            // Bare return in emitting routine: deliver the emit slot value
-            if (_emitSlotAddr != null && _emitSlotType != null)
-            {
-                // Load the stored emit value
-                string loaded = NextTemp();
-                EmitLine(sb: sb, line: $"  {loaded} = load {_emitSlotType}, ptr {_emitSlotAddr}");
-
-                string emitCarrierType = GetMaybeCarrierLLVMType(valueType: _currentEmittingRoutine!.ReturnType!);
-
-                // Build { i1 1, <value> } — VALID
-                string v0 = NextTemp();
-                EmitLine(sb: sb, line: $"  {v0} = insertvalue {emitCarrierType} undef, i1 1, 0");
-                string v1 = NextTemp();
-                if (_currentEmittingRoutine!.ReturnType is EntityTypeInfo)
-                    EmitLine(sb: sb,
-                        line: $"  {v1} = insertvalue {emitCarrierType} {v0}, ptr {loaded}, 1");
-                else
-                    EmitLine(sb: sb,
-                        line: $"  {v1} = insertvalue {emitCarrierType} {v0}, {_emitSlotType} {loaded}, 1");
-
-                EmitUsingCleanup(sb: sb);
-                EmitRCRecordCleanup(sb: sb);
-                EmitEntityCleanup(sb: sb, returnedVarName: null);
-                if (_traceCurrentRoutine)
-                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
-                EmitLine(sb: sb, line: $"  ret {emitCarrierType} {v1}");
-            }
+            EmitUsingCleanup(sb: sb);
+            EmitRCRecordCleanup(sb: sb);
+            EmitEntityCleanup(sb: sb, returnedVarName: null);
+            if (_traceCurrentRoutine)
+                EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+            if (_currentFunctionReturnType == null)
+                EmitLine(sb: sb, line: "  ret void");
             else
             {
-                EmitUsingCleanup(sb: sb);
-                EmitRCRecordCleanup(sb: sb);
-                EmitEntityCleanup(sb: sb, returnedVarName: null);
-                if (_traceCurrentRoutine)
-                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
-                if (_currentFunctionReturnType == null)
+                string retLlvmType = GetLLVMType(type: _currentFunctionReturnType);
+                if (retLlvmType == "void")
                     EmitLine(sb: sb, line: "  ret void");
                 else
                 {
-                    string retLlvmType = GetLLVMType(type: _currentFunctionReturnType);
                     string retZero = GetZeroValue(type: _currentFunctionReturnType);
                     EmitLine(sb: sb, line: $"  ret {retLlvmType} {retZero}");
                 }
@@ -565,6 +573,32 @@ public partial class LLVMCodeGenerator
         }
         else
         {
+            // Blank is llvm void — if the function returns void, skip evaluating the expression.
+            // BlankReturnNormalizationPass fills bare `return` with IdentifierExpression("Blank");
+            // since the return type maps to void, no LLVM value is needed.
+            string earlyType = _currentFunctionReturnType != null
+                ? GetLLVMType(type: _currentFunctionReturnType)
+                : "void"; // this should throw error
+            if (earlyType == "void")
+            {
+                EmitUsingCleanup(sb: sb);
+                EmitRCRecordCleanup(sb: sb);
+                EmitEntityCleanup(sb: sb, returnedVarName: null);
+                if (_traceCurrentRoutine)
+                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+                EmitLine(sb: sb, line: "  ret void");
+                return;
+            }
+
+            // If returning a crashable from a failable routine, treat as throw (RF idiom).
+            // `return ErrorType(...)` in a failable function is a throw, not a normal return.
+            TypeInfo? retValType = GetExpressionType(expr: ret.Value);
+            if (retValType is CrashableTypeInfo && _currentRoutineIsFailable)
+            {
+                EmitThrow(sb: sb, throwStmt: new ThrowStatement(Error: ret.Value, Location: ret.Location));
+                return;
+            }
+
             string value = EmitExpression(sb: sb, expr: ret.Value);
             // Prefer current function's return type (matches the 'define' header)
             // to avoid type mismatches between header and ret instruction
@@ -589,7 +623,9 @@ public partial class LLVMCodeGenerator
             if (_traceCurrentRoutine)
                 EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
 
-            // Auto-wrap bare values in Maybe when function returns Maybe[T] but expression is T
+            // Auto-wrap bare values in Maybe when function returns Maybe[T] but expression is T.
+            // Record Maybe { i1 present, T value }: insertvalue i1 1 at 0, T at 1.
+            // Entity Maybe { Snatched[T] }:         single ptr field — non-null ptr = present.
             if (IsMaybeType(type: retType) && value != "zeroinitializer")
             {
                 TypeInfo? exprType = GetExpressionType(expr: ret.Value);
@@ -599,23 +635,23 @@ public partial class LLVMCodeGenerator
                         ? retType.TypeArguments[index: 0]
                         : retType;
                     string carrierType = GetLLVMType(type: retType);
-                    string v0 = NextTemp();
-                    EmitLine(sb: sb, line: $"  {v0} = insertvalue {carrierType} undef, i1 1, 0");
-                    string v1 = NextTemp();
                     if (innerType is EntityTypeInfo)
                     {
-                        // Entity types are already pointers — insert directly
+                        string v0 = NextTemp();
                         EmitLine(sb: sb,
-                            line: $"  {v1} = insertvalue {carrierType} {v0}, ptr {value}, 1");
+                            line: $"  {v0} = insertvalue {carrierType} zeroinitializer, ptr {value}, 0");
+                        EmitLine(sb: sb, line: $"  ret {carrierType} {v0}");
                     }
                     else
                     {
                         string innerLlvm = GetLLVMType(type: innerType);
+                        string v0 = NextTemp();
+                        EmitLine(sb: sb, line: $"  {v0} = insertvalue {carrierType} zeroinitializer, i1 1, 0");
+                        string v1 = NextTemp();
                         EmitLine(sb: sb,
                             line: $"  {v1} = insertvalue {carrierType} {v0}, {innerLlvm} {value}, 1");
+                        EmitLine(sb: sb, line: $"  ret {carrierType} {v1}");
                     }
-
-                    EmitLine(sb: sb, line: $"  ret {carrierType} {v1}");
                 }
                 else
                 {
@@ -703,55 +739,368 @@ public partial class LLVMCodeGenerator
 
     #endregion
 
-    #region Emit Statement
+    #region Throw / Absent / Becomes
 
     /// <summary>
-    /// Emits code for an emit statement in an emitting routine.
-    /// Stores the value in a hidden return slot. Does not terminate the block —
-    /// code after emit does bookkeeping, then a bare return delivers the value.
+    /// Emits code for a <see cref="VariantReturnStatement"/> inserted into error-handling variant
+    /// bodies by <see cref="Desugaring.Passes.ErrorHandlingVariantPass"/>.
+    /// Handles carrier construction for all (VariantKind, SiteKind) combinations without relying
+    /// on mutable _currentVariantIs* flag fields.
     /// </summary>
-    private void EmitEmit(StringBuilder sb, EmitStatement emitStmt)
+    private void EmitVariantReturn(StringBuilder sb, VariantReturnStatement variantRet)
     {
-        string value = EmitExpression(sb: sb, expr: emitStmt.Expression);
+        // ReturnType is either the carrier (Maybe[T]/Result[T]/Lookup[T]) or the inner T.
+        // MonomorphizationPlanner strips the carrier for generic routines (ReturnType = T).
+        // Non-generic stdlib variant routines keep the carrier as ReturnType.
+        // Always extract inner T from the carrier when present.
+        TypeInfo returnType = _currentEmittingRoutine!.ReturnType!;
+        TypeInfo innerType = (variantRet.VariantKind == ErrorHandlingVariantKind.Try
+                              || IsCarrierType(type: returnType))
+            ? returnType.TypeArguments![index: 0]
+            : returnType;
 
-        TypeInfo? valueType =
-            GetExpressionType(expr: emitStmt.Expression) ?? _currentFunctionReturnType;
-        if (valueType == null)
+        switch (variantRet.VariantKind, variantRet.SiteKind)
         {
-            throw new InvalidOperationException(
-                message: "Cannot determine type for emit expression");
-        }
-
-        string llvmType = GetLLVMType(type: valueType);
-
-        // Tuple literals produce inline aggregates, not pointers — match EmitTupleLiteral's actual type
-        if (llvmType == "ptr" && emitStmt.Expression is TupleLiteralExpression tupleEmitExpr)
-        {
-            IEnumerable<string> elemTypes = tupleEmitExpr.Elements.Select(selector: e =>
+            // ── Try variant ────────────────────────────────────────────────────────────────
+            case (ErrorHandlingVariantKind.Try, VariantSiteKind.FromThrow):
             {
-                TypeInfo? et = GetExpressionType(expr: e);
-                return et != null
-                    ? GetLLVMType(type: et)
-                    : "i64";
-            });
-            llvmType = $"{{ {string.Join(separator: ", ", values: elemTypes)} }}";
-        }
+                // Evaluate error expression for side effects (matches existing EmitThrow behavior).
+                // Skip if errType is unknown (unregistered type) — cannot construct it safely.
+                if (variantRet.Value != null)
+                {
+                    TypeInfo? errType = GetExpressionType(expr: variantRet.Value);
+                    bool isEmptyRec = errType == null
+                        || errType is RecordTypeInfo { MemberVariables.Count: 0 }
+                        or CrashableTypeInfo { MemberVariables.Count: 0 };
+                    if (!isEmptyRec)
+                        EmitExpression(sb: sb, expr: variantRet.Value);
+                }
 
-        // Lazily create the emit slot alloca on first emit
-        if (_emitSlotAddr == null)
-        {
-            _emitSlotAddr = "%emit.slot.addr";
-            _emitSlotType = llvmType;
-            EmitEntryAlloca(llvmName: _emitSlotAddr, llvmType: llvmType);
-        }
+                string tryCarrier = GetMaybeCarrierLLVMType(valueType: innerType);
+                EmitUsingCleanup(sb: sb);
+                EmitRCRecordCleanup(sb: sb);
+                if (_traceCurrentRoutine)
+                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+                EmitLine(sb: sb, line: $"  ret {tryCarrier} zeroinitializer");
+                break;
+            }
 
-        // Store the emitted value
-        EmitLine(sb: sb, line: $"  store {llvmType} {value}, ptr {_emitSlotAddr}");
+            case (ErrorHandlingVariantKind.Try, VariantSiteKind.FromAbsent):
+            {
+                string tryCarrier = GetMaybeCarrierLLVMType(valueType: innerType);
+                EmitUsingCleanup(sb: sb);
+                EmitRCRecordCleanup(sb: sb);
+                if (_traceCurrentRoutine)
+                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+                EmitLine(sb: sb, line: $"  ret {tryCarrier} zeroinitializer");
+                break;
+            }
+
+            case (ErrorHandlingVariantKind.Try, VariantSiteKind.FromReturn):
+            {
+                // "return ErrorType(...)" in a failable routine is an error throw in RF.
+                // The ErrorHandlingVariantPass creates FromReturn for ALL return statements;
+                // detect the crashable case here and treat it as absent (zeroinitializer).
+                TypeInfo? tryRetType = variantRet.Value != null
+                    ? GetExpressionType(expr: variantRet.Value) : null;
+                bool tryRetIsCrashable = tryRetType is CrashableTypeInfo;
+
+                string? returnedVarName = variantRet.Value is IdentifierExpression tryId &&
+                                          _localEntityVars.Any(predicate: e => e.Name == tryId.Name)
+                    ? tryId.Name
+                    : null;
+                EmitUsingCleanup(sb: sb);
+                EmitRCRecordCleanup(sb: sb);
+                EmitEntityCleanup(sb: sb, returnedVarName: returnedVarName);
+                if (_traceCurrentRoutine)
+                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+
+                if (tryRetIsCrashable)
+                {
+                    // Return of a crashable from a Try variant → absent in Maybe (error is dropped).
+                    // Evaluate for side effects (allocates and immediately discards the crashable).
+                    EmitExpression(sb: sb, expr: variantRet.Value!);
+                    string tryCarrier = GetMaybeCarrierLLVMType(valueType: innerType);
+                    EmitLine(sb: sb, line: $"  ret {tryCarrier} zeroinitializer");
+                }
+                else if (variantRet.Value == null)
+                {
+                    // Bare return in Try variant (Blank inner type): present with no payload.
+                    // Record Maybe { i1, Blank }: set i1 tag to 1 (present), zeroinitializer for Blank payload.
+                    string tryCarrier = GetMaybeCarrierLLVMType(valueType: innerType);
+                    string tv0 = NextTemp();
+                    EmitLine(sb: sb, line: $"  {tv0} = insertvalue {tryCarrier} zeroinitializer, i1 1, 0");
+                    EmitLine(sb: sb, line: $"  ret {tryCarrier} {tv0}");
+                }
+                else
+                {
+                    // Present value: wrap in Maybe carrier.
+                    // Record Maybe { i1 present, T value }: insertvalue i1 1 at 0, T at 1.
+                    // Entity Maybe { Snatched[T] }:         single ptr field — non-null ptr = present.
+                    string value = EmitExpression(sb: sb, expr: variantRet.Value);
+                    string tryCarrier = GetMaybeCarrierLLVMType(valueType: innerType);
+                    if (innerType is EntityTypeInfo)
+                    {
+                        string v0 = NextTemp();
+                        EmitLine(sb: sb, line: $"  {v0} = insertvalue {tryCarrier} zeroinitializer, ptr {value}, 0");
+                        EmitLine(sb: sb, line: $"  ret {tryCarrier} {v0}");
+                    }
+                    else
+                    {
+                        string innerLlvm = GetLLVMType(type: innerType);
+                        string v0 = NextTemp();
+                        EmitLine(sb: sb, line: $"  {v0} = insertvalue {tryCarrier} zeroinitializer, i1 1, 0");
+                        string v1 = NextTemp();
+                        EmitLine(sb: sb, line: $"  {v1} = insertvalue {tryCarrier} {v0}, {innerLlvm} {value}, 1");
+                        EmitLine(sb: sb, line: $"  ret {tryCarrier} {v1}");
+                    }
+                }
+
+                break;
+            }
+
+            // ── TryBool variant ────────────────────────────────────────────────────────────
+            case (ErrorHandlingVariantKind.TryBool, VariantSiteKind.FromThrow):
+            {
+                // Evaluate error for side effects
+                if (variantRet.Value != null)
+                {
+                    TypeInfo? errType = GetExpressionType(expr: variantRet.Value);
+                    bool isEmptyRec = errType is RecordTypeInfo { MemberVariables.Count: 0 }
+                        or CrashableTypeInfo { MemberVariables.Count: 0 };
+                    if (!isEmptyRec)
+                        EmitExpression(sb: sb, expr: variantRet.Value);
+                }
+
+                EmitUsingCleanup(sb: sb);
+                EmitRCRecordCleanup(sb: sb);
+                if (_traceCurrentRoutine)
+                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+                EmitLine(sb: sb, line: "  ret i1 false");
+                break;
+            }
+
+            case (ErrorHandlingVariantKind.TryBool, VariantSiteKind.FromAbsent):
+            {
+                EmitUsingCleanup(sb: sb);
+                EmitRCRecordCleanup(sb: sb);
+                if (_traceCurrentRoutine)
+                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+                EmitLine(sb: sb, line: "  ret i1 false");
+                break;
+            }
+
+            case (ErrorHandlingVariantKind.TryBool, VariantSiteKind.FromReturn):
+            {
+                EmitUsingCleanup(sb: sb);
+                EmitRCRecordCleanup(sb: sb);
+                EmitEntityCleanup(sb: sb, returnedVarName: null);
+                if (_traceCurrentRoutine)
+                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+                EmitLine(sb: sb, line: "  ret i1 true");
+                break;
+            }
+
+            // ── Lookup variant ─────────────────────────────────────────────────────────────
+            case (ErrorHandlingVariantKind.Lookup, VariantSiteKind.FromThrow):
+            {
+                TypeInfo? errType = variantRet.Value != null
+                    ? GetExpressionType(expr: variantRet.Value)
+                    : null;
+                string errTypeName = errType?.Name ?? "UnknownError";
+                // Treat unknown type (errType == null) as empty — cannot construct safely.
+                bool isEmptyRec = errType == null
+                    || errType is RecordTypeInfo { MemberVariables.Count: 0 }
+                    or CrashableTypeInfo { MemberVariables.Count: 0 };
+                string errorVal = isEmptyRec || variantRet.Value == null
+                    ? "zeroinitializer"
+                    : EmitExpression(sb: sb, expr: variantRet.Value!);
+
+                string lookupCarrier = GetLookupCarrierLLVMType(valueType: innerType);
+                ulong errTypeId = errType != null
+                    ? ComputeTypeId(fullName: errType.FullName)
+                    : 0;
+                string errDataAddr = EmitErrorDataAddress(sb: sb, errorType: errType ?? innerType,
+                    errorVal: errorVal, isEmptyRecord: isEmptyRec);
+
+                EmitUsingCleanup(sb: sb);
+                EmitRCRecordCleanup(sb: sb);
+                if (_traceCurrentRoutine)
+                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+
+                string lv0 = NextTemp();
+                EmitLine(sb: sb, line: $"  {lv0} = insertvalue {lookupCarrier} zeroinitializer, i64 {errTypeId}, 0");
+                string lv1 = NextTemp();
+                EmitLine(sb: sb, line: $"  {lv1} = insertvalue {lookupCarrier} {lv0}, i64 {errDataAddr}, 1");
+                EmitLine(sb: sb, line: $"  ret {lookupCarrier} {lv1}");
+                break;
+            }
+
+            case (ErrorHandlingVariantKind.Lookup, VariantSiteKind.FromAbsent):
+            {
+                string lookupCarrier = GetLookupCarrierLLVMType(valueType: innerType);
+                EmitUsingCleanup(sb: sb);
+                EmitRCRecordCleanup(sb: sb);
+                if (_traceCurrentRoutine)
+                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+                EmitLine(sb: sb, line: $"  ret {lookupCarrier} zeroinitializer");
+                break;
+            }
+
+            case (ErrorHandlingVariantKind.Lookup, VariantSiteKind.FromReturn):
+            {
+                TypeInfo? lookupRetType = variantRet.Value != null
+                    ? GetExpressionType(expr: variantRet.Value) : null;
+                bool lookupRetIsCrashable = lookupRetType is CrashableTypeInfo;
+
+                string? returnedVarName = variantRet.Value is IdentifierExpression lookupId &&
+                                          _localEntityVars.Any(predicate: e => e.Name == lookupId.Name)
+                    ? lookupId.Name
+                    : null;
+                EmitUsingCleanup(sb: sb);
+                EmitRCRecordCleanup(sb: sb);
+                EmitEntityCleanup(sb: sb, returnedVarName: returnedVarName);
+                if (_traceCurrentRoutine)
+                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+
+                string lookupCarrier = GetLookupCarrierLLVMType(valueType: innerType);
+
+                if (lookupRetIsCrashable)
+                {
+                    // "return ErrorType(...)" → store error in carrier field 1.
+                    string errorVal = EmitExpression(sb: sb, expr: variantRet.Value!);
+                    ulong errTypeId = ComputeTypeId(fullName: lookupRetType!.FullName);
+                    string errDataAddr = EmitErrorDataAddress(sb: sb, errorType: lookupRetType,
+                        errorVal: errorVal, isEmptyRecord: false);
+                    string lev0 = NextTemp();
+                    EmitLine(sb: sb,
+                        line: $"  {lev0} = insertvalue {lookupCarrier} zeroinitializer, i64 {errTypeId}, 0");
+                    string lev1 = NextTemp();
+                    EmitLine(sb: sb, line: $"  {lev1} = insertvalue {lookupCarrier} {lev0}, i64 {errDataAddr}, 1");
+                    EmitLine(sb: sb, line: $"  ret {lookupCarrier} {lev1}");
+                }
+                else if (variantRet.Value == null)
+                {
+                    EmitLine(sb: sb, line: $"  ret {lookupCarrier} zeroinitializer");
+                }
+                else
+                {
+                    string value = EmitExpression(sb: sb, expr: variantRet.Value);
+                    ulong validId = ComputeTypeId(fullName: innerType.FullName);
+                    string lrv0 = NextTemp();
+                    EmitLine(sb: sb,
+                        line: $"  {lrv0} = insertvalue {lookupCarrier} zeroinitializer, i64 {validId}, 0");
+                    string lrv1 = NextTemp();
+                    string lDataVal = EmitSuccessDataAddress(sb: sb, innerType: innerType, value: value);
+                    EmitLine(sb: sb, line: $"  {lrv1} = insertvalue {lookupCarrier} {lrv0}, i64 {lDataVal}, 1");
+                    EmitLine(sb: sb, line: $"  ret {lookupCarrier} {lrv1}");
+                }
+
+                break;
+            }
+
+            // ── Check variant ──────────────────────────────────────────────────────────────
+            case (ErrorHandlingVariantKind.Check, VariantSiteKind.FromThrow):
+            {
+                TypeInfo? errType = variantRet.Value != null
+                    ? GetExpressionType(expr: variantRet.Value)
+                    : null;
+                // Treat unknown type (errType == null) as empty — cannot construct safely.
+                bool isEmptyRec = errType == null
+                    || errType is RecordTypeInfo { MemberVariables.Count: 0 }
+                    or CrashableTypeInfo { MemberVariables.Count: 0 };
+                string errorVal = isEmptyRec || variantRet.Value == null
+                    ? "zeroinitializer"
+                    : EmitExpression(sb: sb, expr: variantRet.Value!);
+
+                string checkCarrier = GetResultCarrierLLVMType(valueType: innerType);
+                ulong errTypeId = errType != null
+                    ? ComputeTypeId(fullName: errType.FullName)
+                    : 0;
+                string errDataAddr = EmitErrorDataAddress(sb: sb, errorType: errType ?? innerType,
+                    errorVal: errorVal, isEmptyRecord: isEmptyRec);
+
+                EmitUsingCleanup(sb: sb);
+                EmitRCRecordCleanup(sb: sb);
+                if (_traceCurrentRoutine)
+                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+
+                string cv0 = NextTemp();
+                EmitLine(sb: sb, line: $"  {cv0} = insertvalue {checkCarrier} zeroinitializer, i64 {errTypeId}, 0");
+                string cv1 = NextTemp();
+                EmitLine(sb: sb, line: $"  {cv1} = insertvalue {checkCarrier} {cv0}, i64 {errDataAddr}, 1");
+                EmitLine(sb: sb, line: $"  ret {checkCarrier} {cv1}");
+                break;
+            }
+
+            case (ErrorHandlingVariantKind.Check, VariantSiteKind.FromAbsent):
+            {
+                string checkCarrier = GetResultCarrierLLVMType(valueType: innerType);
+                EmitUsingCleanup(sb: sb);
+                EmitRCRecordCleanup(sb: sb);
+                if (_traceCurrentRoutine)
+                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+                EmitLine(sb: sb, line: $"  ret {checkCarrier} zeroinitializer");
+                break;
+            }
+
+            case (ErrorHandlingVariantKind.Check, VariantSiteKind.FromReturn):
+            {
+                TypeInfo? checkRetType = variantRet.Value != null
+                    ? GetExpressionType(expr: variantRet.Value) : null;
+                bool checkRetIsCrashable = checkRetType is CrashableTypeInfo;
+
+                string? returnedVarName = variantRet.Value is IdentifierExpression checkId &&
+                                          _localEntityVars.Any(predicate: e => e.Name == checkId.Name)
+                    ? checkId.Name
+                    : null;
+                EmitUsingCleanup(sb: sb);
+                EmitRCRecordCleanup(sb: sb);
+                EmitEntityCleanup(sb: sb, returnedVarName: returnedVarName);
+                if (_traceCurrentRoutine)
+                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+
+                string checkCarrier = GetResultCarrierLLVMType(valueType: innerType);
+
+                if (checkRetIsCrashable)
+                {
+                    // "return ErrorType(...)" → store error in carrier field 1.
+                    string errorVal = EmitExpression(sb: sb, expr: variantRet.Value!);
+                    ulong errTypeId = ComputeTypeId(fullName: checkRetType!.FullName);
+                    string errDataAddr = EmitErrorDataAddress(sb: sb, errorType: checkRetType,
+                        errorVal: errorVal, isEmptyRecord: false);
+                    string cev0 = NextTemp();
+                    EmitLine(sb: sb,
+                        line: $"  {cev0} = insertvalue {checkCarrier} zeroinitializer, i64 {errTypeId}, 0");
+                    string cev1 = NextTemp();
+                    EmitLine(sb: sb, line: $"  {cev1} = insertvalue {checkCarrier} {cev0}, i64 {errDataAddr}, 1");
+                    EmitLine(sb: sb, line: $"  ret {checkCarrier} {cev1}");
+                }
+                else if (variantRet.Value == null)
+                {
+                    EmitLine(sb: sb, line: $"  ret {checkCarrier} zeroinitializer");
+                }
+                else
+                {
+                    string value = EmitExpression(sb: sb, expr: variantRet.Value);
+                    ulong validId = ComputeTypeId(fullName: innerType.FullName);
+                    string crv0 = NextTemp();
+                    EmitLine(sb: sb,
+                        line: $"  {crv0} = insertvalue {checkCarrier} zeroinitializer, i64 {validId}, 0");
+                    string crv1 = NextTemp();
+                    string cDataVal = EmitSuccessDataAddress(sb: sb, innerType: innerType, value: value);
+                    EmitLine(sb: sb, line: $"  {crv1} = insertvalue {checkCarrier} {crv0}, i64 {cDataVal}, 1");
+                    EmitLine(sb: sb, line: $"  ret {checkCarrier} {crv1}");
+                }
+
+                break;
+            }
+
+            default:
+                throw new InvalidOperationException(
+                    message: $"Unhandled VariantReturnStatement: {variantRet.VariantKind}/{variantRet.SiteKind}");
+        }
     }
-
-    #endregion
-
-    #region Throw / Absent / Becomes
 
     /// <summary>
     /// Emits code for a throw statement.
@@ -766,7 +1115,8 @@ public partial class LLVMCodeGenerator
         TypeInfo? errorType = GetExpressionType(expr: throwStmt.Error);
         string typeName = errorType?.Name ?? "UnknownError";
 
-        // Check if error type is an empty record (no member variables) — skip construction
+        // Check if error type is an empty record (no member variables) — skip construction.
+        // Crashable types are entity-like and always go through EmitExpression.
         bool isEmptyRecord = errorType is RecordTypeInfo { MemberVariables.Count: 0 };
         string errorVal;
         if (isEmptyRecord)
@@ -800,6 +1150,7 @@ public partial class LLVMCodeGenerator
 
             // Text entity = { ptr letters_list }
             // List[Character] entity = { ptr data, i64 count, i64 capacity }
+            // TODO: This should not be hardcoded
             string lettersPtr = NextTemp();
             EmitLine(sb: sb, line: $"  {lettersPtr} = load ptr, ptr {textPtr}");
             string dataField = NextTemp();
@@ -840,21 +1191,111 @@ public partial class LLVMCodeGenerator
         EmitUsingCleanup(sb: sb);
         EmitRCRecordCleanup(sb: sb);
 
-        // In a try_/check_/lookup_ variant, throw → return Maybe[T] with present=false
-        if (_currentVariantIsTry)
-        {
-            string carrierType = GetMaybeCarrierLLVMType(valueType: _currentEmittingRoutine!.ReturnType!);
-            if (_traceCurrentRoutine)
-                EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
-            EmitLine(sb: sb, line: $"  ret {carrierType} zeroinitializer");
-            return;
-        }
-
         // Call rf_crash — never returns
         EmitLine(sb: sb,
             line:
             $"  call void @rf_crash(i64 {typeNameAsInt}, i64 {typeName.Length}, i64 {fileAsInt}, i64 {throwStmt.Location.FileName.Length}, i32 {throwStmt.Location.Line}, i32 {throwStmt.Location.Column}, i64 {msgDataAsInt}, i64 {msgLen})");
         EmitLine(sb: sb, line: "  unreachable");
+    }
+
+    /// <summary>
+    /// Converts a success value of inner type T to the i64 representation stored in a Result/Lookup
+    /// carrier's field 1. Handles entity (ptrtoint), primitive ≤ i64 (zext), and struct types
+    /// (heap-allocate via rf_allocate_dynamic and return address as i64).
+    /// </summary>
+    private string EmitSuccessDataAddress(StringBuilder sb, TypeInfo innerType, string value)
+    {
+        if (innerType is EntityTypeInfo)
+        {
+            string asInt = NextTemp();
+            EmitLine(sb: sb, line: $"  {asInt} = ptrtoint ptr {value} to i64");
+            return asInt;
+        }
+
+        string innerLlvm = GetLLVMType(type: innerType);
+        if (innerLlvm == "i64") return value;
+
+        // Types that need heap allocation: structs (named %Type or inline { fields }), i128, fp128.
+        // Any type that cannot be zero-extended to i64 must be heap-allocated.
+        bool needsHeapAlloc = innerLlvm.StartsWith(value: "%")
+                              || innerLlvm.StartsWith(value: "{")
+                              || innerLlvm is "i128" or "fp128";
+        if (needsHeapAlloc)
+        {
+            string sizePtr = NextTemp();
+            string sizeVal = NextTemp();
+            EmitLine(sb: sb, line: $"  {sizePtr} = getelementptr {innerLlvm}, ptr null, i32 1");
+            EmitLine(sb: sb, line: $"  {sizeVal} = ptrtoint ptr {sizePtr} to i64");
+            string heapPtr = NextTemp();
+            EmitLine(sb: sb, line: $"  {heapPtr} = call ptr @rf_allocate_dynamic(i64 {sizeVal})");
+            EmitLine(sb: sb, line: $"  store {innerLlvm} {value}, ptr {heapPtr}");
+            string asInt = NextTemp();
+            EmitLine(sb: sb, line: $"  {asInt} = ptrtoint ptr {heapPtr} to i64");
+            return asInt;
+        }
+
+        // Float or small integer type: bitcast float to i64 or zero-extend integer to i64.
+        if (innerLlvm is "double" or "float" or "half")
+        {
+            // Use same-width bitcast + zext/trunc to fit in i64
+            int bits = innerLlvm switch { "double" => 64, "float" => 32, _ => 16 };
+            string intType = $"i{bits}";
+            string bc = NextTemp();
+            EmitLine(sb: sb, line: $"  {bc} = bitcast {innerLlvm} {value} to {intType}");
+            if (bits == 64) return bc;
+            string ze = NextTemp();
+            EmitLine(sb: sb, line: $"  {ze} = zext {intType} {bc} to i64");
+            return ze;
+        }
+
+        // Small integer type (e.g., i1, i8, i16, i32): zero-extend to i64.
+        string zext = NextTemp();
+        EmitLine(sb: sb, line: $"  {zext} = zext {innerLlvm} {value} to i64");
+        return zext;
+    }
+
+    /// <summary>
+    /// Emits code to store a thrown error, returning its address as i64 for the carrier field.
+    /// For empty records (no fields), returns "0" — crash_message ignores `me`, passing null is safe.
+    /// For entity/crashable types, they are already heap-allocated — just convert the ptr to i64.
+    /// For non-empty records, the data is heap-allocated via rf_allocate_dynamic so the
+    /// address remains valid after the throwing function returns.
+    /// </summary>
+    private string EmitErrorDataAddress(StringBuilder sb, TypeInfo errorType, string errorVal,
+        bool isEmptyRecord)
+    {
+        if (isEmptyRecord)
+        {
+            return "0";
+        }
+
+        // Entity and crashable types are already heap-allocated (their value IS a ptr).
+        // Return the pointer itself as i64 — no extra allocation needed.
+        // The protocol dispatch stub passes this ptr directly to crash_message(ptr %self).
+        if (errorType is EntityTypeInfo or CrashableTypeInfo)
+        {
+            string addrInt = NextTemp();
+            EmitLine(sb: sb, line: $"  {addrInt} = ptrtoint ptr {errorVal} to i64");
+            return addrInt;
+        }
+
+        string llvmErrType = GetLLVMType(type: errorType);
+
+        // Compute sizeof(RecordType) via GEP null trick: getelementptr T, null, 1 → byte past end
+        string sizePtr = NextTemp();
+        string sizeVal = NextTemp();
+        EmitLine(sb: sb, line: $"  {sizePtr} = getelementptr {llvmErrType}, ptr null, i32 1");
+        EmitLine(sb: sb, line: $"  {sizeVal} = ptrtoint ptr {sizePtr} to i64");
+
+        // Heap-allocate storage for the error record (leaked, but errors are rare/terminal)
+        string heapPtr = NextTemp();
+        EmitLine(sb: sb, line: $"  {heapPtr} = call ptr @rf_allocate_dynamic(i64 {sizeVal})");
+        EmitLine(sb: sb, line: $"  store {llvmErrType} {errorVal}, ptr {heapPtr}");
+
+        // Return address as i64 for storage in the Result/Lookup carrier field 1
+        string addrInt2 = NextTemp();
+        EmitLine(sb: sb, line: $"  {addrInt2} = ptrtoint ptr {heapPtr} to i64");
+        return addrInt2;
     }
 
     /// <summary>
@@ -875,8 +1316,10 @@ public partial class LLVMCodeGenerator
             return;
         }
 
-        // Return zeroinitializer — tag=0 means ABSENT for any carrier layout
-        string absentCarrierType = GetMaybeCarrierLLVMType(valueType: _currentEmittingRoutine!.ReturnType!);
+        // Return zeroinitializer — tag=0 means ABSENT for Maybe[T].
+        // ReturnType is now the full Maybe[T] carrier (not the inner T), so use GetLLVMType directly.
+        TypeInfo absentRetType = _currentEmittingRoutine!.ReturnType!;
+        string absentCarrierType = GetLLVMType(type: absentRetType);
         // Clean up active scopes before returning absent
         EmitUsingCleanup(sb: sb);
         EmitRCRecordCleanup(sb: sb);

@@ -75,6 +75,31 @@ public enum BinaryOperator
 
     #endregion
 
+    #region Arithmetic - unchecked variants (UB on overflow, require danger block)
+
+    /// <summary>Unchecked addition (+!) — UB on overflow, emits add nsw/nuw</summary>
+    AddUnchecked,
+
+    /// <summary>Unchecked subtraction (-!) — UB on overflow, emits sub nsw/nuw</summary>
+    SubtractUnchecked,
+
+    /// <summary>Unchecked multiplication (*!) — UB on overflow, emits mul nsw/nuw</summary>
+    MultiplyUnchecked,
+
+    /// <summary>Unchecked float division (/!) — emits fdiv fast, no NaN/inf check</summary>
+    TrueDivideUnchecked,
+
+    /// <summary>Unchecked integer floor division (//!) — bare sdiv/udiv, UB on zero or overflow</summary>
+    FloorDivideUnchecked,
+
+    /// <summary>Unchecked modulo (%!) — bare srem/urem, UB on zero</summary>
+    ModuloUnchecked,
+
+    /// <summary>Unchecked exponentiation (**!) — UB on overflow</summary>
+    PowerUnchecked,
+
+    #endregion
+
 
     #region Comparison - equality, relational, and membership
 
@@ -211,6 +236,14 @@ public static class BinaryOperatorExtensions
                 BinaryOperator.TrueDivClamp => "/^",
                 BinaryOperator.PowerClamp => "**^",
 
+                BinaryOperator.AddUnchecked => "+!",
+                BinaryOperator.SubtractUnchecked => "-!",
+                BinaryOperator.MultiplyUnchecked => "*!",
+                BinaryOperator.TrueDivideUnchecked => "/!",
+                BinaryOperator.FloorDivideUnchecked => "//!",
+                BinaryOperator.ModuloUnchecked => "%!",
+                BinaryOperator.PowerUnchecked => "**!",
+
                 BinaryOperator.Equal => "==",
                 BinaryOperator.NotEqual => "!=",
                 BinaryOperator.Identical => "===",
@@ -276,6 +309,15 @@ public static class BinaryOperatorExtensions
                 BinaryOperator.MultiplyClamp => "$mul_clamp",
                 BinaryOperator.TrueDivClamp => "$truediv_clamp",
                 BinaryOperator.PowerClamp => "$pow_clamp",
+
+                // Unchecked arithmetic — dispatch through stdlib methods that contain nsw/nuw IR
+                BinaryOperator.AddUnchecked => "$add_unchecked",
+                BinaryOperator.SubtractUnchecked => "$sub_unchecked",
+                BinaryOperator.MultiplyUnchecked => "$mul_unchecked",
+                BinaryOperator.TrueDivideUnchecked => "$truediv_unchecked",
+                BinaryOperator.FloorDivideUnchecked => "$floordiv_unchecked",
+                BinaryOperator.ModuloUnchecked => "$mod_unchecked",
+                BinaryOperator.PowerUnchecked => null,  // TBD
 
                 // Ordering (overloadable)
                 BinaryOperator.Equal => "$eq",

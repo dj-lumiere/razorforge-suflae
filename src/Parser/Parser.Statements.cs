@@ -201,15 +201,8 @@ public partial class Parser
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
-        // loop body is equivalent to while true body
-        Expression trueCondition =
-            new LiteralExpression(Value: true, LiteralType: TokenType.True, Location: location);
         Statement body = ParseBody();
-
-        return new WhileStatement(Condition: trueCondition,
-            Body: body,
-            ElseBranch: null,
-            Location: location);
+        return new LoopStatement(Body: body, Location: location);
     }
 
     /// <summary>
@@ -966,20 +959,6 @@ public partial class Parser
 
         ConsumeStatementTerminator();
         return new DiscardStatement(Expression: expression, Location: location);
-    }
-
-    /// <summary>
-    /// Parses an emit statement (generator yield).
-    /// Syntax: <c>emit expression</c>
-    /// Yields a value from a generator routine.
-    /// </summary>
-    /// <returns>An <see cref="EmitStatement"/> AST node.</returns>
-    private EmitStatement ParseEmitStatement()
-    {
-        SourceLocation location = GetLocation(token: PeekToken(offset: -1));
-        Expression expression = ParseExpression();
-        ConsumeStatementTerminator();
-        return new EmitStatement(Expression: expression, Location: location);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════

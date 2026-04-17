@@ -1,5 +1,5 @@
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Types;
+using SemanticVerification.Results;
+using SemanticVerification.Types;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;

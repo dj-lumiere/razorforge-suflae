@@ -1,4 +1,5 @@
-using SemanticAnalysis.Results;
+using SemanticVerification.Results;
+using Compiler.Diagnostics;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -220,7 +221,7 @@ public class ControlFlowAnalysisTests
     /// </summary>
 
     [Fact]
-    public void Analyze_AbsentInNonFailable_ReportsError()
+    public void Analyze_AbsentInNonFailable_ReportsWarning()
     {
         string source = """
                         routine test() -> S32
@@ -229,7 +230,8 @@ public class ControlFlowAnalysisTests
                         """;
 
         AnalysisResult result = Analyze(source: source);
-        Assert.True(condition: result.Errors.Count > 0);
+        Assert.Contains(collection: result.Warnings,
+            filter: w => w.Code == SemanticWarningCode.ThrowAbsentInNonFailable);
     }
     /// <summary>
     /// Tests Analyze_ThrowInNonFailable_ReportsError.
@@ -284,7 +286,7 @@ public class ControlFlowAnalysisTests
     #region Throw Terminality (S215/S216)
 
     /// <summary>
-    /// S215: throw terminates control flow — no return needed after it.
+    /// S215: throw terminates control flow ??no return needed after it.
     /// </summary>
     [Fact]
     public void Analyze_ThrowTerminates_NoMissingReturn()
@@ -301,7 +303,7 @@ public class ControlFlowAnalysisTests
     }
 
     /// <summary>
-    /// S215: throw in all if/else branches terminates — no return needed.
+    /// S215: throw in all if/else branches terminates ??no return needed.
     /// </summary>
     [Fact]
     public void Analyze_ThrowInAllBranches_NoMissingReturn()
@@ -321,7 +323,7 @@ public class ControlFlowAnalysisTests
     }
 
     /// <summary>
-    /// S215: absent terminates control flow — no return needed after it.
+    /// S215: absent terminates control flow ??no return needed after it.
     /// </summary>
     [Fact]
     public void Analyze_AbsentTerminates_NoMissingReturn()
@@ -338,7 +340,7 @@ public class ControlFlowAnalysisTests
     }
 
     /// <summary>
-    /// S216: routine with only throw branches — valid, no missing return.
+    /// S216: routine with only throw branches ??valid, no missing return.
     /// </summary>
     [Fact]
     public void Analyze_AllPathsThrow_NoMissingReturn()
@@ -358,7 +360,7 @@ public class ControlFlowAnalysisTests
     }
 
     /// <summary>
-    /// S215: throw followed by dead code in block — block still terminates.
+    /// S215: throw followed by dead code in block ??block still terminates.
     /// </summary>
     [Fact]
     public void Analyze_ThrowWithDeadCode_NoMissingReturn()

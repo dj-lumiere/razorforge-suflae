@@ -71,3 +71,8 @@ old
 /native/libco/
 /native/libuv/
 /.dotnet/.nuget/packages/
+/memory
+/CLAUDE.md
+/rust_bench
+/.cache/clangd/index/
+/scripts/

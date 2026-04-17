@@ -1,4 +1,5 @@
-using SemanticAnalysis.Results;
+using Compiler.Diagnostics;
+using SemanticVerification.Results;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -109,7 +110,7 @@ public class TypeNarrowingTests
 
         AnalysisResult result = Analyze(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticAnalysis.Diagnostics.SemanticDiagnosticCode.ReturnTypeMismatch);
+            filter: e => e.Code == SemanticDiagnosticCode.ReturnTypeMismatch);
     }
 
     #endregion
@@ -154,7 +155,7 @@ public class TypeNarrowingTests
                           return 0
                         """;
 
-        // Should not crash — the is/isnot check may produce warnings
+        // Should not crash ??the is/isnot check may produce warnings
         // but should not cause an internal error
         Analyze(source: source);
     }

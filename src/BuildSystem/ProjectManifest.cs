@@ -62,6 +62,12 @@ public sealed class TargetInfo
     /// Defaults to "debug" when not specified.
     /// </summary>
     public string Mode { get; set; } = "debug";
+
+    /// <summary>
+    /// When true, writes the fully post-desugared AST to a .rf.desugared file alongside the .ll output.
+    /// Controlled by the <c>dump-ast</c> field in the target's TOML table.
+    /// </summary>
+    public bool DumpAst { get; set; }
 }
 /// <summary>
 /// Represents the parsed contents of a project manifest file.

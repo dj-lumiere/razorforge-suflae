@@ -1,6 +1,6 @@
 using Compiler.Lexer;
-using SemanticAnalysis.Diagnostics;
-using SemanticAnalysis.Results;
+using Compiler.Diagnostics;
+using SemanticVerification.Results;
 using SyntaxTree;
 using Xunit;
 

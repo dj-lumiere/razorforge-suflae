@@ -1,9 +1,9 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis.Enums;
-using SemanticAnalysis.Symbols;
-using SemanticAnalysis.Types;
+using SemanticVerification.Enums;
+using SemanticVerification.Symbols;
+using SemanticVerification.Types;
 
 public partial class LLVMCodeGenerator
 {
@@ -11,102 +11,183 @@ public partial class LLVMCodeGenerator
     {
         foreach ((string mangledName, ProtocolDispatchInfo info) in _pendingProtocolDispatches)
         {
-            // Skip if already defined (a previous iteration or other codegen path generated it)
+            // Skip if already defined
             if (_generatedFunctionDefs.Contains(item: mangledName))
             {
                 continue;
             }
 
-            // Find the declaration to get param/return types
-            // The declaration was emitted in EmitMethodCall: "declare <retType> @<mangledName>(<paramTypes>)"
+            // Skip if no declare was emitted yet
             if (!_generatedFunctions.Contains(item: mangledName))
             {
                 continue;
             }
 
-            // Find concrete implementers of this protocol resolution
-            string? concreteFunc =
-                FindConcreteImplementer(protocol: info.Protocol, methodName: info.MethodName);
-            if (concreteFunc == null || !_generatedFunctionDefs.Contains(item: concreteFunc))
+            // Determine the return type from the protocol method declaration
+            ProtocolMethodInfo? protoMethod = info.Protocol.Methods
+               .FirstOrDefault(predicate: m => m.Name == info.MethodName && !m.IsFailable);
+            protoMethod ??= info.Protocol.Methods
+               .FirstOrDefault(predicate: m => m.Name == info.MethodName);
+
+            string retType = protoMethod?.ReturnType != null
+                ? GetLLVMType(type: protoMethod.ReturnType)
+                : "void";
+
+            // Trigger compilation of every uncompiled implementer, then defer if any were added.
+            // This ensures the switch table covers all concrete types, not just the first compiled one.
+            int triggered = TriggerAllImplementerCompilations(
+                protocol: info.Protocol, methodName: info.MethodName);
+            if (triggered > 0)
+            {
+                continue; // Some declared-but-not-compiled implementations queued — revisit next pass
+            }
+
+            // Find all compiled concrete implementers (type + mangled function name)
+            List<(TypeInfo ConcreteType, string FuncName)> implementers =
+                FindAllCompiledImplementers(protocol: info.Protocol, methodName: info.MethodName);
+
+            // Nothing compiled (and nothing left to trigger) — defer stub
+            if (implementers.Count == 0)
             {
                 continue;
             }
 
-            // Parse the declaration to extract return type and parameter types
-            string? declLine = FindDeclarationLine(mangledName: mangledName);
-            if (declLine == null)
+            // Generate a switch-based dispatch stub: branch on type_id to the right concrete method
+            StringBuilder sb = _functionDefinitions;
+            string defaultLabel = NextLabel(prefix: "dispatch_default");
+            var caseLabels = implementers
+               .Select(selector: (_, i) => NextLabel(prefix: $"dispatch_{i}_"))
+               .ToList();
+
+            EmitLine(sb: sb, line: $"define {retType} @{mangledName}(ptr %self, i64 %type_id) {{");
+            EmitLine(sb: sb, line: "entry:");
+
+            // Build switch: switch i64 %type_id, label %default [ i64 X, label %dN ... ]
+            var switchSb = new System.Text.StringBuilder();
+            switchSb.Append($"  switch i64 %type_id, label %{defaultLabel} [");
+            for (int i = 0; i < implementers.Count; i++)
             {
-                continue;
+                ulong typeId = ComputeTypeId(fullName: implementers[i].ConcreteType.FullName);
+                switchSb.Append($"\n    i64 {typeId}, label %{caseLabels[index: i]}");
             }
 
-            // Parse: "declare <retType> @<name>(<params>)"
-            int declareIdx = declLine.IndexOf(value: "declare ");
-            if (declareIdx < 0)
-            {
-                continue;
-            }
+            switchSb.Append("\n  ]");
+            EmitLine(sb: sb, line: switchSb.ToString());
 
-            string afterDeclare = declLine[(declareIdx + 8)..];
-            int atIdx = afterDeclare.IndexOf(value: " @");
-            if (atIdx < 0)
+            // Emit one dispatch basic block per implementer
+            for (int i = 0; i < implementers.Count; i++)
             {
-                continue;
-            }
+                TypeInfo concreteType = implementers[i].ConcreteType;
+                string funcName = implementers[i].FuncName;
 
-            string retType = afterDeclare[..atIdx]
-               .Trim();
-            int openParen = afterDeclare.IndexOf(value: '(');
-            int closeParen = afterDeclare.LastIndexOf(value: ')');
-            if (openParen < 0 || closeParen < 0)
-            {
-                continue;
-            }
+                EmitLine(sb: sb, line: $"{caseLabels[index: i]}:");
 
-            string paramList = afterDeclare[(openParen + 1)..closeParen]
-               .Trim();
-
-            // Build parameter names
-            var paramNames = new List<string>();
-            var paramTypes = new List<string>();
-            if (!string.IsNullOrEmpty(value: paramList))
-            {
-                // Split param types (handles types like { i64, ptr } that contain commas)
-                paramTypes = SplitLlvmParams(paramList: paramList);
-                for (int i = 0; i < paramTypes.Count; i++)
+                if (concreteType is RecordTypeInfo)
                 {
-                    paramNames.Add(item: i == 0
-                        ? "%self"
-                        : $"%arg{i}");
+                    // Record methods take the struct by value — load it from the pointer
+                    string llvmType = GetLLVMType(type: concreteType);
+                    string loaded = NextTemp();
+                    EmitLine(sb: sb, line: $"  {loaded} = load {llvmType}, ptr %self");
+
+                    if (retType == "void")
+                    {
+                        EmitLine(sb: sb, line: $"  call void @{funcName}({llvmType} {loaded})");
+                        EmitLine(sb: sb, line: "  ret void");
+                    }
+                    else
+                    {
+                        string result = NextTemp();
+                        EmitLine(sb: sb,
+                            line: $"  {result} = call {retType} @{funcName}({llvmType} {loaded})");
+                        EmitLine(sb: sb, line: $"  ret {retType} {result}");
+                    }
+                }
+                else
+                {
+                    // Entity methods take ptr directly
+                    if (retType == "void")
+                    {
+                        EmitLine(sb: sb, line: $"  call void @{funcName}(ptr %self)");
+                        EmitLine(sb: sb, line: "  ret void");
+                    }
+                    else
+                    {
+                        string result = NextTemp();
+                        EmitLine(sb: sb,
+                            line: $"  {result} = call {retType} @{funcName}(ptr %self)");
+                        EmitLine(sb: sb, line: $"  ret {retType} {result}");
+                    }
                 }
             }
 
-            // Emit forwarding stub
-            StringBuilder sb = _functionDefinitions;
-            string paramDefs = string.Join(separator: ", ",
-                values: paramTypes.Select(selector: (t, i) => $"{t} {paramNames[index: i]}"));
-            EmitLine(sb: sb, line: $"define {retType} @{mangledName}({paramDefs}) {{");
-            EmitLine(sb: sb, line: "entry:");
-
-            string callArgs = string.Join(separator: ", ",
-                values: paramTypes.Select(selector: (t, i) => $"{t} {paramNames[index: i]}"));
-
-            if (retType == "void")
-            {
-                EmitLine(sb: sb, line: $"  call void @{concreteFunc}({callArgs})");
-                EmitLine(sb: sb, line: "  ret void");
-            }
-            else
-            {
-                EmitLine(sb: sb, line: $"  %fwd = call {retType} @{concreteFunc}({callArgs})");
-                EmitLine(sb: sb, line: $"  ret {retType} %fwd");
-            }
-
+            // Default case: unknown type_id — should never be reached in correct code
+            EmitLine(sb: sb, line: $"{defaultLabel}:");
+            EmitLine(sb: sb, line: "  unreachable");
             EmitLine(sb: sb, line: "}");
             EmitLine(sb: sb, line: "");
 
             _generatedFunctionDefs.Add(item: mangledName);
         }
     }
+
+    /// <summary>
+    /// Returns all concrete types that implement the given protocol and have the named method
+    /// already compiled (present in _generatedFunctionDefs).
+    /// </summary>
+    private List<(TypeInfo ConcreteType, string FuncName)> FindAllCompiledImplementers(
+        ProtocolTypeInfo protocol, string methodName)
+    {
+        var result = new List<(TypeInfo, string)>();
+        ProtocolTypeInfo protocolDef = protocol.GenericDefinition ?? protocol;
+        string protocolBaseName = protocolDef.Name;
+
+        var seen = new HashSet<string>();
+        foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Entity)
+                                           .Concat(second: _registry.GetTypesByCategory(
+                                                category: TypeCategory.Record))
+                                           .Concat(second: _registry.GetTypesByCategory(
+                                                category: TypeCategory.Crashable)))
+        {
+            if (type.IsGenericDefinition)
+            {
+                continue;
+            }
+
+            if (!seen.Add(item: type.FullName))
+            {
+                continue;
+            }
+
+            IReadOnlyList<TypeInfo>? protocols = type switch
+            {
+                EntityTypeInfo e => e.ImplementedProtocols,
+                RecordTypeInfo r => r.ImplementedProtocols,
+                CrashableTypeInfo c => c.ImplementedProtocols,
+                _ => null
+            };
+            if (protocols == null)
+            {
+                continue;
+            }
+
+            bool implements = protocols.Any(predicate: p =>
+                (GetGenericBaseName(type: p) ?? p.Name) == protocolBaseName);
+            if (!implements)
+            {
+                continue;
+            }
+
+            string candidateName =
+                Q(name: $"{type.FullName}.{SanitizeLLVMName(name: methodName)}");
+            if (_generatedFunctionDefs.Contains(item: candidateName))
+            {
+                result.Add(item: (type, candidateName));
+            }
+        }
+
+        return result;
+    }
+
 
     /// <summary>
     /// Finds the concrete implementation function for a protocol method.
@@ -121,11 +202,13 @@ public partial class LLVMCodeGenerator
         // Track whether we've already triggered a monomorphization for an uncompiled candidate
         bool triggered = false;
 
-        // Search all entity/record types (including resolutions) for implementers
+        // Search all entity/record/crashable types (including resolutions) for implementers
         var seen = new HashSet<string>();
         foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Entity)
                                            .Concat(second: _registry.GetTypesByCategory(
-                                                category: TypeCategory.Record)))
+                                                category: TypeCategory.Record))
+                                           .Concat(second: _registry.GetTypesByCategory(
+                                                category: TypeCategory.Crashable)))
         {
             if (type.IsGenericDefinition && protocol.TypeArguments == null)
             {
@@ -141,6 +224,7 @@ public partial class LLVMCodeGenerator
             {
                 EntityTypeInfo e => e.ImplementedProtocols,
                 RecordTypeInfo r => r.ImplementedProtocols,
+                CrashableTypeInfo c => c.ImplementedProtocols,
                 _ => null
             };
             if (protocols == null)
@@ -285,7 +369,7 @@ public partial class LLVMCodeGenerator
                         RoutineInfo? genericMethod =
                             _registry.LookupMethod(type: genericDef, methodName: methodName);
                         if (genericMethod != null &&
-                            !_pendingMonomorphizations.ContainsKey(key: candidateName))
+                            !_planner.HasEntry(mangledName: candidateName))
                         {
                             // Ensure entity type struct is defined for the concrete type
                             if (concreteType is EntityTypeInfo entityType)
@@ -307,21 +391,171 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
+    /// Triggers compilation (monomorphization) of every uncompiled concrete implementer
+    /// of the given protocol method. Returns the number of new compilations triggered.
+    /// Call before generating the dispatch stub so the switch table is complete.
+    /// </summary>
+    private int TriggerAllImplementerCompilations(ProtocolTypeInfo protocol, string methodName)
+    {
+        ProtocolTypeInfo protocolDef = protocol.GenericDefinition ?? protocol;
+        string protocolBaseName = protocolDef.Name;
+        int count = 0;
+
+        var seen = new HashSet<string>();
+        foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Entity)
+                                           .Concat(second: _registry.GetTypesByCategory(
+                                                category: TypeCategory.Record))
+                                           .Concat(second: _registry.GetTypesByCategory(
+                                                category: TypeCategory.Crashable)))
+        {
+            if (type.IsGenericDefinition && protocol.TypeArguments == null)
+                continue;
+            if (!seen.Add(item: type.Name))
+                continue;
+
+            IReadOnlyList<TypeInfo>? protocols = type switch
+            {
+                EntityTypeInfo e => e.ImplementedProtocols,
+                RecordTypeInfo r => r.ImplementedProtocols,
+                CrashableTypeInfo c => c.ImplementedProtocols,
+                _ => null
+            };
+            if (protocols == null)
+                continue;
+
+            foreach (TypeInfo impl in protocols)
+            {
+                string implBaseName = GetGenericBaseName(type: impl) ?? impl.Name;
+                if (implBaseName != protocolBaseName)
+                    continue;
+
+                // Verify type-argument match for resolved types (same logic as FindConcreteImplementer)
+                if (!type.IsGenericDefinition && protocol.TypeArguments is { Count: > 0 } &&
+                    impl.TypeArguments is { Count: > 0 })
+                {
+                    if (protocol.TypeArguments.Count != impl.TypeArguments.Count)
+                        continue;
+                    bool argsMatch = true;
+                    for (int i = 0; i < protocol.TypeArguments.Count; i++)
+                    {
+                        if (protocol.TypeArguments[index: i].FullName !=
+                            impl.TypeArguments[index: i].FullName)
+                        {
+                            argsMatch = false;
+                            break;
+                        }
+                    }
+
+                    if (!argsMatch)
+                        continue;
+                }
+
+                // Resolve concrete type (handle generic definitions)
+                TypeInfo concreteType = type;
+                if (type.IsGenericDefinition && protocol.TypeArguments is { Count: > 0 })
+                {
+                    ProtocolTypeInfo protocolGenDef = protocol.GenericDefinition ?? protocol;
+                    if (protocolGenDef.GenericParameters is { Count: > 0 } &&
+                        type.GenericParameters is { Count: > 0 })
+                    {
+                        var mapping = new Dictionary<string, TypeInfo>();
+                        for (int i = 0;
+                             i < protocolGenDef.GenericParameters.Count &&
+                             i < protocol.TypeArguments.Count;
+                             i++)
+                        {
+                            mapping[key: protocolGenDef.GenericParameters[index: i]] =
+                                protocol.TypeArguments[index: i];
+                        }
+
+                        var typeArgs = new List<TypeInfo>();
+                        if (impl.TypeArguments is { Count: > 0 })
+                        {
+                            foreach (TypeInfo implArg in impl.TypeArguments)
+                            {
+                                if (implArg is GenericParameterTypeInfo gp &&
+                                    mapping.TryGetValue(key: gp.Name, value: out TypeInfo? concrete))
+                                    typeArgs.Add(item: concrete);
+                                else if (mapping.TryGetValue(key: implArg.Name,
+                                             value: out TypeInfo? concrete2))
+                                    typeArgs.Add(item: concrete2);
+                                else
+                                    typeArgs.Add(item: implArg);
+                            }
+                        }
+                        else
+                        {
+                            typeArgs.AddRange(collection: protocol.TypeArguments);
+                        }
+
+                        if (typeArgs.Count == type.GenericParameters.Count)
+                            concreteType = _registry.GetOrCreateResolution(genericDef: type,
+                                typeArguments: typeArgs);
+                        else
+                            continue;
+                    }
+                    else
+                    {
+                        continue;
+                    }
+                }
+                else if (type.IsGenericDefinition)
+                {
+                    continue;
+                }
+
+                string candidateName =
+                    Q(name: $"{concreteType.FullName}.{SanitizeLLVMName(name: methodName)}");
+
+                // Skip if already compiled
+                if (_generatedFunctionDefs.Contains(item: candidateName))
+                    continue;
+
+                // Skip if already queued
+                if (_planner.HasEntry(mangledName: candidateName))
+                    continue;
+
+                // Trigger monomorphization for this implementer
+                TypeInfo? genericDef = concreteType switch
+                {
+                    EntityTypeInfo e => e.GenericDefinition,
+                    RecordTypeInfo r => r.GenericDefinition,
+                    _ => null
+                };
+                TypeInfo lookupType = genericDef ?? concreteType;
+                RoutineInfo? genericMethod =
+                    _registry.LookupMethod(type: lookupType, methodName: methodName);
+                if (genericMethod == null)
+                    continue;
+
+                // Force-declare if not yet declared: protocol dispatch routes to ANY conforming
+                // type at runtime via type_id, so all implementations must appear in the switch.
+                if (!_generatedFunctions.Contains(item: candidateName))
+                    GenerateFunctionDeclaration(routine: genericMethod, nameOverride: candidateName);
+
+                if (concreteType is EntityTypeInfo entityType)
+                    GenerateEntityType(entity: entityType);
+                else if (concreteType is CrashableTypeInfo crashableType)
+                    GenerateCrashableType(crashable: crashableType);
+
+                RecordMonomorphization(mangledName: candidateName,
+                    genericMethod: genericMethod,
+                    resolvedOwnerType: concreteType);
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    /// <summary>
     /// Finds a declaration line for a given mangled function name.
     /// </summary>
     private string? FindDeclarationLine(string mangledName)
     {
-        string searchTarget = $"@{mangledName}(";
-        foreach (string line in _functionDeclarations.ToString()
-                                                     .Split(separator: '\n'))
-        {
-            if (line.StartsWith(value: "declare ") && line.Contains(value: searchTarget))
-            {
-                return line;
-            }
-        }
-
-        return null;
+        return _rfFunctionDeclarations.TryGetValue(key: mangledName, value: out string? line)
+            ? line
+            : null;
     }
 
     /// <summary>

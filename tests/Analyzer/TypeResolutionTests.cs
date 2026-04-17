@@ -1,12 +1,13 @@
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Symbols;
-using SemanticAnalysis.Types;
-using SemanticAnalysis.Diagnostics;
+using SemanticVerification.Results;
+using SemanticVerification.Symbols;
+using SemanticVerification.Types;
+using Compiler.Diagnostics;
+using Compiler.Resolution;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
 
-using SemanticAnalysis.Enums;
+using SemanticVerification.Enums;
 using static TestHelpers;
 
 /// <summary>

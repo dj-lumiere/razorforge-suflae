@@ -1,8 +1,8 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis.Symbols;
-using SemanticAnalysis.Types;
+using SemanticVerification.Symbols;
+using SemanticVerification.Types;
 using SyntaxTree;
 
 /// <summary>
@@ -17,6 +17,7 @@ public partial class LLVMCodeGenerator
         int size = CalculateEntitySize(entity: entity);
 
         // Allocate memory
+        // TODO(C41): route through a typed allocator abstraction rather than calling rf_allocate_dynamic directly.
         string rawPtr = NextTemp();
         EmitLine(sb: sb, line: $"  {rawPtr} = call ptr @rf_allocate_dynamic(i64 {size})");
 
@@ -67,10 +68,38 @@ public partial class LLVMCodeGenerator
                 message: $"Unknown type in constructor: {expr.TypeName}");
         }
 
+        // When the name resolves to a generic definition but the expression has a concrete
+        // ResolvedType (e.g. Range[S64] lowered from RangeExpression), use the resolved type
+        // so EmitRecordConstruction gets the correct monomorphized LLVM struct name.
+        if (type.IsGenericDefinition && expr.ResolvedType != null)
+            type = expr.ResolvedType;
+
+        // In monomorphized generic bodies the AST has explicit TypeArguments (e.g. List[T](...)
+        // rewritten to List[DictEntry[...]](...)). Resolve them so we get the concrete type
+        // (e.g. List[DictEntry[S64,S64]]) instead of the generic definition (%Entity.List).
+        if (type.IsGenericDefinition && expr.TypeArguments is { Count: > 0 })
+        {
+            var resolvedArgs = expr.TypeArguments
+                .Select(ta => ResolveTypeArgument(ta: ta))
+                .Where(a => a != null)
+                .Select(a => a!)
+                .ToList();
+            if (resolvedArgs.Count == expr.TypeArguments.Count)
+                type = _registry.GetOrCreateResolution(genericDef: type, typeArguments: resolvedArgs);
+        }
+
         return type switch
         {
             EntityTypeInfo entity => EmitEntityConstruction(sb: sb, entity: entity, expr: expr),
             RecordTypeInfo record => EmitRecordConstruction(sb: sb, record: record, expr: expr),
+            // Crashable types are entity-like (heap-allocated, ptr semantics).
+            CrashableTypeInfo crashable => EmitCrashableConstruction(
+                sb: sb,
+                crashable: crashable,
+                arguments: expr.MemberVariables
+                    .Select(mv => (Expression)new NamedArgumentExpression(
+                        Name: mv.Name, Value: mv.Value, Location: expr.Location))
+                    .ToList()),
             _ => throw new InvalidOperationException(
                 message: $"Cannot construct type: {type.Category}")
         };
@@ -142,8 +171,8 @@ public partial class LLVMCodeGenerator
         // Multi-member-variable record: build struct value
         string typeName = GetRecordTypeName(record: record);
 
-        // Start with undef and insert each member variable
-        string result = "undef";
+        // Start with zeroinitializer and insert each member variable
+        string result = "zeroinitializer";
         for (int i = 0; i < expr.MemberVariables.Count && i < record.MemberVariables.Count; i++)
         {
             string value = EmitExpression(sb: sb, expr: expr.MemberVariables[index: i].Value);
@@ -204,7 +233,7 @@ public partial class LLVMCodeGenerator
 
         // Multi-member-variable record: build struct value
         string typeName = GetRecordTypeName(record: record);
-        string result = "undef";
+        string result = "zeroinitializer";
         for (int i = 0; i < arguments.Count && i < record.MemberVariables.Count; i++)
         {
             // Unwrap NamedArgumentExpression if present
@@ -256,6 +285,36 @@ public partial class LLVMCodeGenerator
         return entityPtr;
     }
 
+    /// <summary>
+    /// Emits crashable type construction: heap-allocate and initialize fields.
+    /// Mirrors entity construction — crashable types have entity (ptr) semantics.
+    /// </summary>
+    private string EmitCrashableConstruction(StringBuilder sb, CrashableTypeInfo crashable,
+        List<Expression> arguments)
+    {
+        string typeName = GetCrashableTypeName(crashable: crashable);
+        string sizeTemp = NextTemp();
+        EmitLine(sb: sb, line: $"  {sizeTemp} = getelementptr {typeName}, ptr null, i32 1");
+        string size = NextTemp();
+        EmitLine(sb: sb, line: $"  {size} = ptrtoint ptr {sizeTemp} to i64");
+        string crashablePtr = NextTemp();
+        EmitLine(sb: sb, line: $"  {crashablePtr} = call ptr @rf_allocate_dynamic(i64 {size})");
+
+        for (int i = 0; i < arguments.Count && i < crashable.MemberVariables.Count; i++)
+        {
+            Expression arg = arguments[index: i] is NamedArgumentExpression named
+                ? named.Value
+                : arguments[index: i];
+            string value = EmitExpression(sb: sb, expr: arg);
+            string fieldType = GetLLVMType(type: crashable.MemberVariables[index: i].Type);
+            string fieldPtr = NextTemp();
+            EmitLine(sb: sb,
+                line: $"  {fieldPtr} = getelementptr {typeName}, ptr {crashablePtr}, i32 0, i32 {i}");
+            EmitLine(sb: sb, line: $"  store {fieldType} {value}, ptr {fieldPtr}");
+        }
+
+        return crashablePtr;
+    }
 
     /// <summary>
     /// Generates code to read a member variable from an entity/record.
@@ -267,11 +326,7 @@ public partial class LLVMCodeGenerator
     /// <returns>The temporary variable holding the member variable value.</returns>
     private string EmitMemberVariableAccess(StringBuilder sb, MemberExpression expr)
     {
-        // Handle force-unwrap suffix: me.root! → load me.root (Maybe), then unwrap
-        bool isForceUnwrap = expr.PropertyName.EndsWith(value: '!');
-        string propertyName = isForceUnwrap
-            ? expr.PropertyName[..^1]
-            : expr.PropertyName;
+        string propertyName = expr.PropertyName;
 
         // Choice/Flags member access: emit constant value directly (no target expression to evaluate)
         TypeInfo? earlyObjectType = GetExpressionType(expr: expr.Object);
@@ -336,19 +391,13 @@ public partial class LLVMCodeGenerator
                     line: $"  {innerPtr} = extractvalue {recordTypeName} {target}, 0");
             }
 
-            string result = EmitEntityMemberVariableRead(sb: sb,
+            return EmitEntityMemberVariableRead(sb: sb,
                 entityPtr: innerPtr,
                 entity: innerEntity,
                 memberVariableName: propertyName);
-            return isForceUnwrap
-                ? EmitMemberForceUnwrap(sb: sb,
-                    maybeValue: result,
-                    ownerType: targetType,
-                    memberName: propertyName)
-                : result;
         }
 
-        string value = targetType switch
+        return targetType switch
         {
             EntityTypeInfo entity => EmitEntityMemberVariableRead(sb: sb,
                 entityPtr: target,
@@ -358,105 +407,20 @@ public partial class LLVMCodeGenerator
                 recordValue: target,
                 record: record,
                 memberVariableName: propertyName),
+            CrashableTypeInfo crashable => EmitCrashableMemberVariableRead(sb: sb,
+                crashablePtr: target,
+                crashable: crashable,
+                memberVariableName: propertyName),
+            TupleTypeInfo tuple => EmitTupleMemberVariableRead(sb: sb,
+                tupleValue: target,
+                tuple: tuple,
+                memberVariableName: propertyName),
+            // Synthetic type_id access generated by PatternLoweringPass for variant subjects.
+            VariantTypeInfo variant when propertyName == "type_id" =>
+                EmitVariantTagAccess(sb: sb, variantValue: target, variant: variant),
             _ => throw new InvalidOperationException(
                 message: $"Cannot access member variable on type: {targetType.Category}")
         };
-
-        return isForceUnwrap
-            ? EmitMemberForceUnwrap(sb: sb,
-                maybeValue: value,
-                ownerType: targetType,
-                memberName: propertyName)
-            : value;
-    }
-
-    /// <summary>
-    /// Force-unwraps a Maybe value from a member variable access (me.field!).
-    /// The value is a { i64, ptr } where tag=0 is None, tag=1 is valid.
-    /// </summary>
-    private string EmitMemberForceUnwrap(StringBuilder sb, string maybeValue, TypeInfo ownerType,
-        string memberName)
-    {
-        // Find the member variable type to determine the unwrapped type
-        MemberVariableInfo? memberVar = ownerType switch
-        {
-            EntityTypeInfo e => e.LookupMemberVariable(memberVariableName: memberName),
-            RecordTypeInfo r => r.LookupMemberVariable(memberVariableName: memberName),
-            _ => null
-        };
-
-        TypeInfo? memberType = memberVar?.Type;
-        if (memberType != null && ownerType is
-                { IsGenericResolution: true, TypeArguments: not null })
-        {
-            memberType = ResolveGenericMemberType(memberType: memberType, ownerType: ownerType);
-        }
-
-        // Determine the wrapper LLVM type (Maybe[T]) and inner value type
-        string wrapperLlvmType = GetLLVMType(type: memberType!);
-        TypeInfo? valueType = memberType switch
-        {
-            RecordTypeInfo r when IsCarrierType(type: r) &&
-                                  r.TypeArguments is { Count: > 0 } => r.TypeArguments[index: 0],
-            _ => null
-        };
-
-        // Declare llvm.trap if not already declared
-        if (_declaredNativeFunctions.Add(item: "llvm.trap"))
-        {
-            EmitLine(sb: _functionDeclarations,
-                line: "declare void @llvm.trap() noreturn nounwind");
-        }
-
-        // Alloca and store the Maybe value using its proper LLVM type
-        string allocaPtr = NextTemp();
-        EmitEntryAlloca(llvmName: allocaPtr, llvmType: wrapperLlvmType);
-        EmitLine(sb: sb, line: $"  store {wrapperLlvmType} {maybeValue}, ptr {allocaPtr}");
-
-        // Extract tag (Maybe always uses i1 tag)
-        string tagType = "i1";
-        string tagPtr = NextTemp();
-        string tag = NextTemp();
-        EmitLine(sb: sb,
-            line: $"  {tagPtr} = getelementptr {wrapperLlvmType}, ptr {allocaPtr}, i32 0, i32 0");
-        EmitLine(sb: sb, line: $"  {tag} = load {tagType}, ptr {tagPtr}");
-
-        string isValid = NextTemp();
-        EmitLine(sb: sb, line: $"  {isValid} = icmp eq {tagType} {tag}, 1");
-
-        string okLabel = NextLabel(prefix: "unwrap_ok");
-        string failLabel = NextLabel(prefix: "unwrap_fail");
-        EmitLine(sb: sb, line: $"  br i1 {isValid}, label %{okLabel}, label %{failLabel}");
-
-        // Fail: trap
-        EmitLine(sb: sb, line: $"{failLabel}:");
-        _currentBlock = failLabel;
-        EmitLine(sb: sb, line: "  call void @llvm.trap()");
-        EmitLine(sb: sb, line: "  unreachable");
-
-        // OK: extract value from field 1
-        EmitLine(sb: sb, line: $"{okLabel}:");
-        _currentBlock = okLabel;
-        string handlePtr = NextTemp();
-        EmitLine(sb: sb,
-            line:
-            $"  {handlePtr} = getelementptr {wrapperLlvmType}, ptr {allocaPtr}, i32 0, i32 1");
-
-        // Entity: field 1 is ptr — return it directly
-        if (valueType is EntityTypeInfo)
-        {
-            string entityPtr = NextTemp();
-            EmitLine(sb: sb, line: $"  {entityPtr} = load ptr, ptr {handlePtr}");
-            return entityPtr;
-        }
-
-        // Record: field 1 is inline T — load from handlePtr
-        string llvmValueType = valueType != null
-            ? GetLLVMType(type: valueType)
-            : "ptr";
-        string result = NextTemp();
-        EmitLine(sb: sb, line: $"  {result} = load {llvmValueType}, ptr {handlePtr}");
-        return result;
     }
 
     /// <summary>
@@ -510,6 +474,46 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
+    /// Generates code to read a member variable from a crashable type (heap-allocated, pointer).
+    /// Uses GEP + load, same structural pattern as entities.
+    /// </summary>
+    private string EmitCrashableMemberVariableRead(StringBuilder sb, string crashablePtr,
+        CrashableTypeInfo crashable, string memberVariableName)
+    {
+        int memberVariableIndex = -1;
+        MemberVariableInfo? memberVariable = null;
+        for (int i = 0; i < crashable.MemberVariables.Count; i++)
+        {
+            if (crashable.MemberVariables[index: i].Name == memberVariableName)
+            {
+                memberVariableIndex = i;
+                memberVariable = crashable.MemberVariables[index: i];
+                break;
+            }
+        }
+
+        if (memberVariableIndex < 0 || memberVariable == null)
+        {
+            throw new InvalidOperationException(
+                message:
+                $"Member variable '{memberVariableName}' not found on crashable '{crashable.Name}'");
+        }
+
+        string typeName = GetCrashableTypeName(crashable: crashable);
+        string memberVariableType = GetLLVMType(type: memberVariable.Type);
+
+        string memberVariablePtr = NextTemp();
+        EmitLine(sb: sb,
+            line:
+            $"  {memberVariablePtr} = getelementptr {typeName}, ptr {crashablePtr}, i32 0, i32 {memberVariableIndex}");
+
+        string value = NextTemp();
+        EmitLine(sb: sb, line: $"  {value} = load {memberVariableType}, ptr {memberVariablePtr}");
+
+        return value;
+    }
+
+    /// <summary>
     /// Generates code to read a member variable from a record (value type).
     /// Uses extractvalue instruction.
     /// </summary>
@@ -548,7 +552,7 @@ public partial class LLVMCodeGenerator
         {
             throw new InvalidOperationException(
                 message:
-                $"Member variable '{memberVariableName}' not found on record '{record.Name}'");
+                $"Member variable '{memberVariableName}' not found on record '{record.FullName}'");
         }
 
         string typeName = GetRecordTypeName(record: record);
@@ -562,6 +566,40 @@ public partial class LLVMCodeGenerator
         return value;
     }
 
+
+    /// <summary>
+    /// Extracts the i64 type_id tag (field 0) from a variant struct value via <c>extractvalue</c>.
+    /// Generated by <see cref="PatternLoweringPass"/> for variant <c>TypePattern</c> conditions.
+    /// </summary>
+    private string EmitVariantTagAccess(StringBuilder sb, string variantValue,
+        VariantTypeInfo variant)
+    {
+        string typeName = GetVariantTypeName(variant: variant);
+        string tag = NextTemp();
+        EmitLine(sb: sb, line: $"  {tag} = extractvalue {typeName} {variantValue}, 0");
+        return tag;
+    }
+
+    /// <summary>
+    /// Generates code to read a field from a tuple value (value type — uses extractvalue).
+    /// </summary>
+    private string EmitTupleMemberVariableRead(StringBuilder sb, string tupleValue,
+        TupleTypeInfo tuple, string memberVariableName)
+    {
+        // Field names are item0, item1, ... — parse the index directly
+        if (!memberVariableName.StartsWith(value: "item", comparisonType: StringComparison.Ordinal) ||
+            !int.TryParse(s: memberVariableName.AsSpan(start: 4), result: out int index) ||
+            index < 0 || index >= tuple.ElementTypes.Count)
+        {
+            throw new InvalidOperationException(
+                message: $"Member variable '{memberVariableName}' not found on tuple '{tuple.Name}'");
+        }
+
+        string tupleTypeName = GetTupleTypeName(tuple: tuple);
+        string result = NextTemp();
+        EmitLine(sb: sb, line: $"  {result} = extractvalue {tupleTypeName} {tupleValue}, {index}");
+        return result;
+    }
 
     /// <summary>
     /// Generates code to write a member variable on an entity.
@@ -599,19 +637,35 @@ public partial class LLVMCodeGenerator
 
         // Auto-wrap non-Maybe values into Maybe when assigning to nullable member variables.
         // Skip wrapping if: value is already a Maybe type, or value is zeroinitializer (None literal).
+        // Record Maybe { i1 present, T value }: insertvalue i1 1 at 0, T at 1.
+        // Entity Maybe { Snatched[T] }:         single ptr field — non-null ptr = present.
         if (IsMaybeType(type: memberVariable.Type) &&
             !(valueType != null && IsMaybeType(type: valueType)) && value != "zeroinitializer")
         {
             string memberCarrierType = GetLLVMType(type: memberVariable.Type);
-            string wrapped = NextTemp();
-            EmitLine(sb: sb,
-                line:
-                $"  {wrapped} = insertvalue {memberCarrierType} undef, i1 1, 0");
-            string wrapped2 = NextTemp();
-            EmitLine(sb: sb,
-                line:
-                $"  {wrapped2} = insertvalue {memberCarrierType} {wrapped}, ptr {value}, 1");
-            value = wrapped2;
+            bool innerIsEntity = memberVariable.Type.TypeArguments is { Count: 1 }
+                && memberVariable.Type.TypeArguments[0] is EntityTypeInfo;
+            if (innerIsEntity)
+            {
+                // Entity Maybe { Snatched[T] }: single ptr field.
+                string wrapped = NextTemp();
+                EmitLine(sb: sb,
+                    line: $"  {wrapped} = insertvalue {memberCarrierType} zeroinitializer, ptr {value}, 0");
+                value = wrapped;
+            }
+            else
+            {
+                string innerLlvm = memberVariable.Type.TypeArguments is { Count: 1 }
+                    ? GetLLVMType(type: memberVariable.Type.TypeArguments[index: 0])
+                    : "ptr";
+                string wrapped = NextTemp();
+                EmitLine(sb: sb,
+                    line: $"  {wrapped} = insertvalue {memberCarrierType} zeroinitializer, i1 1, 0");
+                string wrapped2 = NextTemp();
+                EmitLine(sb: sb,
+                    line: $"  {wrapped2} = insertvalue {memberCarrierType} {wrapped}, {innerLlvm} {value}, 1");
+                value = wrapped2;
+            }
         }
 
         // GEP to get member variable pointer

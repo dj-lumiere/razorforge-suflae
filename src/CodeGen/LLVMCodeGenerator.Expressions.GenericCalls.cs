@@ -1,8 +1,8 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis.Symbols;
-using SemanticAnalysis.Types;
+using SemanticVerification.Symbols;
+using SemanticVerification.Types;
 using SyntaxTree;
 
 /// <summary>
@@ -16,8 +16,14 @@ public partial class LLVMCodeGenerator
         // e.g., Snatched[U8](ptr_value) → just pass through the argument
         if (generic.Object is IdentifierExpression id && id.Name == generic.MethodName)
         {
+            // Only use id.ResolvedType as a type-constructor fallback when it is an actual
+            // data type (entity, record, etc.).  RoutineTypeInfo (set when the identifier
+            // resolves to a free function like ptrtoint) and ErrorTypeInfo must be excluded;
+            // both would pass the "as TypeInfo" cast but do not represent constructable types.
             TypeInfo? calledType = LookupTypeInCurrentModule(name: id.Name) ??
-                                   id.ResolvedType as TypeInfo;
+                                   (id.ResolvedType is not RoutineTypeInfo and not ErrorTypeInfo
+                                       ? id.ResolvedType as TypeInfo
+                                       : null);
             if (calledType != null)
             {
                 // Resolve type arguments (apply type substitutions for monomorphization)
@@ -28,6 +34,24 @@ public partial class LLVMCodeGenerator
                     if (resolved != null)
                     {
                         resolvedTypeArgs.Add(item: resolved);
+                    }
+                }
+
+                // Fallback: if ResolveTypeArgument missed some args (e.g., the rewritten name
+                // "DictEntry[Core.S64, Core.S64]" is not yet in _resolutions), use
+                // _typeSubstitutions directly by matching generic parameter names to values.
+                // This handles stdlib constructor calls like List[T](data:...) inside
+                // List[T].$create monomorphized for a concrete T.
+                if (calledType.IsGenericDefinition &&
+                    resolvedTypeArgs.Count < calledType.GenericParameters!.Count &&
+                    _typeSubstitutions != null &&
+                    generic.TypeArguments.Count == calledType.GenericParameters.Count)
+                {
+                    resolvedTypeArgs.Clear();
+                    foreach (string paramName in calledType.GenericParameters)
+                    {
+                        if (_typeSubstitutions.TryGetValue(key: paramName, value: out TypeInfo? sub))
+                            resolvedTypeArgs.Add(item: sub);
                     }
                 }
 
@@ -45,13 +69,16 @@ public partial class LLVMCodeGenerator
                     return EmitFunctionCall(sb: sb,
                         functionName: generic.ResolvedRoutine.Name,
                         arguments: generic.Arguments,
-                        resolvedRoutine: generic.ResolvedRoutine);
+                        resolvedRoutine: generic.ResolvedRoutine,
+                        resolvedReturnType: resolvedFullType);
                 }
 
-                // Named-field construction: Type[T](field1: val1, field2: val2, ...)
-                // e.g., List[T](data: ..., count: ..., capacity: ...) during monomorphization
+                // Multi-field construction: Type[T](val1, val2, ...) or Type[T](f1: val1, f2: val2, ...)
+                // ExpressionLoweringPass strips NamedArgumentExpression wrappers from generic
+                // method call args, so we must NOT require All(NamedArg) here. Positional args
+                // (after stripping) are fine — EmitEntityConstruction/EmitRecordConstruction both
+                // accept positional as well as named (NamedArgumentExpression) expressions.
                 if (generic.Arguments.Count > 1 &&
-                    generic.Arguments.All(predicate: a => a is NamedArgumentExpression) &&
                     resolvedFullType is EntityTypeInfo resolvedEntity)
                 {
                     return EmitEntityConstruction(sb: sb,
@@ -62,7 +89,6 @@ public partial class LLVMCodeGenerator
                 }
 
                 if (generic.Arguments.Count > 1 &&
-                    generic.Arguments.All(predicate: a => a is NamedArgumentExpression) &&
                     resolvedFullType is RecordTypeInfo resolvedRecord)
                 {
                     return EmitRecordConstruction(sb: sb,
@@ -160,9 +186,8 @@ public partial class LLVMCodeGenerator
                                     : "ptr";
                             if (!_generatedFunctions.Contains(item: funcName))
                             {
-                                EmitLine(sb: _functionDeclarations,
-                                    line: $"declare {retType} @{funcName}({argLlvm})");
-                                _generatedFunctions.Add(item: funcName);
+                                GenerateFunctionDeclaration(routine: creator,
+                                    nameOverride: funcName);
                             }
 
                             string createResult = NextTemp();
@@ -195,7 +220,7 @@ public partial class LLVMCodeGenerator
                         string result = NextTemp();
                         EmitLine(sb: sb,
                             line:
-                            $"  {result} = insertvalue {targetType} undef, ptr {argValue}, 0");
+                            $"  {result} = insertvalue {targetType} zeroinitializer, ptr {argValue}, 0");
                         return result;
                     }
 
@@ -271,9 +296,8 @@ public partial class LLVMCodeGenerator
                             : "ptr";
                         if (!_generatedFunctions.Contains(item: funcName))
                         {
-                            EmitLine(sb: _functionDeclarations,
-                                line: $"declare {retType} @{funcName}()");
-                            _generatedFunctions.Add(item: funcName);
+                            GenerateFunctionDeclaration(routine: creator,
+                                nameOverride: funcName);
                         }
 
                         string result = NextTemp();
@@ -642,10 +666,8 @@ public partial class LLVMCodeGenerator
         // Ensure the function is declared
         if (!_generatedFunctions.Contains(item: mangledName))
         {
-            string declRetType = returnType;
-            EmitLine(sb: _functionDeclarations,
-                line:
-                $"declare {declRetType} @{mangledName}({string.Join(separator: ", ", values: argTypes)})");
+            _rfFunctionDeclarations[key: mangledName] =
+                $"declare {returnType} @{mangledName}({string.Join(separator: ", ", values: argTypes)})";
             _generatedFunctions.Add(item: mangledName);
         }
 
@@ -952,9 +974,33 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Resolves unsubstituted generic parameters in a type through _typeSubstitutions.
     /// E.g., during monomorphization with {U→S64}: Snatched[U] → Snatched[S64], U → S64.
+    /// Also unconditionally converts WrapperTypeInfo to RecordTypeInfo so that LookupMethod
+    /// and LLVM name mangling work correctly even in non-generic (non-monomorphized) contexts.
     /// </summary>
     private TypeInfo ApplyTypeSubstitutions(TypeInfo type)
     {
+        // WrapperTypeInfo (e.g., Snatched[Byte]) must always be converted to the real RecordTypeInfo
+        // (e.g., Core.Snatched[Byte]) so LookupMethod uses the right key and the LLVM mangled name
+        // uses "Core.Snatched[Byte]" rather than "Snatched[Core.Byte]". This is needed even in
+        // non-generic contexts (_typeSubstitutions == null) because the SA stores WrapperTypeInfo
+        // as ResolvedType on call expressions even when the inner type is already concrete.
+        if (type is WrapperTypeInfo wrapper)
+        {
+            TypeInfo? wrapperRecordDef = _registry.LookupType(name: wrapper.Name);
+            if (wrapperRecordDef is { IsGenericDefinition: true } &&
+                wrapper.TypeArguments is { Count: > 0 })
+            {
+                var resolvedArgs = _typeSubstitutions != null
+                    ? wrapper.TypeArguments
+                               .Select(selector: a => SubstituteTypeParams(type: a,
+                                   substitutions: _typeSubstitutions))
+                               .ToList()
+                    : [.. wrapper.TypeArguments];
+                return _registry.GetOrCreateResolution(genericDef: wrapperRecordDef,
+                    typeArguments: resolvedArgs);
+            }
+        }
+
         if (_typeSubstitutions == null)
         {
             return type;
@@ -1046,6 +1092,29 @@ public partial class LLVMCodeGenerator
                     return _registry.GetOrCreateResolution(genericDef: genericBase,
                         typeArguments: resolvedArgs);
                 }
+            }
+        }
+
+        // WrapperTypeInfo (e.g., Snatched[T] → Snatched[S64] when T→S64, or Snatched[S64] stays
+        // Snatched[S64]). WrapperTypeInfo is used for member variable types when the stdlib loader
+        // resolves Snatched[T] as a wrapper rather than the RecordTypeInfo generic resolution.
+        // Always resolve to the real RecordTypeInfo so LookupMethod works correctly and the LLVM
+        // mangled name uses "Core.Snatched[S64]" (from RecordTypeInfo.FullName) not
+        // "Snatched[Core.S64]" (from WrapperTypeInfo.FullName with Module=null).
+        if (type is WrapperTypeInfo wrapper)
+        {
+            TypeInfo resolvedInner = SubstituteTypeParams(type: wrapper.InnerType, substitutions: substitutions);
+            TypeInfo? wrapperRecordDef = _registry.LookupType(name: wrapper.Name);
+            if (wrapperRecordDef is { IsGenericDefinition: true })
+            {
+                return _registry.GetOrCreateResolution(genericDef: wrapperRecordDef,
+                    typeArguments: new List<TypeInfo> { resolvedInner });
+            }
+
+            if (!ReferenceEquals(resolvedInner, wrapper.InnerType))
+            {
+                return new WrapperTypeInfo(wrapperName: wrapper.Name, innerType: resolvedInner,
+                    isReadOnly: wrapper.IsReadOnly);
             }
         }
 

@@ -1,5 +1,5 @@
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Diagnostics;
+using SemanticVerification.Results;
+using Compiler.Diagnostics;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -197,7 +197,7 @@ public class TypeProhibitionTests
                         """;
 
         AnalysisResult result = Analyze(source: source);
-        // No GrammarException thrown — lexer accepts ASCII byte literals
+        // No GrammarException thrown ??lexer accepts ASCII byte literals
         Assert.NotNull(@object: result);
     }
 

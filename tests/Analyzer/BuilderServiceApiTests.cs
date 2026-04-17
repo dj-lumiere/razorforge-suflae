@@ -1,5 +1,5 @@
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Diagnostics;
+using SemanticVerification.Results;
+using Compiler.Diagnostics;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -7,13 +7,13 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// Full API tests for BuilderService — verifies every per-type routine, standalone routine,
+/// Full API tests for BuilderService ??verifies every per-type routine, standalone routine,
 /// and platform/build info routine resolves correctly with 'import BuilderService'.
 /// Also verifies import-gating for each category and that wired routines are unaffected.
 /// </summary>
 public class BuilderServiceApiTests
 {
-    #region Per-Type Routines — Records
+    #region Per-Type Routines ??Records
     /// <summary>
     /// Tests Record_TypeName_Available.
     /// </summary>
@@ -277,7 +277,7 @@ public class BuilderServiceApiTests
 
     #endregion
 
-    #region Per-Type Routines — Entities
+    #region Per-Type Routines ??Entities
     /// <summary>
     /// Tests Entity_TypeName_Available.
     /// </summary>
@@ -338,7 +338,7 @@ public class BuilderServiceApiTests
 
     #endregion
 
-    #region Per-Type Routines — Choices
+    #region Per-Type Routines ??Choices
     /// <summary>
     /// Tests Choice_TypeName_Available.
     /// </summary>
@@ -384,7 +384,7 @@ public class BuilderServiceApiTests
 
     #endregion
 
-    #region Per-Type Routines — Import Gating (every routine without import)
+    #region Per-Type Routines ??Import Gating (every routine without import)
     /// <summary>
     /// Tests PerTypeRoutine_WithoutImport_ReportsError.
     /// </summary>
@@ -460,7 +460,7 @@ public class BuilderServiceApiTests
 
     #endregion
 
-    #region Standalone Routines — Source Location
+    #region Standalone Routines ??Source Location
     /// <summary>
     /// Tests SourceLocationRoutine_WithoutImport_ReportsError.
     /// </summary>
@@ -518,7 +518,7 @@ public class BuilderServiceApiTests
 
     #endregion
 
-    #region Standalone Routines — Platform/Build Info
+    #region Standalone Routines ??Platform/Build Info
     /// <summary>
     /// Tests PlatformRoutine_WithoutImport_ReportsError.
     /// </summary>
@@ -574,7 +574,7 @@ public class BuilderServiceApiTests
 
     #endregion
 
-    #region Wired Routines — Never Gated
+    #region Wired Routines ??Never Gated
     /// <summary>
     /// Tests WiredRoutine_WithoutImport_NoError.
     /// </summary>
@@ -697,7 +697,7 @@ public class BuilderServiceApiTests
 
     #endregion
 
-    #region data_size — RazorForge Only
+    #region data_size ??RazorForge Only
     /// <summary>
     /// Tests DataSize_InSuflae_NotAvailable.
     /// </summary>
@@ -726,7 +726,7 @@ public class BuilderServiceApiTests
 
     #endregion
 
-    #region Per-Type Routines — On Different Type Kinds
+    #region Per-Type Routines ??On Different Type Kinds
     /// <summary>
     /// Tests Entity_AllMetadata_Available.
     /// </summary>

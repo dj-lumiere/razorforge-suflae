@@ -1,6 +1,6 @@
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Diagnostics;
-using SemanticAnalysis.Symbols;
+using SemanticVerification.Results;
+using Compiler.Diagnostics;
+using SemanticVerification.Symbols;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -67,7 +67,7 @@ public class ErrorHandlingValidationTests
     /// </summary>
 
     [Fact]
-    public void Analyze_FailableWithoutThrowOrAbsent_ReportsError()
+    public void Analyze_FailableWithoutThrowOrAbsent_ReportsWarning()
     {
         string source = """
                         routine useless!() -> S32
@@ -75,8 +75,8 @@ public class ErrorHandlingValidationTests
                         """;
 
         AnalysisResult result = Analyze(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrowOrAbsent);
+        Assert.Contains(collection: result.Warnings,
+            filter: w => w.Code == SemanticWarningCode.FailableRoutineNeverCrashes);
     }
     /// <summary>
     /// Tests Analyze_FailableWithThrow_NoError.
@@ -222,8 +222,8 @@ public class ErrorHandlingValidationTests
                         """;
 
         AnalysisResult result = Analyze(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.UnhandledCrashableCall);
+        Assert.Contains(collection: result.Warnings,
+            filter: w => w.Code == SemanticWarningCode.UnhandledCrashableCall);
     }
     /// <summary>
     /// Tests Analyze_FailableCallAsStatement_InFailable_NoError.
@@ -244,8 +244,8 @@ public class ErrorHandlingValidationTests
                         """;
 
         AnalysisResult result = Analyze(source: source);
-        Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.UnhandledCrashableCall);
+        Assert.DoesNotContain(collection: result.Warnings,
+            filter: w => w.Code == SemanticWarningCode.UnhandledCrashableCall);
     }
 
     /// <summary>

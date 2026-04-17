@@ -28,5 +28,7 @@ public enum ConstraintKind
     ConstGeneric,
 
     /// <summary>Type equality constraint (where T in [s32, u8])</summary>
-    TypeEquality
+    TypeEquality,
+
+    Crashable
 }

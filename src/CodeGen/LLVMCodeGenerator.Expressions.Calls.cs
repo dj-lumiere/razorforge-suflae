@@ -1,8 +1,9 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis.Symbols;
-using SemanticAnalysis.Types;
+using Compiler.Desugaring;
+using SemanticVerification.Symbols;
+using SemanticVerification.Types;
 using SyntaxTree;
 
 /// <summary>
@@ -314,13 +315,55 @@ public partial class LLVMCodeGenerator
     }
 
     private string EmitFunctionCall(StringBuilder sb, string functionName,
-        List<Expression> arguments, RoutineInfo? resolvedRoutine = null)
+        List<Expression> arguments, RoutineInfo? resolvedRoutine = null,
+        TypeInfo? resolvedReturnType = null)
     {
         bool isFailableCallSyntax = functionName.EndsWith(value: '!');
         // Strip failable '!' suffix — registry stores names without it
         if (isFailableCallSyntax)
         {
             functionName = functionName[..^1];
+        }
+
+        // Indirect call through a local function-pointer variable (e.g., compare(a: x, b: y)
+        // where 'compare' is a parameter of type Routine[(T, T), Bool]).
+        if (_localVariables.TryGetValue(key: functionName, value: out TypeInfo? localType) &&
+            localType is RoutineTypeInfo routineTypeInfo)
+        {
+            string llvmName =
+                _localVarLLVMNames.TryGetValue(key: functionName, value: out string? unique)
+                    ? unique
+                    : functionName;
+            string fpVal = NextTemp();
+            EmitLine(sb: sb, line: $"  {fpVal} = load ptr, ptr %{llvmName}.addr");
+
+            var fpArgValues = new List<string>();
+            var fpArgTypes = new List<string>();
+            foreach (Expression arg in arguments)
+            {
+                string v = EmitExpression(sb: sb, expr: arg);
+                fpArgValues.Add(item: v);
+                TypeInfo? argType = GetExpressionType(expr: arg);
+                fpArgTypes.Add(item: argType != null ? GetLLVMType(type: argType) : "i64");
+            }
+
+            string retLlvm = routineTypeInfo.ReturnType != null
+                ? GetLLVMType(type: routineTypeInfo.ReturnType)
+                : "void";
+
+            string callArgs = BuildCallArgs(types: fpArgTypes, values: fpArgValues);
+            if (retLlvm == "void")
+            {
+                EmitLine(sb: sb, line: $"  call void {fpVal}({callArgs})");
+                return "undef";
+            }
+            else
+            {
+                string result = NextTemp();
+                EmitLine(sb: sb,
+                    line: $"  {result} = call {retLlvm} {fpVal}({callArgs})");
+                return result;
+            }
         }
 
         // Primitive type conversion: U8(val), S32(val), F64(val), etc.
@@ -339,6 +382,43 @@ public partial class LLVMCodeGenerator
             }
         }
 
+        // Record/entity direct field construction — check BEFORE routine lookup so a user-defined
+        // 0-arg routine with the same name doesn't shadow the constructor call.
+        // e.g., NotImplementedError(feature: "warp drive") where NotImplementedError() also exists.
+        {
+            TypeInfo? ctorType = LookupTypeInCurrentModule(name: functionName);
+            if (ctorType is RecordTypeInfo ctorRecord && ctorRecord.MemberVariables.Count > 0 &&
+                arguments.Count == ctorRecord.MemberVariables.Count && arguments.All(
+                    predicate: a =>
+                        a is NamedArgumentExpression namedArg &&
+                        ctorRecord.MemberVariables.Any(
+                            predicate: mv => mv.Name == namedArg.Name)))
+            {
+                return EmitRecordConstruction(sb: sb, record: ctorRecord, arguments: arguments);
+            }
+
+            if (ctorType is EntityTypeInfo ctorEntity && ctorEntity.MemberVariables.Count > 0 &&
+                arguments.Count == ctorEntity.MemberVariables.Count && arguments.All(
+                    predicate: a =>
+                        a is NamedArgumentExpression namedArg &&
+                        ctorEntity.MemberVariables.Any(
+                            predicate: mv => mv.Name == namedArg.Name)))
+            {
+                return EmitEntityConstruction(sb: sb, entity: ctorEntity, arguments: arguments);
+            }
+
+            if (ctorType is CrashableTypeInfo ctorCrashable &&
+                arguments.Count == ctorCrashable.MemberVariables.Count && arguments.All(
+                    predicate: a => ctorCrashable.MemberVariables.Count == 0 ||
+                                    a is NamedArgumentExpression namedArg &&
+                                    ctorCrashable.MemberVariables.Any(
+                                        predicate: mv => mv.Name == namedArg.Name)))
+            {
+                return EmitCrashableConstruction(sb: sb, crashable: ctorCrashable,
+                    arguments: arguments);
+            }
+        }
+
         // Use semantic analyzer's resolved routine if available (e.g., generic overload)
         // Otherwise look up the routine — try full name first, then short name fallback
         RoutineInfo? routine = resolvedRoutine ??
@@ -352,7 +432,7 @@ public partial class LLVMCodeGenerator
         if (routine is { GenericDefinition: not null, TypeArguments: not null })
         {
             string monoName = MangleFunctionName(routine: routine);
-            if (!_pendingMonomorphizations.ContainsKey(key: monoName))
+            if (!_planner.HasEntry(mangledName: monoName))
             {
                 RoutineInfo? genericDef = routine.GenericDefinition;
                 var typeSubs = new Dictionary<string, TypeInfo>();
@@ -362,13 +442,13 @@ public partial class LLVMCodeGenerator
                         (TypeInfo)routine.TypeArguments[index: i];
                 }
 
-                // Use [generic] marker so FindGenericAstRoutine skips non-generic overloads
+                // Use [generic] marker so FindAstRoutine skips non-generic overloads
                 string genericAstName = $"{genericDef.Name}[generic]";
-                _pendingMonomorphizations[key: monoName] = new MonomorphizationEntry(
+                _planner.AddDirectEntry(mangledName: monoName, entry: new MonomorphizationEntry(
                     GenericMethod: genericDef,
                     ResolvedOwnerType: null!,
                     TypeSubstitutions: typeSubs,
-                    GenericAstName: genericAstName);
+                    GenericAstName: genericAstName));
             }
         }
 
@@ -398,6 +478,17 @@ public partial class LLVMCodeGenerator
                             entity.MemberVariables.Any(predicate: mv => mv.Name == named2.Name)))
                 {
                     return EmitEntityConstruction(sb: sb, entity: entity, arguments: arguments);
+                }
+
+                if (calledType is CrashableTypeInfo crashable &&
+                    arguments.Count == crashable.MemberVariables.Count && arguments.All(
+                        predicate: a => crashable.MemberVariables.Count == 0 ||
+                                        a is NamedArgumentExpression named3 &&
+                                        crashable.MemberVariables.Any(
+                                            predicate: mv => mv.Name == named3.Name)))
+                {
+                    return EmitCrashableConstruction(sb: sb, crashable: crashable,
+                        arguments: arguments);
                 }
 
                 // Zero-arg entity construction → try $create() first, then null
@@ -567,7 +658,7 @@ public partial class LLVMCodeGenerator
 
                     // Record monomorphization
                     string monoName = MangleFunctionName(routine: routine);
-                    if (!_pendingMonomorphizations.ContainsKey(key: monoName))
+                    if (!_planner.HasEntry(mangledName: monoName))
                     {
                         var typeSubs = new Dictionary<string, TypeInfo>();
                         for (int i = 0; i < genericOverload.GenericParameters.Count; i++)
@@ -577,11 +668,11 @@ public partial class LLVMCodeGenerator
                         }
 
                         string genericAstName = $"{genericOverload.Name}[generic]";
-                        _pendingMonomorphizations[key: monoName] = new MonomorphizationEntry(
+                        _planner.AddDirectEntry(mangledName: monoName, entry: new MonomorphizationEntry(
                             GenericMethod: genericOverload,
                             ResolvedOwnerType: null!,
                             TypeSubstitutions: typeSubs,
-                            GenericAstName: genericAstName);
+                            GenericAstName: genericAstName));
                     }
                 }
             }
@@ -633,8 +724,8 @@ public partial class LLVMCodeGenerator
                 if (routine.Name == "$create" && routine.Parameters.Count > 0)
                 {
                     TypeInfo resolvedParamType =
-                        ResolveSubstitutedType(type: routine.Parameters[index: 0].Type,
-                            subs: _typeSubstitutions);
+                        _planner.ResolveSubstitutedType(type: routine.Parameters[index: 0].Type,
+                            subs: _typeSubstitutions!);
                     paramSuffix = $"({resolvedParamType.Name})";
                 }
 
@@ -645,15 +736,91 @@ public partial class LLVMCodeGenerator
                         isFailable: routine.IsFailable));
 
                 // Record monomorphization so the body gets generated
-                if (!_pendingMonomorphizations.ContainsKey(key: mangledName) &&
+                if (!_planner.HasEntry(mangledName: mangledName) &&
                     !_generatedFunctionDefs.Contains(item: mangledName))
                 {
                     string genericAstName = $"{routine.OwnerType.Name}.{routine.Name}";
-                    _pendingMonomorphizations[key: mangledName] = new MonomorphizationEntry(
+                    _planner.AddDirectEntry(mangledName: mangledName, entry: new MonomorphizationEntry(
                         GenericMethod: routine,
                         ResolvedOwnerType: resolvedOwnerType,
-                        TypeSubstitutions: _typeSubstitutions,
-                        GenericAstName: genericAstName);
+                        TypeSubstitutions: _typeSubstitutions!,
+                        GenericAstName: genericAstName));
+                }
+            }
+        }
+
+        // Fallback for lowered generic-type constructor calls (e.g., List[U64](cap) lowered to
+        // CallExpression("$create", ResolvedType=Core.List[Core.U64]) by GenericCallLoweringPass).
+        // The block above can't resolve the owner when the owner's generic param (T) is not
+        // directly in _typeSubstitutions (e.g., Dict[K,V] body calling Snatched[K] — T ∉ subs,
+        // but K ∈ subs, and resolvedReturnType.TypeArguments[0] = GenericParameterTypeInfo("K")).
+        // Reconstruct the concrete owner type by resolving all type args through substitutions.
+        if (routine?.Name == "$create"
+            && routine.OwnerType is { IsGenericDefinition: true, GenericParameters: not null }
+            && resolvedReturnType is { IsGenericResolution: true, TypeArguments: { Count: > 0 } }
+            && routine.OwnerType.GenericParameters.Count == resolvedReturnType.TypeArguments.Count)
+        {
+            // Resolve each type arg: if it's a GenericParameterTypeInfo, look up in
+            // _typeSubstitutions (handles Snatched[K] where K=S64 from Dict body).
+            // If already concrete, use as-is (handles List[U64] case).
+            var resolvedOwnerArgs = new List<TypeInfo>();
+            foreach (TypeInfo ta in resolvedReturnType.TypeArguments)
+            {
+                if (ta is GenericParameterTypeInfo gpArg && _typeSubstitutions != null
+                    && _typeSubstitutions.TryGetValue(key: gpArg.Name, value: out TypeInfo? subArg))
+                {
+                    resolvedOwnerArgs.Add(item: subArg);
+                }
+                else if (ta is not GenericParameterTypeInfo)
+                {
+                    resolvedOwnerArgs.Add(item: ta); // already concrete
+                }
+                else
+                {
+                    break; // unresolvable generic param — give up
+                }
+            }
+
+            if (resolvedOwnerArgs.Count == routine.OwnerType.GenericParameters.Count)
+            {
+                TypeInfo resolvedOwnerType2 = _registry.GetOrCreateResolution(
+                    genericDef: routine.OwnerType, typeArguments: resolvedOwnerArgs);
+
+                string paramSuffix2 = routine.Parameters.Count > 0
+                    // Use .Name (short) for param type — consistent with EmitGenericMethodCall
+                    // and the block above (both use .Name, not .FullName).
+                    ? $"({routine.Parameters[index: 0].Type.Name})"
+                    : "";
+
+                string recoveredName = Q(name: DecorateRoutineSymbolName(
+                    baseName:
+                    $"{resolvedOwnerType2.FullName}.{SanitizeLLVMName(name: routine.Name)}{paramSuffix2}",
+                    isFailable: routine.IsFailable));
+
+                // Only use the recovered name if it differs from the current (wrong) one.
+                if (recoveredName != mangledName)
+                {
+                    mangledName = recoveredName;
+
+                    // Record monomorphization so the body gets generated.
+                    if (!_planner.HasEntry(mangledName: mangledName) &&
+                        !_generatedFunctionDefs.Contains(item: mangledName))
+                    {
+                        string genericAstName = $"{routine.OwnerType.Name}.{routine.Name}";
+                        var typeSubs2 = new Dictionary<string, TypeInfo>();
+                        for (int i = 0; i < routine.OwnerType.GenericParameters.Count; i++)
+                        {
+                            typeSubs2[key: routine.OwnerType.GenericParameters[index: i]] =
+                                resolvedOwnerArgs[index: i];
+                        }
+
+                        _planner.AddDirectEntry(mangledName: mangledName,
+                            entry: new MonomorphizationEntry(
+                                GenericMethod: routine,
+                                ResolvedOwnerType: resolvedOwnerType2,
+                                TypeSubstitutions: typeSubs2,
+                                GenericAstName: genericAstName));
+                    }
                 }
             }
         }
@@ -756,7 +923,8 @@ public partial class LLVMCodeGenerator
     /// The object becomes the implicit 'me' parameter.
     /// </summary>
     private string EmitMethodCall(StringBuilder sb, MemberExpression member,
-        List<Expression> arguments, RoutineInfo? resolvedRoutine = null)
+        List<Expression> arguments, RoutineInfo? resolvedRoutine = null,
+        IReadOnlyList<TypeExpression>? typeArguments = null)
     {
         // Intercept var_name() — inline the variable name from the receiver expression
         if (member.PropertyName == "var_name" && arguments.Count == 0)
@@ -794,8 +962,30 @@ public partial class LLVMCodeGenerator
 
         if (receiverType == null)
         {
+            string objDesc = member.Object switch
+            {
+                IdentifierExpression id => $"identifier '{id.Name}'",
+                CallExpression c when c.Callee is MemberExpression m2 =>
+                    $"call .{m2.PropertyName}() (ResolvedType={c.ResolvedType?.Name ?? "null"})",
+                _ => member.Object.GetType().Name
+            };
             throw new InvalidOperationException(
-                message: "Cannot determine receiver type for method call");
+                message: $"Cannot determine receiver type for method call .{member.PropertyName} on {objDesc}");
+        }
+
+        // WrapperTypeInfo (e.g., Snatched[Byte]) has FullName="Snatched[Core.Byte]" (Module=null,
+        // inner FullName used for type args) which LookupMethod can't resolve and emits a wrong
+        // mangled name. Always normalize to the real RecordTypeInfo (FullName="Core.Snatched[Byte]")
+        // so both LookupMethod and LLVM name mangling work correctly.
+        if (receiverType is WrapperTypeInfo wrapperReceiver)
+        {
+            TypeInfo? wrapperDef = _registry.LookupType(name: wrapperReceiver.Name);
+            if (wrapperDef is { IsGenericDefinition: true } &&
+                wrapperReceiver.TypeArguments is { Count: > 0 })
+            {
+                receiverType = _registry.GetOrCreateResolution(genericDef: wrapperDef,
+                    typeArguments: wrapperReceiver.TypeArguments);
+            }
         }
 
         // Look up the method — prefer resolved routine from semantic analysis (P1)
@@ -808,6 +998,16 @@ public partial class LLVMCodeGenerator
                               _registry.LookupMethod(type: receiverType,
                                   methodName: methodName,
                                   isFailable: isFailableMethodCall);
+
+        // Fallback: if the method name has no '!' but the registry only has a failable variant
+        // (e.g., OperatorLoweringPass emitted "$add" for a type whose method is "$add!"),
+        // retry with isFailable:null to find it regardless of failable flag.
+        if (method == null && !isFailableMethodCall)
+        {
+            method = _registry.LookupMethod(type: receiverType,
+                methodName: methodName,
+                isFailable: null);
+        }
 
         // Representable pattern: obj.Text() → Text.$create(from: obj)
         // When the method name matches a registered type and no direct method exists,
@@ -963,11 +1163,6 @@ public partial class LLVMCodeGenerator
                 string retType3 = creator.ReturnType != null
                     ? GetLLVMType(type: creator.ReturnType)
                     : "ptr";
-                // Failable creators return Maybe[T] = { i64, ptr } at IR level
-                if (creator.IsFailable)
-                {
-                    retType3 = "{ i64, ptr }";
-                }
 
                 string receiverLlvm3 = GetLLVMType(type: receiverType);
                 string result3 = NextTemp();
@@ -1049,9 +1244,10 @@ public partial class LLVMCodeGenerator
         }
 
         // Method-level generics on regular method calls (e.g., method has [T] on itself, not the owner)
-        // Infer type args from concrete argument types and monomorphize
+        // Infer type args from concrete argument types and monomorphize.
+        // Skip when typeArguments != null — caller provided explicit type args (from GenericCallLoweringPass).
         Dictionary<string, TypeInfo>? inferredMethodTypeArgs = null;
-        if (method != null && method.IsGenericDefinition && arguments.Count > 0)
+        if (method != null && method.IsGenericDefinition && arguments.Count > 0 && typeArguments == null)
         {
             // Only pass explicit argument types — method.Parameters excludes implicit 'me',
             // so including receiverType would cause an off-by-one mismatch
@@ -1072,7 +1268,52 @@ public partial class LLVMCodeGenerator
         // Build the call — for resolved generic types (e.g., List[Character].add_last),
         // use the resolved type name even if the method was found via the base type
         string mangledName;
-        if (method != null && inferredMethodTypeArgs != null)
+        if (typeArguments is { Count: > 0 } && method != null)
+        {
+            // Explicit type-argument generic call (lowered from GenericMethodCallExpression by
+            // GenericCallLoweringPass). Mirror EmitRegularGenericMethodCall mangling:
+            // "ReceiverType.MethodName[T1, T2]" — no parameter suffix, no '!' in name part.
+            var ownerParams = new HashSet<string>(
+                method.OwnerType?.GenericParameters ?? (IEnumerable<string>)[]);
+            var methodLevelParams = method.GenericParameters?
+                                          .Where(predicate: gp => !ownerParams.Contains(item: gp))
+                                          .ToList() ?? [];
+
+            var resolvedTypeArgNames = new List<string>();
+            var methodTypeArgMap = new Dictionary<string, TypeInfo>();
+            for (int i = 0; i < methodLevelParams.Count && i < typeArguments.Count; i++)
+            {
+                string taName = typeArguments[i].Name;
+                TypeInfo? resolved = null;
+                if (_typeSubstitutions?.TryGetValue(key: taName, value: out TypeInfo? sub) == true)
+                    resolved = sub;
+                resolved ??= _registry.LookupType(name: taName);
+                if (resolved != null)
+                {
+                    methodTypeArgMap[key: methodLevelParams[index: i]] = resolved;
+                    resolvedTypeArgNames.Add(item: resolved.Name);
+                }
+                else
+                {
+                    resolvedTypeArgNames.Add(item: taName);
+                }
+            }
+
+            string typeArgsSuffix = resolvedTypeArgNames.Count > 0
+                ? $"[{string.Join(separator: ", ", values: resolvedTypeArgNames)}]"
+                : "";
+            string methodNamePart = SanitizeLLVMName(name: member.PropertyName) + typeArgsSuffix;
+            mangledName = Q(name: $"{receiverType.FullName}.{methodNamePart}");
+
+            if (receiverType.IsGenericResolution || method.OwnerType is GenericParameterTypeInfo)
+            {
+                RecordMonomorphization(mangledName: mangledName,
+                    genericMethod: method,
+                    resolvedOwnerType: receiverType,
+                    methodTypeArgs: methodTypeArgMap.Count > 0 ? methodTypeArgMap : null);
+            }
+        }
+        else if (method != null && inferredMethodTypeArgs != null)
         {
             // Method-level generics: use concrete explicit argument types in mangled name
             // (receiver is already encoded in ownerName — do NOT include it in the param suffix)
@@ -1137,6 +1378,27 @@ public partial class LLVMCodeGenerator
         {
             _pendingProtocolDispatches.TryAdd(key: mangledName,
                 value: new ProtocolDispatchInfo(Protocol: protoDispatch, MethodName: method.Name));
+
+            // Append the runtime type_id as the last argument so the dispatch stub can
+            // switch to the right concrete implementation.
+            // For "when is Protocol var" bindings, the type_id was saved in a dedicated alloca.
+            // For other protocol-typed receivers, we fall back to 0 (unknown → unreachable).
+            string typeIdToPass;
+            if (member.Object is IdentifierExpression protocolVarExpr &&
+                _protocolTypeIdAllocas.TryGetValue(key: protocolVarExpr.Name,
+                    value: out string? typeIdAlloca))
+            {
+                string typeIdTemp = NextTemp();
+                EmitLine(sb: sb, line: $"  {typeIdTemp} = load i64, ptr {typeIdAlloca}");
+                typeIdToPass = typeIdTemp;
+            }
+            else
+            {
+                typeIdToPass = "0";
+            }
+
+            argValues.Add(item: typeIdToPass);
+            argTypes.Add(item: "i64");
         }
 
         // Use the semantic-layer-resolved return type.
@@ -1147,33 +1409,39 @@ public partial class LLVMCodeGenerator
             resolvedReturnType = ApplyTypeSubstitutions(type: resolvedReturnType);
         }
 
+
         // For resolved generic methods, also emit a declaration with the resolved name
         if (!_generatedFunctions.Contains(item: mangledName))
         {
-            string retType = resolvedReturnType != null
-                ? GetLLVMType(type: resolvedReturnType)
-                : "void";
-            // Emitting routines return { i64, ptr } carrier; failable return T directly
-            if (method?.AsyncStatus == AsyncStatus.Emitting)
+            if (method != null)
             {
-                retType = "{ i64, ptr }";
+                GenerateFunctionDeclaration(routine: method, nameOverride: mangledName);
+                // Protocol dispatch stubs take an extra i64 type_id parameter at the end.
+                // GenerateFunctionDeclaration only uses the method's own Parameters, so the
+                // stored declaration omits the type_id. Overwrite it with the full argTypes
+                // (which already includes the appended i64) so declare and define match.
+                if (method.OwnerType is ProtocolTypeInfo)
+                {
+                    string retType2 = resolvedReturnType != null
+                        ? GetLLVMType(type: resolvedReturnType) : "void";
+                    _rfFunctionDeclarations[key: mangledName] =
+                        $"declare {retType2} @{mangledName}({string.Join(separator: ", ", values: argTypes)})";
+                }
             }
-
-            EmitLine(sb: _functionDeclarations,
-                line:
-                $"declare {retType} @{mangledName}({string.Join(separator: ", ", values: argTypes)})");
-            _generatedFunctions.Add(item: mangledName);
+            else
+            {
+                string retType = resolvedReturnType != null
+                    ? GetLLVMType(type: resolvedReturnType)
+                    : "void";
+                _rfFunctionDeclarations[key: mangledName] =
+                    $"declare {retType} @{mangledName}({string.Join(separator: ", ", values: argTypes)})";
+                _generatedFunctions.Add(item: mangledName);
+            }
         }
 
         string returnType = resolvedReturnType != null
             ? GetLLVMType(type: resolvedReturnType)
             : "void";
-        // Emitting routines return { i64, ptr } carrier; failable return T directly
-        bool isEmittingCall = method?.AsyncStatus == AsyncStatus.Emitting;
-        if (isEmittingCall)
-        {
-            returnType = "{ i64, ptr }";
-        }
 
         if (returnType == "void")
         {
@@ -1189,91 +1457,10 @@ public partial class LLVMCodeGenerator
             string args = BuildCallArgs(types: argTypes, values: argValues);
             EmitLine(sb: sb, line: $"  {result} = call {returnType} @{mangledName}({args})");
 
-            // Unwrap { i64, ptr } from emitting routine calls (C74).
-            // EmitFor handles $next!() unwrapping directly, so this only fires for
-            // direct calls like `var item = me.source.$next!()` inside emitting bodies.
-            if (isEmittingCall)
-            {
-                return EmitEmittingCallUnwrap(sb: sb,
-                    maybeResult: result,
-                    valueType: resolvedReturnType);
-            }
-
             return method?.IsAsync == true
                 ? EmitAsyncCompletedTask(sb: sb, routine: method, rawResult: result)
                 : result;
         }
-    }
-
-    /// <summary>
-    /// Unwraps a Maybe[T] result from an emitting routine call (C74).
-    /// Extracts the tag, propagates ABSENT if inside an emitting routine, and loads the value.
-    /// </summary>
-    private string EmitEmittingCallUnwrap(StringBuilder sb, string maybeResult,
-        TypeInfo? valueType)
-    {
-        // Store Maybe carrier to memory for field extraction
-        string maybeCarrierType = GetMaybeCarrierLLVMType(valueType: valueType!);
-        string maybeTagType = "i1"; // Maybe always uses i1 tag
-        string maybeAddr = NextTemp();
-        EmitEntryAlloca(llvmName: maybeAddr, llvmType: maybeCarrierType);
-        EmitLine(sb: sb, line: $"  store {maybeCarrierType} {maybeResult}, ptr {maybeAddr}");
-
-        // Extract tag (field 0 = Bool present)
-        string tagPtr = NextTemp();
-        EmitLine(sb: sb,
-            line: $"  {tagPtr} = getelementptr {maybeCarrierType}, ptr {maybeAddr}, i32 0, i32 0");
-        string tag = NextTemp();
-        EmitLine(sb: sb, line: $"  {tag} = load {maybeTagType}, ptr {tagPtr}");
-
-        // Branch: tag == 1 (Bool true / VALID) → extract value, else → propagate ABSENT
-        string isValid = NextTemp();
-        EmitLine(sb: sb, line: $"  {isValid} = icmp eq {maybeTagType} {tag}, 1");
-
-        string validLabel = NextLabel(prefix: "emit_unwrap_valid");
-        string absentLabel = NextLabel(prefix: "emit_unwrap_absent");
-        EmitLine(sb: sb, line: $"  br i1 {isValid}, label %{validLabel}, label %{absentLabel}");
-
-        // ABSENT branch: propagate absence (emitting caller) or trap (non-emitting caller)
-        EmitLine(sb: sb, line: $"{absentLabel}:");
-        if (_currentEmittingRoutine?.AsyncStatus == AsyncStatus.Emitting)
-        {
-            // Inside an emitting routine: propagate absence via zeroinitializer
-            string callerCarrierType = GetMaybeCarrierLLVMType(valueType: _currentEmittingRoutine.ReturnType!);
-            if (_traceCurrentRoutine)
-                EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
-            EmitLine(sb: sb, line: $"  ret {callerCarrierType} zeroinitializer");
-        }
-        else
-        {
-            // Any other caller: absence is a contract violation — unreachable
-            EmitLine(sb: sb, line: "  unreachable");
-        }
-
-        // VALID branch: extract field 1 and return the value
-        EmitLine(sb: sb, line: $"{validLabel}:");
-        _currentBlock = validLabel;
-
-        string handlePtr = NextTemp();
-        EmitLine(sb: sb,
-            line: $"  {handlePtr} = getelementptr {maybeCarrierType}, ptr {maybeAddr}, i32 0, i32 1");
-
-        // For entity types, field 1 is ptr — return it directly
-        if (valueType is EntityTypeInfo)
-        {
-            string entityPtr = NextTemp();
-            EmitLine(sb: sb, line: $"  {entityPtr} = load ptr, ptr {handlePtr}");
-            return entityPtr;
-        }
-
-        // Record/value: field 1 is inline T — load from handlePtr
-        string unwrappedType = valueType != null
-            ? GetLLVMType(type: valueType)
-            : "i64";
-        string unwrappedVal = NextTemp();
-        EmitLine(sb: sb, line: $"  {unwrappedVal} = load {unwrappedType}, ptr {handlePtr}");
-
-        return unwrappedVal;
     }
 
     /// <summary>

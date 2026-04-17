@@ -1,9 +1,9 @@
-using SemanticAnalysis.Symbols;
+using SemanticVerification.Symbols;
 
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis.Types;
+using SemanticVerification.Types;
 using SyntaxTree;
 
 public partial class LLVMCodeGenerator

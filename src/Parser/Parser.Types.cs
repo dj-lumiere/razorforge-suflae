@@ -348,6 +348,14 @@ public partial class Parser
                         ConstraintTypes: null,
                         Location: location));
                 }
+                else if (Match(type: TokenType.Crashable))
+                {
+                    inlineConstraints.Add(item: new GenericConstraintDeclaration(
+                        ParameterName: paramName,
+                        ConstraintType: ConstraintKind.Crashable,
+                        ConstraintTypes: null,
+                        Location: location));
+                }
                 else if (Check(type: TokenType.Identifier))
                 {
                     // Const generic constraint: N is Address
@@ -535,6 +543,14 @@ public partial class Parser
                             ConstraintTypes: null,
                             Location: location));
                     }
+                    else if (Match(type: TokenType.Crashable))
+                    {
+                        constraints.Add(item: new GenericConstraintDeclaration(
+                            ParameterName: paramName,
+                            ConstraintType: ConstraintKind.Crashable,
+                            ConstraintTypes: null,
+                            Location: location));
+                    }
                     else if (Check(type: TokenType.Identifier))
                     {
                         // Const generic constraint: N is Address
@@ -550,7 +566,7 @@ public partial class Parser
                     {
                         throw ThrowParseError(code: GrammarDiagnosticCode.InvalidConstraintKind,
                             message:
-                            "Expected 'record', 'entity', 'routine', 'choice', 'flags', 'variant', or type after 'is' in constraint");
+                            "Expected 'record', 'entity', 'routine', 'choice', 'flags', 'variant', 'crashable', or type after 'is' in constraint");
                     }
                 }
                 else if (Match(type: TokenType.In))

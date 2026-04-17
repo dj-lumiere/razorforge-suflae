@@ -1,6 +1,6 @@
 namespace Compiler.Lexer;
 
-using SemanticAnalysis.Enums;
+using SemanticVerification.Enums;
 
 /// <summary>
 /// Unified tokenizer for both RazorForge and Suflae programming languages.
@@ -131,6 +131,7 @@ public partial class Tokenizer
             [key: "record"] = TokenType.Record,
             [key: "choice"] = TokenType.Choice,
             [key: "flags"] = TokenType.Flags,
+            [key: "crashable"] = TokenType.Crashable,
             [key: "variant"] = TokenType.Variant,
             [key: "protocol"] = TokenType.Protocol,
 
@@ -205,8 +206,6 @@ public partial class Tokenizer
             [key: "needs"] = TokenType.Requires,
 
             // Async/generator
-            [key: "emit"] = TokenType.Emit,
-            [key: "emitting"] = TokenType.Emitting,
             [key: "suspended"] = TokenType.Suspended,
             [key: "waitfor"] = TokenType.Waitfor,
             [key: "within"] = TokenType.Within,

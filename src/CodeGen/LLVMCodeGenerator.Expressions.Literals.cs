@@ -1,9 +1,9 @@
-using SemanticAnalysis.Native;
+using SemanticVerification;
 
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis.Types;
+using SemanticVerification.Types;
 using SyntaxTree;
 
 /// <summary>
@@ -94,12 +94,12 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private static bool IsIntegerLiteralType(Lexer.TokenType type)
     {
-        return type is Lexer.TokenType.S8Literal or Lexer.TokenType.S16Literal
-            or Lexer.TokenType.S32Literal or Lexer.TokenType.S64Literal
-            or Lexer.TokenType.S128Literal or Lexer.TokenType.U8Literal
-            or Lexer.TokenType.U16Literal or Lexer.TokenType.U32Literal
-            or Lexer.TokenType.U64Literal or Lexer.TokenType.U128Literal
-            or Lexer.TokenType.AddressLiteral;
+        return type is Lexer.TokenType.Integer or Lexer.TokenType.S8Literal
+            or Lexer.TokenType.S16Literal or Lexer.TokenType.S32Literal
+            or Lexer.TokenType.S64Literal or Lexer.TokenType.S128Literal
+            or Lexer.TokenType.U8Literal or Lexer.TokenType.U16Literal
+            or Lexer.TokenType.U32Literal or Lexer.TokenType.U64Literal
+            or Lexer.TokenType.U128Literal or Lexer.TokenType.AddressLiteral;
     }
 
     /// <summary>
@@ -107,8 +107,9 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private static bool IsFloatLiteralType(Lexer.TokenType type)
     {
-        return type is Lexer.TokenType.F16Literal or Lexer.TokenType.F32Literal
-            or Lexer.TokenType.F64Literal or Lexer.TokenType.F128Literal;
+        return type is Lexer.TokenType.Decimal or Lexer.TokenType.F16Literal
+            or Lexer.TokenType.F32Literal or Lexer.TokenType.F64Literal
+            or Lexer.TokenType.F128Literal;
     }
 
     private static bool IsDecimalFloatLiteralType(Lexer.TokenType type)
@@ -175,7 +176,7 @@ public partial class LLVMCodeGenerator
         if (llvmType.StartsWith(value: "%"))
         {
             string result = NextTemp();
-            EmitLine(sb: sb, line: $"  {result} = insertvalue {llvmType} undef, i64 {bytes}, 0");
+            EmitLine(sb: sb, line: $"  {result} = insertvalue {llvmType} zeroinitializer, i64 {bytes}, 0");
             return result;
         }
 
@@ -245,7 +246,7 @@ public partial class LLVMCodeGenerator
             : "%Record.Duration";
 
         string tmp1 = NextTemp();
-        EmitLine(sb: sb, line: $"  {tmp1} = insertvalue {llvmType} undef, i64 {seconds}, 0");
+        EmitLine(sb: sb, line: $"  {tmp1} = insertvalue {llvmType} zeroinitializer, i64 {seconds}, 0");
         string tmp2 = NextTemp();
         EmitLine(sb: sb, line: $"  {tmp2} = insertvalue {llvmType} {tmp1}, i32 {nanoseconds}, 1");
         return tmp2;
@@ -269,7 +270,7 @@ public partial class LLVMCodeGenerator
         {
             string result = NextTemp();
             EmitLine(sb: sb,
-                line: $"  {result} = insertvalue {llvmType} undef, i32 {codepoint}, 0");
+                line: $"  {result} = insertvalue {llvmType} zeroinitializer, i32 {codepoint}, 0");
             return result;
         }
 
@@ -291,7 +292,7 @@ public partial class LLVMCodeGenerator
         {
             string result = NextTemp();
             EmitLine(sb: sb,
-                line: $"  {result} = insertvalue {llvmType} undef, i8 {byteValue}, 0");
+                line: $"  {result} = insertvalue {llvmType} zeroinitializer, i8 {byteValue}, 0");
             return result;
         }
 
@@ -588,7 +589,7 @@ public partial class LLVMCodeGenerator
                 string tmp1 = NextTemp();
                 string tmp2 = NextTemp();
                 EmitLine(sb: sb,
-                    line: $"  {tmp1} = insertvalue %Record.D128 undef, i64 {d128.Lo}, 0");
+                    line: $"  {tmp1} = insertvalue %Record.D128 zeroinitializer, i64 {d128.Lo}, 0");
                 EmitLine(sb: sb,
                     line: $"  {tmp2} = insertvalue %Record.D128 {tmp1}, i64 {d128.Hi}, 1");
                 return tmp2;

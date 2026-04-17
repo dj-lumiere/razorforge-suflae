@@ -1,5 +1,5 @@
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Diagnostics;
+using SemanticVerification.Results;
+using Compiler.Diagnostics;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -11,7 +11,7 @@ using static TestHelpers;
 /// </summary>
 public class BuilderServiceTests
 {
-    #region Import Gating — Per-Type Routines
+    #region Import Gating ??Per-Type Routines
     /// <summary>
     /// Tests TypeName_WithoutImport_ReportsError.
     /// </summary>
@@ -107,7 +107,7 @@ public class BuilderServiceTests
 
     #endregion
 
-    #region Import Gating — Standalone Routines
+    #region Import Gating ??Standalone Routines
     /// <summary>
     /// Tests SourceFile_WithoutImport_ReportsError.
     /// </summary>

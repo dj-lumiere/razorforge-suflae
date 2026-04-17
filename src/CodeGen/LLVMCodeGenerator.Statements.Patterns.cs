@@ -1,38 +1,164 @@
-using SemanticAnalysis.Symbols;
+using SemanticVerification.Symbols;
 
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis.Types;
+using SemanticVerification.Types;
 using SyntaxTree;
 
 public partial class LLVMCodeGenerator
 {
-    private void EmitWhen(StringBuilder sb, WhenStatement whenStmt)
+    // Returns true if ALL clauses of the when statement are guaranteed to terminate
+    // (i.e. the when_end block is unreachable).
+    private bool EmitWhen(StringBuilder sb, WhenStatement whenStmt)
     {
         // Evaluate the subject expression once
         string subject = EmitExpression(sb: sb, expr: whenStmt.Expression);
         TypeInfo? subjectType = GetExpressionType(expr: whenStmt.Expression);
-        string endLabel = NextLabel(prefix: "when_end");
 
-        // Generate labels for each clause
-        var clauseLabels = new List<string>();
-        for (int i = 0; i < whenStmt.Clauses.Count; i++)
+        // Carrier and variant types are struct values (returned by value).
+        // EmitWhenSwitch/Chain use GEP which needs a pointer — spill to a temp alloca.
+        // Maybe, Result, and Lookup WhenStatements are fully lowered by PatternLoweringPass
+        // and normally never reach here; this spill guards against any residual cases.
+        if (subjectType != null &&
+            (IsCarrierType(type: subjectType) || subjectType is VariantTypeInfo))
         {
-            clauseLabels.Add(item: NextLabel(prefix: $"when_case{i}"));
+            string llvmType = GetLLVMType(type: subjectType);
+            string spillAddr = NextTemp();
+            EmitLine(sb: sb, line: $"  {spillAddr} = alloca {llvmType}");
+            EmitLine(sb: sb, line: $"  store {llvmType} {subject}, ptr {spillAddr}");
+            subject = spillAddr;
         }
 
-        // Jump to first clause
-        if (clauseLabels.Count > 0)
+        string endLabel = NextLabel(prefix: "when_end");
+        bool allTerminated;
+
+        // User variant subjects: use a single switch i64 %type_id dispatch.
+        // All carrier subjects (Maybe/Result/Lookup) use the chain path.
+        if (subjectType is VariantTypeInfo)
         {
-            EmitLine(sb: sb, line: $"  br label %{clauseLabels[index: 0]}");
+            allTerminated = EmitWhenSwitch(sb: sb, whenStmt: whenStmt,
+                subject: subject, subjectType: subjectType!, endLabel: endLabel);
         }
         else
         {
-            EmitLine(sb: sb, line: $"  br label %{endLabel}");
+            allTerminated = EmitWhenChain(sb: sb, whenStmt: whenStmt,
+                subject: subject, subjectType: subjectType, endLabel: endLabel);
         }
 
-        // Emit each clause
+        // End block — if all clauses terminated the when_end block is unreachable
+        EmitLine(sb: sb, line: $"{endLabel}:");
+        if (allTerminated)
+            EmitLine(sb: sb, line: "  unreachable");
+
+        return allTerminated;
+    }
+
+    /// <summary>
+    /// Emits a <c>switch i64 %tag</c> dispatch for a <see cref="WhenStatement"/>
+    /// whose subject is a user variant.
+    ///
+    /// <para>
+    /// The tag is loaded once via GEP field 0. Each <see cref="TypePattern"/> becomes
+    /// one switch arm; an optional <see cref="ElsePattern"/>, <see cref="WildcardPattern"/>,
+    /// or <see cref="IdentifierPattern"/> becomes the switch default.
+    /// </para>
+    ///
+    /// <para>
+    /// Falls back to <see cref="EmitWhenChain"/> when any clause cannot be expressed
+    /// as a direct switch arm (e.g. <see cref="GuardPattern"/>,
+    /// <see cref="NegatedTypePattern"/>, <see cref="CrashablePattern"/>).
+    /// </para>
+    /// </summary>
+    private bool EmitWhenSwitch(StringBuilder sb, WhenStatement whenStmt,
+        string subject, TypeInfo subjectType, string endLabel)
+    {
+        // ── Pre-scan: classify every clause without emitting anything ────────────
+        // If any clause can't be expressed as a switch arm or default, bail.
+        var arms = new List<(string tagLiteral, int clauseIdx)>();
+        int defaultClauseIdx = -1;
+
+        for (int i = 0; i < whenStmt.Clauses.Count; i++)
+        {
+            Pattern p = whenStmt.Clauses[index: i].Pattern;
+            if (TryGetSwitchTagValue(pattern: p, subjectType: subjectType, out string tagLiteral))
+            {
+                arms.Add((tagLiteral, i));
+            }
+            else if (p is ElsePattern or WildcardPattern or IdentifierPattern)
+            {
+                defaultClauseIdx = i;
+            }
+            else
+            {
+                // Complex: GuardPattern, NegatedTypePattern, CrashablePattern, etc.
+                return EmitWhenChain(sb: sb, whenStmt: whenStmt,
+                    subject: subject, subjectType: subjectType, endLabel: endLabel);
+            }
+        }
+
+        // ── Load the tag once ────────────────────────────────────────────────────
+        string tag = EmitLoadVariantOrCarrierTag(sb: sb, subject: subject,
+            subjectType: subjectType);
+
+        // ── Allocate body labels ─────────────────────────────────────────────────
+        var bodyLabels = new string[whenStmt.Clauses.Count];
+        for (int i = 0; i < whenStmt.Clauses.Count; i++)
+            bodyLabels[i] = NextLabel(prefix: $"when_body{i}");
+
+        // ── Emit the switch instruction ──────────────────────────────────────────
+        string switchDefault = defaultClauseIdx >= 0
+            ? bodyLabels[defaultClauseIdx]
+            : endLabel;
+
+        var switchSb = new StringBuilder($"  switch i64 {tag}, label %{switchDefault} [");
+        foreach ((string tval, int idx) in arms)
+            switchSb.Append($"\n    i64 {tval}, label %{bodyLabels[idx]}");
+        switchSb.Append("\n  ]");
+        EmitLine(sb: sb, line: switchSb.ToString());
+
+        // ── Emit each clause body ────────────────────────────────────────────────
+        bool allTerminated = whenStmt.Clauses.Count > 0;
+        for (int i = 0; i < whenStmt.Clauses.Count; i++)
+        {
+            WhenClause clause = whenStmt.Clauses[index: i];
+            EmitLine(sb: sb, line: $"{bodyLabels[i]}:");
+            EmitSwitchArmBinding(sb: sb, pattern: clause.Pattern,
+                subject: subject, subjectType: subjectType);
+            bool bodyTerminated = EmitStatement(sb: sb, stmt: clause.Body);
+            if (!bodyTerminated)
+            {
+                allTerminated = false;
+                EmitLine(sb: sb, line: $"  br label %{endLabel}");
+            }
+        }
+
+        return allTerminated;
+    }
+
+    /// <summary>
+    /// Per-clause chain emitter (if/else chain via sequential compare-and-branch).
+    /// Used for Maybe subjects and any fallback from <see cref="EmitWhenSwitch"/>.
+    /// </summary>
+    private bool EmitWhenChain(StringBuilder sb, WhenStatement whenStmt,
+        string subject, TypeInfo? subjectType, string endLabel)
+    {
+        // Generate labels for each clause
+        var clauseLabels = new List<string>();
+        for (int i = 0; i < whenStmt.Clauses.Count; i++)
+            clauseLabels.Add(item: NextLabel(prefix: $"when_case{i}"));
+
+        // Jump to first clause
+        if (clauseLabels.Count > 0)
+            EmitLine(sb: sb, line: $"  br label %{clauseLabels[index: 0]}");
+        else
+            EmitLine(sb: sb, line: $"  br label %{endLabel}");
+
+        // Track handled carrier arms for ElsePattern narrowing (mirrors SA logic)
+        bool handledAbsent = false;
+        bool handledCrashable = false;
+        bool allTerminated = clauseLabels.Count > 0;
+
         for (int i = 0; i < whenStmt.Clauses.Count; i++)
         {
             WhenClause clause = whenStmt.Clauses[index: i];
@@ -43,26 +169,246 @@ public partial class LLVMCodeGenerator
 
             EmitLine(sb: sb, line: $"{currentLabel}:");
 
+            // For carrier ElsePattern with a variable: extract the inner T value, mirroring SA narrowing.
+            // Must do this BEFORE EmitPatternMatch to pass the right type.
+            if (subjectType != null && IsCarrierType(type: subjectType) &&
+                clause.Pattern is ElsePattern { VariableName: not null } elseCarrier &&
+                subjectType.TypeArguments?.Count > 0)
+            {
+                TypeInfo innerType = subjectType.TypeArguments[index: 0];
+                bool isNarrowedToT = (GetCarrierBaseName(type: subjectType) == "Maybe" && handledAbsent)
+                    || (GetCarrierBaseName(type: subjectType) == "Result" && handledCrashable)
+                    || (GetCarrierBaseName(type: subjectType) == "Lookup" && handledAbsent && handledCrashable);
+
+                if (isNarrowedToT)
+                {
+                    string bodyLabel = NextLabel(prefix: $"when_body{i}");
+                    EmitCarrierElsePatternExtract(sb: sb,
+                        subject: subject,
+                        subjectType: subjectType,
+                        innerType: innerType,
+                        variableName: elseCarrier.VariableName,
+                        matchLabel: bodyLabel);
+                    EmitLine(sb: sb, line: $"{bodyLabel}:");
+                    bool bodyTerminated2 = EmitStatement(sb: sb, stmt: clause.Body);
+                    if (!bodyTerminated2)
+                    {
+                        allTerminated = false;
+                        EmitLine(sb: sb, line: $"  br label %{endLabel}");
+                    }
+
+                    continue;
+                }
+            }
+
+            // Track absent/crashable for narrowing of subsequent else arms
+            if (subjectType != null && IsCarrierType(type: subjectType))
+            {
+                if (IsAbsentPatternForCarrier(pattern: clause.Pattern, carrierType: subjectType))
+                    handledAbsent = true;
+                else if (IsCrashablePatternForGen(pattern: clause.Pattern))
+                    handledCrashable = true;
+            }
+
             // Emit pattern matching code
-            string bodyLabel = NextLabel(prefix: $"when_body{i}");
+            string bodyLbl = NextLabel(prefix: $"when_body{i}");
             EmitPatternMatch(sb: sb,
                 subject: subject,
                 pattern: clause.Pattern,
-                matchLabel: bodyLabel,
+                matchLabel: bodyLbl,
                 failLabel: nextLabel,
                 subjectType: subjectType);
 
             // Emit body
-            EmitLine(sb: sb, line: $"{bodyLabel}:");
+            EmitLine(sb: sb, line: $"{bodyLbl}:");
             bool bodyTerminated = EmitStatement(sb: sb, stmt: clause.Body);
             if (!bodyTerminated)
             {
+                allTerminated = false;
                 EmitLine(sb: sb, line: $"  br label %{endLabel}");
             }
         }
 
-        // End block
-        EmitLine(sb: sb, line: $"{endLabel}:");
+        return allTerminated;
+    }
+
+    // ─── switch i64 helpers ───────────────────────────────────────────────────────
+
+    /// <summary>Loads the i64 type_id tag from a user variant pointer (GEP field 0).</summary>
+    private string EmitLoadVariantOrCarrierTag(StringBuilder sb, string subject,
+        TypeInfo subjectType)
+    {
+        string variantTypeName = GetVariantTypeName(variant: (VariantTypeInfo)subjectType);
+        string tagPtr = NextTemp();
+        EmitLine(sb: sb,
+            line: $"  {tagPtr} = getelementptr {variantTypeName}, ptr {subject}, i32 0, i32 0");
+        string tag = NextTemp();
+        EmitLine(sb: sb, line: $"  {tag} = load i64, ptr {tagPtr}");
+        return tag;
+    }
+
+    /// <summary>
+    /// Returns true when <paramref name="pattern"/> maps to a single i64 constant
+    /// in a <c>switch i64 %tag</c> instruction, and sets <paramref name="tagLiteral"/>
+    /// to that constant.
+    ///
+    /// <list type="bullet">
+    ///   <item>Variant subjects: <see cref="TypePattern"/> → <see cref="VariantMemberInfo.TagValue"/></item>
+    ///   <item>Result/Lookup subjects: <see cref="TypePattern"/> → FNV-1a type_id of the named type;
+    ///         "Blank" → 0.</item>
+    ///   <item><see cref="NonePattern"/> → None member tag (variant) or 0 (Lookup absent).</item>
+    /// </list>
+    /// </summary>
+    private bool TryGetSwitchTagValue(Pattern pattern, TypeInfo subjectType, out string tagLiteral)
+    {
+        tagLiteral = "0";
+
+        // ── User variant ────────────────────────────────────────────────────────
+        if (subjectType is VariantTypeInfo variantType)
+        {
+            switch (pattern)
+            {
+                case TypePattern tp:
+                {
+                    TypeInfo? targetType = tp.Type.ResolvedType
+                        ?? _registry.LookupType(name: tp.Type.Name);
+                    VariantMemberInfo? member = targetType?.Name == "None"
+                        ? variantType.Members.FirstOrDefault(predicate: m => m.IsNone)
+                        : targetType != null
+                            ? variantType.FindMember(type: targetType)
+                            : null;
+                    if (member == null) return false;
+                    tagLiteral = member.TagValue.ToString();
+                    return true;
+                }
+
+                case NonePattern:
+                {
+                    VariantMemberInfo? noneMember =
+                        variantType.Members.FirstOrDefault(predicate: m => m.IsNone);
+                    if (noneMember == null) return false;
+                    tagLiteral = noneMember.TagValue.ToString();
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // ── Result/Lookup carrier ────────────────────────────────────────────────
+        if (!IsCarrierType(type: subjectType) || IsMaybeType(type: subjectType))
+            return false;
+
+        switch (pattern)
+        {
+            case TypePattern { Type.Name: "Blank" }:
+            case NonePattern: // Lookup absent state
+                tagLiteral = "0";
+                return true;
+
+            case TypePattern tp:
+            {
+                TypeInfo? targetType = tp.Type.ResolvedType
+                    ?? _registry.LookupType(name: tp.Type.Name);
+                if (targetType == null) return false;
+                ulong hash = ComputeTypeId(fullName: targetType.FullName);
+                // LLVM switch uses the same bit pattern; sign doesn't matter for equality
+                tagLiteral = unchecked((long)hash).ToString();
+                return true;
+            }
+
+            // CrashablePattern: range check (tag != 0 && tag != validId) — not a single arm
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Emits the variable binding for a switch arm that has already been selected
+    /// (tag check already passed via the <c>switch</c> instruction).
+    /// No-op for patterns without bindings.
+    /// </summary>
+    private void EmitSwitchArmBinding(StringBuilder sb, Pattern pattern,
+        string subject, TypeInfo subjectType)
+    {
+        switch (pattern)
+        {
+            // ── TypePattern with binding ──────────────────────────────────────────
+            case TypePattern { VariableName: not null } tp:
+            {
+                TypeInfo? targetType = tp.Type.ResolvedType
+                    ?? _registry.LookupType(name: tp.Type.Name);
+                if (targetType == null) break;
+
+                string varAddr = $"%{tp.VariableName}.addr";
+
+                if (subjectType is VariantTypeInfo variant)
+                {
+                    VariantMemberInfo? member = variant.FindMember(type: targetType);
+                    if (member?.Type == null) break; // None/Blank: no payload
+
+                    string variantTypeName = GetVariantTypeName(variant: variant);
+                    string payloadPtr = NextTemp();
+                    string payloadVal = NextTemp();
+                    string payloadLlvm = GetLLVMType(type: member.Type);
+                    EmitLine(sb: sb,
+                        line: $"  {payloadPtr} = getelementptr {variantTypeName}, ptr {subject}, i32 0, i32 1");
+                    EmitLine(sb: sb, line: $"  {payloadVal} = load {payloadLlvm}, ptr {payloadPtr}");
+                    EmitEntryAlloca(llvmName: varAddr, llvmType: payloadLlvm);
+                    EmitLine(sb: sb, line: $"  store {payloadLlvm} {payloadVal}, ptr {varAddr}");
+                    _localVariables[key: tp.VariableName] = member.Type;
+                }
+                else
+                {
+                    // Result/Lookup { i64 type_id, i64 data }: field 1 is the address as i64
+                    string dataPtr = NextTemp();
+                    string dataVal = NextTemp();
+                    string handleVal = NextTemp();
+                    EmitLine(sb: sb,
+                        line: $"  {dataPtr} = getelementptr {{ i64, i64 }}, ptr {subject}, i32 0, i32 1");
+                    EmitLine(sb: sb, line: $"  {dataVal} = load i64, ptr {dataPtr}");
+                    EmitLine(sb: sb, line: $"  {handleVal} = inttoptr i64 {dataVal} to ptr");
+                    EmitEntryAlloca(llvmName: varAddr, llvmType: "ptr");
+                    EmitLine(sb: sb, line: $"  store ptr {handleVal}, ptr {varAddr}");
+                    _localVariables[key: tp.VariableName] = targetType;
+                }
+                break;
+            }
+
+            // ── ElsePattern with binding ──────────────────────────────────────────
+            case ElsePattern { VariableName: not null } ep:
+            {
+                // For Result/Lookup: the default arm (after all errors are dispatched via explicit
+                // switch arms) holds the valid inner T value — extract field 1, don't bind the carrier.
+                if (IsCarrierType(type: subjectType) && !IsMaybeType(type: subjectType) &&
+                    subjectType.TypeArguments?.Count > 0)
+                {
+                    TypeInfo innerType = subjectType.TypeArguments[index: 0];
+                    EmitCarrierElsePatternExtract(sb: sb, subject: subject,
+                        subjectType: subjectType, innerType: innerType,
+                        variableName: ep.VariableName);
+                    break;
+                }
+
+                // For variants and other types: bind subject directly (subject is already a ptr).
+                string elseAddr = $"%{ep.VariableName}.addr";
+                EmitEntryAlloca(llvmName: elseAddr, llvmType: "ptr");
+                EmitLine(sb: sb, line: $"  store ptr {subject}, ptr {elseAddr}");
+                _localVariables[key: ep.VariableName] = subjectType;
+                break;
+            }
+
+            // ── IdentifierPattern: bind subject to name ───────────────────────────
+            case IdentifierPattern id:
+            {
+                // Subject is a ptr (spilled carrier or variant handle); always store as ptr.
+                string idAddr = $"%{id.Name}.addr";
+                EmitEntryAlloca(llvmName: idAddr, llvmType: "ptr");
+                EmitLine(sb: sb, line: $"  store ptr {subject}, ptr {idAddr}");
+                _localVariables[key: id.Name] = subjectType;
+                break;
+            }
+
+            // WildcardPattern, TypePattern without binding, NonePattern: no binding
+        }
     }
 
     /// <summary>
@@ -312,8 +658,32 @@ public partial class LLVMCodeGenerator
     private void EmitTypePatternMatch(StringBuilder sb, string subject, TypePattern typePattern,
         string matchLabel, string failLabel, TypeInfo? subjectType)
     {
+        // "is None" on Maybe[T] → delegate to EmitNonePatternMatch (tag == 0 check).
+        // The parser may produce TypePattern { "None" } instead of NonePattern.
+        if (typePattern.Type.Name == "None" && subjectType != null && IsMaybeType(type: subjectType))
+        {
+            EmitNonePatternMatch(sb: sb, subject: subject, matchLabel: matchLabel,
+                failLabel: failLabel, subjectType: subjectType);
+            return;
+        }
+
         // Resolve the target type
         TypeInfo? targetType = _registry.LookupType(name: typePattern.Type.Name);
+
+        // "is Crashable [varName]" on a Result/Lookup carrier → delegate to crashable matching logic.
+        // The generic carrier tag check (icmp eq tag, ComputeTypeId("Crashable")) never matches
+        // real error types — we need the "tag != 0 && tag != ComputeTypeId(T)" range check instead.
+        if (subjectType != null && IsCarrierType(type: subjectType) &&
+            !IsMaybeType(type: subjectType) && typePattern.Type.Name == "Crashable")
+        {
+            var crashableProxy = new CrashablePattern(
+                ErrorType: null,
+                VariableName: typePattern.VariableName,
+                Location: typePattern.Location);
+            EmitCrashablePatternMatch(sb: sb, subject: subject, crashable: crashableProxy,
+                matchLabel: matchLabel, failLabel: failLabel, subjectType: subjectType);
+            return;
+        }
 
         // Determine the actual target label — if we need to bind, use an extraction block
         bool needsBind = typePattern.VariableName != null && targetType != null;
@@ -321,68 +691,89 @@ public partial class LLVMCodeGenerator
             ? NextLabel(prefix: "type_bind")
             : matchLabel;
 
-        // Error-handling carriers: Maybe checks i1 tag, Result/Lookup compare i64 type_id
+        // Error-handling carriers: entity Maybe checks ptr null; record Maybe checks i1 tag;
+        // Result/Lookup compare i64 type_id.
         if (subjectType != null && IsCarrierType(type: subjectType))
         {
             string carrierLlvmType = GetCarrierLLVMType(type: subjectType);
-            string tagType = GetCarrierTagType(kind: GetCarrierKind(type: subjectType));
-            string tagPtr = NextTemp();
-            string tag = NextTemp();
+            string field0PtrP = NextTemp();
             EmitLine(sb: sb,
-                line: $"  {tagPtr} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 0");
-            EmitLine(sb: sb, line: $"  {tag} = load {tagType}, ptr {tagPtr}");
+                line: $"  {field0PtrP} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 0");
 
-            string expectedTag = IsMaybeType(type: subjectType)
-                ? "1"
-                : (targetType != null
-                    ? ComputeTypeId(fullName: targetType.FullName).ToString()
-                    : "0");
-            string cmp = NextTemp();
-            EmitLine(sb: sb, line: $"  {cmp} = icmp eq {tagType} {tag}, {expectedTag}");
-            EmitLine(sb: sb, line: $"  br i1 {cmp}, label %{branchTarget}, label %{failLabel}");
+            bool isEntityMaybeTP = IsMaybeType(type: subjectType)
+                && subjectType.TypeArguments?.Count > 0
+                && subjectType.TypeArguments[0] is EntityTypeInfo;
 
-            if (needsBind && targetType != null)
+            if (isEntityMaybeTP)
             {
-                EmitLine(sb: sb, line: $"{branchTarget}:");
-                string varAddr = $"%{typePattern.VariableName}.addr";
+                // Entity Maybe { Snatched[T] }: non-null check — ptr != null means present.
+                string ptrValP = NextTemp();
+                EmitLine(sb: sb, line: $"  {ptrValP} = load ptr, ptr {field0PtrP}");
+                string cmp = NextTemp();
+                EmitLine(sb: sb, line: $"  {cmp} = icmp ne ptr {ptrValP}, null");
+                EmitLine(sb: sb, line: $"  br i1 {cmp}, label %{branchTarget}, label %{failLabel}");
 
-                if (IsMaybeType(type: subjectType))
+                if (needsBind && targetType != null)
                 {
-                    string valPtr = NextTemp();
-                    EmitLine(sb: sb,
-                        line: $"  {valPtr} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 1");
-                    if (targetType is EntityTypeInfo or WrapperTypeInfo)
+                    EmitLine(sb: sb, line: $"{branchTarget}:");
+                    // For entity Maybe, field 0 IS the entity ptr (Snatched[T] = ptr).
+                    string varAddr = $"%{typePattern.VariableName}.addr";
+                    EmitEntryAlloca(llvmName: varAddr, llvmType: "ptr");
+                    EmitLine(sb: sb, line: $"  store ptr {ptrValP}, ptr {varAddr}");
+                    _localVariables[key: typePattern.VariableName!] = targetType;
+                    EmitLine(sb: sb, line: $"  br label %{matchLabel}");
+                }
+            }
+            else
+            {
+                string tagTypeP = GetCarrierTagType(kind: GetCarrierKind(type: subjectType));
+                string expectedTagP = IsMaybeType(type: subjectType)
+                    ? "1"
+                    : (targetType != null
+                        ? ComputeTypeId(fullName: targetType.FullName).ToString()
+                        : "0");
+                string tagP = NextTemp();
+                EmitLine(sb: sb, line: $"  {tagP} = load {tagTypeP}, ptr {field0PtrP}");
+                string cmp = NextTemp();
+                EmitLine(sb: sb, line: $"  {cmp} = icmp eq {tagTypeP} {tagP}, {expectedTagP}");
+                EmitLine(sb: sb, line: $"  br i1 {cmp}, label %{branchTarget}, label %{failLabel}");
+
+                if (needsBind && targetType != null)
+                {
+                    EmitLine(sb: sb, line: $"{branchTarget}:");
+                    string varAddr = $"%{typePattern.VariableName}.addr";
+
+                    if (IsMaybeType(type: subjectType))
                     {
-                        string ptrVal = NextTemp();
-                        EmitLine(sb: sb, line: $"  {ptrVal} = load ptr, ptr {valPtr}");
-                        EmitEntryAlloca(llvmName: varAddr, llvmType: "ptr");
-                        EmitLine(sb: sb, line: $"  store ptr {ptrVal}, ptr {varAddr}");
-                    }
-                    else
-                    {
+                        // Record Maybe { i1, T }: value at field 1
+                        string valPtr = NextTemp();
+                        EmitLine(sb: sb,
+                            line:
+                            $"  {valPtr} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 1");
                         string valLlvm = GetLLVMType(type: targetType);
                         string val = NextTemp();
                         EmitLine(sb: sb, line: $"  {val} = load {valLlvm}, ptr {valPtr}");
                         EmitEntryAlloca(llvmName: varAddr, llvmType: valLlvm);
                         EmitLine(sb: sb, line: $"  store {valLlvm} {val}, ptr {varAddr}");
                     }
-                }
-                else
-                {
-                    // Result/Lookup: field 1 is i64 address → inttoptr
-                    string addrPtr = NextTemp();
-                    string addrVal = NextTemp();
-                    string handleVal = NextTemp();
-                    EmitLine(sb: sb,
-                        line: $"  {addrPtr} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 1");
-                    EmitLine(sb: sb, line: $"  {addrVal} = load i64, ptr {addrPtr}");
-                    EmitLine(sb: sb, line: $"  {handleVal} = inttoptr i64 {addrVal} to ptr");
-                    EmitEntryAlloca(llvmName: varAddr, llvmType: "ptr");
-                    EmitLine(sb: sb, line: $"  store ptr {handleVal}, ptr {varAddr}");
-                }
+                    else
+                    {
+                        // Result/Lookup { i64, i64 }: field 1 is i64 address → inttoptr
+                        string addrPtr = NextTemp();
+                        string addrVal = NextTemp();
+                        string handleVal = NextTemp();
+                        EmitLine(sb: sb,
+                            line:
+                            $"  {addrPtr} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 1");
+                        EmitLine(sb: sb, line: $"  {addrVal} = load i64, ptr {addrPtr}");
+                        EmitLine(sb: sb, line: $"  {handleVal} = inttoptr i64 {addrVal} to ptr");
+                        EmitEntryAlloca(llvmName: varAddr, llvmType: "ptr");
+                        EmitLine(sb: sb, line: $"  store ptr {handleVal}, ptr {varAddr}");
+                    }
 
-                _localVariables[key: typePattern.VariableName!] = targetType;
-                EmitLine(sb: sb, line: $"  br label %{matchLabel}");
+                    _localVariables[key: typePattern.VariableName!] = targetType;
+                    EmitLine(sb: sb, line: $"  br label %{matchLabel}");
+                }
             }
 
             return;
@@ -512,7 +903,17 @@ public partial class LLVMCodeGenerator
                 EmitEntryAlloca(llvmName: varAddr, llvmType: "ptr");
                 EmitLine(sb: sb, line: $"  store ptr {handleVal}, ptr {varAddr}");
 
-                _localVariables[key: crashable.VariableName] = subjectType;
+                // Also store the type_id so protocol dispatch can select the right implementer.
+                string typeIdAddr = $"%{crashable.VariableName}.typeid.addr";
+                EmitEntryAlloca(llvmName: typeIdAddr, llvmType: "i64");
+                EmitLine(sb: sb, line: $"  store i64 {tag}, ptr {typeIdAddr}");
+                _protocolTypeIdAllocas[key: crashable.VariableName] = typeIdAddr;
+
+                // The bound variable is an opaque error pointer — type it as Crashable (protocol)
+                // so subsequent method calls (e.g., err.crash_message()) resolve correctly.
+                TypeInfo errVarType =
+                    _registry.LookupType(name: "Crashable") ?? subjectType;
+                _localVariables[key: crashable.VariableName] = errVarType;
                 EmitLine(sb: sb, line: $"  br label %{matchLabel}");
             }
             else
@@ -545,17 +946,34 @@ public partial class LLVMCodeGenerator
                 return;
             }
 
-            // Maybe: { i1, T } tag is i1; Lookup: { i64, i64 } tag is i64 — both absent when tag == 0
             string carrierLlvmType = GetCarrierLLVMType(type: subjectType);
-            string tagType = GetCarrierTagType(kind: GetCarrierKind(type: subjectType));
-            string tagPtr = NextTemp();
-            string tag = NextTemp();
+            string field0PtrN = NextTemp();
             EmitLine(sb: sb,
-                line: $"  {tagPtr} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 0");
-            EmitLine(sb: sb, line: $"  {tag} = load {tagType}, ptr {tagPtr}");
-            string cmp = NextTemp();
-            EmitLine(sb: sb, line: $"  {cmp} = icmp eq {tagType} {tag}, 0");
-            EmitLine(sb: sb, line: $"  br i1 {cmp}, label %{matchLabel}, label %{failLabel}");
+                line: $"  {field0PtrN} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 0");
+
+            bool isEntityMaybe = IsMaybeType(type: subjectType)
+                && subjectType.TypeArguments?.Count > 0
+                && subjectType.TypeArguments[0] is EntityTypeInfo;
+
+            if (isEntityMaybe)
+            {
+                // Entity Maybe { Snatched[T] }: field 0 is a ptr — null check.
+                string ptrValN = NextTemp();
+                EmitLine(sb: sb, line: $"  {ptrValN} = load ptr, ptr {field0PtrN}");
+                string cmp = NextTemp();
+                EmitLine(sb: sb, line: $"  {cmp} = icmp eq ptr {ptrValN}, null");
+                EmitLine(sb: sb, line: $"  br i1 {cmp}, label %{matchLabel}, label %{failLabel}");
+            }
+            else
+            {
+                // Record Maybe { i1, T } or Lookup: compare tag field to 0.
+                string tagTypeN = GetCarrierTagType(kind: GetCarrierKind(type: subjectType));
+                string tagN = NextTemp();
+                EmitLine(sb: sb, line: $"  {tagN} = load {tagTypeN}, ptr {field0PtrN}");
+                string cmp = NextTemp();
+                EmitLine(sb: sb, line: $"  {cmp} = icmp eq {tagTypeN} {tagN}, 0");
+                EmitLine(sb: sb, line: $"  br i1 {cmp}, label %{matchLabel}, label %{failLabel}");
+            }
         }
         else
         {
@@ -1020,5 +1438,104 @@ public partial class LLVMCodeGenerator
             EmitLine(sb: sb, line: $"  store {memberLlvmType} {memberVal}, ptr {varAddr}");
             _localVariables[key: bindName] = memberVar.Type;
         }
+    }
+
+    /// <summary>Returns the generic base name of a carrier type (Maybe, Result, or Lookup), or null.</summary>
+    private static string? GetCarrierBaseName(TypeInfo? type) =>
+        type == null ? null : GetGenericBaseName(type: type);
+
+    /// <summary>
+    /// Returns true if this pattern represents the "absent" arm for the given carrier type.
+    /// Maybe → NonePattern or TypePattern(None); Result/Lookup → TypePattern(Blank).
+    /// </summary>
+    private static bool IsAbsentPatternForCarrier(Pattern pattern, TypeInfo? carrierType) =>
+        GetCarrierBaseName(type: carrierType) switch
+        {
+            "Maybe" => pattern is NonePattern or TypePattern { Type.Name: "None" },
+            "Result" or "Lookup" => pattern is TypePattern { Type.Name: "Blank" },
+            _ => false
+        };
+
+    /// <summary>
+    /// Returns true if the pattern matches the error/crashable arm of a carrier.
+    /// The parser creates TypePattern(type: "Crashable") rather than CrashablePattern.
+    /// </summary>
+    private static bool IsCrashablePatternForGen(Pattern pattern) =>
+        pattern is CrashablePattern or TypePattern { Type.Name: "Crashable" };
+
+    /// <summary>
+    /// Extracts the inner T value from a carrier (already spilled to ptr <paramref name="subject"/>)
+    /// for a narrowed else arm. Stores the extracted value into a local variable and
+    /// unconditionally branches to <paramref name="matchLabel"/>.
+    /// </summary>
+    private void EmitCarrierElsePatternExtract(StringBuilder sb, string subject,
+        TypeInfo subjectType, TypeInfo innerType, string variableName, string? matchLabel = null)
+    {
+        string carrierLlvmType = GetCarrierLLVMType(type: subjectType);
+        string varAddr = $"%{variableName}.addr";
+
+        if (IsMaybeType(type: subjectType))
+        {
+            // Record Maybe { i1 present, T value }: value at field 1.
+            // Entity Maybe { Snatched[T] }:         entity ptr at field 0 (only field).
+            if (innerType is EntityTypeInfo)
+            {
+                string valPtr = NextTemp();
+                EmitLine(sb: sb,
+                    line: $"  {valPtr} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 0");
+                string val = NextTemp();
+                EmitLine(sb: sb, line: $"  {val} = load ptr, ptr {valPtr}");
+                EmitEntryAlloca(llvmName: varAddr, llvmType: "ptr");
+                EmitLine(sb: sb, line: $"  store ptr {val}, ptr {varAddr}");
+            }
+            else
+            {
+                string valPtr = NextTemp();
+                EmitLine(sb: sb,
+                    line: $"  {valPtr} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 1");
+                string innerLlvm = GetLLVMType(type: innerType);
+                string val = NextTemp();
+                EmitLine(sb: sb, line: $"  {val} = load {innerLlvm}, ptr {valPtr}");
+                EmitEntryAlloca(llvmName: varAddr, llvmType: innerLlvm);
+                EmitLine(sb: sb, line: $"  store {innerLlvm} {val}, ptr {varAddr}");
+            }
+
+            _localVariables[key: variableName] = innerType;
+        }
+        else
+        {
+            // Result/Lookup { i64 type_id, i64 data }: raw value bits at field 1
+            string dataPtr = NextTemp();
+            EmitLine(sb: sb,
+                line: $"  {dataPtr} = getelementptr {{ i64, i64 }}, ptr {subject}, i32 0, i32 1");
+            string dataVal = NextTemp();
+            EmitLine(sb: sb, line: $"  {dataVal} = load i64, ptr {dataPtr}");
+
+            string innerLlvm = GetLLVMType(type: innerType);
+            if (innerType is EntityTypeInfo)
+            {
+                string ptrVal = NextTemp();
+                EmitLine(sb: sb, line: $"  {ptrVal} = inttoptr i64 {dataVal} to ptr");
+                EmitEntryAlloca(llvmName: varAddr, llvmType: "ptr");
+                EmitLine(sb: sb, line: $"  store ptr {ptrVal}, ptr {varAddr}");
+            }
+            else if (innerLlvm == "i64")
+            {
+                EmitEntryAlloca(llvmName: varAddr, llvmType: "i64");
+                EmitLine(sb: sb, line: $"  store i64 {dataVal}, ptr {varAddr}");
+            }
+            else
+            {
+                string truncVal = NextTemp();
+                EmitLine(sb: sb, line: $"  {truncVal} = trunc i64 {dataVal} to {innerLlvm}");
+                EmitEntryAlloca(llvmName: varAddr, llvmType: innerLlvm);
+                EmitLine(sb: sb, line: $"  store {innerLlvm} {truncVal}, ptr {varAddr}");
+            }
+
+            _localVariables[key: variableName] = innerType;
+        }
+
+        if (matchLabel != null)
+            EmitLine(sb: sb, line: $"  br label %{matchLabel}");
     }
 }

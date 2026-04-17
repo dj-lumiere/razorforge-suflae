@@ -401,6 +401,65 @@ public partial class Parser
     }
 
     /// <summary>
+    /// Parses a crashable type declaration.
+    /// Syntax: <c>crashable Name</c> followed by an optional indented body with
+    /// field declarations.
+    /// </summary>
+    private CrashableDeclaration ParseCrashableDeclaration(
+        VisibilityModifier visibility = VisibilityModifier.Open)
+    {
+        SourceLocation location = GetLocation(token: PeekToken(offset: -1));
+        string name = ConsumeIdentifier(errorMessage: "Expected crashable type name");
+
+        var members = new List<Declaration>();
+
+        Consume(type: TokenType.Newline, errorMessage: "Expected newline after crashable header");
+
+        bool wasParsingTypeBody = _parsingTypeBody;
+        bool wasParsingStrictRecordBody = _parsingStrictRecordBody;
+        _parsingTypeBody = true;
+        _parsingStrictRecordBody = false;
+
+        if (Check(type: TokenType.Indent))
+        {
+            ProcessIndentToken();
+
+            while (!Check(type: TokenType.Dedent) && !IsAtEnd)
+            {
+                if (Match(TokenType.Newline, TokenType.DocComment))
+                    continue;
+
+                if (Match(type: TokenType.Pass))
+                {
+                    Match(type: TokenType.Newline);
+                    continue;
+                }
+
+                IAstNode node = ParseDeclaration();
+                if (node is Declaration member)
+                    members.Add(item: member);
+                else
+                    throw ThrowParseError(code: GrammarDiagnosticCode.InvalidDeclarationInBody,
+                        message: $"Expected declaration inside crashable body, got {node.GetType().Name}");
+            }
+
+            if (Check(type: TokenType.Dedent))
+                ProcessDedentTokens();
+            else if (!IsAtEnd)
+                throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedDedentAfterBody,
+                    message: "Expected dedent after crashable body");
+        }
+
+        _parsingTypeBody = wasParsingTypeBody;
+        _parsingStrictRecordBody = wasParsingStrictRecordBody;
+
+        return new CrashableDeclaration(Name: name,
+            Members: members,
+            Visibility: visibility,
+            Location: location);
+    }
+
+    /// <summary>
     /// Parses a variant (tagged union) declaration.
     /// Syntax: <c>variant Name</c> followed by indented cases with optional associated types.
     /// Variants are sum types where each case can carry different data.

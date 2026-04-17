@@ -1,8 +1,8 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis.Symbols;
-using SemanticAnalysis.Types;
+using SemanticVerification.Symbols;
+using SemanticVerification.Types;
 
 /// <summary>
 /// Declaration code generation for synthesized runtime-support routines.
@@ -142,23 +142,34 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Emits the body for a synthesized S32() or S64() identity cast routine.
-    /// Choice is backed by i32, Flags by i64 — just return %me directly.
+    /// Emits the body for a synthesized numeric creator from a Flags or Choice type.
+    /// U64.$create(from: FlagsType) — identity cast (i64 → i64).
+    /// S64.$create(from: ChoiceType) — sign-extend (i32 → i64).
     /// </summary>
-    private void EmitSynthesizedIdentityCast(RoutineInfo routine, string funcName,
-        string llvmRetType)
+    private void EmitSynthesizedNumericCreate(RoutineInfo routine, string funcName)
     {
-        if (routine.OwnerType == null)
-        {
-            return;
-        }
+        if (routine.ReturnType == null || routine.Parameters.Count != 1) return;
 
-        string meType = GetParameterLLVMType(type: routine.OwnerType);
+        string paramLlvmType = GetParameterLLVMType(type: routine.Parameters[0].Type);
+        string retLlvmType = GetLLVMType(type: routine.ReturnType);
 
         EmitLine(sb: _functionDefinitions,
-            line: $"define {llvmRetType} @{funcName}({meType} %me) {{");
+            line: $"define {retLlvmType} @{funcName}({paramLlvmType} %from) {{");
         EmitLine(sb: _functionDefinitions, line: "entry:");
-        EmitLine(sb: _functionDefinitions, line: $"  ret {llvmRetType} %me");
+
+        if (paramLlvmType == retLlvmType)
+        {
+            EmitLine(sb: _functionDefinitions, line: $"  ret {retLlvmType} %from");
+        }
+        else
+        {
+            // Choice is i32, S64 return is i64 — sign-extend
+            string ext = NextTemp();
+            EmitLine(sb: _functionDefinitions,
+                line: $"  {ext} = sext {paramLlvmType} %from to {retLlvmType}");
+            EmitLine(sb: _functionDefinitions, line: $"  ret {retLlvmType} {ext}");
+        }
+
         EmitLine(sb: _functionDefinitions, line: "}");
         EmitLine(sb: _functionDefinitions, line: "");
     }

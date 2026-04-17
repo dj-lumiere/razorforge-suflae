@@ -93,7 +93,8 @@ public record VariableDeclaration(
     Expression? Initializer,
     VisibilityModifier Visibility,
     SourceLocation Location,
-    StorageClass Storage = StorageClass.None) : Declaration(Location: Location)
+    StorageClass Storage = StorageClass.None,
+    IReadOnlyList<string>? Annotations = null) : Declaration(Location: Location)
 {
     /// <inheritdoc/>
     public override T Accept<T>(IAstVisitor<T> visitor)
@@ -117,7 +118,7 @@ public record VariableDeclaration(
 /// <param name="GenericConstraints">Optional generic constraints.</param>
 /// <param name="IsFailable">Whether the routine has a failable <c>!</c> suffix.</param>
 /// <param name="Storage">Storage class for the routine.</param>
-/// <param name="Async">Suspended, threaded, or emitting routine mode.</param>
+/// <param name="Async">Suspended or threaded routine mode.</param>
 /// <param name="IsDangerous">Whether the routine requires a <c>danger!</c> context.</param>
 /// <remarks>
 /// Function declarations support:
@@ -300,6 +301,29 @@ public record FlagsDeclaration(
 }
 
 /// <summary>
+/// Crashable type declaration — a throwable error entity.
+/// Always heap-allocated. Must provide crash_message() -> Text.
+/// crash_title() is synthesized from the type name (CamelCase → sentence case).
+/// Automatically conforms to the Crashable protocol.
+/// </summary>
+/// <param name="Name">Crashable type identifier name</param>
+/// <param name="Members">Field declarations and optional crash_message() routine body</param>
+/// <param name="Visibility">Access control modifier</param>
+/// <param name="Location">Source location information</param>
+public record CrashableDeclaration(
+    string Name,
+    List<Declaration> Members,
+    VisibilityModifier Visibility,
+    SourceLocation Location) : Declaration(Location: Location)
+{
+    /// <inheritdoc/>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitCrashableDeclaration(node: this);
+    }
+}
+
+/// <summary>
 /// Variant declaration that defines type-based tagged unions.
 /// Each member is a type — the type IS the tag. No named cases.
 /// </summary>
@@ -455,10 +479,29 @@ public enum AsyncStatus
     Threaded,
 
     /// <summary>
-    /// Generator routine that yields values via emit statements.
-    /// Used for lazy sequence generation (Iterator pattern).
+    /// Compiler-generated lookup_ variant: wraps a failable routine to return Lookup[T].
+    /// throw → error carrier, absent → zeroinitializer, return → success carrier.
     /// </summary>
-    Emitting
+    LookupVariant,
+
+    /// <summary>
+    /// Compiler-generated check_ variant: wraps a failable routine to return Result[Blank].
+    /// throw → error carrier, absent/return → success zeroinitializer (Blank).
+    /// </summary>
+    CheckVariant,
+
+    /// <summary>
+    /// Compiler-generated try_ variant for Blank-returning failable routines.
+    /// Returns Bool (i1): true = success, false = absent or throw.
+    /// </summary>
+    TryBoolVariant,
+
+    /// <summary>
+    /// Compiler-generated try_ variant for non-Blank failable routines.
+    /// Returns Maybe[T] carrier: absent/throw → zeroinitializer (None), return value → present.
+    /// RoutineInfo.ReturnType is the full Maybe[T] type; codegen uses GetLLVMType directly.
+    /// </summary>
+    TryVariant
 }
 
 /// <summary>

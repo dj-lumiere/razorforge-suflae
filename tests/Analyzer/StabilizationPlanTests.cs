@@ -1,5 +1,5 @@
-using SemanticAnalysis.Diagnostics;
-using SemanticAnalysis.Results;
+using Compiler.Diagnostics;
+using SemanticVerification.Results;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -13,7 +13,7 @@ using static TestHelpers;
 /// </summary>
 public class StabilizationPlanTests
 {
-    #region P1 — Protocol method lookup on instantiated generics
+    #region P1 ??Protocol method lookup on instantiated generics
 
     /// <summary>
     /// Verifies that protocol method lookup substitutes the owner type argument on instantiated generics.
@@ -124,7 +124,7 @@ public class StabilizationPlanTests
 
     #endregion
 
-    #region P2 — GenericDefinition preserved across all update paths
+    #region P2 ??GenericDefinition preserved across all update paths
 
     /// <summary>
     /// Verifies that generic record protocol updates preserve the generic definition for later substitution.
@@ -196,7 +196,7 @@ public class StabilizationPlanTests
 
     #endregion
 
-    #region P3 — Using bound type agreement
+    #region P3 ??Using bound type agreement
 
     /// <summary>
     /// Verifies that <c>using</c> binds the correct type for generic resources exposing <c>$enter</c>/<c>$exit</c>.
@@ -259,7 +259,7 @@ public class StabilizationPlanTests
 
     #endregion
 
-    #region P4 — Routine body matching edge cases
+    #region P4 ??Routine body matching edge cases
 
     /// <summary>
     /// Verifies that zero-argument and one-argument overloads each resolve to the correct routine body.
@@ -409,7 +409,7 @@ public class StabilizationPlanTests
 
     #endregion
 
-    #region P5 — GenericAstRewriter no longer rewrites identifiers
+    #region P5 ??GenericAstRewriter no longer rewrites identifiers
 
     /// <summary>
     /// Verifies that generic constant parameters remain for code generation to resolve rather than being rewritten in the AST.
@@ -438,7 +438,7 @@ public class StabilizationPlanTests
 
     #endregion
 
-    #region P6 — No string-based generic heuristics
+    #region P6 ??No string-based generic heuristics
 
     /// <summary>
     /// Verifies that nested generic types resolve through generic definitions instead of string heuristics.
@@ -503,7 +503,7 @@ public class StabilizationPlanTests
 
     #endregion
 
-    #region Cross-cutting — Generic + protocol + overload combined
+    #region Cross-cutting ??Generic + protocol + overload combined
 
     /// <summary>
     /// Verifies that generic substitution, protocol lookup, and overload body matching work together in one scenario.

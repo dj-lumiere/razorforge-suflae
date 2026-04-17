@@ -1,5 +1,6 @@
-﻿using SemanticAnalysis.Results;
-using SemanticAnalysis.Symbols;
+using Compiler.Diagnostics;
+using SemanticVerification.Results;
+using SemanticVerification.Symbols;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -217,7 +218,7 @@ public class ErrorVariantGenerationTests
     /// </summary>
 
     [Fact]
-    public void Analyze_ThrowInNonFailableRoutine_ReportsError()
+    public void Analyze_ThrowInNonFailableRoutine_ReportsWarning()
     {
         string source = """
                         entity SomeError obeys Crashable
@@ -237,20 +238,15 @@ public class ErrorVariantGenerationTests
                         """;
 
         AnalysisResult result = Analyze(source: source);
-        Assert.True(condition: result.Errors.Count > 0);
-        Assert.Contains(collection: result.Errors,
-            filter: e =>
-                e.Message.Contains(value: "throw",
-                    comparisonType: StringComparison.OrdinalIgnoreCase) ||
-                e.Message.Contains(value: "failable",
-                    comparisonType: StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(collection: result.Warnings,
+            filter: w => w.Code == SemanticWarningCode.ThrowAbsentInNonFailable);
     }
     /// <summary>
     /// Tests Analyze_AbsentInNonFailableRoutine_ReportsError.
     /// </summary>
 
     [Fact]
-    public void Analyze_AbsentInNonFailableRoutine_ReportsError()
+    public void Analyze_AbsentInNonFailableRoutine_ReportsWarning()
     {
         string source = """
                         routine might_fail() -> S32
@@ -259,13 +255,8 @@ public class ErrorVariantGenerationTests
                         """;
 
         AnalysisResult result = Analyze(source: source);
-        Assert.True(condition: result.Errors.Count > 0);
-        Assert.Contains(collection: result.Errors,
-            filter: e =>
-                e.Message.Contains(value: "absent",
-                    comparisonType: StringComparison.OrdinalIgnoreCase) ||
-                e.Message.Contains(value: "failable",
-                    comparisonType: StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(collection: result.Warnings,
+            filter: w => w.Code == SemanticWarningCode.ThrowAbsentInNonFailable);
     }
     /// <summary>
     /// Tests Analyze_ThrowNonCrashable_ReportsError.

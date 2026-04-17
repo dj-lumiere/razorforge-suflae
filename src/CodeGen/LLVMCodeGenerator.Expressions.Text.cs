@@ -1,8 +1,8 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis.Symbols;
-using SemanticAnalysis.Types;
+using SemanticVerification.Symbols;
+using SemanticVerification.Types;
 using SyntaxTree;
 
 /// <summary>

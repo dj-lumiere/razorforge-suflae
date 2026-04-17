@@ -42,6 +42,10 @@ public partial class Tokenizer
                 Advance();
                 AddToken(type: TokenType.PlusAssign);
                 break;
+            case '!':
+                Advance();
+                AddToken(type: TokenType.PlusUnchecked);
+                break;
             default:
                 AddToken(type: TokenType.Plus);
                 break;
@@ -73,6 +77,10 @@ public partial class Tokenizer
             case '=':
                 Advance();
                 AddToken(type: TokenType.MinusAssign);
+                break;
+            case '!':
+                Advance();
+                AddToken(type: TokenType.MinusUnchecked);
                 break;
             default:
                 AddToken(type: TokenType.Minus);
@@ -130,6 +138,13 @@ public partial class Tokenizer
                     ? TokenType.PowerAssign
                     : TokenType.StarAssign);
                 break;
+            case '!':
+                Advance();
+                // *! or **!
+                AddToken(type: isPow
+                    ? TokenType.PowerUnchecked
+                    : TokenType.MultiplyUnchecked);
+                break;
             default:
                 AddToken(type: isPow
                     ? TokenType.Power
@@ -145,7 +160,7 @@ public partial class Tokenizer
     {
         if (!Match(expected: '/'))
         {
-            // Single / - check for /^, /^=, /=
+            // Single / - check for /^, /^=, /=, /!
             if (Match(expected: '^'))
             {
                 AddToken(type: Match(expected: '=')
@@ -156,6 +171,10 @@ public partial class Tokenizer
             {
                 AddToken(type: TokenType.SlashAssign);
             }
+            else if (Match(expected: '!'))
+            {
+                AddToken(type: TokenType.SlashUnchecked); // /!
+            }
             else
             {
                 AddToken(type: TokenType.Slash);
@@ -163,10 +182,14 @@ public partial class Tokenizer
         }
         else
         {
-            // Double // - check for //=
+            // Double // - check for //=, //!
             if (Match(expected: '='))
             {
                 AddToken(type: TokenType.DivideAssign); // //=
+            }
+            else if (Match(expected: '!'))
+            {
+                AddToken(type: TokenType.DivideUnchecked); // //!
             }
             else
             {
@@ -184,6 +207,11 @@ public partial class Tokenizer
         {
             Advance();
             AddToken(type: TokenType.PercentAssign);
+        }
+        else if (Peek() == '!')
+        {
+            Advance();
+            AddToken(type: TokenType.PercentUnchecked);
         }
         else
         {

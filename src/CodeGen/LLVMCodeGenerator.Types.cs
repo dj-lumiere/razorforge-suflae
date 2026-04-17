@@ -1,9 +1,9 @@
-﻿using SemanticAnalysis.Enums;
-using SemanticAnalysis.Symbols;
+﻿using SemanticVerification.Enums;
+using SemanticVerification.Symbols;
 
 namespace Compiler.CodeGen;
 
-using SemanticAnalysis.Types;
+using SemanticVerification.Types;
 
 /// <summary>
 /// Type mapping: RazorForge/Suflae types → LLVM IR types.
@@ -74,6 +74,8 @@ public partial class LLVMCodeGenerator
             } record => record.LlvmType,
 
             // Legacy single-member-variable wrappers → unwrap to underlying intrinsic
+            // TODO(C78): extend this to ALL single-field records as an automatic inlining
+            // optimization — eliminates one level of struct wrapping for zero-overhead wrappers.
             RecordTypeInfo { IsSingleMemberVariableWrapper: true } record => GetLLVMType(
                 type: record.UnderlyingIntrinsic!),
 
@@ -94,19 +96,16 @@ public partial class LLVMCodeGenerator
                 GenericDefinition: { HasDirectBackendType: true } baseRecord
             } => baseRecord.LlvmType,
 
-            // Error handling records (Maybe[T], Result[T], Lookup[T]) — split by kind
-            RecordTypeInfo record when GetGenericBaseName(type: record) is "Maybe" => record
-               .TypeArguments is { Count: 1 }
-                ? GetMaybeCarrierLLVMType(valueType: record.TypeArguments[index: 0])
-                : GetMaybeCarrierLLVMType(valueType: new GenericParameterTypeInfo(name: "T")),
-            RecordTypeInfo when GetGenericBaseName(type: type) is "Result" or "Lookup" =>
-                GetResultLookupCarrierType(),
-
-            // Multi-member-variable records → LLVM struct type
-            RecordTypeInfo record => GetRecordTypeName(record: record),
+            // Multi-member-variable records → LLVM struct type.
+            // Also ensure the struct declaration is emitted — carrier types like Result[Result[T]]
+            // may be created on-demand without being registered, so the type loop never sees them.
+            RecordTypeInfo record => EnsureRecordTypeDeclared(record: record),
 
             // Entities → pointer to LLVM struct
             EntityTypeInfo => "ptr",
+
+            // Crashable types → pointer to LLVM struct (always entity semantics)
+            CrashableTypeInfo => "ptr",
 
             // Wrappers (Viewed, Hijacked, Snatched, etc.) → all pointers at LLVM level
             WrapperTypeInfo => "ptr",
@@ -126,10 +125,15 @@ public partial class LLVMCodeGenerator
             // Protocols → type-erased pointer (protocol-typed fields/params hold a handle to a concrete object)
             ProtocolTypeInfo => "ptr",
 
+            // Routine types (function pointers) → opaque pointer
+            RoutineTypeInfo => "ptr",
+
             // Const generic values — map to the underlying integer type
             ConstGenericValueTypeInfo => "i64",
 
-            // Generic parameters — use ptr as fallback (should be resolved before reaching codegen)
+            // Generic parameters — use ptr as fallback (should be resolved before reaching codegen).
+            // ResolveTypeSubstitution at the top of this method already consults _typeSubstitutions,
+            // so by the time we reach this arm the parameter is genuinely unresolved.
             GenericParameterTypeInfo => "ptr",
 
             // Error placeholder
@@ -178,6 +182,20 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
+    /// Gets the LLVM struct type name for a record, ensuring its declaration is emitted.
+    /// Called from GetLLVMType so on-demand records (e.g., Result[Result[T]]) are always declared.
+    /// </summary>
+    private string EnsureRecordTypeDeclared(RecordTypeInfo record)
+    {
+        string name = GetRecordTypeName(record: record);
+        // Proactively declare if not yet emitted — covers types created on-demand
+        // that are never visited by the registry iteration in GenerateTypes().
+        if (!_generatedTypes.Contains(item: name))
+            GenerateRecordType(record: record);
+        return name;
+    }
+
+    /// <summary>
     /// Gets the LLVM struct type name for a record.
     /// </summary>
     private static string GetRecordTypeName(RecordTypeInfo record)
@@ -194,6 +212,14 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
+    /// Gets the LLVM struct type name for a crashable type.
+    /// </summary>
+    private static string GetCrashableTypeName(CrashableTypeInfo crashable)
+    {
+        return $"%{Q(name: $"Crashable.{crashable.Name}")}";
+    }
+
+    /// <summary>
     /// Gets the LLVM struct type name for a variant.
     /// </summary>
     private static string GetVariantTypeName(VariantTypeInfo variant)
@@ -202,33 +228,43 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Returns the correct LLVM struct type for an error-handling carrier.
-    /// Maybe → { i1, T_inline } or { i1, ptr }; Result/Lookup → { i64, i64 }.
+    /// Returns the named LLVM type for an error-handling carrier (Maybe[T], Result[T], Lookup[T]).
+    /// Delegates to GetLLVMType — carrier layouts come from their Standard library definitions.
     /// </summary>
-    private string GetCarrierLLVMType(TypeInfo type) =>
-        IsMaybeType(type: type)
-            ? GetMaybeCarrierLLVMType(valueType: type.TypeArguments![index: 0])
-            : GetResultLookupCarrierType();
+    private string GetCarrierLLVMType(TypeInfo type) => GetLLVMType(type: type);
 
     /// <summary>
-    /// Returns the LLVM struct type for Result and Lookup carriers.
-    /// Fixed layout: { U64 type_id, Address data_address } = { i64, i64 }.
-    /// </summary>
-    private static string GetResultLookupCarrierType() => "{ i64, i64 }";
-
-    /// <summary>
-    /// Returns the LLVM struct for a Maybe carrier.
-    /// Tag is always i1; value is inline T or ptr for entities/wrappers/unresolved generics.
+    /// Returns the named LLVM type for a Maybe[T] carrier given the inner value type T.
+    /// Looks up the resolved Maybe[T] in the registry; falls back to constructing the name directly.
     /// </summary>
     private string GetMaybeCarrierLLVMType(TypeInfo valueType)
     {
-        // Value layout: entity/wrapper/unresolved generic → ptr (Snatched[T] is a WrapperTypeInfo)
-        // Record/value → inline T (field 1 is T directly)
-        string valueLlvm = valueType is EntityTypeInfo or WrapperTypeInfo
-            or GenericParameterTypeInfo or TypeParameterPlaceholder
-            ? "ptr"
-            : GetLLVMType(type: valueType);
-        return $"{{ i1, {valueLlvm} }}";
+        TypeInfo? resolved = _registry.LookupType(name: $"Maybe[{valueType.Name}]");
+        if (resolved is RecordTypeInfo maybeRecord)
+            return GetRecordTypeName(record: maybeRecord);
+        return $"%{Q(name: $"Record.Maybe[{valueType.Name}]")}";
+    }
+
+    /// <summary>
+    /// Returns the named LLVM type for a Lookup[T] carrier given the inner value type T.
+    /// </summary>
+    private string GetLookupCarrierLLVMType(TypeInfo valueType)
+    {
+        TypeInfo? resolved = _registry.LookupType(name: $"Lookup[{valueType.Name}]");
+        if (resolved is RecordTypeInfo lookupRecord)
+            return GetRecordTypeName(record: lookupRecord);
+        return $"%{Q(name: $"Record.Lookup[{valueType.Name}]")}";
+    }
+
+    /// <summary>
+    /// Returns the named LLVM type for a Result[T] carrier given the inner value type T.
+    /// </summary>
+    private string GetResultCarrierLLVMType(TypeInfo valueType)
+    {
+        TypeInfo? resolved = _registry.LookupType(name: $"Result[{valueType.Name}]");
+        if (resolved is RecordTypeInfo resultRecord)
+            return GetRecordTypeName(record: resultRecord);
+        return $"%{Q(name: $"Record.Result[{valueType.Name}]")}";
     }
 
     /// <summary>Returns the LLVM type of the tag field for a carrier (i1 for Maybe, i64 for Result/Lookup).</summary>
@@ -349,8 +385,9 @@ public partial class LLVMCodeGenerator
         type = ResolveTypeSubstitution(type: type);
         return type switch
         {
-            // Entities are always passed as pointers
+            // Entities and crashable types are always passed as pointers
             EntityTypeInfo => "ptr",
+            CrashableTypeInfo => "ptr",
 
             // Other types use normal mapping
             _ => GetLLVMType(type: type)
@@ -371,6 +408,7 @@ public partial class LLVMCodeGenerator
                 type: record.UnderlyingIntrinsic!),
             RecordTypeInfo record => CalculateRecordSize(record: record),
             EntityTypeInfo => _pointerSizeBytes, // Entities are heap-allocated, stored as pointers
+            CrashableTypeInfo => _pointerSizeBytes, // Crashable types are heap-allocated entities
             TupleTypeInfo tuple => CalculateTupleSize(tuple: tuple),
             WrapperTypeInfo => _pointerSizeBytes, // Pointer size
             ChoiceTypeInfo => 4, // i32 tag

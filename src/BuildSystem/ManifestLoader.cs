@@ -163,6 +163,9 @@ public static class ManifestLoader
             target.Mode = mode?.ToString() ?? "debug";
         }
 
+        if (table.TryGetValue(key: "dump-ast", value: out object? dumpAst))
+            target.DumpAst = dumpAst is bool b && b;
+
         if (string.IsNullOrWhiteSpace(value: target.Entry))
         {
             throw new InvalidOperationException(
@@ -209,6 +212,11 @@ public static class ManifestLoader
                          searchPattern: pattern,
                          searchOption: SearchOption.AllDirectories))
             {
+                // Skip debug AST dump files — they share the module name with the real source
+                if (filePath.EndsWith(value: ".rf.desugared",
+                        comparisonType: StringComparison.OrdinalIgnoreCase))
+                    continue;
+
                 string? moduleName = ExtractModuleName(filePath: filePath);
                 if (moduleName != null)
                 {

@@ -1,4 +1,4 @@
-using SemanticAnalysis.Results;
+using SemanticVerification.Results;
 using SyntaxTree;
 using Xunit;
 
@@ -247,8 +247,8 @@ public class GenericResolutionTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticAnalysis.SemanticAnalyzer(
-            language: SemanticAnalysis.Enums.Language.RazorForge);
+        var analyzer = new SemanticVerification.SemanticAnalyzer(
+            language: SemanticVerification.Enums.Language.RazorForge);
         AnalysisResult result = analyzer.Analyze(program: program);
         Assert.Empty(collection: result.Errors);
 
@@ -286,8 +286,8 @@ public class GenericResolutionTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticAnalysis.SemanticAnalyzer(
-            language: SemanticAnalysis.Enums.Language.RazorForge);
+        var analyzer = new SemanticVerification.SemanticAnalyzer(
+            language: SemanticVerification.Enums.Language.RazorForge);
         AnalysisResult result = analyzer.Analyze(program: program);
         Assert.Empty(collection: result.Errors);
 
@@ -320,8 +320,8 @@ public class GenericResolutionTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticAnalysis.SemanticAnalyzer(
-            language: SemanticAnalysis.Enums.Language.RazorForge);
+        var analyzer = new SemanticVerification.SemanticAnalyzer(
+            language: SemanticVerification.Enums.Language.RazorForge);
         AnalysisResult result = analyzer.Analyze(program: program);
         Assert.Empty(collection: result.Errors);
 
@@ -329,12 +329,15 @@ public class GenericResolutionTests
                                  .First(predicate: r => r.Name == "test");
         var body = (BlockStatement)testRoutine.Body;
         // Statement 1 (index 1): var c = b.convert[Bool](true)
+        // After GenericCallLoweringPass, the node is lowered to a CallExpression with TypeArguments.
         var declStmt = (DeclarationStatement)body.Statements[index: 1];
         var varDecl = (VariableDeclaration)declStmt.Declaration;
-        var generic = (GenericMethodCallExpression)varDecl.Initializer!;
+        var call = (CallExpression)varDecl.Initializer!;
 
-        Assert.NotNull(@object: generic.ResolvedRoutine);
-        Assert.Equal(expected: "convert", actual: generic.ResolvedRoutine!.Name);
+        Assert.NotNull(@object: call.ResolvedRoutine);
+        Assert.Equal(expected: "convert", actual: call.ResolvedRoutine!.Name);
+        Assert.NotNull(@object: call.TypeArguments);
+        Assert.Single(call.TypeArguments!);
     }
 
     #endregion

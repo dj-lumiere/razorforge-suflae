@@ -243,6 +243,16 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the generic member expression</returns>
     T VisitGenericMemberExpression(GenericMemberExpression node);
 
+    /// <summary>Visits a type-id expression node (compile-time FNV-1a type_id constant)</summary>
+    /// <param name="node">The type-id expression to visit</param>
+    /// <returns>Result of visiting the type-id expression</returns>
+    T VisitTypeIdExpression(TypeIdExpression node);
+
+    /// <summary>Visits a carrier-payload expression node (extracts and reinterprets Result/Lookup payload)</summary>
+    /// <param name="node">The carrier-payload expression to visit</param>
+    /// <returns>Result of visiting the carrier-payload expression</returns>
+    T VisitCarrierPayloadExpression(CarrierPayloadExpression node);
+
     /// <summary>Visits an is-pattern expression node (pattern matching like 'value is Point (x, y)')</summary>
     /// <param name="node">The is-pattern expression to visit</param>
     /// <returns>Result of visiting the is-pattern expression</returns>
@@ -318,6 +328,11 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the becomes statement</returns>
     T VisitBecomesStatement(BecomesStatement node);
 
+    /// <summary>Visits a synthesized variant return statement (replaces throw/absent/return in variant bodies)</summary>
+    /// <param name="node">The variant return statement to visit</param>
+    /// <returns>Result of visiting the variant return statement</returns>
+    T VisitVariantReturnStatement(VariantReturnStatement node);
+
     /// <summary>Visits a throw statement node (error throw, triggers Result&lt;T&gt; or Lookup&lt;T&gt;)</summary>
     /// <param name="node">The throw statement to visit</param>
     /// <returns>Result of visiting the throw statement</returns>
@@ -337,6 +352,11 @@ public interface IAstVisitor<T>
     /// <param name="node">The while statement to visit</param>
     /// <returns>Result of visiting the while statement</returns>
     T VisitWhileStatement(WhileStatement node);
+
+    /// <summary>Visits a loop statement node (infinite loop primitive)</summary>
+    /// <param name="node">The loop statement to visit</param>
+    /// <returns>Result of visiting the loop statement</returns>
+    T VisitLoopStatement(LoopStatement node);
 
     /// <summary>Visits a for statement node (iterator loop over collections)</summary>
     /// <param name="node">The for statement to visit</param>
@@ -378,11 +398,6 @@ public interface IAstVisitor<T>
     /// <returns>Result of visiting the discard statement</returns>
     T VisitDiscardStatement(DiscardStatement node);
 
-    /// <summary>Visits an emit statement node (generator yield)</summary>
-    /// <param name="node">The emit statement to visit</param>
-    /// <returns>Result of visiting the emit statement</returns>
-    T VisitEmitStatement(EmitStatement node);
-
     // Declaration visitor methods - handle all declaration node types
 
     /// <summary>Visits a variable declaration node (var declarations)</summary>
@@ -414,6 +429,11 @@ public interface IAstVisitor<T>
     /// <param name="node">The flags declaration to visit</param>
     /// <returns>Result of visiting the flags declaration</returns>
     T VisitFlagsDeclaration(FlagsDeclaration node);
+
+    /// <summary>Visits a crashable declaration node (throwable error entity)</summary>
+    /// <param name="node">The crashable declaration to visit</param>
+    /// <returns>Result of visiting the crashable declaration</returns>
+    T VisitCrashableDeclaration(CrashableDeclaration node);
 
     /// <summary>Visits a variant declaration node (tagged union/algebraic data type definitions)</summary>
     /// <param name="node">The variant declaration to visit</param>

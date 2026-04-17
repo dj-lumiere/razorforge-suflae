@@ -17,7 +17,8 @@ public partial class Parser
     /// </summary>
     private VariableDeclaration ParseVariableDeclaration(
         VisibilityModifier visibility = VisibilityModifier.Open,
-        StorageClass storage = StorageClass.None)
+        StorageClass storage = StorageClass.None,
+        IReadOnlyList<string>? annotations = null)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -42,7 +43,8 @@ public partial class Parser
             Initializer: initializer,
             Visibility: visibility,
             Location: location,
-            Storage: storage);
+            Storage: storage,
+            Annotations: annotations?.Count > 0 ? annotations : null);
     }
 
     /// <summary>

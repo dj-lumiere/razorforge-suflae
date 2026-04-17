@@ -1,9 +1,8 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis.Enums;
-using SemanticAnalysis.Symbols;
-using SemanticAnalysis.Types;
+using SemanticVerification.Symbols;
+using SemanticVerification.Types;
 using SyntaxTree;
 
 /// <summary>
@@ -11,6 +10,138 @@ using SyntaxTree;
 /// </summary>
 public partial class LLVMCodeGenerator
 {
+    /// <summary>
+    /// Emits a lambda expression as an internal auxiliary function and returns its function pointer.
+    /// Only non-capturing lambdas are supported (captures require a closure struct, not yet implemented).
+    /// </summary>
+    private string EmitLambdaExpression(LambdaExpression lambda)
+    {
+        if (lambda.ResolvedType is not RoutineTypeInfo routineType)
+        {
+            throw new InvalidOperationException(
+                message: "Lambda expression has no resolved RoutineTypeInfo.");
+        }
+
+        string lambdaName = $"\"lambda.{_lambdaCounter++}\"";
+
+        // Build parameter list (use param names from AST, types from resolved RoutineTypeInfo)
+        var paramDecls = new List<string>();
+        for (int i = 0; i < lambda.Parameters.Count; i++)
+        {
+            string paramName = lambda.Parameters[index: i].Name;
+            TypeInfo paramType = i < routineType.ParameterTypes.Count
+                ? routineType.ParameterTypes[index: i]
+                : ErrorTypeInfo.Instance;
+            string llvmType = GetLLVMType(type: paramType);
+            paramDecls.Add(item: $"{llvmType} %{paramName}");
+        }
+
+        string retLlvmType = routineType.ReturnType != null
+            ? GetLLVMType(type: routineType.ReturnType)
+            : "void";
+        string paramStr = string.Join(separator: ", ", values: paramDecls);
+
+        // Save current function state
+        Dictionary<string, TypeInfo> savedLocals = new(_localVariables);
+        Dictionary<string, string> savedLocalLLVM = new(_localVarLLVMNames);
+        Dictionary<string, int> savedVarCounts = new(_varNameCounts);
+        List<(string Name, string LLVMAddr)> savedEntityVars = new(_localEntityVars);
+        List<(string Name, string LLVMAddr, RecordTypeInfo RecordType)> savedRCVars =
+            new(_localRCRecordVars);
+        HashSet<string> savedEmittedAllocas = new(_emittedAllocaNames);
+        TypeInfo? savedRetType = _currentFunctionReturnType;
+        bool savedIsFailable = _currentRoutineIsFailable;
+        RoutineInfo? savedRoutine = _currentEmittingRoutine;
+        string savedBlock = _currentBlock;
+        int savedTempCounter = _tempCounter;
+        string savedEntryAllocas = _currentFunctionEntryAllocas.ToString();
+        bool savedTrace = _traceCurrentRoutine;
+
+        // Set up clean state for lambda body
+        _localVariables.Clear();
+        _localVarLLVMNames.Clear();
+        _varNameCounts.Clear();
+        _localEntityVars.Clear();
+        _localRCRecordVars.Clear();
+        _emittedAllocaNames.Clear();
+        _currentFunctionReturnType = routineType.ReturnType;
+        _currentRoutineIsFailable = false;
+        _currentEmittingRoutine = null;
+        _currentBlock = "entry";
+        _currentFunctionEntryAllocas.Clear();
+        _traceCurrentRoutine = false;
+
+        // Register lambda parameters as local variables (alloca/store style)
+        var bodyBuilder = new StringBuilder();
+        for (int i = 0; i < lambda.Parameters.Count; i++)
+        {
+            string paramName = lambda.Parameters[index: i].Name;
+            TypeInfo paramType = i < routineType.ParameterTypes.Count
+                ? routineType.ParameterTypes[index: i]
+                : ErrorTypeInfo.Instance;
+            string llvmType = GetLLVMType(type: paramType);
+            string addrName = $"%{paramName}.addr";
+            _currentFunctionEntryAllocas.AppendLine(value: $"  {addrName} = alloca {llvmType}, align 8");
+            _emittedAllocaNames.Add(item: addrName);
+            bodyBuilder.AppendLine(value: $"  store {llvmType} %{paramName}, ptr {addrName}");
+            _localVariables[key: paramName] = paramType;
+        }
+
+        // Emit body expression
+        string resultVal = EmitExpression(sb: bodyBuilder, expr: lambda.Body);
+        bodyBuilder.AppendLine(value: $"  ret {retLlvmType} {resultVal}");
+
+        // Emit the lambda function to aux definitions
+        EmitLine(sb: _auxFunctionDefinitions,
+            line: $"define internal {retLlvmType} @{lambdaName}({paramStr}) {{");
+        EmitLine(sb: _auxFunctionDefinitions, line: "entry:");
+        _auxFunctionDefinitions.Append(value: _currentFunctionEntryAllocas);
+        _auxFunctionDefinitions.Append(value: bodyBuilder);
+        EmitLine(sb: _auxFunctionDefinitions, line: "}");
+        EmitLine(sb: _auxFunctionDefinitions, line: "");
+
+        // Restore state
+        _localVariables.Clear();
+        foreach (KeyValuePair<string, TypeInfo> kv in savedLocals)
+        {
+            _localVariables[key: kv.Key] = kv.Value;
+        }
+
+        _localVarLLVMNames.Clear();
+        foreach (KeyValuePair<string, string> kv in savedLocalLLVM)
+        {
+            _localVarLLVMNames[key: kv.Key] = kv.Value;
+        }
+
+        _varNameCounts.Clear();
+        foreach (KeyValuePair<string, int> kv in savedVarCounts)
+        {
+            _varNameCounts[key: kv.Key] = kv.Value;
+        }
+
+        _localEntityVars.Clear();
+        _localEntityVars.AddRange(collection: savedEntityVars);
+        _localRCRecordVars.Clear();
+        _localRCRecordVars.AddRange(collection: savedRCVars);
+
+        _emittedAllocaNames.Clear();
+        foreach (string name in savedEmittedAllocas)
+        {
+            _emittedAllocaNames.Add(item: name);
+        }
+
+        _currentFunctionReturnType = savedRetType;
+        _currentRoutineIsFailable = savedIsFailable;
+        _currentEmittingRoutine = savedRoutine;
+        _currentBlock = savedBlock;
+        _tempCounter = savedTempCounter;
+        _currentFunctionEntryAllocas.Clear();
+        _currentFunctionEntryAllocas.Append(value: savedEntryAllocas);
+        _traceCurrentRoutine = savedTrace;
+
+        return $"@{lambdaName}";
+    }
+
     private string EmitConditional(StringBuilder sb, ConditionalExpression cond)
     {
         string condition = EmitExpression(sb: sb, expr: cond.Condition);
@@ -46,154 +177,6 @@ public partial class LLVMCodeGenerator
             line:
             $"  {result} = phi {llvmType} [ {thenValue}, %{thenLabel} ], [ {elseValue}, %{elseLabel} ]");
 
-        return result;
-    }
-
-    /// <summary>
-    /// Generates code for an index access expression (e.g., list[i]).
-    /// </summary>
-    private string EmitIndexAccess(StringBuilder sb, IndexExpression index)
-    {
-        // Resolve target type to decide dispatch strategy
-        TypeInfo? targetType = GetExpressionType(expr: index.Object);
-
-        // If the type has a $getitem method, dispatch to it
-        if (targetType != null)
-        {
-            RoutineInfo? getItem = _registry.LookupMethod(type: targetType, methodName: "$getitem");
-
-            if (getItem != null)
-            {
-                // Emit as method call: obj.$getitem(index) or obj.$getitem!(index)
-                // The parser strips '!' from failable routine names (IsFailable = true, Name = "$getitem").
-                // EmitMethodCall detects failability from the trailing '!' in PropertyName, so restore it.
-                string getItemPropertyName = getItem.IsFailable ? getItem.Name + "!" : getItem.Name;
-                var member = new MemberExpression(Object: index.Object,
-                    PropertyName: getItemPropertyName,
-                    Location: index.Location);
-                return EmitMethodCall(sb: sb,
-                    member: member,
-                    arguments: new List<Expression> { index.Index });
-            }
-
-            // For entity types with a list-like first field (e.g., Text has characters: List[Character]),
-            // inline $getitem as: load list ptr → GEP data → load element
-            if (getItem != null && targetType is EntityTypeInfo entity &&
-                entity.MemberVariables.Count > 0)
-            {
-                MemberVariableInfo firstField = entity.MemberVariables[index: 0];
-                if (firstField.Type is EntityTypeInfo listType &&
-                    listType.Name.StartsWith(value: "List["))
-                {
-                    string target = EmitExpression(sb: sb, expr: index.Object);
-                    string indexValue = EmitExpression(sb: sb, expr: index.Index);
-
-                    // GEP to get the list pointer field
-                    string entityTypeName = GetEntityTypeName(entity: entity);
-                    string listFieldPtr = NextTemp();
-                    EmitLine(sb: sb,
-                        line:
-                        $"  {listFieldPtr} = getelementptr {entityTypeName}, ptr {target}, i32 0, i32 0");
-                    string listPtr = NextTemp();
-                    EmitLine(sb: sb, line: $"  {listPtr} = load ptr, ptr {listFieldPtr}");
-
-                    // GEP into list's data (field 0 of list entity)
-                    string listEntityType = GetEntityTypeName(entity: listType);
-                    string dataFieldPtr = NextTemp();
-                    EmitLine(sb: sb,
-                        line:
-                        $"  {dataFieldPtr} = getelementptr {listEntityType}, ptr {listPtr}, i32 0, i32 0");
-                    string dataBase = NextTemp();
-                    EmitLine(sb: sb, line: $"  {dataBase} = load ptr, ptr {dataFieldPtr}");
-
-                    // Load the element
-                    TypeInfo? elemType = GetListElementType(listEntity: listType);
-                    string elemLlvm = elemType != null
-                        ? GetLLVMType(type: elemType)
-                        : "i32";
-                    string elemPtr = NextTemp();
-                    EmitLine(sb: sb,
-                        line:
-                        $"  {elemPtr} = getelementptr {elemLlvm}, ptr {dataBase}, i64 {indexValue}");
-                    string loaded = NextTemp();
-                    EmitLine(sb: sb, line: $"  {loaded} = load {elemLlvm}, ptr {elemPtr}");
-                    return loaded;
-                }
-            }
-        }
-
-        // For CStr indexing: pointer + offset → load byte
-        if (targetType is RecordTypeInfo { Name: "CStr" })
-        {
-            string cstrVal = EmitExpression(sb: sb, expr: index.Object);
-            string idxVal = EmitExpression(sb: sb, expr: index.Index);
-            string ptr = NextTemp();
-            EmitLine(sb: sb, line: $"  {ptr} = extractvalue %Record.CStr {cstrVal}, 0");
-            string addr = NextTemp();
-            EmitLine(sb: sb, line: $"  {addr} = add i64 {ptr}, {idxVal}");
-            string realPtr = NextTemp();
-            EmitLine(sb: sb, line: $"  {realPtr} = inttoptr i64 {addr} to ptr");
-            string loaded = NextTemp();
-            EmitLine(sb: sb, line: $"  {loaded} = load i8, ptr {realPtr}");
-            return loaded;
-        }
-
-        // Fallback: raw GEP + load for pointer/contiguous-memory types
-        string fallbackTarget = EmitExpression(sb: sb, expr: index.Object);
-        string fallbackIndex = EmitExpression(sb: sb, expr: index.Index);
-
-        string fallbackElemType = targetType switch
-        {
-            RecordTypeInfo r when r.TypeArguments is { Count: > 0 } => GetLLVMType(
-                type: r.TypeArguments[index: 0]),
-            EntityTypeInfo e when e.TypeArguments is { Count: > 0 } => GetLLVMType(
-                type: e.TypeArguments[index: 0]),
-            _ => throw new InvalidOperationException(
-                message: $"Cannot determine element type for indexing on type: {targetType?.Name}")
-        };
-
-        string fallbackElemPtr = NextTemp();
-        string fallbackResult = NextTemp();
-        EmitLine(sb: sb,
-            line:
-            $"  {fallbackElemPtr} = getelementptr {fallbackElemType}, ptr {fallbackTarget}, i64 {fallbackIndex}");
-        EmitLine(sb: sb,
-            line: $"  {fallbackResult} = load {fallbackElemType}, ptr {fallbackElemPtr}");
-
-        return fallbackResult;
-    }
-
-    /// <summary>
-    /// Generates code for a slice expression: obj[start to end] → $getslice(start, end)
-    /// </summary>
-    private string EmitSliceAccess(StringBuilder sb, SliceExpression slice)
-    {
-        string target = EmitExpression(sb: sb, expr: slice.Object);
-        string start = EmitExpression(sb: sb, expr: slice.Start);
-        string end = EmitExpression(sb: sb, expr: slice.End);
-
-        TypeInfo? targetType = GetExpressionType(expr: slice.Object);
-        if (targetType == null)
-        {
-            throw new InvalidOperationException(message: "Cannot determine type for slice target");
-        }
-
-        RoutineInfo? method = _registry.LookupMethod(type: targetType, methodName: "$getslice");
-
-        var argValues = new List<string> { target, start, end };
-        var argTypes = new List<string> { GetParameterLLVMType(type: targetType), "i64", "i64" };
-
-        string mangledName = method != null
-            ? MangleFunctionName(routine: method)
-            : Q(name: $"{targetType.Name}.$getslice");
-
-        string returnType = method?.ReturnType != null
-            ? GetLLVMType(type: method.ReturnType)
-            : GetParameterLLVMType(type: targetType);
-
-        string result = NextTemp();
-        string args = BuildCallArgs(types: argTypes, values: argValues);
-        EmitLine(sb: sb, line: $"  {result} = call {returnType} @{mangledName}({args})");
         return result;
     }
 
@@ -244,7 +227,7 @@ public partial class LLVMCodeGenerator
         // Build struct via insertvalue chain: { start, end, step, inclusive }
         string v0 = NextTemp();
         EmitLine(sb: sb,
-            line: $"  {v0} = insertvalue {structType} undef, {elemLlvmType} {start}, 0");
+            line: $"  {v0} = insertvalue {structType} zeroinitializer, {elemLlvmType} {start}, 0");
         string v1 = NextTemp();
         EmitLine(sb: sb, line: $"  {v1} = insertvalue {structType} {v0}, {elemLlvmType} {end}, 1");
         string v2 = NextTemp();
@@ -257,33 +240,14 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Generates code for a steal expression (ownership transfer).
-    /// </summary>
-    /// <remarks>
-    /// The steal keyword transfers ownership from the source to the destination.
-    /// At runtime, this is essentially a pass-through - the ownership tracking
-    /// is handled at compile time by the semantic analyzer, which marks the
-    /// source as a deadref after the steal.
-    ///
-    /// Non-stealable types (caught by semantic analyzer):
-    /// - All wrappers and tokens (Viewed, Hijacked, Retained, Tracked, Shared, Marked, Inspected, Seized)
-    /// - Snatched[T] (internal ownership type)
-    /// </remarks>
-    private string EmitSteal(StringBuilder sb, StealExpression steal)
-    {
-        // Steal just evaluates the operand and passes the value through.
-        // The semantic analyzer has already validated that:
-        // 1. The operand is a raw entity type
-        // 2. The source will be marked as deadref after this point
-        return EmitExpression(sb: sb, expr: steal.Operand);
-    }
-
-    /// <summary>
     /// Generates code for a tuple literal expression.
     /// Tuples are always inline LLVM structs built via insertvalue chain.
     /// </summary>
     private string EmitTupleLiteral(StringBuilder sb, TupleLiteralExpression tuple)
     {
+        // Both ValueTuple and Tuple are inline LLVM structs (value semantics, never heap-allocated).
+        // Tuple's entity elements require RC bump on copy / RC decrement on drop, but that
+        // copy/drop emission is deferred to RecordCopyLoweringPass once it handles TupleTypeInfo.
         // Evaluate all element expressions
         var elemValues = new List<string>();
         var elemLLVMTypes = new List<string>();
@@ -310,7 +274,7 @@ public partial class LLVMCodeGenerator
             structType = $"{{ {string.Join(separator: ", ", values: elemLLVMTypes)} }}";
         }
 
-        string result = "undef";
+        string result = "zeroinitializer";
         for (int i = 0; i < elemValues.Count; i++)
         {
             string newResult = NextTemp();
@@ -323,438 +287,6 @@ public partial class LLVMCodeGenerator
         return result;
     }
 
-
-    /// <summary>
-    /// Emits the ?? (none coalesce) operator.
-    /// If the left operand (carrier type) is VALID, extracts its value.
-    /// Otherwise evaluates and returns the right operand as default.
-    /// </summary>
-    private string EmitNoneCoalesce(StringBuilder sb, BinaryExpression binary)
-    {
-        string left = EmitExpression(sb: sb, expr: binary.Left);
-        TypeInfo? leftType = GetExpressionType(expr: binary.Left);
-
-        if (leftType == null || !IsCarrierType(type: leftType))
-        {
-            throw new InvalidOperationException(
-                message: "'??' operator requires a carrier type (Maybe/Result/Lookup) on the left");
-        }
-
-        // Use proper LLVM type for the maybe/error-handling value
-        string maybeType = GetLLVMType(type: leftType);
-
-        // Alloca and store the maybe value
-        string allocaPtr = NextTemp();
-        EmitEntryAlloca(llvmName: allocaPtr, llvmType: maybeType);
-        EmitLine(sb: sb, line: $"  store {maybeType} {left}, ptr {allocaPtr}");
-
-        // Extract tag (field 0)
-        string tagType = GetCarrierTagType(kind: GetCarrierKind(type: leftType));
-        string validTag = GetCarrierValidTag(type: leftType);
-        string tagPtr = NextTemp();
-        string tag = NextTemp();
-        EmitLine(sb: sb,
-            line: $"  {tagPtr} = getelementptr {maybeType}, ptr {allocaPtr}, i32 0, i32 0");
-        EmitLine(sb: sb, line: $"  {tag} = load {tagType}, ptr {tagPtr}");
-
-        // Check tag == valid discriminant
-        string isValid = NextTemp();
-        EmitLine(sb: sb, line: $"  {isValid} = icmp eq {tagType} {tag}, {validTag}");
-
-        string valLabel = NextLabel(prefix: "coalesce_val");
-        string rhsLabel = NextLabel(prefix: "coalesce_rhs");
-        string endLabel = NextLabel(prefix: "coalesce_end");
-        string leftBlock = _currentBlock;
-
-        EmitLine(sb: sb, line: $"  br i1 {isValid}, label %{valLabel}, label %{rhsLabel}");
-
-        // Valid path: extract the value
-        EmitLine(sb: sb, line: $"{valLabel}:");
-        _currentBlock = valLabel;
-        string handlePtr = NextTemp();
-        EmitLine(sb: sb,
-            line: $"  {handlePtr} = getelementptr {maybeType}, ptr {allocaPtr}, i32 0, i32 1");
-
-        // Determine the value type T
-        TypeInfo valueType = leftType.TypeArguments![0];
-        string llvmValueType = GetLLVMType(type: valueType);
-
-        string validValue;
-        if (valueType is EntityTypeInfo)
-        {
-            // Entity: field 1 is ptr — load it directly
-            validValue = NextTemp();
-            EmitLine(sb: sb, line: $"  {validValue} = load ptr, ptr {handlePtr}");
-        }
-        else if (IsMaybeType(type: leftType))
-        {
-            // Record Maybe: field 1 is inline T — load it from handlePtr
-            validValue = NextTemp();
-            EmitLine(sb: sb, line: $"  {validValue} = load {llvmValueType}, ptr {handlePtr}");
-        }
-        else
-        {
-            // Result/Lookup: field 1 is i64 address — load and inttoptr then load T
-            string addrVal = NextTemp();
-            string valuePtr = NextTemp();
-            validValue = NextTemp();
-            EmitLine(sb: sb, line: $"  {addrVal} = load i64, ptr {handlePtr}");
-            EmitLine(sb: sb, line: $"  {valuePtr} = inttoptr i64 {addrVal} to ptr");
-            EmitLine(sb: sb, line: $"  {validValue} = load {llvmValueType}, ptr {valuePtr}");
-        }
-
-        string valBlock = _currentBlock;
-        EmitLine(sb: sb, line: $"  br label %{endLabel}");
-
-        // RHS path: evaluate the default expression
-        EmitLine(sb: sb, line: $"{rhsLabel}:");
-        _currentBlock = rhsLabel;
-        string rhsValue = EmitExpression(sb: sb, expr: binary.Right);
-        string rhsBlock = _currentBlock;
-        EmitLine(sb: sb, line: $"  br label %{endLabel}");
-
-        // Merge with PHI
-        EmitLine(sb: sb, line: $"{endLabel}:");
-        _currentBlock = endLabel;
-        string result = NextTemp();
-        EmitLine(sb: sb,
-            line:
-            $"  {result} = phi {llvmValueType} [ {validValue}, %{valBlock} ], [ {rhsValue}, %{rhsBlock} ]");
-
-        return result;
-    }
-
-    /// <summary>
-    /// Emits the !! (force unwrap) operator.
-    /// If the operand (carrier type) is VALID, extracts its value.
-    /// Otherwise traps (crashes the program).
-    /// </summary>
-    private string EmitForceUnwrap(StringBuilder sb, UnaryExpression unary)
-    {
-        string operand = EmitExpression(sb: sb, expr: unary.Operand);
-        TypeInfo? operandType = GetExpressionType(expr: unary.Operand);
-
-        // Determine the value type inside the Maybe/Result/Lookup wrapper
-        TypeInfo? valueType = operandType != null && IsCarrierType(type: operandType)
-            ? operandType.TypeArguments![0]
-            : null;
-
-        if (valueType == null)
-        {
-            throw new InvalidOperationException(
-                message:
-                $"'!!' operator requires Maybe/Result/Lookup operand, got {operandType?.GetType().Name ?? "null"}: {operandType?.Name ?? "null"}");
-        }
-
-        // Declare llvm.trap if not already declared
-        if (_declaredNativeFunctions.Add(item: "llvm.trap"))
-        {
-            EmitLine(sb: _functionDeclarations,
-                line: "declare void @llvm.trap() noreturn nounwind");
-        }
-
-        // Alloca and store the carrier value
-        string maybeType = GetLLVMType(type: operandType!);
-        string allocaPtr = NextTemp();
-        EmitEntryAlloca(llvmName: allocaPtr, llvmType: maybeType);
-        EmitLine(sb: sb, line: $"  store {maybeType} {operand}, ptr {allocaPtr}");
-
-        // Determine tag type and valid discriminant from the carrier kind
-        ErrorHandlingKind carrierKind = GetCarrierKind(type: operandType!);
-        string tagType = GetCarrierTagType(kind: carrierKind);
-        string validTag = GetCarrierValidTag(type: operandType!);
-
-        // Extract tag (field 0)
-        string tagPtr = NextTemp();
-        string tag = NextTemp();
-        EmitLine(sb: sb,
-            line: $"  {tagPtr} = getelementptr {maybeType}, ptr {allocaPtr}, i32 0, i32 0");
-        EmitLine(sb: sb, line: $"  {tag} = load {tagType}, ptr {tagPtr}");
-
-        // Check tag == valid discriminant
-        string isValid = NextTemp();
-        EmitLine(sb: sb, line: $"  {isValid} = icmp eq {tagType} {tag}, {validTag}");
-
-        string okLabel = NextLabel(prefix: "unwrap_ok");
-        string failLabel = NextLabel(prefix: "unwrap_fail");
-
-        EmitLine(sb: sb, line: $"  br i1 {isValid}, label %{okLabel}, label %{failLabel}");
-
-        // Fail path: trap
-        EmitLine(sb: sb, line: $"{failLabel}:");
-        _currentBlock = failLabel;
-        EmitLine(sb: sb, line: $"  call void @llvm.trap()");
-        EmitLine(sb: sb, line: $"  unreachable");
-
-        // OK path: extract the value from field 1
-        EmitLine(sb: sb, line: $"{okLabel}:");
-        _currentBlock = okLabel;
-        string handlePtr = NextTemp();
-        EmitLine(sb: sb,
-            line: $"  {handlePtr} = getelementptr {maybeType}, ptr {allocaPtr}, i32 0, i32 1");
-
-        // For entity types, the value IS the pointer (no boxing) — return directly
-        if (valueType is EntityTypeInfo)
-        {
-            string entityPtr = NextTemp();
-            EmitLine(sb: sb, line: $"  {entityPtr} = load ptr, ptr {handlePtr}");
-            return entityPtr;
-        }
-
-        if (!IsMaybeType(type: operandType!))
-        {
-            // Result/Lookup: field 1 is i64 address — inttoptr then load T
-            string llvmValueType = GetLLVMType(type: valueType);
-            string addrVal = NextTemp();
-            string valuePtr = NextTemp();
-            string result = NextTemp();
-            EmitLine(sb: sb, line: $"  {addrVal} = load i64, ptr {handlePtr}");
-            EmitLine(sb: sb, line: $"  {valuePtr} = inttoptr i64 {addrVal} to ptr");
-            EmitLine(sb: sb, line: $"  {result} = load {llvmValueType}, ptr {valuePtr}");
-            return result;
-        }
-
-        // Maybe record: field 1 is inline T — load from handlePtr
-        {
-            string llvmValueType = GetLLVMType(type: valueType);
-            string result = NextTemp();
-            EmitLine(sb: sb, line: $"  {result} = load {llvmValueType}, ptr {handlePtr}");
-            return result;
-        }
-    }
-
-
-    /// <summary>
-    /// Emits optional member access (?.): obj?.field
-    /// If obj is null/none, produces a zero/null value. Otherwise performs normal member access.
-    /// </summary>
-    private string EmitOptionalMemberAccess(StringBuilder sb, OptionalMemberExpression optMember)
-    {
-        string obj = EmitExpression(sb: sb, expr: optMember.Object);
-        TypeInfo? objType = GetExpressionType(expr: optMember.Object);
-
-        if (objType != null && IsCarrierType(type: objType))
-        {
-            return EmitOptionalChainErrorHandling(sb: sb,
-                obj: obj,
-                carrierType: objType,
-                propertyName: optMember.PropertyName);
-        }
-
-        // Entity (pointer): null check
-        return EmitOptionalChainPointer(sb: sb,
-            obj: obj,
-            objType: objType,
-            propertyName: optMember.PropertyName);
-    }
-
-    /// <summary>
-    /// Optional chaining on a pointer-based type (entity): null check → member access or zero.
-    /// </summary>
-    private string EmitOptionalChainPointer(StringBuilder sb, string obj, TypeInfo? objType,
-        string propertyName)
-    {
-        string nonNullLabel = NextLabel(prefix: "optchain_nonnull");
-        string nullLabel = NextLabel(prefix: "optchain_null");
-        string endLabel = NextLabel(prefix: "optchain_end");
-        string entryBlock = _currentBlock;
-
-        // Null check
-        string isNull = NextTemp();
-        EmitLine(sb: sb, line: $"  {isNull} = icmp eq ptr {obj}, null");
-        EmitLine(sb: sb, line: $"  br i1 {isNull}, label %{nullLabel}, label %{nonNullLabel}");
-
-        // Non-null path: do normal member access
-        EmitLine(sb: sb, line: $"{nonNullLabel}:");
-        _currentBlock = nonNullLabel;
-        string memberValue = EmitMemberAccessOnType(sb: sb,
-            value: obj,
-            type: objType,
-            propertyName: propertyName);
-        string memberBlock = _currentBlock;
-
-        // Determine result type from member access
-        TypeInfo? resultType =
-            GetMemberTypeFromOwner(ownerType: objType, memberName: propertyName);
-        string llvmResultType = resultType != null
-            ? GetLLVMType(type: resultType)
-            : "ptr";
-        string zeroValue = resultType != null
-            ? GetZeroValue(type: resultType)
-            : "null";
-
-        EmitLine(sb: sb, line: $"  br label %{endLabel}");
-
-        // Null path: return zero/null
-        EmitLine(sb: sb, line: $"{nullLabel}:");
-        _currentBlock = nullLabel;
-        EmitLine(sb: sb, line: $"  br label %{endLabel}");
-
-        // Merge
-        EmitLine(sb: sb, line: $"{endLabel}:");
-        _currentBlock = endLabel;
-        string result = NextTemp();
-        EmitLine(sb: sb,
-            line:
-            $"  {result} = phi {llvmResultType} [ {memberValue}, %{memberBlock} ], [ {zeroValue}, %{nullLabel} ]");
-
-        return result;
-    }
-
-    /// <summary>
-    /// Optional chaining on a carrier type (Maybe/Result/Lookup): check VALID → extract value → member access, or zero.
-    /// </summary>
-    private string EmitOptionalChainErrorHandling(StringBuilder sb, string obj,
-        TypeInfo carrierType, string propertyName)
-    {
-        // Alloca and store the carrier value
-        string carrierLlvmType = GetCarrierLLVMType(type: carrierType);
-        string allocaPtr = NextTemp();
-        EmitEntryAlloca(llvmName: allocaPtr, llvmType: carrierLlvmType);
-        EmitLine(sb: sb, line: $"  store {carrierLlvmType} {obj}, ptr {allocaPtr}");
-
-        // Extract tag
-        string tagType = GetCarrierTagType(kind: GetCarrierKind(type: carrierType));
-        string validTag = GetCarrierValidTag(type: carrierType);
-        string tagPtr = NextTemp();
-        string tag = NextTemp();
-        EmitLine(sb: sb,
-            line: $"  {tagPtr} = getelementptr {carrierLlvmType}, ptr {allocaPtr}, i32 0, i32 0");
-        EmitLine(sb: sb, line: $"  {tag} = load {tagType}, ptr {tagPtr}");
-
-        string isValid = NextTemp();
-        EmitLine(sb: sb, line: $"  {isValid} = icmp eq {tagType} {tag}, {validTag}");
-
-        string validLabel = NextLabel(prefix: "optchain_valid");
-        string invalidLabel = NextLabel(prefix: "optchain_invalid");
-        string endLabel = NextLabel(prefix: "optchain_end");
-
-        EmitLine(sb: sb, line: $"  br i1 {isValid}, label %{validLabel}, label %{invalidLabel}");
-
-        // Valid path: extract value and do member access
-        EmitLine(sb: sb, line: $"{validLabel}:");
-        _currentBlock = validLabel;
-
-        TypeInfo valueType = carrierType.TypeArguments![0];
-        string llvmValueType = GetLLVMType(type: valueType);
-
-        string handlePtr = NextTemp();
-        EmitLine(sb: sb,
-            line: $"  {handlePtr} = getelementptr {carrierLlvmType}, ptr {allocaPtr}, i32 0, i32 1");
-
-        string innerValue;
-        if (valueType is EntityTypeInfo)
-        {
-            innerValue = NextTemp();
-            EmitLine(sb: sb, line: $"  {innerValue} = load ptr, ptr {handlePtr}");
-        }
-        else if (!IsMaybeType(type: carrierType))
-        {
-            // Result/Lookup: field 1 is i64 address
-            string addrVal = NextTemp();
-            string valuePtr = NextTemp();
-            innerValue = NextTemp();
-            EmitLine(sb: sb, line: $"  {addrVal} = load i64, ptr {handlePtr}");
-            EmitLine(sb: sb, line: $"  {valuePtr} = inttoptr i64 {addrVal} to ptr");
-            EmitLine(sb: sb, line: $"  {innerValue} = load {llvmValueType}, ptr {valuePtr}");
-        }
-        else
-        {
-            // Maybe record: inline T
-            innerValue = NextTemp();
-            EmitLine(sb: sb, line: $"  {innerValue} = load {llvmValueType}, ptr {handlePtr}");
-        }
-
-        // Now do member access on the extracted value
-        string memberValue = EmitMemberAccessOnType(sb: sb,
-            value: innerValue,
-            type: valueType,
-            propertyName: propertyName);
-        string validBlock = _currentBlock;
-
-        // Determine result type
-        TypeInfo? resultType =
-            GetMemberTypeFromOwner(ownerType: valueType, memberName: propertyName);
-        string llvmResultType = resultType != null
-            ? GetLLVMType(type: resultType)
-            : "ptr";
-        string zeroValue = resultType != null
-            ? GetZeroValue(type: resultType)
-            : "null";
-
-        EmitLine(sb: sb, line: $"  br label %{endLabel}");
-
-        // Invalid path
-        EmitLine(sb: sb, line: $"{invalidLabel}:");
-        _currentBlock = invalidLabel;
-        EmitLine(sb: sb, line: $"  br label %{endLabel}");
-
-        // Merge
-        EmitLine(sb: sb, line: $"{endLabel}:");
-        _currentBlock = endLabel;
-        string result = NextTemp();
-        EmitLine(sb: sb,
-            line:
-            $"  {result} = phi {llvmResultType} [ {memberValue}, %{validBlock} ], [ {zeroValue}, %{invalidLabel} ]");
-
-        return result;
-    }
-
-    /// <summary>
-    /// Performs member access on a value given its type, reusing existing member read logic.
-    /// </summary>
-    private string EmitMemberAccessOnType(StringBuilder sb, string value, TypeInfo? type,
-        string propertyName)
-    {
-        return type switch
-        {
-            EntityTypeInfo entity => EmitEntityMemberVariableRead(sb: sb,
-                entityPtr: value,
-                entity: entity,
-                memberVariableName: propertyName),
-            RecordTypeInfo record => EmitRecordMemberVariableRead(sb: sb,
-                recordValue: value,
-                record: record,
-                memberVariableName: propertyName),
-            _ => throw new InvalidOperationException(
-                message: $"Cannot access member on type: {type?.Name}")
-        };
-    }
-
-    /// <summary>
-    /// Gets the type of a member variable from the owning type.
-    /// </summary>
-    private TypeInfo? GetMemberTypeFromOwner(TypeInfo? ownerType, string memberName)
-    {
-        IReadOnlyList<MemberVariableInfo>? members = ownerType switch
-        {
-            EntityTypeInfo entity => entity.MemberVariables,
-            RecordTypeInfo record => record.MemberVariables,
-            _ => null
-        };
-
-        if (members == null)
-        {
-            return null;
-        }
-
-        foreach (MemberVariableInfo m in members)
-        {
-            if (m.Name == memberName)
-            {
-                TypeInfo memberType = m.Type;
-                if (ownerType is { IsGenericResolution: true, TypeArguments: not null })
-                {
-                    memberType =
-                        ResolveGenericMemberType(memberType: memberType, ownerType: ownerType);
-                }
-
-                return memberType;
-            }
-        }
-
-        return null;
-    }
 
     /// <summary>
     /// Resolves generic type parameters in a member's type using the owner's type arguments.
@@ -788,5 +320,66 @@ public partial class LLVMCodeGenerator
         }
 
         return SubstituteTypeParams(type: memberType, substitutions: subs);
+    }
+
+    /// <summary>
+    /// Emits code for a <see cref="CarrierPayloadExpression"/>: extracts field 1 (the data i64)
+    /// from a Result/Lookup carrier and reinterprets it as the concrete type.
+    ///
+    /// <list type="bullet">
+    ///   <item>Entity types: <c>inttoptr i64 → ptr</c> (pointer stored as i64).</item>
+    ///   <item>Value types wider than i64: not expected (carrier stores ≤ 64-bit values).</item>
+    ///   <item>Value types narrower than i64: truncate from i64 to the target LLVM type.</item>
+    ///   <item>i64-sized value types: load directly.</item>
+    /// </list>
+    /// </summary>
+    private string EmitCarrierPayloadExpression(StringBuilder sb,
+        CarrierPayloadExpression payload)
+    {
+        // EmitExpression returns a loaded struct value (not a pointer); GEP needs a pointer.
+        // Spill the carrier value to a temp alloca first.
+        string carrierVal = EmitExpression(sb: sb, expr: payload.Carrier);
+
+        TypeInfo carrierType = payload.Carrier.ResolvedType!;
+        string carrierLlvmType = GetCarrierLLVMType(type: carrierType);
+
+        string spillAddr = NextTemp();
+        EmitLine(sb: sb, line: $"  {spillAddr} = alloca {carrierLlvmType}");
+        EmitLine(sb: sb, line: $"  store {carrierLlvmType} {carrierVal}, ptr {spillAddr}");
+
+        TypeInfo? concreteType = payload.ResolvedType
+            ?? payload.ConcreteType.ResolvedType
+            ?? _registry.LookupType(name: payload.ConcreteType.Name);
+
+        // GEP field 1 (the data/address i64) from the carrier struct.
+        string dataPtr = NextTemp();
+        EmitLine(sb: sb,
+            line: $"  {dataPtr} = getelementptr {carrierLlvmType}, ptr {spillAddr}, i32 0, i32 1");
+        string dataI64 = NextTemp();
+        EmitLine(sb: sb, line: $"  {dataI64} = load i64, ptr {dataPtr}");
+
+        if (concreteType is EntityTypeInfo or CrashableTypeInfo)
+        {
+            // Entity / crashable: payload is a heap pointer stored as i64 → inttoptr
+            string ptrVal = NextTemp();
+            EmitLine(sb: sb, line: $"  {ptrVal} = inttoptr i64 {dataI64} to ptr");
+            return ptrVal;
+        }
+
+        // Value type: zero-extend stored as i64; truncate/bitcast to target type.
+        string llvmType = concreteType != null ? GetLLVMType(type: concreteType) : "i64";
+        if (llvmType == "i64") return dataI64;
+
+        // If the LLVM type is a pointer (protocol, opaque handle), use inttoptr — not trunc.
+        if (llvmType == "ptr")
+        {
+            string ptrVal2 = NextTemp();
+            EmitLine(sb: sb, line: $"  {ptrVal2} = inttoptr i64 {dataI64} to ptr");
+            return ptrVal2;
+        }
+
+        string truncated = NextTemp();
+        EmitLine(sb: sb, line: $"  {truncated} = trunc i64 {dataI64} to {llvmType}");
+        return truncated;
     }
 }

@@ -1,5 +1,5 @@
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Diagnostics;
+using SemanticVerification.Results;
+using Compiler.Diagnostics;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -336,7 +336,7 @@ public class FlagsValidationTests
     #region #133: isonly rejects or/but (parser-enforced)
 
     // #133 is enforced at the parser level: the isonly parser only accepts 'and' connective.
-    // 'isonly READ or WRITE' parses as '(perms isonly READ) or WRITE' — a logical or,
+    // 'isonly READ or WRITE' parses as '(perms isonly READ) or WRITE' ??a logical or,
     // which produces LogicalOperatorRequiresBool. No semantic check needed.
     /// <summary>
     /// Tests Flags_IsOnlyWithOr_ProducesParseError.

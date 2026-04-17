@@ -1,4 +1,4 @@
-﻿namespace SemanticAnalysis.Diagnostics;
+﻿namespace Compiler.Diagnostics;
 
 /// <summary>
 /// Exception thrown when a fatal semantic analysis error occurs that cannot be

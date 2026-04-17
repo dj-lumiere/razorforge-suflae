@@ -1,7 +1,7 @@
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Diagnostics;
-using SemanticAnalysis.Symbols;
-using SemanticAnalysis.Types;
+using SemanticVerification.Results;
+using Compiler.Diagnostics;
+using SemanticVerification.Symbols;
+using SemanticVerification.Types;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -19,7 +19,7 @@ using static TestHelpers;
 /// </summary>
 public class UnwrapOperatorTests
 {
-    #region Built-in error handling infrastructure — try_ variant generation
+    #region Built-in error handling infrastructure ??try_ variant generation
 
     [Fact]
     public void TryVariant_Generated_ReturnsMaybeType()
@@ -55,7 +55,7 @@ public class UnwrapOperatorTests
                         """;
 
         AnalysisResult result = Analyze(source: source);
-        // get!() returns S64 in failable context — !! on S64 is invalid
+        // get!() returns S64 in failable context ??!! on S64 is invalid
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
@@ -82,7 +82,7 @@ public class UnwrapOperatorTests
 
     #endregion
 
-    #region !! on plain types without $unwrap — error
+    #region !! on plain types without $unwrap ??error
 
     [Fact]
     public void ForceUnwrap_OnS64_ReportsError()
@@ -163,7 +163,7 @@ public class UnwrapOperatorTests
 
     #endregion
 
-    #region ?? on plain types without $unwrap_or — error
+    #region ?? on plain types without $unwrap_or ??error
 
     [Fact]
     public void NoneCoalesce_OnS64_ReportsError()
@@ -214,7 +214,7 @@ public class UnwrapOperatorTests
 
     #endregion
 
-    #region !! on user type with $unwrap — no error
+    #region !! on user type with $unwrap ??no error
 
     [Fact]
     public void ForceUnwrap_OnUserTypeWithUnwrap_NoError()
@@ -258,7 +258,7 @@ public class UnwrapOperatorTests
 
     #endregion
 
-    #region ?? on user type with $unwrap_or — no error
+    #region ?? on user type with $unwrap_or ??no error
 
     [Fact]
     public void NoneCoalesce_OnUserTypeWithUnwrapOr_NoError()
@@ -341,7 +341,7 @@ public class UnwrapOperatorTests
 
     #endregion
 
-    #region !! and ?? on non-failable call — error (no error handling type)
+    #region !! and ?? on non-failable call ??error (no error handling type)
 
     [Fact]
     public void ForceUnwrap_OnNonFailableCall_ReportsError()
@@ -379,7 +379,7 @@ public class UnwrapOperatorTests
 
     #endregion
 
-    #region !! on choice/flags — error (no operators on choice/flags)
+    #region !! on choice/flags ??error (no operators on choice/flags)
 
     [Fact]
     public void ForceUnwrap_OnChoice_ReportsError()
@@ -403,7 +403,7 @@ public class UnwrapOperatorTests
     public void NoneCoalesce_OnChoice_ReportsError()
     {
         // ?? is caught by the choice operator prohibition check (ArithmeticOnChoiceType)
-        // before reaching the NoneCoalesce handler — correct behavior
+        // before reaching the NoneCoalesce handler ??correct behavior
         string source = """
                         choice Direction
                           NORTH
@@ -440,7 +440,7 @@ public class UnwrapOperatorTests
 
     #endregion
 
-    #region GetMethodName mapping — $unwrap and $unwrap_or registered
+    #region GetMethodName mapping ??$unwrap and $unwrap_or registered
 
     [Fact]
     public void ForceUnwrap_GetMethodName_ReturnsUnwrap()

@@ -1,0 +1,330 @@
+using SyntaxTree;
+
+namespace Compiler.Desugaring.Passes;
+
+/// <summary>
+/// Lowers <see cref="GenericMethodCallExpression"/> nodes to plain <see cref="CallExpression"/>
+/// nodes where possible. Runs after <see cref="ExpressionLoweringPass"/> in the per-file pipeline.
+///
+/// <para>Lowered cases (require <c>ResolvedRoutine != null</c> from Phase 5):</para>
+/// <list type="bullet">
+///   <item><b>Type constructor with resolved <c>$create</c></b>:
+///         <c>Maybe[S64](value: x)</c> → <c>CallExpression(IdentifierExpression("$create"), args)</c></item>
+///   <item><b>Generic method call on receiver</b>:
+///         <c>buf.read![U8](offset)</c> →
+///         <c>CallExpression(MemberExpression(buf, "read!"), args, TypeArguments=[U8])</c></item>
+/// </list>
+///
+/// <para>Kept as <see cref="GenericMethodCallExpression"/> (not lowered):</para>
+/// <list type="bullet">
+///   <item>LLVM intrinsics — <c>LlvmIrTemplate != null</c> or <c>CallingConvention == "llvm"</c>;
+///         need template expansion in <c>EmitLlvmIntrinsicGenericCall</c>.</item>
+///   <item>Collection literals — <c>IsCollectionLiteral == true</c>;
+///         codegen emits <c>$create + add_last</c> loops.</item>
+///   <item>Unresolved calls — <c>ResolvedRoutine == null</c> (stdlib bodies, standalone generic
+///         free functions, compiler intrinsics like <c>rf_invalidate</c>).</item>
+///   <item>Type constructors without a resolved routine (complex multi-path constructor logic
+///         remains in <c>EmitGenericMethodCall</c>).</item>
+/// </list>
+/// </summary>
+internal sealed class GenericCallLoweringPass(DesugaringContext ctx)
+{
+    public void Run(Program program)
+    {
+        for (int i = 0; i < program.Declarations.Count; i++)
+        {
+            switch (program.Declarations[i])
+            {
+                case RoutineDeclaration r:
+                {
+                    Statement newBody = LowerStatement(r.Body);
+                    if (!ReferenceEquals(newBody, r.Body))
+                        program.Declarations[i] = r with { Body = newBody };
+                    break;
+                }
+
+                case EntityDeclaration e:
+                    LowerMemberList(e.Members);
+                    break;
+
+                case RecordDeclaration rec:
+                    LowerMemberList(rec.Members);
+                    break;
+
+                case CrashableDeclaration cr:
+                    LowerMemberList(cr.Members);
+                    break;
+            }
+        }
+    }
+
+    private void LowerMemberList(List<SyntaxTree.Declaration> members)
+    {
+        for (int j = 0; j < members.Count; j++)
+        {
+            if (members[j] is not RoutineDeclaration m) continue;
+            Statement newBody = LowerStatement(m.Body);
+            if (!ReferenceEquals(newBody, m.Body))
+                members[j] = m with { Body = newBody };
+        }
+    }
+
+    // ── Statement lowering ────────────────────────────────────────────────────
+
+    private Statement LowerStatement(Statement stmt)
+    {
+        switch (stmt)
+        {
+            case BlockStatement b:
+            {
+                List<Statement> stmts = LowerStatementList(b.Statements);
+                return ReferenceEquals(stmts, b.Statements) ? stmt : b with { Statements = stmts };
+            }
+
+            case IfStatement ifs:
+            {
+                Expression cond = LowerExpression(ifs.Condition);
+                Statement then = LowerStatement(ifs.ThenStatement);
+                Statement? elseS = ifs.ElseStatement != null
+                    ? LowerStatement(ifs.ElseStatement)
+                    : null;
+                bool changed = !ReferenceEquals(cond, ifs.Condition)
+                               || !ReferenceEquals(then, ifs.ThenStatement)
+                               || !ReferenceEquals(elseS, ifs.ElseStatement);
+                return changed
+                    ? ifs with { Condition = cond, ThenStatement = then, ElseStatement = elseS }
+                    : stmt;
+            }
+
+            case WhileStatement w:
+            {
+                Expression cond = LowerExpression(w.Condition);
+                Statement body = LowerStatement(w.Body);
+                Statement? elseB = w.ElseBranch != null ? LowerStatement(w.ElseBranch) : null;
+                bool changed = !ReferenceEquals(cond, w.Condition)
+                               || !ReferenceEquals(body, w.Body)
+                               || !ReferenceEquals(elseB, w.ElseBranch);
+                return changed ? w with { Condition = cond, Body = body, ElseBranch = elseB } : stmt;
+            }
+
+            case LoopStatement loop:
+            {
+                Statement body = LowerStatement(loop.Body);
+                return ReferenceEquals(body, loop.Body) ? stmt : loop with { Body = body };
+            }
+
+            case WhenStatement w:
+            {
+                Expression subj = LowerExpression(w.Expression);
+                bool clauseChanged = false;
+                var clauses = new List<WhenClause>(capacity: w.Clauses.Count);
+                foreach (WhenClause c in w.Clauses)
+                {
+                    Statement lBody = LowerStatement(c.Body);
+                    clauseChanged |= !ReferenceEquals(lBody, c.Body);
+                    clauses.Add(ReferenceEquals(lBody, c.Body) ? c : c with { Body = lBody });
+                }
+                bool changed = !ReferenceEquals(subj, w.Expression) || clauseChanged;
+                return changed ? w with { Expression = subj, Clauses = clauses } : stmt;
+            }
+
+            case ReturnStatement r:
+            {
+                if (r.Value == null) return stmt;
+                Expression val = LowerExpression(r.Value);
+                return ReferenceEquals(val, r.Value) ? stmt : r with { Value = val };
+            }
+
+            case ExpressionStatement es:
+            {
+                Expression e = LowerExpression(es.Expression);
+                return ReferenceEquals(e, es.Expression) ? stmt : es with { Expression = e };
+            }
+
+            case AssignmentStatement a:
+            {
+                Expression val = LowerExpression(a.Value);
+                // Target is usually not a GenericMethodCallExpression; walk it anyway
+                Expression tgt = LowerExpression(a.Target);
+                bool changed = !ReferenceEquals(val, a.Value) || !ReferenceEquals(tgt, a.Target);
+                return changed ? a with { Target = tgt, Value = val } : stmt;
+            }
+
+            case DeclarationStatement { Declaration: VariableDeclaration vd } decl:
+            {
+                if (vd.Initializer == null) return stmt;
+                Expression init = LowerExpression(vd.Initializer);
+                if (ReferenceEquals(init, vd.Initializer)) return stmt;
+                return decl with { Declaration = vd with { Initializer = init } };
+            }
+
+            case DiscardStatement d:
+            {
+                Expression e = LowerExpression(d.Expression);
+                return ReferenceEquals(e, d.Expression) ? stmt : d with { Expression = e };
+            }
+
+            default:
+                return stmt;
+        }
+    }
+
+    private List<Statement> LowerStatementList(List<Statement> stmts)
+    {
+        bool changed = false;
+        var result = new List<Statement>(capacity: stmts.Count);
+        foreach (Statement s in stmts)
+        {
+            Statement lowered = LowerStatement(s);
+            changed |= !ReferenceEquals(lowered, s);
+            result.Add(lowered);
+        }
+        return changed ? result : stmts;
+    }
+
+    // ── Expression lowering ───────────────────────────────────────────────────
+
+    private Expression LowerExpression(Expression expr)
+    {
+        switch (expr)
+        {
+            case GenericMethodCallExpression gmc:
+                return TryLowerGenericCall(gmc) ?? LowerGenericCallChildren(gmc);
+
+            case CallExpression call:
+            {
+                Expression callee = LowerExpression(call.Callee);
+                bool argsChanged = false;
+                var args = new List<Expression>(capacity: call.Arguments.Count);
+                foreach (Expression arg in call.Arguments)
+                {
+                    Expression lowered = LowerExpression(arg);
+                    args.Add(lowered);
+                    argsChanged |= !ReferenceEquals(lowered, arg);
+                }
+                bool changed = !ReferenceEquals(callee, call.Callee) || argsChanged;
+                return changed ? call with { Callee = callee, Arguments = args } : expr;
+            }
+
+            case MemberExpression me:
+            {
+                Expression obj = LowerExpression(me.Object);
+                return ReferenceEquals(obj, me.Object) ? expr : me with { Object = obj };
+            }
+
+            case BinaryExpression bin:
+            {
+                Expression left = LowerExpression(bin.Left);
+                Expression right = LowerExpression(bin.Right);
+                bool changed = !ReferenceEquals(left, bin.Left) || !ReferenceEquals(right, bin.Right);
+                return changed ? bin with { Left = left, Right = right } : expr;
+            }
+
+            case UnaryExpression u:
+            {
+                Expression operand = LowerExpression(u.Operand);
+                return ReferenceEquals(operand, u.Operand) ? expr : u with { Operand = operand };
+            }
+
+            case ConditionalExpression cond:
+            {
+                Expression c = LowerExpression(cond.Condition);
+                Expression t = LowerExpression(cond.TrueExpression);
+                Expression f = LowerExpression(cond.FalseExpression);
+                bool changed = !ReferenceEquals(c, cond.Condition)
+                               || !ReferenceEquals(t, cond.TrueExpression)
+                               || !ReferenceEquals(f, cond.FalseExpression);
+                return changed
+                    ? cond with { Condition = c, TrueExpression = t, FalseExpression = f }
+                    : expr;
+            }
+
+            case NamedArgumentExpression named:
+            {
+                Expression val = LowerExpression(named.Value);
+                return ReferenceEquals(val, named.Value) ? expr : named with { Value = val };
+            }
+
+            default:
+                return expr;
+        }
+    }
+
+    /// <summary>
+    /// Tries to lower a <see cref="GenericMethodCallExpression"/> to a plain
+    /// <see cref="CallExpression"/>. Returns <c>null</c> if the node cannot be safely lowered.
+    /// </summary>
+    private Expression? TryLowerGenericCall(GenericMethodCallExpression gmc)
+    {
+        // Only lower when SA has resolved the routine — provides the concrete call target.
+        if (gmc.ResolvedRoutine == null) return null;
+
+        // Collection literals need special codegen ($create + add_last loop).
+        if (gmc.IsCollectionLiteral) return null;
+
+        // LLVM intrinsics require template-based emission — keep as-is.
+        if (gmc.ResolvedRoutine.LlvmIrTemplate != null) return null;
+        if (gmc.ResolvedRoutine.CallingConvention == "llvm") return null;
+
+        // Lower arguments first.
+        var loweredArgs = new List<Expression>(capacity: gmc.Arguments.Count);
+        foreach (Expression arg in gmc.Arguments)
+            loweredArgs.Add(LowerExpression(arg));
+
+        // ── Type constructor: Object and MethodName are the same identifier ──
+        // e.g., Maybe[S64](value: x) — SA resolved $create and set ResolvedRoutine.
+        if (gmc.Object is IdentifierExpression id && id.Name == gmc.MethodName)
+        {
+            return new CallExpression(
+                Callee: new IdentifierExpression(
+                    Name: gmc.ResolvedRoutine.Name,
+                    Location: gmc.Location),
+                Arguments: loweredArgs,
+                Location: gmc.Location)
+            {
+                ResolvedRoutine = gmc.ResolvedRoutine,
+                ResolvedType = gmc.ResolvedType
+            };
+        }
+
+        // ── Generic method call on a receiver ──────────────────────────────
+        // e.g., buf.read![U8](offset) → CallExpression with TypeArguments=[U8].
+        Expression loweredObj = LowerExpression(gmc.Object);
+
+        return new CallExpression(
+            Callee: new MemberExpression(
+                Object: loweredObj,
+                PropertyName: gmc.MethodName,
+                Location: gmc.Location)
+            {
+                ResolvedType = gmc.Object.ResolvedType
+            },
+            Arguments: loweredArgs,
+            Location: gmc.Location)
+        {
+            ResolvedRoutine = gmc.ResolvedRoutine,
+            TypeArguments = gmc.TypeArguments.Count > 0 ? gmc.TypeArguments : null,
+            ResolvedType = gmc.ResolvedType
+        };
+    }
+
+    /// <summary>
+    /// Falls through to just lowering the children of an un-lowerable
+    /// <see cref="GenericMethodCallExpression"/>.
+    /// </summary>
+    private GenericMethodCallExpression LowerGenericCallChildren(GenericMethodCallExpression gmc)
+    {
+        Expression loweredObj = LowerExpression(gmc.Object);
+        bool argsChanged = false;
+        var args = new List<Expression>(capacity: gmc.Arguments.Count);
+        foreach (Expression arg in gmc.Arguments)
+        {
+            Expression lowered = LowerExpression(arg);
+            args.Add(lowered);
+            argsChanged |= !ReferenceEquals(lowered, arg);
+        }
+
+        bool changed = !ReferenceEquals(loweredObj, gmc.Object) || argsChanged;
+        return changed ? gmc with { Object = loweredObj, Arguments = args } : gmc;
+    }
+}

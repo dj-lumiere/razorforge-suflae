@@ -1,6 +1,6 @@
 using SyntaxTree;
 using Compiler.Lexer;
-using SemanticAnalysis.Enums;
+using SemanticVerification.Enums;
 using Compiler.Diagnostics;
 
 namespace Compiler.Parser;
@@ -369,6 +369,17 @@ public partial class Parser
         // Variable declarations
         if (Match(TokenType.Var, TokenType.Preset))
         {
+            // 'global var' is no longer accepted — use 'global name: Type' directly
+            if (storage == StorageClass.Global)
+            {
+                throw new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
+                    message: "'var' is not valid after 'global'. Use 'global name: Type = value' directly.",
+                    fileName: fileName,
+                    line: CurrentToken.Line,
+                    column: CurrentToken.Column,
+                    language: _language);
+            }
+
             // In type bodies (record, entity), var/preset are not allowed
             // MemberVariables use 'name: Type' syntax without var keywords
             if (_parsingTypeBody)
@@ -382,7 +393,17 @@ public partial class Parser
                     language: _language);
             }
 
-            return ParseVariableDeclaration(visibility: visibility, storage: storage);
+            return ParseVariableDeclaration(visibility: visibility, storage: storage,
+                annotations: annotations);
+        }
+
+        // 'global name: Type = value' — no 'var' required for global declarations.
+        if (storage == StorageClass.Global
+            && Check(type: TokenType.Identifier)
+            && PeekToken(offset: 1).Type == TokenType.Colon)
+        {
+            return ParseVariableDeclaration(visibility: visibility, storage: storage,
+                annotations: annotations);
         }
 
         // Pass statement/declaration (empty placeholder)
@@ -405,7 +426,7 @@ public partial class Parser
         // ROUTINE DECLARATION (with async status modifiers)
         // ═══════════════════════════════════════════════════════════════════════════
 
-        // Check for suspended/threaded/emitting modifier before routine
+        // Check for async modifiers before 'routine'. Order: secret → suspended/threaded → routine
         AsyncStatus asyncStatus = AsyncStatus.None;
         if (Match(type: TokenType.Suspended))
         {
@@ -415,11 +436,6 @@ public partial class Parser
         else if (_language == Language.RazorForge && Match(type: TokenType.Threaded))
         {
             asyncStatus = AsyncStatus.Threaded;
-        }
-        // RF-only: emitting (generator) routine
-        else if (_language == Language.RazorForge && Match(type: TokenType.Emitting))
-        {
-            asyncStatus = AsyncStatus.Emitting;
         }
 
         // Routine (function) declaration
@@ -444,12 +460,15 @@ public partial class Parser
                 isDangerous: isDangerous);
         }
 
-        // If we consumed 'suspended'/'threaded' but no 'routine' follows, that's an error
+        // If we consumed async modifiers but no 'routine' follows, that's an error
         if (asyncStatus != AsyncStatus.None)
         {
-            string modifier = asyncStatus == AsyncStatus.Suspended
-                ? "suspended"
-                : "threaded";
+            string modifier = asyncStatus switch
+            {
+                AsyncStatus.Suspended => "suspended",
+                AsyncStatus.Threaded  => "threaded",
+                _                     => asyncStatus.ToString().ToLower()
+            };
             throw new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
                 message: $"'{modifier}' must be followed by 'routine'",
                 fileName: fileName,
@@ -465,6 +484,7 @@ public partial class Parser
                 TokenType.Record,
                 TokenType.Choice,
                 TokenType.Flags,
+                TokenType.Crashable,
                 TokenType.Variant,
                 TokenType.Protocol);
 
@@ -499,6 +519,11 @@ public partial class Parser
         if (Match(type: TokenType.Flags))
         {
             return ParseFlagsDeclaration(visibility: visibility);
+        }
+
+        if (Match(type: TokenType.Crashable))
+        {
+            return ParseCrashableDeclaration(visibility: visibility);
         }
 
         if (Match(type: TokenType.Variant))
@@ -677,11 +702,6 @@ public partial class Parser
         if (Match(type: TokenType.Discard))
         {
             return ParseDiscardStatement();
-        }
-
-        if (Match(type: TokenType.Emit))
-        {
-            return ParseEmitStatement();
         }
 
         // ═══════════════════════════════════════════════════════════════════════════

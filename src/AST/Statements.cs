@@ -1,4 +1,5 @@
 using Compiler.Lexer;
+using Compiler.Synthesis;
 
 namespace SyntaxTree;
 
@@ -298,27 +299,6 @@ public record DiscardStatement(Expression Expression, SourceLocation Location)
     }
 }
 
-/// <summary>
-/// Emit statement that yields a value from a generator routine.
-/// Analogous to Python's yield or Rust's yield — produces the next value in an iterator.
-/// </summary>
-/// <example>
-/// <code>
-/// emit value
-/// </code>
-/// </example>
-/// <param name="Expression">The expression whose value is yielded</param>
-/// <param name="Location">Source location information</param>
-public record EmitStatement(Expression Expression, SourceLocation Location)
-    : Statement(Location: Location)
-{
-    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
-    public override T Accept<T>(IAstVisitor<T> visitor)
-    {
-        return visitor.VisitEmitStatement(node: this);
-    }
-}
-
 #endregion
 
 #region Control Flow Statements
@@ -391,6 +371,24 @@ public record WhileStatement(
     public override T Accept<T>(IAstVisitor<T> visitor)
     {
         return visitor.VisitWhileStatement(node: this);
+    }
+}
+
+/// <summary>
+/// Infinite loop statement (the <c>loop</c> keyword). Executes the body unconditionally
+/// until a <c>break</c> or <c>return</c> exits it.
+/// This is the primitive loop form; <c>while</c> desugars into this.
+/// </summary>
+/// <param name="Body">Statement to execute on every iteration</param>
+/// <param name="Location">Source location information</param>
+public record LoopStatement(
+    Statement Body,
+    SourceLocation Location) : Statement(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(IAstVisitor<T> visitor)
+    {
+        return visitor.VisitLoopStatement(node: this);
     }
 }
 
@@ -862,6 +860,42 @@ public record DangerStatement(BlockStatement Body, SourceLocation Location)
 }
 
 #endregion
+
+/// <summary>
+/// Identifies which control-flow site was transformed into a <see cref="VariantReturnStatement"/>.
+/// </summary>
+public enum VariantSiteKind
+{
+    /// <summary>Transformed from a <see cref="ThrowStatement"/>.</summary>
+    FromThrow,
+
+    /// <summary>Transformed from an <see cref="AbsentStatement"/>.</summary>
+    FromAbsent,
+
+    /// <summary>Transformed from a <see cref="ReturnStatement"/>.</summary>
+    FromReturn
+}
+
+/// <summary>
+/// Synthesized return statement inserted into error-handling variant bodies by
+/// <see cref="Desugaring.Passes.ErrorHandlingVariantPass"/>.
+/// Replaces <see cref="ThrowStatement"/>, <see cref="AbsentStatement"/>, and
+/// <see cref="ReturnStatement"/> so that codegen can emit carrier construction via
+/// <c>EmitVariantReturn</c> without relying on mutable flags.
+/// </summary>
+/// <param name="VariantKind">Which variant body this belongs to (Try, TryBool, Check, Lookup).</param>
+/// <param name="SiteKind">Which original statement was replaced.</param>
+/// <param name="Value">Original expression (error for FromThrow, value for FromReturn; null for FromAbsent).</param>
+/// <param name="Location">Source location for diagnostics.</param>
+public record VariantReturnStatement(
+    ErrorHandlingVariantKind VariantKind,
+    VariantSiteKind SiteKind,
+    Expression? Value,
+    SourceLocation Location
+) : Statement(Location: Location)
+{
+    public override T Accept<T>(IAstVisitor<T> visitor) => visitor.VisitVariantReturnStatement(node: this);
+}
 
 /// <summary>
 /// Represents a scoped resource management block (using expr as name).

@@ -1,5 +1,5 @@
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Diagnostics;
+using SemanticVerification.Results;
+using Compiler.Diagnostics;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -8,7 +8,7 @@ using static TestHelpers;
 
 /// <summary>
 /// Tests for C29: Dispatch inference for varargs calls.
-/// Protocol-constrained varargs with mixed types → RuntimeDispatchNotSupported in RazorForge.
+/// Protocol-constrained varargs with mixed types ??RuntimeDispatchNotSupported in RazorForge.
 /// </summary>
 public class DispatchInferenceTests
 {

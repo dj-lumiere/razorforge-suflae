@@ -1,8 +1,8 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis.Symbols;
-using SemanticAnalysis.Types;
+using SemanticVerification.Symbols;
+using SemanticVerification.Types;
 using SyntaxTree;
 
 /// <summary>
@@ -66,8 +66,8 @@ public partial class LLVMCodeGenerator
                 : "void";
             if (!_generatedFunctions.Contains(item: mangledAdd))
             {
-                EmitLine(sb: _functionDeclarations,
-                    line: $"declare {addReturnType} @{mangledAdd}(ptr, {elemLLVMType})");
+                _rfFunctionDeclarations[key: mangledAdd] =
+                    $"declare {addReturnType} @{mangledAdd}(ptr, {elemLLVMType})";
                 _generatedFunctions.Add(item: mangledAdd);
             }
 
@@ -116,8 +116,8 @@ public partial class LLVMCodeGenerator
                 string mangledAdd = resolvedAdd.MangledName;
                 if (!_generatedFunctions.Contains(item: mangledAdd))
                 {
-                    EmitLine(sb: _functionDeclarations,
-                        line: $"declare i1 @{mangledAdd}(ptr, {elemLLVMType})");
+                    _rfFunctionDeclarations[key: mangledAdd] =
+                        $"declare i1 @{mangledAdd}(ptr, {elemLLVMType})";
                     _generatedFunctions.Add(item: mangledAdd);
                 }
 
@@ -174,9 +174,8 @@ public partial class LLVMCodeGenerator
                 string mangledAdd = resolvedAdd.MangledName;
                 if (!_generatedFunctions.Contains(item: mangledAdd))
                 {
-                    EmitLine(sb: _functionDeclarations,
-                        line:
-                        $"declare i1 @{mangledAdd}(ptr, {keyLLVMType}, {valueLLVMType})");
+                    _rfFunctionDeclarations[key: mangledAdd] =
+                        $"declare i1 @{mangledAdd}(ptr, {keyLLVMType}, {valueLLVMType})";
                     _generatedFunctions.Add(item: mangledAdd);
                 }
 
@@ -258,8 +257,8 @@ public partial class LLVMCodeGenerator
         string elemLlvm = GetLLVMType(type: elemType);
         if (!_generatedFunctions.Contains(item: mangledAdd))
         {
-            EmitLine(sb: _functionDeclarations,
-                line: $"declare void @{mangledAdd}(ptr, {elemLlvm})");
+            _rfFunctionDeclarations[key: mangledAdd] =
+                $"declare void @{mangledAdd}(ptr, {elemLlvm})";
             _generatedFunctions.Add(item: mangledAdd);
         }
 
@@ -386,8 +385,7 @@ public partial class LLVMCodeGenerator
 
                 if (!_generatedFunctions.Contains(item: funcName))
                 {
-                    EmitLine(sb: _functionDeclarations, line: $"declare ptr @{funcName}()");
-                    _generatedFunctions.Add(item: funcName);
+                    GenerateFunctionDeclaration(routine: creator, nameOverride: funcName);
                 }
 
                 string result = NextTemp();
@@ -400,8 +398,7 @@ public partial class LLVMCodeGenerator
             string funcName = resolved.MangledName;
             if (!_generatedFunctions.Contains(item: funcName))
             {
-                EmitLine(sb: _functionDeclarations, line: $"declare ptr @{funcName}()");
-                _generatedFunctions.Add(item: funcName);
+                GenerateFunctionDeclaration(routine: resolved.Routine, nameOverride: funcName);
             }
 
             string result = NextTemp();
@@ -410,6 +407,8 @@ public partial class LLVMCodeGenerator
         }
 
         // Last resort: direct allocation with collection header size
+        // TODO(C41): this fallback should not exist — collection $create should always be
+        // resolvable from stdlib. Remove once all collection types have registered $create bodies.
         string ptr = NextTemp();
         EmitLine(sb: sb,
             line: $"  {ptr} = call ptr @rf_allocate_dynamic(i64 {_collectionHeaderSizeBytes})");
@@ -443,7 +442,7 @@ public partial class LLVMCodeGenerator
             ? GetLLVMType(type: valueType)
             : "i64";
 
-        EmitLine(sb: sb, line: $"  {tmp1} = insertvalue {llvmType} undef, {keyLlvm} {keyVal}, 0");
+        EmitLine(sb: sb, line: $"  {tmp1} = insertvalue {llvmType} zeroinitializer, {keyLlvm} {keyVal}, 0");
         EmitLine(sb: sb, line: $"  {tmp2} = insertvalue {llvmType} {tmp1}, {valLlvm} {valVal}, 1");
         return tmp2;
     }
@@ -591,8 +590,8 @@ public partial class LLVMCodeGenerator
                     // Declare the add function if not yet declared
                     if (!_generatedFunctions.Contains(item: mangledAdd))
                     {
-                        EmitLine(sb: _functionDeclarations,
-                            line: $"declare i1 @{mangledAdd}(ptr, {keyLlvm}, {valLlvm})");
+                        _rfFunctionDeclarations[key: mangledAdd] =
+                            $"declare i1 @{mangledAdd}(ptr, {keyLlvm}, {valLlvm})";
                         _generatedFunctions.Add(item: mangledAdd);
                     }
 
@@ -620,8 +619,8 @@ public partial class LLVMCodeGenerator
                     string retType = baseName is "Set" or "SortedSet"
                         ? "i1"
                         : "void";
-                    EmitLine(sb: _functionDeclarations,
-                        line: $"declare {retType} @{mangledAdd}(ptr, {elemLlvm})");
+                    _rfFunctionDeclarations[key: mangledAdd] =
+                        $"declare {retType} @{mangledAdd}(ptr, {elemLlvm})";
                     _generatedFunctions.Add(item: mangledAdd);
                 }
 
@@ -752,8 +751,8 @@ public partial class LLVMCodeGenerator
                 // add(element: TElement, priority: TPriority)
                 if (!_generatedFunctions.Contains(item: mangledAdd))
                 {
-                    EmitLine(sb: _functionDeclarations,
-                        line: $"declare void @{mangledAdd}(ptr, {elementLlvm}, {priorityLlvm})");
+                    _rfFunctionDeclarations[key: mangledAdd] =
+                        $"declare void @{mangledAdd}(ptr, {elementLlvm}, {priorityLlvm})";
                     _generatedFunctions.Add(item: mangledAdd);
                 }
 

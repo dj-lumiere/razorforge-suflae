@@ -1,4 +1,4 @@
-namespace SemanticAnalysis.Diagnostics;
+namespace Compiler.Diagnostics;
 
 /// <summary>
 /// Semantic warning codes for RazorForge (RF-W prefix).
@@ -139,6 +139,18 @@ public enum SemanticWarningCode
 
     /// <summary>Deeply nested conditional expression; consider using 'when' for readability.</summary>
     NestedConditionalExpression = 253,
+
+    /// <summary>Failable routine (!) contains no throw or absent — will never crash.</summary>
+    FailableRoutineNeverCrashes = 254,
+
+    /// <summary>throw/absent in a non-failable routine — add ! suffix or remove the statement.</summary>
+    ThrowAbsentInNonFailable = 255,
+
+    /// <summary>Bare entity type in variant member — use an RC wrapper (Retained[T], etc.) instead.</summary>
+    BareEntityInVariantMember = 256,
+
+    /// <summary>Failable routine called in a non-failable context without error handling.</summary>
+    UnhandledCrashableCall = 257,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // STYLE WARNINGS (RF-W300 - RF-W349)

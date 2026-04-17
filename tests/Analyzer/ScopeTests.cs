@@ -1,4 +1,4 @@
-using SemanticAnalysis.Results;
+using SemanticVerification.Results;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;

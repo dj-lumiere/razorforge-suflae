@@ -1,4 +1,4 @@
-namespace SemanticAnalysis.Diagnostics;
+namespace Compiler.Diagnostics;
 
 /// <summary>
 /// Semantic diagnostic codes for RazorForge (RF-S prefix).
@@ -205,6 +205,9 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Type is not a variant type as required by constraint.</summary>
     VariantTypeConstraintViolation = 156,
+
+    /// <summary>Type is not a crashable type as required by constraint.</summary>
+    CrashableTypeConstraintViolation = 157,
 
     /// <summary>Invalid const generic type.</summary>
     InvalidConstGenericType = 158,
@@ -670,6 +673,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Thrown value must implement Crashable protocol.</summary>
     ThrowNotCrashable = 700,
 
+    /// <summary>Crashable type missing crash_message() -> Text implementation.</summary>
+    CrashMessageNotImplemented = 704,
+
     /// <summary>Only record types can be thrown (error types must be records).</summary>
     ThrowRequiresRecordType = 701,
 
@@ -697,9 +703,6 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Error during variant generation.</summary>
     VariantGenerationError = 752,
-
-    /// <summary>Crashable function called without error handling.</summary>
-    UnhandledCrashableCall = 753,
 
     /// <summary>Error handling type (Result/Lookup) cannot be used as parameter type.</summary>
     ErrorHandlingTypeAsParameter = 754,
@@ -798,12 +801,6 @@ public enum SemanticDiagnosticCode
     /// <summary>Lazy Sequence[T] cannot escape the scope of the token it was created from.</summary>
     SequenceScopeEscape = 820,
 
-    /// <summary>'emit' statement only allowed in generator routines.</summary>
-    EmitOutsideGenerator = 825,
-
-    /// <summary>Generator routine must return Sequence[T] type.</summary>
-    GeneratorReturnType = 826,
-
     /// <summary>Suflae untyped parameter defaults to Data.</summary>
     SuflaeImplicitDataType = 830,
 
@@ -832,6 +829,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Invalid intrinsic arguments.</summary>
     InvalidIntrinsicArguments = 853,
 
+    /// <summary>Unchecked arithmetic operator used outside a danger block or @dangerous routine.</summary>
+    UncheckedOperatorOutsideDanger = 854,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // CONCURRENCY AND TASK DEPENDENCY ERRORS (RF-S900 - RF-S949)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -858,7 +858,10 @@ public enum SemanticDiagnosticCode
     BuilderServiceImportRequired = 950,
 
     /// <summary>Routine declaration body could not be matched to a registered routine.</summary>
-    UnresolvedRoutineBody = 951
+    UnresolvedRoutineBody = 951,
+
+    /// <summary>'@thread_local' annotation is only valid on global variable declarations.</summary>
+    ThreadLocalOnNonGlobal = 952
 }
 /// <summary>
 /// Provides formatting helpers for <see cref="SemanticDiagnosticCode"/>.

@@ -1,8 +1,8 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis.Symbols;
-using SemanticAnalysis.Types;
+using SemanticVerification.Symbols;
+using SemanticVerification.Types;
 
 /// <summary>
 /// Declaration code generation for synthesized text conversion and hashing routines.
@@ -378,11 +378,7 @@ public partial class LLVMCodeGenerator
         {
             string tupleStructType = GetTupleTypeName(tuple: tuple);
 
-            // Determine ValueTuple vs Tuple: any entity element → Tuple, all value types → ValueTuple
-            bool isValueTuple = tuple.ElementTypes.All(predicate: t => t is not EntityTypeInfo);
-            string tuplePrefix = isValueTuple
-                ? "ValueTuple"
-                : "Tuple";
+            string tuplePrefix = tuple.IsValueTuple ? "ValueTuple" : "Tuple";
             string tupleDisplayName =
                 $"{tuplePrefix}[{string.Join(separator: ", ", values: tuple.ElementTypes.Select(selector: t => t.Name))}]";
 
@@ -459,6 +455,9 @@ public partial class LLVMCodeGenerator
 
         if (fields == null)
         {
+            // TODO(C90): DataTypeInfo falls through here and gets just its type name.
+            // It needs a proper branch above (like Maybe/Choice/Flags) that emits
+            // "Data(type_id: N, size: N)" for $diagnose and the runtime type name for $represent.
             string nameStr = EmitSynthesizedStringLiteral(value: typeName);
             EmitLine(sb: _functionDefinitions, line: $"  ret ptr {nameStr}");
             EmitLine(sb: _functionDefinitions, line: "}");
@@ -574,6 +573,10 @@ public partial class LLVMCodeGenerator
         {
             return value;
         }
+
+        // TODO(C119): F32/F64 cannot be passed directly to Text.$create — that overload expects
+        // an opaque carrier (i64 type_id + ptr data), not a raw float value. A dedicated
+        // rf_f32_to_text / rf_f64_to_text path (or pre-allocated carrier struct) is needed here.
 
         if (useDiagnose)
         {

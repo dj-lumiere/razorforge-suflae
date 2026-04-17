@@ -1,5 +1,5 @@
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Diagnostics;
+using SemanticVerification.Results;
+using Compiler.Diagnostics;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -66,7 +66,7 @@ public class VarargsCallTests
     [Fact]
     public void Varargs_LeadingNonMeParam_ReportsVarargsNotFirst()
     {
-        // Varargs must be first non-me param — leading params are rejected
+        // Varargs must be first non-me param ??leading params are rejected
         string source = """
                         routine log(label: Text, values...: S64) -> S64
                           return 0
@@ -143,7 +143,7 @@ public class VarargsCallTests
     [Fact]
     public void CreateOverload_SingleNamedArg_ResolvesToCreate()
     {
-        // Entity with 3 fields + $create(capacity: U64) — named arg should resolve to $create
+        // Entity with 3 fields + $create(capacity: U64) ??named arg should resolve to $create
         string source = """
                         entity Pool
                           secret data: U64
@@ -165,7 +165,7 @@ public class VarargsCallTests
     [Fact]
     public void CreateOverload_SinglePositionalArg_ResolvesToCreate()
     {
-        // Entity with 3 fields + $create(capacity: U64) — positional U64 should resolve to $create
+        // Entity with 3 fields + $create(capacity: U64) ??positional U64 should resolve to $create
         string source = """
                         entity Pool
                           secret data: U64
@@ -226,7 +226,7 @@ public class VarargsCallTests
     [Fact]
     public void CreateOverload_NoMatchingCreate_FallsThrough()
     {
-        // Two S64 args don't match any $create(capacity: U64) overload → falls through to S510
+        // Two S64 args don't match any $create(capacity: U64) overload ??falls through to S510
         string source = """
                         entity Pool
                           secret data: U64

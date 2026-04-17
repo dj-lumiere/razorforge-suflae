@@ -1,9 +1,9 @@
-using SemanticAnalysis.Symbols;
+using SemanticVerification.Symbols;
 
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis.Types;
+using SemanticVerification.Types;
 using SyntaxTree;
 
 public partial class LLVMCodeGenerator
@@ -117,6 +117,35 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
+    /// Emits code for a loop statement (infinite loop primitive).
+    /// Unconditional back-edge: continue → loop header, break → end.
+    /// </summary>
+    private void EmitLoop(StringBuilder sb, LoopStatement loopStmt)
+    {
+        string bodyLabel = NextLabel(prefix: "loop_body");
+        string endLabel = NextLabel(prefix: "loop_end");
+
+        // Push loop labels: continue → body header, break → end
+        _loopStack.Push(item: (bodyLabel, endLabel, _usingCleanupStack.Count));
+
+        // Jump to body
+        EmitLine(sb: sb, line: $"  br label %{bodyLabel}");
+
+        // Body block
+        EmitLine(sb: sb, line: $"{bodyLabel}:");
+        bool bodyTerminated = EmitStatement(sb: sb, stmt: loopStmt.Body);
+        if (!bodyTerminated)
+        {
+            EmitLine(sb: sb, line: $"  br label %{bodyLabel}");
+        }
+
+        // End block
+        EmitLine(sb: sb, line: $"{endLabel}:");
+
+        _loopStack.Pop();
+    }
+
+    /// <summary>
     /// Emits code for a for loop.
     /// for x in iterable { body } becomes:
     ///   iterator = iterable.$iter()
@@ -124,16 +153,14 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private void EmitFor(StringBuilder sb, ForStatement forStmt)
     {
-        // Fast path: range-based for loop (for x in (start to end) or (start to end by step))
-        if (forStmt.Iterable is RangeExpression range)
-        {
-            EmitForRange(sb: sb, forStmt: forStmt, range: range);
-            return;
-        }
+        // Range-based for loops are desugared by ControlFlowLoweringPass to loop+when via
+        // Range[T].$iter() / RangeEmitter[T].try_next() — they never reach here as ForStatement.
+        // Only deferred forms (tuple destructuring, for-else) reach codegen as ForStatement.
 
-        // General iterator protocol: seq.$iter() → emitter, emitter.try_next() → Maybe[T]
-        // try_next() is the emitting variant; $next!() crashes when exhausted.
-        // Maybe layout: { i1 (present), T } for record T, { i1 (present), ptr } for entity T
+        // General iterator protocol: seq.$iter() → iterator, iterator.try_next() → Maybe[T]
+        // try_next() returns Maybe[T]; $next!() crashes when exhausted.
+        // Record Maybe[T] layout: { i1 present, T value }  — Bool tag + inline value.
+        // Entity Maybe[T] layout: { Snatched[T] value }    — single ptr; null = absent.
 
         string condLabel = NextLabel(prefix: "for_cond");
         string bodyLabel = NextLabel(prefix: "for_body");
@@ -299,11 +326,10 @@ public partial class LLVMCodeGenerator
         EmitEntryAlloca(llvmName: emitterAddr, llvmType: emitterLlvmType);
         EmitLine(sb: sb, line: $"  store {emitterLlvmType} {emitterValue}, ptr {emitterAddr}");
 
-        // Determine element type from try_next() return type (preferred) or emitter type arguments (fallback).
-        // try_next is preferred because the yielded type may differ from the emitter's type argument
-        // (e.g., EnumerateEmitter[S64].$next!() yields Tuple[U64, S64], not S64).
-        // All emitting routines have try_next registered (failable → via ErrorHandlingGenerator;
-        // non-failable → via GenerateTryAlias). try_next always returns Maybe[T].
+        // Determine element type from try_next() return type (preferred) or iterator type arguments (fallback).
+        // try_next is preferred because the yielded type may differ from the iterator's type argument
+        // (e.g., EnumerateIterator[S64].$next!() yields Tuple[U64, S64], not S64).
+        // All iterators have try_next registered (failable → via ErrorHandlingGenerator). try_next always returns Maybe[T].
         TypeInfo? elemType = null;
         if (emitterType != null)
         {
@@ -403,14 +429,14 @@ public partial class LLVMCodeGenerator
         EmitLine(sb: sb, line: $"  br label %{condLabel}");
 
         // Condition block: call try_next() → Maybe[T]
-        // try_next is the emitting routine (returns Maybe[T]); $next! is generated from it (crashes when None).
+        // try_next returns Maybe[T]; $next! is generated from it (crashes when None).
         EmitLine(sb: sb, line: $"{condLabel}:");
         string emitterLoad = NextTemp();
         EmitLine(sb: sb, line: $"  {emitterLoad} = load {emitterLlvmType}, ptr {emitterAddr}");
 
-        // Call try_next() on the emitter — returns Maybe[T] carrier.
-        // All emitting routines have try_next registered (failable via ErrorHandlingGenerator,
-        // non-failable via GenerateTryAlias). LookupMethod handles generic type fallback.
+        // Call try_next() on the iterator — returns Maybe[T] carrier.
+        // All iterators have try_next registered (failable via ErrorHandlingGenerator).
+        // LookupMethod handles generic type fallback.
         RoutineInfo? nextMethod = emitterType != null
             ? _registry.LookupMethod(type: emitterType, methodName: "try_next")
             : null;
@@ -418,7 +444,7 @@ public partial class LLVMCodeGenerator
 
         string maybeResult;
 
-        // Emitting routines return a Maybe carrier — layout depends on element type
+        // Iterator try_next returns a Maybe carrier — layout depends on element type
         string maybeRetType = GetMaybeCarrierLLVMType(valueType: elemType!);
 
         if (nextMethod != null)
@@ -439,6 +465,14 @@ public partial class LLVMCodeGenerator
             else
             {
                 nextMangled = MangleFunctionName(routine: nextMethod);
+                // Non-generic iterator type with generated try_next — record for body compilation.
+                // e.g., BitListIterator.try_next must compile the $next! body with try wrapping.
+                if (nextMethod.OriginalName != null && emitterType != null)
+                {
+                    RecordMonomorphization(mangledName: nextMangled,
+                        genericMethod: nextMethod,
+                        resolvedOwnerType: emitterType);
+                }
             }
 
             GenerateFunctionDeclaration(routine: nextMethod);
@@ -469,44 +503,59 @@ public partial class LLVMCodeGenerator
                 $"  {maybeResult} = call {maybeRetType} @{fallbackName}({emitterLlvmType} {emitterLoad})");
         }
 
-        // Extract tag from Maybe result (field 0 = Bool present)
-        string maybeTagType = "i1";
+        // Store Maybe carrier to an alloca so we can GEP into it.
+        // Record Maybe[T] layout: { i1 present, T value }  — tag = field 0, value = field 1.
+        // Entity Maybe[T] layout: { Snatched[T] value }    — single ptr field; null = absent.
         string maybeTagPtr = NextTemp();
         EmitEntryAlloca(llvmName: maybeTagPtr, llvmType: maybeRetType);
         EmitLine(sb: sb, line: $"  store {maybeRetType} {maybeResult}, ptr {maybeTagPtr}");
         string tagFieldPtr = NextTemp();
-        string tagVal = NextTemp();
         EmitLine(sb: sb,
             line:
             $"  {tagFieldPtr} = getelementptr {maybeRetType}, ptr {maybeTagPtr}, i32 0, i32 0");
-        EmitLine(sb: sb, line: $"  {tagVal} = load {maybeTagType}, ptr {tagFieldPtr}");
 
-        // tag == 1 (Bool true / VALID) → has value → body, else → end
-        string hasValue = NextTemp();
-        EmitLine(sb: sb, line: $"  {hasValue} = icmp eq {maybeTagType} {tagVal}, 1");
+        string hasValue;
+        if (elemType is EntityTypeInfo)
+        {
+            // Entity Maybe { Snatched[T] }: field 0 is ptr; null = absent.
+            string ptrVal = NextTemp();
+            EmitLine(sb: sb, line: $"  {ptrVal} = load ptr, ptr {tagFieldPtr}");
+            hasValue = NextTemp();
+            EmitLine(sb: sb, line: $"  {hasValue} = icmp ne ptr {ptrVal}, null");
+        }
+        else
+        {
+            // Record Maybe { i1, T }: field 0 is Bool tag.
+            string tagVal = NextTemp();
+            EmitLine(sb: sb, line: $"  {tagVal} = load i1, ptr {tagFieldPtr}");
+            hasValue = NextTemp();
+            EmitLine(sb: sb, line: $"  {hasValue} = icmp eq i1 {tagVal}, 1");
+        }
+
         EmitLine(sb: sb, line: $"  br i1 {hasValue}, label %{bodyLabel}, label %{endLabel}");
 
-        // Body block: extract payload (field 1)
+        // Body block: extract payload.
+        // Record Maybe: value is at field 1.
+        // Entity Maybe: the Snatched ptr at field 0 IS the entity ptr (no field 1 exists).
         EmitLine(sb: sb, line: $"{bodyLabel}:");
-        string handlePtr = NextTemp();
-        EmitLine(sb: sb,
-            line:
-            $"  {handlePtr} = getelementptr {maybeRetType}, ptr {maybeTagPtr}, i32 0, i32 1");
 
         string handleVal;
         if (elemType is EntityTypeInfo)
         {
-            // Entity: field 1 is a ptr — load it directly
-            handleVal = NextTemp();
-            EmitLine(sb: sb, line: $"  {handleVal} = load ptr, ptr {handlePtr}");
+            // Entity Maybe: field 0 is the Snatched[T] ptr — use it directly.
+            handleVal = tagFieldPtr;
         }
         else
         {
-            // Record/value: field 1 IS the inline value — handlePtr is already the address
+            // Record/value Maybe: value is at field 1.
+            string handlePtr = NextTemp();
+            EmitLine(sb: sb,
+                line:
+                $"  {handlePtr} = getelementptr {maybeRetType}, ptr {maybeTagPtr}, i32 0, i32 1");
             handleVal = handlePtr;
         }
 
-        // Load element value from the Snatched handle pointer
+        // Load element value from the handle pointer
         if (forStmt.VariablePattern != null && elemType is TupleTypeInfo bodyTupleType)
         {
             // Tuple destructuring: extract each field from the handle pointer
@@ -543,8 +592,13 @@ public partial class LLVMCodeGenerator
         {
             if (elemType is EntityTypeInfo)
             {
-                // Entity: handleVal is the ptr — store it directly
-                EmitLine(sb: sb, line: $"  store ptr {handleVal}, ptr {varAddr}");
+                // Entity Maybe { Snatched[T] }: field 0 ptr IS the entity — load and store.
+                // TODO(C87): RC-bump the entity here (call rf_retain) before storing into the loop
+                // variable. Currently the loop variable borrows the entity without incrementing its
+                // reference count, which is unsound if the source collection is mutated during iteration.
+                string entityPtr = NextTemp();
+                EmitLine(sb: sb, line: $"  {entityPtr} = load ptr, ptr {handleVal}");
+                EmitLine(sb: sb, line: $"  store ptr {entityPtr}, ptr {varAddr}");
             }
             else
             {
@@ -665,177 +719,6 @@ public partial class LLVMCodeGenerator
         }
 
         return type;
-    }
-
-    /// <summary>
-    /// Emits a range-based for loop as a simple counter loop with start/end/step.
-    /// </summary>
-    private void EmitForRange(StringBuilder sb, ForStatement forStmt, RangeExpression range)
-    {
-        string condLabel = NextLabel(prefix: "for_cond");
-        string bodyLabel = NextLabel(prefix: "for_body");
-        string incrLabel = NextLabel(prefix: "for_incr");
-        string endLabel = NextLabel(prefix: "for_end");
-
-        _loopStack.Push(item: (incrLabel, endLabel, _usingCleanupStack.Count));
-
-        // Infer element type from range bounds
-        TypeInfo? elemType =
-            GetExpressionType(expr: range.Start) ?? GetExpressionType(expr: range.End);
-        string elemLlvmType = elemType != null
-            ? GetLLVMType(type: elemType)
-            : "i64";
-
-        // Evaluate range bounds
-        string start = EmitExpression(sb: sb, expr: range.Start);
-        string end = EmitExpression(sb: sb, expr: range.End);
-        string? userStep = range.Step != null
-            ? EmitExpression(sb: sb, expr: range.Step)
-            : null;
-
-        // Allocate loop variable (uniquify name to avoid conflicts with repeated loops)
-        string varName = forStmt.Variable ?? "_iter";
-        string uniqueVarName;
-        if (_varNameCounts.TryGetValue(key: varName, value: out int count))
-        {
-            _varNameCounts[key: varName] = count + 1;
-            uniqueVarName = $"{varName}.{count + 1}";
-        }
-        else
-        {
-            _varNameCounts[key: varName] = 1;
-            uniqueVarName = varName;
-        }
-
-        _localVarLLVMNames[key: varName] = uniqueVarName;
-        string varAddr = $"%{uniqueVarName}.addr";
-        EmitEntryAlloca(llvmName: varAddr, llvmType: elemLlvmType);
-        EmitLine(sb: sb, line: $"  store {elemLlvmType} {start}, ptr {varAddr}");
-
-        // Register loop variable type
-        TypeInfo? loopVarType = elemType ?? _registry.LookupType(name: "S64") ??
-            _registry.LookupType(name: "@intrinsic.i64");
-        if (loopVarType != null)
-        {
-            _localVariables[key: varName] = loopVarType;
-        }
-
-        bool isFloat = elemLlvmType is "half" or "float" or "double" or "fp128";
-
-        // Compute direction at runtime: is_desc = start > end
-        // For float ranges or explicitly descending (downto), keep compile-time behavior
-        string? isDescReg = null;
-        string? step = null;
-        if (isFloat || range.IsDescending)
-        {
-            step = userStep;
-        }
-        else
-        {
-            // Runtime direction inference for integer to/til ranges
-            isDescReg = NextTemp();
-            EmitLine(sb: sb, line: $"  {isDescReg} = icmp sgt {elemLlvmType} {start}, {end}");
-            if (userStep != null)
-            {
-                // Negate step if descending: step = select is_desc, -userStep, userStep
-                string negStep = NextTemp();
-                EmitLine(sb: sb, line: $"  {negStep} = sub {elemLlvmType} 0, {userStep}");
-                step = NextTemp();
-                EmitLine(sb: sb,
-                    line:
-                    $"  {step} = select i1 {isDescReg}, {elemLlvmType} {negStep}, {elemLlvmType} {userStep}");
-            }
-            else
-            {
-                step = NextTemp();
-                EmitLine(sb: sb,
-                    line:
-                    $"  {step} = select i1 {isDescReg}, {elemLlvmType} -1, {elemLlvmType} 1");
-            }
-        }
-
-        EmitLine(sb: sb, line: $"  br label %{condLabel}");
-
-        // Condition
-        EmitLine(sb: sb, line: $"{condLabel}:");
-        string current = NextTemp();
-        EmitLine(sb: sb, line: $"  {current} = load {elemLlvmType}, ptr {varAddr}");
-        string cmp;
-        if (isFloat)
-        {
-            cmp = NextTemp();
-            string fcmpOp = range.IsDescending ? "oge" : range.IsExclusive ? "olt" : "ole";
-            EmitLine(sb: sb, line: $"  {cmp} = fcmp {fcmpOp} {elemLlvmType} {current}, {end}");
-        }
-        else if (range.IsDescending)
-        {
-            // Explicit descending (downto): always use sge
-            cmp = NextTemp();
-            string icmpOp = range.IsExclusive
-                ? "sgt"
-                : "sge";
-            EmitLine(sb: sb, line: $"  {cmp} = icmp {icmpOp} {elemLlvmType} {current}, {end}");
-        }
-        else
-        {
-            // Runtime direction: emit both comparisons, select based on is_desc
-            string ascCmp = NextTemp();
-            string descCmp = NextTemp();
-            string ascOp = range.IsExclusive
-                ? "slt"
-                : "sle";
-            string descOp = range.IsExclusive
-                ? "sgt"
-                : "sge";
-            EmitLine(sb: sb, line: $"  {ascCmp} = icmp {ascOp} {elemLlvmType} {current}, {end}");
-            EmitLine(sb: sb, line: $"  {descCmp} = icmp {descOp} {elemLlvmType} {current}, {end}");
-            cmp = NextTemp();
-            EmitLine(sb: sb, line: $"  {cmp} = select i1 {isDescReg}, i1 {descCmp}, i1 {ascCmp}");
-        }
-
-        EmitLine(sb: sb, line: $"  br i1 {cmp}, label %{bodyLabel}, label %{endLabel}");
-
-        // Body
-        EmitLine(sb: sb, line: $"{bodyLabel}:");
-        bool bodyTerminated = EmitStatement(sb: sb, stmt: forStmt.Body);
-        if (!bodyTerminated)
-        {
-            EmitLine(sb: sb, line: $"  br label %{incrLabel}");
-        }
-
-        // Increment: i += step (step is negative for descending)
-        EmitLine(sb: sb, line: $"{incrLabel}:");
-        string curVal = NextTemp();
-        EmitLine(sb: sb, line: $"  {curVal} = load {elemLlvmType}, ptr {varAddr}");
-        string nextVal = NextTemp();
-        if (isFloat)
-        {
-            string fop = range.IsDescending
-                ? "fsub"
-                : "fadd";
-            EmitLine(sb: sb,
-                line: $"  {nextVal} = {fop} {elemLlvmType} {curVal}, {userStep ?? "1"}");
-        }
-        else
-        {
-            // step already has correct sign from runtime select (or is positive for explicit descending sub)
-            if (range.IsDescending)
-            {
-                EmitLine(sb: sb,
-                    line: $"  {nextVal} = sub {elemLlvmType} {curVal}, {userStep ?? "1"}");
-            }
-            else
-            {
-                EmitLine(sb: sb, line: $"  {nextVal} = add {elemLlvmType} {curVal}, {step}");
-            }
-        }
-
-        EmitLine(sb: sb, line: $"  store {elemLlvmType} {nextVal}, ptr {varAddr}");
-        EmitLine(sb: sb, line: $"  br label %{condLabel}");
-
-        // End
-        EmitLine(sb: sb, line: $"{endLabel}:");
-        _loopStack.Pop();
     }
 
     /// <summary>

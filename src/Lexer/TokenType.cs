@@ -256,6 +256,13 @@ public enum TokenType
     Flags,
 
     /// <summary>
+    /// Crashable declaration keyword.
+    /// Entity type that can be thrown as an error. Must implement crash_message().
+    /// Automatically conforms to the Crashable protocol.
+    /// </summary>
+    Crashable,
+
+    /// <summary>
     /// Variant declaration keyword.
     /// Tagged union - each case can hold different data types.
     /// Requires pattern matching to unpack. Cases are immediately disposed after unpacking.
@@ -555,6 +562,31 @@ public enum TokenType
 
     #endregion
 
+    #region Operators - Unchecked Variants
+
+    /// <summary>Unchecked addition operator (+!) — UB on overflow, enables nsw/nuw LLVM hint</summary>
+    PlusUnchecked,
+
+    /// <summary>Unchecked subtraction operator (-!) — UB on overflow, enables nsw/nuw LLVM hint</summary>
+    MinusUnchecked,
+
+    /// <summary>Unchecked multiplication operator (*!) — UB on overflow, enables nsw/nuw LLVM hint</summary>
+    MultiplyUnchecked,
+
+    /// <summary>Unchecked float division operator (/!) — fdiv fast, no NaN/inf check</summary>
+    SlashUnchecked,
+
+    /// <summary>Unchecked integer floor division operator (//!) — bare sdiv/udiv, UB on zero or overflow</summary>
+    DivideUnchecked,
+
+    /// <summary>Unchecked modulo operator (%!) — bare srem/urem, UB on zero</summary>
+    PercentUnchecked,
+
+    /// <summary>Unchecked exponentiation operator (**!) — UB on overflow</summary>
+    PowerUnchecked,
+
+    #endregion
+
     #region Operators - Comparison
 
     /// <summary>Equality comparison operator (==)</summary>
@@ -800,19 +832,6 @@ public enum TokenType
     #endregion
 
     #region Async/Generator Keywords
-
-    /// <summary>
-    /// Generator yield keyword.
-    /// Yields values from generator/iterator functions (coroutine mechanism).
-    /// Similar to 'yield' in Python/C#.
-    /// </summary>
-    Emit,
-
-    /// <summary>
-    /// Emitting routine modifier keyword.
-    /// Marks a routine as a generator that produces values via 'emit'.
-    /// </summary>
-    Emitting,
 
     /// <summary>
     /// Async function declaration keyword.

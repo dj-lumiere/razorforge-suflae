@@ -1,7 +1,7 @@
 namespace Compiler.CodeGen;
 
-using SemanticAnalysis.Symbols;
-using SemanticAnalysis.Types;
+using SemanticVerification.Symbols;
+using SemanticVerification.Types;
 using SyntaxTree;
 
 /// <summary>
@@ -113,13 +113,13 @@ public partial class LLVMCodeGenerator
         }
 
         // First, check if the semantic analyzer has already resolved the type
-        if (expr.ResolvedType != null)
+        if (expr.ResolvedType != null && expr.ResolvedType is not ErrorTypeInfo)
         {
             // During monomorphization, resolve unsubstituted generic params (e.g., Snatched[U] → Snatched[S64])
             TypeInfo resolved = ApplyTypeSubstitutions(type: expr.ResolvedType);
-            // If the type is still an unresolved generic parameter, fall through to the
-            // expression-specific resolution which can use call-site type arguments
-            if (resolved is not GenericParameterTypeInfo)
+            // If the type is still an unresolved generic parameter or an error placeholder,
+            // fall through to the expression-specific resolution which can use call-site type arguments
+            if (resolved is not GenericParameterTypeInfo and not ErrorTypeInfo)
             {
                 // Const generic values resolve to their underlying primitive type for method dispatch
                 if (resolved is ConstGenericValueTypeInfo constVal)
@@ -150,8 +150,27 @@ public partial class LLVMCodeGenerator
             DictEntryLiteralExpression dictEntry => dictEntry.ResolvedType,
             ConditionalExpression cond => GetExpressionType(expr: cond.TrueExpression),
             GenericMemberExpression gme => GetGenericMemberExpressionType(gme: gme),
+            RangeExpression range => GetRangeType(range: range),
             _ => null
         };
+    }
+
+    /// <summary>
+    /// Infers the type of a <see cref="RangeExpression"/> as <c>Range[T]</c> where T is the
+    /// element type derived from the start (or end) sub-expression. Used when
+    /// <c>ResolvedType</c> is null (e.g. stdlib bodies that bypass ExpressionLoweringPass).
+    /// </summary>
+    private TypeInfo? GetRangeType(RangeExpression range)
+    {
+        TypeInfo? elemType = GetExpressionType(expr: range.Start)
+                             ?? GetExpressionType(expr: range.End);
+        if (elemType == null) return null;
+
+        TypeInfo? rangeDef = _registry.LookupType(name: "Range");
+        if (rangeDef == null) return null;
+
+        return _registry.GetOrCreateResolution(genericDef: rangeDef,
+            typeArguments: new List<TypeInfo> { elemType });
     }
 
     /// <summary>
@@ -297,10 +316,39 @@ public partial class LLVMCodeGenerator
             {
                 // Qualified method call: resolve receiver type, look up Type.method
                 TypeInfo? receiverType = GetExpressionType(expr: member.Object);
+
+                // Fallback: if the receiver is a type-name identifier (e.g., Duration.from_nanoseconds),
+                // GetExpressionType returns null because it only checks _localVariables.
+                // Try ResolveTypeNameAsReceiver to handle static/factory method calls.
+                if (receiverType == null && member.Object is IdentifierExpression typeNameId &&
+                    !_localVariables.ContainsKey(key: typeNameId.Name))
+                {
+                    receiverType = ResolveTypeNameAsReceiver(name: typeNameId.Name);
+                }
+
                 if (receiverType != null)
                 {
+                    // Normalize WrapperTypeInfo (e.g., Snatched[Byte]) to the real RecordTypeInfo
+                    // so LookupMethod can find methods via the generic definition path.
+                    if (receiverType is WrapperTypeInfo wrapperRcvr)
+                    {
+                        TypeInfo? wrapperDef = _registry.LookupType(name: wrapperRcvr.Name);
+                        if (wrapperDef is { IsGenericDefinition: true } &&
+                            wrapperRcvr.InnerType != null)
+                        {
+                            TypeInfo normalized = _registry.GetOrCreateResolution(
+                                genericDef: wrapperDef,
+                                typeArguments: new List<TypeInfo> { wrapperRcvr.InnerType });
+                            receiverType = normalized;
+                        }
+                    }
+
+                    // Strip '!' suffix from failable method names — registry stores without it
+                    string lookupName = member.PropertyName.EndsWith(value: '!')
+                        ? member.PropertyName[..^1]
+                        : member.PropertyName;
                     RoutineInfo? method = _registry.LookupMethod(type: receiverType,
-                        methodName: member.PropertyName);
+                        methodName: lookupName);
 
                     if (method?.ReturnType != null)
                     {
@@ -310,6 +358,23 @@ public partial class LLVMCodeGenerator
                                 value: out TypeInfo? sub))
                         {
                             return sub;
+                        }
+
+                        // WrapperTypeInfo with same name as return type: receiver is Snatched[Byte],
+                        // method returns Snatched[T] → return Snatched[Byte] (same concrete wrapper).
+                        if (receiverType is WrapperTypeInfo rcvrWrapper &&
+                            method.ReturnType is WrapperTypeInfo retWrapper &&
+                            rcvrWrapper.Name == retWrapper.Name)
+                        {
+                            return receiverType;
+                        }
+
+                        // WrapperTypeInfo receiver with method returning T (generic param): T → InnerType.
+                        // e.g., Snatched[Byte].read() → T; T becomes Byte.
+                        if (receiverType is WrapperTypeInfo wrapperRcvr2 &&
+                            method.ReturnType is GenericParameterTypeInfo)
+                        {
+                            return wrapperRcvr2.InnerType;
                         }
 
                         // For generic resolution receivers (e.g., Snatched[U8].read() → T should become U8),
@@ -518,6 +583,10 @@ public partial class LLVMCodeGenerator
     {
         string? typeName = literal.LiteralType switch
         {
+            // Bare unsuffixed literals default to S64/F64 in RazorForge (same as SA rule).
+            // Stdlib bodies bypass SA so we must handle these token types here.
+            Lexer.TokenType.Integer => "S64",
+            Lexer.TokenType.Decimal => "F64",
             Lexer.TokenType.S8Literal => "S8",
             Lexer.TokenType.S16Literal => "S16",
             Lexer.TokenType.S32Literal => "S32",
@@ -535,6 +604,7 @@ public partial class LLVMCodeGenerator
             Lexer.TokenType.D32Literal => "D32",
             Lexer.TokenType.D64Literal => "D64",
             Lexer.TokenType.D128Literal => "D128",
+            Lexer.TokenType.AddressLiteral => "Address",
             Lexer.TokenType.True or Lexer.TokenType.False => "Bool",
             Lexer.TokenType.TextLiteral => "Text",
             Lexer.TokenType.CharacterLiteral => "Character",
@@ -589,6 +659,7 @@ public partial class LLVMCodeGenerator
         {
             EntityTypeInfo e => e.LookupMemberVariable(memberVariableName: member.PropertyName),
             RecordTypeInfo r => r.LookupMemberVariable(memberVariableName: member.PropertyName),
+            CrashableTypeInfo c => c.LookupMemberVariable(memberVariableName: member.PropertyName),
             _ => null
         };
 

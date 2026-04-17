@@ -3,13 +3,14 @@ using Xunit;
 
 namespace RazorForge.Tests;
 
-using SemanticAnalysis;
-using SemanticAnalysis.Enums;
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Symbols;
+using SemanticVerification;
+using SemanticVerification.Enums;
+using SemanticVerification.Results;
+using SemanticVerification.Symbols;
 using Compiler.Lexer;
+using Compiler.Resolution;
 using SyntaxTree;
-using TypeInfo = SemanticAnalysis.Types.TypeInfo;
+using TypeInfo = SemanticVerification.Types.TypeInfo;
 
 /// <summary>
 /// Helper methods for parsing and analyzing test code.

@@ -1,14 +1,14 @@
 using System.Diagnostics;
-using System.Text;
 using Compiler.Diagnostics;
 using Compiler.Lexer;
 using Compiler.Parser;
 using SyntaxTree;
-using SemanticAnalysis;
-using SemanticAnalysis.Enums;
-using SemanticAnalysis.Results;
+using Compiler.Resolution;
+using SemanticVerification;
+using SemanticVerification.Enums;
+using SemanticVerification.Results;
 using Compiler.CodeGen;
-using Builder.Modules;
+using Compiler.Declaration;
 
 namespace Builder;
 
@@ -37,7 +37,7 @@ internal partial class Program
 
         // Check if first arg is a command or a file
         bool isCommand = command == "parse" || command == "tokenize" || command == "codegen" ||
-                         command == "emit" || command == "build" || command == "buildandrun" ||
+                         command == "build" || command == "buildandrun" ||
                          command == "check" || command == "validate-stdlib" || command == "help";
 
         if (!isCommand)
@@ -67,7 +67,6 @@ internal partial class Program
                 return TokenizeFile(sourceFile: args[1]);
 
             case "codegen":
-            case "emit":
                 if (args.Length < 2)
                 {
                     Console.WriteLine(value: "Error: codegen command requires a file path");
@@ -83,7 +82,7 @@ internal partial class Program
             case "build":
             {
                 (string? entryFile, string? projectRoot, string? outputFile2,
-                    RfBuildMode buildMode2) = ResolveEntryFile(args: args, needsOutputArg: true);
+                    RfBuildMode buildMode2, bool dumpAst2) = ResolveEntryFile(args: args, needsOutputArg: true);
                 if (entryFile == null)
                 {
                     return 1;
@@ -92,13 +91,14 @@ internal partial class Program
                 return BuildMultiFile(entryFile: entryFile,
                     outputFile: outputFile2,
                     projectRoot: projectRoot,
-                    buildMode: buildMode2);
+                    buildMode: buildMode2,
+                    dumpAst: dumpAst2);
             }
 
             case "buildandrun":
             {
                 (string? entryFile, string? projectRoot, _,
-                    RfBuildMode buildMode3) = ResolveEntryFile(args: args, needsOutputArg: false);
+                    RfBuildMode buildMode3, bool dumpAst3) = ResolveEntryFile(args: args, needsOutputArg: false);
                 if (entryFile == null)
                 {
                     return 1;
@@ -106,12 +106,13 @@ internal partial class Program
 
                 return BuildAndRun(entryFile: entryFile,
                     projectRoot: projectRoot,
-                    buildMode: buildMode3);
+                    buildMode: buildMode3,
+                    dumpAst: dumpAst3);
             }
 
             case "check":
             {
-                (string? entryFile, string? projectRoot, _, _) =
+                (string? entryFile, string? projectRoot, _, _, _) =
                     ResolveEntryFile(args: args, needsOutputArg: false);
                 if (entryFile == null)
                 {
@@ -144,14 +145,14 @@ internal partial class Program
     }
 
     /// <summary>
-    /// Resolves the entry file, project root, optional output file, and build mode
+    /// Resolves the entry file, project root, optional output file, build mode, and dump-ast flag
     /// for build/buildandrun/check commands.
     /// When no explicit entry file is given, searches for a razorforge.toml manifest.
     /// Supports --target to select a specific target from the manifest.
-    /// Returns (entryFile, projectRoot, outputFile, buildMode); entryFile is null on error.
+    /// Returns (entryFile, projectRoot, outputFile, buildMode, dumpAst); entryFile is null on error.
     /// </summary>
     private static (string? EntryFile, string? ProjectRoot, string? OutputFile,
-        RfBuildMode BuildMode) ResolveEntryFile(string[] args, bool needsOutputArg)
+        RfBuildMode BuildMode, bool DumpAst) ResolveEntryFile(string[] args, bool needsOutputArg)
     {
         // args[0] is the command name (build/buildandrun/check)
         string? targetName = null;
@@ -187,29 +188,43 @@ internal partial class Program
             }
         }
 
-        // Explicit entry file given — use it directly (debug mode, no manifest)
-        if (explicitEntry != null)
+        // Explicit source file given — use it directly (debug mode, no manifest)
+        // .toml files are treated as manifests, not source files
+        if (explicitEntry != null &&
+            !explicitEntry.EndsWith(value: ".toml", comparisonType: StringComparison.OrdinalIgnoreCase))
         {
             if (!File.Exists(path: explicitEntry))
             {
                 Console.WriteLine(value: $"Error: File '{explicitEntry}' not found.");
-                return (null, null, null, RfBuildMode.Debug);
+                return (null, null, null, RfBuildMode.Debug, false);
             }
 
             string projectRoot =
                 Path.GetDirectoryName(path: Path.GetFullPath(path: explicitEntry)) ?? ".";
-            return (explicitEntry, projectRoot, outputFile, RfBuildMode.Debug);
+            return (explicitEntry, projectRoot, outputFile, RfBuildMode.Debug, false);
         }
 
-        // No explicit entry — search for manifest
-        string? manifestPath = ManifestLoader.FindManifest(startDir: Environment.CurrentDirectory);
+        // No explicit entry (or .toml manifest given) — load manifest
+        string? manifestPath = explicitEntry != null
+            ? (File.Exists(path: explicitEntry)
+                ? Path.GetFullPath(path: explicitEntry)
+                : null)
+            : ManifestLoader.FindManifest(startDir: Environment.CurrentDirectory);
         if (manifestPath == null)
         {
-            Console.WriteLine(
-                value: "Error: No entry file specified and no razorforge.toml found.");
-            Console.WriteLine(
-                value: "Either provide an entry file or create a razorforge.toml manifest.");
-            return (null, null, null, RfBuildMode.Debug);
+            if (explicitEntry != null)
+            {
+                Console.WriteLine(value: $"Error: Manifest '{explicitEntry}' not found.");
+            }
+            else
+            {
+                Console.WriteLine(
+                    value: "Error: No entry file specified and no razorforge.toml found.");
+                Console.WriteLine(
+                    value: "Either provide an entry file or create a razorforge.toml manifest.");
+            }
+
+            return (null, null, null, RfBuildMode.Debug, false);
         }
 
         try
@@ -230,7 +245,7 @@ internal partial class Program
                     Console.WriteLine(
                         value:
                         $"Available targets: {string.Join(separator: ", ", values: manifest.Targets.Select(selector: t => t.Name))}");
-                    return (null, null, null, RfBuildMode.Debug);
+                    return (null, null, null, RfBuildMode.Debug, false);
                 }
             }
             else
@@ -251,13 +266,13 @@ internal partial class Program
             Console.WriteLine(value: $"Using manifest: {manifestPath}");
             Console.WriteLine(value: $"Target: {target.Name} ({target.Type}, {target.Mode})");
 
-            return (target.Entry, manifest.ManifestDirectory, outputFile, buildMode);
+            return (target.Entry, manifest.ManifestDirectory, outputFile, buildMode, target.DumpAst);
         }
         catch (Exception ex)
         {
             Console.WriteLine(
                 value: $"Error loading {ManifestLoader.ManifestFileName}: {ex.Message}");
-            return (null, null, null, RfBuildMode.Debug);
+            return (null, null, null, RfBuildMode.Debug, false);
         }
     }
 
@@ -595,7 +610,9 @@ internal partial class Program
             var generator = new LLVMCodeGenerator(program: ast,
                 registry: result.Registry,
                 stdlibPrograms: stdlibPrograms,
-                buildMode: buildMode);
+                buildMode: buildMode,
+                synthesizedBodies: result.SynthesizedBodies,
+                preMonomorphizedBodies: result.PreMonomorphizedBodies);
             string llvmIR = generator.Generate();
 
             // Output
@@ -744,6 +761,37 @@ internal partial class Program
     }
 
     /// <summary>
+    /// Returns the full path to the compiler-rt builtins library (e.g. clang_rt.builtins-x86_64.lib)
+    /// by asking clang where it lives. Returns an empty string if the library cannot be found.
+    /// </summary>
+    private static string GetCompilerRtBuiltinsLib()
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "clang",
+                Arguments = "--print-libgcc-file-name --rtlib=compiler-rt",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+            using var proc = Process.Start(psi);
+            if (proc == null) return "";
+            string output = proc.StandardOutput.ReadToEnd().Trim();
+            proc.WaitForExit();
+            if (proc.ExitCode == 0 && File.Exists(output))
+                return output;
+        }
+        catch
+        {
+            // clang not available or doesn't support --print-libgcc-file-name
+        }
+        return "";
+    }
+
+    /// <summary>
     /// Detects the underlying linker tool name from clang's stderr output.
     /// </summary>
     private static string DetectLinkerFromStderr(string stderr)
@@ -782,7 +830,8 @@ internal partial class Program
     /// Returns 0 on success or 1 if any stage fails.
     /// </summary>
     private static int BuildMultiFile(string entryFile, string? outputFile,
-        string? projectRoot = null, RfBuildMode buildMode = RfBuildMode.Debug)
+        string? projectRoot = null, RfBuildMode buildMode = RfBuildMode.Debug,
+        bool dumpAst = false)
     {
         if (!File.Exists(path: entryFile))
         {
@@ -953,13 +1002,29 @@ internal partial class Program
             var generator = new LLVMCodeGenerator(userPrograms: userPrograms,
                 registry: result.Registry,
                 stdlibPrograms: stdlibPrograms,
-                buildMode: buildMode);
+                buildMode: buildMode,
+                synthesizedBodies: result.SynthesizedBodies,
+                preMonomorphizedBodies: result.PreMonomorphizedBodies);
             string llvmIR = generator.Generate();
 
             // Output
             string outPath = outputFile ?? Path.ChangeExtension(path: entryFile, extension: ".ll");
             File.WriteAllText(path: outPath, contents: llvmIR);
             Console.WriteLine(value: $"LLVM IR written to: {outPath}");
+
+            if (dumpAst)
+            {
+                string astPath = Path.ChangeExtension(path: outPath, extension: ".rf.desugared");
+                var printer = new RfAstPrinter();
+                string astText = printer.PrintMultiProgram(
+                    programs: userPrograms,
+                    synthesizedBodies: result.SynthesizedBodies,
+                    registry: result.Registry,
+                    stdlibPrograms: stdlibPrograms,
+                    preMonomorphizedBodies: result.PreMonomorphizedBodies);
+                File.WriteAllText(path: astPath, contents: astText);
+                Console.WriteLine(value: $"Desugared AST written to: {astPath}");
+            }
 
             Console.WriteLine();
             Console.WriteLine(value: "Build successful!");
@@ -1132,7 +1197,7 @@ internal partial class Program
     /// Returns 0 on success or 1 if build or execution fails.
     /// </summary>
     private static int BuildAndRun(string entryFile, string? projectRoot = null,
-        RfBuildMode buildMode = RfBuildMode.Debug)
+        RfBuildMode buildMode = RfBuildMode.Debug, bool dumpAst = false)
     {
         // Remove stale per-target outputs before rebuilding.
         string llFile = Path.ChangeExtension(path: entryFile, extension: ".ll");
@@ -1144,7 +1209,8 @@ internal partial class Program
         int buildResult = BuildMultiFile(entryFile: entryFile,
             outputFile: llFile,
             projectRoot: projectRoot,
-            buildMode: buildMode);
+            buildMode: buildMode,
+            dumpAst: dumpAst);
         if (buildResult != 0)
         {
             return buildResult;
@@ -1217,8 +1283,22 @@ internal partial class Program
         string windowsThreadingLibs = OperatingSystem.IsWindows()
             ? " -lucrt -lmsvcrt -lkernel32"
             : "";
+        // Compiler-RT builtins resolve softfloat/softint symbols that LLVM emits for types
+        // without direct hardware support:
+        //   fp128 arithmetic: __addtf3, __subtf3, __multf3, __divtf3, __negtf2, __eqtf2, etc.
+        //   f16 conversions:  __extendhfsf2, __truncsfhf2
+        //   i128 arithmetic:  __divti3, __modti3, __udivti3, __umodti3
+        //
+        // On Windows, neither MSVC link.exe nor lld-link automatically searches for the clang
+        // compiler-rt builtins library when linking an .ll/.obj that was generated from LLVM IR
+        // (rather than from a C/C++ source file). We locate the library explicitly via
+        //   clang --print-libgcc-file-name --rtlib=compiler-rt
+        // and add it directly to the linker command line.
+        string compilerRtLib = GetCompilerRtBuiltinsLib();
+        string compilerRtArg = compilerRtLib.Length > 0 ? $" \"{compilerRtLib}\"" : " --rtlib=compiler-rt";
+        string lldFlag = OperatingSystem.IsWindows() ? " -fuse-ld=lld" : "";
         string clangArgs =
-            $"{clangOptLevel}{framePointerFlag} -o \"{exeFile}\" \"{optFile}\" -L\"{runtimeLibDir}\" -lrazorforge_runtime{windowsThreadingLibs}";
+            $"{clangOptLevel}{framePointerFlag}{lldFlag} -o \"{exeFile}\" \"{optFile}\" -L\"{runtimeLibDir}\" -lrazorforge_runtime{compilerRtArg}{windowsThreadingLibs}";
 
         var clangPsi = new ProcessStartInfo
         {

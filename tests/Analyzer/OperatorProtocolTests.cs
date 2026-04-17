@@ -1,4 +1,4 @@
-using SemanticAnalysis.Results;
+using SemanticVerification.Results;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -32,7 +32,7 @@ public class OperatorProtocolTests
 
                         @readonly
                         routine Vector.$add(you: Vector) -> Vector
-                          return Vector(x: me.x + you.x, y: me.y + you.y)
+                          return Vector(x: me.x +% you.x, y: me.y +% you.y)
                         """;
 
         AnalysisResult result = Analyze(source: source);

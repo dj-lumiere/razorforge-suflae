@@ -371,7 +371,9 @@ public partial class Parser
                    TokenType.PlusWrap,
                    TokenType.PlusClamp,
                    TokenType.MinusWrap,
-                   TokenType.MinusClamp))
+                   TokenType.MinusClamp,
+                   TokenType.PlusUnchecked,
+                   TokenType.MinusUnchecked))
         {
             Token op = PeekToken(offset: -1);
             Expression right = ParseMultiplicative();
@@ -399,7 +401,11 @@ public partial class Parser
                    TokenType.Divide,
                    TokenType.MultiplyWrap,
                    TokenType.MultiplyClamp,
-                   TokenType.SlashClamp))
+                   TokenType.SlashClamp,
+                   TokenType.MultiplyUnchecked,
+                   TokenType.SlashUnchecked,
+                   TokenType.DivideUnchecked,
+                   TokenType.PercentUnchecked))
         {
             Token op = PeekToken(offset: -1);
             Expression right = ParsePower();
@@ -422,7 +428,7 @@ public partial class Parser
     {
         Expression expr = ParseUnary();
 
-        if (Match(TokenType.Power, TokenType.PowerWrap, TokenType.PowerClamp))
+        if (Match(TokenType.Power, TokenType.PowerWrap, TokenType.PowerClamp, TokenType.PowerUnchecked))
         {
             Token op = PeekToken(offset: -1);
             Expression right = ParsePower(); // Recursive call for right-associativity

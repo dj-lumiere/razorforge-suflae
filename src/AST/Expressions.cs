@@ -1,4 +1,4 @@
-using SemanticAnalysis.Types;
+using SemanticVerification.Types;
 using Compiler.Lexer;
 
 namespace SyntaxTree;
@@ -332,19 +332,27 @@ public record CallExpression(
     /// The resolved dispatch strategy for this call, set by the semantic analyzer.
     /// Null for non-varargs calls. Buildtime or Runtime for protocol-constrained varargs.
     /// </summary>
-    public SemanticAnalysis.Enums.DispatchStrategy? ResolvedDispatch { get; set; }
+    public SemanticVerification.Enums.DispatchStrategy? ResolvedDispatch { get; set; }
 
     /// <summary>
     /// The resolved routine for this call, set by the semantic analyzer during overload resolution.
     /// When set, the codegen should use this instead of performing its own lookup.
     /// </summary>
-    public SemanticAnalysis.Symbols.RoutineInfo? ResolvedRoutine { get; set; }
+    public SemanticVerification.Symbols.RoutineInfo? ResolvedRoutine { get; set; }
 
     /// <summary>
     /// When true, this call is a collection literal constructor (e.g., List(1, 2, 3), Set(1, 2, 3)).
     /// Codegen should emit $create() + repeated add/add_last calls instead of a normal function call.
     /// </summary>
     public bool IsCollectionLiteral { get; set; }
+
+    /// <summary>
+    /// Method-level type arguments, set by <c>GenericCallLoweringPass</c> when lowering a
+    /// <c>GenericMethodCallExpression</c> that has explicit type parameters at the call site
+    /// (e.g., <c>buf.read![U8](offset)</c> → <c>TypeArguments = [U8]</c>).
+    /// Null for calls with no method-level type args.
+    /// </summary>
+    public IReadOnlyList<TypeExpression>? TypeArguments { get; set; }
 }
 
 /// <summary>
@@ -832,7 +840,7 @@ public record GenericMethodCallExpression(
     /// The fully resolved RoutineInfo from semantic analysis (with owner-level and method-level
     /// generic substitution applied). Set for generic method calls on objects (e.g., obj.method[U](args)).
     /// </summary>
-    public SemanticAnalysis.Symbols.RoutineInfo? ResolvedRoutine { get; set; }
+    public SemanticVerification.Symbols.RoutineInfo? ResolvedRoutine { get; set; }
 }
 
 /// <summary>
@@ -854,6 +862,41 @@ public record GenericMemberExpression(
     {
         return visitor.VisitGenericMemberExpression(node: this);
     }
+}
+
+#endregion
+
+#region Carrier Pattern Expressions
+
+/// <summary>
+/// Expression that produces the compile-time FNV-1a type_id for a type.
+/// Used in lowered CrashablePattern branches to compare against the carrier's type_id field.
+/// Codegen evaluates this as a U64 literal via ComputeTypeId(Type.FullName).
+/// </summary>
+/// <param name="Type">The type whose id is computed</param>
+/// <param name="Location">Source location information</param>
+public record TypeIdExpression(TypeExpression Type, SourceLocation Location)
+    : Expression(Location: Location)
+{
+    public override T Accept<T>(IAstVisitor<T> visitor) =>
+        visitor.VisitTypeIdExpression(node: this);
+}
+
+/// <summary>
+/// Expression that extracts the payload from a Result/Lookup carrier and reinterprets it
+/// as a specific concrete type.
+/// Codegen emits: GEP field 1 → load i64 → inttoptr to ConcreteType*.
+/// </summary>
+/// <param name="Carrier">The Result/Lookup carrier expression</param>
+/// <param name="ConcreteType">The concrete type to cast the payload to</param>
+/// <param name="Location">Source location information</param>
+public record CarrierPayloadExpression(
+    Expression Carrier,
+    TypeExpression ConcreteType,
+    SourceLocation Location) : Expression(Location: Location)
+{
+    public override T Accept<T>(IAstVisitor<T> visitor) =>
+        visitor.VisitCarrierPayloadExpression(node: this);
 }
 
 #endregion

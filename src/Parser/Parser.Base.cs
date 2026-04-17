@@ -259,16 +259,20 @@ public partial class Parser
             TokenType.Plus or TokenType.Minus => Precedence.Additive,
             TokenType.PlusWrap or TokenType.PlusClamp => Precedence.Additive,
             TokenType.MinusWrap or TokenType.MinusClamp => Precedence.Additive,
+            TokenType.PlusUnchecked or TokenType.MinusUnchecked => Precedence.Additive,
 
             // Multiplicative operators
             TokenType.Star or TokenType.Slash or TokenType.Divide or TokenType.Percent =>
                 Precedence.Multiplicative,
             TokenType.MultiplyWrap or TokenType.MultiplyClamp => Precedence.Multiplicative,
             TokenType.SlashClamp => Precedence.Multiplicative,
+            TokenType.MultiplyUnchecked or TokenType.SlashUnchecked or TokenType.DivideUnchecked
+                or TokenType.PercentUnchecked => Precedence.Multiplicative,
 
             // Power operators
             TokenType.Power => Precedence.Power,
             TokenType.PowerWrap or TokenType.PowerClamp => Precedence.Power,
+            TokenType.PowerUnchecked => Precedence.Power,
 
             _ => Precedence.None
         };
@@ -542,6 +546,15 @@ public partial class Parser
             TokenType.SlashClamp => BinaryOperator.TrueDivClamp,
             TokenType.PowerWrap => BinaryOperator.PowerWrap,
             TokenType.PowerClamp => BinaryOperator.PowerClamp,
+
+            // Unchecked variants
+            TokenType.PlusUnchecked => BinaryOperator.AddUnchecked,
+            TokenType.MinusUnchecked => BinaryOperator.SubtractUnchecked,
+            TokenType.MultiplyUnchecked => BinaryOperator.MultiplyUnchecked,
+            TokenType.SlashUnchecked => BinaryOperator.TrueDivideUnchecked,
+            TokenType.DivideUnchecked => BinaryOperator.FloorDivideUnchecked,
+            TokenType.PercentUnchecked => BinaryOperator.ModuloUnchecked,
+            TokenType.PowerUnchecked => BinaryOperator.PowerUnchecked,
 
             TokenType.Equal => BinaryOperator.Equal,
             TokenType.NotEqual => BinaryOperator.NotEqual,

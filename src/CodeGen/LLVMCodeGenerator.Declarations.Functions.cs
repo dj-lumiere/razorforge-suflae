@@ -1,12 +1,54 @@
+using Compiler.Desugaring;
+using Compiler.Desugaring.Passes;
+using SemanticVerification.Enums;
+
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis.Symbols;
-using SemanticAnalysis.Types;
+using SemanticVerification.Symbols;
+using SemanticVerification.Types;
 using SyntaxTree;
 
 public partial class LLVMCodeGenerator
 {
+    private string GetImplicitMeParameterDeclaration(RoutineInfo routine, bool includeName)
+    {
+        if (routine.OwnerType == null)
+        {
+            throw new InvalidOperationException(message: "Implicit 'me' requested for routine without owner type.");
+        }
+
+        // $setitem! on records: me is passed by pointer so the caller's alloca is mutated in-place.
+        // The parameter is always "ptr %me.addr" regardless of the underlying value type.
+        if (IsRecordSetItem(routine: routine))
+        {
+            string nameSuffix = includeName ? " %me.addr" : string.Empty;
+            return $"ptr{nameSuffix}";
+        }
+
+        string meType = GetParameterLLVMType(type: routine.OwnerType);
+        string attrs = GetImplicitMeParameterAttributes(routine: routine);
+        string nameSuffix2 = includeName ? " %me" : string.Empty;
+
+        return string.IsNullOrEmpty(value: attrs)
+            ? $"{meType}{nameSuffix2}"
+            : $"{meType} {attrs}{nameSuffix2}";
+    }
+
+    private static string GetImplicitMeParameterAttributes(RoutineInfo routine)
+    {
+        if (routine.ModificationCategory != ModificationCategory.Readonly)
+        {
+            return string.Empty;
+        }
+
+        return routine.OwnerType switch
+        {
+            EntityTypeInfo or WrapperTypeInfo => "readonly",
+            _ => string.Empty
+        };
+    }
+
     private void GenerateFunctionDeclaration(RoutineInfo routine, string? nameOverride = null)
     {
         string funcName = nameOverride ?? MangleFunctionName(routine: routine);
@@ -38,15 +80,8 @@ public partial class LLVMCodeGenerator
         if (routine.OwnerType != null && !isCreator)
         {
             // $setitem! on records: me is passed by pointer so mutations propagate to caller
-            if (IsRecordSetItem(routine: routine))
-            {
-                paramTypes.Add(item: "ptr");
-            }
-            else
-            {
-                string meType = GetParameterLLVMType(type: routine.OwnerType);
-                paramTypes.Add(item: meType);
-            }
+            paramTypes.Add(item: GetImplicitMeParameterDeclaration(routine: routine,
+                includeName: false));
         }
 
         // Add explicit parameters
@@ -81,11 +116,20 @@ public partial class LLVMCodeGenerator
         string returnType = routine.ReturnType != null
             ? GetLLVMType(type: routine.ReturnType)
             : "void";
-        // Emitting routines return a Maybe carrier at IR level.
-        // The carrier layout depends on the element type (record → inline, entity → ptr).
-        if (routine.AsyncStatus == AsyncStatus.Emitting)
+        if (routine.AsyncStatus == AsyncStatus.LookupVariant)
         {
-            returnType = GetMaybeCarrierLLVMType(valueType: routine.ReturnType!);
+            // TODO(C121): if routine.ReturnType is Blank, degenerate Lookup[Blank] → Result[Blank]
+            // (absent state on a Blank lookup is semantically meaningless). Use GetResultCarrierLLVMType
+            // and AsyncStatus.CheckVariant for such routines instead.
+            returnType = GetLookupCarrierLLVMType(valueType: routine.ReturnType!);
+        }
+        else if (routine.AsyncStatus == AsyncStatus.CheckVariant)
+        {
+            returnType = GetResultCarrierLLVMType(valueType: routine.ReturnType!);
+        }
+        else if (routine.AsyncStatus == AsyncStatus.TryBoolVariant)
+        {
+            returnType = "i1";
         }
 
         if (isCExtern && returnType == "half")
@@ -102,14 +146,14 @@ public partial class LLVMCodeGenerator
             // Change declaration: void @func(ptr sret(%RecordType), original_params...)
             paramTypes.Insert(index: 0, item: $"ptr sret({returnType})");
             string parameters = string.Join(separator: ", ", values: paramTypes);
-            EmitLine(sb: _functionDeclarations, line: $"declare void @{funcName}({parameters})");
+            _rfFunctionDeclarations[key: funcName] = $"declare void @{funcName}({parameters})";
         }
         else
         {
             // Normal declaration
             string parameters = string.Join(separator: ", ", values: paramTypes);
-            EmitLine(sb: _functionDeclarations,
-                line: $"declare {returnType} @{funcName}({parameters})");
+            _rfFunctionDeclarations[key: funcName] =
+                $"declare {returnType} @{funcName}({parameters})";
         }
     }
 
@@ -238,20 +282,15 @@ public partial class LLVMCodeGenerator
         var paramList = new List<string>();
 
         // For methods, add implicit 'me' parameter first
-        // Skip 'me' for $create routines (static factories)
+        // Skip 'me' for $create routines (static factories) and void/Blank owner types
         bool isCreator = routineInfo.Name.Contains(value: "$create");
         if (routineInfo.OwnerType != null && !isCreator)
         {
-            // $setitem! on records: me is passed by pointer (named %me.addr)
-            // so mutations propagate to the caller's alloca
-            if (IsRecordSetItem(routine: routineInfo))
+            string meParam = GetImplicitMeParameterDeclaration(routine: routineInfo,
+                includeName: true);
+            if (!meParam.StartsWith(value: "void", comparisonType: StringComparison.Ordinal))
             {
-                paramList.Add(item: "ptr %me.addr");
-            }
-            else
-            {
-                string meType = GetParameterLLVMType(type: routineInfo.OwnerType);
-                paramList.Add(item: $"{meType} %me");
+                paramList.Add(item: meParam);
             }
         }
 
@@ -265,11 +304,17 @@ public partial class LLVMCodeGenerator
         string returnType = routineInfo.ReturnType != null
             ? GetLLVMType(type: routineInfo.ReturnType)
             : "void";
-        // Emitting routines return a Maybe carrier at IR level.
-        // Failable routines return T directly — they crash on failure, never wrap.
-        if (routineInfo.AsyncStatus == AsyncStatus.Emitting)
+        if (routineInfo.AsyncStatus == AsyncStatus.LookupVariant)
         {
-            returnType = GetMaybeCarrierLLVMType(valueType: routineInfo.ReturnType!);
+            returnType = GetLookupCarrierLLVMType(valueType: routineInfo.ReturnType!);
+        }
+        else if (routineInfo.AsyncStatus == AsyncStatus.CheckVariant)
+        {
+            returnType = GetResultCarrierLLVMType(valueType: routineInfo.ReturnType!);
+        }
+        else if (routineInfo.AsyncStatus == AsyncStatus.TryBoolVariant)
+        {
+            returnType = "i1";
         }
 
         // Start function — save position so we can rollback on error
@@ -284,35 +329,21 @@ public partial class LLVMCodeGenerator
         EmitLine(sb: _functionDefinitions, line: "entry:");
         var bodyBuilder = new StringBuilder();
 
-        // Generate body — if it throws, rollback and emit a stub function
         try
         {
             GenerateFunctionBody(sb: bodyBuilder, body: routine.Body, routine: routineInfo);
             _functionDefinitions.Append(value: _currentFunctionEntryAllocas);
             _functionDefinitions.Append(value: bodyBuilder);
         }
-        catch (Exception ex)
+        catch
         {
-            // Log the error for debugging
-            Console.Error.WriteLine(
-                value: $"Warning: Codegen failed for '{funcName}': {ex.Message}");
-
-            // Rollback any partial output from the failed body
+            // Rollback partial IR so the output stays well-formed, then re-throw so the
+            // caller can decide whether to skip or abort compilation.
             _functionDefinitions.Length = savedLength;
             _tempCounter = savedTempCounter;
-
-            // Emit a stub function
-            EmitLine(sb: _functionDefinitions,
-                line: $"define {returnType} @{funcName}({parameters}) {{");
-            EmitLine(sb: _functionDefinitions, line: "entry:");
-            if (returnType == "void")
-            {
-                EmitLine(sb: _functionDefinitions, line: "  ret void");
-            }
-            else
-            {
-                EmitLine(sb: _functionDefinitions, line: $"  ret {returnType} zeroinitializer");
-            }
+            _generatedFunctionDefs.Remove(item: funcName);
+            _generatedFunctions.Remove(item: funcName);
+            throw;
         }
 
         // End function
@@ -326,7 +357,7 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private void GenerateFunctionBody(StringBuilder sb, Statement body, RoutineInfo routine)
     {
-        // Clear local variables and emit slot for this function
+        // Clear local variables for this function
         _localVariables.Clear();
         _localVarLLVMNames.Clear();
         _varNameCounts.Clear();
@@ -334,13 +365,11 @@ public partial class LLVMCodeGenerator
         _localRCRecordVars.Clear();
         _currentBlock = "entry";
         _currentFunctionEntryAllocas.Clear();
-        _emitSlotAddr = null;
-        _emitSlotType = null;
+        _emittedAllocaNames.Clear();
 
         // Set current function return type for use in EmitReturn
         _currentFunctionReturnType = routine.ReturnType;
         _currentRoutineIsFailable = routine.IsFailable;
-        _currentVariantIsTry = routine.OriginalName != null;
 
         // Track current routine for source_routine() / source_module() injection
         _currentEmittingRoutine = routine;
@@ -357,8 +386,13 @@ public partial class LLVMCodeGenerator
             else
             {
                 string meType = GetParameterLLVMType(type: routine.OwnerType);
-                EmitEntryAlloca(llvmName: "%me.addr", llvmType: meType);
-                EmitLine(sb: sb, line: $"  store {meType} %me, ptr %me.addr");
+                // Skip alloca/store for void me (Blank owner type — unit type, no data)
+                if (meType != "void")
+                {
+                    EmitEntryAlloca(llvmName: "%me.addr", llvmType: meType);
+                    EmitLine(sb: sb, line: $"  store {meType} %me, ptr %me.addr");
+                }
+
                 _localVariables[key: "me"] = routine.OwnerType;
             }
         }
@@ -395,13 +429,9 @@ public partial class LLVMCodeGenerator
                 line: $"  call void @_rf_trace_push(ptr {routineCStr}, ptr {fileCStr}, i32 {line}, i32 {col})");
         }
 
-        // Emit the body statements
-        EmitStatement(sb: sb, stmt: body);
-
-        // Ensure function is properly terminated
-        // Check if the last instruction was a terminator (ret, br, etc.)
-        // If not, add a default return
-        if (EndsWithTerminator(sb: sb))
+        // Emit the body statements — returns true if the block ends with a terminator
+        bool terminated = EmitStatement(sb: sb, stmt: body);
+        if (terminated)
         {
             return;
         }
@@ -411,43 +441,26 @@ public partial class LLVMCodeGenerator
         EmitEntityCleanup(sb: sb, returnedVarName: null);
         if (_traceCurrentRoutine)
             EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
-        if (routine.ReturnType == null)
+        string retType = routine.ReturnType != null
+            ? GetLLVMType(type: routine.ReturnType)
+            : "void";
+        if (retType == "void")
         {
             EmitLine(sb: sb, line: "  ret void");
         }
         else
         {
-            string returnType = GetLLVMType(type: routine.ReturnType);
-            string zeroValue = GetZeroValue(type: routine.ReturnType);
-            EmitLine(sb: sb, line: $"  ret {returnType} {zeroValue}");
+            string zeroValue = GetZeroValue(type: routine.ReturnType!);
+            EmitLine(sb: sb, line: $"  ret {retType} {zeroValue}");
         }
     }
 
-    /// <summary>
-    /// Checks if the StringBuilder ends with a terminator instruction.
-    /// </summary>
     /// <summary>
     /// Whether this routine is a $setitem on a record type (needs pass-by-pointer for me).
     /// </summary>
     private static bool IsRecordSetItem(RoutineInfo routine)
     {
         return routine.OwnerType is RecordTypeInfo && routine.Name.Contains(value: "$setitem");
-    }
-
-    private static bool EndsWithTerminator(StringBuilder sb)
-    {
-        string content = sb.ToString();
-        string[] lines =
-            content.Split(separator: '\n', options: StringSplitOptions.RemoveEmptyEntries);
-        if (lines.Length == 0)
-        {
-            return false;
-        }
-
-        string lastLine = lines[^1]
-           .Trim();
-        return lastLine.StartsWith(value: "ret ") || lastLine.StartsWith(value: "br ") ||
-               lastLine.StartsWith(value: "unreachable");
     }
 
     /// <summary>
@@ -491,8 +504,22 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Mangles a function name to be LLVM-compatible.
     /// </summary>
-    private static string MangleFunctionName(RoutineInfo routine)
+    internal static string MangleFunctionName(RoutineInfo routine)
     {
+        // Lambda closures: [lambda]filename:line:col(paramTypes)
+        if (routine.IsLambda)
+        {
+            string fileName =
+                System.IO.Path.GetFileName(path: routine.Location?.FileName ?? "[unknown]");
+            int line = routine.Location?.Line ?? 0;
+            int col = routine.Location?.Column ?? 0;
+            string paramTypes = string.Join(separator: ",",
+                values: routine.Parameters.Select(selector: p => p.Type.Name));
+            return Q(name: DecorateRoutineSymbolName(
+                baseName: $"[lambda]{fileName}:{line}:{col}({paramTypes})",
+                isFailable: routine.IsFailable));
+        }
+
         // External("C") functions use the raw C symbol name — no module prefix,
         // so that LLVM IR symbols match the actual C linker symbols.
         if (routine.CallingConvention == "C")
@@ -523,14 +550,25 @@ public partial class LLVMCodeGenerator
                 isFailable: routine.IsFailable));
         }
 
-        // Method: Module.OwnerType.Name (OwnerType.FullName includes module)
-        string typeName = routine.OwnerType.FullName;
-        string baseName = $"{typeName}.{name}";
+        // Common (type-level static) routines: [common]Module.Type.name(paramTypes)
+        if (routine.IsCommon)
+        {
+            string typeName = routine.OwnerType.FullName;
+            string paramTypes = string.Join(separator: ",",
+                values: routine.Parameters.Select(selector: p => p.Type.FullName));
+            return Q(name: DecorateRoutineSymbolName(
+                baseName: $"[common]{typeName}.{name}({paramTypes})",
+                isFailable: routine.IsFailable));
+        }
 
-        // Disambiguate $create overloads by first parameter type
+        // Method: Module.OwnerType.Name (OwnerType.FullName includes module)
+        string ownerTypeName = routine.OwnerType.FullName;
+        string baseName = $"{ownerTypeName}.{name}";
+
+        // Disambiguate $create overloads by first parameter type (fully qualified)
         if (name == "$create" && routine.Parameters.Count > 0)
         {
-            string firstParamType = routine.Parameters[index: 0].Type.Name;
+            string firstParamType = routine.Parameters[index: 0].Type.FullName;
             baseName = $"{baseName}({firstParamType})";
         }
 
@@ -538,7 +576,7 @@ public partial class LLVMCodeGenerator
             isFailable: routine.IsFailable));
     }
 
-    private static string DecorateRoutineSymbolName(string baseName, bool isFailable)
+    internal static string DecorateRoutineSymbolName(string baseName, bool isFailable)
     {
         return isFailable
             ? $"{baseName}!"
@@ -549,406 +587,125 @@ public partial class LLVMCodeGenerator
     /// Sanitizes a name for use as an LLVM IR identifier.
     /// Replaces characters that are invalid in LLVM identifiers.
     /// </summary>
-    private static string SanitizeLLVMName(string name)
+    internal static string SanitizeLLVMName(string name)
     {
         return name.Replace(oldValue: "!", newValue: "");
     }
 
 
     /// <summary>
-    /// Monomorphizes generic methods by compiling generic AST bodies with type substitutions.
-    /// For each pending monomorphization (recorded by EmitMethodCall/EmitGenericMethodCall),
-    /// finds the generic AST body from stdlib programs, sets type parameter substitutions,
-    /// and compiles the body with the concrete types.
+    /// <summary>
+    /// Emits LLVM IR for all pending monomorphizations.
+    /// <para>
+    /// Bodies are pre-rewritten by <see cref="MonomorphizationPlanner.PreRewriteAll"/> before
+    /// this method runs, so the inner loop has no AST search or substitution-map building.
+    /// Any entries added <em>during</em> emission (late-discovered via <see cref="RecordMonomorphization"/>
+    /// calls in expression emitters) fall back to on-demand rewriting via the planner.
+    /// </para>
     /// </summary>
     private void MonomorphizeGenericMethods()
     {
-        // Multi-pass: compiling one generic method may reference other generic methods
-        // (e.g., List[Character].add_last calls List[Character].reserve)
-        int prevDefCount;
-        do
+        // Pre-rewrite any entries that were newly recorded since the last call
+        _planner.PreRewriteAll(synthesizedBodies: _synthesizedBodies);
+
+        // Primary path: emit all pre-rewritten bodies
+        foreach ((string mangledName, MonomorphizedBody body) in _planner.MonomorphizedBodies.ToList())
         {
-            prevDefCount = _generatedFunctionDefs.Count;
+            if (_generatedFunctionDefs.Contains(item: mangledName))
+                continue;
 
-            foreach ((string mangledName, MonomorphizationEntry entry) in _pendingMonomorphizations
-                        .ToList())
+            EmitMonomorphizedBody(mangledName: mangledName, body: body);
+        }
+
+        // Fallback path: entries that arrived too late to be pre-rewritten
+        // (e.g., discovered by protocol-dispatch or collection-literal emitters during
+        // the current round). The outer fixed-point loop in GenerateFunctionDefinitions
+        // re-invokes PreRewriteAll → MonomorphizeGenericMethods until convergence.
+        foreach ((string mangledName, MonomorphizationEntry entry) in
+                 _planner.PendingMonomorphizations.ToList())
+        {
+            if (_generatedFunctionDefs.Contains(item: mangledName))
+                continue;
+            if (_planner.MonomorphizedBodies.ContainsKey(key: mangledName))
+                continue;
+
+            // Entry was not yet pre-rewritten — rewrite on demand and emit
+            MonomorphizedBody? onDemandBody = _planner.BuildBodyPublic(
+                mangledName: mangledName,
+                entry: entry,
+                synthesizedBodies: _synthesizedBodies);
+            if (onDemandBody != null)
             {
-                if (_generatedFunctionDefs.Contains(item: mangledName))
-                {
-                    continue;
-                }
-
-                // Find the generic AST body in stdlib programs
-                // For $create overloads, pass first param type for disambiguation (e.g., SortedSet[T] vs U64)
-                string? firstParamGenericType = null;
-                if (entry.GenericMethod.Name == "$create" &&
-                    entry.GenericMethod.Parameters.Count > 0)
-                {
-                    TypeInfo paramType = entry.GenericMethod.Parameters[index: 0].Type;
-                    // Reverse-substitute concrete types back to generic params for AST matching
-                    // e.g., SortedSet[S64] → SortedSet (the base name is enough to disambiguate)
-                    firstParamGenericType = GetGenericBaseName(type: paramType) ?? paramType.Name;
-                }
-
-                RoutineDeclaration? astRoutine = FindGenericAstRoutine(
-                    genericAstName: entry.GenericAstName,
-                    expectedParamCount: entry.GenericMethod.Parameters.Count,
-                    firstParamTypeHint: firstParamGenericType);
-
-                // Fallback: try the concrete resolved name for non-generic specializations
-                // e.g., "List[Byte].$create" for a concrete overload like List[Byte].$create(from: Bytes)
-                if (astRoutine == null && entry.ResolvedOwnerType != null)
-                {
-                    string concreteName =
-                        $"{entry.ResolvedOwnerType.Name}.{entry.GenericMethod.Name}";
-                    astRoutine = FindGenericAstRoutine(
-                        genericAstName: concreteName,
-                        expectedParamCount: entry.GenericMethod.Parameters.Count,
-                        firstParamTypeHint: firstParamGenericType);
-                }
-
-                if (astRoutine == null)
-                {
-                    // Synthesized routines (type_name, $ne, etc.) have no AST body —
-                    // emit their bodies directly for the monomorphized type
-                    if (entry.GenericMethod.IsSynthesized)
-                    {
-                        RoutineInfo synthInfo = BuildResolvedRoutineInfo(entry: entry);
-                        EmitSynthesizedRoutineBody(routine: synthInfo, funcName: mangledName);
-                        _generatedFunctionDefs.Add(item: mangledName);
-                    }
-
-                    // Generated variants (try_/check_/lookup_) have no AST of their own —
-                    // fall back to the original failable routine's AST body.
-                    if (entry.GenericMethod.OriginalName != null)
-                    {
-                        // Build fallback name from owner type + OriginalName (no string parsing)
-                        TypeInfo? variantOwner = entry.GenericMethod.OwnerType;
-                        // Variants on resolved generic types (e.g., DequeEmitter[S64]) have OwnerType
-                        // set to the substituted resolution. We need the generic definition to build
-                        // the AST name (e.g., "DequeEmitter[T].$next" not "DequeEmitter[S64].$next").
-                        if (variantOwner is EntityTypeInfo { IsGenericDefinition: false } eOwner &&
-                            eOwner.GenericDefinition != null)
-                        {
-                            variantOwner = eOwner.GenericDefinition;
-                        }
-                        else if (variantOwner is RecordTypeInfo { IsGenericDefinition: false } rOwner &&
-                                 rOwner.GenericDefinition != null)
-                        {
-                            variantOwner = rOwner.GenericDefinition;
-                        }
-
-                        string fallbackAstName;
-                        if (variantOwner is { IsGenericDefinition: true, GenericParameters: not null })
-                        {
-                            string paramList = string.Join(separator: ", ",
-                                values: variantOwner.GenericParameters);
-                            fallbackAstName =
-                                $"{variantOwner.Name}[{paramList}].{entry.GenericMethod.OriginalName}";
-                        }
-                        else if (variantOwner != null)
-                        {
-                            fallbackAstName =
-                                $"{variantOwner.Name}.{entry.GenericMethod.OriginalName}";
-                        }
-                        else
-                        {
-                            fallbackAstName = entry.GenericMethod.OriginalName;
-                        }
-
-                        astRoutine = FindGenericAstRoutine(
-                            genericAstName: fallbackAstName,
-                            expectedParamCount: entry.GenericMethod.Parameters.Count,
-                            firstParamTypeHint: firstParamGenericType);
-                    }
-
-                    if (astRoutine == null)
-                        continue;
-                }
-
-                // Build a resolved RoutineInfo with the correct owner type and substituted types
-                RoutineInfo resolvedInfo = BuildResolvedRoutineInfo(entry: entry);
-
-                // For generated variants (try_/check_/lookup_), compile using emitting-routine
-                // infrastructure: unwrap the Maybe[T] return type to T and set AsyncStatus.Emitting
-                // so the emit slot and absent path work correctly. The _currentVariantIsTry flag
-                // makes EmitThrow return zeroinitializer (present=false) instead of crashing.
-                if (resolvedInfo.OriginalName != null && resolvedInfo.ReturnType != null &&
-                    IsMaybeType(type: resolvedInfo.ReturnType) &&
-                    resolvedInfo.ReturnType.TypeArguments is { Count: > 0 })
-                {
-                    TypeInfo innerType = resolvedInfo.ReturnType.TypeArguments[index: 0];
-                    resolvedInfo = new RoutineInfo(name: resolvedInfo.Name)
-                    {
-                        Kind = resolvedInfo.Kind,
-                        OwnerType = resolvedInfo.OwnerType,
-                        Parameters = resolvedInfo.Parameters,
-                        ReturnType = innerType,
-                        IsFailable = resolvedInfo.IsFailable,
-                        DeclaredModification = resolvedInfo.DeclaredModification,
-                        ModificationCategory = resolvedInfo.ModificationCategory,
-                        Visibility = resolvedInfo.Visibility,
-                        Location = resolvedInfo.Location,
-                        Module = resolvedInfo.Module,
-                        Annotations = resolvedInfo.Annotations,
-                        CallingConvention = resolvedInfo.CallingConvention,
-                        IsVariadic = resolvedInfo.IsVariadic,
-                        IsDangerous = resolvedInfo.IsDangerous,
-                        Storage = resolvedInfo.Storage,
-                        AsyncStatus = AsyncStatus.Emitting,
-                        OriginalName = resolvedInfo.OriginalName
-                    };
-                }
-
-                // Build string substitution map and rewrite AST with concrete types
-                var astSubs = new Dictionary<string, string>();
-                foreach ((string paramName, TypeInfo typeInfo) in entry.TypeSubstitutions)
-                {
-                    astSubs[key: paramName] = typeInfo.Name;
-                }
-
-                RoutineDeclaration rewrittenAst =
-                    GenericAstRewriter.Rewrite(routine: astRoutine, subs: astSubs);
-
-                // Ensure entity/record type definitions are emitted for monomorphized types
-                if (entry.ResolvedOwnerType is EntityTypeInfo ownerEntity)
-                {
-                    GenerateEntityType(entity: ownerEntity);
-                }
-                else if (entry.ResolvedOwnerType is RecordTypeInfo ownerRecord)
-                {
-                    GenerateRecordType(record: ownerRecord);
-                }
-
-                // Also ensure return type and parameter record types are defined
-                if (resolvedInfo.ReturnType is RecordTypeInfo returnRecord &&
-                    !returnRecord.HasDirectBackendType &&
-                    !returnRecord.IsSingleMemberVariableWrapper &&
-                    !returnRecord.IsGenericDefinition)
-                {
-                    GenerateRecordType(record: returnRecord);
-                }
-
-                foreach (ParameterInfo param in resolvedInfo.Parameters)
-                {
-                    if (param.Type is RecordTypeInfo paramRecord &&
-                        !paramRecord.HasDirectBackendType &&
-                        !paramRecord.IsSingleMemberVariableWrapper &&
-                        !paramRecord.IsGenericDefinition)
-                    {
-                        GenerateRecordType(record: paramRecord);
-                    }
-                }
-
-                // Keep _typeSubstitutions as fallback for ResolvedType metadata
-                _typeSubstitutions = entry.TypeSubstitutions;
-                try
-                {
-                    GenerateFunctionDefinition(routine: rewrittenAst,
-                        preResolvedInfo: resolvedInfo,
-                        nameOverride: mangledName);
-                }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine(
-                        value:
-                        $"Warning: Monomorphization failed for '{mangledName}': {ex.Message}");
-                }
-                finally
-                {
-                    _typeSubstitutions = null;
-                }
+                _planner.MonomorphizedBodies[key: mangledName] = onDemandBody;
+                // Fold any residual BS calls (e.g. Byte.data_size()) that GenericAstRewriter
+                // left unfolded in on-demand-built bodies. Re-fold the full map so the new
+                // entry is covered; already-folded entries are no-ops.
+                new BuilderServiceInliningPass(_registry).RunOnMonomorphizedBodies(
+                    _planner.MonomorphizedBodies);
+                EmitMonomorphizedBody(mangledName: mangledName,
+                    body: _planner.MonomorphizedBodies[key: mangledName]);
             }
-        } while (_generatedFunctionDefs.Count > prevDefCount);
+        }
     }
 
     /// <summary>
-    /// Finds the AST declaration for a generic routine across user and stdlib programs.
+    /// Emits the LLVM IR body for a single pre-rewritten monomorphization entry.
     /// </summary>
-    private RoutineDeclaration? FindGenericAstRoutine(string genericAstName,
-        int expectedParamCount = -1, string? firstParamTypeHint = null)
+    private void EmitMonomorphizedBody(string mangledName, MonomorphizedBody body)
     {
-        bool requireGeneric = genericAstName.EndsWith(value: "[generic]");
-        string baseName = requireGeneric
-            ? genericAstName[..genericAstName.IndexOf(value: "[generic]")]
-            : genericAstName;
+        // Ensure LLVM type declarations exist for owner, return, and parameter types
+        if (body.Info.OwnerType is EntityTypeInfo ownerEntity)
+            GenerateEntityType(entity: ownerEntity);
+        else if (body.Info.OwnerType is RecordTypeInfo ownerRecord)
+            GenerateRecordType(record: ownerRecord);
 
-        RoutineDeclaration? firstMatch = null;
-
-        bool MatchesRoutine(RoutineDeclaration routine)
+        if (body.Info.ReturnType is RecordTypeInfo returnRecord &&
+            !returnRecord.HasDirectBackendType &&
+            !returnRecord.IsSingleMemberVariableWrapper &&
+            !returnRecord.IsGenericDefinition)
         {
-            if (routine.Name != baseName)
-            {
-                return false;
-            }
-
-            if (requireGeneric && routine.GenericParameters is not { Count: > 0 })
-            {
-                return false;
-            }
-
-            if (expectedParamCount >= 0 && routine.Parameters.Count != expectedParamCount)
-            {
-                return false;
-            }
-
-            return true;
+            GenerateRecordType(record: returnRecord);
         }
 
-        bool MatchesParamType(RoutineDeclaration routine)
+        foreach (ParameterInfo param in body.Info.Parameters)
         {
-            if (firstParamTypeHint == null || routine.Parameters.Count == 0)
+            if (param.Type is RecordTypeInfo paramRecord &&
+                !paramRecord.HasDirectBackendType &&
+                !paramRecord.IsSingleMemberVariableWrapper &&
+                !paramRecord.IsGenericDefinition)
             {
-                return true;
-            }
-
-            string astParamType = routine.Parameters[index: 0].Type.Name;
-            return astParamType.StartsWith(value: firstParamTypeHint);
-        }
-
-        foreach ((Program userProgram, string _, string _) in _userPrograms)
-        {
-            foreach (IAstNode decl in userProgram.Declarations)
-            {
-                if (decl is RoutineDeclaration routine && MatchesRoutine(routine: routine))
-                {
-                    firstMatch ??= routine;
-                    if (MatchesParamType(routine: routine))
-                    {
-                        return routine;
-                    }
-                }
+                GenerateRecordType(record: paramRecord);
             }
         }
 
-        foreach ((Program program, string _, string _) in _stdlibPrograms)
+        // Set type substitution fallback for expressions whose ResolvedType still carries
+        // generic parameter names (SA annotated the generic template, not the rewritten copy)
+        _typeSubstitutions = body.TypeSubs;
+        try
         {
-            foreach (IAstNode decl in program.Declarations)
+            if (body.IsSynthesized)
             {
-                if (decl is RoutineDeclaration routine && MatchesRoutine(routine: routine))
-                {
-                    firstMatch ??= routine;
-                    if (MatchesParamType(routine: routine))
-                    {
-                        return routine;
-                    }
-                }
+                _generatedFunctionDefs.Add(item: mangledName);
+                _generatedFunctions.Add(item: mangledName);
+
+                // If the body has a real AST (derived-operator case), use EmitSynthesizedBodyFromAst
+                if (body.Ast.Body is not BlockStatement { Statements.Count: 0 })
+                    EmitSynthesizedBodyFromAst(routine: body.Info, funcName: mangledName,
+                        body: body.Ast.Body);
+                else
+                    EmitSynthesizedRoutineBody(routine: body.Info, funcName: mangledName);
+            }
+            else
+            {
+                GenerateFunctionDefinition(routine: body.Ast,
+                    preResolvedInfo: body.Info,
+                    nameOverride: mangledName);
             }
         }
-
-        // Only fall back to firstMatch if we weren't filtering by param type,
-        // otherwise we'd return the wrong overload (e.g., $create(U64) instead of $create(Bytes))
-        if (firstMatch != null && firstParamTypeHint == null)
+        finally
         {
-            return firstMatch;
+            _typeSubstitutions = null;
         }
-
-        if (expectedParamCount >= 0)
-        {
-            return FindGenericAstRoutine(genericAstName: genericAstName,
-                expectedParamCount: -1,
-                firstParamTypeHint: firstParamTypeHint);
-        }
-
-        return null;
     }
 
-    /// <summary>
-    /// Resolves a type by applying generic substitutions for monomorphization.
-    /// </summary>
-    private TypeInfo ResolveSubstitutedType(TypeInfo type, Dictionary<string, TypeInfo> subs)
-    {
-        if (subs.TryGetValue(key: type.Name, value: out TypeInfo? sub))
-        {
-            return sub;
-        }
-
-        if (type is { IsGenericResolution: true, TypeArguments: not null })
-        {
-            bool anySubstituted = false;
-            var substitutedArgs = new List<TypeInfo>();
-            foreach (TypeInfo arg in type.TypeArguments)
-            {
-                TypeInfo resolved = ResolveSubstitutedType(type: arg, subs: subs);
-                substitutedArgs.Add(item: resolved);
-                if (!ReferenceEquals(objA: resolved, objB: arg))
-                {
-                    anySubstituted = true;
-                }
-            }
-
-            if (anySubstituted)
-            {
-                TypeInfo? genericBase = GetGenericBase(type: type);
-                if (genericBase != null)
-                {
-                    return _registry.GetOrCreateResolution(genericDef: genericBase,
-                        typeArguments: substitutedArgs);
-                }
-            }
-        }
-
-        if (type is { IsGenericDefinition: true, GenericParameters: not null } &&
-            type.TypeArguments == null)
-        {
-            var typeArgs = type.GenericParameters
-                               .Select(selector: gp =>
-                                    subs.TryGetValue(key: gp, value: out TypeInfo? s)
-                                        ? s
-                                        : _registry.LookupType(name: gp))
-                               .Where(predicate: t => t != null)
-                               .ToList();
-            if (typeArgs.Count == type.GenericParameters.Count)
-            {
-                return _registry.GetOrCreateResolution(genericDef: type, typeArguments: typeArgs!);
-            }
-        }
-
-        return type;
-    }
-
-    /// <summary>
-    /// Builds the concrete RoutineInfo used for a monomorphized generic routine.
-    /// </summary>
-    private RoutineInfo BuildResolvedRoutineInfo(MonomorphizationEntry entry)
-    {
-        RoutineInfo generic = entry.GenericMethod;
-        Dictionary<string, TypeInfo> subs = entry.TypeSubstitutions;
-
-        var resolvedParams = generic.Parameters
-                                    .Select(selector: p =>
-                                     {
-                                         TypeInfo resolvedType =
-                                             ResolveSubstitutedType(type: p.Type, subs: subs);
-                                         return p.WithSubstitutedType(newType: resolvedType);
-                                     })
-                                    .ToList();
-
-        TypeInfo? resolvedReturnType = generic.ReturnType;
-        if (resolvedReturnType != null)
-        {
-            resolvedReturnType = ResolveSubstitutedType(type: resolvedReturnType, subs: subs);
-        }
-
-        return new RoutineInfo(name: generic.Name)
-        {
-            Kind = generic.Kind,
-            OwnerType = entry.ResolvedOwnerType,
-            Parameters = resolvedParams,
-            ReturnType = resolvedReturnType,
-            IsFailable = generic.IsFailable,
-            DeclaredModification = generic.DeclaredModification,
-            ModificationCategory = generic.ModificationCategory,
-            Visibility = generic.Visibility,
-            Location = generic.Location,
-            Module = generic.Module,
-            Annotations = generic.Annotations,
-            CallingConvention = generic.CallingConvention,
-            IsVariadic = generic.IsVariadic,
-            IsDangerous = generic.IsDangerous,
-            Storage = generic.Storage,
-            AsyncStatus = generic.AsyncStatus,
-            OriginalName = generic.OriginalName
-        };
-    }
 }

@@ -1,11 +1,13 @@
-using SemanticAnalysis.Enums;
+using SemanticVerification.Enums;
 
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis;
-using SemanticAnalysis.Symbols;
-using SemanticAnalysis.Types;
+using Compiler.Desugaring;
+using Compiler.Resolution;
+using SemanticVerification;
+using SemanticVerification.Symbols;
+using SemanticVerification.Types;
 using SyntaxTree;
 
 /// <summary>
@@ -19,11 +21,14 @@ public partial class LLVMCodeGenerator
     /// <summary>The type registry from semantic analysis.</summary>
     private readonly TypeRegistry _registry;
 
+    /// <summary>AST bodies for compiler-generated derived operators, keyed by RoutineInfo.RegistryKey.</summary>
+    private IReadOnlyDictionary<string, Statement> _synthesizedBodies = new Dictionary<string, Statement>();
+
     /// <summary>Wrapper type base names for member forwarding in codegen.</summary>
     private static readonly HashSet<string> _wrapperTypeNames =
     [
         "Viewed", "Hijacked", "Retained", "Tracked", "Inspected", "Seized", "Shared",
-        "Marked", "Snatched"
+        "Marked", "Snatched", "Owned"
     ];
 
     /// <summary>The user program ASTs to generate code for (single-file or multi-file).</summary>
@@ -34,14 +39,30 @@ public partial class LLVMCodeGenerator
     private readonly IReadOnlyList<(Program Program, string FilePath, string Module)>
         _stdlibPrograms;
 
-    /// <summary>Output buffer for type declarations.</summary>
-    private readonly StringBuilder _typeDeclarations = new();
+    /// <summary>
+    /// Type declarations bucketed by kind and sorted lexicographically within each bucket.
+    /// Emitted in category order: record → choice → variant → entity → crashable.
+    /// Key = mangled LLVM type name; value = full declaration text (struct line + comment line).
+    /// </summary>
+    private readonly SortedDictionary<string, string> _typeDeclarationsRecord = new();
+    private readonly SortedDictionary<string, string> _typeDeclarationsChoice = new();
+    private readonly SortedDictionary<string, string> _typeDeclarationsFlags = new();
+    private readonly SortedDictionary<string, string> _typeDeclarationsVariant = new();
+    private readonly SortedDictionary<string, string> _typeDeclarationsEntity = new();
+    private readonly SortedDictionary<string, string> _typeDeclarationsCrashable = new();
 
     /// <summary>Output buffer for global declarations (constants, presets).</summary>
     private readonly StringBuilder _globalDeclarations = new();
 
-    /// <summary>Output buffer for function declarations.</summary>
+    /// <summary>Output buffer for native/extern function declarations (always emitted).</summary>
     private readonly StringBuilder _functionDeclarations = new();
+
+    /// <summary>
+    /// RF function forward declarations keyed by mangled name.
+    /// Entries whose name is in <see cref="_generatedFunctionDefs"/> are suppressed at output
+    /// time to avoid declare+define conflicts in the same LLVM module.
+    /// </summary>
+    private readonly Dictionary<string, string> _rfFunctionDeclarations = new();
 
     /// <summary>Output buffer for function definitions.</summary>
     private readonly StringBuilder _functionDefinitions = new();
@@ -61,6 +82,9 @@ public partial class LLVMCodeGenerator
     /// <summary>Set of already-generated function declarations to avoid duplicates.</summary>
     private readonly HashSet<string> _generatedFunctions = [];
 
+    /// <summary>Counter for generating unique lambda function names.</summary>
+    private int _lambdaCounter;
+
     /// <summary>Counter for generating unique string constant names.</summary>
     private int _stringCounter;
 
@@ -72,6 +96,12 @@ public partial class LLVMCodeGenerator
 
     /// <summary>Set of already-declared native functions to avoid duplicate declarations.</summary>
     private readonly HashSet<string> _declaredNativeFunctions = [];
+
+    /// <summary>Map of global variable names to their types (module-level 'global' declarations).</summary>
+    private readonly Dictionary<string, TypeInfo> _globalVariables = new();
+
+    /// <summary>Map of global variable names to their LLVM global symbol names (e.g. "@MyMod.x").</summary>
+    private readonly Dictionary<string, string> _globalVariableLlvmNames = new();
 
     /// <summary>Map of local variable names to their types for the current function.</summary>
     private readonly Dictionary<string, TypeInfo> _localVariables = new();
@@ -104,14 +134,19 @@ public partial class LLVMCodeGenerator
     /// <summary>Function-entry alloca instructions emitted once per function.</summary>
     private readonly StringBuilder _currentFunctionEntryAllocas = new();
 
+    /// <summary>Tracks alloca names already emitted for the current function to prevent duplicates.</summary>
+    private readonly HashSet<string> _emittedAllocaNames = new();
+
     /// <summary>Type parameter substitution map for generic monomorphization (e.g., "T" → Character).</summary>
     private Dictionary<string, TypeInfo>? _typeSubstitutions;
 
     /// <summary>
-    /// Pending generic monomorphizations: mangled function name → info needed to compile.
-    /// Populated by EmitMethodCall/EmitGenericMethodCall when a resolved generic method is called.
+    /// Planner that owns all pending and pre-rewritten monomorphization entries.
+    /// Replaces the old inline <c>_pendingMonomorphizations</c> dictionary and the
+    /// related helper methods (<c>RecordMonomorphization</c>, <c>FindGenericAstRoutine</c>,
+    /// <c>BuildResolvedRoutineInfo</c>, <c>ResolveSubstitutedType</c>).
     /// </summary>
-    private readonly Dictionary<string, MonomorphizationEntry> _pendingMonomorphizations = new();
+    private readonly MonomorphizationPlanner _planner;
 
     /// <summary>
     /// Pending protocol dispatch stubs: mangled name → info needed to generate forwarding stub.
@@ -119,16 +154,20 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private readonly Dictionary<string, ProtocolDispatchInfo> _pendingProtocolDispatches = new();
 
+    // ─── Removed fields (moved to MonomorphizationPlanner) ───────────────────
+    // _pendingMonomorphizations  →  _planner.PendingMonomorphizations
+    // MonomorphizationEntry      →  MonomorphizationEntry (same file, now standalone)
+    // RecordMonomorphization     →  _planner.Record()
+
     /// <summary>Entry for a pending protocol dispatch stub.</summary>
     private record ProtocolDispatchInfo(ProtocolTypeInfo Protocol, string MethodName);
 
-    /// <summary>Entry for a pending generic monomorphization.</summary>
-    private record MonomorphizationEntry(
-        RoutineInfo GenericMethod,
-        TypeInfo ResolvedOwnerType,
-        Dictionary<string, TypeInfo> TypeSubstitutions,
-        string GenericAstName,
-        Dictionary<string, TypeInfo>? MethodTypeSubstitutions = null);
+    /// <summary>
+    /// Maps local variable names that were bound via "when is Protocol x" pattern matching
+    /// to their type_id alloca name (e.g., "err" → "%err.typeid.addr").
+    /// Used by EmitMethodCall to pass the type_id for runtime protocol dispatch.
+    /// </summary>
+    private readonly Dictionary<string, string> _protocolTypeIdAllocas = new();
 
     /// <summary>Bundles a method lookup result with fully-resolved context for codegen emission.</summary>
     private record ResolvedMethod(
@@ -171,20 +210,10 @@ public partial class LLVMCodeGenerator
     /// <summary>Byte size of a Data entity: { i64 type_id, ptr data_ptr, i64 data_size }.</summary>
     private readonly int _dataEntitySizeBytes;
 
-    /// <summary>Alloca address for the emit slot in emitting routines (null outside emitting context).</summary>
-    private string? _emitSlotAddr;
-
-    /// <summary>LLVM type of the emit slot value.</summary>
-    private string? _emitSlotType;
-
     /// <summary>Whether the current function being generated is failable (has ! suffix, can return absent).</summary>
     private bool _currentRoutineIsFailable;
 
-    /// <summary>Whether the current function is a generated try_/check_/lookup_ variant body.
-    /// In this context, throw statements return Maybe[T] with present=false (zeroinitializer) instead of crashing.</summary>
-    private bool _currentVariantIsTry;
-
-    /// <summary>The routine currently being emitted (for source_routine() / source_module() injection).</summary>
+    /// <summary>The routine currently being compiled (for source_routine() / source_module() injection).</summary>
     private RoutineInfo? _currentEmittingRoutine;
 
     #endregion
@@ -202,12 +231,16 @@ public partial class LLVMCodeGenerator
     public LLVMCodeGenerator(Program program, TypeRegistry registry,
         IReadOnlyList<(Program Program, string FilePath, string Module)>? stdlibPrograms = null,
         TargetConfig? target = null,
-        RfBuildMode buildMode = RfBuildMode.Debug) : this(userPrograms:
-        [(program, program.Location.FileName, "")],
+        RfBuildMode buildMode = RfBuildMode.Debug,
+        IReadOnlyDictionary<string, Statement>? synthesizedBodies = null,
+        IReadOnlyDictionary<string, Desugaring.MonomorphizedBody>? preMonomorphizedBodies = null)
+        : this(userPrograms: [(program, program.Location.FileName, "")],
         registry: registry,
         stdlibPrograms: stdlibPrograms,
         target: target,
-        buildMode: buildMode)
+        buildMode: buildMode,
+        synthesizedBodies: synthesizedBodies,
+        preMonomorphizedBodies: preMonomorphizedBodies)
     {
     }
 
@@ -224,7 +257,9 @@ public partial class LLVMCodeGenerator
         TypeRegistry registry,
         IReadOnlyList<(Program Program, string FilePath, string Module)>? stdlibPrograms = null,
         TargetConfig? target = null,
-        RfBuildMode buildMode = RfBuildMode.Debug)
+        RfBuildMode buildMode = RfBuildMode.Debug,
+        IReadOnlyDictionary<string, Statement>? synthesizedBodies = null,
+        IReadOnlyDictionary<string, Desugaring.MonomorphizedBody>? preMonomorphizedBodies = null)
     {
         _target = target ?? TargetConfig.ForCurrentHost();
         if (_target.PointerBitWidth != 64)
@@ -237,6 +272,12 @@ public partial class LLVMCodeGenerator
         _userPrograms = userPrograms;
         _registry = registry;
         _stdlibPrograms = stdlibPrograms ?? [];
+        if (synthesizedBodies != null) _synthesizedBodies = synthesizedBodies;
+        _planner = new MonomorphizationPlanner(
+            registry: registry,
+            userPrograms: _userPrograms,
+            stdlibPrograms: _stdlibPrograms,
+            preMonomorphizedBodies: preMonomorphizedBodies);
         _buildMode = buildMode;
         _pointerBitWidth = _target.PointerBitWidth;
         _pointerSizeBytes = _target.PointerBitWidth / 8;
@@ -289,7 +330,14 @@ public partial class LLVMCodeGenerator
     /// Gets the generic definition for a resolved generic type, regardless of concrete subtype.
     /// Returns null for non-generic or non-resolved types.
     /// </summary>
-    private static TypeInfo? GetGenericBase(TypeInfo type)
+    private static TypeInfo? GetGenericBase(TypeInfo type) =>
+        GetGenericBaseStatic(type: type);
+
+    /// <summary>
+    /// Gets the generic definition for a resolved generic type. Exposed as
+    /// <c>internal static</c> so <see cref="MonomorphizationPlanner"/> can call it.
+    /// </summary>
+    internal static TypeInfo? GetGenericBaseStatic(TypeInfo type)
     {
         return type switch
         {
@@ -305,11 +353,16 @@ public partial class LLVMCodeGenerator
     /// Gets the generic definition's name for a resolved generic type.
     /// Returns null for non-generic or non-resolved types.
     /// </summary>
-    private static string? GetGenericBaseName(TypeInfo type)
-    {
-        return GetGenericBase(type: type)
-          ?.Name;
-    }
+    private static string? GetGenericBaseName(TypeInfo type) =>
+        GetGenericBaseNameStatic(type: type);
+
+    /// <summary>Exposed as <c>internal static</c> for <see cref="MonomorphizationPlanner"/>.</summary>
+    internal static string? GetGenericBaseNameStatic(TypeInfo type) =>
+        GetGenericBaseStatic(type: type)?.Name;
+
+    /// <summary>Exposed as <c>internal static</c> for <see cref="MonomorphizationPlanner"/>.</summary>
+    internal static bool IsMaybeTypeStatic(TypeInfo type) =>
+        GetGenericBaseNameStatic(type: type) is "Maybe";
 
     #endregion
 
@@ -323,6 +376,9 @@ public partial class LLVMCodeGenerator
     {
         // Phase 1: Generate all type declarations
         GenerateTypeDeclarations();
+
+        // Phase 1b: Emit module-level global variable slots
+        GenerateGlobalVariableDeclarations();
 
         // Phase 2: Generate function declarations (signatures)
         GenerateFunctionDeclarations();
@@ -340,6 +396,71 @@ public partial class LLVMCodeGenerator
     #endregion
 
     #region Code Generation Phases
+
+    /// <summary>
+    /// Emits module-level LLVM global variable declarations for all top-level
+    /// <c>global var</c> declarations in user programs.
+    /// Entity globals are emitted as <c>ptr</c>-typed globals initialized to null.
+    /// Declarations annotated with <c>@thread_local</c> use the <c>thread_local</c> prefix.
+    /// Initializer expressions (if any) are collected and emitted in a private
+    /// <c>@.rf_global_init</c> constructor registered via <c>@llvm.global_ctors</c>.
+    /// </summary>
+    private void GenerateGlobalVariableDeclarations()
+    {
+        var initStmts = new List<(string LlvmName, TypeInfo Type, SyntaxTree.Expression Init)>();
+
+        foreach ((Program userProgram, string _, string module) in _userPrograms)
+        {
+            foreach (IAstNode decl in userProgram.Declarations)
+            {
+                if (decl is not VariableDeclaration varDecl ||
+                    varDecl.Storage != StorageClass.Global)
+                    continue;
+
+                TypeInfo? varType = varDecl.Type != null
+                    ? ResolveTypeExpression(typeExpr: varDecl.Type)
+                    : null;
+                if (varType == null) continue;
+
+                bool isThreadLocal = varDecl.Annotations?.Any(a => a == "thread_local") == true;
+                string prefix = isThreadLocal ? "thread_local global" : "global";
+
+                // Entity globals are ptr-typed (heap-allocated)
+                // Use module-qualified LLVM name to avoid collisions
+                string llvmName = string.IsNullOrEmpty(value: module)
+                    ? $"@{varDecl.Name}"
+                    : $"@{module}.{varDecl.Name}";
+
+                EmitLine(sb: _globalDeclarations,
+                    line: $"{llvmName} = {prefix} ptr null");
+
+                _globalVariables[key: varDecl.Name] = varType;
+                _globalVariableLlvmNames[key: varDecl.Name] = llvmName;
+
+                if (varDecl.Initializer != null)
+                    initStmts.Add((LlvmName: llvmName, Type: varType, Init: varDecl.Initializer));
+            }
+        }
+
+        if (initStmts.Count == 0) return;
+
+        // Emit @.rf_global_init function that runs all global initializers
+        EmitLine(sb: _globalDeclarations,
+            line: "@llvm.global_ctors = appending global [1 x { i32, ptr, ptr }] " +
+                  "[{ i32, ptr, ptr } { i32 65535, ptr @.rf_global_init, ptr null }]");
+
+        var sb = _functionDefinitions;
+        EmitLine(sb: sb, line: "define private void @.rf_global_init() {");
+        EmitLine(sb: sb, line: "entry:");
+        foreach ((string llvmName, TypeInfo type, SyntaxTree.Expression init) in initStmts)
+        {
+            string val = EmitExpression(sb: sb, expr: init);
+            EmitLine(sb: sb, line: $"  store ptr {val}, ptr {llvmName}");
+        }
+        EmitLine(sb: sb, line: "  ret void");
+        EmitLine(sb: sb, line: "}");
+        EmitLine(sb: sb, line: "");
+    }
 
     /// <summary>
     /// Generates LLVM type declarations for all types in the registry.
@@ -363,13 +484,20 @@ public partial class LLVMCodeGenerator
             }
         }
 
+        // Generate crashable types (always entity semantics — heap-allocated error types)
+        foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Crashable))
+        {
+            if (type is CrashableTypeInfo crashable)
+                GenerateCrashableType(crashable: crashable);
+        }
+
         // Generate record types (value types)
         foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Record))
         {
             if (type is RecordTypeInfo { IsGenericDefinition: false } record)
             {
                 if (record.TypeArguments != null &&
-                    record.TypeArguments.Any(predicate: ContainsGenericParameter))
+                    record.TypeArguments.Any(predicate: t => ContainsGenericParameter(t) || t is ErrorTypeInfo))
                 {
                     continue;
                 }
@@ -378,17 +506,19 @@ public partial class LLVMCodeGenerator
             }
         }
 
-        // Generate choice types (enums → single-member-variable records)
+        // Generate choice types (enums → i32 wrapper)
         foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Choice))
         {
             if (type is ChoiceTypeInfo choice)
-            {
                 GenerateChoiceType(choice: choice);
-            }
         }
 
-        // Error handling types (Result[T], Lookup[T], Maybe[T]) use anonymous { i64, ptr }
-        // so no named struct definitions are needed.
+        // Generate flags types (bitmask types → i64 wrapper)
+        foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Flags))
+        {
+            if (type is FlagsTypeInfo flags)
+                GenerateFlagsType(flags: flags);
+        }
 
         // Generate variant types (tagged unions → tag + payload record)
         foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Variant))
@@ -508,6 +638,37 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
+    /// Registers pending monomorphization entries for standalone user-defined variants
+    /// (try_/lookup_/check_ on module-level failable routines). These routines have no AST body —
+    /// MonomorphizeGenericMethods compiles them from the original failable routine's body.
+    /// </summary>
+    private void RegisterStandaloneUserVariants()
+    {
+        foreach (RoutineInfo routine in _registry.GetAllRoutines())
+        {
+            // Only generated variants (OriginalName set), no owner type (standalone)
+            if (routine.OriginalName == null || routine.OwnerType != null)
+                continue;
+
+            string funcName = MangleFunctionName(routine: routine);
+            if (!_generatedFunctions.Contains(item: funcName))
+                continue;
+            if (_planner.HasEntry(mangledName: funcName))
+                continue;
+            if (_generatedFunctionDefs.Contains(item: funcName))
+                continue;
+
+            // Register for compilation: GenericAstName not found → fallback to OriginalName
+            _planner.AddDirectEntry(mangledName: funcName, entry: new MonomorphizationEntry(
+                GenericMethod: routine,
+                ResolvedOwnerType: null,
+                TypeSubstitutions: new Dictionary<string, TypeInfo>(),
+                GenericAstName: routine.Name,
+                MethodTypeSubstitutions: null));
+        }
+    }
+
+    /// <summary>
     /// Generates LLVM function definitions (with bodies).
     /// Includes both user program routines and stdlib routines (for intrinsics).
     /// </summary>
@@ -525,24 +686,34 @@ public partial class LLVMCodeGenerator
             }
         }
 
+        // Register standalone user-defined variants (try_/lookup_/check_) for compilation.
+        // These routines are not in the AST — MonomorphizeGenericMethods compiles them from the
+        // original failable routine's body with the appropriate carrier semantics.
+        RegisterStandaloneUserVariants();
+
+        // Pre-rewrite all pending monomorphization entries collected so far (from user program
+        // emission above and from RegisterStandaloneUserVariants). Additional entries discovered
+        // during the loop below are pre-rewritten at the top of each MonomorphizeGenericMethods call.
+        _planner.PreRewriteAll(synthesizedBodies: _synthesizedBodies);
+
         // Unified loop: compile stdlib bodies, monomorphize generics, and generate
         // synthesized routines together. Each phase can introduce new declarations that
         // the other phases need to handle. All three are idempotent (they check
         // _generatedFunctionDefs before emitting), so calling them repeatedly is safe.
         int prevDefCount;
+        int prevDeclCount;
         int iterations = 0;
         const int maxIterations = 100;
         do
         {
             prevDefCount = _generatedFunctionDefs.Count;
+            prevDeclCount = _generatedFunctions.Count;
 
             // Phase A: Compile stdlib routine bodies for referenced routines
             foreach ((Program program, string _, string module) in _stdlibPrograms)
             {
-                foreach (IAstNode decl in program.Declarations)
+                foreach (RoutineDeclaration routine in EnumerateStdlibRoutines(program: program))
                 {
-                    if (decl is RoutineDeclaration routine)
-                    {
                         // Look up routine info — try multiple keys:
                         // 1. Raw AST name (e.g., "show")
                         // 2. Module-qualified (e.g., "IO.show")
@@ -663,7 +834,6 @@ public partial class LLVMCodeGenerator
                                 $"Warning: Stdlib codegen failed for '{routine.Name}': {ex.Message}");
                         }
                     }
-                }
             }
 
             // Phase B: Monomorphize generic methods (compile generic AST bodies with type substitutions)
@@ -683,7 +853,36 @@ public partial class LLVMCodeGenerator
                     $"Warning: GenerateFunctionDefinitions reached {maxIterations} iterations, possible infinite loop");
                 break;
             }
-        } while (_generatedFunctionDefs.Count > prevDefCount);
+        } while (_generatedFunctionDefs.Count > prevDefCount
+            || _generatedFunctions.Count > prevDeclCount);
+    }
+
+    /// <summary>
+    /// Enumerates all compilable RoutineDeclaration nodes from a stdlib program, including
+    /// routines nested inside CrashableDeclaration.Members (e.g., crash_message synthesized
+    /// from the "message:" directive). Nested routines are yielded with their names prefixed
+    /// by the owning type name (e.g., "DivisionByZeroError.crash_message") so Phase A's
+    /// registry lookup can find the registered method.
+    /// </summary>
+    private static IEnumerable<RoutineDeclaration> EnumerateStdlibRoutines(Program program)
+    {
+        foreach (IAstNode decl in program.Declarations)
+        {
+            if (decl is RoutineDeclaration routine)
+            {
+                yield return routine;
+            }
+            else if (decl is CrashableDeclaration crashable)
+            {
+                foreach (Declaration member in crashable.Members)
+                {
+                    if (member is RoutineDeclaration memberRoutine)
+                    {
+                        yield return memberRoutine with { Name = $"{crashable.Name}.{memberRoutine.Name}" };
+                    }
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -711,11 +910,28 @@ public partial class LLVMCodeGenerator
         output.AppendLine(handler: $"target triple = \"{_targetTriple}\"");
         output.AppendLine();
 
-        // Type declarations
-        if (_typeDeclarations.Length > 0)
+        // Type declarations — record → choice → variant → entity → crashable, each sorted by name
+        bool anyTypes = _typeDeclarationsRecord.Count > 0
+                     || _typeDeclarationsChoice.Count > 0
+                     || _typeDeclarationsFlags.Count > 0
+                     || _typeDeclarationsVariant.Count > 0
+                     || _typeDeclarationsEntity.Count > 0
+                     || _typeDeclarationsCrashable.Count > 0;
+        if (anyTypes)
         {
             output.AppendLine(value: "; Type declarations");
-            output.Append(value: _typeDeclarations);
+            void EmitTypeSection(string header, SortedDictionary<string, string> bucket)
+            {
+                if (bucket.Count == 0) return;
+                output.AppendLine(handler: $"; -- {header} --");
+                foreach (string decl in bucket.Values) output.Append(value: decl);
+            }
+            EmitTypeSection(header: "records",    bucket: _typeDeclarationsRecord);
+            EmitTypeSection(header: "choices",    bucket: _typeDeclarationsChoice);
+            EmitTypeSection(header: "flags",      bucket: _typeDeclarationsFlags);
+            EmitTypeSection(header: "variants",   bucket: _typeDeclarationsVariant);
+            EmitTypeSection(header: "entities",   bucket: _typeDeclarationsEntity);
+            EmitTypeSection(header: "crashables", bucket: _typeDeclarationsCrashable);
             output.AppendLine();
         }
 
@@ -727,43 +943,18 @@ public partial class LLVMCodeGenerator
             output.AppendLine();
         }
 
-        // Function declarations — filter out any that now have definitions
+        // Native/extern function declarations (always emitted)
         if (_functionDeclarations.Length > 0)
         {
             output.AppendLine(value: "; Function declarations");
-            foreach (string line in _functionDeclarations.ToString()
-                                                         .Split(separator: '\n'))
+            output.Append(value: _functionDeclarations);
+        }
+
+        // RF function forward declarations — skip any that now have definitions
+        foreach ((string name, string line) in _rfFunctionDeclarations)
+        {
+            if (!_generatedFunctionDefs.Contains(item: name))
             {
-                // Skip declare lines for functions that have definitions
-                if (line.StartsWith(value: "declare ") && _generatedFunctionDefs.Count > 0)
-                {
-                    // Extract function name from "declare ... @funcName(...)" or "declare ... @"quoted name"(...)"
-                    int atIdx = line.IndexOf(value: '@');
-                    if (atIdx > 0)
-                    {
-                        string declaredName;
-                        if (atIdx + 1 < line.Length && line[atIdx + 1] == '"')
-                        {
-                            // Quoted identifier: @"..." — find closing quote
-                            int closeQuoteIdx = line.IndexOf(value: '"', startIndex: atIdx + 2);
-                            declaredName = closeQuoteIdx > atIdx + 1
-                                ? line[(atIdx + 1)..(closeQuoteIdx + 1)]
-                                : "";
-                        }
-                        else
-                        {
-                            // Unquoted identifier: find first (
-                            int parenIdx = line.IndexOf(value: '(', startIndex: atIdx);
-                            declaredName = parenIdx > atIdx ? line[(atIdx + 1)..parenIdx] : "";
-                        }
-
-                        if (declaredName != "" && _generatedFunctionDefs.Contains(item: declaredName))
-                        {
-                            continue; // Skip — this function has a define
-                        }
-                    }
-                }
-
                 output.AppendLine(value: line);
             }
         }
@@ -907,6 +1098,11 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private void EmitEntryAlloca(string llvmName, string llvmType)
     {
+        if (!_emittedAllocaNames.Add(item: llvmName))
+        {
+            return; // Already emitted for this function — pattern variables shared across when arms
+        }
+
         EmitLine(sb: _currentFunctionEntryAllocas, line: $"  {llvmName} = alloca {llvmType}");
     }
 
@@ -1112,142 +1308,15 @@ public partial class LLVMCodeGenerator
     /// Called from EmitMethodCall/EmitGenericMethodCall when a call targets a method on
     /// a resolved generic type (e.g., List[Character].add_last).
     /// </summary>
+    /// <summary>
+    /// Delegates to <see cref="MonomorphizationPlanner.Record"/>. Kept as a thin wrapper so
+    /// the 20+ call sites across codegen files don't need to be changed in this PR.
+    /// </summary>
     private void RecordMonomorphization(string mangledName, RoutineInfo genericMethod,
         TypeInfo resolvedOwnerType, Dictionary<string, TypeInfo>? methodTypeArgs = null)
     {
-        if (_pendingMonomorphizations.ContainsKey(key: mangledName))
-        {
-            return;
-        }
-
-        // Generic parameter owner methods (e.g., routine T.view() called on Point)
-        // The owner is GenericParameterTypeInfo("T"), resolved to a concrete type
-        if (genericMethod.OwnerType is GenericParameterTypeInfo genParam)
-        {
-            var typeSubs = new Dictionary<string, TypeInfo>
-            {
-                [key: genParam.Name] = resolvedOwnerType
-            };
-            // Merge method-level type args
-            if (methodTypeArgs != null)
-            {
-                foreach ((string key, TypeInfo value) in methodTypeArgs)
-                {
-                    typeSubs[key: key] = value;
-                }
-            }
-
-            string genericAstName = $"{genParam.Name}.{genericMethod.Name}";
-            _pendingMonomorphizations[key: mangledName] = new MonomorphizationEntry(
-                GenericMethod: genericMethod,
-                ResolvedOwnerType: resolvedOwnerType,
-                TypeSubstitutions: typeSubs,
-                GenericAstName: genericAstName,
-                MethodTypeSubstitutions: methodTypeArgs);
-            return;
-        }
-
-        // Protocol-owned methods (e.g., Iterable[T].enumerate() called on List[S64])
-        // AST name must use the protocol owner, not the concrete receiver type
-        if (genericMethod.OwnerType is ProtocolTypeInfo protocolOwner &&
-            protocolOwner.GenericParameters is { Count: > 0 })
-        {
-            var typeSubs = new Dictionary<string, TypeInfo>();
-            // Map protocol's generic params using receiver's type arguments
-            if (resolvedOwnerType.TypeArguments != null)
-            {
-                for (int i = 0;
-                     i < protocolOwner.GenericParameters.Count &&
-                     i < resolvedOwnerType.TypeArguments.Count;
-                     i++)
-                {
-                    typeSubs[key: protocolOwner.GenericParameters[index: i]] =
-                        resolvedOwnerType.TypeArguments[index: i];
-                }
-            }
-
-            if (methodTypeArgs != null)
-            {
-                foreach ((string key, TypeInfo value) in methodTypeArgs)
-                {
-                    typeSubs[key: key] = value;
-                }
-            }
-
-            string protoParamList =
-                string.Join(separator: ", ", values: protocolOwner.GenericParameters);
-            string genericAstName = $"{protocolOwner.Name}[{protoParamList}].{genericMethod.Name}";
-
-            _pendingMonomorphizations[key: mangledName] = new MonomorphizationEntry(
-                GenericMethod: genericMethod,
-                ResolvedOwnerType: resolvedOwnerType,
-                TypeSubstitutions: typeSubs,
-                GenericAstName: genericAstName,
-                MethodTypeSubstitutions: methodTypeArgs);
-            return;
-        }
-
-        // Build the generic AST name: "List[T].add_last" from owner's generic definition name + method name
-        TypeInfo? genericDef = resolvedOwnerType switch
-        {
-            EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
-            RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
-            _ => null
-        };
-
-        if (genericDef != null && genericDef.GenericParameters != null)
-        {
-            // Build type substitution map: e.g., { "T" → Character }
-            var typeSubs2 = new Dictionary<string, TypeInfo>();
-            if (resolvedOwnerType.TypeArguments != null)
-            {
-                for (int i = 0;
-                     i < genericDef.GenericParameters.Count &&
-                     i < resolvedOwnerType.TypeArguments.Count;
-                     i++)
-                {
-                    typeSubs2[key: genericDef.GenericParameters[index: i]] =
-                        resolvedOwnerType.TypeArguments[index: i];
-                }
-            }
-
-            // Merge method-level type args (e.g., U → S32 for double-generic methods)
-            if (methodTypeArgs != null)
-            {
-                foreach ((string key, TypeInfo value) in methodTypeArgs)
-                {
-                    typeSubs2[key: key] = value;
-                }
-            }
-
-            // Build generic AST name: e.g., "List[T].add_last"
-            string genericParamList =
-                string.Join(separator: ", ", values: genericDef.GenericParameters);
-            string genericAstName2 = $"{genericDef.Name}[{genericParamList}].{genericMethod.Name}";
-
-            _pendingMonomorphizations[key: mangledName] = new MonomorphizationEntry(
-                GenericMethod: genericMethod,
-                ResolvedOwnerType: resolvedOwnerType,
-                TypeSubstitutions: typeSubs2,
-                GenericAstName: genericAstName2,
-                MethodTypeSubstitutions: methodTypeArgs);
-            return;
-        }
-
-        // Method-level generics on a non-generic owner (e.g., Text.$create[T](from: List[T]))
-        // Owner type is concrete (Text), but method itself has generic parameters
-        if (methodTypeArgs != null && methodTypeArgs.Count > 0 &&
-            genericMethod.IsGenericDefinition)
-        {
-            var typeSubs3 = new Dictionary<string, TypeInfo>(dictionary: methodTypeArgs);
-            string genericAstName3 = genericMethod.BaseName; // e.g., "Text.$create"
-            _pendingMonomorphizations[key: mangledName] = new MonomorphizationEntry(
-                GenericMethod: genericMethod,
-                ResolvedOwnerType: resolvedOwnerType,
-                TypeSubstitutions: typeSubs3,
-                GenericAstName: genericAstName3,
-                MethodTypeSubstitutions: methodTypeArgs);
-        }
+        _planner.Record(mangledName: mangledName, genericMethod: genericMethod,
+            resolvedOwnerType: resolvedOwnerType, methodTypeArgs: methodTypeArgs);
     }
 
     #endregion

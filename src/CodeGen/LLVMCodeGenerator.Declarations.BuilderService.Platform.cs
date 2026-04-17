@@ -1,7 +1,8 @@
 namespace Compiler.CodeGen;
 
-using SemanticAnalysis.Symbols;
+using SemanticVerification.Symbols;
 
+// TODO: This file should be removed entirely
 public partial class LLVMCodeGenerator
 {
     private void EmitSynthesizedBuilderServiceU64(RoutineInfo routine, string funcName, long value)

@@ -1,9 +1,9 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticAnalysis.Enums;
-using SemanticAnalysis.Symbols;
-using SemanticAnalysis.Types;
+using SemanticVerification.Enums;
+using SemanticVerification.Symbols;
+using SemanticVerification.Types;
 using SyntaxTree;
 
 /// <summary>
@@ -24,17 +24,12 @@ public partial class LLVMCodeGenerator
             LiteralExpression literal => EmitLiteral(sb: sb, literal: literal),
             IdentifierExpression identifier => EmitIdentifier(sb: sb, identifier: identifier),
             MemberExpression memberAccess => EmitMemberVariableAccess(sb: sb, expr: memberAccess),
-            OptionalMemberExpression optMember => EmitOptionalMemberAccess(sb: sb,
-                optMember: optMember),
             CreatorExpression constructor => EmitConstructorCall(sb: sb, expr: constructor),
             CallExpression call => EmitCall(sb: sb, call: call),
             BinaryExpression binary => EmitBinaryOp(sb: sb, binary: binary),
             UnaryExpression unary => EmitUnaryOp(sb: sb, unary: unary),
             ConditionalExpression cond => EmitConditional(sb: sb, cond: cond),
-            IndexExpression index => EmitIndexAccess(sb: sb, index: index),
-            SliceExpression slice => EmitSliceAccess(sb: sb, slice: slice),
             RangeExpression range => EmitRange(sb: sb, range: range),
-            StealExpression steal => EmitSteal(sb: sb, steal: steal),
             TupleLiteralExpression tuple => EmitTupleLiteral(sb: sb, tuple: tuple),
             GenericMethodCallExpression generic => EmitGenericMethodCall(sb: sb, generic: generic),
             InsertedTextExpression inserted => EmitInsertedText(sb: sb, inserted: inserted),
@@ -42,15 +37,18 @@ public partial class LLVMCodeGenerator
             SetLiteralExpression set => EmitSetLiteral(sb: sb, set: set),
             DictLiteralExpression dict => EmitDictLiteral(sb: sb, dict: dict),
             FlagsTestExpression flagsTest => EmitFlagsTest(sb: sb, flagsTest: flagsTest),
-            ChainedComparisonExpression chain => EmitChainedComparison(sb: sb, chain: chain),
             CompoundAssignmentExpression compound => EmitCompoundAssignment(sb: sb,
                 compound: compound),
             IsPatternExpression isPattern => EmitIsPattern(sb: sb, isPattern: isPattern),
             WaitforExpression waitfor => EmitWaitforExpression(sb: sb, waitfor: waitfor),
-            NamedArgumentExpression named => EmitExpression(sb: sb, expr: named.Value),
             DictEntryLiteralExpression dictEntry => EmitDictEntryLiteral(sb: sb,
                 dictEntry: dictEntry),
-            GenericMemberExpression gme => EmitGenericMemberExpression(sb: sb, gme: gme),
+            CarrierPayloadExpression payload => EmitCarrierPayloadExpression(sb: sb,
+                payload: payload),
+            // Named arguments appear inside synthesized AST bodies (e.g., me.$eq(you: you)).
+            // The name is irrelevant to codegen — just emit the inner value positionally.
+            NamedArgumentExpression named => EmitExpression(sb: sb, expr: named.Value),
+            LambdaExpression lambda => EmitLambdaExpression(lambda: lambda),
             _ => throw new NotImplementedException(
                 message: $"Expression type not implemented: {expr.GetType().Name}")
         };
@@ -94,6 +92,16 @@ public partial class LLVMCodeGenerator
                     }
                 }
             }
+        }
+
+        // Check if this is a module-level global variable
+        if (_globalVariables.TryGetValue(key: identifier.Name, value: out TypeInfo? globalType) &&
+            _globalVariableLlvmNames.TryGetValue(key: identifier.Name, value: out string? globalLlvm))
+        {
+            string globalLlvmType = GetLLVMType(type: globalType);
+            string tmp2 = NextTemp();
+            EmitLine(sb: sb, line: $"  {tmp2} = load {globalLlvmType}, ptr {globalLlvm}");
+            return tmp2;
         }
 
         // Look up the variable in local variables first
@@ -143,11 +151,13 @@ public partial class LLVMCodeGenerator
             MemberExpression member => EmitMethodCall(sb: sb,
                 member: member,
                 arguments: call.Arguments,
-                resolvedRoutine: call.ResolvedRoutine),
+                resolvedRoutine: call.ResolvedRoutine,
+                typeArguments: call.TypeArguments),
             IdentifierExpression id => EmitFunctionCall(sb: sb,
                 functionName: id.Name,
                 arguments: call.Arguments,
-                resolvedRoutine: call.ResolvedRoutine),
+                resolvedRoutine: call.ResolvedRoutine,
+                resolvedReturnType: call.ResolvedType),
             _ => throw new NotImplementedException(
                 message: $"Cannot emit call for callee type: {call.Callee.GetType().Name}")
         };
@@ -203,6 +213,7 @@ public partial class LLVMCodeGenerator
             ? GetLLVMType(type: argType)
             : targetLlvm;
 
+
         if (sourceLlvm == targetLlvm)
         {
             return argValue;
@@ -253,6 +264,43 @@ public partial class LLVMCodeGenerator
             {
                 EmitLine(sb: sb, line: $"  {cast} = sext {sourceLlvm} {argValue} to {targetLlvm}");
             }
+        }
+
+        return cast;
+    }
+
+    /// <summary>
+    /// Emits a primitive type cast (trunc/zext/sext/bitcast) from one LLVM primitive type to another.
+    /// Used when an explicitly typed variable declaration has an initializer of a different type.
+    /// </summary>
+    private string EmitPrimitiveCast(StringBuilder sb, string value, string fromLlvm, string toLlvm)
+    {
+        if (fromLlvm == toLlvm) return value;
+
+        bool fromIsFloat = fromLlvm is "half" or "float" or "double" or "fp128";
+        bool toIsFloat = toLlvm is "half" or "float" or "double" or "fp128";
+
+        string cast = NextTemp();
+        if (fromIsFloat && toIsFloat)
+        {
+            string op = GetTypeBitWidth(llvmType: fromLlvm) > GetTypeBitWidth(llvmType: toLlvm)
+                ? "fptrunc" : "fpext";
+            EmitLine(sb: sb, line: $"  {cast} = {op} {fromLlvm} {value} to {toLlvm}");
+        }
+        else if (fromIsFloat)
+        {
+            EmitLine(sb: sb, line: $"  {cast} = fptosi {fromLlvm} {value} to {toLlvm}");
+        }
+        else if (toIsFloat)
+        {
+            EmitLine(sb: sb, line: $"  {cast} = sitofp {fromLlvm} {value} to {toLlvm}");
+        }
+        else
+        {
+            int srcBits = GetTypeBitWidth(llvmType: fromLlvm);
+            int dstBits = GetTypeBitWidth(llvmType: toLlvm);
+            string op = srcBits > dstBits ? "trunc" : srcBits < dstBits ? "zext" : "bitcast";
+            EmitLine(sb: sb, line: $"  {cast} = {op} {fromLlvm} {value} to {toLlvm}");
         }
 
         return cast;

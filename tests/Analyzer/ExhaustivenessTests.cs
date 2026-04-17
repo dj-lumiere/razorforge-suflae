@@ -1,5 +1,5 @@
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Diagnostics;
+using SemanticVerification.Results;
+using Compiler.Diagnostics;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -11,14 +11,14 @@ using static TestHelpers;
 /// When expressions must be exhaustive (S356 error).
 /// When statements on enumerable types warn if non-exhaustive (W250 warning).
 ///
-/// Note: Variant exhaustiveness tests are deferred — variant case names
+/// Note: Variant exhaustiveness tests are deferred ??variant case names
 /// (e.g., Shape.CIRCLE) are not yet resolved by the type system in pattern context.
 /// The exhaustiveness infrastructure supports variants (CheckVariantExhaustiveness)
 /// and will activate once variant type resolution in patterns is implemented.
 /// </summary>
 public class ExhaustivenessTests
 {
-    #region Choice — When Expression
+    #region Choice ??When Expression
     /// <summary>
     /// Tests WhenExpression_Choice_AllCasesCovered_NoError.
     /// </summary>
@@ -145,7 +145,7 @@ public class ExhaustivenessTests
 
     #endregion
 
-    #region Choice — When Statement
+    #region Choice ??When Statement
     /// <summary>
     /// Tests WhenStatement_Choice_MissingCase_ReportsWarning.
     /// </summary>
@@ -221,7 +221,7 @@ public class ExhaustivenessTests
 
     #endregion
 
-    #region Bool — When Expression
+    #region Bool ??When Expression
     /// <summary>
     /// Tests WhenExpression_Bool_BothCases_NoError.
     /// </summary>
@@ -280,7 +280,7 @@ public class ExhaustivenessTests
 
     #endregion
 
-    #region Error Handling Types — When Expression
+    #region Error Handling Types ??When Expression
     /// <summary>
     /// Tests WhenExpression_Maybe_NoneAndElse_NoError.
     /// </summary>
@@ -349,7 +349,7 @@ public class ExhaustivenessTests
     [Fact]
     public void WhenExpression_NoElse_NonEnumerableType_ReportsError()
     {
-        // S32 has 2**32 values — without else, cannot be exhaustive
+        // S32 has 2**32 values ??without else, cannot be exhaustive
         string source = """
                         routine test(x: S32) -> S32
                           return when x
@@ -439,7 +439,7 @@ public class ExhaustivenessTests
 
     #endregion
 
-    #region Choice — Unified 'is' Pattern (Phase 12)
+    #region Choice ??Unified 'is' Pattern (Phase 12)
     /// <summary>
     /// Tests WhenExpression_Choice_IsPattern_AllCases_NoError.
     /// </summary>

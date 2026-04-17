@@ -1,4 +1,4 @@
-using SemanticAnalysis.Enums;
+using SemanticVerification.Enums;
 
 namespace Compiler.Diagnostics;
 

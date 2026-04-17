@@ -253,10 +253,10 @@ public class ControlFlowTests
         RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
         var body = routine.Body as BlockStatement;
         Assert.NotNull(@object: body);
-        // The loop statement is parsed as WhileStatement with a true condition
-        WhileStatement? loopStmt = body.Statements
-                                       .OfType<WhileStatement>()
-                                       .FirstOrDefault();
+        // The loop statement is parsed as a LoopStatement (infinite loop primitive)
+        LoopStatement? loopStmt = body.Statements
+                                      .OfType<LoopStatement>()
+                                      .FirstOrDefault();
         Assert.NotNull(@object: loopStmt);
     }
     /// <summary>

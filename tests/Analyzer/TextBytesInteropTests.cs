@@ -1,5 +1,5 @@
-using SemanticAnalysis.Diagnostics;
-using SemanticAnalysis.Results;
+using Compiler.Diagnostics;
+using SemanticVerification.Results;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
@@ -56,7 +56,7 @@ public class TextBytesInteropTests
     {
         AnalysisResult result = Analyze("""
                                         routine test()
-                                          var text: Text = "Hello, 세계"
+                                          var text: Text = "Hello, ?�계"
                                           var bytes: Bytes = text.encode_as_utf8()
                                           var roundtrip: Text = bytes.decode_as_utf8()
                                           return

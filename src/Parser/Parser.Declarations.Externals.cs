@@ -3,7 +3,7 @@ namespace Compiler.Parser;
 using Lexer;
 using SyntaxTree;
 using Diagnostics;
-using SemanticAnalysis.Enums;
+using SemanticVerification.Enums;
 
 /// <summary>
 /// Partial class containing external block and external routine declaration parsing.
