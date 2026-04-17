@@ -3,8 +3,9 @@
 module Core
 
 ### Defines the record `Tracked`.
-### :typeparam T: The value used for `T`.
+### :typeparam T: The exclusively owned entity type.
 record Tracked[T]
+needs T is EntityType
   ### Stores the controller member value.
   secret controller: Snatched[RetainController]
   ### Stores the data member value.
@@ -84,4 +85,4 @@ routine Tracked[T].$diagnose() -> Text
     var rc = me.controller.strong_count()
     var weak = me.controller.weak_count()
     var alive = rc > 0
-    return me.type_name() + "(rc: " + rc.$represent() + ", weak: " + weak.$represent() + ", alive: " + alive.$represent() + ")"
+    return me.type_name() + "(holding: " + rc.$represent() + ", observing: " + weak.$represent() + ", alive: " + alive.$represent() + ")"

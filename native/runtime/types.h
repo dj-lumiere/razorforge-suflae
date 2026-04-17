@@ -36,7 +36,6 @@ typedef bool rf_Bool;         // Standard boolean
 // 3. C Interop Types (Platform Dependent)
 // ==========================================
 // These map to the C compiler's native types.
-typedef void rf_CVoid;
 #define rf_CNull    NULL
 
 typedef char rf_CChar;              // Ambiguous sign

@@ -38,10 +38,10 @@ routine Dict[K, V].$create() -> Dict[K, V]
   var i = 0u64
   while i < cap
     dict.hashes.add_last(0u64)
-    i = i + 1u64
+    i = i +% 1u64
   danger!
-    dict.keys = Snatched[K](rf_allocate_dynamic(cap * K.data_size()))
-    dict.vals = Snatched[V](rf_allocate_dynamic(cap * V.data_size()))
+    dict.keys = Snatched[K](rf_allocate_dynamic(K.data_size() * cap))
+    dict.vals = Snatched[V](rf_allocate_dynamic(V.data_size() * cap))
   return dict
 
 ### Creates a new instance pre-sized to hold at least `capacity` entries.
@@ -50,7 +50,7 @@ routine Dict[K, V].$create() -> Dict[K, V]
 routine Dict[K, V].$create(capacity: U64) -> Dict[K, V]
   var cap = DICT_INITIAL_CAPACITY
   while cap < capacity
-    cap = cap * 2u64
+    cap = cap *% 2u64
   var dict = Dict[K, V](
     hashes: List[U64](cap),
     keys: snatched_none[K](),
@@ -61,10 +61,10 @@ routine Dict[K, V].$create(capacity: U64) -> Dict[K, V]
   var i = 0u64
   while i < cap
     dict.hashes.add_last(0u64)
-    i = i + 1u64
+    i = i +% 1u64
   danger!
-    dict.keys = Snatched[K](rf_allocate_dynamic(cap * K.data_size()))
-    dict.vals = Snatched[V](rf_allocate_dynamic(cap * V.data_size()))
+    dict.keys = Snatched[K](rf_allocate_dynamic(K.data_size() * cap))
+    dict.vals = Snatched[V](rf_allocate_dynamic(V.data_size() * cap))
   return dict
 
 ### Creates a new instance from varargs entries.
@@ -100,32 +100,32 @@ routine Dict[K, V].normalize_hash(h: U64) -> U64
 ### :param slot: The slot index.
 ### :returns: The resulting `U64` value.
 routine Dict[K, V].probe_dist(hash: U64, slot: U64) -> U64
-  return (slot + me.capacity - (hash & (me.capacity - 1u64))) & (me.capacity - 1u64)
+  return (slot +% me.capacity -% (hash & (me.capacity -% 1u64))) & (me.capacity -% 1u64)
 
 ### Reads the key at `slot`.
 ### :param slot: The slot index.
 ### :returns: The resulting `K` value.
 routine Dict[K, V].read_key(slot: U64) -> K
-  return me.keys.offset(slot * K.data_size()).read()
+  return me.keys.offset(K.data_size() * slot).read()
 
 ### Writes `key` to `slot`.
 ### :param slot: The slot index.
 ### :param key: The key to store.
 routine Dict[K, V].write_key(slot: U64, key: K)
-  me.keys.offset(slot * K.data_size()).write(key)
+  me.keys.offset(K.data_size() * slot).write(key)
   return
 
 ### Reads the value at `slot`.
 ### :param slot: The slot index.
 ### :returns: The resulting `V` value.
 routine Dict[K, V].read_val(slot: U64) -> V
-  return me.vals.offset(slot * V.data_size()).read()
+  return me.vals.offset(V.data_size() * slot).read()
 
 ### Writes `val` to `slot`.
 ### :param slot: The slot index.
 ### :param val: The value to store.
 routine Dict[K, V].write_val(slot: U64, val: V)
-  me.vals.offset(slot * V.data_size()).write(val)
+  me.vals.offset(V.data_size() * slot).write(val)
   return
 
 ### Linear-probes for `key` using the Robin Hood invariant.
@@ -134,14 +134,14 @@ routine Dict[K, V].write_val(slot: U64, val: V)
 ### :returns: The resulting `U64` value.
 routine Dict[K, V].find_slot(key: K) -> U64
   var h = me.normalize_hash(key.$hash())
-  var mask = me.capacity - 1u64
+  var mask = me.capacity -% 1u64
   var i = h & mask
   var dist = 0u64
   while me.hashes[i] != 0u64 and me.probe_dist(hash: me.hashes[i], slot: i) >= dist
     if me.hashes[i] == h and me.read_key(i) == key
       return i
-    i = (i + 1u64) & mask
-    dist = dist + 1u64
+    i = (i +% 1u64) & mask
+    dist = dist +% 1u64
   return me.capacity
 
 ### Inserts a pre-normalized hash + key + value using Robin Hood probing.
@@ -150,7 +150,7 @@ routine Dict[K, V].find_slot(key: K) -> U64
 ### :param key: The key to insert.
 ### :param val: The value to insert.
 routine Dict[K, V].insert_raw(h: U64, key: K, val: V)
-  var mask = me.capacity - 1u64
+  var mask = me.capacity -% 1u64
   var i = h & mask
   var dist = 0u64
   var cur_h = h
@@ -169,8 +169,8 @@ routine Dict[K, V].insert_raw(h: U64, key: K, val: V)
       me.write_val(slot: i, val: cur_val)
       cur_val = tmp_val
       dist = occ_dist
-    i = (i + 1u64) & mask
-    dist = dist + 1u64
+    i = (i +% 1u64) & mask
+    dist = dist +% 1u64
   me.hashes[i] = cur_h
   me.write_key(slot: i, key: cur_key)
   me.write_val(slot: i, val: cur_val)
@@ -179,22 +179,22 @@ routine Dict[K, V].insert_raw(h: U64, key: K, val: V)
 ### Removes the entry at `slot` using backward-shift deletion (no tombstones).
 ### :param slot: The occupied slot to vacate.
 routine Dict[K, V].delete_at(slot: U64)
-  var mask = me.capacity - 1u64
+  var mask = me.capacity -% 1u64
   var i = slot
-  var j = (i + 1u64) & mask
+  var j = (i +% 1u64) & mask
   while me.hashes[j] != 0u64 and me.probe_dist(hash: me.hashes[j], slot: j) > 0u64
     me.hashes[i] = me.hashes[j]
     me.write_key(slot: i, key: me.read_key(j))
     me.write_val(slot: i, val: me.read_val(j))
     i = j
-    j = (i + 1u64) & mask
+    j = (i +% 1u64) & mask
   me.hashes[i] = 0u64
   return
 
 ### Returns true if the next insert would exceed 75% load.
 ### :returns: The resulting `Bool` value.
 routine Dict[K, V].should_rehash() -> Bool
-  return me.count * 4u64 >= me.capacity * 3u64
+  return me.count *% 4u64 >= me.capacity *% 3u64
 
 ### Doubles capacity and reinserts all live entries.
 routine Dict[K, V].rehash()
@@ -202,25 +202,25 @@ routine Dict[K, V].rehash()
   var old_hashes = me.hashes
   var old_keys = me.keys
   var old_vals = me.vals
-  var new_cap = old_cap * 2u64
+  var new_cap = old_cap *% 2u64
 
   me.hashes = List[U64](new_cap)
   var i = 0u64
   while i < new_cap
     me.hashes.add_last(0u64)
-    i = i + 1u64
+    i = i +% 1u64
   danger!
-    me.keys = Snatched[K](rf_allocate_dynamic(new_cap * K.data_size()))
-    me.vals = Snatched[V](rf_allocate_dynamic(new_cap * V.data_size()))
+    me.keys = Snatched[K](rf_allocate_dynamic(K.data_size() * new_cap))
+    me.vals = Snatched[V](rf_allocate_dynamic(V.data_size() * new_cap))
   me.capacity = new_cap
   me.count = 0u64
 
   i = 0u64
   while i < old_cap
     if old_hashes[i] != 0u64
-      me.insert_raw(h: old_hashes[i], key: old_keys.offset(i * K.data_size()).read(), val: old_vals.offset(i * V.data_size()).read())
-      me.count = me.count + 1u64
-    i = i + 1u64
+      me.insert_raw(h: old_hashes[i], key: old_keys.offset(K.data_size() * i).read(), val: old_vals.offset(V.data_size() * i).read())
+      me.count = me.count +% 1u64
+    i = i +% 1u64
 
   danger!
     if not old_keys.is_none()
@@ -248,7 +248,7 @@ routine Dict[K, V].clear()
   var i = 0u64
   while i < me.capacity
     me.hashes[i] = 0u64
-    i = i + 1u64
+    i = i +% 1u64
   me.count = 0u64
   return
 
@@ -271,7 +271,7 @@ routine Dict[K, V].add(key: K, value: V) -> Bool
     me.write_val(slot: slot, val: value)
     return false
   me.insert_raw(h: me.normalize_hash(key.$hash()), key: key, val: value)
-  me.count = me.count + 1u64
+  me.count = me.count +% 1u64
   return true
 
 ### Removes the entry with `key`.
@@ -282,7 +282,7 @@ routine Dict[K, V].remove(key: K) -> Bool
   if slot >= me.capacity
     return false
   me.delete_at(slot)
-  me.count = me.count - 1u64
+  me.count = me.count -% 1u64
   return true
 
 ### Returns the value for `key`, or `default_value` if not found.
@@ -335,7 +335,7 @@ routine Dict[K, V].keys() -> List[K]
   while i < me.capacity
     if me.hashes[i] != 0u64
       result.add_last(me.read_key(i))
-    i = i + 1u64
+    i = i +% 1u64
   return result
 
 ### Returns all values as a list.
@@ -346,7 +346,7 @@ routine Dict[K, V].values() -> List[V]
   while i < me.capacity
     if me.hashes[i] != 0u64
       result.add_last(me.read_val(i))
-    i = i + 1u64
+    i = i +% 1u64
   return result
 
 ### Returns all key-value entries as a list.
@@ -357,7 +357,7 @@ routine Dict[K, V].entries() -> List[DictEntry[K, V]]
   while i < me.capacity
     if me.hashes[i] != 0u64
       result.add_last(DictEntry[K, V](key: me.read_key(i), value: me.read_val(i)))
-    i = i + 1u64
+    i = i +% 1u64
   return result
 
 # ============================================================================
@@ -368,28 +368,41 @@ routine Dict[K, V].entries() -> List[DictEntry[K, V]]
 ### :returns: The resulting `DictIterator[K, V]` value.
 @readonly
 routine Dict[K, V].$iter() -> DictIterator[K, V]
-  return DictIterator[K, V](dict: me, slot: 0u64)
+  danger!
+    return DictIterator[K, V](
+      hashes: me.hashes.data,
+      keys: me.keys,
+      vals: me.vals,
+      capacity: me.capacity,
+      slot: 0u64
+    )
 
 ### Defines the entity `DictIterator`.
 ### :typeparam K: The key type.
 ### :typeparam V: The value type.
 entity DictIterator[K, V] obeys Iterator[DictEntry[K, V]]
-  ### The dict being iterated.
-  dict: Dict[K, V]
-  ### The current slot index.
-  slot: U64
+  ### Raw pointer into the source dict's hash array buffer.
+  secret hashes: Snatched[U64]
+  ### Raw pointer into the source dict's key storage.
+  secret keys: Snatched[K]
+  ### Raw pointer into the source dict's value storage.
+  secret vals: Snatched[V]
+  ### Slot capacity captured at iterator creation.
+  secret capacity: U64
+  ### Current slot index.
+  secret slot: U64
 
-### Returns the next entry from this iterator.
-### :returns: The resulting `DictEntry[K, V]` value.
-### :absent: Returns absent when the iterator is exhausted.
 @writable
-emitting routine DictIterator[K, V].$next!() -> DictEntry[K, V]
-  while me.slot < me.dict.capacity
-    var s = me.slot
-    me.slot = me.slot + 1u64
-    if me.dict.hashes[s] != 0u64
-      emit DictEntry[K, V](key: me.dict.read_key(s), value: me.dict.read_val(s))
-      return
+routine DictIterator[K, V].$next!() -> DictEntry[K, V]
+  danger!
+    while me.slot < me.capacity
+      var s = me.slot
+      me.slot = me.slot + 1u64
+      var h = me.hashes.offset(U64.data_size() * s).read()
+      if h != 0u64
+        var k = me.keys.offset(K.data_size() * s).read()
+        var v = me.vals.offset(V.data_size() * s).read()
+        return DictEntry[K, V](key: k, value: v)
   absent
 
 # ============================================================================
@@ -442,5 +455,5 @@ routine Dict[K, V].$eq(other: Dict[K, V]) -> Bool
         return false
       if me.read_val(i) != other.read_val(slot)
         return false
-    i = i + 1u64
+    i = i +% 1u64
   return true

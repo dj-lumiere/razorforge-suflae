@@ -146,38 +146,51 @@ routine D32.$create(from: Bool) -> D32
 ### Returns the sum of this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D32` value.
-routine D32.$add(you: D32) -> D32
+routine D32.$add!(you: D32) -> D32
   var a_bits = bitcast[D32, U32](me)
   var b_bits = bitcast[D32, U32](you)
   var result = rf_d32_add(a_bits, b_bits)
+  if rf_d32_isfinite(result) == 0_s32
+    throw NumericOverflowError(description: f"D32 addition produced non-finite result: {me} + {you}")
   return bitcast[U32, D32](result)
 
 ### Returns the difference between this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D32` value.
-routine D32.$sub(you: D32) -> D32
+routine D32.$sub!(you: D32) -> D32
   var a_bits = bitcast[D32, U32](me)
   var b_bits = bitcast[D32, U32](you)
   var result = rf_d32_sub(a_bits, b_bits)
+  if rf_d32_isfinite(result) == 0_s32
+    throw NumericOverflowError(description: f"D32 subtraction produced non-finite result: {me} - {you}")
   return bitcast[U32, D32](result)
 
 ### Returns the product of this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D32` value.
-routine D32.$mul(you: D32) -> D32
+routine D32.$mul!(you: D32) -> D32
   var a_bits = bitcast[D32, U32](me)
   var b_bits = bitcast[D32, U32](you)
   var result = rf_d32_mul(a_bits, b_bits)
+  if rf_d32_isfinite(result) == 0_s32
+    throw NumericOverflowError(description: f"D32 multiplication produced non-finite result: {me} * {you}")
   return bitcast[U32, D32](result)
 
 ### Returns the quotient of this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D32` value.
-routine D32.$truediv(you: D32) -> D32
+routine D32.$truediv!(you: D32) -> D32
   var a_bits = bitcast[D32, U32](me)
   var b_bits = bitcast[D32, U32](you)
   var result = rf_d32_div(a_bits, b_bits)
+  if rf_d32_isfinite(result) == 0_s32
+    throw NumericOverflowError(description: f"D32 division produced non-finite result: {me} / {you}")
   return bitcast[U32, D32](result)
+
+### Returns true if this value is finite.
+### :returns: The resulting `Bool` value.
+routine D32.is_finite() -> Bool
+  return rf_d32_isfinite(me.to_bits()) != 0_s32
 
 ### Returns the negated value.
 ### :returns: The resulting `D32` value.
@@ -407,5 +420,5 @@ routine D32.$create!(from_text: Text) -> D32
     if not has_digit
       throw InvalidValueError(input: from_text, target: "D32")
   var cstr_val = from_text.CStr()
-  var bits = rf_D32_from_string(cstr_val)
+  var bits = rf_d32_from_string(cstr_val)
   return bitcast[U32, D32](bits)

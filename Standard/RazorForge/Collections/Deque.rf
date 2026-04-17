@@ -45,14 +45,15 @@ routine Deque[T].$create() -> Deque[T]
 routine Deque[T].$create(capacity: U64) -> Deque[T]
   var actual = 1u64
   while actual < capacity
-    actual = actual * 2u64
-  var byte_size = actual * T.data_size()
-  return Deque[T](
-    data: Snatched[T](rf_allocate_dynamic(byte_size)),
-    start: 0u64,
-    count: 0u64,
-    capacity: actual
-  )
+    actual = actual *% 2u64
+  var byte_size = T.data_size() * actual
+  danger!
+    return Deque[T](
+      data: Snatched[T](rf_allocate_dynamic(byte_size)),
+      start: 0u64,
+      count: 0u64,
+      capacity: actual
+    )
 
 ### Creates a new instance.
 ### :param values...: The `values...` value.
@@ -74,30 +75,30 @@ routine Deque[T].wrap_index(index: U64) -> U64
   # Capacity is always a power of 2 — use bitmask instead of modulo.
   if me.capacity == 0u64
     return 0u64
-  return index & (me.capacity - 1u64)
+  return index & (me.capacity -% 1u64)
 
 ### Returns the result of `physical index`.
 ### :param logical_index: The `logical_index` value.
 ### :returns: The resulting `U64` value.
 routine Deque[T].physical_index(logical_index: U64) -> U64
   # Convert logical index (0 = front) to physical index in buffer
-  return me.wrap_index(me.start + logical_index)
+  return me.wrap_index(me.start +% logical_index)
 
 ### Returns the result of `read at`.
 ### :param physical_idx: The `physical_idx` value.
 ### :returns: The resulting `T` value.
 routine Deque[T].read_at(physical_idx: U64) -> T
-  var byte_offset = physical_idx * T.data_size()
-  var ptr = Snatched[T](me.data.get_address() + byte_offset)
-  return ptr.read()
+  var byte_offset = T.data_size() * physical_idx
+  danger!
+    return me.data.offset(byte_offset).read()
 
 ### Performs `write at` on this value.
 ### :param physical_idx: The `physical_idx` value.
 ### :param value: The value to use.
 routine Deque[T].write_at(physical_idx: U64, value: T)
-  var byte_offset = physical_idx * T.data_size()
-  var ptr = Snatched[T](me.data.get_address() + byte_offset)
-  ptr.write(value)
+  var byte_offset = T.data_size() * physical_idx
+  danger!
+    me.data.offset(byte_offset).write(value)
   return
 
 # ============================================================================
@@ -126,8 +127,8 @@ routine Deque[T].add_last(value: T)
   if me.count >= me.capacity
     me.grow()
   var idx = me.physical_index(me.count)
-  me.write_at(idx, value)
-  me.count = me.count + 1u64
+  me.write_at(physical_idx: idx, value: value)
+  me.count = me.count +% 1u64
   return
 
 ### Adds a value using `add_first`.
@@ -137,9 +138,9 @@ routine Deque[T].add_first(value: T)
   if me.count >= me.capacity
     me.grow()
   # Decrement start with wrap: (start + cap - 1) & (cap - 1) — branchless
-  me.start = me.wrap_index(me.start + me.capacity - 1u64)
-  me.write_at(me.start, value)
-  me.count = me.count + 1u64
+  me.start = me.wrap_index(me.start +% me.capacity -% 1u64)
+  me.write_at(physical_idx: me.start, value: value)
+  me.count = me.count +% 1u64
   return
 
 ### Removes a value using `remove_last`.
@@ -196,7 +197,7 @@ routine Deque[T].clear()
 
 ### Executes `grow`.
 routine Deque[T].grow()
-  var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity * 2u64
+  var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity *% 2u64
   me.reserve(new_capacity)
   return
 
@@ -205,26 +206,27 @@ routine Deque[T].grow()
 routine Deque[T].reserve(new_capacity: U64)
   var actual = 1u64
   while actual < new_capacity
-    actual = actual * 2u64
+    actual = actual *% 2u64
   if actual <= me.capacity
     return
 
-  var new_byte_size = actual * T.data_size()
-  var new_data = Snatched[T]( rf_allocate_dynamic(new_byte_size))
+  var new_byte_size = T.data_size() * actual
+  danger!
+    var _new_data = Snatched[T](rf_allocate_dynamic(new_byte_size))
 
-  # Copy elements in logical order (unwrap the ring)
-  var i = 0u64
-  while i < me.count
-    var old_idx = me.physical_index(i)
-    var value = me.read_at(old_idx)
-    var new_byte_offset = i * T.data_size()
-    Snatched[T]( new_data.get_address() + new_byte_offset).write(value)
-    i = i + 1u64
+    # Copy elements in logical order (unwrap the ring)
+    var i = 0u64
+    while i < me.count
+      var old_idx = me.physical_index(i)
+      var value = me.read_at(old_idx)
+      var new_byte_offset = T.data_size() * i
+      _new_data.offset(new_byte_offset).write(value)
+      i = i +% 1u64
 
-  me.data = new_data
-  me.start = 0u64
-  me.capacity = actual
-  return
+    me.data = _new_data
+    me.start = 0u64
+    me.capacity = actual
+    return
 
 # ============================================================================
 # Indexing with Integral (forward index)
@@ -252,7 +254,7 @@ needs I obeys Integral
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   var physical_idx = me.physical_index(idx)
-  me.write_at(physical_idx, value)
+  me.write_at(physical_idx: physical_idx, value: value)
   return
 
 # ============================================================================
@@ -275,7 +277,7 @@ routine Deque[T].$setitem![I](index: BackIndex[I], value: T)
 needs I obeys Integral
   var idx = index.resolve(me.count)
   var physical_idx = me.physical_index(idx)
-  me.write_at(physical_idx, value)
+  me.write_at(physical_idx: physical_idx, value: value)
   return
 
 # ============================================================================
@@ -289,8 +291,8 @@ routine Deque[T].rotate_left(n: U64)
   # Front elements move to back
   if me.count == 0u64
     return
-  var shift = n % me.count
-  me.start = me.wrap_index(me.start + shift)
+  var shift = urem[U64](n, me.count)
+  me.start = me.wrap_index(me.start +% shift)
   return
 
 ### Performs `rotate right` on this value.
@@ -300,41 +302,51 @@ routine Deque[T].rotate_right(n: U64)
   # Back elements move to front
   if me.count == 0u64
     return
-  var shift = n % me.count
+  var shift = urem[U64](n, me.count)
   if shift > me.start
-    me.start = me.capacity - (shift - me.start)
+    me.start = me.capacity -% (shift -% me.start)
   else
-    me.start = me.start - shift
+    me.start = me.start -% shift
   return
 
 # ============================================================================
 # Iteration Support
 # ============================================================================
 
-### Creates an iterator for this value.
-### :returns: The resulting `DequeEmitter[T]` value.
 @readonly
 routine Deque[T].$iter() -> DequeEmitter[T]
-  return DequeEmitter[T](deque: me, index: 0u64)
+  danger!
+    return DequeEmitter[T](
+      data: me.data,
+      start: me.start,
+      count: me.count,
+      capacity: me.capacity,
+      index: 0u64
+    )
 
 ### Defines the entity `DequeEmitter`.
 ### :typeparam T: The value used for `T`.
 entity DequeEmitter[T] obeys Iterator[T]
-  ### Stores the deque member value.
-  secret deque: Deque[T]
-  ### Stores the index member value.
+  ### Raw pointer into the source deque's circular buffer.
+  secret data: Snatched[T]
+  ### Front-of-queue physical index captured at iterator creation.
+  secret start: U64
+  ### Element count captured at iterator creation.
+  secret count: U64
+  ### Buffer capacity captured at iterator creation.
+  secret capacity: U64
+  ### Current logical position.
   secret index: U64
 
-### Returns the next value from this iterator.
-### :returns: The resulting `T` value.
-### :absent: Returns absent when the requested value is unavailable.
 @writable
-emitting routine DequeEmitter[T].$next!() -> T
-  if me.index >= me.deque.count()
+routine DequeEmitter[T].$next!() -> T
+  if me.index >= me.count
     absent
-  emit me.deque[me.index]
+  danger!
+    var physical = (me.start +% me.index) & (me.capacity -% 1u64)
+    var _result = me.data.offset(T.data_size() * physical).read()
   me.index = me.index + 1u64
-  return
+  return _result
 
 # ============================================================================
 # Utility Operations
@@ -365,7 +377,7 @@ routine Deque[T].$contains(value: T) -> Bool
   while i < me.count
     if me[i] == value
       return true
-    i = i + 1u64
+    i = i +% 1u64
   return false
 
 # ============================================================================
@@ -381,7 +393,7 @@ routine Deque[T].$represent() -> Text
     if i > 0u64
       result = result + ", "
     result = result + v.$represent()
-    i = i + 1u64
+    i = i +% 1u64
   result = result + "]"
   return result
 
@@ -394,7 +406,7 @@ routine Deque[T].$diagnose() -> Text
     if i > 0u64
       result = result + ", "
     result = result + v.$represent()
-    i = i + 1u64
+    i = i +% 1u64
   result = result + "])"
   return result
 
@@ -408,5 +420,5 @@ routine Deque[T].$eq(other: Deque[T]) -> Bool
   while i < me.count
     if me[i] != other[i]
       return false
-    i = i + 1u64
+    i = i +% 1u64
   return true

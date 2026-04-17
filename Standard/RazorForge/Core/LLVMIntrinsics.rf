@@ -56,6 +56,12 @@ external("llvm") routine ptrtoint[From, To](value: Snatched[From]) -> To
 ### :returns: The resulting `Snatched[To]` value.
 @llvm_ir("{result} = inttoptr {From} {value} to ptr")
 external("llvm") routine inttoptr[From, To](value: From) -> Snatched[To]
+### Returns the entity reference stored in a Snatched pointer, without dereferencing.
+### Use only when T is an entity type and the Snatched holds the entity pointer directly.
+### :param value: The raw pointer value.
+### :returns: The resulting `T` entity reference.
+@llvm_ir("{result} = getelementptr i8, ptr {value}, i64 0")
+dangerous external("llvm") routine entity_from_snatched[T](value: Snatched[T]) -> T
 ### Returns the result of `sitofp`.
 ### :param value: The value to use.
 ### :returns: The resulting `To` value.
@@ -97,18 +103,54 @@ external("llvm") routine fptrunc[From, To](value: From) -> To
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = add {T} {a}, {b}")
 external("llvm") routine add[T](a: T, b: T) -> T
+### Returns the result of `add nsw` (no signed wrap — UB on signed overflow).
+### :param a: The left-hand value.
+### :param b: The right-hand value.
+### :returns: The resulting `T` value.
+@llvm_ir("{result} = add nsw {T} {a}, {b}")
+dangerous external("llvm") routine add_nsw[T](a: T, b: T) -> T
+### Returns the result of `add nuw` (no unsigned wrap — UB on unsigned overflow).
+### :param a: The left-hand value.
+### :param b: The right-hand value.
+### :returns: The resulting `T` value.
+@llvm_ir("{result} = add nuw {T} {a}, {b}")
+dangerous external("llvm") routine add_nuw[T](a: T, b: T) -> T
 ### Returns the result of `sub`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = sub {T} {a}, {b}")
 external("llvm") routine sub[T](a: T, b: T) -> T
+### Returns the result of `sub nsw` (no signed wrap — UB on signed overflow).
+### :param a: The left-hand value.
+### :param b: The right-hand value.
+### :returns: The resulting `T` value.
+@llvm_ir("{result} = sub nsw {T} {a}, {b}")
+dangerous external("llvm") routine sub_nsw[T](a: T, b: T) -> T
+### Returns the result of `sub nuw` (no unsigned wrap — UB on unsigned overflow).
+### :param a: The left-hand value.
+### :param b: The right-hand value.
+### :returns: The resulting `T` value.
+@llvm_ir("{result} = sub nuw {T} {a}, {b}")
+dangerous external("llvm") routine sub_nuw[T](a: T, b: T) -> T
 ### Returns the result of `mul`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = mul {T} {a}, {b}")
 external("llvm") routine mul[T](a: T, b: T) -> T
+### Returns the result of `mul nsw` (no signed wrap — UB on signed overflow).
+### :param a: The left-hand value.
+### :param b: The right-hand value.
+### :returns: The resulting `T` value.
+@llvm_ir("{result} = mul nsw {T} {a}, {b}")
+dangerous external("llvm") routine mul_nsw[T](a: T, b: T) -> T
+### Returns the result of `mul nuw` (no unsigned wrap — UB on unsigned overflow).
+### :param a: The left-hand value.
+### :param b: The right-hand value.
+### :returns: The resulting `T` value.
+@llvm_ir("{result} = mul nuw {T} {a}, {b}")
+dangerous external("llvm") routine mul_nuw[T](a: T, b: T) -> T
 ### Returns the result of `sdiv`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
@@ -162,6 +204,12 @@ external("llvm") routine fmul[T](a: T, b: T) -> T
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = fdiv {T} {a}, {b}")
 external("llvm") routine fdiv[T](a: T, b: T) -> T
+### Returns the result of `fdiv fast` (no NaN/inf checks — UB if result is non-finite).
+### :param a: The left-hand value.
+### :param b: The right-hand value.
+### :returns: The resulting `T` value.
+@llvm_ir("{result} = fdiv fast {T} {a}, {b}")
+dangerous external("llvm") routine fdiv_fast[T](a: T, b: T) -> T
 ### Returns the result of `frem`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
@@ -363,37 +411,37 @@ external("llvm") routine usub_sat[T](a: T, b: T) -> T
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `(T, Bool)` value.
-@llvm_ir("{result} = call { {T}, i1 } @llvm.sadd.with.overflow.{T}({T} {a}, {T} {b})\n{result} = extractvalue { {T}, i1 } {prev}, 0")
+@llvm_ir("{result} = call { {T}, i1 } @llvm.sadd.with.overflow.{T}({T} {a}, {T} {b})")
 external("llvm") routine sadd_with_overflow[T](a: T, b: T) -> (T, Bool)
 ### Returns the result of `uadd with overflow`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `(T, Bool)` value.
-@llvm_ir("{result} = call { {T}, i1 } @llvm.uadd.with.overflow.{T}({T} {a}, {T} {b})\n{result} = extractvalue { {T}, i1 } {prev}, 0")
+@llvm_ir("{result} = call { {T}, i1 } @llvm.uadd.with.overflow.{T}({T} {a}, {T} {b})")
 external("llvm") routine uadd_with_overflow[T](a: T, b: T) -> (T, Bool)
 ### Returns the result of `ssub with overflow`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `(T, Bool)` value.
-@llvm_ir("{result} = call { {T}, i1 } @llvm.ssub.with.overflow.{T}({T} {a}, {T} {b})\n{result} = extractvalue { {T}, i1 } {prev}, 0")
+@llvm_ir("{result} = call { {T}, i1 } @llvm.ssub.with.overflow.{T}({T} {a}, {T} {b})")
 external("llvm") routine ssub_with_overflow[T](a: T, b: T) -> (T, Bool)
 ### Returns the result of `usub with overflow`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `(T, Bool)` value.
-@llvm_ir("{result} = call { {T}, i1 } @llvm.usub.with.overflow.{T}({T} {a}, {T} {b})\n{result} = extractvalue { {T}, i1 } {prev}, 0")
+@llvm_ir("{result} = call { {T}, i1 } @llvm.usub.with.overflow.{T}({T} {a}, {T} {b})")
 external("llvm") routine usub_with_overflow[T](a: T, b: T) -> (T, Bool)
 ### Returns the result of `smul with overflow`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `(T, Bool)` value.
-@llvm_ir("{result} = call { {T}, i1 } @llvm.smul.with.overflow.{T}({T} {a}, {T} {b})\n{result} = extractvalue { {T}, i1 } {prev}, 0")
+@llvm_ir("{result} = call { {T}, i1 } @llvm.smul.with.overflow.{T}({T} {a}, {T} {b})")
 external("llvm") routine smul_with_overflow[T](a: T, b: T) -> (T, Bool)
 ### Returns the result of `umul with overflow`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `(T, Bool)` value.
-@llvm_ir("{result} = call { {T}, i1 } @llvm.umul.with.overflow.{T}({T} {a}, {T} {b})\n{result} = extractvalue { {T}, i1 } {prev}, 0")
+@llvm_ir("{result} = call { {T}, i1 } @llvm.umul.with.overflow.{T}({T} {a}, {T} {b})")
 external("llvm") routine umul_with_overflow[T](a: T, b: T) -> (T, Bool)
 
 # ============================================================================

@@ -126,13 +126,13 @@ routine Bytes.is_empty() -> Bool
 ### Returns the element at the requested position.
 ### :param index: The zero-based position to use.
 ### :returns: The resulting `Byte` value.
-routine Bytes.$getitem[I obeys Integral](index: I) -> Byte
+routine Bytes.$getitem![I obeys Integral](index: I) -> Byte
   return me.bytes[index]
 
 ### Returns the element at the requested position.
 ### :param index: The zero-based position to use.
 ### :returns: The resulting `Byte` value.
-routine Bytes.$getitem[I obeys Integral](index: BackIndex[I]) -> Byte
+routine Bytes.$getitem![I obeys Integral](index: BackIndex[I]) -> Byte
   return me.bytes[index]
 
 ### Returns the slice between the requested bounds.
@@ -295,7 +295,6 @@ routine Bytes.$iter() -> BytesIterator
 ### Returns the next value from this iterator.
 ### :returns: The resulting `Byte` value.
 ### :absent: Returns absent when the requested value is unavailable.
-# TODO: This should be emitting routine
 routine BytesIterator.$next!() -> Byte
   if me.index >= me.bytes.count()
     absent
@@ -525,7 +524,7 @@ routine BytesUtf8View.$iter() -> BytesUtf8Iterator
 ### Returns the next value from this iterator.
 ### :returns: The resulting `Character` value.
 ### :absent: Returns absent when the requested value is unavailable.
-emitting routine BytesUtf8Iterator.$next!() -> Character
+routine BytesUtf8Iterator.$next!() -> Character
   if me.index >= me.bytes.count()
     absent
 
@@ -591,8 +590,7 @@ emitting routine BytesUtf8Iterator.$next!() -> Character
       codepoint = CHARACTER_REPLACEMENT.codepoint()
       me.index += 1u64
 
-  emit Character(codepoint)
-  return
+  return Character(codepoint)
 
 # ============================================================================
 # C-String Interop
@@ -607,9 +605,9 @@ routine Bytes.to_cstr() -> Address
   loop
     if i >= len
       break
-    Snatched[Byte](buffer.get_address() + i).write(me[i])
+    Snatched[Byte](buffer.get_address() +% Address(i)).write(me[i])
     i += 1u64
-  Snatched[Byte](buffer.get_address() + len).write(BYTE_NULL)
+  Snatched[Byte](buffer.get_address() +% Address(len)).write(BYTE_NULL)
   return buffer.get_address()
 
 ### Converts this value to cstr.

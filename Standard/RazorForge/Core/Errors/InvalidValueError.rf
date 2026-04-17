@@ -1,7 +1,7 @@
 module Core
 
-### Defines the entity `InvalidValueError`.
-entity InvalidValueError obeys Crashable
+### Defines the crashable `InvalidValueError`.
+crashable InvalidValueError
   ### Stores the input member value.
   input: Text
   ### Stores the target member value.

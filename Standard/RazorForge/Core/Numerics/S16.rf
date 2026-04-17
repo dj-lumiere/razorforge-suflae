@@ -36,7 +36,7 @@ routine S16.$create(from: S16) -> S16
 ### :throws: May throw {IntegerOverflowError}.
 routine S16.$create!(from: S32) -> S16
   if not (S16_MIN <= from <= S16_MAX)
-    throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
+    throw IntegerOverflowError()
   return trunc[S32, S16](from)
 
 ### Implements the wired routine behavior for this value.
@@ -45,7 +45,7 @@ routine S16.$create!(from: S32) -> S16
 ### :throws: May throw {IntegerOverflowError}.
 routine S16.$create!(from: S64) -> S16
   if not (S16_MIN <= from <= S16_MAX)
-    throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
+    throw IntegerOverflowError()
   return trunc[S64, S16](from)
 
 ### Implements the wired routine behavior for this value.
@@ -54,7 +54,7 @@ routine S16.$create!(from: S64) -> S16
 ### :throws: May throw {IntegerOverflowError}.
 routine S16.$create!(from: S128) -> S16
   if not (S16_MIN <= from <= S16_MAX)
-    throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
+    throw IntegerOverflowError()
   return trunc[S128, S16](from)
 
 ### Implements the wired routine behavior for this value.
@@ -69,7 +69,7 @@ routine S16.$create!(from: U8) -> S16
 ### :throws: May throw {IntegerOverflowError}.
 routine S16.$create!(from: U16) -> S16
   if from > 32767_u16
-    throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
+    throw IntegerOverflowError()
   return bitcast[U16, S16](from)
 
 ### Implements the wired routine behavior for this value.
@@ -78,7 +78,7 @@ routine S16.$create!(from: U16) -> S16
 ### :throws: May throw {IntegerOverflowError}.
 routine S16.$create!(from: U32) -> S16
   if from > 32767_u32
-    throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
+    throw IntegerOverflowError()
   return trunc[U32, S16](from)
 
 ### Implements the wired routine behavior for this value.
@@ -87,7 +87,7 @@ routine S16.$create!(from: U32) -> S16
 ### :throws: May throw {IntegerOverflowError}.
 routine S16.$create!(from: U64) -> S16
   if from > 32767_u64
-    throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
+    throw IntegerOverflowError()
   return trunc[U64, S16](from)
 
 ### Implements the wired routine behavior for this value.
@@ -96,7 +96,7 @@ routine S16.$create!(from: U64) -> S16
 ### :throws: May throw {IntegerOverflowError}.
 routine S16.$create!(from: U128) -> S16
   if from > 32767_u128
-    throw IntegerOverflowError(f"Cannot convert {from} to S16: value out of range [{S16_MIN}, {S16_MAX}]")
+    throw IntegerOverflowError()
   return trunc[U128, S16](from)
 
 ### Implements the wired routine behavior for this value.
@@ -145,38 +145,80 @@ routine S16.$create!(from: D128) -> S16
 # Arithmetic Operations (trapping on overflow by default)
 # ============================================================================
 
+### Returns the sum and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(S16, Bool)` value.
+routine S16.add_with_overflow(you: S16) -> (S16, Bool)
+  return sadd_with_overflow[S16](me, you)
+
+### Returns the difference and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(S16, Bool)` value.
+routine S16.sub_with_overflow(you: S16) -> (S16, Bool)
+  return ssub_with_overflow[S16](me, you)
+
+### Returns the product and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(S16, Bool)` value.
+routine S16.mul_with_overflow(you: S16) -> (S16, Bool)
+  return smul_with_overflow[S16](me, you)
+
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S16` value.
 routine S16.$add!(you: S16) -> S16
-  return add[S16](me, you)
+  var result = me.add_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
-### Returns the difference between this value and the other value.
+### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S16` value.
-routine S16.$sub(you: S16) -> S16
-  return sub[S16](me, you)
+routine S16.$sub!(you: S16) -> S16
+  var result = me.sub_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
-### Returns the product of this value and the other value.
+### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S16` value.
-routine S16.$mul(you: S16) -> S16
-  return mul[S16](me, you)
+routine S16.$mul!(you: S16) -> S16
+  var result = me.mul_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
-### Returns the quotient of this value and the other value.
+### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S16` value.
 ### :throws: May throw {DivisionByZeroError}.
-routine S16.$floordiv(you: S16) -> S16
+routine S16.$floordiv!(you: S16) -> S16
   if you == 0
     throw DivisionByZeroError()
-  return sdiv[S16](me, you)
+  if me == S16_MIN and you == -1_s16
+    throw IntegerOverflowError()
+  var quotient = sdiv[S16](me, you)
+  var remainder = srem[S16](me, you)
+  if remainder < 0_s16
+    if you > 0_s16
+      return quotient - 1_s16
+    return quotient + 1_s16
+  return quotient
 
 ### Returns the remainder after division.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S16` value.
 routine S16.$mod(you: S16) -> S16
-  return srem[S16](me, you)
+  if you == 0
+    throw DivisionByZeroError()
+  var remainder = srem[S16](me, you)
+  if remainder < 0_s16
+    if you > 0_s16
+      return remainder + you
+    return remainder - you
+  return remainder
 
 ### Returns the negated value.
 ### :returns: The resulting `S16` value.
@@ -204,6 +246,51 @@ routine S16.$sub_wrap(you: S16) -> S16
 ### :returns: The resulting `S16` value.
 routine S16.$mul_wrap(you: S16) -> S16
   return mul[S16](me, you)
+
+# ============================================================================
+# Unchecked Arithmetic (+!, -!, *!, //!, %!)
+# ============================================================================
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S16` value.
+routine S16.$add_unchecked(you: S16) -> S16
+  return add_nsw[S16](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S16` value.
+routine S16.$sub_unchecked(you: S16) -> S16
+  return sub_nsw[S16](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S16` value.
+routine S16.$mul_unchecked(you: S16) -> S16
+  return mul_nsw[S16](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S16` value.
+routine S16.$floordiv_unchecked(you: S16) -> S16
+  var quotient = sdiv[S16](me, you)
+  var remainder = srem[S16](me, you)
+  if remainder < 0_s16
+    if you > 0_s16
+      return quotient - 1_s16
+    return quotient + 1_s16
+  return quotient
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S16` value.
+routine S16.$mod_unchecked(you: S16) -> S16
+  var remainder = srem[S16](me, you)
+  if remainder < 0_s16
+    if you > 0_s16
+      return remainder + you
+    return remainder - you
+  return remainder
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
@@ -236,24 +323,40 @@ routine S16.$mul_clamp(you: S16) -> S16
 # Power Operations (**)
 # ============================================================================
 
-### Implements the wired routine behavior for this value.
+### Returns the power result and whether it overflowed.
 ### :param exp: The exponent value.
-### :returns: The resulting `S16` value.
+### :returns: The resulting `(S16, Bool)` value.
 ### :throws: May throw {IndeterminateResultError}.
-routine S16.$pow!(exp: S16) -> S16
+routine S16.pow_with_overflow!(exp: S16) -> (S16, Bool)
   var result: S16 = 1
   var base: S16 = me
   var e: U32 = exp
+  var overflow = false
   if me == 0 and exp == 0
     throw IndeterminateResultError()
   if exp < 0
     return NegativeExponentError(exp)
   while e > 0
     if (e & 1) == 1
-      result = mul[S16](result, base)
-    base = mul[S16](base, base)
-    e = e >> 1
-  return result
+      var mul_result = result.mul_with_overflow(base)
+      result = mul_result.item0
+      overflow = overflow or mul_result.item1
+    e = e >> 1_u32
+    if e > 0
+      var square_result = base.mul_with_overflow(base)
+      base = square_result.item0
+      overflow = overflow or square_result.item1
+  return (result, overflow)
+
+### Implements the wired routine behavior for this value.
+### :param exp: The exponent value.
+### :returns: The resulting `S16` value.
+### :throws: May throw {IndeterminateResultError}.
+routine S16.$pow!(exp: S16) -> S16
+  var result = me.pow_with_overflow!(exp)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param exp: The exponent value.
@@ -265,13 +368,14 @@ routine S16.$pow_wrap!(exp: S16) -> S16
   var e: U32 = exp
   if me == 0 and exp == 0
     throw IndeterminateResultError()
-  if exp < 0
+  if exp < 0_s16
     return NegativeExponentError(exp)
   while e > 0
     if (e & 1) == 1
-      result = mul[S16](result, base)
-    base = mul[S16](base, base)
-    e = e >> 1
+      result = result.$mul_wrap(base)
+    e = e >> 1_u32
+    if e > 0
+      base = base.$mul_wrap(base)
   return result
 
 ### Implements the wired routine behavior for this value.
@@ -289,8 +393,9 @@ routine S16.$pow_clamp!(exp: S16) -> S16
   while e > 0
     if (e & 1) == 1
       result = result.$mul_clamp(base)
-    base = base.$mul_clamp(base)
-    e = e >> 1
+    e = e >> 1_u32
+    if e > 0
+      base = base.$mul_clamp(base)
   return result
 
 # ============================================================================
@@ -328,25 +433,25 @@ routine S16.$bitnot() -> S16
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `S16` value.
 routine S16.$ashl(bits: U32) -> S16
-  return shl[S16](me, bits)
+  return shl[S16](me, S16(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `S16` value.
 routine S16.$ashr(bits: U32) -> S16
-  return ashr[S16](me, bits)
+  return ashr[S16](me, S16(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `S16` value.
 routine S16.$lshl(bits: U32) -> S16
-  return shl[S16](me, bits)
+  return shl[S16](me, S16(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `S16` value.
 routine S16.$lshr(bits: U32) -> S16
-  return lshr[S16](me, bits)
+  return lshr[S16](me, S16(bits))
 
 # ============================================================================
 # Comparison Operations
@@ -408,7 +513,7 @@ routine S16.count_ones() -> S16
 ### Returns the number of stored values.
 ### :returns: The resulting `S16` value.
 routine S16.count_zeros() -> S16
-  return 16_s16 - me.count_ones()
+  return 16_s16 -% me.count_ones()
 
 ### Returns the result of `leading zeros`.
 ### :returns: The resulting `S16` value.

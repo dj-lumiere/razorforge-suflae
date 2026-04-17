@@ -1,10 +1,8 @@
 module Core
 
 ### Defines the record `DivisionByZeroError`.
-record DivisionByZeroError obeys Crashable
+crashable DivisionByZeroError
   pass
 
-### Returns the result of `crash message`.
-### :returns: The resulting `Text` value.
 routine DivisionByZeroError.crash_message() -> Text
   return "You tried to divide by zero, which is not allowed."

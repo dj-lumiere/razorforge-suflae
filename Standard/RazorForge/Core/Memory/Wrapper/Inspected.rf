@@ -27,8 +27,9 @@
 module Core
 
 ### Defines the record `Inspected`.
-### :typeparam T: The value used for `T`.
+### :typeparam T: The exclusively owned entity type.
 record Inspected[T]
+needs T is EntityType
   ### Stores the ptr member value.
   secret ptr: Snatched[T]    # Generic type - use Snatched[T]
   ### Stores the lock guard member value.

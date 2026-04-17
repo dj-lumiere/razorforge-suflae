@@ -14,6 +14,35 @@ record Maybe[T] needs T is EntityType
   ### The stored value, valid only when it is not null.
   secret value: Snatched[T]
 
+routine Maybe[T].$represent() -> Text needs T is RecordType
+  if not me.present
+    return "None"
+  return f"{me.value}"
+
+routine Maybe[T].$diagnose() -> Text needs T is RecordType
+  if not me.present
+    return "Core.Maybe(None)"
+  return f"Core.Maybe({me.value})"
+
+routine Maybe[T].$represent() -> Text needs T is EntityType
+  if icmp_eq[Snatched[T]](me.value, snatched_none[T]())
+    return "None"
+  var val = entity_from_snatched[T](me.value)
+  return f"{val}"
+
+routine Maybe[T].$diagnose() -> Text needs T is EntityType
+  if icmp_eq[Snatched[T]](me.value, snatched_none[T]())
+    return "Core.Maybe(None)"
+  var val = entity_from_snatched[T](me.value)
+  return f"Core.Maybe({val})"
+
+### Returns the stored value, crashing if absent.
+### :returns: The resulting `T` value.
+routine Maybe[T].$unwrap() -> T needs T is RecordType
+  if not me.present
+    throw AbsentValueError()
+  return me.value
+
 ### Returns the stored value or a fallback.
 ### :param default: The fallback value to return.
 ### :returns: The resulting `T` value.
@@ -30,18 +59,25 @@ routine Maybe[T].$unwrap_or(or_else: Routine[Me, T]) -> T needs T is RecordType
     return or_else()
   return me.value
 
+### Returns the stored value, crashing if absent.
+### :returns: The resulting `T` value.
+routine Maybe[T].$unwrap() -> T needs T is EntityType
+  if icmp_eq[Snatched[T]](me.value, snatched_none[T]())
+    throw AbsentValueError()
+  return entity_from_snatched[T](me.value)
+
 ### Returns the stored value or a fallback.
 ### :param default: The fallback value to return.
 ### :returns: The resulting `T` value.
 routine Maybe[T].$unwrap_or(default: T) -> T needs T is EntityType
-  if me.value == Snatched[T](0addr)
+  if icmp_eq[Snatched[T]](me.value, snatched_none[T]())
     return default
-  return me.value.read()
+  return entity_from_snatched[T](me.value)
 
 ### Returns the stored value or a fallback.
 ### :param or_else: The fallback routine to call.
 ### :returns: The resulting `T` value.
 routine Maybe[T].$unwrap_or(or_else: Routine[Me, T]) -> T needs T is EntityType
-  if me.value == Snatched[T](0addr)
+  if icmp_eq[Snatched[T]](me.value, snatched_none[T]())
     return or_else()
-  return me.value.read()
+  return entity_from_snatched[T](me.value)

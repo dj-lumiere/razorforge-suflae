@@ -7,11 +7,9 @@ module Core
 #
 # Size: ~228 bytes (fixed, fits inline in type unions)
 
-### Defines the record `RuntimeError`.
-record RuntimeError obeys Crashable
+### Defines the crashable `RuntimeError`.
+crashable RuntimeError
   pass
 
-### Returns the result of `crash message`.
-### :returns: The resulting `Text` value.
 routine RuntimeError.crash_message() -> Text
   return "A runtime error occurred."

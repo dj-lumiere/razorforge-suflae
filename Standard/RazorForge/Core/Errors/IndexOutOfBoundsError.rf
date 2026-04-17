@@ -4,8 +4,8 @@ module Core
 # Used by List[T] and other indexed collections
 
 
-### Defines the record `IndexOutOfBoundsError`.
-record IndexOutOfBoundsError obeys Crashable
+### Defines the crashable `IndexOutOfBoundsError`.
+crashable IndexOutOfBoundsError
   ### Stores the index member value.
   index: U64
   ### Stores the count member value.
@@ -16,8 +16,8 @@ record IndexOutOfBoundsError obeys Crashable
 routine IndexOutOfBoundsError.crash_message() -> Text
   return f"Index {me.index} is out of bounds for collection with {me.count} elements"
 
-### Defines the record `EmptyCollectionError`.
-record EmptyCollectionError obeys Crashable
+### Defines the crashable `EmptyCollectionError`.
+crashable EmptyCollectionError
   ### Stores the operation member value.
   operation: Text
 
@@ -26,10 +26,9 @@ record EmptyCollectionError obeys Crashable
 routine EmptyCollectionError.crash_message() -> Text
   return f"Cannot {me.operation} on empty collection"
 
-### Defines the record `ElementNotFoundError`.
-record ElementNotFoundError obeys Crashable
+### Defines the crashable `ElementNotFoundError`.
+crashable ElementNotFoundError
+  pass
 
-### Returns the result of `crash message`.
-### :returns: The resulting `Text` value.
 routine ElementNotFoundError.crash_message() -> Text
   return "No matching element found"

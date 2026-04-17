@@ -134,31 +134,49 @@ routine F32.$create(from: D128) -> F32
 ### Returns the sum of this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F32` value.
-routine F32.$add(you: F32) -> F32
-  return fadd[F32](me, you)
+routine F32.$add!(you: F32) -> F32
+  var result = fadd[F32](me, you)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"F32 addition produced non-finite result: {me} + {you}")
+  return result
 
 ### Returns the difference between this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F32` value.
-routine F32.$sub(you: F32) -> F32
-  return fsub[F32](me, you)
+routine F32.$sub!(you: F32) -> F32
+  var result = fsub[F32](me, you)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"F32 subtraction produced non-finite result: {me} - {you}")
+  return result
 
 ### Returns the product of this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F32` value.
-routine F32.$mul(you: F32) -> F32
-  return fmul[F32](me, you)
+routine F32.$mul!(you: F32) -> F32
+  var result = fmul[F32](me, you)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"F32 multiplication produced non-finite result: {me} * {you}")
+  return result
 
 ### Returns the quotient of this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F32` value.
-routine F32.$truediv(you: F32) -> F32
-  return fdiv[F32](me, you)
+routine F32.$truediv!(you: F32) -> F32
+  var result = fdiv[F32](me, you)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"F32 division produced non-finite result: {me} / {you}")
+  return result
 
 ### Returns the negated value.
 ### :returns: The resulting `F32` value.
 routine F32.$neg() -> F32
   return fneg[F32](me)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `F32` value.
+routine F32.$truediv_unchecked(you: F32) -> F32
+  return fdiv_fast[F32](me, you)
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)
@@ -245,6 +263,15 @@ routine F32.log10() -> F32
 routine F32.pow(exp: F32) -> F32
   return pow[F32](me, exp)
 
+### Returns the result of `pow`.
+### :param exp: The exponent value.
+### :returns: The resulting `F32` value.
+routine F32.$pow!(exp: F32) -> F32
+  var result = me.pow(exp)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"F32 power produced non-finite result: {me} ** {exp}")
+  return result
+
 ### Returns the result of `copysign`.
 ### :param sign: The `sign` value.
 ### :returns: The resulting `F32` value.
@@ -288,6 +315,27 @@ routine F32.is_negative() -> Bool
 ### :returns: The resulting `Bool` value.
 routine F32.is_zero() -> Bool
   return me == 0.0_f32
+
+### Returns true if this value is nan.
+### :returns: The resulting `Bool` value.
+routine F32.is_nan() -> Bool
+  var bits = me.to_bits()
+  var exponent = bit_and[U32](bits, 0x7F800000_u32)
+  var mantissa = bit_and[U32](bits, 0x007FFFFF_u32)
+  return exponent == 0x7F800000_u32 and mantissa != 0_u32
+
+### Returns true if this value is infinite.
+### :returns: The resulting `Bool` value.
+routine F32.is_infinite() -> Bool
+  var bits = me.to_bits()
+  var exponent = bit_and[U32](bits, 0x7F800000_u32)
+  var mantissa = bit_and[U32](bits, 0x007FFFFF_u32)
+  return exponent == 0x7F800000_u32 and mantissa == 0_u32
+
+### Returns true if this value is finite.
+### :returns: The resulting `Bool` value.
+routine F32.is_finite() -> Bool
+  return not me.is_nan() and not me.is_infinite()
 
 ### Returns the result of `signum`.
 ### :returns: The resulting `F32` value.

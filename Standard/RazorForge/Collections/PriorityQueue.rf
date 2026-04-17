@@ -43,8 +43,8 @@ routine PriorityQueue[TPriority, TElement].$create() -> PriorityQueue[TPriority,
   )
 
 routine PriorityQueue[TPriority, TElement].$create(capacity: U64) -> PriorityQueue[TPriority, TElement]
-  var priority_byte_size = capacity * TPriority.data_size()
-  var element_byte_size = capacity * TElement.data_size()
+  var priority_byte_size = TPriority.data_size() * capacity
+  var element_byte_size = TElement.data_size() * capacity
   var priority_ptr = rf_allocate_dynamic(priority_byte_size)
   var element_ptr = rf_allocate_dynamic(element_byte_size)
   return PriorityQueue[TPriority, TElement](
@@ -69,20 +69,20 @@ routine PriorityQueue[TPriority, TElement].$destroy()
 
 @inline
 routine PriorityQueue[TPriority, TElement].get_priority_raw(index: U64) -> TPriority
-  return me.priorities.offset(index * TPriority.data_size()).read()
+  return me.priorities.offset(TPriority.data_size() * index).read()
 
 @inline
 routine PriorityQueue[TPriority, TElement].set_priority_raw(index: U64, value: TPriority)
-  me.priorities.offset(index * TPriority.data_size()).write(value)
+  me.priorities.offset(TPriority.data_size() * index).write(value)
   return
 
 @inline
 routine PriorityQueue[TPriority, TElement].get_element_raw(index: U64) -> TElement
-  return me.elements.offset(index * TElement.data_size()).read()
+  return me.elements.offset(TElement.data_size() * index).read()
 
 @inline
 routine PriorityQueue[TPriority, TElement].set_element_raw(index: U64, value: TElement)
-  me.elements.offset(index * TElement.data_size()).write(value)
+  me.elements.offset(TElement.data_size() * index).write(value)
   return
 
 @inline
@@ -100,8 +100,8 @@ routine PriorityQueue[TPriority, TElement].set_entry_raw(index: U64, entry: PQEn
 
 routine PriorityQueue[TPriority, TElement].reserve(new_capacity: U64)
   if new_capacity > me.capacity
-    var priority_byte_size = new_capacity * TPriority.data_size()
-    var element_byte_size = new_capacity * TElement.data_size()
+    var priority_byte_size = TPriority.data_size() * new_capacity
+    var element_byte_size = TElement.data_size() * new_capacity
 
     if me.priorities.is_none()
       danger!
@@ -125,7 +125,7 @@ routine PriorityQueue[TPriority, TElement].reserve(new_capacity: U64)
   return
 
 routine PriorityQueue[TPriority, TElement].grow()
-  var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity * 2u64
+  var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity *% 2u64
   me.reserve(new_capacity)
   return
 
@@ -134,13 +134,13 @@ routine PriorityQueue[TPriority, TElement].grow()
 # ============================================================================
 
 routine PriorityQueue[TPriority, TElement].parent_index(index: U64) -> U64
-  return (index - 1u64) // 2u64
+  return udiv[U64](index -% 1u64, 2u64)
 
 routine PriorityQueue[TPriority, TElement].left_child(index: U64) -> U64
-  return 2u64 * index + 1u64
+  return 2u64 *% index +% 1u64
 
 routine PriorityQueue[TPriority, TElement].right_child(index: U64) -> U64
-  return 2u64 * index + 2u64
+  return 2u64 *% index +% 2u64
 
 routine PriorityQueue[TPriority, TElement].sift_up(index: U64)
   var hole_idx = index
@@ -219,7 +219,7 @@ routine PriorityQueue[TPriority, TElement].add(element: TElement, priority: TPri
   var insert_idx = me.count
   me.set_priority_raw(insert_idx, priority)
   me.set_element_raw(insert_idx, element)
-  me.count = insert_idx + 1u64
+  me.count = insert_idx +% 1u64
   me.sift_up(insert_idx)
   return
 
@@ -278,7 +278,7 @@ routine PriorityQueue[TPriority, TElement].add_all(elements: List[TElement], pri
   var limit = if elements.count() < priorities.count() then elements.count() else priorities.count()
   while i < limit
     me.add(elements[i], priorities[i])
-    i = i + 1u64
+    i = i +% 1u64
   return
 
 ### Returns the result of `drain`.
@@ -302,7 +302,7 @@ routine PriorityQueue[TPriority, TElement].$contains(element: TElement) -> Bool
   while i < me.count
     if me.get_element_raw(i) == element
       return true
-    i = i + 1u64
+    i = i +% 1u64
   return false
 
 ### Creates a new instance.
@@ -313,7 +313,7 @@ routine List[PQEntry[TPriority, TElement]].$create(from: PriorityQueue[TPriority
   var i = 0u64
   while i < from.count()
     result.add_last(from.get_entry_raw(i))
-    i = i + 1u64
+    i = i +% 1u64
   return result
 
 # ============================================================================
@@ -324,10 +324,13 @@ routine List[PQEntry[TPriority, TElement]].$create(from: PriorityQueue[TPriority
 ### :returns: The resulting `PriorityQueueIterator[TPriority, TElement]` value.
 @readonly
 routine PriorityQueue[TPriority, TElement].$iter() -> PriorityQueueIterator[TPriority, TElement]
-  return PriorityQueueIterator[TPriority, TElement](
-    queue: me,
-    index: 0u64
-  )
+  danger!
+    return PriorityQueueIterator[TPriority, TElement](
+      priorities: me.priorities,
+      elements: me.elements,
+      count: me.count(),
+      index: 0u64
+    )
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
@@ -338,7 +341,7 @@ routine PriorityQueue[TPriority, TElement].$represent() -> Text
     if i > 0u64
       result = result + ", "
     result = result + entry.priority.$represent() + ": " + entry.element.$represent()
-    i = i + 1u64
+    i = i +% 1u64
   result = result + "]"
   return result
 
@@ -351,7 +354,7 @@ routine PriorityQueue[TPriority, TElement].$diagnose() -> Text
     if i > 0u64
       result = result + ", "
     result = result + entry.priority.$represent() + ": " + entry.element.$represent()
-    i = i + 1u64
+    i = i +% 1u64
   result = result + "])"
   return result
 
@@ -359,18 +362,22 @@ routine PriorityQueue[TPriority, TElement].$diagnose() -> Text
 ### :typeparam TPriority: The value used for `TPriority`.
 ### :typeparam TElement: The value used for `TElement`.
 entity PriorityQueueIterator[TPriority, TElement] obeys Iterator[PQEntry[TPriority, TElement]]
-  ### Stores the queue member value.
-  queue: PriorityQueue[TPriority, TElement]
-  ### Stores the index member value.
-  index: U64
+  ### Raw pointer into the source queue's priority buffer.
+  secret priorities: Snatched[TPriority]
+  ### Raw pointer into the source queue's element buffer.
+  secret elements: Snatched[TElement]
+  ### Element count captured at iterator creation.
+  secret count: U64
+  ### Current position.
+  secret index: U64
 
-### Returns the next value from this iterator.
-### :returns: The resulting `PQEntry[TPriority, TElement]` value.
-### :absent: Returns absent when the requested value is unavailable.
 @writable
-emitting routine PriorityQueueIterator[TPriority, TElement].$next!() -> PQEntry[TPriority, TElement]
-  if me.index >= me.queue.count()
+routine PriorityQueueIterator[TPriority, TElement].$next!() -> PQEntry[TPriority, TElement]
+  if me.index >= me.count
     absent
-  emit me.queue.get_entry_raw(me.index)
+  danger!
+    var p = me.priorities.offset(TPriority.data_size() * me.index).read()
+    var e = me.elements.offset(TElement.data_size() * me.index).read()
+    var _result = PQEntry[TPriority, TElement](priority: p, element: e)
   me.index = me.index + 1u64
-  return
+  return _result

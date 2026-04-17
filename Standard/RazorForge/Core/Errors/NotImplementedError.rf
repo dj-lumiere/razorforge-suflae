@@ -3,8 +3,8 @@ module Core
 # NotImplementedError - Error for unimplemented functionality
 # Used as a placeholder for methods/routines that are not yet implemented
 
-### Defines the record `NotImplementedError`.
-record NotImplementedError obeys Crashable
+### Defines the crashable `NotImplementedError`.
+crashable NotImplementedError
   ### Stores the feature member value.
   feature: Text
 

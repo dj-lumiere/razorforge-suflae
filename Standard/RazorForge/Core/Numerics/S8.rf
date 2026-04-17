@@ -30,7 +30,7 @@ routine S8.$create(from: S8) -> S8
 ### :throws: May throw {IntegerOverflowError}.
 routine S8.$create!(from: S16) -> S8
   if not (S8_MIN <= from <= S8_MAX)
-    throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
+    throw IntegerOverflowError()
   return trunc[S16, S8](from)
 
 ### Implements the wired routine behavior for this value.
@@ -39,7 +39,7 @@ routine S8.$create!(from: S16) -> S8
 ### :throws: May throw {IntegerOverflowError}.
 routine S8.$create!(from: S32) -> S8
   if not (S8_MIN <= from <= S8_MAX)
-    throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
+    throw IntegerOverflowError()
   return trunc[S32, S8](from)
 
 ### Implements the wired routine behavior for this value.
@@ -48,7 +48,7 @@ routine S8.$create!(from: S32) -> S8
 ### :throws: May throw {IntegerOverflowError}.
 routine S8.$create!(from: S64) -> S8
   if not (S8_MIN <= from <= S8_MAX)
-    throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
+    throw IntegerOverflowError()
   return trunc[S64, S8](from)
 
 ### Implements the wired routine behavior for this value.
@@ -57,7 +57,7 @@ routine S8.$create!(from: S64) -> S8
 ### :throws: May throw {IntegerOverflowError}.
 routine S8.$create!(from: S128) -> S8
   if not (S8_MIN <= from <= S8_MAX)
-    throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
+    throw IntegerOverflowError()
   return trunc[S128, S8](from)
 
 ### Implements the wired routine behavior for this value.
@@ -66,7 +66,7 @@ routine S8.$create!(from: S128) -> S8
 ### :throws: May throw {IntegerOverflowError}.
 routine S8.$create!(from: U8) -> S8
   if from > 127_u8
-    throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
+    throw IntegerOverflowError()
   return bitcast[U8, S8](from)
 
 ### Implements the wired routine behavior for this value.
@@ -75,7 +75,7 @@ routine S8.$create!(from: U8) -> S8
 ### :throws: May throw {IntegerOverflowError}.
 routine S8.$create!(from: U16) -> S8
   if from > 127_u16
-    throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
+    throw IntegerOverflowError()
   return trunc[U16, S8](from)
 
 ### Implements the wired routine behavior for this value.
@@ -84,7 +84,7 @@ routine S8.$create!(from: U16) -> S8
 ### :throws: May throw {IntegerOverflowError}.
 routine S8.$create!(from: U32) -> S8
   if from > 127_u32
-    throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
+    throw IntegerOverflowError()
   return trunc[U32, S8](from)
 
 ### Implements the wired routine behavior for this value.
@@ -93,7 +93,7 @@ routine S8.$create!(from: U32) -> S8
 ### :throws: May throw {IntegerOverflowError}.
 routine S8.$create!(from: U64) -> S8
   if from > 127_u64
-    throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
+    throw IntegerOverflowError()
   return trunc[U64, S8](from)
 
 ### Implements the wired routine behavior for this value.
@@ -102,7 +102,7 @@ routine S8.$create!(from: U64) -> S8
 ### :throws: May throw {IntegerOverflowError}.
 routine S8.$create!(from: U128) -> S8
   if from > 127_u128
-    throw IntegerOverflowError(f"Cannot convert {from} to S8: value out of range [{S8_MIN}, {S8_MAX}]")
+    throw IntegerOverflowError()
   return trunc[U128, S8](from)
 
 ### Implements the wired routine behavior for this value.
@@ -151,23 +151,50 @@ routine S8.$create!(from: D128) -> S8
 # Arithmetic Operations (trapping on overflow by default)
 # ============================================================================
 
+### Returns the sum and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(S8, Bool)` value.
+routine S8.add_with_overflow(you: S8) -> (S8, Bool)
+  return sadd_with_overflow[S8](me, you)
+
+### Returns the difference and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(S8, Bool)` value.
+routine S8.sub_with_overflow(you: S8) -> (S8, Bool)
+  return ssub_with_overflow[S8](me, you)
+
+### Returns the product and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(S8, Bool)` value.
+routine S8.mul_with_overflow(you: S8) -> (S8, Bool)
+  return smul_with_overflow[S8](me, you)
+
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S8` value.
 routine S8.$add!(you: S8) -> S8
-  return add[S8](me, you)
+  var result = me.add_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S8` value.
 routine S8.$sub!(you: S8) -> S8
-  return sub[S8](me, you)
+  var result = me.sub_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S8` value.
 routine S8.$mul!(you: S8) -> S8
-  return mul[S8](me, you)
+  var result = me.mul_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
@@ -176,13 +203,28 @@ routine S8.$mul!(you: S8) -> S8
 routine S8.$floordiv!(you: S8) -> S8
   if you == 0
     throw DivisionByZeroError()
-  return sdiv[S8](me, you)
+  if me == S8_MIN and you == -1_s8
+    throw IntegerOverflowError()
+  var quotient = sdiv[S8](me, you)
+  var remainder = srem[S8](me, you)
+  if remainder < 0_s8
+    if you > 0_s8
+      return quotient - 1_s8
+    return quotient + 1_s8
+  return quotient
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S8` value.
 routine S8.$mod!(you: S8) -> S8
-  return srem[S8](me, you)
+  if you == 0
+    throw DivisionByZeroError()
+  var remainder = srem[S8](me, you)
+  if remainder < 0_s8
+    if you > 0_s8
+      return remainder + you
+    return remainder - you
+  return remainder
 
 ### Implements the wired routine behavior for this value.
 ### :returns: The resulting `S8` value.
@@ -210,6 +252,51 @@ routine S8.$sub_wrap(you: S8) -> S8
 ### :returns: The resulting `S8` value.
 routine S8.$mul_wrap(you: S8) -> S8
   return mul[S8](me, you)
+
+# ============================================================================
+# Unchecked Arithmetic (+!, -!, *!, //!, %!)
+# ============================================================================
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S8` value.
+routine S8.$add_unchecked(you: S8) -> S8
+  return add_nsw[S8](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S8` value.
+routine S8.$sub_unchecked(you: S8) -> S8
+  return sub_nsw[S8](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S8` value.
+routine S8.$mul_unchecked(you: S8) -> S8
+  return mul_nsw[S8](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S8` value.
+routine S8.$floordiv_unchecked(you: S8) -> S8
+  var quotient = sdiv[S8](me, you)
+  var remainder = srem[S8](me, you)
+  if remainder < 0_s8
+    if you > 0_s8
+      return quotient - 1_s8
+    return quotient + 1_s8
+  return quotient
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S8` value.
+routine S8.$mod_unchecked(you: S8) -> S8
+  var remainder = srem[S8](me, you)
+  if remainder < 0_s8
+    if you > 0_s8
+      return remainder + you
+    return remainder - you
+  return remainder
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
@@ -242,24 +329,40 @@ routine S8.$mul_clamp(you: S8) -> S8
 # Power Operations (**)
 # ============================================================================
 
-### Implements the wired routine behavior for this value.
+### Returns the power result and whether it overflowed.
 ### :param exp: The exponent value.
-### :returns: The resulting `S8` value.
+### :returns: The resulting `(S8, Bool)` value.
 ### :throws: May throw {IndeterminateResultError}.
-routine S8.$pow!(exp: S8) -> S8
+routine S8.pow_with_overflow!(exp: S8) -> (S8, Bool)
   var result: S8 = 1
   var base: S8 = me
   var e: U32 = exp
+  var overflow = false
   if me == 0 and exp == 0
     throw IndeterminateResultError()
   if exp < 0
     return NegativeExponentError(exp)
   while e > 0
     if (e & 1) == 1
-      result = mul[S8](result, base)
-    base = mul[S8](base, base)
-    e = e >> 1
-  return result
+      var mul_result = result.mul_with_overflow(base)
+      result = mul_result.item0
+      overflow = overflow or mul_result.item1
+    e = e >> 1_u32
+    if e > 0
+      var square_result = base.mul_with_overflow(base)
+      base = square_result.item0
+      overflow = overflow or square_result.item1
+  return (result, overflow)
+
+### Implements the wired routine behavior for this value.
+### :param exp: The exponent value.
+### :returns: The resulting `S8` value.
+### :throws: May throw {IndeterminateResultError}.
+routine S8.$pow!(exp: S8) -> S8
+  var result = me.pow_with_overflow!(exp)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param exp: The exponent value.
@@ -271,13 +374,14 @@ routine S8.$pow_wrap!(exp: S8) -> S8
   var e: U32 = exp
   if me == 0 and exp == 0
     throw IndeterminateResultError()
-  if exp < 0
+  if exp < 0_s8
     return NegativeExponentError(exp)
   while e > 0
     if (e & 1) == 1
-      result = mul[S8](result, base)
-    base = mul[S8](base, base)
-    e = e >> 1
+      result = result.$mul_wrap(base)
+    e = e >> 1_u32
+    if e > 0
+      base = base.$mul_wrap(base)
   return result
 
 ### Implements the wired routine behavior for this value.
@@ -295,8 +399,9 @@ routine S8.$pow_clamp!(exp: S8) -> S8
   while e > 0
     if (e & 1) == 1
       result = result.$mul_clamp(base)
-    base = base.$mul_clamp(base)
-    e = e >> 1
+    e = e >> 1_u32
+    if e > 0
+      base = base.$mul_clamp(base)
   return result
 
 # ============================================================================
@@ -334,25 +439,25 @@ routine S8.$bitnot() -> S8
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `S8` value.
 routine S8.$ashl(bits: U32) -> S8
-  return shl[S8](me, bits)
+  return shl[S8](me, S8(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `S8` value.
 routine S8.$ashr(bits: U32) -> S8
-  return ashr[S8](me, bits)
+  return ashr[S8](me, S8(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `S8` value.
 routine S8.$lshl(bits: U32) -> S8
-  return shl[S8](me, bits)
+  return shl[S8](me, S8(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `S8` value.
 routine S8.$lshr(bits: U32) -> S8
-  return lshr[S8](me, bits)
+  return lshr[S8](me, S8(bits))
 
 # ============================================================================
 # Comparison Operations
@@ -414,7 +519,7 @@ routine S8.count_ones() -> S8
 ### Returns the number of stored values.
 ### :returns: The resulting `S8` value.
 routine S8.count_zeros() -> S8
-  return 8_s8 - me.count_ones()
+  return 8_s8 -% me.count_ones()
 
 ### Returns the result of `leading zeros`.
 ### :returns: The resulting `S8` value.

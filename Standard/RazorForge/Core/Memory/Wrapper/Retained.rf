@@ -3,8 +3,9 @@
 module Core
 
 ### Defines the record `Retained`.
-### :typeparam T: The value used for `T`.
+### :typeparam T: The exclusively owned entity type.
 record Retained[T]
+needs T is EntityType
   ### Stores the controller member value.
   secret controller: Snatched[RetainController]
   ### Stores the data member value.
@@ -83,4 +84,4 @@ routine Retained[T].$diagnose() -> Text
     var rc = me.controller.strong_count()
     var weak = me.controller.weak_count()
     var addr = me.data.get_address()
-    return me.type_name() + "(rc: " + rc.$represent() + ", weak: " + weak.$represent() + ", addr: " + addr.$represent() + ", " + me.data.read().$diagnose() + ")"
+    return me.type_name() + "(holding: " + rc.$represent() + ", observing: " + weak.$represent() + ", addr: " + addr.$represent() + ", " + me.data.read().$diagnose() + ")"

@@ -3,9 +3,10 @@
 module Core
 
 ### Defines the record `Shared`.
-### :typeparam T: The value used for `T`.
+### :typeparam T: The exclusively owned entity type.
 ### :typeparam P: The value used for `P`.
 record Shared[T, P]
+needs T is EntityType
 needs P obeys LockPolicy
   secret controller: Snatched[ShareController]
   secret data: Snatched[T]
@@ -92,4 +93,4 @@ routine Shared[T, P].$diagnose() -> Text
     var data_addr = me.data.get_address()
     var lock_addr = me.lock.get_address()
     var lock_state = me.lock.read().state()
-    return me.type_name() + "(arc: " + arc.$represent() + ", weak: " + weak.$represent() + ", state: " + lock_state.$represent() + ", data_addr: " + data_addr.$represent() + ", lock_addr: " + lock_addr.$represent() + ")"
+    return me.type_name() + "(holding: " + arc.$represent() + ", observing: " + weak.$represent() + ", state: " + lock_state.$represent() + ", data_addr: " + data_addr.$represent() + ", lock_addr: " + lock_addr.$represent() + ")"

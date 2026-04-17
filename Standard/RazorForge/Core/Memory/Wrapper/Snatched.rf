@@ -92,7 +92,7 @@ routine Snatched[T].is_none() -> Bool
 ### :returns: The resulting `Snatched[T]` value.
 routine Snatched[T].offset(bytes: ByteSize) -> Snatched[T]
   var addr = ptrtoint[T, Address](me)
-  return Snatched[T](addr + bytes.value)
+  return Snatched[T](addr + bytes)
 
 ### Returns whether both values are equal.
 ### :param you: The other value to compare against.

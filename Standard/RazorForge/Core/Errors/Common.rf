@@ -3,46 +3,38 @@ module Core
 # Common Error Types
 #
 # Built-in error types for common runtime errors.
-# All error types follow the Crashable protocol.
+# All error types are crashables.
 
 ### Defines the record `AbsentValueError`.
-record AbsentValueError obeys Crashable
+crashable AbsentValueError
   pass
 
-### Returns the result of `crash message`.
-### :returns: The resulting `Text` value.
 routine AbsentValueError.crash_message() -> Text
   return "Attempted to access a value that is absent."
 
 ### Defines the record `UserTerminationError`.
-record UserTerminationError obeys Crashable
+crashable UserTerminationError
   pass
 
-### Returns the result of `crash message`.
-### :returns: The resulting `Text` value.
 routine UserTerminationError.crash_message() -> Text
   return "Program was stopped by user."
 
 ### Defines the record `VerificationFailedError`.
-record VerificationFailedError obeys Crashable
+crashable VerificationFailedError
   pass
 
-### Returns the result of `crash message`.
-### :returns: The resulting `Text` value.
 routine VerificationFailedError.crash_message() -> Text
   return "A verification check failed."
 
 ### Defines the record `LogicBreachedError`.
-record LogicBreachedError obeys Crashable
+crashable LogicBreachedError
   pass
 
-### Returns the result of `crash message`.
-### :returns: The resulting `Text` value.
 routine LogicBreachedError.crash_message() -> Text
   return "A logic breach was detected."
 
 ### Defines the record `KeyNotFoundError`.
-record KeyNotFoundError obeys Crashable
+crashable KeyNotFoundError
   key: Text
 
 ### Returns the result of `crash message`.

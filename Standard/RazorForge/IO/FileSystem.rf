@@ -39,7 +39,7 @@ routine create_dir!(path: Text)
   var cstr = CStr(from: path)
   var result = rf_fs_create_dir(cstr, cstr.count().S32())
   if result == -1
-    throw IOError(message: f"Cannot create directory: {path}")
+    throw IOError(description: f"Cannot create directory: {path}")
   return
 
 ### Performs `create dir all` on this value.
@@ -49,7 +49,7 @@ routine create_dir_all!(path: Text)
   var cstr = CStr(from: path)
   var result = rf_fs_create_dir_all(cstr, cstr.count().S32())
   if result == -1
-    throw IOError(message: f"Cannot create directories: {path}")
+    throw IOError(description: f"Cannot create directories: {path}")
   return
 
 # ============================================================================
@@ -65,7 +65,7 @@ routine copy!(source: Text, destination: Text)
   var dst_cstr = CStr(from: destination)
   var result = rf_fs_copy(src_cstr, src_cstr.count().S32(), dst_cstr, dst_cstr.count().S32())
   if result == -1
-    throw IOError(message: f"Cannot copy '{source}' to '{destination}'")
+    throw IOError(description: f"Cannot copy '{source}' to '{destination}'")
   return
 
 ### Performs `move` on this value.
@@ -77,7 +77,7 @@ routine move!(source: Text, destination: Text)
   var dst_cstr = CStr(from: destination)
   var result = rf_fs_move(src_cstr, src_cstr.count().S32(), dst_cstr, dst_cstr.count().S32())
   if result == -1
-    throw IOError(message: f"Cannot move '{source}' to '{destination}'")
+    throw IOError(description: f"Cannot move '{source}' to '{destination}'")
   return
 
 ### Performs `delete path` on this value.
@@ -87,7 +87,7 @@ routine delete_path!(path: Text)
   var cstr = CStr(from: path)
   var result = rf_fs_remove(cstr, cstr.count().S32())
   if result == -1
-    throw IOError(message: "Cannot remove path")
+    throw IOError(description: "Cannot remove path")
   return
 
 ### Performs `delete path all` on this value.
@@ -97,7 +97,7 @@ routine delete_path_all!(path: Text)
   var cstr = CStr(from: path)
   var result = rf_fs_remove_all(cstr, cstr.count().S32())
   if result == -1
-    throw IOError(message: "Cannot remove directory tree")
+    throw IOError(description: "Cannot remove directory tree")
   return
 
 # ============================================================================
@@ -114,7 +114,7 @@ routine join_path(a: Text, b: Text) -> Text
   var ptr = rf_fs_join_path(a_cstr, a_cstr.count().S32(), b_cstr, b_cstr.count().S32())
   var len = rf_get_result_len()
   var bytes = Bytes(ptr: ptr, count: len)
-  return bytes.decode_as_utf8()
+  return bytes.decode_as_utf8_lossy()
 
 ### Returns the result of `parent path`.
 ### :param path: The `path` value.
@@ -124,7 +124,7 @@ routine parent_path(path: Text) -> Text
   var ptr = rf_fs_parent_path(cstr, cstr.count().S32())
   var len = rf_get_result_len()
   var bytes = Bytes(ptr: ptr, count: len)
-  return bytes.decode_as_utf8()
+  return bytes.decode_as_utf8_lossy()
 
 ### Returns the result of `file name`.
 ### :param path: The `path` value.
@@ -134,7 +134,7 @@ routine file_name(path: Text) -> Text
   var ptr = rf_fs_file_name(cstr, cstr.count().S32())
   var len = rf_get_result_len()
   var bytes = Bytes(ptr: ptr, count: len)
-  return bytes.decode_as_utf8()
+  return bytes.decode_as_utf8_lossy()
 
 ### Returns the result of `file stem`.
 ### :param path: The `path` value.
@@ -144,7 +144,7 @@ routine file_stem(path: Text) -> Text
   var ptr = rf_fs_file_stem(cstr, cstr.count().S32())
   var len = rf_get_result_len()
   var bytes = Bytes(ptr: ptr, count: len)
-  return bytes.decode_as_utf8()
+  return bytes.decode_as_utf8_lossy()
 
 ### Returns the result of `extension`.
 ### :param path: The `path` value.
@@ -154,7 +154,7 @@ routine extension(path: Text) -> Text
   var ptr = rf_fs_extension(cstr, cstr.count().S32())
   var len = rf_get_result_len()
   var bytes = Bytes(ptr: ptr, count: len)
-  return bytes.decode_as_utf8()
+  return bytes.decode_as_utf8_lossy()
 
 # ============================================================================
 # Path resolution (OS calls, failable)
@@ -169,9 +169,9 @@ routine absolute_path!(path: Text) -> Text
   var ptr = rf_fs_absolute_path(cstr, cstr.count().S32())
   var len = rf_get_result_len()
   if ptr.is_none()
-    throw IOError(message: f"Cannot resolve absolute path: {path}")
+    throw IOError(description: f"Cannot resolve absolute path: {path}")
   var bytes = Bytes(ptr: ptr, count: len)
-  return bytes.decode_as_utf8()
+  return bytes.decode_as_utf8_lossy()
 
 ### Returns the result of `canonical path`.
 ### :param path: The `path` value.
@@ -182,9 +182,9 @@ routine canonical_path!(path: Text) -> Text
   var ptr = rf_fs_canonical_path(cstr, cstr.count().S32())
   var len = rf_get_result_len()
   if ptr.is_none()
-    throw IOError(message: f"Cannot resolve canonical path: {path}")
+    throw IOError(description: f"Cannot resolve canonical path: {path}")
   var bytes = Bytes(ptr: ptr, count: len)
-  return bytes.decode_as_utf8()
+  return bytes.decode_as_utf8_lossy()
 
 # ============================================================================
 # Permissions
@@ -219,5 +219,5 @@ routine set_readonly!(path: Text, readonly: Bool = true)
   var cstr = CStr(from: path)
   var result = rf_fs_set_readonly(cstr, cstr.count().S32(), readonly)
   if result == -1
-    throw IOError(message: f"Cannot set readonly on: {path}")
+    throw IOError(description: f"Cannot set readonly on: {path}")
   return

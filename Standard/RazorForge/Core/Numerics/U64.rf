@@ -22,7 +22,7 @@ preset U64_ONE: U64 = 1_u64
 ### :throws: May throw {IntegerOverflowError}.
 routine U64.$create!(from: S8) -> U64
   if from < 0_s8
-    throw IntegerOverflowError(f"Cannot convert {from} to U64: value out of range [{U64_MIN}, {U64_MAX}]")
+    throw IntegerOverflowError()
   return sext[S8, U64](from)
 
 ### Implements the wired routine behavior for this value.
@@ -31,7 +31,7 @@ routine U64.$create!(from: S8) -> U64
 ### :throws: May throw {IntegerOverflowError}.
 routine U64.$create!(from: S16) -> U64
   if from < 0_s16
-    throw IntegerOverflowError(f"Cannot convert {from} to U64: value out of range [{U64_MIN}, {U64_MAX}]")
+    throw IntegerOverflowError()
   return sext[S16, U64](from)
 
 ### Implements the wired routine behavior for this value.
@@ -40,7 +40,7 @@ routine U64.$create!(from: S16) -> U64
 ### :throws: May throw {IntegerOverflowError}.
 routine U64.$create!(from: S32) -> U64
   if from < 0_s32
-    throw IntegerOverflowError(f"Cannot convert {from} to U64: value out of range [{U64_MIN}, {U64_MAX}]")
+    throw IntegerOverflowError()
   return sext[S32, U64](from)
 
 ### Implements the wired routine behavior for this value.
@@ -49,7 +49,7 @@ routine U64.$create!(from: S32) -> U64
 ### :throws: May throw {IntegerOverflowError}.
 routine U64.$create!(from: S64) -> U64
   if from < 0_s64
-    throw IntegerOverflowError(f"Cannot convert {from} to U64: value out of range [{U64_MIN}, {U64_MAX}]")
+    throw IntegerOverflowError()
   return bitcast[S64, U64](from)
 
 ### Implements the wired routine behavior for this value.
@@ -58,7 +58,7 @@ routine U64.$create!(from: S64) -> U64
 ### :throws: May throw {IntegerOverflowError}.
 routine U64.$create!(from: S128) -> U64
   if not (0_s128 <= from <= 18446744073709551615_s128)
-    throw IntegerOverflowError(f"Cannot convert {from} to U64: value out of range [{U64_MIN}, {U64_MAX}]")
+    throw IntegerOverflowError()
   return trunc[S128, U64](from)
 
 ### Implements the wired routine behavior for this value.
@@ -91,7 +91,7 @@ routine U64.$create(from: U64) -> U64
 ### :throws: May throw {IntegerOverflowError}.
 routine U64.$create!(from: U128) -> U64
   if from > 18446744073709551615_u128
-    throw IntegerOverflowError(f"Cannot convert {from} to U64: value out of range [{U64_MIN}, {U64_MAX}]")
+    throw IntegerOverflowError()
   return trunc[U128, U64](from)
 
 ### Implements the wired routine behavior for this value.
@@ -140,28 +140,63 @@ routine U64.$create!(from: D128) -> U64
 # Arithmetic Operations (trapping on overflow by default)
 # ============================================================================
 
+### Returns the sum and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(U64, Bool)` value.
+routine U64.add_with_overflow(you: U64) -> (U64, Bool)
+  return uadd_with_overflow[U64](me, you)
+
+### Returns the difference and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(U64, Bool)` value.
+routine U64.sub_with_overflow(you: U64) -> (U64, Bool)
+  return usub_with_overflow[U64](me, you)
+
+### Returns the product and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(U64, Bool)` value.
+routine U64.mul_with_overflow(you: U64) -> (U64, Bool)
+  return umul_with_overflow[U64](me, you)
+
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U64` value.
 routine U64.$add!(you: U64) -> U64
-  return add[U64](me, you)
+  var result = me.add_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U64` value.
 routine U64.$sub!(you: U64) -> U64
-  return sub[U64](me, you)
+  var result = me.sub_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U64` value.
 routine U64.$mul!(you: U64) -> U64
-  return mul[U64](me, you)
+  var result = me.mul_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
+
+### Returns the product of this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U64` value.
+routine U64.$mul(you: U64) -> U64
+  return me.$mul!(you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U64` value.
 routine U64.$floordiv!(you: U64) -> U64
+  if you == 0
+    throw DivisionByZeroError()
   return udiv[U64](me, you)
 
 ### Implements the wired routine behavior for this value.
@@ -196,6 +231,40 @@ routine U64.$mul_wrap(you: U64) -> U64
   return mul[U64](me, you)
 
 # ============================================================================
+# Unchecked Arithmetic (+!, -!, *!, //!, %!)
+# ============================================================================
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U64` value.
+routine U64.$add_unchecked(you: U64) -> U64
+  return add_nuw[U64](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U64` value.
+routine U64.$sub_unchecked(you: U64) -> U64
+  return sub_nuw[U64](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U64` value.
+routine U64.$mul_unchecked(you: U64) -> U64
+  return mul_nuw[U64](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U64` value.
+routine U64.$floordiv_unchecked(you: U64) -> U64
+  return udiv[U64](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U64` value.
+routine U64.$mod_unchecked(you: U64) -> U64
+  return urem[U64](me, you)
+
+# ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
 # ============================================================================
 
@@ -224,22 +293,38 @@ routine U64.$mul_clamp(you: U64) -> U64
 # Power Operations (**)
 # ============================================================================
 
+### Returns the power result and whether it overflowed.
+### :param exp: The exponent value.
+### :returns: The resulting `(U64, Bool)` value.
+### :throws: May throw {IndeterminateResultError}.
+routine U64.pow_with_overflow!(exp: U64) -> (U64, Bool)
+  var result: U64 = 1
+  var base: U64 = me
+  var e: U32 = exp
+  var overflow = false
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  while e > 0
+    if (e & 1) == 1
+      var mul_result = result.mul_with_overflow(base)
+      result = mul_result.item0
+      overflow = overflow or mul_result.item1
+    e = e >> 1_u32
+    if e > 0
+      var square_result = base.mul_with_overflow(base)
+      base = square_result.item0
+      overflow = overflow or square_result.item1
+  return (result, overflow)
+
 ### Implements the wired routine behavior for this value.
 ### :param exp: The exponent value.
 ### :returns: The resulting `U64` value.
 ### :throws: May throw {IndeterminateResultError}.
 routine U64.$pow!(exp: U64) -> U64
-  var result: U64 = 1
-  var base: U64 = me
-  var e: U32 = exp
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
-  while e > 0
-    if (e & 1) == 1
-      result = mul[U64](result, base)
-    base = mul[U64](base, base)
-    e = e >> 1
-  return result
+  var result = me.pow_with_overflow!(exp)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param exp: The exponent value.
@@ -253,9 +338,10 @@ routine U64.$pow_wrap!(exp: U64) -> U64
     throw IndeterminateResultError()
   while e > 0
     if (e & 1) == 1
-      result = mul[U64](result, base)
-    base = mul[U64](base, base)
-    e = e >> 1
+      result = result.$mul_wrap(base)
+    e = e >> 1_u32
+    if e > 0
+      base = base.$mul_wrap(base)
   return result
 
 ### Implements the wired routine behavior for this value.
@@ -272,7 +358,7 @@ routine U64.$pow_clamp!(exp: U64) -> U64
     if (e & 1) == 1
       result = result.$mul_clamp(base)
     base = base.$mul_clamp(base)
-    e = e >> 1
+    e = e >> 1_u32
   return result
 
 # ============================================================================
@@ -282,24 +368,24 @@ routine U64.$pow_clamp!(exp: U64) -> U64
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U64` value.
-routine U64.$and(you: U64) -> U64
+routine U64.$bitand(you: U64) -> U64
   return bit_and[U64](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U64` value.
-routine U64.$or(you: U64) -> U64
+routine U64.$bitor(you: U64) -> U64
   return bit_or[U64](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U64` value.
-routine U64.$xor(you: U64) -> U64
+routine U64.$bitxor(you: U64) -> U64
   return xor[U64](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :returns: The resulting `U64` value.
-routine U64.$not() -> U64
+routine U64.$bitnot() -> U64
   return xor[U64](me, -1)
 
 # ============================================================================
@@ -311,25 +397,25 @@ routine U64.$not() -> U64
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U64` value.
 routine U64.$ashl(bits: U32) -> U64
-  return shl[U64](me, bits)
+  return shl[U64](me, U64(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U64` value.
 routine U64.$ashr(bits: U32) -> U64
-  return lshr[U64](me, bits)
+  return lshr[U64](me, U64(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U64` value.
 routine U64.$lshl(bits: U32) -> U64
-  return shl[U64](me, bits)
+  return shl[U64](me, U64(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U64` value.
 routine U64.$lshr(bits: U32) -> U64
-  return lshr[U64](me, bits)
+  return lshr[U64](me, U64(bits))
 
 # ============================================================================
 # Comparison Operations
@@ -386,7 +472,7 @@ routine U64.count_ones() -> U64
 ### Returns the number of stored values.
 ### :returns: The resulting `U64` value.
 routine U64.count_zeros() -> U64
-  return 64_u64 - me.count_ones()
+  return 64_u64 -% me.count_ones()
 
 ### Returns the result of `leading zeros`.
 ### :returns: The resulting `U64` value.
@@ -401,12 +487,12 @@ routine U64.trailing_zeros() -> U64
 ### Returns the result of `leading ones`.
 ### :returns: The resulting `U64` value.
 routine U64.leading_ones() -> U64
-  return me.$not().leading_zeros()
+  return me.$bitnot().leading_zeros()
 
 ### Returns the result of `trailing ones`.
 ### :returns: The resulting `U64` value.
 routine U64.trailing_ones() -> U64
-  return me.$not().trailing_zeros()
+  return me.$bitnot().trailing_zeros()
 
 ### Returns the result of `reverse bits`.
 ### :returns: The resulting `U64` value.
@@ -421,14 +507,14 @@ routine U64.swap_bytes() -> U64
 ### Returns true if this value is power of two.
 ### :returns: The resulting `Bool` value.
 routine U64.is_power_of_two() -> Bool
-  return me != 0_u64 and (me & (me - 1_u64)) == 0_u64
+  return me != 0_u64 and (me & (me -% 1_u64)) == 0_u64
 
 ### Returns the result of `rotate left`.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U64` value.
 routine U64.rotate_left(bits: U32) -> U64
   var left = shl[U64](me, bits)
-  var right = lshr[U64](me, 64_u32 - bits)
+  var right = lshr[U64](me, 64_u32 -% bits)
   return bit_or[U64](left, right)
 
 ### Returns the result of `rotate right`.
@@ -436,7 +522,7 @@ routine U64.rotate_left(bits: U32) -> U64
 ### :returns: The resulting `U64` value.
 routine U64.rotate_right(bits: U32) -> U64
   var right = lshr[U64](me, bits)
-  var left = shl[U64](me, 64_u32 - bits)
+  var left = shl[U64](me, 64_u32 -% bits)
   return bit_or[U64](right, left)
 
 # ============================================================================
@@ -476,8 +562,8 @@ routine U64.$represent() -> Text
   var digits = List[Character]()
   var remaining = me
   while remaining > 0u64
-    var digit = U8(remaining % 10u64)
-    remaining = remaining // 10u64
+    var digit = U8(urem[U64](remaining, 10u64))
+    remaining = udiv[U64](remaining, 10u64)
     digits.add_first(Character(0x0030u32 + U32(digit)))
   return Text(from_list: digits)
 

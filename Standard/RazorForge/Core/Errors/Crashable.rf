@@ -1,8 +1,16 @@
 module Core
 
 ### Defines the protocol `Crashable`.
+### `crashable` is the type-category keyword, while `Crashable` is the
+### protocol name for that category, analogous to `record` and `RecordType`.
+### Crashables are used by `throw`, `Result[T]`, and `Lookup[T]`.
 protocol Crashable
   ### Returns the result of `crash message`.
   ### :returns: The resulting `Text` value.
   @readonly
   routine Me.crash_message() -> Text
+  ### Returns the result of `crash title`.
+  ### The title should be the crash type rendered in sentence case.
+  ### :returns: The resulting `Text` value.
+  @readonly
+  routine Me.crash_title() -> Text

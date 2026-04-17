@@ -10,6 +10,7 @@ module BuilderService
 choice TypeKind
   RECORD
   ENTITY
+  CRASHABLE
   CHOICE
   VARIANT
   FLAGS

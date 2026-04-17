@@ -48,7 +48,7 @@ routine S64.$create(from: S64) -> S64
 ### :throws: May throw {IntegerOverflowError}.
 routine S64.$create!(from: S128) -> S64
   if not (S64_MIN <= from <= S64_MAX)
-    throw IntegerOverflowError(f"Cannot convert {from} to S64: value out of range [{S64_MIN}, {S64_MAX}]")
+    throw IntegerOverflowError()
   return trunc[S128, S64](from)
 
 ### Implements the wired routine behavior for this value.
@@ -75,7 +75,7 @@ routine S64.$create!(from: U32) -> S64
 ### :throws: May throw {IntegerOverflowError}.
 routine S64.$create!(from: U64) -> S64
   if from > 9223372036854775807_u64
-    throw IntegerOverflowError(f"Cannot convert {from} to S64: value out of range [{S64_MIN}, {S64_MAX}]")
+    throw IntegerOverflowError()
   return bitcast[U64, S64](from)
 
 ### Implements the wired routine behavior for this value.
@@ -84,7 +84,7 @@ routine S64.$create!(from: U64) -> S64
 ### :throws: May throw {IntegerOverflowError}.
 routine S64.$create!(from: U128) -> S64
   if from > 9223372036854775807_u128
-    throw IntegerOverflowError(f"Cannot convert {from} to S64: value out of range [{S64_MIN}, {S64_MAX}]")
+    throw IntegerOverflowError()
   return trunc[U128, S64](from)
 
 ### Implements the wired routine behavior for this value.
@@ -135,23 +135,50 @@ routine S64.$create!(from: D128) -> S64
 # Arithmetic Operations
 # ============================================================================
 
+### Returns the sum and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(S64, Bool)` value.
+routine S64.add_with_overflow(you: S64) -> (S64, Bool)
+  return sadd_with_overflow[S64](me, you)
+
+### Returns the difference and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(S64, Bool)` value.
+routine S64.sub_with_overflow(you: S64) -> (S64, Bool)
+  return ssub_with_overflow[S64](me, you)
+
+### Returns the product and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(S64, Bool)` value.
+routine S64.mul_with_overflow(you: S64) -> (S64, Bool)
+  return smul_with_overflow[S64](me, you)
+
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S64` value.
 routine S64.$add!(you: S64) -> S64
-  return add[S64](me, you)
+  var result = me.add_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S64` value.
 routine S64.$sub!(you: S64) -> S64
-  return sub[S64](me, you)
+  var result = me.sub_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S64` value.
 routine S64.$mul!(you: S64) -> S64
-  return mul[S64](me, you)
+  var result = me.mul_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
@@ -160,13 +187,28 @@ routine S64.$mul!(you: S64) -> S64
 routine S64.$floordiv!(you: S64) -> S64
   if you == 0
     throw DivisionByZeroError()
-  return div_wrapping[S64](me, you)
+  if me == S64_MIN and you == -1_s64
+    throw IntegerOverflowError()
+  var quotient = sdiv[S64](me, you)
+  var remainder = srem[S64](me, you)
+  if remainder < 0_s64
+    if you > 0_s64
+      return quotient - 1_s64
+    return quotient + 1_s64
+  return quotient
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S64` value.
 routine S64.$mod!(you: S64) -> S64
-  return rem_wrapping[S64](me, you)
+  if you == 0
+    throw DivisionByZeroError()
+  var remainder = srem[S64](me, you)
+  if remainder < 0_s64
+    if you > 0_s64
+      return remainder + you
+    return remainder - you
+  return remainder
 
 ### Implements the wired routine behavior for this value.
 ### :returns: The resulting `S64` value.
@@ -194,6 +236,51 @@ routine S64.$sub_wrap(you: S64) -> S64
 ### :returns: The resulting `S64` value.
 routine S64.$mul_wrap(you: S64) -> S64
   return mul[S64](me, you)
+
+# ============================================================================
+# Unchecked Arithmetic (+!, -!, *!, //!, %!)
+# ============================================================================
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S64` value.
+routine S64.$add_unchecked(you: S64) -> S64
+  return add_nsw[S64](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S64` value.
+routine S64.$sub_unchecked(you: S64) -> S64
+  return sub_nsw[S64](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S64` value.
+routine S64.$mul_unchecked(you: S64) -> S64
+  return mul_nsw[S64](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S64` value.
+routine S64.$floordiv_unchecked(you: S64) -> S64
+  var quotient = sdiv[S64](me, you)
+  var remainder = srem[S64](me, you)
+  if remainder < 0_s64
+    if you > 0_s64
+      return quotient - 1_s64
+    return quotient + 1_s64
+  return quotient
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S64` value.
+routine S64.$mod_unchecked(you: S64) -> S64
+  var remainder = srem[S64](me, you)
+  if remainder < 0_s64
+    if you > 0_s64
+      return remainder + you
+    return remainder - you
+  return remainder
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
@@ -226,23 +313,40 @@ routine S64.$mul_clamp(you: S64) -> S64
 # Power Operations (**)
 # ============================================================================
 
+### Returns the power result and whether it overflowed.
+### :param exp: The exponent value.
+### :returns: The resulting `(S64, Bool)` value.
+### :throws: May throw {IndeterminateResultError}.
+routine S64.pow_with_overflow!(exp: S64) -> (S64, Bool)
+  var result: S64 = 1
+  var base: S64 = me
+  var e: S64 = exp
+  var overflow = false
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  if exp < 0
+    return NegativeExponentError(exp)
+  while e > 0
+    if (e & 1) == 1
+      var mul_result = result.mul_with_overflow(base)
+      result = mul_result.item0
+      overflow = overflow or mul_result.item1
+    e = e >> 1_u32
+    if e > 0
+      var square_result = base.mul_with_overflow(base)
+      base = square_result.item0
+      overflow = overflow or square_result.item1
+  return (result, overflow)
+
 ### Implements the wired routine behavior for this value.
 ### :param exp: The exponent value.
 ### :returns: The resulting `S64` value.
 ### :throws: May throw {IndeterminateResultError}.
 routine S64.$pow!(exp: S64) -> S64
-  var result: S64 = 1
-  var base: S64 = me
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
-  if exp < 0
-    return NegativeExponentError(exp)
-  while exp > 0
-    if (exp & 1) == 1
-      result = mul[S64](result, base)
-    base = mul[S64](base, base)
-    exp = exp >> 1
-  return result
+  var result = me.pow_with_overflow!(exp)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param exp: The exponent value.
@@ -251,15 +355,17 @@ routine S64.$pow!(exp: S64) -> S64
 routine S64.$pow_wrap!(exp: S64) -> S64
   var result: S64 = 1
   var base: S64 = me
+  var e: U32 = exp
   if me == 0 and exp == 0
     throw IndeterminateResultError()
-  if exp < 0
+  if exp < 0_s64
     return NegativeExponentError(exp)
-  while exp > 0
-    if (exp & 1) == 1
-      result = mul[S64](result, base)
-    base = mul[S64](base, base)
-    exp = exp >> 1
+  while e > 0
+    if (e & 1) == 1
+      result = result.$mul_wrap(base)
+    e = e >> 1_u32
+    if e > 0
+      base = base.$mul_wrap(base)
   return result
 
 ### Implements the wired routine behavior for this value.
@@ -276,8 +382,9 @@ routine S64.$pow_clamp!(exp: S64) -> S64
   while exp > 0
     if (exp & 1) == 1
       result = result.$mul_clamp(base)
-    base = base.$mul_clamp(base)
-    exp = exp >> 1
+    exp = exp >> 1_u32
+    if exp > 0
+      base = base.$mul_clamp(base)
   return result
 
 # ============================================================================
@@ -315,25 +422,25 @@ routine S64.$bitnot() -> S64
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `S64` value.
 routine S64.$ashl(bits: U32) -> S64
-  return shl[S64](me, bits)
+  return shl[S64](me, S64(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `S64` value.
 routine S64.$ashr(bits: U32) -> S64
-  return ashr[S64](me, bits)
+  return ashr[S64](me, S64(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `S64` value.
 routine S64.$lshl(bits: U32) -> S64
-  return shl[S64](me, bits)
+  return shl[S64](me, S64(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `S64` value.
 routine S64.$lshr(bits: U32) -> S64
-  return lshr[S64](me, bits)
+  return lshr[S64](me, S64(bits))
 
 # ============================================================================
 # Comparison Operations
@@ -401,7 +508,7 @@ routine S64.count_ones() -> S64
 ### Returns the number of stored values.
 ### :returns: The resulting `S64` value.
 routine S64.count_zeros() -> S64
-  return 64_s64 - me.count_ones()
+  return 64_s64 -% me.count_ones()
 
 ### Returns the result of `leading zeros`.
 ### :returns: The resulting `S64` value.
@@ -491,7 +598,7 @@ routine S64.$represent() -> Text
     return "0"
   if me > 0s64
     return U64(me).$represent()
-  return "-" + U64(0u64 - U64(me)).$represent()
+  return "-" + U64(0u64 -% U64(me)).$represent()
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.

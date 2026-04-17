@@ -76,7 +76,7 @@ routine S128.$create!(from: U64) -> S128
 ### :throws: May throw {IntegerOverflowError}.
 routine S128.$create!(from: U128) -> S128
   if from > 170141183460469231731687303715884105727_u128
-    throw IntegerOverflowError(f"Cannot convert {from} to S128: value out of range [{S128_MIN}, {S128_MAX}]")
+    throw IntegerOverflowError()
   return bitcast[U128, S128](from)
 
 ### Implements the wired routine behavior for this value.
@@ -124,23 +124,51 @@ routine S128.$create!(from: D128) -> S128
 # ============================================================================
 # Arithmetic Operations (trapping on overflow by default)
 # ============================================================================
+
+### Returns the sum and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(S128, Bool)` value.
+routine S128.add_with_overflow(you: S128) -> (S128, Bool)
+  return sadd_with_overflow[S128](me, you)
+
+### Returns the difference and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(S128, Bool)` value.
+routine S128.sub_with_overflow(you: S128) -> (S128, Bool)
+  return ssub_with_overflow[S128](me, you)
+
+### Returns the product and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(S128, Bool)` value.
+routine S128.mul_with_overflow(you: S128) -> (S128, Bool)
+  return smul_with_overflow[S128](me, you)
+
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S128` value.
 routine S128.$add!(you: S128) -> S128
-  return add[S128](me, you)
+  var result = me.add_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S128` value.
 routine S128.$sub!(you: S128) -> S128
-  return sub[S128](me, you)
+  var result = me.sub_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S128` value.
 routine S128.$mul!(you: S128) -> S128
-  return mul[S128](me, you)
+  var result = me.mul_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
@@ -149,13 +177,28 @@ routine S128.$mul!(you: S128) -> S128
 routine S128.$floordiv!(you: S128) -> S128
   if you == 0
     throw DivisionByZeroError()
-  return sdiv[S128](me, you)
+  if me == S128_MIN and you == -1_s128
+    throw IntegerOverflowError()
+  var quotient = sdiv[S128](me, you)
+  var remainder = srem[S128](me, you)
+  if remainder < 0_s128
+    if you > 0_s128
+      return quotient - 1_s128
+    return quotient + 1_s128
+  return quotient
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S128` value.
 routine S128.$mod!(you: S128) -> S128
-  return srem[S128](me, you)
+  if you == 0
+    throw DivisionByZeroError()
+  var remainder = srem[S128](me, you)
+  if remainder < 0_s128
+    if you > 0_s128
+      return remainder + you
+    return remainder - you
+  return remainder
 
 ### Implements the wired routine behavior for this value.
 ### :returns: The resulting `S128` value.
@@ -183,6 +226,51 @@ routine S128.$sub_wrap(you: S128) -> S128
 ### :returns: The resulting `S128` value.
 routine S128.$mul_wrap(you: S128) -> S128
   return mul[S128](me, you)
+
+# ============================================================================
+# Unchecked Arithmetic (+!, -!, *!, //!, %!)
+# ============================================================================
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S128` value.
+routine S128.$add_unchecked(you: S128) -> S128
+  return add_nsw[S128](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S128` value.
+routine S128.$sub_unchecked(you: S128) -> S128
+  return sub_nsw[S128](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S128` value.
+routine S128.$mul_unchecked(you: S128) -> S128
+  return mul_nsw[S128](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S128` value.
+routine S128.$floordiv_unchecked(you: S128) -> S128
+  var quotient = sdiv[S128](me, you)
+  var remainder = srem[S128](me, you)
+  if remainder < 0_s128
+    if you > 0_s128
+      return quotient - 1_s128
+    return quotient + 1_s128
+  return quotient
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S128` value.
+routine S128.$mod_unchecked(you: S128) -> S128
+  var remainder = srem[S128](me, you)
+  if remainder < 0_s128
+    if you > 0_s128
+      return remainder + you
+    return remainder - you
+  return remainder
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
@@ -220,24 +308,40 @@ routine S128.$mul_clamp(you: S128) -> S128
 # Power Operations (**)
 # ============================================================================
 
-### Implements the wired routine behavior for this value.
+### Returns the power result and whether it overflowed.
 ### :param exp: The exponent value.
-### :returns: The resulting `S128` value.
+### :returns: The resulting `(S128, Bool)` value.
 ### :throws: May throw {IndeterminateResultError}.
-routine S128.$pow!(exp: S128) -> S128
+routine S128.pow_with_overflow!(exp: S128) -> (S128, Bool)
   var result: S128 = 1
   var base: S128 = me
   var e: U32 = exp
+  var overflow = false
   if me == 0 and exp == 0
     throw IndeterminateResultError()
   if exp < 0
     return NegativeExponentError(exp)
   while e > 0
     if (e & 1) == 1
-      result = mul[S128](result, base)
-    base = mul[S128](base, base)
-    e = e >> 1
-  return result
+      var mul_result = result.mul_with_overflow(base)
+      result = mul_result.item0
+      overflow = overflow or mul_result.item1
+    e = e >> 1_u32
+    if e > 0
+      var square_result = base.mul_with_overflow(base)
+      base = square_result.item0
+      overflow = overflow or square_result.item1
+  return (result, overflow)
+
+### Implements the wired routine behavior for this value.
+### :param exp: The exponent value.
+### :returns: The resulting `S128` value.
+### :throws: May throw {IndeterminateResultError}.
+routine S128.$pow!(exp: S128) -> S128
+  var result = me.pow_with_overflow!(exp)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param exp: The exponent value.
@@ -249,13 +353,14 @@ routine S128.$pow_wrap!(exp: S128) -> S128
   var e: U32 = exp
   if me == 0 and exp == 0
     throw IndeterminateResultError()
-  if exp < 0
+  if exp < 0_s128
     return NegativeExponentError(exp)
   while e > 0
     if (e & 1) == 1
-      result = mul[S128](result, base)
-    base = mul[S128](base, base)
-    e = e >> 1
+      result = result.$mul_wrap(base)
+    e = e >> 1_u32
+    if e > 0
+      base = base.$mul_wrap(base)
   return result
 
 ### Implements the wired routine behavior for this value.
@@ -273,8 +378,9 @@ routine S128.$pow_clamp!(exp: S128) -> S128
   while e > 0
     if (e & 1) == 1
       result = result.$mul_clamp(base)
-    base = base.$mul_clamp(base)
-    e = e >> 1
+    e = e >> 1_u32
+    if e > 0
+      base = base.$mul_clamp(base)
   return result
 
 # ============================================================================
@@ -312,25 +418,25 @@ routine S128.$bitnot() -> S128
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `S128` value.
 routine S128.$ashl(bits: U32) -> S128
-  return shl[S128](me, bits)
+  return shl[S128](me, S128(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `S128` value.
 routine S128.$ashr(bits: U32) -> S128
-  return ashr[S128](me, bits)
+  return ashr[S128](me, S128(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `S128` value.
 routine S128.$lshl(bits: U32) -> S128
-  return shl[S128](me, bits)
+  return shl[S128](me, S128(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `S128` value.
 routine S128.$lshr(bits: U32) -> S128
-  return lshr[S128](me, bits)
+  return lshr[S128](me, S128(bits))
 
 # ============================================================================
 # Comparison Operations
@@ -392,7 +498,7 @@ routine S128.count_ones() -> S128
 ### Returns the number of stored values.
 ### :returns: The resulting `S128` value.
 routine S128.count_zeros() -> S128
-  return 128_s128 - me.count_ones()
+  return 128_s128 -% me.count_ones()
 
 ### Returns the result of `leading zeros`.
 ### :returns: The resulting `S128` value.
@@ -473,7 +579,7 @@ routine S128.$represent() -> Text
     return "0"
   if me > 0s128
     return U128(me).$represent()
-  return "-" + U128(0u128 - U128(me)).$represent()
+  return "-" + U128(0u128 -% U128(me)).$represent()
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.

@@ -38,11 +38,11 @@ routine normalize_moment(seconds: S64, nanoseconds: S64) -> Moment
   var ns = nanoseconds
 
   if ns >= NS_PER_SECOND
-    s = s + ns // NS_PER_SECOND
-    ns = ns % NS_PER_SECOND
+    s = s +% sdiv[S64](ns, NS_PER_SECOND)
+    ns = srem[S64](ns, NS_PER_SECOND)
   elseif ns < 0_s64
-    var borrow = (0_s64 - ns - 1_s64) // NS_PER_SECOND + 1_s64
-    s = s - borrow
+    var borrow = sdiv[S64](0_s64 -% ns -% 1_s64, NS_PER_SECOND) +% 1_s64
+    s = s -% borrow
     ns = ns + borrow *% NS_PER_SECOND
 
   return Moment(seconds: s, nanoseconds: U32(ns))
@@ -61,64 +61,64 @@ routine ymd_to_days(year: S64, month: S64, day: S64) -> S64
   var y = year
   var m = month
   if m <= 2_s64
-    y = y - 1_s64
+    y = y -% 1_s64
 
   # Era-based calculation for proleptic Gregorian
-  var era_year = y - (y // 400_s64) *% 400_s64
-  var era = y // 400_s64
+  var era_year = y -% sdiv[S64](y, 400_s64) *% 400_s64
+  var era = sdiv[S64](y, 400_s64)
 
   # Day of year within March-based year
   if m > 2_s64
-    m = m - 3_s64
+    m = m -% 3_s64
   else
-    m = m + 9_s64
-  var doy = (153_s64 *% m + 2_s64) // 5_s64 + day - 1_s64
+    m = m +% 9_s64
+  var doy = sdiv[S64](153_s64 *% m +% 2_s64, 5_s64) +% day -% 1_s64
 
   # Day of era
-  var doe = era_year *% 365_s64 + era_year // 4_s64 - era_year // 100_s64 + doy
+  var doe = era_year *% 365_s64 +% sdiv[S64](era_year, 4_s64) -% sdiv[S64](era_year, 100_s64) +% doy
 
   # Days since epoch (epoch = 1970-01-01 = era 4, doe 719468 from era 0)
-  return era *% 146097_s64 + doe - 719468_s64
+  return era *% 146097_s64 +% doe -% 719468_s64
 
 ### Returns the result of `days to year`.
 ### :param days_since_epoch: The `days_since_epoch` value.
 ### :returns: The resulting `S64` value.
 routine days_to_year(days_since_epoch: S64) -> S64
-  var z = days_since_epoch + 719468_s64
-  var era = (if z >= 0_s64 then z else z - 146096_s64) // 146097_s64
-  var doe = z - era *% 146097_s64
-  var yoe = (doe - doe // 1460_s64 + doe // 36524_s64 - doe // 146096_s64) // 365_s64
-  var y = yoe + era *% 400_s64
-  var doy = doe - (365_s64 *% yoe + yoe // 4_s64 - yoe // 100_s64)
-  var mp = (5_s64 *% doy + 2_s64) // 153_s64
-  var m = mp + (if mp < 10_s64 then 3_s64 else 0_s64 - 9_s64)
+  var z = days_since_epoch +% 719468_s64
+  var era = sdiv[S64](if z >= 0_s64 then z else z -% 146096_s64, 146097_s64)
+  var doe = z -% era *% 146097_s64
+  var yoe = sdiv[S64](doe -% sdiv[S64](doe, 1460_s64) +% sdiv[S64](doe, 36524_s64) -% sdiv[S64](doe, 146096_s64), 365_s64)
+  var y = yoe +% era *% 400_s64
+  var doy = doe -% (365_s64 *% yoe +% sdiv[S64](yoe, 4_s64) -% sdiv[S64](yoe, 100_s64))
+  var mp = sdiv[S64](5_s64 *% doy +% 2_s64, 153_s64)
+  var m = mp +% (if mp < 10_s64 then 3_s64 else 0_s64 -% 9_s64)
   if m <= 2_s64
-    return y + 1_s64
+    return y +% 1_s64
   return y
 
 ### Returns the result of `days to month`.
 ### :param days_since_epoch: The `days_since_epoch` value.
 ### :returns: The resulting `S64` value.
 routine days_to_month(days_since_epoch: S64) -> S64
-  var z = days_since_epoch + 719468_s64
-  var era = (if z >= 0_s64 then z else z - 146096_s64) // 146097_s64
-  var doe = z - era *% 146097_s64
-  var yoe = (doe - doe // 1460_s64 + doe // 36524_s64 - doe // 146096_s64) // 365_s64
-  var doy = doe - (365_s64 *% yoe + yoe // 4_s64 - yoe // 100_s64)
-  var mp = (5_s64 *% doy + 2_s64) // 153_s64
-  return mp + (if mp < 10_s64 then 3_s64 else 0_s64 - 9_s64)
+  var z = days_since_epoch +% 719468_s64
+  var era = sdiv[S64](if z >= 0_s64 then z else z -% 146096_s64, 146097_s64)
+  var doe = z -% era *% 146097_s64
+  var yoe = sdiv[S64](doe -% sdiv[S64](doe, 1460_s64) +% sdiv[S64](doe, 36524_s64) -% sdiv[S64](doe, 146096_s64), 365_s64)
+  var doy = doe -% (365_s64 *% yoe +% sdiv[S64](yoe, 4_s64) -% sdiv[S64](yoe, 100_s64))
+  var mp = sdiv[S64](5_s64 *% doy +% 2_s64, 153_s64)
+  return mp +% (if mp < 10_s64 then 3_s64 else 0_s64 -% 9_s64)
 
 ### Returns the result of `days to day`.
 ### :param days_since_epoch: The `days_since_epoch` value.
 ### :returns: The resulting `S64` value.
 routine days_to_day(days_since_epoch: S64) -> S64
-  var z = days_since_epoch + 719468_s64
-  var era = (if z >= 0_s64 then z else z - 146096_s64) // 146097_s64
-  var doe = z - era *% 146097_s64
-  var yoe = (doe - doe // 1460_s64 + doe // 36524_s64 - doe // 146096_s64) // 365_s64
-  var doy = doe - (365_s64 *% yoe + yoe // 4_s64 - yoe // 100_s64)
-  var mp = (5_s64 *% doy + 2_s64) // 153_s64
-  return doy - (153_s64 *% mp + 2_s64) // 5_s64 + 1_s64
+  var z = days_since_epoch +% 719468_s64
+  var era = sdiv[S64](if z >= 0_s64 then z else z -% 146096_s64, 146097_s64)
+  var doe = z -% era *% 146097_s64
+  var yoe = sdiv[S64](doe -% sdiv[S64](doe, 1460_s64) +% sdiv[S64](doe, 36524_s64) -% sdiv[S64](doe, 146096_s64), 365_s64)
+  var doy = doe -% (365_s64 *% yoe +% sdiv[S64](yoe, 4_s64) -% sdiv[S64](yoe, 100_s64))
+  var mp = sdiv[S64](5_s64 *% doy +% 2_s64, 153_s64)
+  return doy -% sdiv[S64](153_s64 *% mp +% 2_s64, 5_s64) +% 1_s64
 
 # ============================================================================
 # Creators
@@ -134,7 +134,7 @@ routine days_to_day(days_since_epoch: S64) -> S64
 ### :returns: The resulting `Moment` value.
 routine Moment.$create(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64) -> Moment
   var d = ymd_to_days(year, month, day)
-  var s = d *% SECONDS_PER_DAY + hour *% SECONDS_PER_HOUR + minute *% SECONDS_PER_MINUTE + second
+  var s = d *% SECONDS_PER_DAY +% hour *% SECONDS_PER_HOUR +% minute *% SECONDS_PER_MINUTE +% second
   return Moment(seconds: s, nanoseconds: 0_u32)
 
 ### Returns the result of `epoch`.
@@ -162,29 +162,29 @@ routine Moment.now() -> Moment
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.year() -> S64
-  return days_to_year(me.seconds // SECONDS_PER_DAY)
+  return days_to_year(sdiv[S64](me.seconds, SECONDS_PER_DAY))
 
 ### Returns the result of `month`.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.month() -> S64
-  return days_to_month(me.seconds // SECONDS_PER_DAY)
+  return days_to_month(sdiv[S64](me.seconds, SECONDS_PER_DAY))
 
 ### Returns the result of `day`.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.day() -> S64
-  return days_to_day(me.seconds // SECONDS_PER_DAY)
+  return days_to_day(sdiv[S64](me.seconds, SECONDS_PER_DAY))
 
 ### Returns the result of `day of week`.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.day_of_week() -> S64
   # 1970-01-01 was Thursday (3). Result: 0=Monday .. 6=Sunday
-  var days = me.seconds // SECONDS_PER_DAY
-  var dow = (days + 3_s64) % 7_s64
+  var days = sdiv[S64](me.seconds, SECONDS_PER_DAY)
+  var dow = srem[S64](days +% 3_s64, 7_s64)
   if dow < 0_s64
-    return dow + 7_s64
+    return dow +% 7_s64
   return dow
 
 # ============================================================================
@@ -195,37 +195,37 @@ routine Moment.day_of_week() -> S64
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.hour() -> S64
-  return (me.seconds % SECONDS_PER_DAY) // SECONDS_PER_HOUR
+  return sdiv[S64](srem[S64](me.seconds, SECONDS_PER_DAY), SECONDS_PER_HOUR)
 
 ### Returns the result of `minute`.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.minute() -> S64
-  return (me.seconds % SECONDS_PER_HOUR) // SECONDS_PER_MINUTE
+  return sdiv[S64](srem[S64](me.seconds, SECONDS_PER_HOUR), SECONDS_PER_MINUTE)
 
 ### Returns the result of `second`.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.second() -> S64
-  return me.seconds % SECONDS_PER_MINUTE
+  return srem[S64](me.seconds, SECONDS_PER_MINUTE)
 
 ### Returns the result of `millisecond`.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.millisecond() -> S64
-  return S64(me.nanoseconds) // NS_PER_MILLISECOND
+  return sdiv[S64](S64(me.nanoseconds), NS_PER_MILLISECOND)
 
 ### Returns the result of `microsecond`.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.microsecond() -> S64
-  return (S64(me.nanoseconds) % NS_PER_MILLISECOND) // NS_PER_MICROSECOND
+  return sdiv[S64](srem[S64](S64(me.nanoseconds), NS_PER_MILLISECOND), NS_PER_MICROSECOND)
 
 ### Returns the result of `nanosecond`.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.nanosecond() -> S64
-  return S64(me.nanoseconds) % NS_PER_MICROSECOND
+  return srem[S64](S64(me.nanoseconds), NS_PER_MICROSECOND)
 
 # ============================================================================
 # Conversion
@@ -241,7 +241,7 @@ routine Moment.timestamp() -> S64
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.timestamp_ms() -> S64
-  return me.seconds *% 1_000_s64 + S64(me.nanoseconds) // NS_PER_MILLISECOND
+  return me.seconds *% 1_000_s64 +% sdiv[S64](S64(me.nanoseconds), NS_PER_MILLISECOND)
 
 # ============================================================================
 # Arithmetic with Duration
@@ -252,7 +252,7 @@ routine Moment.timestamp_ms() -> S64
 ### :returns: The resulting `Moment` value.
 @readonly
 routine Moment.add_duration(duration: Duration) -> Moment
-  return normalize_moment(me.seconds + duration.total_seconds(), S64(me.nanoseconds) + S64(duration.subsec_nanoseconds()))
+  return normalize_moment(me.seconds +% duration.total_seconds(), S64(me.nanoseconds) +% S64(duration.subsec_nanoseconds()))
 
 ### Returns the result of `subtract duration`.
 ### :param duration: The `duration` value.
@@ -266,7 +266,7 @@ routine Moment.subtract_duration(duration: Duration) -> Moment
 ### :returns: The resulting `Duration` value.
 @readonly
 routine Moment.elapsed_since(earlier: Moment) -> Duration
-  return normalize_duration(me.seconds - earlier.seconds, S64(me.nanoseconds) - S64(earlier.nanoseconds))
+  return normalize_duration(me.seconds -% earlier.seconds, S64(me.nanoseconds) -% S64(earlier.nanoseconds))
 
 ### Returns the sum of this value and the other value.
 ### :param you: The other value to compare against.

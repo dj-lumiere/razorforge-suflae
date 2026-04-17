@@ -40,7 +40,7 @@ routine S32.$create(from: S32) -> S32
 ### :throws: May throw {IntegerOverflowError}.
 routine S32.$create!(from: S64) -> S32
   unless S64(S32_MIN) <= from <= S64(S32_MAX)
-    throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
+    throw IntegerOverflowError()
   return trunc[S64, S32](from)
 
 ### Implements the wired routine behavior for this value.
@@ -49,7 +49,7 @@ routine S32.$create!(from: S64) -> S32
 ### :throws: May throw {IntegerOverflowError}.
 routine S32.$create!(from: S128) -> S32
   unless S128(S32_MIN) <= from <= S128(S32_MAX)
-    throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
+    throw IntegerOverflowError()
   return trunc[S128, S32](from)
 
 ### Creates a new instance.
@@ -70,7 +70,7 @@ routine S32.$create(from: U16) -> S32
 ### :throws: May throw {IntegerOverflowError}.
 routine S32.$create!(from: U32) -> S32
   unless from <= U32(S32_MAX)
-    throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
+    throw IntegerOverflowError()
   return bitcast[U32, S32](from)
 
 ### Implements the wired routine behavior for this value.
@@ -79,7 +79,7 @@ routine S32.$create!(from: U32) -> S32
 ### :throws: May throw {IntegerOverflowError}.
 routine S32.$create!(from: U64) -> S32
   unless from <= U64(S32_MAX)
-    throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
+    throw IntegerOverflowError()
   return trunc[U64, S32](from)
 
 ### Implements the wired routine behavior for this value.
@@ -88,7 +88,7 @@ routine S32.$create!(from: U64) -> S32
 ### :throws: May throw {IntegerOverflowError}.
 routine S32.$create!(from: U128) -> S32
   unless from <= U128(S32_MAX)
-    throw IntegerOverflowError(f"Cannot convert {from} to S32: value out of range [{S32_MIN}, {S32_MAX}]")
+    throw IntegerOverflowError()
   return trunc[U128, S32](from)
 
 ### Implements the wired routine behavior for this value.
@@ -139,23 +139,50 @@ routine S32.$create!(from: D128) -> S32
 # Arithmetic Operations
 # ============================================================================
 
+### Returns the sum and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(S32, Bool)` value.
+routine S32.add_with_overflow(you: S32) -> (S32, Bool)
+  return sadd_with_overflow[S32](me, you)
+
+### Returns the difference and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(S32, Bool)` value.
+routine S32.sub_with_overflow(you: S32) -> (S32, Bool)
+  return ssub_with_overflow[S32](me, you)
+
+### Returns the product and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(S32, Bool)` value.
+routine S32.mul_with_overflow(you: S32) -> (S32, Bool)
+  return smul_with_overflow[S32](me, you)
+
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S32` value.
 routine S32.$add!(you: S32) -> S32
-  return add[S32](me, you)
+  var result = me.add_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S32` value.
 routine S32.$sub!(you: S32) -> S32
-  return sub[S32](me, you)
+  var result = me.sub_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S32` value.
 routine S32.$mul!(you: S32) -> S32
-  return mul[S32](me, you)
+  var result = me.mul_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
@@ -164,13 +191,28 @@ routine S32.$mul!(you: S32) -> S32
 routine S32.$floordiv!(you: S32) -> S32
   if you == 0
     throw DivisionByZeroError()
-  return sdiv[S32](me, you)
+  if me == S32_MIN and you == -1_s32
+    throw IntegerOverflowError()
+  var quotient = sdiv[S32](me, you)
+  var remainder = srem[S32](me, you)
+  if remainder < 0_s32
+    if you > 0_s32
+      return quotient - 1_s32
+    return quotient + 1_s32
+  return quotient
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S32` value.
 routine S32.$mod!(you: S32) -> S32
-  return srem[S32](me, you)
+  if you == 0
+    throw DivisionByZeroError()
+  var remainder = srem[S32](me, you)
+  if remainder < 0_s32
+    if you > 0_s32
+      return remainder + you
+    return remainder - you
+  return remainder
 
 ### Implements the wired routine behavior for this value.
 ### :returns: The resulting `S32` value.
@@ -198,6 +240,51 @@ routine S32.$sub_wrap(you: S32) -> S32
 ### :returns: The resulting `S32` value.
 routine S32.$mul_wrap(you: S32) -> S32
   return mul[S32](me, you)
+
+# ============================================================================
+# Unchecked Arithmetic (+!, -!, *!, //!, %!)
+# ============================================================================
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S32` value.
+routine S32.$add_unchecked(you: S32) -> S32
+  return add_nsw[S32](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S32` value.
+routine S32.$sub_unchecked(you: S32) -> S32
+  return sub_nsw[S32](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S32` value.
+routine S32.$mul_unchecked(you: S32) -> S32
+  return mul_nsw[S32](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S32` value.
+routine S32.$floordiv_unchecked(you: S32) -> S32
+  var quotient = sdiv[S32](me, you)
+  var remainder = srem[S32](me, you)
+  if remainder < 0_s32
+    if you > 0_s32
+      return quotient - 1_s32
+    return quotient + 1_s32
+  return quotient
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `S32` value.
+routine S32.$mod_unchecked(you: S32) -> S32
+  var remainder = srem[S32](me, you)
+  if remainder < 0_s32
+    if you > 0_s32
+      return remainder + you
+    return remainder - you
+  return remainder
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
@@ -230,24 +317,40 @@ routine S32.$mul_clamp(you: S32) -> S32
 # Power Operations (**)
 # ============================================================================
 
-### Implements the wired routine behavior for this value.
+### Returns the power result and whether it overflowed.
 ### :param exp: The exponent value.
-### :returns: The resulting `S32` value.
+### :returns: The resulting `(S32, Bool)` value.
 ### :throws: May throw {IndeterminateResultError}.
-routine S32.$pow!(exp: S32) -> S32
+routine S32.pow_with_overflow!(exp: S32) -> (S32, Bool)
   var result: S32 = 1
   var base: S32 = me
   var e: U32 = exp
+  var overflow = false
   if me == 0 and exp == 0
     throw IndeterminateResultError()
   if exp < 0
     return NegativeExponentError(exp)
   while e > 0
     if (e & 1) == 1
-      result = mul[S32](result, base)
-    base = mul[S32](base, base)
-    e = e >> 1
-  return result
+      var mul_result = result.mul_with_overflow(base)
+      result = mul_result.item0
+      overflow = overflow or mul_result.item1
+    e = e >> 1_u32
+    if e > 0
+      var square_result = base.mul_with_overflow(base)
+      base = square_result.item0
+      overflow = overflow or square_result.item1
+  return (result, overflow)
+
+### Implements the wired routine behavior for this value.
+### :param exp: The exponent value.
+### :returns: The resulting `S32` value.
+### :throws: May throw {IndeterminateResultError}.
+routine S32.$pow!(exp: S32) -> S32
+  var result = me.pow_with_overflow!(exp)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param exp: The exponent value.
@@ -259,13 +362,14 @@ routine S32.$pow_wrap!(exp: S32) -> S32
   var e: U32 = exp
   if me == 0 and exp == 0
     throw IndeterminateResultError()
-  if exp < 0
+  if exp < 0_s32
     return NegativeExponentError(exp)
   while e > 0
     if (e & 1) == 1
-      result = mul[S32](result, base)
-    base = mul[S32](base, base)
-    e = e >> 1
+      result = result.$mul_wrap(base)
+    e = e >> 1_u32
+    if e > 0
+      base = base.$mul_wrap(base)
   return result
 
 ### Implements the wired routine behavior for this value.
@@ -283,8 +387,9 @@ routine S32.$pow_clamp!(exp: S32) -> S32
   while e > 0
     if (e & 1) == 1
       result = result.$mul_clamp(base)
-    base = base.$mul_clamp(base)
-    e = e >> 1
+    e = e >> 1_u32
+    if e > 0
+      base = base.$mul_clamp(base)
   return result
 
 # ============================================================================
@@ -402,7 +507,7 @@ routine S32.count_ones() -> S32
 ### Returns the number of stored values.
 ### :returns: The resulting `S32` value.
 routine S32.count_zeros() -> S32
-  return 32_s32 - me.count_ones()
+  return 32_s32 -% me.count_ones()
 
 ### Returns the result of `leading zeros`.
 ### :returns: The resulting `S32` value.
@@ -492,7 +597,7 @@ routine S32.$represent() -> Text
     return "0"
   if me > 0s32
     return U32(me).$represent()
-  return "-" + U32(0u32 - U32(me)).$represent()
+  return "-" + U32(0u32 -% U32(me)).$represent()
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.

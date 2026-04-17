@@ -16,7 +16,7 @@ module Collections
 ### Defines the entity `BitList`.
 entity BitList obeys Iterable[Bool]
   ### Stores the data member value.
-  secret data: Snatched[Byte]    # Heap-allocated byte array (8 bits per Byte)
+  secret data: Snatched[U8]      # Heap-allocated byte array (8 bits per U8)
   ### Stores the count member value.
   secret count: U64              # Current number of bits
   ### Stores the capacity member value.
@@ -31,7 +31,7 @@ entity BitList obeys Iterable[Bool]
 routine BitList.$create() -> BitList
   # Create empty bit list with default capacity
   return BitList(
-    data: snatched_none[Byte](),
+    data: snatched_none[U8](),
     count: 0u64,
     capacity: 0u64
   )
@@ -41,9 +41,9 @@ routine BitList.$create() -> BitList
 ### :returns: The resulting `BitList` value.
 routine BitList.$create(capacity: U64) -> BitList
   # Create bit list with pre-allocated capacity (in bits)
-  var byte_size = (capacity + 7u64) // 8u64  # Round up to nearest byte
+  var byte_size = udiv[U64](capacity +% 7u64, 8u64)  # Round up to nearest byte
   return BitList(
-    data: Snatched[Byte](rf_allocate_dynamic(byte_size)),
+    data: Snatched[U8](rf_allocate_dynamic(byte_size)),
     count: 0u64,
     capacity: capacity
   )
@@ -66,24 +66,24 @@ routine BitList.$create(values...: Bool) -> BitList
 ### :returns: The resulting `U64` value.
 routine BitList.byte_index(bit_index: U64) -> U64
   # Get the byte index for a given bit index
-  return bit_index // 8u64
+  return udiv[U64](bit_index, 8u64)
 
 ### Returns the result of `bit offset`.
 ### :param bit_index: The `bit_index` value.
 ### :returns: The resulting `U8` value.
 routine BitList.bit_offset(bit_index: U64) -> U8
   # Get the bit position within the byte (0-7)
-  return U8(bit_index % 8u64)
+  return U8(urem[U64](bit_index, 8u64))
 
 ### Returns the bit internal component.
 ### :param index: The zero-based position to use.
 ### :returns: The resulting `Bool` value.
 routine BitList.get_bit_internal(index: U64) -> Bool
   # Internal: get bit without bounds checking
-  var byte_idx = index // 8u64
-  var bit_off = U8(index % 8u64)
-  var ptr = Snatched[Byte](me.data.get_address() + byte_idx)
-  var byte_val = U8(ptr.read())
+  var byte_idx = udiv[U64](index, 8u64)
+  var bit_off = U8(urem[U64](index, 8u64))
+  var ptr = Snatched[U8](me.data.get_address() +% Address(byte_idx))
+  var byte_val = ptr.read()
   return (byte_val & (1u8 << bit_off)) != 0u8
 
 ### Sets the bit internal component.
@@ -91,17 +91,17 @@ routine BitList.get_bit_internal(index: U64) -> Bool
 ### :param value: The value to use.
 routine BitList.set_bit_internal(index: U64, value: Bool)
   # Internal: set bit without bounds checking
-  var byte_idx = index // 8u64
-  var bit_off = U8(index % 8u64)
-  var byte_ptr = Snatched[Byte](me.data.get_address() + byte_idx)
-  var byte_val = U8(byte_ptr.read())
+  var byte_idx = udiv[U64](index, 8u64)
+  var bit_off = U8(urem[U64](index, 8u64))
+  var byte_ptr = Snatched[U8](me.data.get_address() +% Address(byte_idx))
+  var byte_val = byte_ptr.read()
 
   if value
     # Set bit to 1
-    byte_ptr.write(Byte(byte_val | (1u8 << bit_off)))
+    byte_ptr.write(byte_val | (1u8 << bit_off))
   else
     # Set bit to 0
-    byte_ptr.write(Byte(byte_val & ~(1u8 << bit_off)))
+    byte_ptr.write(byte_val & ~(1u8 << bit_off))
   return
 
 # ============================================================================
@@ -131,11 +131,11 @@ routine BitList.add_last(value: Bool)
   # Append bit to end - O(1) amortized
   if me.count >= me.capacity
     # Need to grow - double capacity (in bits)
-    var new_capacity = if me.capacity == 0u64 then 64u64 else me.capacity * 2u64  # Start with 64 bits (8 bytes)
+    var new_capacity = if me.capacity == 0u64 then 64u64 else me.capacity *% 2u64  # Start with 64 bits (8 bytes)
     me.reserve(new_capacity)
 
   me.set_bit_internal(me.count, value)
-  me.count = me.count + 1u64
+  me.count = me.count +% 1u64
   return
 
 ### Removes a value using `remove_last`.
@@ -155,13 +155,13 @@ routine BitList.remove_last!() -> Bool
 routine BitList.reserve(new_capacity: U64)
   # Ensure capacity is at least new_capacity (in bits)
   if new_capacity > me.capacity
-    var new_byte_size = (new_capacity + 7u64) / 8u64
-    var new_data = Snatched[Byte]( rf_allocate_dynamic(new_byte_size))
+    var new_byte_size = udiv[U64](new_capacity +% 7u64, 8u64)
+    var new_data = Snatched[U8](rf_allocate_dynamic(new_byte_size))
     rf_set_bytes_at(new_data.get_address(), 0u8, new_byte_size)  # Initialize all bits to 0
 
     # Copy existing bytes
     if me.count > 0u64
-      var copy_bytes = (me.count + 7u64) / 8u64
+      var copy_bytes = udiv[U64](me.count +% 7u64, 8u64)
       rf_copy_bytes_at(new_data.get_address(), me.data.get_address(), copy_bytes)
 
     me.data = new_data
@@ -234,7 +234,7 @@ needs I obeys Integral
 ### :param value: The value to use.
 routine BitList.set_all(value: Bool)
   # Set all bits to the same value
-  var byte_count = (me.count + 7u64) / 8u64
+  var byte_count = udiv[U64](me.count +% 7u64, 8u64)
   var fill_byte = if value then 0xFFu8 else 0x00u8
   rf_set_bytes_at(me.data.get_address(), fill_byte, byte_count)
   return
@@ -255,13 +255,13 @@ needs I obeys Integral
 ### Executes `flip all`.
 routine BitList.flip_all()
   # Toggle all bits
-  var byte_count = (me.count + 7u64) / 8u64
+  var byte_count = udiv[U64](me.count +% 7u64, 8u64)
   var i = 0u64
   while i < byte_count
-    var byte_ptr = Snatched[Byte](me.data.get_address() + i)
-    var byte_val = U8(byte_ptr.read())
-    byte_ptr.write(Byte(~byte_val))
-    i = i + 1u64
+    var byte_ptr = Snatched[U8](me.data.get_address() +% Address(i))
+    var byte_val = byte_ptr.read()
+    byte_ptr.write(~byte_val)
+    i = i +% 1u64
   return
 
 ### Returns the number of stored values.
@@ -272,15 +272,15 @@ routine BitList.count_ones() -> U64
   var i = 0u64
   while i < me.count
     if me.get_bit_internal(i)
-      count = count + 1u64
-    i = i + 1u64
+      count = count +% 1u64
+    i = i +% 1u64
   return count
 
 ### Returns the number of stored values.
 ### :returns: The resulting `U64` value.
 routine BitList.count_zeros() -> U64
   # Count number of bits set to 0
-  return me.count - me.count_ones()
+  return me.count -% me.count_ones()
 
 ### Returns true if `any` applies.
 ### :returns: The resulting `Bool` value.
@@ -290,7 +290,7 @@ routine BitList.any() -> Bool
   while i < me.count
     if me.get_bit_internal(i)
       return true
-    i = i + 1u64
+    i = i +% 1u64
   return false
 
 ### Returns true if `all` applies.
@@ -301,7 +301,7 @@ routine BitList.all() -> Bool
   while i < me.count
     if not me.get_bit_internal(i)
       return false
-    i = i + 1u64
+    i = i +% 1u64
   return true
 
 ### Returns true if `none` applies.
@@ -326,7 +326,7 @@ routine BitList.$bitand(other: BitList) -> BitList
   while i < min_count
     var val = me.get_bit_internal(i) and other.get_bit_internal(i)
     result.add_last(val)
-    i = i + 1u64
+    i = i +% 1u64
   return result
 
 ### Returns the result of the requested bitwise operation.
@@ -342,7 +342,7 @@ routine BitList.$bitor(other: BitList) -> BitList
     var a = if i < me.count then me.get_bit_internal(i) else false
     var b = if i < other.count then other.get_bit_internal(i) else false
     result.add_last(a or b)
-    i = i + 1u64
+    i = i +% 1u64
   return result
 
 ### Returns the result of the requested bitwise operation.
@@ -358,7 +358,7 @@ routine BitList.$bitxor(other: BitList) -> BitList
     var a = if i < me.count then me.get_bit_internal(i) else false
     var b = if i < other.count then other.get_bit_internal(i) else false
     result.add_last(a ^ b)
-    i = i + 1u64
+    i = i +% 1u64
   return result
 
 ### Returns the result of the requested bitwise operation.
@@ -370,39 +370,39 @@ routine BitList.$bitnot() -> BitList
   var i = 0u64
   while i < me.count
     result.add_last(not me.get_bit_internal(i))
-    i = i + 1u64
+    i = i +% 1u64
   return result
 
 # ============================================================================
 # Iteration Support
 # ============================================================================
 
-### Creates an iterator for this value.
-### :returns: The resulting `BitListIterator` value.
 @readonly
 routine BitList.$iter() -> BitListIterator
-  return BitListIterator(
-    list: me,
-    index: 0u64
-  )
+  danger!
+    return BitListIterator(data: me.data, count: me.count(), index: 0u64)
 
 ### Defines the entity `BitListIterator`.
 entity BitListIterator obeys Iterator[Bool]
-  ### Stores the list member value.
-  list: BitList
-  ### Stores the index member value.
-  index: U64
+  ### Raw pointer into the source bit list's packed byte buffer.
+  secret data: Snatched[U8]
+  ### Bit count captured at iterator creation.
+  secret count: U64
+  ### Current bit position.
+  secret index: U64
 
-### Returns the next value from this iterator.
-### :returns: The resulting `Bool` value.
-### :absent: Returns absent when the requested value is unavailable.
 @writable
-emitting routine BitListIterator.$next!() -> Bool
-  if me.index >= me.list.count()
+routine BitListIterator.$next!() -> Bool
+  if me.index >= me.count
     absent
-  emit me.list[me.index]
+  danger!
+    var byte_idx = me.index >> 3u32
+    var bit_idx = U8(me.index & 7u64)
+    var ptr = Snatched[U8](me.data.get_address() +% Address(byte_idx))
+    var byte_val = ptr.read()
+    var _result = (byte_val >> bit_idx) & 1u8 != 0u8
   me.index = me.index + 1u64
-  return
+  return _result
 
 # ============================================================================
 # Utility Operations
@@ -433,7 +433,7 @@ routine BitList.reverse() -> BitList
   var result = BitList(me.count)
   var i = me.count
   while i > 0u64
-    i = i - 1u64
+    i = i -% 1u64
     result.add_last(me.get_bit_internal(i))
   return result
 
@@ -451,7 +451,7 @@ routine BitList.$eq(other: BitList) -> Bool
   while i < me.count
     if me.get_bit_internal(i) != other.get_bit_internal(i)
       return false
-    i = i + 1u64
+    i = i +% 1u64
   return true
 
 # ============================================================================
@@ -465,7 +465,9 @@ routine BitList.to_u8!() -> U8
   # Convert first 8 bits to U8 (absent if fewer than 8 bits)
   if me.count < 8u64
     absent
-  return U8(me.data.read())
+  danger!
+    var _result = me.data.read()
+  return _result
 
 ### Converts this value to u16.
 ### :returns: The resulting `U16` value.
@@ -474,9 +476,11 @@ routine BitList.to_u16!() -> U16
   # Convert first 16 bits to U16 (absent if fewer than 16 bits)
   if me.count < 16u64
     absent
-  var low = U16(U8(me.data.read()))
-  var high = U16(U8(Snatched[Byte](me.data.get_address() + 1u64).read()))
-  return low | (high << 8u16)
+  danger!
+    var low = U32(me.data.read())
+    var high = U32(Snatched[U8](me.data.get_address() +% Address(1u64)).read())
+    var _result = U16(low | (high << 8u32))
+  return _result
 
 ### Converts this value to u32.
 ### :returns: The resulting `U32` value.
@@ -485,13 +489,14 @@ routine BitList.to_u32!() -> U32
   # Convert first 32 bits to U32 (absent if fewer than 32 bits)
   if me.count < 32u64
     absent
-  var result = 0u32
-  var i = 0u64
-  while i < 4u64
-    var byte_val = U32(U8(Snatched[Byte](me.data.get_address() + i).read()))
-    result = result | (byte_val << U32(i * 8u64))
-    i = i + 1u64
-  return result
+  danger!
+    var _result = 0u32
+    var i = 0u64
+    while i < 4u64
+      var byte_val = U32(Snatched[U8](me.data.get_address() +% Address(i)).read())
+      _result = _result | (byte_val << (U32(U8(i)) *% 8u32))
+      i = i +% 1u64
+  return _result
 
 ### Converts this value to u64.
 ### :returns: The resulting `U64` value.
@@ -500,13 +505,14 @@ routine BitList.to_u64!() -> U64
   # Convert first 64 bits to U64 (absent if fewer than 64 bits)
   if me.count < 64u64
     absent
-  var result = 0u64
-  var i = 0u64
-  while i < 8u64
-    var byte_val = U64(U8(Snatched[Byte](me.data.get_address() + i).read()))
-    result = result | (byte_val << (i * 8u64))
-    i = i + 1u64
-  return result
+  danger!
+    var _result = 0u64
+    var i = 0u64
+    while i < 8u64
+      var byte_val = U64(Snatched[U8](me.data.get_address() +% Address(i)).read())
+      _result = _result | (byte_val << (i *% 8u64))
+      i = i +% 1u64
+  return _result
 
 ### Creates a value from u8.
 ### :param value: The value to use.
@@ -553,7 +559,7 @@ routine BitList.$represent() -> Text
     if i > 0u64
       result = result + ", "
     result = result + v.$represent()
-    i = i + 1u64
+    i = i +% 1u64
   result = result + "]"
   return result
 
@@ -566,7 +572,7 @@ routine BitList.$diagnose() -> Text
     if i > 0u64
       result = result + ", "
     result = result + v.$represent()
-    i = i + 1u64
+    i = i +% 1u64
   result = result + "])"
   return result
 
@@ -579,5 +585,5 @@ routine BitList.from_u64(value: U64) -> BitList
   var i = 0u64
   while i < 64u64
     result.add_last((value & (1u64 << i)) != 0u64)
-    i = i + 1u64
+    i = i +% 1u64
   return result

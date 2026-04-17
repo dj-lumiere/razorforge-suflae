@@ -28,16 +28,14 @@ entity SkipWhileEmitter[T] obeys Iterator[T]
 
 ### Returns the next value from this iterator.
 ### :returns: The resulting `T` value.
-emitting routine SkipWhileEmitter[T].$next!() -> T
+routine SkipWhileEmitter[T].$next!() -> T
   if me.skipping
     loop
       var item = me.source.$next!()
       if not me.predicate(item)
         me.skipping = false
-        emit item
-        return
-  emit me.source.$next!()
-  return
+        return item
+  return me.source.$next!()
 
 ### Returns the result of `skip while`.
 ### :param predicate: The `predicate` value.

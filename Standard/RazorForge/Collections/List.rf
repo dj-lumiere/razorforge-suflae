@@ -27,7 +27,7 @@ routine List[T].$create() -> List[T]
 ### :param capacity: The capacity value to use.
 ### :returns: The resulting `List[T]` value.
 routine List[T].$create(capacity: U64) -> List[T]
-  var byte_size = capacity * T.data_size()
+  var byte_size = T.data_size() * capacity
   var ptr = rf_allocate_dynamic(byte_size)
   return List[T](
     data: Snatched[T](ptr),
@@ -63,12 +63,12 @@ routine List[T].is_empty() -> Bool
 ### :param value: The value to use.
 routine List[T].add_last(value: T)
   if me.count >= me.capacity
-    var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity * 2u64
+    var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity *% 2u64
     me.reserve(new_capacity)
 
-  var byte_offset = me.count * T.data_size()
+  var byte_offset = T.data_size() * me.count
   me.data.offset(byte_offset).write(value)
-  me.count = me.count + 1u64
+  me.count = me.count +% 1u64
   return
 
 ### Removes a value using `remove_last`.
@@ -79,7 +79,7 @@ routine List[T].remove_last!() -> T
     absent
 
   me.count = me.count - 1u64
-  var byte_offset = me.count * T.data_size()
+  var byte_offset = T.data_size() * me.count
   return me.data.offset(byte_offset).read()
 
 ### Adds a value using `add_first`.
@@ -104,11 +104,11 @@ routine List[T].add_at!(index: U64, value: T)
   if index < me.count
     danger!
       var elem_size = T.data_size()
-      var src_ptr = me.data.offset(index * elem_size)
-      var dst_ptr = me.data.offset((index + 1u64) * elem_size)
-      rf_copy_bytes_at(src_ptr.get_address(), dst_ptr.get_address(), (me.count - index) * elem_size)
+      var src_ptr = me.data.offset(elem_size * index)
+      var dst_ptr = me.data.offset(elem_size * (index + 1u64))
+      rf_copy_bytes_at(src_ptr.get_address(), dst_ptr.get_address(), elem_size * (me.count - index))
 
-  me.data.offset(index * T.data_size()).write(value)
+  me.data.offset(T.data_size() * index).write(value)
   me.count = me.count + 1u64
   return
 
@@ -125,16 +125,16 @@ routine List[T].remove_at!(index: U64) -> T
   if index >= me.count
     throw IndexOutOfBoundsError(index: index.U64(), count: me.count.U64())
 
-  var byte_offset = index * T.data_size()
+  var byte_offset = T.data_size() * index
   var value = me.data.offset(byte_offset).read()
 
   # Shift elements left via memmove
   if index < me.count - 1u64
     danger!
       var elem_size = T.data_size()
-      var src_ptr = me.data.offset((index + 1u64) * elem_size)
-      var dst_ptr = me.data.offset(index * elem_size)
-      rf_copy_bytes_at(src_ptr.get_address(), dst_ptr.get_address(), (me.count - 1u64 - index) * elem_size)
+      var src_ptr = me.data.offset(elem_size * (index + 1u64))
+      var dst_ptr = me.data.offset(elem_size * index)
+      rf_copy_bytes_at(src_ptr.get_address(), dst_ptr.get_address(), elem_size * (me.count - 1u64 - index))
 
   me.count = me.count - 1u64
   return value
@@ -152,7 +152,7 @@ needs I obeys Integral
   var idx = index.U64()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx.U64(), count: me.count.U64())
-  var byte_offset = idx * T.data_size()
+  var byte_offset = T.data_size() * idx
   return me.data.offset(byte_offset).read()
 
 ### Implements the wired routine behavior for this value.
@@ -164,7 +164,7 @@ needs I obeys Integral
   var idx = index.U64()
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx.U64(), count: me.count.U64())
-  var byte_offset = idx * T.data_size()
+  var byte_offset = T.data_size() * idx
   me.data.offset(byte_offset).write(value)
   return
 
@@ -178,7 +178,7 @@ needs I obeys Integral
 routine List[T].$getitem![I](index: BackIndex[I]) -> T
 needs I obeys Integral
   var idx = index.resolve(me.count)
-  var byte_offset = idx * T.data_size()
+  var byte_offset = T.data_size() * idx
   return me.data.offset(byte_offset).read()
 
 ### Implements the wired routine behavior for this value.
@@ -187,7 +187,7 @@ needs I obeys Integral
 routine List[T].$setitem![I](index: BackIndex[I], value: T)
 needs I obeys Integral
   var idx = index.resolve(me.count)
-  var byte_offset = idx * T.data_size()
+  var byte_offset = T.data_size() * idx
   me.data.offset(byte_offset).write(value)
   return
 
@@ -199,13 +199,13 @@ needs I obeys Integral
 ### Caller must guarantee index < count.
 @inline
 routine List[T].get_raw(index: U64) -> T
-  return me.data.offset(index * T.data_size()).read()
+  return me.data.offset(T.data_size() * index).read()
 
 ### Sets the element at `index` without bounds checking.
 ### Caller must guarantee index < count.
 @inline
 routine List[T].set_raw(index: U64, value: T)
-  me.data.offset(index * T.data_size()).write(value)
+  me.data.offset(T.data_size() * index).write(value)
   return
 
 # ============================================================================
@@ -230,7 +230,7 @@ needs I obeys Integral
   loop
     if i >= e
       break
-    var byte_offset = i * T.data_size()
+    var byte_offset = T.data_size() * i
     result.add_last(me.data.offset(byte_offset).read())
     i = i + 1u64
 
@@ -254,7 +254,7 @@ needs I obeys Integral
   loop
     if i >= e
       break
-    var byte_offset = i * T.data_size()
+    var byte_offset = T.data_size() * i
     result.add_last(me.data.offset(byte_offset).read())
     i = i + 1u64
 
@@ -264,7 +264,7 @@ needs I obeys Integral
 ### :param new_capacity: The minimum capacity to reserve.
 routine List[T].reserve(new_capacity: U64)
   if new_capacity > me.capacity
-    var new_byte_size = new_capacity * T.data_size()
+    var new_byte_size = T.data_size() * new_capacity
 
     if me.data.is_none()
       danger!
@@ -290,28 +290,26 @@ routine List[T].clear()
 ### Defines the entity `ListEmitter`.
 ### :typeparam T: The value used for `T`.
 entity ListEmitter[T] obeys Iterator[T]
-  ### Stores the list member value.
-  secret list: List[T]
-  ### Stores the index member value.
+  ### Raw pointer into the source list's buffer.
+  secret data: Snatched[T]
+  ### Element count captured at iterator creation.
+  secret count: U64
+  ### Current position.
   secret index: U64
 
-### Creates an iterator for this value.
-### :returns: The resulting `ListEmitter[T]` value.
 @readonly
 routine List[T].$iter() -> ListEmitter[T]
-  return ListEmitter[T](list: me, index: 0u64)
+  danger!
+    return ListEmitter[T](data: me.data, count: me.count(), index: 0u64)
 
-### Returns the next value from this iterator.
-### :returns: The resulting `T` value.
-### :absent: Returns absent when the requested value is unavailable.
 @writable
-emitting routine ListEmitter[T].$next!() -> T
-  if me.index >= me.list.count()
+routine ListEmitter[T].$next!() -> T
+  if me.index >= me.count
     absent
-
-  emit me.list[me.index]
+  danger!
+    var _result = me.data.offset(T.data_size() * me.index).read()
   me.index = me.index + 1u64
-  return
+  return _result
 
 ### Returns whether this value contains `value`.
 ### :param value: The value to use.
@@ -322,7 +320,7 @@ routine List[T].$contains(value: T) -> Bool
   while i < me.count()
     if me[i] == value
       return true
-    i = i + 1u64
+    i = i +% 1u64
   return false
 
 ### Returns the textual representation of this value.
@@ -334,7 +332,7 @@ routine List[T].$represent() -> Text
     if i > 0u64
       result = result + ", "
     result = result + v.$represent()
-    i = i + 1u64
+    i = i +% 1u64
   result = result + "]"
   return result
 
@@ -347,7 +345,7 @@ routine List[T].$diagnose() -> Text
     if i > 0u64
       result = result + ", "
     result = result + v.$represent()
-    i = i + 1u64
+    i = i +% 1u64
   result = result + "])"
   return result
 
@@ -369,9 +367,9 @@ routine List[T].add_range!(source: List[T], from: U64, count: U64)
 
   danger!
     var elem_size = T.data_size()
-    var src_ptr = source.data.offset(from * elem_size)
-    var dst_ptr = me.data.offset(me.count * elem_size)
-    rf_copy_bytes_at(src_ptr.get_address(), dst_ptr.get_address(), count * elem_size)
+    var src_ptr = source.data.offset(elem_size * from)
+    var dst_ptr = me.data.offset(elem_size * me.count)
+    rf_copy_bytes_at(src_ptr.get_address(), dst_ptr.get_address(), elem_size * count)
 
   me.count = new_count
   return
@@ -392,4 +390,302 @@ routine List[T].truncate(new_count: U64)
   if new_count > me.count
     throw IndexOutOfBoundsError(index: new_count, count: me.count)
   me.count = new_count
+  return
+
+# ============================================================================
+# Sorting — iterative merge sort with insertion sort for small runs
+# ============================================================================
+
+### The minimum run size used by sort routines. Chunks of this size or
+### smaller are sorted with insertion sort before being merged.
+preset SORT_MIN_RUN: U64 = 32u64
+
+### Sorts the list in ascending order using the default `<` operator.
+### Uses an iterative bottom-up merge sort with insertion sort for small
+### runs (≤ 32 elements). Requires `T` to obey `Comparable`.
+### Stable: equal elements preserve their original order.
+routine List[T].sort()
+needs T obeys Comparable
+  if me.count <= 1u64
+    return
+
+  # Insertion sort small lists directly
+  if me.count <= SORT_MIN_RUN
+    me.insertion_sort(0u64, me.count)
+    return
+
+  # Phase 1: insertion sort each chunk of SORT_MIN_RUN
+  var i = 0u64
+  loop
+    if i >= me.count
+      break
+    var end = i + SORT_MIN_RUN
+    if end > me.count
+      end = me.count
+    me.insertion_sort(i, end)
+    i = i + SORT_MIN_RUN
+
+  # Phase 2: iterative bottom-up merge, doubling width each pass
+  var buffer = List[T](capacity: me.count)
+  buffer.count = me.count
+
+  var width = SORT_MIN_RUN
+  loop
+    if width >= me.count
+      break
+
+    var left = 0u64
+    loop
+      if left >= me.count
+        break
+
+      var mid = left + width
+      if mid > me.count
+        mid = me.count
+      var right = left + width *% 2u64
+      if right > me.count
+        right = me.count
+
+      if mid < right
+        me.merge_into(left, mid, right, buffer)
+
+      left = left + width *% 2u64
+
+    width = width *% 2u64
+  return
+
+### Sorts the list in ascending order using a custom comparator.
+### The comparator must return `true` when `a` should come before `b`.
+### Uses an iterative bottom-up merge sort with insertion sort for small
+### runs (≤ 32 elements). Stable: equal elements preserve their original order.
+### :param compare: A routine that takes two `T` values and returns `Bool`.
+routine List[T].sort_by(compare: Routine[(T, T), Bool])
+  if me.count <= 1u64
+    return
+
+  if me.count <= SORT_MIN_RUN
+    me.insertion_sort_by(0u64, me.count, compare)
+    return
+
+  var i = 0u64
+  loop
+    if i >= me.count
+      break
+    var end = i + SORT_MIN_RUN
+    if end > me.count
+      end = me.count
+    me.insertion_sort_by(i, end, compare)
+    i = i + SORT_MIN_RUN
+
+  var buffer = List[T](capacity: me.count)
+  buffer.count = me.count
+
+  var width = SORT_MIN_RUN
+  loop
+    if width >= me.count
+      break
+
+    var left = 0u64
+    loop
+      if left >= me.count
+        break
+
+      var mid = left + width
+      if mid > me.count
+        mid = me.count
+      var right = left + width *% 2u64
+      if right > me.count
+        right = me.count
+
+      if mid < right
+        me.merge_into_by(left, mid, right, buffer, compare)
+
+      left = left + width *% 2u64
+
+    width = width *% 2u64
+  return
+
+### Returns a new sorted copy of the list in ascending order.
+### The original list is not modified.
+### :returns: The resulting sorted `List[T]` value.
+routine List[T].sorted() -> List[T]
+needs T obeys Comparable
+  var copy = List[T](capacity: me.count)
+  copy.add_range!(me, 0u64, me.count)
+  copy.sort()
+  return copy
+
+### Returns a new sorted copy using a custom comparator.
+### The original list is not modified.
+### :param compare: A routine that takes two `T` values and returns `Bool`.
+### :returns: The resulting sorted `List[T]` value.
+routine List[T].sorted_by(compare: Routine[(T, T), Bool]) -> List[T]
+  var copy = List[T](capacity: me.count)
+  copy.add_range!(me, 0u64, me.count)
+  copy.sort_by(compare)
+  return copy
+
+### Reverses the order of elements in place.
+routine List[T].reverse()
+  if me.count <= 1u64
+    return
+
+  var lo = 0u64
+  var hi = me.count - 1u64
+  loop
+    if lo >= hi
+      break
+    var temp = me.get_raw(lo)
+    me.set_raw(lo, me.get_raw(hi))
+    me.set_raw(hi, temp)
+    lo = lo + 1u64
+    hi = hi - 1u64
+  return
+
+# ============================================================================
+# Sorting — internal helpers (secret)
+# ============================================================================
+
+### Insertion sorts the range [start, end) in place.
+### Used internally by sort routines for small runs.
+### :param start: The inclusive starting index.
+### :param end: The exclusive ending index.
+routine List[T].insertion_sort(start: U64, end: U64)
+needs T obeys Comparable
+  var i = start + 1u64
+  loop
+    if i >= end
+      break
+    var key = me.get_raw(i)
+    var j = i
+    loop
+      if j <= start
+        break
+      var prev = me.get_raw(j - 1u64)
+      if not (key < prev)
+        break
+      me.set_raw(j, prev)
+      j = j - 1u64
+    me.set_raw(j, key)
+    i = i + 1u64
+  return
+
+### Insertion sorts the range [start, end) using a custom comparator.
+### :param start: The inclusive starting index.
+### :param end: The exclusive ending index.
+### :param compare: A routine that returns `true` when `a` should precede `b`.
+routine List[T].insertion_sort_by(start: U64, end: U64, compare: Routine[(T, T), Bool])
+  var i = start + 1u64
+  loop
+    if i >= end
+      break
+    var key = me.get_raw(i)
+    var j = i
+    loop
+      if j <= start
+        break
+      var prev = me.get_raw(j - 1u64)
+      if not compare(key, prev)
+        break
+      me.set_raw(j, prev)
+      j = j - 1u64
+    me.set_raw(j, key)
+    i = i + 1u64
+  return
+
+### Merges two adjacent sorted runs [left, mid) and [mid, right) in place,
+### using `buffer` as temporary storage. Stable.
+### :param left: The start index of the first run.
+### :param mid: The start index of the second run (end of the first).
+### :param right: The exclusive end of the second run.
+### :param buffer: A pre-allocated list used as scratch space.
+routine List[T].merge_into(left: U64, mid: U64, right: U64, buffer: List[T])
+needs T obeys Comparable
+  # Copy [left, right) into the buffer
+  var i = left
+  loop
+    if i >= right
+      break
+    buffer.set_raw(i, me.get_raw(i))
+    i = i + 1u64
+
+  var a = left
+  var b = mid
+  var out = left
+
+  loop
+    if a >= mid or b >= right
+      break
+    var va = buffer.get_raw(a)
+    var vb = buffer.get_raw(b)
+    if vb < va
+      me.set_raw(out, vb)
+      b = b + 1u64
+    else
+      me.set_raw(out, va)
+      a = a + 1u64
+    out = out + 1u64
+
+  # Copy remaining elements from left run
+  loop
+    if a >= mid
+      break
+    me.set_raw(out, buffer.get_raw(a))
+    a = a + 1u64
+    out = out + 1u64
+
+  # Copy remaining elements from right run
+  loop
+    if b >= right
+      break
+    me.set_raw(out, buffer.get_raw(b))
+    b = b + 1u64
+    out = out + 1u64
+  return
+
+### Merges two adjacent sorted runs [left, mid) and [mid, right) using a
+### custom comparator and `buffer` as temporary storage. Stable.
+### :param left: The start index of the first run.
+### :param mid: The start index of the second run (end of the first).
+### :param right: The exclusive end of the second run.
+### :param buffer: A pre-allocated list used as scratch space.
+### :param compare: A routine that returns `true` when `a` should precede `b`.
+routine List[T].merge_into_by(left: U64, mid: U64, right: U64, buffer: List[T], compare: Routine[(T, T), Bool])
+  var i = left
+  loop
+    if i >= right
+      break
+    buffer.set_raw(i, me.get_raw(i))
+    i = i + 1u64
+
+  var a = left
+  var b = mid
+  var out = left
+
+  loop
+    if a >= mid or b >= right
+      break
+    var va = buffer.get_raw(a)
+    var vb = buffer.get_raw(b)
+    if compare(vb, va)
+      me.set_raw(out, vb)
+      b = b + 1u64
+    else
+      me.set_raw(out, va)
+      a = a + 1u64
+    out = out + 1u64
+
+  loop
+    if a >= mid
+      break
+    me.set_raw(out, buffer.get_raw(a))
+    a = a + 1u64
+    out = out + 1u64
+
+  loop
+    if b >= right
+      break
+    me.set_raw(out, buffer.get_raw(b))
+    b = b + 1u64
+    out = out + 1u64
   return

@@ -142,7 +142,7 @@ routine Integer.$cmp(you: Integer) -> CompareSign
 ### Implements the wired routine behavior for this value.
 ### :param other: The other value to compare against.
 ### :returns: The resulting `Integer` value.
-routine Integer.$and(other: Integer) -> Integer
+routine Integer.$bitand(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_and(result.handle, me.handle, other.handle)
   return result
@@ -150,7 +150,7 @@ routine Integer.$and(other: Integer) -> Integer
 ### Implements the wired routine behavior for this value.
 ### :param other: The other value to compare against.
 ### :returns: The resulting `Integer` value.
-routine Integer.$or(other: Integer) -> Integer
+routine Integer.$bitor(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_or(result.handle, me.handle, other.handle)
   return result
@@ -158,7 +158,7 @@ routine Integer.$or(other: Integer) -> Integer
 ### Implements the wired routine behavior for this value.
 ### :param other: The other value to compare against.
 ### :returns: The resulting `Integer` value.
-routine Integer.$xor(other: Integer) -> Integer
+routine Integer.$bitxor(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_xor(result.handle, me.handle, other.handle)
   return result

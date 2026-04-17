@@ -1,7 +1,7 @@
 module Core
 
-### Defines the entity `MalformedUtf8Error`.
-entity MalformedUtf8Error obeys Crashable
+### Defines the crashable `MalformedUtf8Error`.
+crashable MalformedUtf8Error
   ### Stores the index member value.
   index: U64
   ### Stores the reason member value.

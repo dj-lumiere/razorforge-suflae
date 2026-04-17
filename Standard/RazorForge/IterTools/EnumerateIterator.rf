@@ -12,26 +12,13 @@ entity EnumerateIterator[T] obeys Iterable[Tuple[S64, T]]
   ### Stores the start member value.
   secret start: S64
 
-### Creates an iterator for this value.
-### :returns: The resulting `EnumerateEmitter[T]` value.
-routine EnumerateIterator[T].$iter() -> EnumerateEmitter[T]
-  return EnumerateEmitter[T](source: me.source.$iter(), index: me.start)
-
-### Defines the entity `EnumerateEmitter`.
-### :typeparam T: The value used for `T`.
-entity EnumerateEmitter[T] obeys Iterator[Tuple[S64, T]]
-  ### Stores the source member value.
-  secret source: Iterator[T]
-  ### Stores the index member value.
-  secret index: S64
-
 ### Returns the next value from this iterator.
 ### :returns: The resulting `Tuple[S64, T]` value.
-emitting routine EnumerateEmitter[T].$next!() -> Tuple[S64, T]
+routine EnumerateIterator[T].$next!() -> Tuple[S64, T]
   var item = me.source.$next!()
-  emit (me.index, item)
+  var _result = (me.index, item)
   me.index = me.index + 1s64
-  return
+  return _result
 
 ### Returns the result of `enumerate`.
 ### :returns: The resulting `EnumerateIterator[T]` value.

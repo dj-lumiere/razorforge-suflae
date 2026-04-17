@@ -2,17 +2,20 @@
 
 ### Executes `stop`.
 ### :throws: May throw {UserTerminationError}.
+@crash_only
 routine stop!()
   throw UserTerminationError()
 
 ### Performs `verify` on this value.
 ### :param expr: The `expr` value.
 ### :throws: May throw {VerificationFailedError}.
+@crash_only
 routine verify!(expr: Bool)
   throw VerificationFailedError()
 
 ### Executes `breach`.
 ### :throws: May throw {LogicBreachedError}.
+@crash_only
 routine breach!()
   throw LogicBreachedError()
 

@@ -141,38 +141,51 @@ routine D64.$create(from: D128) -> D64
 ### Returns the sum of this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D64` value.
-routine D64.$add(you: D64) -> D64
+routine D64.$add!(you: D64) -> D64
   var a_bits = bitcast[D64, U64](me)
   var b_bits = bitcast[D64, U64](you)
   var result = rf_d64_add(a_bits, b_bits)
+  if rf_d64_isfinite(result) == 0_s32
+    throw NumericOverflowError(description: f"D64 addition produced non-finite result: {me} + {you}")
   return bitcast[U64, D64](result)
 
 ### Returns the difference between this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D64` value.
-routine D64.$sub(you: D64) -> D64
+routine D64.$sub!(you: D64) -> D64
   var a_bits = bitcast[D64, U64](me)
   var b_bits = bitcast[D64, U64](you)
   var result = rf_d64_sub(a_bits, b_bits)
+  if rf_d64_isfinite(result) == 0_s32
+    throw NumericOverflowError(description: f"D64 subtraction produced non-finite result: {me} - {you}")
   return bitcast[U64, D64](result)
 
 ### Returns the product of this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D64` value.
-routine D64.$mul(you: D64) -> D64
+routine D64.$mul!(you: D64) -> D64
   var a_bits = bitcast[D64, U64](me)
   var b_bits = bitcast[D64, U64](you)
   var result = rf_d64_mul(a_bits, b_bits)
+  if rf_d64_isfinite(result) == 0_s32
+    throw NumericOverflowError(description: f"D64 multiplication produced non-finite result: {me} * {you}")
   return bitcast[U64, D64](result)
 
 ### Returns the quotient of this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D64` value.
-routine D64.$truediv(you: D64) -> D64
+routine D64.$truediv!(you: D64) -> D64
   var a_bits = bitcast[D64, U64](me)
   var b_bits = bitcast[D64, U64](you)
   var result = rf_d64_div(a_bits, b_bits)
+  if rf_d64_isfinite(result) == 0_s32
+    throw NumericOverflowError(description: f"D64 division produced non-finite result: {me} / {you}")
   return bitcast[U64, D64](result)
+
+### Returns true if this value is finite.
+### :returns: The resulting `Bool` value.
+routine D64.is_finite() -> Bool
+  return rf_d64_isfinite(me.to_bits()) != 0_s32
 
 ### Returns the negated value.
 ### :returns: The resulting `D64` value.
@@ -398,5 +411,5 @@ routine D64.$create!(from_text: Text) -> D64
     if not has_digit
       throw InvalidValueError(input: from_text, target: "D64")
   var cstr_val = from_text.CStr()
-  var bits = rf_D64_from_string(cstr_val)
+  var bits = rf_d64_from_string(cstr_val)
   return bitcast[U64, D64](bits)

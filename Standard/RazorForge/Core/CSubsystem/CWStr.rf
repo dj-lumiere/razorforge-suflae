@@ -58,21 +58,21 @@ routine CWStr.$create(from_codepoints: Text) -> CWStr
     var codepoint = from_codepoints[i].codepoint()
 
     if codepoint <= 0xFFFFu32
-      Snatched[U16](buffer.get_address() + write_pos * 2u64).write(U16!(codepoint))
-      write_pos = write_pos + 1u64
+      Snatched[U16](buffer.get_address() +% Address(write_pos * 2u64)).write(U16!(codepoint))
+      write_pos = write_pos +% 1u64
     elseif codepoint <= 0x10FFFFu32
       var adjusted = codepoint - 0x10000u32
       var high = U16!((adjusted >> 10u32) + 0xD800u32)
       var low = U16!((adjusted & 0x3FFu32) + 0xDC00u32)
-      Snatched[U16](buffer.get_address() + write_pos * 2u64).write(high)
-      Snatched[U16](buffer.get_address() + (write_pos + 1u64) * 2u64).write(low)
-      write_pos = write_pos + 2u64
+      Snatched[U16](buffer.get_address() +% Address(write_pos * 2u64)).write(high)
+      Snatched[U16](buffer.get_address() +% Address((write_pos +% 1u64) * 2u64)).write(low)
+      write_pos = write_pos +% 2u64
     else
-      Snatched[U16](buffer.get_address() + write_pos * 2u64).write(0xFFFDu16)
-      write_pos = write_pos + 1u64
+      Snatched[U16](buffer.get_address() +% Address(write_pos * 2u64)).write(0xFFFDu16)
+      write_pos = write_pos +% 1u64
 
-    i = i + 1u64
-  Snatched[U16](buffer.get_address() + write_pos * 2u64).write(0u16)
+    i = i +% 1u64
+  Snatched[U16](buffer.get_address() +% Address(write_pos * 2u64)).write(0u16)
 
   return CWStr(ptr: buffer.obtain_as[CWChar]())
 
@@ -86,9 +86,9 @@ routine CWStr.$create(from_units: List[U16]) -> CWStr
 
   var i: U64 = 0u64
   while i < len
-    Snatched[U16](buffer.get_address() + i * 2u64).write(from_units[i])
-    i = i + 1u64
-  Snatched[U16](buffer.get_address() + len * 2u64).write(0u16)
+    Snatched[U16](buffer.get_address() +% Address(i * 2u64)).write(from_units[i])
+    i = i +% 1u64
+  Snatched[U16](buffer.get_address() +% Address(len * 2u64)).write(0u16)
 
   return CWStr(ptr: buffer.obtain_as[CWChar]())
 
@@ -114,7 +114,7 @@ routine CWStr.is_empty() -> Bool
 routine CWStr.$getitem!(index: U64) -> U16
   if index >= me.count()
     throw IndexOutOfBoundsError()
-  return Snatched[U16](me.ptr.get_address() + (index * 2u64)).read()
+  return Snatched[U16](me.ptr.get_address() +% Address(index * 2u64)).read()
 
 ### Returns whether both values are equal.
 ### :param other: The other value to compare against.
@@ -151,7 +151,7 @@ routine CWStr.to_units() -> List[U16]
   loop
     if i >= len
       break
-    list.add_last(Snatched[U16](me.ptr.get_address() + (i * 2u64)).read())
+    list.add_last(Snatched[U16](me.ptr.get_address() +% Address(i * 2u64)).read())
     i = i + 1u64
   return list
 
@@ -159,10 +159,10 @@ routine CWStr.to_units() -> List[U16]
 ### :param n: The `n` value.
 ### :returns: The resulting `CWStr` value.
 routine CWStr.offset(n: U64) -> CWStr
-  return CWStr(ptr: Snatched[CWChar](me.ptr.get_address() + (n * 2u64)))
+  return CWStr(ptr: Snatched[CWChar](me.ptr.get_address() +% Address(n * 2u64)))
 
 ### Creates a value from index.
 ### :param start: The inclusive starting position.
 ### :returns: The resulting `CWStr` value.
 routine CWStr.from_index(start: U64) -> CWStr
-  return CWStr(ptr: Snatched[CWChar](me.ptr.get_address() + (start * 2u64)))
+  return CWStr(ptr: Snatched[CWChar](me.ptr.get_address() +% Address(start * 2u64)))

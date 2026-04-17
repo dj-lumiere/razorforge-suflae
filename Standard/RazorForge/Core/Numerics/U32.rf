@@ -22,7 +22,7 @@ preset U32_ONE: U32 = 1_u32
 ### :throws: May throw {IntegerOverflowError}.
 routine U32.$create!(from: S8) -> U32
   if from < 0_s8
-    throw IntegerOverflowError(f"Cannot convert {from} to U32: value out of range [{U32_MIN}, {U32_MAX}]")
+    throw IntegerOverflowError()
   return sext[S8, U32](from)
 
 ### Implements the wired routine behavior for this value.
@@ -31,7 +31,7 @@ routine U32.$create!(from: S8) -> U32
 ### :throws: May throw {IntegerOverflowError}.
 routine U32.$create!(from: S16) -> U32
   if from < 0_s16
-    throw IntegerOverflowError(f"Cannot convert {from} to U32: value out of range [{U32_MIN}, {U32_MAX}]")
+    throw IntegerOverflowError()
   return sext[S16, U32](from)
 
 ### Implements the wired routine behavior for this value.
@@ -40,7 +40,7 @@ routine U32.$create!(from: S16) -> U32
 ### :throws: May throw {IntegerOverflowError}.
 routine U32.$create!(from: S32) -> U32
   if from < 0_s32
-    throw IntegerOverflowError(f"Cannot convert {from} to U32: value out of range [{U32_MIN}, {U32_MAX}]")
+    throw IntegerOverflowError()
   return bitcast[S32, U32](from)
 
 ### Implements the wired routine behavior for this value.
@@ -49,7 +49,7 @@ routine U32.$create!(from: S32) -> U32
 ### :throws: May throw {IntegerOverflowError}.
 routine U32.$create!(from: S64) -> U32
   if not (0_s64 <= from <= 4294967295_s64)
-    throw IntegerOverflowError(f"Cannot convert {from} to U32: value out of range [{U32_MIN}, {U32_MAX}]")
+    throw IntegerOverflowError()
   return trunc[S64, U32](from)
 
 ### Implements the wired routine behavior for this value.
@@ -58,7 +58,7 @@ routine U32.$create!(from: S64) -> U32
 ### :throws: May throw {IntegerOverflowError}.
 routine U32.$create!(from: S128) -> U32
   if not (0_s128 <= from <= 4294967295_s128)
-    throw IntegerOverflowError(f"Cannot convert {from} to U32: value out of range [{U32_MIN}, {U32_MAX}]")
+    throw IntegerOverflowError()
   return trunc[S128, U32](from)
 
 ### Implements the wired routine behavior for this value.
@@ -85,7 +85,7 @@ routine U32.$create(from: U32) -> U32
 ### :throws: May throw {IntegerOverflowError}.
 routine U32.$create!(from: U64) -> U32
   if from > 4294967295_u64
-    throw IntegerOverflowError(f"Cannot convert {from} to U32: value out of range [{U32_MIN}, {U32_MAX}]")
+    throw IntegerOverflowError()
   return trunc[U64, U32](from)
 
 ### Implements the wired routine behavior for this value.
@@ -94,7 +94,7 @@ routine U32.$create!(from: U64) -> U32
 ### :throws: May throw {IntegerOverflowError}.
 routine U32.$create!(from: U128) -> U32
   if from > 4294967295_u128
-    throw IntegerOverflowError(f"Cannot convert {from} to U32: value out of range [{U32_MIN}, {U32_MAX}]")
+    throw IntegerOverflowError()
   return trunc[U128, U32](from)
 
 ### Implements the wired routine behavior for this value.
@@ -143,23 +143,56 @@ routine U32.$create!(from: D128) -> U32
 # Arithmetic Operations (trapping on overflow by default)
 # ============================================================================
 
+### Returns the sum and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(U32, Bool)` value.
+routine U32.add_with_overflow(you: U32) -> (U32, Bool)
+  return uadd_with_overflow[U32](me, you)
+
+### Returns the difference and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(U32, Bool)` value.
+routine U32.sub_with_overflow(you: U32) -> (U32, Bool)
+  return usub_with_overflow[U32](me, you)
+
+### Returns the product and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(U32, Bool)` value.
+routine U32.mul_with_overflow(you: U32) -> (U32, Bool)
+  return umul_with_overflow[U32](me, you)
+
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U32` value.
 routine U32.$add!(you: U32) -> U32
-  return add[U32](me, you)
+  var result = me.add_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U32` value.
 routine U32.$sub!(you: U32) -> U32
-  return sub[U32](me, you)
+  var result = me.sub_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U32` value.
 routine U32.$mul!(you: U32) -> U32
-  return mul[U32](me, you)
+  var result = me.mul_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
+
+### Returns the product of this value and the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U32` value.
+routine U32.$mul(you: U32) -> U32
+  return me.$mul!(you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
@@ -199,6 +232,40 @@ routine U32.$mul_wrap(you: U32) -> U32
   return mul[U32](me, you)
 
 # ============================================================================
+# Unchecked Arithmetic (+!, -!, *!, //!, %!)
+# ============================================================================
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U32` value.
+routine U32.$add_unchecked(you: U32) -> U32
+  return add_nuw[U32](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U32` value.
+routine U32.$sub_unchecked(you: U32) -> U32
+  return sub_nuw[U32](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U32` value.
+routine U32.$mul_unchecked(you: U32) -> U32
+  return mul_nuw[U32](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U32` value.
+routine U32.$floordiv_unchecked(you: U32) -> U32
+  return udiv[U32](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U32` value.
+routine U32.$mod_unchecked(you: U32) -> U32
+  return urem[U32](me, you)
+
+# ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
 # ============================================================================
 
@@ -227,22 +294,38 @@ routine U32.$mul_clamp(you: U32) -> U32
 # Power Operations (**)
 # ============================================================================
 
+### Returns the power result and whether it overflowed.
+### :param exp: The exponent value.
+### :returns: The resulting `(U32, Bool)` value.
+### :throws: May throw {IndeterminateResultError}.
+routine U32.pow_with_overflow!(exp: U32) -> (U32, Bool)
+  var result: U32 = 1
+  var base: U32 = me
+  var e: U32 = exp
+  var overflow = false
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  while e > 0
+    if (e & 1) == 1
+      var mul_result = result.mul_with_overflow(base)
+      result = mul_result.item0
+      overflow = overflow or mul_result.item1
+    e = e >> 1_u32
+    if e > 0
+      var square_result = base.mul_with_overflow(base)
+      base = square_result.item0
+      overflow = overflow or square_result.item1
+  return (result, overflow)
+
 ### Implements the wired routine behavior for this value.
 ### :param exp: The exponent value.
 ### :returns: The resulting `U32` value.
 ### :throws: May throw {IndeterminateResultError}.
 routine U32.$pow!(exp: U32) -> U32
-  var result: U32 = 1
-  var base: U32 = me
-  var e: U32 = exp
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
-  while e > 0
-    if (e & 1) == 1
-      result = mul[U32](result, base)
-    base = mul[U32](base, base)
-    e = e >> 1
-  return result
+  var result = me.pow_with_overflow!(exp)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param exp: The exponent value.
@@ -256,9 +339,10 @@ routine U32.$pow_wrap!(exp: U32) -> U32
     throw IndeterminateResultError()
   while e > 0
     if (e & 1) == 1
-      result = mul[U32](result, base)
-    base = mul[U32](base, base)
-    e = e >> 1
+      result = result.$mul_wrap(base)
+    e = e >> 1_u32
+    if e > 0
+      base = base.$mul_wrap(base)
   return result
 
 ### Implements the wired routine behavior for this value.
@@ -275,7 +359,7 @@ routine U32.$pow_clamp!(exp: U32) -> U32
     if (e & 1) == 1
       result = result.$mul_clamp(base)
     base = base.$mul_clamp(base)
-    e = e >> 1
+    e = e >> 1_u32
   return result
 
 # ============================================================================
@@ -285,24 +369,24 @@ routine U32.$pow_clamp!(exp: U32) -> U32
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U32` value.
-routine U32.$and(you: U32) -> U32
+routine U32.$bitand(you: U32) -> U32
   return bit_and[U32](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U32` value.
-routine U32.$or(you: U32) -> U32
+routine U32.$bitor(you: U32) -> U32
   return bit_or[U32](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U32` value.
-routine U32.$xor(you: U32) -> U32
+routine U32.$bitxor(you: U32) -> U32
   return xor[U32](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :returns: The resulting `U32` value.
-routine U32.$not() -> U32
+routine U32.$bitnot() -> U32
   return xor[U32](me, -1)
 
 # ============================================================================
@@ -389,7 +473,7 @@ routine U32.count_ones() -> U32
 ### Returns the number of stored values.
 ### :returns: The resulting `U32` value.
 routine U32.count_zeros() -> U32
-  return 32_u32 - me.count_ones()
+  return 32_u32 -% me.count_ones()
 
 ### Returns the result of `leading zeros`.
 ### :returns: The resulting `U32` value.
@@ -404,12 +488,12 @@ routine U32.trailing_zeros() -> U32
 ### Returns the result of `leading ones`.
 ### :returns: The resulting `U32` value.
 routine U32.leading_ones() -> U32
-  return me.$not().leading_zeros()
+  return me.$bitnot().leading_zeros()
 
 ### Returns the result of `trailing ones`.
 ### :returns: The resulting `U32` value.
 routine U32.trailing_ones() -> U32
-  return me.$not().trailing_zeros()
+  return me.$bitnot().trailing_zeros()
 
 ### Returns the result of `reverse bits`.
 ### :returns: The resulting `U32` value.
@@ -424,7 +508,7 @@ routine U32.swap_bytes() -> U32
 ### Returns true if this value is power of two.
 ### :returns: The resulting `Bool` value.
 routine U32.is_power_of_two() -> Bool
-  return me != 0_u32 and (me & (me - 1_u32)) == 0_u32
+  return me != 0_u32 and (me & (me -% 1_u32)) == 0_u32
 
 # ============================================================================
 # Utility Methods
@@ -458,8 +542,8 @@ routine U32.$represent() -> Text
   var digits = List[Character]()
   var remaining = me
   while remaining > 0u32
-    var digit = U8(remaining % 10u32)
-    remaining = remaining // 10u32
+    var digit = U8(urem[U32](remaining, 10u32))
+    remaining = udiv[U32](remaining, 10u32)
     digits.add_first(Character(0x0030u32 + U32(digit)))
   return Text(from_list: digits)
 

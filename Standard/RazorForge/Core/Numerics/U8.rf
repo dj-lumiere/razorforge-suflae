@@ -22,7 +22,7 @@ preset U8_ONE: U8 = 1_u8
 ### :throws: May throw {IntegerOverflowError}.
 routine U8.$create!(from: S8) -> U8
   if from < 0_s8
-    throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
+    throw IntegerOverflowError()
   return bitcast[S8, U8](from)
 
 ### Implements the wired routine behavior for this value.
@@ -31,7 +31,7 @@ routine U8.$create!(from: S8) -> U8
 ### :throws: May throw {IntegerOverflowError}.
 routine U8.$create!(from: S16) -> U8
   if not (0_s16 <= from <= 255_s16)
-    throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
+    throw IntegerOverflowError()
   return trunc[S16, U8](from)
 
 ### Implements the wired routine behavior for this value.
@@ -40,7 +40,7 @@ routine U8.$create!(from: S16) -> U8
 ### :throws: May throw {IntegerOverflowError}.
 routine U8.$create!(from: S32) -> U8
   if not (0_s32 <= from <= 255_s32)
-    throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
+    throw IntegerOverflowError()
   return trunc[S32, U8](from)
 
 ### Implements the wired routine behavior for this value.
@@ -49,7 +49,7 @@ routine U8.$create!(from: S32) -> U8
 ### :throws: May throw {IntegerOverflowError}.
 routine U8.$create!(from: S64) -> U8
   if not (0_s64 <= from <= 255_s64)
-    throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
+    throw IntegerOverflowError()
   return trunc[S64, U8](from)
 
 ### Implements the wired routine behavior for this value.
@@ -58,7 +58,7 @@ routine U8.$create!(from: S64) -> U8
 ### :throws: May throw {IntegerOverflowError}.
 routine U8.$create!(from: S128) -> U8
   if not (0_s128 <= from <= 255_s128)
-    throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
+    throw IntegerOverflowError()
   return trunc[S128, U8](from)
 
 ### Creates a new instance.
@@ -73,7 +73,7 @@ routine U8.$create(from: U8) -> U8
 ### :throws: May throw {IntegerOverflowError}.
 routine U8.$create!(from: U16) -> U8
   if from > 255_u16
-    throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
+    throw IntegerOverflowError()
   return trunc[U16, U8](from)
 
 ### Implements the wired routine behavior for this value.
@@ -82,7 +82,7 @@ routine U8.$create!(from: U16) -> U8
 ### :throws: May throw {IntegerOverflowError}.
 routine U8.$create!(from: U32) -> U8
   if from > 255_u32
-    throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
+    throw IntegerOverflowError()
   return trunc[U32, U8](from)
 
 ### Implements the wired routine behavior for this value.
@@ -91,7 +91,7 @@ routine U8.$create!(from: U32) -> U8
 ### :throws: May throw {IntegerOverflowError}.
 routine U8.$create!(from: U64) -> U8
   if from > 255_u64
-    throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
+    throw IntegerOverflowError()
   return trunc[U64, U8](from)
 
 ### Implements the wired routine behavior for this value.
@@ -100,7 +100,7 @@ routine U8.$create!(from: U64) -> U8
 ### :throws: May throw {IntegerOverflowError}.
 routine U8.$create!(from: U128) -> U8
   if from > 255_u128
-    throw IntegerOverflowError(f"Cannot convert {from} to U8: value out of range [{U8_MIN}, {U8_MAX}]")
+    throw IntegerOverflowError()
   return trunc[U128, U8](from)
 
 ### Implements the wired routine behavior for this value.
@@ -149,23 +149,50 @@ routine U8.$create!(from: D128) -> U8
 # Arithmetic Operations (trapping on overflow by default)
 # ============================================================================
 
+### Returns the sum and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(U8, Bool)` value.
+routine U8.add_with_overflow(you: U8) -> (U8, Bool)
+  return uadd_with_overflow[U8](me, you)
+
+### Returns the difference and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(U8, Bool)` value.
+routine U8.sub_with_overflow(you: U8) -> (U8, Bool)
+  return usub_with_overflow[U8](me, you)
+
+### Returns the product and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(U8, Bool)` value.
+routine U8.mul_with_overflow(you: U8) -> (U8, Bool)
+  return umul_with_overflow[U8](me, you)
+
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U8` value.
 routine U8.$add!(you: U8) -> U8
-  return add[U8](me, you)
+  var result = me.add_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U8` value.
 routine U8.$sub!(you: U8) -> U8
-  return sub[U8](me, you)
+  var result = me.sub_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
-### Implements the wired routine behavior for this value.
+### Returns the product of this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U8` value.
 routine U8.$mul!(you: U8) -> U8
-  return mul[U8](me, you)
+  var result = me.mul_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
@@ -205,6 +232,40 @@ routine U8.$mul_wrap(you: U8) -> U8
   return mul[U8](me, you)
 
 # ============================================================================
+# Unchecked Arithmetic (+!, -!, *!, //!, %!)
+# ============================================================================
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U8` value.
+routine U8.$add_unchecked(you: U8) -> U8
+  return add_nuw[U8](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U8` value.
+routine U8.$sub_unchecked(you: U8) -> U8
+  return sub_nuw[U8](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U8` value.
+routine U8.$mul_unchecked(you: U8) -> U8
+  return mul_nuw[U8](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U8` value.
+routine U8.$floordiv_unchecked(you: U8) -> U8
+  return udiv[U8](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U8` value.
+routine U8.$mod_unchecked(you: U8) -> U8
+  return urem[U8](me, you)
+
+# ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
 # ============================================================================
 
@@ -233,22 +294,38 @@ routine U8.$mul_clamp(you: U8) -> U8
 # Power Operations (**)
 # ============================================================================
 
+### Returns the power result and whether it overflowed.
+### :param exp: The exponent value.
+### :returns: The resulting `(U8, Bool)` value.
+### :throws: May throw {IndeterminateResultError}.
+routine U8.pow_with_overflow!(exp: U8) -> (U8, Bool)
+  var result: U8 = 1
+  var base: U8 = me
+  var e: U32 = exp
+  var overflow = false
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  while e > 0
+    if (e & 1) == 1
+      var mul_result = result.mul_with_overflow(base)
+      result = mul_result.item0
+      overflow = overflow or mul_result.item1
+    e = e >> 1_u32
+    if e > 0
+      var square_result = base.mul_with_overflow(base)
+      base = square_result.item0
+      overflow = overflow or square_result.item1
+  return (result, overflow)
+
 ### Implements the wired routine behavior for this value.
 ### :param exp: The exponent value.
 ### :returns: The resulting `U8` value.
 ### :throws: May throw {IndeterminateResultError}.
 routine U8.$pow!(exp: U8) -> U8
-  var result: U8 = 1
-  var base: U8 = me
-  var e: U32 = exp
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
-  while e > 0
-    if (e & 1) == 1
-      result = mul[U8](result, base)
-    base = mul[U8](base, base)
-    e = e >> 1
-  return result
+  var result = me.pow_with_overflow!(exp)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param exp: The exponent value.
@@ -262,9 +339,10 @@ routine U8.$pow_wrap!(exp: U8) -> U8
     throw IndeterminateResultError()
   while e > 0
     if (e & 1) == 1
-      result = mul[U8](result, base)
-    base = mul[U8](base, base)
-    e = e >> 1
+      result = result.$mul_wrap(base)
+    e = e >> 1_u32
+    if e > 0
+      base = base.$mul_wrap(base)
   return result
 
 ### Implements the wired routine behavior for this value.
@@ -281,7 +359,7 @@ routine U8.$pow_clamp!(exp: U8) -> U8
     if (e & 1) == 1
       result = result.$mul_clamp(base)
     base = base.$mul_clamp(base)
-    e = e >> 1
+    e = e >> 1_u32
   return result
 
 # ============================================================================
@@ -291,24 +369,24 @@ routine U8.$pow_clamp!(exp: U8) -> U8
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U8` value.
-routine U8.$and(you: U8) -> U8
+routine U8.$bitand(you: U8) -> U8
   return bit_and[U8](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U8` value.
-routine U8.$or(you: U8) -> U8
+routine U8.$bitor(you: U8) -> U8
   return bit_or[U8](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U8` value.
-routine U8.$xor(you: U8) -> U8
+routine U8.$bitxor(you: U8) -> U8
   return xor[U8](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :returns: The resulting `U8` value.
-routine U8.$not() -> U8
+routine U8.$bitnot() -> U8
   return xor[U8](me, -1)
 
 # ============================================================================
@@ -320,25 +398,25 @@ routine U8.$not() -> U8
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U8` value.
 routine U8.$ashl(bits: U32) -> U8
-  return shl[U8](me, bits)
+  return shl[U8](me, U8(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U8` value.
 routine U8.$ashr(bits: U32) -> U8
-  return lshr[U8](me, bits)
+  return lshr[U8](me, U8(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U8` value.
 routine U8.$lshl(bits: U32) -> U8
-  return shl[U8](me, bits)
+  return shl[U8](me, U8(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U8` value.
 routine U8.$lshr(bits: U32) -> U8
-  return lshr[U8](me, bits)
+  return lshr[U8](me, U8(bits))
 
 # ============================================================================
 # Comparison Operations
@@ -395,7 +473,7 @@ routine U8.count_ones() -> U8
 ### Returns the number of stored values.
 ### :returns: The resulting `U8` value.
 routine U8.count_zeros() -> U8
-  return 8_u8 - me.count_ones()
+  return 8_u8 -% me.count_ones()
 
 ### Returns the result of `leading zeros`.
 ### :returns: The resulting `U8` value.
@@ -410,12 +488,12 @@ routine U8.trailing_zeros() -> U8
 ### Returns the result of `leading ones`.
 ### :returns: The resulting `U8` value.
 routine U8.leading_ones() -> U8
-  return me.$not().leading_zeros()
+  return me.$bitnot().leading_zeros()
 
 ### Returns the result of `trailing ones`.
 ### :returns: The resulting `U8` value.
 routine U8.trailing_ones() -> U8
-  return me.$not().trailing_zeros()
+  return me.$bitnot().trailing_zeros()
 
 ### Returns the result of `reverse bits`.
 ### :returns: The resulting `U8` value.

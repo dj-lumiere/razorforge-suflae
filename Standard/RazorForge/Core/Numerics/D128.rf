@@ -132,26 +132,38 @@ routine D128.$create(from: D128) -> D128
 ### Returns the sum of this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D128` value.
-routine D128.$add(you: D128) -> D128
-  return rf_d128_add(me.low, me.high, you.low, you.high)
+routine D128.$add!(you: D128) -> D128
+  var result = rf_d128_add(me.low, me.high, you.low, you.high)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"D128 addition produced non-finite result: {me} + {you}")
+  return result
 
 ### Returns the difference between this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D128` value.
-routine D128.$sub(you: D128) -> D128
-  return rf_d128_sub(me.low, me.high, you.low, you.high)
+routine D128.$sub!(you: D128) -> D128
+  var result = rf_d128_sub(me.low, me.high, you.low, you.high)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"D128 subtraction produced non-finite result: {me} - {you}")
+  return result
 
 ### Returns the product of this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D128` value.
-routine D128.$mul(you: D128) -> D128
-  return rf_d128_mul(me.low, me.high, you.low, you.high)
+routine D128.$mul!(you: D128) -> D128
+  var result = rf_d128_mul(me.low, me.high, you.low, you.high)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"D128 multiplication produced non-finite result: {me} * {you}")
+  return result
 
 ### Returns the quotient of this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D128` value.
-routine D128.$truediv(you: D128) -> D128
-  return rf_d128_div(me.low, me.high, you.low, you.high)
+routine D128.$truediv!(you: D128) -> D128
+  var result = rf_d128_div(me.low, me.high, you.low, you.high)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"D128 division produced non-finite result: {me} / {you}")
+  return result
 
 ### Returns the negated value.
 ### :returns: The resulting `D128` value.
@@ -312,6 +324,15 @@ routine D128.log10() -> D128
 routine D128.pow(exp: D128) -> D128
   return rf_d128_pow(me.low, me.high, exp.low, exp.high)
 
+### Returns the result of `pow`.
+### :param exp: The exponent value.
+### :returns: The resulting `D128` value.
+routine D128.$pow!(exp: D128) -> D128
+  var result = me.pow(exp)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"D128 power produced non-finite result: {me} ** {exp}")
+  return result
+
 ### Returns the result of `cbrt`.
 ### :returns: The resulting `D128` value.
 routine D128.cbrt() -> D128
@@ -363,6 +384,11 @@ routine D128.is_negative() -> Bool
 routine D128.is_zero() -> Bool
   var zero = D128_ZERO
   return rf_d128_cmp(me.low, me.high, zero.low, zero.high) == 0
+
+### Returns true if this value is finite.
+### :returns: The resulting `Bool` value.
+routine D128.is_finite() -> Bool
+  return rf_d128_isfinite(me.low, me.high) != 0_s32
 
 ### Returns the result of `signum`.
 ### :returns: The resulting `D128` value.
@@ -469,4 +495,4 @@ routine D128.$create!(from_text: Text) -> D128
     if not has_digit
       throw InvalidValueError(input: from_text, target: "D128")
   var cstr_val = from_text.CStr()
-  return rf_D128_from_string(cstr_val)
+  return rf_d128_from_string(cstr_val)

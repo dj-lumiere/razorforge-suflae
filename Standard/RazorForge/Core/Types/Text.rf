@@ -105,11 +105,11 @@ routine Text.$create(from: CWStr) -> Text
     loop
       if i >= len
         break
-      var high = Snatched[U16](from.ptr.get_address() + (i * 2u64)).read()
+      var high = Snatched[U16](from.ptr.get_address() +% Address(i * 2u64)).read()
 
       # Check for high surrogate (U+D800 to U+DBFF)
       if high >= 0xD800u16 and high <= 0xDBFFu16 and i + 1u64 < len
-        var low = Snatched[U16](from.ptr.get_address() + ((i + 1u64) * 2u64)).read()
+        var low = Snatched[U16](from.ptr.get_address() +% Address((i +% 1u64) * 2u64)).read()
         # Check for low surrogate (U+DC00 to U+DFFF)
         if low >= 0xDC00u16 and low <= 0xDFFFu16
           # Valid surrogate pair - decode to codepoint
@@ -623,7 +623,6 @@ routine Text.$iter() -> TextIterator
 ### Returns the next value from this iterator.
 ### :returns: The resulting `Character` value.
 ### :absent: Returns absent when the requested value is unavailable.
-# TODO: This should be emitting routine
 routine TextIterator.$next!() -> Character
   if me.index >= me.text.count()
     absent

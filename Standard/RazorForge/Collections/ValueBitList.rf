@@ -74,8 +74,8 @@ routine ValueBitList[N].with_set(index: U64, value: Bool) -> ValueBitList[N]
     return me
   var result = me
   # Modify the bit in the copy
-  var byte_idx = index // 8u64
-  var bit_off = U8(index % 8u64)
+  var byte_idx = udiv[U64](index, 8u64)
+  var bit_off = U8(urem[U64](index, 8u64))
   var byte_val = byte_at[ValueBitList[N]](result,byte_idx)
   if value
     result = set_byte_at[ValueBitList[N]](result,byte_idx, byte_val | (1u8 << bit_off))
@@ -104,14 +104,14 @@ routine ValueBitList[N].count_ones() -> U64
   var i = 0u64
   while i < N
     if me[i]
-      count = count + 1u64
-    i = i + 1u64
+      count = count +% 1u64
+    i = i +% 1u64
   return count
 
 ### Returns the number of stored values.
 ### :returns: The resulting `U64` value.
 routine ValueBitList[N].count_zeros() -> U64
-  return N - me.count_ones()
+  return N -% me.count_ones()
 
 ### Returns true if `any` applies.
 ### :returns: The resulting `Bool` value.
@@ -120,7 +120,7 @@ routine ValueBitList[N].any() -> Bool
   while i < N
     if me[i]
       return true
-    i = i + 1u64
+    i = i +% 1u64
   return false
 
 ### Returns true if `all` applies.
@@ -130,7 +130,7 @@ routine ValueBitList[N].all() -> Bool
   while i < N
     if not me[i]
       return false
-    i = i + 1u64
+    i = i +% 1u64
   return true
 
 ### Returns true if `none` applies.
@@ -160,7 +160,7 @@ routine ValueBitList[N].$represent() -> Text
     if i > 0u64
       result = result + ", "
     result = result + me[i].$represent()
-    i = i + 1u64
+    i = i +% 1u64
   result = result + "]"
   return result
 
@@ -173,7 +173,7 @@ routine ValueBitList[N].$diagnose() -> Text
     if i > 0u64
       result = result + ", "
     result = result + me[i].$represent()
-    i = i + 1u64
+    i = i +% 1u64
   result = result + "])"
   return result
 

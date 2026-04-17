@@ -13,11 +13,22 @@ external("C") routine rf_runtime_init()
 ### :param size: The size value to use.
 ### :returns: The resulting `Address` value.
 dangerous external("C") routine rf_allocate_dynamic(size: U64) -> Address
+### Returns the result of `rf allocate dynamic`.
+### :param size: The size value to use.
+### :returns: The resulting `Address` value.
+dangerous routine rf_allocate_dynamic(size: ByteSize) -> Address
+  return rf_allocate_dynamic(size: size.byte_size())
 ### Returns the result of `rf reallocate dynamic`.
 ### :param ptr: The pointer value to use.
 ### :param size: The size value to use.
 ### :returns: The resulting `Address` value.
 dangerous external("C") routine rf_reallocate_dynamic(ptr: Address, size: U64) -> Address
+### Returns the result of `rf reallocate dynamic`.
+### :param ptr: The pointer value to use.
+### :param size: The size value to use.
+### :returns: The resulting `Address` value.
+dangerous routine rf_reallocate_dynamic(ptr: Address, size: ByteSize) -> Address
+  return rf_reallocate_dynamic(ptr: ptr, size: size.byte_size())
 ### Performs `rf invalidate` on this value.
 ### :param ptr: The pointer value to use.
 dangerous external("C") routine rf_invalidate(ptr: Address)
@@ -26,11 +37,25 @@ dangerous external("C") routine rf_invalidate(ptr: Address)
 ### :param src: The source location.
 ### :param size: The size value to use.
 dangerous external("C") routine rf_copy_bytes_at(dest: Address, src: Address, size: U64)
+### Performs `rf copy bytes at` on this value.
+### :param dest: The destination location.
+### :param src: The source location.
+### :param size: The size value to use.
+dangerous routine rf_copy_bytes_at(dest: Address, src: Address, size: ByteSize)
+  rf_copy_bytes_at(dest: dest, src: src, size: size.byte_size())
+  return
 ### Performs `rf set bytes at` on this value.
 ### :param dest: The destination location.
 ### :param value: The value to use.
 ### :param size: The size value to use.
 dangerous external("C") routine rf_set_bytes_at(dest: Address, value: U8, size: U64)
+### Performs `rf set bytes at` on this value.
+### :param dest: The destination location.
+### :param value: The value to use.
+### :param size: The size value to use.
+dangerous routine rf_set_bytes_at(dest: Address, value: U8, size: ByteSize)
+  rf_set_bytes_at(dest: dest, value: value, size: size.byte_size())
+  return
 
 # ============================================================================
 # Task Runtime
@@ -209,6 +234,7 @@ external("C") routine rf_d32_div(a: U32, b: U32) -> U32
 ### :param b: The right-hand value.
 ### :returns: The resulting `S32` value.
 external("C") routine rf_d32_cmp(a: U32, b: U32) -> S32
+external("C") routine rf_d32_isfinite(bits: U32) -> S32
 
 ### Returns the result of `rf d32 sqrt`.
 ### :param value: The value to use.
@@ -323,6 +349,7 @@ external("C") routine rf_d64_div(a: U64, b: U64) -> U64
 ### :param b: The right-hand value.
 ### :returns: The resulting `S32` value.
 external("C") routine rf_d64_cmp(a: U64, b: U64) -> S32
+external("C") routine rf_d64_isfinite(bits: U64) -> S32
 
 ### Returns the result of `rf d64 sqrt`.
 ### :param value: The value to use.
@@ -447,6 +474,7 @@ external("C") routine rf_d128_div(a_low: U64, a_high: U64, b_low: U64, b_high: U
 ### :param b_high: The `b_high` value.
 ### :returns: The resulting `S32` value.
 external("C") routine rf_d128_cmp(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> S32
+external("C") routine rf_d128_isfinite(low: U64, high: U64) -> S32
 
 ### Returns the result of `rf d128 sqrt`.
 ### :param low: The `low` value.

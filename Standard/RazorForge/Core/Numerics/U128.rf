@@ -22,7 +22,7 @@ preset U128_ONE: U128 = 1_u128
 ### :throws: May throw {IntegerOverflowError}.
 routine U128.$create!(from: S8) -> U128
   if from < 0_s8
-    throw IntegerOverflowError(f"Cannot convert {from} to U128: value out of range [{U128_MIN}, {U128_MAX}]")
+    throw IntegerOverflowError()
   return sext[S8, U128](from)
 
 ### Implements the wired routine behavior for this value.
@@ -31,7 +31,7 @@ routine U128.$create!(from: S8) -> U128
 ### :throws: May throw {IntegerOverflowError}.
 routine U128.$create!(from: S16) -> U128
   if from < 0_s16
-    throw IntegerOverflowError(f"Cannot convert {from} to U128: value out of range [{U128_MIN}, {U128_MAX}]")
+    throw IntegerOverflowError()
   return sext[S16, U128](from)
 
 ### Implements the wired routine behavior for this value.
@@ -40,7 +40,7 @@ routine U128.$create!(from: S16) -> U128
 ### :throws: May throw {IntegerOverflowError}.
 routine U128.$create!(from: S32) -> U128
   if from < 0_s32
-    throw IntegerOverflowError(f"Cannot convert {from} to U128: value out of range [{U128_MIN}, {U128_MAX}]")
+    throw IntegerOverflowError()
   return sext[S32, U128](from)
 
 ### Implements the wired routine behavior for this value.
@@ -49,7 +49,7 @@ routine U128.$create!(from: S32) -> U128
 ### :throws: May throw {IntegerOverflowError}.
 routine U128.$create!(from: S64) -> U128
   if from < 0_s64
-    throw IntegerOverflowError(f"Cannot convert {from} to U128: value out of range [{U128_MIN}, {U128_MAX}]")
+    throw IntegerOverflowError()
   return sext[S64, U128](from)
 
 ### Implements the wired routine behavior for this value.
@@ -58,7 +58,7 @@ routine U128.$create!(from: S64) -> U128
 ### :throws: May throw {IntegerOverflowError}.
 routine U128.$create!(from: S128) -> U128
   if from < 0_s128
-    throw IntegerOverflowError(f"Cannot convert {from} to U128: value out of range [{U128_MIN}, {U128_MAX}]")
+    throw IntegerOverflowError()
   return bitcast[S128, U128](from)
 
 ### Implements the wired routine behavior for this value.
@@ -137,29 +137,56 @@ routine U128.$create!(from: D128) -> U128
 # Arithmetic Operations (trapping on overflow by default)
 # ============================================================================
 
+### Returns the sum and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(U128, Bool)` value.
+routine U128.add_with_overflow(you: U128) -> (U128, Bool)
+  return uadd_with_overflow[U128](me, you)
+
+### Returns the difference and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(U128, Bool)` value.
+routine U128.sub_with_overflow(you: U128) -> (U128, Bool)
+  return usub_with_overflow[U128](me, you)
+
+### Returns the product and whether it overflowed.
+### :param you: The other value to compare against.
+### :returns: The resulting `(U128, Bool)` value.
+routine U128.mul_with_overflow(you: U128) -> (U128, Bool)
+  return umul_with_overflow[U128](me, you)
+
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U128` value.
 routine U128.$add!(you: U128) -> U128
-  return add[U128](me, you)
+  var result = me.add_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
-### Returns the difference between this value and the other value.
+### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U128` value.
-routine U128.$sub(you: U128) -> U128
-  return sub[U128](me, you)
+routine U128.$sub!(you: U128) -> U128
+  var result = me.sub_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
-### Returns the product of this value and the other value.
+### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U128` value.
-routine U128.$mul(you: U128) -> U128
-  return mul[U128](me, you)
+routine U128.$mul!(you: U128) -> U128
+  var result = me.mul_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
-### Returns the quotient of this value and the other value.
+### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U128` value.
 ### :throws: May throw {DivisionByZeroError}.
-routine U128.$floordiv(you: U128) -> U128
+routine U128.$floordiv!(you: U128) -> U128
   if you == 0
     throw DivisionByZeroError()
   return udiv[U128](me, you)
@@ -193,6 +220,40 @@ routine U128.$mul_wrap(you: U128) -> U128
   return mul[U128](me, you)
 
 # ============================================================================
+# Unchecked Arithmetic (+!, -!, *!, //!, %!)
+# ============================================================================
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U128` value.
+routine U128.$add_unchecked(you: U128) -> U128
+  return add_nuw[U128](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U128` value.
+routine U128.$sub_unchecked(you: U128) -> U128
+  return sub_nuw[U128](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U128` value.
+routine U128.$mul_unchecked(you: U128) -> U128
+  return mul_nuw[U128](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U128` value.
+routine U128.$floordiv_unchecked(you: U128) -> U128
+  return udiv[U128](me, you)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `U128` value.
+routine U128.$mod_unchecked(you: U128) -> U128
+  return urem[U128](me, you)
+
+# ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
 # ============================================================================
 
@@ -224,22 +285,38 @@ routine U128.$mul_clamp(you: U128) -> U128
 # Power Operations (**)
 # ============================================================================
 
+### Returns the power result and whether it overflowed.
+### :param exp: The exponent value.
+### :returns: The resulting `(U128, Bool)` value.
+### :throws: May throw {IndeterminateResultError}.
+routine U128.pow_with_overflow!(exp: U128) -> (U128, Bool)
+  var result: U128 = 1
+  var base: U128 = me
+  var e: U32 = exp
+  var overflow = false
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  while e > 0
+    if (e & 1) == 1
+      var mul_result = result.mul_with_overflow(base)
+      result = mul_result.item0
+      overflow = overflow or mul_result.item1
+    e = e >> 1_u32
+    if e > 0
+      var square_result = base.mul_with_overflow(base)
+      base = square_result.item0
+      overflow = overflow or square_result.item1
+  return (result, overflow)
+
 ### Implements the wired routine behavior for this value.
 ### :param exp: The exponent value.
 ### :returns: The resulting `U128` value.
 ### :throws: May throw {IndeterminateResultError}.
 routine U128.$pow!(exp: U128) -> U128
-  var result: U128 = 1
-  var base: U128 = me
-  var e: U32 = exp
-  if me == 0 and exp == 0
-    throw IndeterminateResultError()
-  while e > 0
-    if (e & 1) == 1
-      result = mul[U128](result, base)
-    base = mul[U128](base, base)
-    e = e >> 1
-  return result
+  var result = me.pow_with_overflow!(exp)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
 
 ### Implements the wired routine behavior for this value.
 ### :param exp: The exponent value.
@@ -253,9 +330,10 @@ routine U128.$pow_wrap!(exp: U128) -> U128
     throw IndeterminateResultError()
   while e > 0
     if (e & 1) == 1
-      result = mul[U128](result, base)
-    base = mul[U128](base, base)
-    e = e >> 1
+      result = result.$mul_wrap(base)
+    e = e >> 1_u32
+    if e > 0
+      base = base.$mul_wrap(base)
   return result
 
 ### Implements the wired routine behavior for this value.
@@ -272,7 +350,7 @@ routine U128.$pow_clamp!(exp: U128) -> U128
     if (e & 1) == 1
       result = result.$mul_clamp(base)
     base = base.$mul_clamp(base)
-    e = e >> 1
+    e = e >> 1_u32
   return result
 
 # ============================================================================
@@ -282,24 +360,24 @@ routine U128.$pow_clamp!(exp: U128) -> U128
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U128` value.
-routine U128.$and(you: U128) -> U128
+routine U128.$bitand(you: U128) -> U128
   return bit_and[U128](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U128` value.
-routine U128.$or(you: U128) -> U128
+routine U128.$bitor(you: U128) -> U128
   return bit_or[U128](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U128` value.
-routine U128.$xor(you: U128) -> U128
+routine U128.$bitxor(you: U128) -> U128
   return xor[U128](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :returns: The resulting `U128` value.
-routine U128.$not() -> U128
+routine U128.$bitnot() -> U128
   return xor[U128](me, -1)
 
 # ============================================================================
@@ -311,25 +389,25 @@ routine U128.$not() -> U128
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U128` value.
 routine U128.$ashl(bits: U32) -> U128
-  return shl[U128](me, bits)
+  return shl[U128](me, U128(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U128` value.
 routine U128.$ashr(bits: U32) -> U128
-  return lshr[U128](me, bits)
+  return lshr[U128](me, U128(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U128` value.
 routine U128.$lshl(bits: U32) -> U128
-  return shl[U128](me, bits)
+  return shl[U128](me, U128(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U128` value.
 routine U128.$lshr(bits: U32) -> U128
-  return lshr[U128](me, bits)
+  return lshr[U128](me, U128(bits))
 
 # ============================================================================
 # Comparison Operations
@@ -386,7 +464,7 @@ routine U128.count_ones() -> U128
 ### Returns the number of stored values.
 ### :returns: The resulting `U128` value.
 routine U128.count_zeros() -> U128
-  return 128_u128 - me.count_ones()
+  return 128_u128 -% me.count_ones()
 
 ### Returns the result of `leading zeros`.
 ### :returns: The resulting `U128` value.
@@ -401,12 +479,12 @@ routine U128.trailing_zeros() -> U128
 ### Returns the result of `leading ones`.
 ### :returns: The resulting `U128` value.
 routine U128.leading_ones() -> U128
-  return me.$not().leading_zeros()
+  return me.$bitnot().leading_zeros()
 
 ### Returns the result of `trailing ones`.
 ### :returns: The resulting `U128` value.
 routine U128.trailing_ones() -> U128
-  return me.$not().trailing_zeros()
+  return me.$bitnot().trailing_zeros()
 
 ### Returns the result of `reverse bits`.
 ### :returns: The resulting `U128` value.
@@ -466,8 +544,8 @@ routine U128.$represent() -> Text
   var digits = List[Character]()
   var remaining = me
   while remaining > 0u128
-    var digit = U8(remaining % 10u128)
-    remaining = remaining // 10u128
+    var digit = U8(urem[U128](remaining, 10u128))
+    remaining = udiv[U128](remaining, 10u128)
     digits.add_first(Character(0x0030u32 + U32(digit)))
   return Text(from_list: digits)
 

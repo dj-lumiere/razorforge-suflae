@@ -1,7 +1,7 @@
 module Core
 
-### Defines the record `NegativeExponentError`.
-record NegativeExponentError obeys Crashable
+### Defines the crashable `NegativeExponentError`.
+crashable NegativeExponentError
   ### Stores the exp member value.
   secret exp: S128
 

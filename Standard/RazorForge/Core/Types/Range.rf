@@ -112,11 +112,11 @@ routine Range[T].$iter() -> RangeEmitter[T]
 ### :returns: The resulting `T` value.
 ### :absent: Returns absent when the requested value is unavailable.
 @writable
-emitting routine RangeEmitter[T].$next!() -> T
+routine RangeEmitter[T].$next!() -> T
   if me.done
     absent
 
-  emit me.current
+  var _result = me.current
 
   if me.ascending
     me.current = me.current + me.step
@@ -135,4 +135,4 @@ emitting routine RangeEmitter[T].$next!() -> T
       if me.current <= me.end
         me.done = true
 
-  return
+  return _result

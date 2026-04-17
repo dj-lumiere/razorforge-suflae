@@ -120,7 +120,7 @@ routine ask_line() -> Text
   if ptr.is_none()
     return ""
   var bytes = Bytes(ptr: ptr)
-  return bytes.decode_as_utf8()
+  return bytes.decode_as_utf8_lossy()
 
 ### Returns the result of `ask word`.
 ### :returns: The resulting `Text` value.
@@ -129,7 +129,7 @@ routine ask_word() -> Text
   if ptr.is_none()
     return ""
   var bytes = Bytes(ptr: ptr)
-  return bytes.decode_as_utf8()
+  return bytes.decode_as_utf8_lossy()
 
 ### Returns the result of `ask all`.
 ### :returns: The resulting `Text` value.
@@ -138,7 +138,7 @@ routine ask_all() -> Text
   if ptr.is_none()
     return ""
   var bytes = Bytes(ptr: ptr)
-  return bytes.decode_as_utf8()
+  return bytes.decode_as_utf8_lossy()
 
 ### Returns the result of `ask lines`.
 ### :returns: The resulting `List[Text]` value.

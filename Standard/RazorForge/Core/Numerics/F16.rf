@@ -15,6 +15,7 @@ preset F16_MAX: F16 = 65504.0_f16
 preset F16_MIN_POSITIVE: F16 = 6.103515625e-5_f16
 preset F16_ZERO: F16 = 0.0_f16
 preset F16_ONE: F16 = 1.0_f16
+preset F16_INFINITY: F16 = F16.from_bits(0x7C00_u16)
 
 # Mathematical constants
 preset F16_PI: F16 = 3.140625_f16
@@ -133,31 +134,49 @@ routine F16.$create(from: D128) -> F16
 ### Returns the sum of this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F16` value.
-routine F16.$add(you: F16) -> F16
-  return fadd[F16](me, you)
+routine F16.$add!(you: F16) -> F16
+  var result = fadd[F16](me, you)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"F16 addition produced non-finite result: {me} + {you}")
+  return result
 
 ### Returns the difference between this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F16` value.
-routine F16.$sub(you: F16) -> F16
-  return fsub[F16](me, you)
+routine F16.$sub!(you: F16) -> F16
+  var result = fsub[F16](me, you)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"F16 subtraction produced non-finite result: {me} - {you}")
+  return result
 
 ### Returns the product of this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F16` value.
-routine F16.$mul(you: F16) -> F16
-  return fmul[F16](me, you)
+routine F16.$mul!(you: F16) -> F16
+  var result = fmul[F16](me, you)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"F16 multiplication produced non-finite result: {me} * {you}")
+  return result
 
 ### Returns the quotient of this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F16` value.
-routine F16.$truediv(you: F16) -> F16
-  return fdiv[F16](me, you)
+routine F16.$truediv!(you: F16) -> F16
+  var result = fdiv[F16](me, you)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"F16 division produced non-finite result: {me} / {you}")
+  return result
 
 ### Returns the negated value.
 ### :returns: The resulting `F16` value.
 routine F16.$neg() -> F16
   return fneg[F16](me)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `F16` value.
+routine F16.$truediv_unchecked(you: F16) -> F16
+  return fdiv_fast[F16](me, you)
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)
@@ -256,6 +275,27 @@ routine F16.is_negative() -> Bool
 ### :returns: The resulting `Bool` value.
 routine F16.is_zero() -> Bool
   return me == 0.0_f16
+
+### Returns true if this value is nan.
+### :returns: The resulting `Bool` value.
+routine F16.is_nan() -> Bool
+  var bits = me.to_bits()
+  var exponent = bit_and[U16](bits, 0x7C00_u16)
+  var mantissa = bit_and[U16](bits, 0x03FF_u16)
+  return exponent == 0x7C00_u16 and mantissa != 0_u16
+
+### Returns true if this value is infinite.
+### :returns: The resulting `Bool` value.
+routine F16.is_infinite() -> Bool
+  var bits = me.to_bits()
+  var exponent = bit_and[U16](bits, 0x7C00_u16)
+  var mantissa = bit_and[U16](bits, 0x03FF_u16)
+  return exponent == 0x7C00_u16 and mantissa == 0_u16
+
+### Returns true if this value is finite.
+### :returns: The resulting `Bool` value.
+routine F16.is_finite() -> Bool
+  return not me.is_nan() and not me.is_infinite()
 
 ### Returns the result of `signum`.
 ### :returns: The resulting `F16` value.

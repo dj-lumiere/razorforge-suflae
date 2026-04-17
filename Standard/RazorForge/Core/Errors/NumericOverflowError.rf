@@ -1,11 +1,11 @@
-module IO/Errors
+module Core
 
-### Defines the crashable `IOError`.
-crashable IOError
+### Defines the crashable `NumericOverflowError`.
+crashable NumericOverflowError
   ### Stores the description member value.
   description: Text
 
 ### Returns the result of `crash message`.
 ### :returns: The resulting `Text` value.
-routine IOError.crash_message() -> Text
+routine NumericOverflowError.crash_message() -> Text
   return me.description

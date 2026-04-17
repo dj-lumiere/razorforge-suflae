@@ -28,7 +28,7 @@ routine BackIndex[I obeys Integral].resolve(length: U64) -> U64
   var offset_u64 = me.offset.U64()
   if offset_u64 > length
     stop!("BackIndex out of bounds")
-  return length - offset_u64
+  return length -% offset_u64
 
 ### Returns the offset component.
 ### :returns: The resulting `I` value.
@@ -50,4 +50,4 @@ routine BackIndex[I obeys Integral].$eq(other: BackIndex[I]) -> Bool
 ### :param other: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine BackIndex[I obeys Integral].$cmp(other: BackIndex[I]) -> ComparisonSign
-  return -me.offset <=> -other.offset
+  return other.offset.$cmp(me.offset)

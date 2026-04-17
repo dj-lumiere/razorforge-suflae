@@ -132,31 +132,49 @@ routine F128.$create(from: D128) -> F128
 ### Returns the sum of this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F128` value.
-routine F128.$add(you: F128) -> F128
-  return fadd[F128](me, you)
+routine F128.$add!(you: F128) -> F128
+  var result = fadd[F128](me, you)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"F128 addition produced non-finite result: {me} + {you}")
+  return result
 
 ### Returns the difference between this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F128` value.
-routine F128.$sub(you: F128) -> F128
-  return fsub[F128](me, you)
+routine F128.$sub!(you: F128) -> F128
+  var result = fsub[F128](me, you)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"F128 subtraction produced non-finite result: {me} - {you}")
+  return result
 
 ### Returns the product of this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F128` value.
-routine F128.$mul(you: F128) -> F128
-  return fmul[F128](me, you)
+routine F128.$mul!(you: F128) -> F128
+  var result = fmul[F128](me, you)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"F128 multiplication produced non-finite result: {me} * {you}")
+  return result
 
 ### Returns the quotient of this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F128` value.
-routine F128.$truediv(you: F128) -> F128
-  return fdiv[F128](me, you)
+routine F128.$truediv!(you: F128) -> F128
+  var result = fdiv[F128](me, you)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"F128 division produced non-finite result: {me} / {you}")
+  return result
 
 ### Returns the negated value.
 ### :returns: The resulting `F128` value.
 routine F128.$neg() -> F128
   return fneg[F128](me)
+
+### Implements the wired routine behavior for this value.
+### :param you: The other value to compare against.
+### :returns: The resulting `F128` value.
+routine F128.$truediv_unchecked(you: F128) -> F128
+  return fdiv_fast[F128](me, you)
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)
@@ -335,6 +353,15 @@ routine F128.log1p() -> F128
 routine F128.pow(exp: F128) -> F128
   return rf_f128_pow(me, exp)
 
+### Returns the result of `pow`.
+### :param exp: The exponent value.
+### :returns: The resulting `F128` value.
+routine F128.$pow!(exp: F128) -> F128
+  var result = me.pow(exp)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"F128 power produced non-finite result: {me} ** {exp}")
+  return result
+
 ### Returns the result of `cbrt`.
 ### :returns: The resulting `F128` value.
 routine F128.cbrt() -> F128
@@ -426,12 +453,26 @@ routine F128.from_bits(bits: U128) -> F128
 ### Returns true if this value is nan.
 ### :returns: The resulting `Bool` value.
 routine F128.is_nan() -> Bool
-  return fcmp_uno[F128](me, me)
+  # F128: bit 127=sign, bits 126-112=exponent (15 bits), bits 111-0=mantissa (112 bits)
+  # NaN = exponent all-ones (0x7FFF) AND mantissa != 0
+  var bits = me.to_bits()
+  var hi = trunc[U128, U64](lshr[U128](bits, 64_u32))
+  var lo = trunc[U128, U64](bits)
+  var exponent = bit_and[U64](lshr[U64](hi, 48_u32), 0x7FFF_u64)
+  var hi_mantissa = bit_and[U64](hi, 0x0000_FFFF_FFFF_FFFF_u64)
+  return exponent == 0x7FFF_u64 and (hi_mantissa != 0_u64 or lo != 0_u64)
 
 ### Returns true if this value is infinite.
 ### :returns: The resulting `Bool` value.
 routine F128.is_infinite() -> Bool
-  return fcmp_oeq[F128](me.abs(), F128_INFINITY)
+  # F128: bit 127=sign, bits 126-112=exponent (15 bits), bits 111-0=mantissa (112 bits)
+  # Infinity = exponent all-ones (0x7FFF) AND mantissa == 0
+  var bits = me.to_bits()
+  var hi = trunc[U128, U64](lshr[U128](bits, 64_u32))
+  var lo = trunc[U128, U64](bits)
+  var exponent = bit_and[U64](lshr[U64](hi, 48_u32), 0x7FFF_u64)
+  var hi_mantissa = bit_and[U64](hi, 0x0000_FFFF_FFFF_FFFF_u64)
+  return exponent == 0x7FFF_u64 and hi_mantissa == 0_u64 and lo == 0_u64
 
 ### Returns true if this value is finite.
 ### :returns: The resulting `Bool` value.

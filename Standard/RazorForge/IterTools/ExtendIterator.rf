@@ -28,16 +28,14 @@ entity ExtendEmitter[T] obeys Iterator[T]
 
 ### Returns the next value from this iterator.
 ### :returns: The resulting `T` value.
-emitting routine ExtendEmitter[T].$next!() -> T
+routine ExtendEmitter[T].$next!() -> T
   if not me.in_second
     var result = me.first.try_next()
     when result
       is None => me.in_second = true
       else item =>
-        emit item
-        return
-  emit me.second.$next!()
-  return
+        return item
+  return me.second.$next!()
 
 ### Returns the result of `extend`.
 ### :param other: The other value to compare against.

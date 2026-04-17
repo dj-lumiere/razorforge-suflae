@@ -32,9 +32,9 @@ preset MIN_KEYS_LIST: U64 = 31u64  # B_LIST/2 - 1
 ### :typeparam T: The value used for `T`.
 entity BTreeListNode[T]
 needs T obeys Comparable
-  keys: List[T]                        # Keys in this node
-  children: List[BTreeListNode[T]]     # Child pointers (empty for leaf)
-  subtree_size: U64                    # Total elements in this subtree
+  keys: List[T]                                  # Keys in this node
+  children: List[BTreeListNode[T]]               # Child pointers (empty for leaf)
+  subtree_size: U64                              # Total elements in this subtree
   is_leaf: Bool
 
 ### Defines the entity `SortedList`.
@@ -152,13 +152,13 @@ routine SortedList[T].count_in_node(node: BTreeListNode[T], value: T) -> U64
 
   while i < node.keys.count()
     if not node.is_leaf
-      count = count + me.count_in_node(node.children.get_raw(i), value)
+      count = count +% me.count_in_node(node.children.get_raw(i), value)
     if node.keys.get_raw(i) == value
-      count = count + 1u64
-    i = i + 1u64
+      count = count +% 1u64
+    i = i +% 1u64
 
   if not node.is_leaf
-    count = count + me.count_in_node(node.children.get_raw(node.children.count() - 1u64), value)
+    count = count +% me.count_in_node(node.children.get_raw(node.children.count() -% 1u64), value)
 
   return count
 
@@ -176,9 +176,9 @@ routine SortedList[T].lower_bound(keys: List[T], value: T) -> U64
   var lo = 0u64
   var hi = keys.count()
   while lo < hi
-    var mid = lo + (hi - lo) / 2u64
+    var mid = lo +% udiv[U64](hi -% lo, 2u64)
     if keys.get_raw(mid) < value
-      lo = mid + 1u64
+      lo = mid +% 1u64
     else
       hi = mid
   return lo
@@ -194,10 +194,10 @@ routine SortedList[T].upper_bound(keys: List[T], value: T) -> U64
   var lo = 0u64
   var hi = keys.count()
   while lo < hi
-    var mid = lo + (hi - lo) / 2u64
+    var mid = lo +% udiv[U64](hi -% lo, 2u64)
     if keys.get_raw(mid) <= value
       # keys[mid] is <= value, so the first strictly-greater key is further right.
-      lo = mid + 1u64
+      lo = mid +% 1u64
     else
       hi = mid
   return lo
@@ -219,17 +219,17 @@ routine SortedList[T].add(value: T)
     return
 
   # If root is full, split it proactively.
-  if me.root!!.keys.count() >= B_LIST - 1u64
+  if me.root!!.keys.count() >= B_LIST -% 1u64
     var old_root = me.root!!
     var new_root = BTreeListNode[T](is_leaf: false)
     new_root.children.add_last(old_root)
     me.split_child(new_root, 0u64)
     me.root = new_root
     # Compute new root's subtree_size from its two children + 1 promoted key.
-    new_root.subtree_size = new_root.children.get_raw(0u64).subtree_size + new_root.children.get_raw(1u64).subtree_size + 1u64
+    new_root.subtree_size = new_root.children.get_raw(0u64).subtree_size +% new_root.children.get_raw(1u64).subtree_size +% 1u64
 
   me.insert_non_full(me.root!!, value)
-  me.count = me.count + 1u64
+  me.count = me.count +% 1u64
   return
 
 ### Inserts `value` into a non-full node's subtree.
@@ -246,7 +246,7 @@ routine SortedList[T].insert_non_full(node: BTreeListNode[T], value: T)
     var i = me.upper_bound(node.keys, value)
     # OPTIMIZED: In-place insert. One memmove, no allocation.
     node.keys.add_at!(i, value)
-    node.subtree_size = node.subtree_size + 1u64
+    node.subtree_size = node.subtree_size +% 1u64
   else
     # Find the child to descend into.
     # upper_bound gives us the first key > value, so the child at that index
@@ -254,15 +254,15 @@ routine SortedList[T].insert_non_full(node: BTreeListNode[T], value: T)
     var i = me.upper_bound(node.keys, value)
 
     # Split child if full (proactive split on the way down).
-    if node.children.get_raw(i).keys.count() >= B_LIST - 1u64
+    if node.children.get_raw(i).keys.count() >= B_LIST -% 1u64
       me.split_child(node, i)
       # After split, the median was promoted to keys[i].
       # If value > promoted key, descend into the right half.
       if value > node.keys.get_raw(i)
-        i = i + 1u64
+        i = i +% 1u64
 
     me.insert_non_full(node.children.get_raw(i), value)
-    node.subtree_size = node.subtree_size + 1u64
+    node.subtree_size = node.subtree_size +% 1u64
   return
 
 ### Splits the child at `child_idx` into two nodes, promoting the median key.
@@ -273,17 +273,17 @@ routine SortedList[T].insert_non_full(node: BTreeListNode[T], value: T)
 @inline
 routine SortedList[T].split_child(parent_node: BTreeListNode[T], child_idx: U64)
   var child = parent_node.children.get_raw(child_idx)
-  var mid = (B_LIST - 1u64) / 2u64
+  var mid = udiv[U64](B_LIST -% 1u64, 2u64)
 
   # Create the right half node.
   var new_node = BTreeListNode[T](is_leaf: child.is_leaf)
 
   # Copy upper keys (mid+1 .. end) to new node.
-  new_node.keys.add_range!(child.keys, mid + 1u64, child.keys.count() - mid - 1u64)
+  new_node.keys.add_range!(child.keys, mid +% 1u64, child.keys.count() -% mid -% 1u64)
 
   # For internal nodes, copy upper children (mid+1 .. end).
   if not child.is_leaf
-    new_node.children.add_range!(child.children, mid + 1u64, child.children.count() - mid - 1u64)
+    new_node.children.add_range!(child.children, mid +% 1u64, child.children.count() -% mid -% 1u64)
 
   # Save median key before truncation.
   var mid_key = child.keys.get_raw(mid)
@@ -291,7 +291,7 @@ routine SortedList[T].split_child(parent_node: BTreeListNode[T], child_idx: U64)
   # OPTIMIZED: Truncate instead of rebuilding.
   child.keys.truncate(mid)
   if not child.is_leaf
-    child.children.truncate(mid + 1u64)
+    child.children.truncate(mid +% 1u64)
 
   # OPTIMIZED: Compute subtree sizes directly.
   if child.is_leaf
@@ -301,19 +301,19 @@ routine SortedList[T].split_child(parent_node: BTreeListNode[T], child_idx: U64)
     var left_size = child.keys.count()
     var i = 0u64
     while i < child.children.count()
-      left_size = left_size + child.children.get_raw(i).subtree_size
-      i = i + 1u64
+      left_size = left_size +% child.children.get_raw(i).subtree_size
+      i = i +% 1u64
     child.subtree_size = left_size
     var right_size = new_node.keys.count()
     i = 0u64
     while i < new_node.children.count()
-      right_size = right_size + new_node.children.get_raw(i).subtree_size
-      i = i + 1u64
+      right_size = right_size +% new_node.children.get_raw(i).subtree_size
+      i = i +% 1u64
     new_node.subtree_size = right_size
 
   # OPTIMIZED: Insert promoted key and new child into parent in-place.
   parent_node.keys.add_at!(child_idx, mid_key)
-  parent_node.children.add_at!(child_idx + 1u64, new_node)
+  parent_node.children.add_at!(child_idx +% 1u64, new_node)
   return
 
 # ============================================================================
@@ -334,7 +334,7 @@ routine SortedList[T].remove(value: T) -> Bool
   var removed = me.remove_from_node(me.root!!, value)
 
   if removed
-    me.count = me.count - 1u64
+    me.count = me.count -% 1u64
 
     # Collapse root if it has no keys but has children.
     if me.root!!.keys.count() == 0u64 and not me.root!!.is_leaf
@@ -362,32 +362,32 @@ routine SortedList[T].remove_from_node(node: BTreeListNode[T], value: T) -> Bool
     if node.is_leaf
       # OPTIMIZED: In-place removal via remove_at!.
       node.keys.remove_at!(i)
-      node.subtree_size = node.subtree_size - 1u64
+      node.subtree_size = node.subtree_size -% 1u64
       return true
     else
       # Internal node: replace with predecessor or successor, then recurse.
       var left = node.children.get_raw(i)
-      var right = node.children.get_raw(i + 1u64)
+      var right = node.children.get_raw(i +% 1u64)
       if left.keys.count() > MIN_KEYS_LIST
         # Case 2a: left child has spare keys — use predecessor.
         var pred = me.get_predecessor(node, i)
         node.keys.set_raw(i, pred)
         me.remove_from_node(left, pred)
-        node.subtree_size = node.subtree_size - 1u64
+        node.subtree_size = node.subtree_size -% 1u64
         return true
       elseif right.keys.count() > MIN_KEYS_LIST
         # Case 2b: right child has spare keys — use successor.
         var succ = me.get_successor(node, i)
         node.keys.set_raw(i, succ)
         me.remove_from_node(right, succ)
-        node.subtree_size = node.subtree_size - 1u64
+        node.subtree_size = node.subtree_size -% 1u64
         return true
       else
         # Case 2c: both at minimum — merge, then recurse.
         me.merge_children_at(node, i)
         var removed = me.remove_from_node(node.children.get_raw(i), value)
         if removed
-          node.subtree_size = node.subtree_size - 1u64
+          node.subtree_size = node.subtree_size -% 1u64
         return removed
   else
     # ── Value not in this node — descend ─────────────────────────────────────
@@ -398,7 +398,7 @@ routine SortedList[T].remove_from_node(node: BTreeListNode[T], value: T) -> Bool
     i = me.fix_child(node, i)
     var removed = me.remove_from_node(node.children.get_raw(i), value)
     if removed
-      node.subtree_size = node.subtree_size - 1u64
+      node.subtree_size = node.subtree_size -% 1u64
     return removed
 
 ### Returns the largest key in the left subtree of keys[idx].
@@ -409,8 +409,8 @@ routine SortedList[T].remove_from_node(node: BTreeListNode[T], value: T) -> Bool
 routine SortedList[T].get_predecessor(node: BTreeListNode[T], idx: U64) -> T
   var current = node.children.get_raw(idx)
   while not current.is_leaf
-    current = current.children.get_raw(current.children.count() - 1u64)
-  return current.keys.get_raw(current.keys.count() - 1u64)
+    current = current.children.get_raw(current.children.count() -% 1u64)
+  return current.keys.get_raw(current.keys.count() -% 1u64)
 
 ### Returns the smallest key in the right subtree of keys[idx].
 ### :param node: The node whose right child subtree to search.
@@ -418,7 +418,7 @@ routine SortedList[T].get_predecessor(node: BTreeListNode[T], idx: U64) -> T
 ### :returns: The in-order successor of keys[idx].
 @inline
 routine SortedList[T].get_successor(node: BTreeListNode[T], idx: U64) -> T
-  var current = node.children.get_raw(idx + 1u64)
+  var current = node.children.get_raw(idx +% 1u64)
   while not current.is_leaf
     current = current.children.get_raw(0u64)
   return current.keys.get_raw(0u64)
@@ -430,7 +430,7 @@ routine SortedList[T].get_successor(node: BTreeListNode[T], idx: U64) -> T
 @inline
 routine SortedList[T].merge_children_at(node: BTreeListNode[T], i: U64)
   var left = node.children.get_raw(i)
-  var right = node.children.get_raw(i + 1u64)
+  var right = node.children.get_raw(i +% 1u64)
 
   # Pull separator down into left.
   left.keys.add_last(node.keys.get_raw(i))
@@ -443,11 +443,11 @@ routine SortedList[T].merge_children_at(node: BTreeListNode[T], i: U64)
     left.children.add_range!(right.children, 0u64, right.children.count())
 
   # Update subtree size.
-  left.subtree_size = left.subtree_size + right.subtree_size + 1u64
+  left.subtree_size = left.subtree_size +% right.subtree_size +% 1u64
 
   # OPTIMIZED: In-place removal from parent.
   node.keys.remove_at!(i)
-  node.children.remove_at!(i + 1u64)
+  node.children.remove_at!(i +% 1u64)
   return
 
 ### Ensures children[i] has > MIN_KEYS_LIST keys before descent.
@@ -459,17 +459,17 @@ routine SortedList[T].fix_child(node: BTreeListNode[T], i: U64) -> U64
   if node.children.get_raw(i).keys.count() > MIN_KEYS_LIST
     return i
 
-  if i > 0u64 and node.children.get_raw(i - 1u64).keys.count() > MIN_KEYS_LIST
+  if i > 0u64 and node.children.get_raw(i -% 1u64).keys.count() > MIN_KEYS_LIST
     me.rotate_right_at(node, i)
     return i
 
-  if i + 1u64 < node.children.count() and node.children.get_raw(i + 1u64).keys.count() > MIN_KEYS_LIST
+  if i +% 1u64 < node.children.count() and node.children.get_raw(i +% 1u64).keys.count() > MIN_KEYS_LIST
     me.rotate_left_at(node, i)
     return i
 
   if i > 0u64
-    me.merge_children_at(node, i - 1u64)
-    return i - 1u64
+    me.merge_children_at(node, i -% 1u64)
+    return i -% 1u64
   me.merge_children_at(node, i)
   return i
 
@@ -479,19 +479,19 @@ routine SortedList[T].fix_child(node: BTreeListNode[T], i: U64) -> U64
 ### :param i: Index of the child that needs an extra key.
 @inline
 routine SortedList[T].rotate_right_at(node: BTreeListNode[T], i: U64)
-  var left = node.children.get_raw(i - 1u64)
+  var left = node.children.get_raw(i -% 1u64)
   var child = node.children.get_raw(i)
 
   # Push parent separator to front of child.
-  child.keys.add_at!(0u64, node.keys.get_raw(i - 1u64))
+  child.keys.add_at!(0u64, node.keys.get_raw(i -% 1u64))
 
   # Move left's rightmost child to child's front (internal nodes only).
   if not child.is_leaf
-    child.children.add_at!(0u64, left.children.get_raw(left.children.count() - 1u64))
+    child.children.add_at!(0u64, left.children.get_raw(left.children.count() -% 1u64))
     left.children.remove_last!()
 
   # Promote left's rightmost key to parent.
-  node.keys.set_raw(i - 1u64, left.keys.get_raw(left.keys.count() - 1u64))
+  node.keys.set_raw(i -% 1u64, left.keys.get_raw(left.keys.count() -% 1u64))
 
   # Remove that key from left. O(1) since it's the last element.
   left.keys.remove_last!()
@@ -507,7 +507,7 @@ routine SortedList[T].rotate_right_at(node: BTreeListNode[T], i: U64)
 ### :param i: Index of the child that needs an extra key.
 @inline
 routine SortedList[T].rotate_left_at(node: BTreeListNode[T], i: U64)
-  var right = node.children.get_raw(i + 1u64)
+  var right = node.children.get_raw(i +% 1u64)
   var child = node.children.get_raw(i)
 
   # Push parent separator to end of child.
@@ -539,8 +539,8 @@ routine SortedList[T].update_subtree_size(node: BTreeListNode[T])
     var size = node.keys.count()
     var i = 0u64
     while i < node.children.count()
-      size = size + node.children.get_raw(i).subtree_size
-      i = i + 1u64
+      size = size +% node.children.get_raw(i).subtree_size
+      i = i +% 1u64
     node.subtree_size = size
   return
 
@@ -550,7 +550,7 @@ routine SortedList[T].update_subtree_size(node: BTreeListNode[T])
 routine SortedList[T].remove_all(value: T) -> U64
   var removed = 0u64
   while me.remove(value)
-    removed = removed + 1u64
+    removed = removed +% 1u64
   return removed
 
 # ============================================================================
@@ -593,14 +593,14 @@ routine SortedList[T].get_by_rank(node: BTreeListNode[T], rank: U64) -> T
     if remaining < child_size
       return me.get_by_rank(node.children.get_raw(i), remaining)
 
-    remaining = remaining - child_size
+    remaining = remaining -% child_size
 
     if i < node.keys.count()
       if remaining == 0u64
         return node.keys.get_raw(i)
-      remaining = remaining - 1u64
+      remaining = remaining -% 1u64
 
-    i = i + 1u64
+    i = i +% 1u64
 
   return node.keys.get_raw(0u64)
 
@@ -628,17 +628,17 @@ routine SortedList[T].range_collect(node: BTreeListNode[T], min_val: T, max_val:
   var i = 0u64
 
   while i < node.keys.count()
-    if not node.is_leaf and (i == 0u64 or node.keys.get_raw(i - 1u64) >= min_val)
+    if not node.is_leaf and (i == 0u64 or node.keys.get_raw(i -% 1u64) >= min_val)
       me.range_collect(node.children.get_raw(i), min_val, max_val, result)
 
     var key = node.keys.get_raw(i)
     if key >= min_val and key <= max_val
       result.add_last(key)
 
-    i = i + 1u64
+    i = i +% 1u64
 
   if not node.is_leaf
-    me.range_collect(node.children.get_raw(node.children.count() - 1u64), min_val, max_val, result)
+    me.range_collect(node.children.get_raw(node.children.count() -% 1u64), min_val, max_val, result)
   return
 
 # ============================================================================
@@ -706,9 +706,9 @@ routine SortedList[T].collect_inorder(node: BTreeListNode[T], result: List[T])
     if not node.is_leaf
       me.collect_inorder(node.children.get_raw(i), result)
     result.add_last(node.keys.get_raw(i))
-    i = i + 1u64
+    i = i +% 1u64
   if not node.is_leaf
-    me.collect_inorder(node.children.get_raw(node.children.count() - 1u64), result)
+    me.collect_inorder(node.children.get_raw(node.children.count() -% 1u64), result)
   return
 
 ### Defines the entity `SortedListIterator`.
@@ -723,12 +723,12 @@ entity SortedListIterator[T] obeys Iterator[T]
 ### :returns: The resulting `T` value.
 ### :absent: Returns absent when the requested value is unavailable.
 @writable
-emitting routine SortedListIterator[T].$next!() -> T
+routine SortedListIterator[T].$next!() -> T
   if me.index >= me.list.count()
     absent
-  emit me.list[me.index]
+  var _result = me.list[me.index]
   me.index = me.index + 1u64
-  return
+  return _result
 
 # ============================================================================
 # Comparison
@@ -743,7 +743,7 @@ routine SortedList[T].$represent() -> Text
     if i > 0u64
       result = result + ", "
     result = result + v.$represent()
-    i = i + 1u64
+    i = i +% 1u64
   result = result + "]"
   return result
 
@@ -756,7 +756,7 @@ routine SortedList[T].$diagnose() -> Text
     if i > 0u64
       result = result + ", "
     result = result + v.$represent()
-    i = i + 1u64
+    i = i +% 1u64
   result = result + "])"
   return result
 
@@ -770,5 +770,5 @@ routine SortedList[T].$eq(other: SortedList[T]) -> Bool
   while i < me.count
     if me[i] != other[i]
       return false
-    i = i + 1u64
+    i = i +% 1u64
   return true
