@@ -1,34 +1,59 @@
+using Compiler.Lexer;
 using SyntaxTree;
 
 namespace Compiler.Desugaring.Passes;
 
 /// <summary>
-/// Lowers for-loops to a loop + when form so the code generator handles all loops
-/// uniformly via <c>EmitLoop</c> + <c>EmitWhen</c>.
+/// Lowers all loop constructs to the <see cref="LoopStatement"/> primitive so the code
+/// generator only needs to handle one loop form via <c>EmitLoop</c>.
 ///
-/// <para>Transform rule for <c>for v in iterable { body }</c>:</para>
+/// <para><b>while</b> → loop+if-break:</para>
+/// <code>
+/// while cond { body }
+///   ↓
+/// loop { if !cond { break }; body }
+/// </code>
+///
+/// <para><b>for v in iterable</b> → loop+when:</para>
 /// <code>
 /// {
 ///   var _lf_iter_N = iterable.$iter()
-///   loop
-///     when _lf_iter_N.try_next()
-///       is None
-///         break
-///       else var v
-///         body
+///   loop { when _lf_iter_N.try_next() { is None → break; else var v → body } }
 /// }
 /// </code>
 ///
-/// <para>Range-based loops (<c>for x in 0 to n</c>) are also lowered via this rule:
-/// <c>RangeExpression</c> is passed as the iterable; <c>ExpressionLoweringPass</c> (which
-/// runs after this pass) converts it to <c>Range[T](...)</c>, so <c>.$iter()</c> dispatches
-/// to <c>Range[T].$iter()</c> → <c>RangeEmitter[T]</c> → <c>try_next()</c>.</para>
+/// <para><b>for (a, b) in pairs</b> (tuple destructuring) → same loop shape, else
+/// body prepends positional member-access bindings:</para>
+/// <code>
+/// {
+///   var _lf_iter_N = pairs.$iter()
+///   loop {
+///     when _lf_iter_N.try_next() {
+///       is None → break
+///       else var _lf_elem_M → { var a = _lf_elem_M.item0; var b = _lf_elem_M.item1; body }
+///     }
+///   }
+/// }
+/// </code>
 ///
-/// <para>The following forms are left unchanged for the code generator to handle:</para>
-/// <list type="bullet">
-///   <item>For-loops with tuple destructuring (<c>for (a, b) in pairs</c>)</item>
-///   <item>For-loops with an else branch</item>
-/// </list>
+/// <para><b>for x in iterable else { alt }</b> (for-else) → exhaustion flag:</para>
+/// <code>
+/// {
+///   var _lf_exhausted_N: Bool = false
+///   var _lf_iter_N = iterable.$iter()
+///   loop {
+///     when _lf_iter_N.try_next() {
+///       is None → { _lf_exhausted_N = true; break }
+///       else var x → body
+///     }
+///   }
+///   if _lf_exhausted_N { alt }
+/// }
+/// </code>
+///
+/// <para>Range-based loops (<c>for x in 0 to n</c>) are also covered: the
+/// <c>RangeExpression</c> iterable is converted to <c>Range[T](...)</c> by
+/// <see cref="ExpressionLoweringPass"/> (which runs after this pass).</para>
 /// </summary>
 internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
 {
@@ -188,37 +213,28 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
 
     private Statement LowerFor(ForStatement forStmt)
     {
-        // Defer tuple destructuring (for (a, b) in pairs)
-        if (forStmt.VariablePattern != null) return forStmt;
-        // Defer for-else (requires _lf_broke tracking to preserve semantics)
-        if (forStmt.ElseBranch != null) return forStmt;
-
         SourceLocation loc = forStmt.Location;
-        string iterName = $"_lf_iter_{_iterCount++}";
+        int n = _iterCount++;
+        string iterName = $"_lf_iter_{n}";
 
-        // "_" is the discard identifier — map to null so ElsePattern doesn't bind a variable
-        string? varName = forStmt.Variable == "_" ? null : forStmt.Variable;
-
-        // ─── Build: var _lf_iter_N = iterable.$iter() ───────────────────────
-        Expression iterCallExpr = new CallExpression(
-            Callee: new MemberExpression(
-                Object: forStmt.Iterable,
-                PropertyName: "$iter",
-                Location: loc),
-            Arguments: [],
-            Location: loc);
-
+        // ─── Shared: var _lf_iter_N = iterable.$iter() ──────────────────────
         Statement iterVarStmt = new DeclarationStatement(
             Declaration: new VariableDeclaration(
                 Name: iterName,
                 Type: null,
-                Initializer: iterCallExpr,
+                Initializer: new CallExpression(
+                    Callee: new MemberExpression(
+                        Object: forStmt.Iterable,
+                        PropertyName: "$iter",
+                        Location: loc),
+                    Arguments: [],
+                    Location: loc),
                 Visibility: VisibilityModifier.Secret,
                 Location: loc),
             Location: loc);
 
-        // ─── Build: _lf_iter_N.try_next() ───────────────────────────────────
-        Expression tryNextCallExpr = new CallExpression(
+        // ─── Shared: _lf_iter_N.try_next() ──────────────────────────────────
+        Expression tryNextCall = new CallExpression(
             Callee: new MemberExpression(
                 Object: new IdentifierExpression(Name: iterName, Location: loc),
                 PropertyName: "try_next",
@@ -226,40 +242,132 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
             Arguments: [],
             Location: loc);
 
-        // Recursively lower nested for-loops inside the body before embedding it
+        // ─── Recursively lower the user body first ───────────────────────────
         Statement loweredBody = LowerStatement(stmt: forStmt.Body);
 
-        // ─── Build: is None → break ──────────────────────────────────────────
-        var noneClause = new WhenClause(
-            Pattern: new NonePattern(Location: loc),
-            Body: new BlockStatement(
-                Statements: [new BreakStatement(Location: loc)],
-                Location: loc),
-            Location: loc);
+        // ─── Build the else-clause body ──────────────────────────────────────
+        Statement elseBody;
+        string? elseVarName;
 
-        // ─── Build: else var v → body ─────────────────────────────────────────
-        var elseClause = new WhenClause(
-            Pattern: new ElsePattern(VariableName: varName, Location: loc),
-            Body: loweredBody,
-            Location: loc);
+        if (forStmt.VariablePattern != null)
+        {
+            // Tuple destructuring: else var _lf_elem_M → { var a = elem.item0; var b = elem.item1; ... body }
+            string elemName = $"_lf_elem_{n}";
+            elseVarName = elemName;
 
-        // ─── Build: when _lf_iter_N.try_next() { is None → break; else var v → body } ──
-        var whenStmt = new WhenStatement(
-            Expression: tryNextCallExpr,
-            Clauses: [noneClause, elseClause],
-            Location: loc);
+            // Prepend: var a = _lf_elem_M.item0, var b = _lf_elem_M.item1, …
+            var bindStmts = new List<Statement>(capacity: forStmt.VariablePattern.Bindings.Count + 1);
+            for (int i = 0; i < forStmt.VariablePattern.Bindings.Count; i++)
+            {
+                DestructuringBinding binding = forStmt.VariablePattern.Bindings[index: i];
+                string bindName = binding.BindingName ?? binding.MemberVariableName ?? $"_lf_b{i}";
+                if (bindName == "_") continue;
 
-        // ─── Build: loop { when ... } ────────────────────────────────────────
-        var loopStmt = new LoopStatement(
-            Body: new BlockStatement(
-                Statements: [whenStmt],
-                Location: loc),
-            Location: loc);
+                bindStmts.Add(item: new DeclarationStatement(
+                    Declaration: new VariableDeclaration(
+                        Name: bindName,
+                        Type: null,
+                        Initializer: new MemberExpression(
+                            Object: new IdentifierExpression(Name: elemName, Location: loc),
+                            PropertyName: $"item{i}",
+                            Location: loc),
+                        Visibility: VisibilityModifier.Secret,
+                        Location: loc),
+                    Location: loc));
+            }
 
-        // ─── Final: { var _lf_iter_N = ...; loop { ... } } ──────────────────
-        return new BlockStatement(
-            Statements: [iterVarStmt, loopStmt],
-            Location: loc);
+            if (loweredBody is BlockStatement bodyBlock)
+            {
+                bindStmts.AddRange(collection: bodyBlock.Statements);
+                elseBody = bodyBlock with { Statements = bindStmts };
+            }
+            else
+            {
+                bindStmts.Add(item: loweredBody);
+                elseBody = new BlockStatement(Statements: bindStmts, Location: loc);
+            }
+        }
+        else
+        {
+            // Simple variable or discard
+            elseVarName = forStmt.Variable == "_" ? null : forStmt.Variable;
+            elseBody    = loweredBody;
+        }
+
+        // ─── Build None and else clauses ─────────────────────────────────────
+        Statement? elseBranchLowered = forStmt.ElseBranch != null
+            ? LowerStatement(stmt: forStmt.ElseBranch)
+            : null;
+
+        Statement noneBody;
+        if (elseBranchLowered != null)
+        {
+            // For-else: set exhausted flag, then break
+            string exhaustedName = $"_lf_exhausted_{n}";
+            noneBody = new BlockStatement(
+                Statements:
+                [
+                    new AssignmentStatement(
+                        Target: new IdentifierExpression(Name: exhaustedName, Location: loc),
+                        Value: new LiteralExpression(Value: true, LiteralType: TokenType.True,
+                            Location: loc),
+                        Location: loc),
+                    new BreakStatement(Location: loc)
+                ],
+                Location: loc);
+
+            var noneClause = new WhenClause(Pattern: new NonePattern(Location: loc), Body: noneBody,
+                Location: loc);
+            var elseClause = new WhenClause(
+                Pattern: new ElsePattern(VariableName: elseVarName, Location: loc),
+                Body: elseBody, Location: loc);
+
+            var whenStmt = new WhenStatement(Expression: tryNextCall,
+                Clauses: [noneClause, elseClause], Location: loc);
+            var loopStmt = new LoopStatement(
+                Body: new BlockStatement(Statements: [whenStmt], Location: loc), Location: loc);
+
+            // var _lf_exhausted_N: Bool = false
+            Statement exhaustedVarStmt = new DeclarationStatement(
+                Declaration: new VariableDeclaration(
+                    Name: exhaustedName,
+                    Type: new TypeExpression(Name: "Bool", GenericArguments: null, Location: loc),
+                    Initializer: new LiteralExpression(Value: false, LiteralType: TokenType.False,
+                        Location: loc),
+                    Visibility: VisibilityModifier.Secret,
+                    Location: loc),
+                Location: loc);
+
+            // if _lf_exhausted_N { alt }
+            Statement exhaustionCheck = new IfStatement(
+                Condition: new IdentifierExpression(Name: exhaustedName, Location: loc),
+                ThenStatement: elseBranchLowered,
+                ElseStatement: null,
+                Location: loc);
+
+            return new BlockStatement(
+                Statements: [exhaustedVarStmt, iterVarStmt, loopStmt, exhaustionCheck],
+                Location: loc);
+        }
+        else
+        {
+            // Plain for (no else branch)
+            noneBody = new BlockStatement(
+                Statements: [new BreakStatement(Location: loc)], Location: loc);
+
+            var noneClause = new WhenClause(Pattern: new NonePattern(Location: loc), Body: noneBody,
+                Location: loc);
+            var elseClause = new WhenClause(
+                Pattern: new ElsePattern(VariableName: elseVarName, Location: loc),
+                Body: elseBody, Location: loc);
+
+            var whenStmt = new WhenStatement(Expression: tryNextCall,
+                Clauses: [noneClause, elseClause], Location: loc);
+            var loopStmt = new LoopStatement(
+                Body: new BlockStatement(Statements: [whenStmt], Location: loc), Location: loc);
+
+            return new BlockStatement(Statements: [iterVarStmt, loopStmt], Location: loc);
+        }
     }
 
     /// <summary>

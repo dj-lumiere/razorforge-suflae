@@ -47,16 +47,8 @@ public partial class LLVMCodeGenerator
             case IfStatement ifStmt:
                 return EmitIf(sb: sb, ifStmt: ifStmt);
 
-            case WhileStatement whileStmt:
-                EmitWhile(sb: sb, whileStmt: whileStmt);
-                return false;
-
             case LoopStatement loopStmt:
                 EmitLoop(sb: sb, loopStmt: loopStmt);
-                return false;
-
-            case ForStatement forStmt:
-                EmitFor(sb: sb, forStmt: forStmt);
                 return false;
 
             case BreakStatement:
