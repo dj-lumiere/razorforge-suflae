@@ -22,7 +22,7 @@ entity ConnectionPool
   active_count: S64
   max_connections: S64
 
-routine acquire_connection(pool: Retained[ConnectionPool]) -> Connection?
+routine acquire_connection(pool: Retained[ConnectionPool]) -> Maybe[Owned[Connection]]
   # Block access for multiple operations
   using pool.hijack() as p
     # Check capacity with pattern matching
@@ -61,7 +61,7 @@ entity UserCache
   secret hit_count: Integer
   secret miss_count: Integer
 
-routine UserCache.__create__()
+routine UserCache.$create()
   me.cache = Dict()
   me.hit_count = 0
   me.miss_count = 0
@@ -239,7 +239,8 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 ### Suflae Documentation
 
 - [Data Types](https://suflae.lumi-dev.xyz/Data-Types) — Records, entities, choices, variants
-- [Concurrency Model](https://suflae.lumi-dev.xyz/Concurrency-Model) — Actor model, `.act()`, suspended routines, `waitfor`
+- [Concurrency Model](https://suflae.lumi-dev.xyz/Concurrency-Model) — Actor model, `.act()`, suspended routines,
+  `waitfor`
 - [Error Handling](https://suflae.lumi-dev.xyz/Error-Handling) — `Maybe`, `Result`, error propagation
 - [Text](https://suflae.lumi-dev.xyz/Text) — String handling and text processing
 - [Code Style](https://suflae.lumi-dev.xyz/Code-Style) — Coding conventions
@@ -308,8 +309,8 @@ RazorForge makes memory operations **visible and explicit** through inline acces
 ```razorforge
 entity Node
   value: S32
-  next: Retained[Node]?
-  prev: Watched[Node]?  # Weak to prevent cycles
+  next: Maybe[Retained[Node]]
+  prev: Maybe[Tracked[Node]]  # Weak to prevent cycles
 
 routine process_node(node: Node)
   # Inline read-only access
@@ -459,16 +460,16 @@ suspended routine start()
 
 ## Concurrency Comparison
 
-| Aspect           | Suflae (Actor Model)   | RazorForge (Primitives)             |
-|------------------|------------------------|-------------------------------------|
-| **Philosophy**   | "Just use actors"      | "Choose your primitive"             |
-| **Primitives**   | Actors only            | Atomics, Mutex, MultiRead, Channels |
-| **Syntax**       | `counter.increment()`  | `counter.seize!().increment()`      |
+| Aspect                     | Suflae (Actor Model)   | RazorForge (Primitives)             |
+|----------------------------|------------------------|-------------------------------------|
+| **Philosophy**             | "Just use actors"      | "Choose your primitive"             |
+| **Primitives**             | Actors only            | Atomics, Mutex, MultiRead, Channels |
+| **Syntax**                 | `counter.increment()`  | `counter.seize!().increment()`      |
 | **Member Variable Access** | Forbidden on actors    | Allowed in lock scope               |
-| **Channels**     | Not exposed (internal) | Exposed for direct use              |
-| **Atomics**      | Not exposed            | Exposed for lock-free ops           |
-| **Control**      | Automatic/implicit     | Explicit/manual                     |
-| **Use Case**     | Applications, scripts  | Systems programming                 |
+| **Channels**               | Not exposed (internal) | Exposed for direct use              |
+| **Atomics**                | Not exposed            | Exposed for lock-free ops           |
+| **Control**                | Automatic/implicit     | Explicit/manual                     |
+| **Use Case**               | Applications, scripts  | Systems programming                 |
 
 ---
 
