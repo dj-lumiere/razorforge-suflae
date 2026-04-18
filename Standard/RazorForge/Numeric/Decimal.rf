@@ -43,7 +43,7 @@ routine Decimal.$create(value: F64) -> Decimal
 ### Implements the wired routine behavior for this value.
 ### :param text: The `text` value.
 ### :returns: The resulting `Decimal` value.
-routine Decimal.$create!(text: Text) -> Decimal
+routine Decimal.$create!(text: Referring[Text]) -> Decimal
   var dec = Decimal(handle: rf_bigdec_new())
   rf_bigdec_set_str(dec.handle, text.to_cstr())
   return dec
@@ -393,8 +393,8 @@ routine Decimal.e(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
 
 ### Returns the result of `parse`.
 ### :param text: The `text` value.
-### :returns: The resulting `Maybe[Decimal]` value.
-routine Decimal.parse(text: Text) -> Maybe[Decimal]
+### :returns: The resulting `Maybe[Owned[Decimal]]` value.
+routine Decimal.parse(text: Referring[Text]) -> Maybe[Owned[Decimal]]
   var dec = Decimal(handle: rf_bigdec_new())
   rf_bigdec_set_str(dec.handle, text.to_cstr())
   # MAPM doesn't return error codes for parsing, so we just return the result

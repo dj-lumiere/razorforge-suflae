@@ -29,9 +29,10 @@ public partial class Parser
             // Optional 'but' exclusion
             if (Match(type: TokenType.But))
             {
-                excluded = new List<string>();
-                excluded.Add(
-                    item: ConsumeIdentifier(errorMessage: "Expected flag name after 'but'"));
+                excluded =
+                [
+                    ConsumeIdentifier(errorMessage: "Expected flag name after 'but'")
+                ];
                 while (Match(type: TokenType.And))
                 {
                     excluded.Add(
@@ -66,8 +67,10 @@ public partial class Parser
         if (Match(type: TokenType.But))
         {
             // Single flag with but exclusion: is READ but WRITE
-            excluded = new List<string>();
-            excluded.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'but'"));
+            excluded =
+            [
+                ConsumeIdentifier(errorMessage: "Expected flag name after 'but'")
+            ];
             while (Match(type: TokenType.And))
             {
                 excluded.Add(

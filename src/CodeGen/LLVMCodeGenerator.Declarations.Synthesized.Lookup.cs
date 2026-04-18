@@ -68,6 +68,7 @@ public partial class LLVMCodeGenerator
         // produced by the semantic analyzer. Emit them via the normal code path.
         if (_synthesizedBodies.TryGetValue(key: routine.RegistryKey, out Statement? astBody))
         {
+            Console.Error.WriteLine($"[synth-ast] Emitting AST body for: {routine.RegistryKey}");
             EmitSynthesizedBodyFromAst(routine: routine, funcName: funcName, body: astBody);
             return;
         }

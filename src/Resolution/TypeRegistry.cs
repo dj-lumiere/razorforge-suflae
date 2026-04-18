@@ -104,7 +104,7 @@ public sealed partial class TypeRegistry
     /// Populated by <see cref="PruneUnusedGenericRoutines"/> and used to filter
     /// <see cref="GetAllRoutines"/> so that dead generic stubs never reach codegen or the AST printer.
     /// </summary>
-    private readonly HashSet<string> _prunedGenericBases = new();
+    private readonly HashSet<string> _prunedGenericBases = [];
 
     /// <summary>
     /// Generic free functions indexed by short name for O(1) lookup in

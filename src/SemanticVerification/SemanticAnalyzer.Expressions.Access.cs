@@ -41,8 +41,11 @@ public sealed partial class SemanticAnalyzer
                     return innerMemberVariable.Type;
                 }
 
-                RoutineInfo? innerMethod = LookupMethodOnWrapperInnerType(wrapperType: objectType,
-                    methodName: member.PropertyName);
+                RoutineInfo? innerMethod =
+                    TrySynthesizeWrapperForwarder(wrapperType: objectType,
+                        methodName: member.PropertyName, isFailable: false)
+                    ?? _registry.LookupMethod(type: objectType,
+                        methodName: member.PropertyName);
                 if (innerMethod != null)
                 {
                     ValidateReadOnlyWrapperMethodAccess(wrapperType: objectType,
@@ -92,9 +95,11 @@ public sealed partial class SemanticAnalyzer
                 return innerMemberVariable.Type;
             }
 
-            // Try to forward method access to the inner type
-            RoutineInfo? innerMethod = LookupMethodOnWrapperInnerType(wrapperType: objectType,
-                methodName: member.PropertyName);
+            // Try to forward method access to the inner type via Phase D synthesized forwarders
+            RoutineInfo? innerMethod =
+                TrySynthesizeWrapperForwarder(wrapperType: objectType,
+                    methodName: member.PropertyName, isFailable: false)
+                ?? _registry.LookupMethod(type: objectType, methodName: member.PropertyName);
             if (innerMethod != null)
             {
                 // Validate read-only wrapper restrictions
@@ -214,6 +219,20 @@ public sealed partial class SemanticAnalyzer
 
         // Look for $getitem method — LookupMethod handles generic resolutions
         RoutineInfo? getItem = _registry.LookupMethod(type: objectType, methodName: "$getitem");
+        // Try failable variant if non-failable not found
+        if (getItem == null)
+        {
+            getItem = _registry.LookupMethod(type: objectType, methodName: "$getitem",
+                isFailable: true);
+        }
+        // Phase D: synthesize a wrapper forwarder if still not found
+        if (getItem == null && IsWrapperType(type: objectType))
+        {
+            getItem = TrySynthesizeWrapperForwarder(wrapperType: objectType,
+                methodName: "$getitem", isFailable: false)
+                ?? TrySynthesizeWrapperForwarder(wrapperType: objectType,
+                    methodName: "$getitem", isFailable: true);
+        }
         if (getItem?.ReturnType != null)
         {
             return getItem.ReturnType;
@@ -369,7 +388,7 @@ public sealed partial class SemanticAnalyzer
 
         // Build set of given captures for quick lookup
         HashSet<string>? givenNames = lambda.Captures != null
-            ? new HashSet<string>(collection: lambda.Captures)
+            ? [..lambda.Captures]
             : null;
 
         foreach (IdentifierExpression id in identifiers)

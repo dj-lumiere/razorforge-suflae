@@ -1,0 +1,24 @@
+# Controlling[T] - Protocol for wrappers that transparently forward T's full API.
+#
+# A routine parameter typed `Controlling[T]` accepts any wrapper that carries
+# mutation authority over T. Read-only wrappers are deliberately excluded.
+#
+# Members (obey Controlling[T]):
+#   - floating T (rvalue)
+#   - Owned[T]
+#   - Hijacked[T]
+#   - Retained[T]
+#   - Seized[T]
+#
+# Non-members:
+#   - Viewed[T], Inspected[T]  -- read-only; cannot satisfy full-API contract.
+#   - Shared[T, P], Tracked[T], Marked[T, P]  -- gateway types.
+#   - Snatched[T]  -- raw unmanaged pointer; no transparent proxy.
+module Core
+
+### Protocol of wrappers that transparently forward `T`'s full (read + write) API.
+### Parameter slot for "any reference to a T I need to mutate".
+### :typeparam T: The referenced entity type.
+protocol Controlling[T] obeys Referring[T]
+needs T is EntityType
+  pass

@@ -229,6 +229,20 @@ public sealed class RoutineInfo
     /// <summary>Whether this routine was auto-generated (e.g., derived comparison operators).</summary>
     public bool IsSynthesized { get; init; }
 
+    /// <summary>
+    /// For wrapper-forwarder synthesized routines: the inner-type method that this forwarder
+    /// delegates to. Used by monomorphization to re-resolve signatures against the concrete
+    /// inner type when the inner method's return depends on the inner's generic parameter.
+    /// </summary>
+    public RoutineInfo? WrapperForwarderInnerMethod { get; init; }
+
+    /// <summary>
+    /// For wrapper-forwarder synthesized routines: the inner type's generic definition
+    /// (e.g. List[T] when wrapping Owned[List[T]]). Used to look up the concrete inner
+    /// method after monomorphization.
+    /// </summary>
+    public TypeSymbol? WrapperForwarderInnerGenericDef { get; init; }
+
     /// <summary>The suspended or threaded status of this routine (None, Suspended, Threaded).</summary>
     public AsyncStatus AsyncStatus { get; init; } = AsyncStatus.None;
 
@@ -321,6 +335,8 @@ public sealed class RoutineInfo
             IsVariadic = IsVariadic,
             IsDangerous = IsDangerous,
             IsSynthesized = IsSynthesized,
+            WrapperForwarderInnerMethod = WrapperForwarderInnerMethod,
+            WrapperForwarderInnerGenericDef = WrapperForwarderInnerGenericDef,
             Storage = Storage,
             AsyncStatus = AsyncStatus
         };

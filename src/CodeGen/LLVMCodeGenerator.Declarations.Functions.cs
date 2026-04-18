@@ -364,6 +364,7 @@ public partial class LLVMCodeGenerator
         _varNameCounts.Clear();
         _localEntityVars.Clear();
         _localRCRecordVars.Clear();
+        _localRetainedVars.Clear();
         _currentBlock = "entry";
         _currentFunctionEntryAllocas.Clear();
         _emittedAllocaNames.Clear();

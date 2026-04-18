@@ -79,7 +79,7 @@ public sealed class EntityTypeInfo : TypeInfo
         // Detect cycles from self-referential member types (e.g., BTreeListNode[T].children:
         // List[BTreeListNode[T]]). Return the in-progress entity so the recursive reference
         // points to the same object that will have its members filled in below.
-        _creatingInstances ??= new HashSet<string>();
+        _creatingInstances ??= [];
         _inProgressEntities ??= new Dictionary<string, EntityTypeInfo>();
         if (!_creatingInstances.Add(item: resolvedName))
         {

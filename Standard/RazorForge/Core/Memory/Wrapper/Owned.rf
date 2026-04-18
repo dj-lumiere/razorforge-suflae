@@ -29,7 +29,7 @@ module Core
 ### Ownership transfers via `steal`; freed automatically when it leaves scope.
 ### :typeparam T: The exclusively owned entity type.
 @llvm("ptr")
-record Owned[T]
+record Owned[T] obeys Controlling[T]
 needs T is EntityType
   pass
 

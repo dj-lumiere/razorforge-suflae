@@ -114,11 +114,15 @@ public partial class LLVMCodeGenerator
     private readonly Dictionary<string, int> _varNameCounts = new();
 
     /// <summary>List of local entity variables (name, LLVM addr name) for auto-cleanup.</summary>
-    private readonly List<(string Name, string LLVMAddr)> _localEntityVars = new();
+    private readonly List<(string Name, string LLVMAddr)> _localEntityVars = [];
 
     /// <summary>List of local record variables with RC wrapper fields for retain/release.</summary>
     private readonly List<(string Name, string LLVMAddr, RecordTypeInfo RecordType)>
-        _localRCRecordVars = new();
+        _localRCRecordVars = [];
+
+    /// <summary>List of local variables whose type IS an RC wrapper (Retained[T], Shared[T], etc.).</summary>
+    private readonly List<(string Name, string LLVMAddr, RecordTypeInfo RecordType)>
+        _localRetainedVars = [];
 
     /// <summary>Set of already-generated function definitions to avoid duplicates.</summary>
     private readonly HashSet<string> _generatedFunctionDefs = [];
@@ -136,7 +140,7 @@ public partial class LLVMCodeGenerator
     private readonly StringBuilder _currentFunctionEntryAllocas = new();
 
     /// <summary>Tracks alloca names already emitted for the current function to prevent duplicates.</summary>
-    private readonly HashSet<string> _emittedAllocaNames = new();
+    private readonly HashSet<string> _emittedAllocaNames = [];
 
     /// <summary>Type parameter substitution map for generic monomorphization (e.g., "T" → Character).</summary>
     private Dictionary<string, TypeInfo>? _typeSubstitutions;

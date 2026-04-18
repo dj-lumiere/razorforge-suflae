@@ -10,21 +10,21 @@ import IO/Errors
 ### Returns the result of `exists`.
 ### :param path: The `path` value.
 ### :returns: The resulting `Bool` value.
-routine exists(path: Text) -> Bool
+routine exists(path: Referring[Text]) -> Bool
   var cstr = CStr(from: path)
   return rf_fs_exists(cstr, cstr.count().S32())
 
 ### Returns true if this value is file.
 ### :param path: The `path` value.
 ### :returns: The resulting `Bool` value.
-routine is_file(path: Text) -> Bool
+routine is_file(path: Referring[Text]) -> Bool
   var cstr = CStr(from: path)
   return rf_fs_is_file(cstr, cstr.count().S32())
 
 ### Returns true if this value is directory.
 ### :param path: The `path` value.
 ### :returns: The resulting `Bool` value.
-routine is_directory(path: Text) -> Bool
+routine is_directory(path: Referring[Text]) -> Bool
   var cstr = CStr(from: path)
   return rf_fs_is_directory(cstr, cstr.count().S32())
 
@@ -35,7 +35,7 @@ routine is_directory(path: Text) -> Bool
 ### Performs `create dir` on this value.
 ### :param path: The `path` value.
 ### :throws: May throw {IOError}.
-routine create_dir!(path: Text)
+routine create_dir!(path: Referring[Text])
   var cstr = CStr(from: path)
   var result = rf_fs_create_dir(cstr, cstr.count().S32())
   if result == -1
@@ -45,7 +45,7 @@ routine create_dir!(path: Text)
 ### Performs `create dir all` on this value.
 ### :param path: The `path` value.
 ### :throws: May throw {IOError}.
-routine create_dir_all!(path: Text)
+routine create_dir_all!(path: Referring[Text])
   var cstr = CStr(from: path)
   var result = rf_fs_create_dir_all(cstr, cstr.count().S32())
   if result == -1
@@ -60,7 +60,7 @@ routine create_dir_all!(path: Text)
 ### :param source: The `source` value.
 ### :param destination: The `destination` value.
 ### :throws: May throw {IOError}.
-routine copy!(source: Text, destination: Text)
+routine copy!(source: Referring[Text], destination: Referring[Text])
   var src_cstr = CStr(from: source)
   var dst_cstr = CStr(from: destination)
   var result = rf_fs_copy(src_cstr, src_cstr.count().S32(), dst_cstr, dst_cstr.count().S32())
@@ -72,7 +72,7 @@ routine copy!(source: Text, destination: Text)
 ### :param source: The `source` value.
 ### :param destination: The `destination` value.
 ### :throws: May throw {IOError}.
-routine move!(source: Text, destination: Text)
+routine move!(source: Referring[Text], destination: Referring[Text])
   var src_cstr = CStr(from: source)
   var dst_cstr = CStr(from: destination)
   var result = rf_fs_move(src_cstr, src_cstr.count().S32(), dst_cstr, dst_cstr.count().S32())
@@ -83,7 +83,7 @@ routine move!(source: Text, destination: Text)
 ### Performs `delete path` on this value.
 ### :param path: The `path` value.
 ### :throws: May throw {IOError}.
-routine delete_path!(path: Text)
+routine delete_path!(path: Referring[Text])
   var cstr = CStr(from: path)
   var result = rf_fs_remove(cstr, cstr.count().S32())
   if result == -1
@@ -93,7 +93,7 @@ routine delete_path!(path: Text)
 ### Performs `delete path all` on this value.
 ### :param path: The `path` value.
 ### :throws: May throw {IOError}.
-routine delete_path_all!(path: Text)
+routine delete_path_all!(path: Referring[Text])
   var cstr = CStr(from: path)
   var result = rf_fs_remove_all(cstr, cstr.count().S32())
   if result == -1
@@ -119,7 +119,7 @@ routine join_path(a: Text, b: Text) -> Text
 ### Returns the result of `parent path`.
 ### :param path: The `path` value.
 ### :returns: The resulting `Text` value.
-routine parent_path(path: Text) -> Text
+routine parent_path(path: Referring[Text]) -> Text
   var cstr = CStr(from: path)
   var ptr = rf_fs_parent_path(cstr, cstr.count().S32())
   var len = rf_get_result_len()
@@ -129,7 +129,7 @@ routine parent_path(path: Text) -> Text
 ### Returns the result of `file name`.
 ### :param path: The `path` value.
 ### :returns: The resulting `Text` value.
-routine file_name(path: Text) -> Text
+routine file_name(path: Referring[Text]) -> Text
   var cstr = CStr(from: path)
   var ptr = rf_fs_file_name(cstr, cstr.count().S32())
   var len = rf_get_result_len()
@@ -139,7 +139,7 @@ routine file_name(path: Text) -> Text
 ### Returns the result of `file stem`.
 ### :param path: The `path` value.
 ### :returns: The resulting `Text` value.
-routine file_stem(path: Text) -> Text
+routine file_stem(path: Referring[Text]) -> Text
   var cstr = CStr(from: path)
   var ptr = rf_fs_file_stem(cstr, cstr.count().S32())
   var len = rf_get_result_len()
@@ -149,7 +149,7 @@ routine file_stem(path: Text) -> Text
 ### Returns the result of `extension`.
 ### :param path: The `path` value.
 ### :returns: The resulting `Text` value.
-routine extension(path: Text) -> Text
+routine extension(path: Referring[Text]) -> Text
   var cstr = CStr(from: path)
   var ptr = rf_fs_extension(cstr, cstr.count().S32())
   var len = rf_get_result_len()
@@ -164,7 +164,7 @@ routine extension(path: Text) -> Text
 ### :param path: The `path` value.
 ### :returns: The resulting `Text` value.
 ### :throws: May throw {IOError}.
-routine absolute_path!(path: Text) -> Text
+routine absolute_path!(path: Referring[Text]) -> Text
   var cstr = CStr(from: path)
   var ptr = rf_fs_absolute_path(cstr, cstr.count().S32())
   var len = rf_get_result_len()
@@ -177,7 +177,7 @@ routine absolute_path!(path: Text) -> Text
 ### :param path: The `path` value.
 ### :returns: The resulting `Text` value.
 ### :throws: May throw {IOError}.
-routine canonical_path!(path: Text) -> Text
+routine canonical_path!(path: Referring[Text]) -> Text
   var cstr = CStr(from: path)
   var ptr = rf_fs_canonical_path(cstr, cstr.count().S32())
   var len = rf_get_result_len()
@@ -193,21 +193,21 @@ routine canonical_path!(path: Text) -> Text
 ### Returns the result of `can read`.
 ### :param path: The `path` value.
 ### :returns: The resulting `Bool` value.
-routine can_read(path: Text) -> Bool
+routine can_read(path: Referring[Text]) -> Bool
   var cstr = CStr(from: path)
   return rf_fs_can_read(cstr, cstr.count().S32())
 
 ### Returns the result of `can write`.
 ### :param path: The `path` value.
 ### :returns: The resulting `Bool` value.
-routine can_write(path: Text) -> Bool
+routine can_write(path: Referring[Text]) -> Bool
   var cstr = CStr(from: path)
   return rf_fs_can_write(cstr, cstr.count().S32())
 
 ### Returns the result of `can execute`.
 ### :param path: The `path` value.
 ### :returns: The resulting `Bool` value.
-routine can_execute(path: Text) -> Bool
+routine can_execute(path: Referring[Text]) -> Bool
   var cstr = CStr(from: path)
   return rf_fs_can_execute(cstr, cstr.count().S32())
 
@@ -215,7 +215,7 @@ routine can_execute(path: Text) -> Bool
 ### :param path: The `path` value.
 ### :param readonly: The `readonly` value.
 ### :throws: May throw {IOError}.
-routine set_readonly!(path: Text, readonly: Bool = true)
+routine set_readonly!(path: Referring[Text], readonly: Bool = true)
   var cstr = CStr(from: path)
   var result = rf_fs_set_readonly(cstr, cstr.count().S32(), readonly)
   if result == -1

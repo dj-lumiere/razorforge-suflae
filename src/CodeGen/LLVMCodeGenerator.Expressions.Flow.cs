@@ -48,6 +48,8 @@ public partial class LLVMCodeGenerator
         List<(string Name, string LLVMAddr)> savedEntityVars = new(_localEntityVars);
         List<(string Name, string LLVMAddr, RecordTypeInfo RecordType)> savedRCVars =
             new(_localRCRecordVars);
+        List<(string Name, string LLVMAddr, RecordTypeInfo RecordType)> savedRetainedVars =
+            new(_localRetainedVars);
         HashSet<string> savedEmittedAllocas = new(_emittedAllocaNames);
         TypeInfo? savedRetType = _currentFunctionReturnType;
         bool savedIsFailable = _currentRoutineIsFailable;
@@ -63,6 +65,7 @@ public partial class LLVMCodeGenerator
         _varNameCounts.Clear();
         _localEntityVars.Clear();
         _localRCRecordVars.Clear();
+        _localRetainedVars.Clear();
         _emittedAllocaNames.Clear();
         _currentFunctionReturnType = routineType.ReturnType;
         _currentRoutineIsFailable = false;
@@ -123,6 +126,8 @@ public partial class LLVMCodeGenerator
         _localEntityVars.AddRange(collection: savedEntityVars);
         _localRCRecordVars.Clear();
         _localRCRecordVars.AddRange(collection: savedRCVars);
+        _localRetainedVars.Clear();
+        _localRetainedVars.AddRange(collection: savedRetainedVars);
 
         _emittedAllocaNames.Clear();
         foreach (string name in savedEmittedAllocas)

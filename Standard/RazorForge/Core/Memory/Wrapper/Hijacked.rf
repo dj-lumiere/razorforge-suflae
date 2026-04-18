@@ -3,7 +3,8 @@ module Core
 ### Defines the record `Hijacked`.
 ### :typeparam T: The value used for `T`.
 @llvm("ptr")
-record Hijacked[T]
+record Hijacked[T] obeys Controlling[T]
+needs T is EntityType
   pass
 
 ### Returns the result of `hijack`.

@@ -988,6 +988,14 @@ public partial class LLVMCodeGenerator
             }
         }
 
+        // Transparent protocol (e.g. Referring[Text] with no declared methods): dispatch through
+        // the first concrete type argument T. Both representations are ptr in LLVM, so no cast needed.
+        if (receiverType is ProtocolTypeInfo transparentProto &&
+            transparentProto.Methods.Count == 0 && transparentProto.TypeArguments is { Count: > 0 })
+        {
+            receiverType = transparentProto.TypeArguments[index: 0];
+        }
+
         // Look up the method — prefer resolved routine from semantic analysis (P1)
         // Strip '!' suffix from failable method calls (e.g., invalidate!() → invalidate)
         bool isFailableMethodCall = member.PropertyName.EndsWith(value: '!');
@@ -1409,6 +1417,16 @@ public partial class LLVMCodeGenerator
             resolvedReturnType = ApplyTypeSubstitutions(type: resolvedReturnType);
         }
 
+        // Universal method (OwnerType = GenericParameterTypeInfo "T"): substitute T → receiverType
+        // in the return type (e.g., T.retain() -> Retained[T] with receiverType=Node → Retained[Node]).
+        if (method?.OwnerType is GenericParameterTypeInfo universalOwnerParam &&
+            resolvedReturnType is { IsGenericResolution: true, TypeArguments: not null })
+        {
+            resolvedReturnType = SubstituteGenericParamInType(
+                type: resolvedReturnType,
+                paramName: universalOwnerParam.Name,
+                concreteType: receiverType);
+        }
 
         // For resolved generic methods, also emit a declaration with the resolved name
         if (!_generatedFunctions.Contains(item: mangledName))
@@ -1500,6 +1518,15 @@ public partial class LLVMCodeGenerator
                 {
                     return _registry.GetOrCreateResolution(genericDef: genericBase,
                         typeArguments: substitutedArgs);
+                }
+
+                // WrapperTypeInfo has no GenericDefinition — resolve via RecordTypeInfo def.
+                if (type is WrapperTypeInfo)
+                {
+                    TypeInfo? wrapperRecordDef = _registry.LookupType(name: type.Name);
+                    if (wrapperRecordDef is { IsGenericDefinition: true })
+                        return _registry.GetOrCreateResolution(genericDef: wrapperRecordDef,
+                            typeArguments: substitutedArgs);
                 }
             }
         }

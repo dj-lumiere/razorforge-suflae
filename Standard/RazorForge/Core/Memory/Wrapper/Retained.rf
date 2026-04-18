@@ -4,7 +4,7 @@ module Core
 
 ### Defines the record `Retained`.
 ### :typeparam T: The exclusively owned entity type.
-record Retained[T]
+record Retained[T] obeys Controlling[T]
 needs T is EntityType
   ### Stores the controller member value.
   secret controller: Snatched[RetainController]
@@ -17,7 +17,7 @@ routine T.retain() -> Retained[T]
   danger!
     # Allocate controller
     var controller = RetainController().snatch()
-    controller.increase_strong_count!()
+    controller.increase_strong_count()
 
     # Create Retained record
     return Retained[T](
@@ -29,22 +29,22 @@ routine T.retain() -> Retained[T]
 ### :returns: The resulting `Retained[T]` value.
 routine Retained[T].retain() -> Retained[T]
   danger!
-    me.controller.increase_strong_count!()
+    me.controller.increase_strong_count()
   return me
 
 ### Executes `release`.
-routine Retained[T].release!()
+dangerous routine Retained[T].release()
   danger!
-    me.controller.decrease_strong_count!()
+    me.controller.decrease_strong_count()
 
     when me.controller.strong_count() == 0
       == true =>
         # Deallocate the data
-        me.data.invalidate!()
+        rf_invalidate[T](me.data)
 
         # Check if we should also deallocate the controller
         when me.controller.weak_count() == 0
-          == true => me.controller.invalidate!()
+          == true => rf_invalidate[RetainController](me.controller)
           == false => pass  # Keep controller alive for weak references
       == false => pass  # Still has strong references
   return

@@ -627,6 +627,29 @@ public sealed partial class StdlibLoader
             isEntitySpecialization = false;
         }
 
+        // Records whose member variables are all known @llvm("ptr") wrapper types (e.g.
+        // Retained[T] with two Snatched fields) have a fixed struct layout regardless of T.
+        // They are NOT entity specializations — register them normally.
+        if (isEntitySpecialization &&
+            record.Members.Any(predicate: m => m is VariableDeclaration { Type: not null }))
+        {
+            bool allMembersPtrWrapper = record.Members
+                .OfType<VariableDeclaration>()
+                .Where(predicate: m => m.Type != null)
+                .All(predicate: m =>
+                {
+                    string baseName = m.Type!.Name.Contains('[')
+                        ? m.Type.Name[..m.Type.Name.IndexOf('[')]
+                        : m.Type.Name;
+                    return baseName is "Snatched" or "Owned" or "Viewed" or "Hijacked"
+                        or "Inspected" or "Seized" or "Shared" or "Marked" or "Tracked";
+                });
+            if (allMembersPtrWrapper)
+            {
+                isEntitySpecialization = false;
+            }
+        }
+
         // Skip if already registered (non-entity-specialization types only;
         // entity specializations need separate registration even if the base name exists)
         if (!isEntitySpecialization && registry.LookupType(name: record.Name) != null)

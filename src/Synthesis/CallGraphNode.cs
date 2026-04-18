@@ -19,9 +19,10 @@ public sealed class CallGraphNode
 
     /// <summary>
     /// The inferred modification category for this routine.
-    /// Starts as Readonly and propagates up to Writable/Migratable.
+    /// Seeded from the routine's declared category so user annotations are never downgraded;
+    /// propagation can only upgrade toward Migratable.
     /// </summary>
-    public ModificationCategory InferredModification { get; set; } = ModificationCategory.Readonly;
+    public ModificationCategory InferredModification { get; set; }
 
     /// <summary>
     /// Whether this routine directly writes to member variables of 'me'.
@@ -45,6 +46,7 @@ public sealed class CallGraphNode
     public CallGraphNode(RoutineInfo routine)
     {
         Routine = routine;
+        InferredModification = routine.DeclaredModification;
     }
 
     /// <summary>

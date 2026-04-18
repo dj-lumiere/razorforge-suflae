@@ -150,7 +150,7 @@ public partial class Parser
     /// <returns>List of parsed task dependencies</returns>
     private List<TaskDependency> ParseTaskDependencies()
     {
-        List<TaskDependency> dependencies = new();
+        List<TaskDependency> dependencies = [];
 
         // Check for tuple-style: after (a, b) as (va, vb)
         if (Check(type: TokenType.LeftParen))
@@ -238,7 +238,7 @@ public partial class Parser
         // Parse expression tuple: (expr, expr, ...)
         Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' for tuple dependencies");
 
-        List<Expression> expressions = new();
+        List<Expression> expressions = [];
         do
         {
             expressions.Add(item: ParseUnary());
@@ -251,7 +251,7 @@ public partial class Parser
 
         Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' for tuple bindings");
 
-        List<string> bindings = new();
+        List<string> bindings = [];
         do
         {
             Token bindingToken = Consume(type: TokenType.Identifier,
@@ -275,7 +275,7 @@ public partial class Parser
         }
 
         // Create TaskDependency for each pair
-        List<TaskDependency> dependencies = new();
+        List<TaskDependency> dependencies = [];
         for (int i = 0; i < expressions.Count; i++)
         {
             string? binding = i < bindings.Count

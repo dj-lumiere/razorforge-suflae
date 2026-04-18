@@ -19,7 +19,7 @@ module Core
 ### Defines the entity `Text`.
 entity Text obeys Addable, Ordered, TextRepeatable
   ### Stores the characters member value.
-  secret characters: List[Character]
+  secret characters: Owned[List[Character]]
 
 # Creators
 
@@ -189,7 +189,7 @@ routine Text.$getslice![I obeys Integral](start: BackIndex[I], end: BackIndex[I]
 ### Returns a new value with `other` appended.
 ### :param other: The other value to compare against.
 ### :returns: The resulting `Text` value.
-routine Text.concat(other: Text) -> Text
+routine Text.concat(other: Referring[Text]) -> Text
   var result = List[Character]()
   var i: U64 = 0u64
   loop
@@ -208,7 +208,7 @@ routine Text.concat(other: Text) -> Text
 ### Returns the sum of this value and the other value.
 ### :param other: The other value to compare against.
 ### :returns: The resulting `Text` value.
-routine Text.$add(other: Text) -> Text
+routine Text.$add(other: Referring[Text]) -> Text
   return me.concat(other)
 
 ### Returns the product of this value and the other value.
@@ -227,7 +227,7 @@ routine Text.$mul[I obeys Integral](count: I) -> Text
 ### Returns whether both values are equal.
 ### :param other: The other value to compare against.
 ### :returns: The resulting `Bool` value.
-routine Text.$eq(other: Text) -> Bool
+routine Text.$eq(other: Referring[Text]) -> Bool
   if me.count() != other.count()
     return false
   var i: U64 = 0u64
@@ -244,7 +244,7 @@ routine Text.$eq(other: Text) -> Bool
 ### Compares this value with the other value.
 ### :param other: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
-routine Text.$cmp(other: Text) -> ComparisonSign
+routine Text.$cmp(other: Referring[Text]) -> ComparisonSign
   var min_len = me.count()
   if other.count() < min_len
     min_len = other.count()
@@ -273,7 +273,7 @@ routine Text.contains(character: Character) -> Bool
 ### Returns true if this value contains the requested value.
 ### :param other: The other value to compare against.
 ### :returns: The resulting `Bool` value.
-routine Text.contains(other: Text) -> Bool
+routine Text.contains(other: Referring[Text]) -> Bool
   if other.is_empty()
     return true
   if other.count() > me.count()
@@ -292,7 +292,7 @@ routine Text.contains(other: Text) -> Bool
 ### Returns true if this value starts with the requested value.
 ### :param prefix: The prefix to test or remove.
 ### :returns: The resulting `Bool` value.
-routine Text.starts_with(prefix: Text) -> Bool
+routine Text.starts_with(prefix: Referring[Text]) -> Bool
   if prefix.count() > me.count()
     return false
   for i in 0 til prefix.count()
@@ -303,7 +303,7 @@ routine Text.starts_with(prefix: Text) -> Bool
 ### Returns true if this value ends with the requested value.
 ### :param suffix: The suffix to test or remove.
 ### :returns: The resulting `Bool` value.
-routine Text.ends_with(suffix: Text) -> Bool
+routine Text.ends_with(suffix: Referring[Text]) -> Bool
   if suffix.count() > me.count()
     return false
   var offset = me.count() - suffix.count()
@@ -326,7 +326,7 @@ routine Text.find!(letter: Character) -> U64
 ### :param other: The other value to compare against.
 ### :returns: The resulting `U64` value.
 ### :absent: Returns absent when the requested value is unavailable.
-routine Text.find!(other: Text) -> U64
+routine Text.find!(other: Referring[Text]) -> U64
   if other.is_empty()
     return 0u64
   if other.count() > me.count()
@@ -409,7 +409,7 @@ routine Text.trim_end() -> Text
 ### :param old: The value to replace.
 ### :param new: The replacement value.
 ### :returns: The resulting `Text` value.
-routine Text.replace(old: Text, new: Text) -> Text
+routine Text.replace(old: Referring[Text], new: Referring[Text]) -> Text
   if old.is_empty()
     return me
   var result = List[Character]()
@@ -436,7 +436,7 @@ routine Text.replace(old: Text, new: Text) -> Text
 ### Returns a copy without the matching prefix.
 ### :param prefix: The prefix to test or remove.
 ### :returns: The resulting `Text` value.
-routine Text.remove_prefix(prefix: Text) -> Text
+routine Text.remove_prefix(prefix: Referring[Text]) -> Text
   if me.starts_with(prefix)
     return me[prefix.count() til me.count()]
   return me
@@ -444,7 +444,7 @@ routine Text.remove_prefix(prefix: Text) -> Text
 ### Returns a copy without the matching suffix.
 ### :param suffix: The suffix to test or remove.
 ### :returns: The resulting `Text` value.
-routine Text.remove_suffix(suffix: Text) -> Text
+routine Text.remove_suffix(suffix: Referring[Text]) -> Text
   if me.ends_with(suffix)
     return me[0 til me.count() - suffix.count()]
   return me
@@ -523,7 +523,7 @@ routine Text.split(separator: Character) -> List[Text]
 ### Splits this value into parts.
 ### :param separator: The separator to use.
 ### :returns: The resulting `List[Text]` value.
-routine Text.split(separator: Text) -> List[Text]
+routine Text.split(separator: Referring[Text]) -> List[Text]
   if separator.is_empty()
     var parts = List[Text]()
     for i in 0 til me.count()

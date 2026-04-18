@@ -576,6 +576,10 @@ public sealed partial class TypeRegistry
                 SubstituteTypeInProtocol(type: resolvedReturn, substitution: substitution);
         }
 
+        // ProtocolSelf (Me) in protocol method signatures means the concrete implementing type.
+        if (resolvedReturn is ProtocolSelfTypeInfo)
+            resolvedReturn = ownerType;
+
         // Convert ProtocolMethodInfo.ParameterTypes → ParameterInfo list
         var parameters = new List<ParameterInfo>();
         for (int i = 0; i < protoMethod.ParameterTypes.Count; i++)
@@ -585,6 +589,9 @@ public sealed partial class TypeRegistry
             {
                 paramType = SubstituteTypeInProtocol(type: paramType, substitution: substitution);
             }
+
+            if (paramType is ProtocolSelfTypeInfo)
+                paramType = ownerType;
 
             string paramName = i < protoMethod.ParameterNames.Count
                 ? protoMethod.ParameterNames[index: i]
@@ -691,6 +698,8 @@ public sealed partial class TypeRegistry
             IsVariadic = method.IsVariadic,
             IsDangerous = method.IsDangerous,
             IsSynthesized = method.IsSynthesized,
+            WrapperForwarderInnerMethod = method.WrapperForwarderInnerMethod,
+            WrapperForwarderInnerGenericDef = method.WrapperForwarderInnerGenericDef,
             Storage = method.Storage,
             AsyncStatus = method.AsyncStatus,
             OriginalName = method.OriginalName

@@ -62,6 +62,7 @@ internal sealed class SignatureResolver
         ModificationCategory declaredModification =
             routine.Annotations.Contains(item: "readonly") ? ModificationCategory.Readonly :
             routine.Annotations.Contains(item: "writable") ? ModificationCategory.Writable :
+            routine.Annotations.Contains(item: "migrating") ? ModificationCategory.Migratable :
             ModificationCategory.Migratable;
 
         // Create preliminary RoutineInfo for generic parameter resolution context.

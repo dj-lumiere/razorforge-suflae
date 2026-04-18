@@ -53,6 +53,16 @@ public partial class LLVMCodeGenerator
                     return _registry.GetOrCreateResolution(genericDef: genericBase,
                         typeArguments: resolvedArgs);
                 }
+
+                // WrapperTypeInfo (Retained[T], etc.) has no GenericDefinition —
+                // look up the RecordTypeInfo definition by wrapper name.
+                if (type is WrapperTypeInfo)
+                {
+                    TypeInfo? wrapperRecordDef = _registry.LookupType(name: type.Name);
+                    if (wrapperRecordDef is { IsGenericDefinition: true })
+                        return _registry.GetOrCreateResolution(genericDef: wrapperRecordDef,
+                            typeArguments: resolvedArgs);
+                }
             }
         }
 

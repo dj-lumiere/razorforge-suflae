@@ -4,9 +4,9 @@ module Numerics
 ### Defines the entity `Complex`.
 entity Complex obeys Numeric, Equatable
   ### Stores the real member value.
-  secret real: Decimal
+  secret real: Owned[Decimal]
   ### Stores the imag member value.
-  secret imag: Decimal
+  secret imag: Owned[Decimal]
 
 # Complex constants
 preset COMPLEX_ZERO: Complex = Complex(real: Decimal.zero(), imag: Decimal.zero())

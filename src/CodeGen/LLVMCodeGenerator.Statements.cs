@@ -200,6 +200,14 @@ public partial class LLVMCodeGenerator
             _localRCRecordVars.Add(item: (varDecl.Name, $"%{uniqueName}.addr", rcRecord));
         }
 
+        // Track variables whose type IS an RC wrapper (Retained[T], Shared[T], etc.)
+        if (varType is RecordTypeInfo rcWrapRecord &&
+            GetGenericBaseName(type: rcWrapRecord) is { } rcWrapBase &&
+            _rcWrapperBaseNames.Contains(item: rcWrapBase))
+        {
+            _localRetainedVars.Add(item: (varDecl.Name, $"%{uniqueName}.addr", rcWrapRecord));
+        }
+
         // Store initial value if present
         if (varDecl.Initializer != null)
         {
@@ -226,6 +234,16 @@ public partial class LLVMCodeGenerator
             if (varType is RecordTypeInfo { HasRCFields: true } rcRecordInit)
             {
                 EmitRCRecordRetain(sb: sb, llvmAddr: varPtr, recordType: rcRecordInit);
+            }
+
+            // For RC wrapper vars copied from another variable/field, bump the strong count.
+            // Calls that return Retained[T] (e.g. .retain()) already set count=1 for us.
+            if (varType is RecordTypeInfo rcWrapInit &&
+                GetGenericBaseName(type: rcWrapInit) is { } rcWrapInitBase &&
+                _rcWrapperBaseNames.Contains(item: rcWrapInitBase) &&
+                varDecl.Initializer is not CallExpression)
+            {
+                EmitRetainedVarRetain(sb: sb, llvmAddr: varPtr, recordType: rcWrapInit);
             }
         }
     }
@@ -307,12 +325,28 @@ public partial class LLVMCodeGenerator
             EmitRCRecordRelease(sb: sb, llvmAddr: varPtr, recordType: rcRecord);
         }
 
+        // Release old RC wrapper value before overwrite
+        if (varType is RecordTypeInfo rcWrapOld &&
+            GetGenericBaseName(type: rcWrapOld) is { } rcWrapOldBase &&
+            _rcWrapperBaseNames.Contains(item: rcWrapOldBase))
+        {
+            EmitRetainedVarRelease(sb: sb, llvmAddr: varPtr, recordType: rcWrapOld);
+        }
+
         EmitLine(sb: sb, line: $"  store {llvmType} {value}, ptr {varPtr}");
 
         // Retain new value's RC fields
         if (varType is RecordTypeInfo { HasRCFields: true } rcRecordNew)
         {
             EmitRCRecordRetain(sb: sb, llvmAddr: varPtr, recordType: rcRecordNew);
+        }
+
+        // Retain new RC wrapper value (call already returned with count set, but copies need bump)
+        if (varType is RecordTypeInfo rcWrapNew &&
+            GetGenericBaseName(type: rcWrapNew) is { } rcWrapNewBase &&
+            _rcWrapperBaseNames.Contains(item: rcWrapNewBase))
+        {
+            EmitRetainedVarRetain(sb: sb, llvmAddr: varPtr, recordType: rcWrapNew);
         }
     }
 
@@ -1417,6 +1451,59 @@ public partial class LLVMCodeGenerator
         {
             EmitRCRecordRelease(sb: sb, llvmAddr: llvmAddr, recordType: recordType);
         }
+
+        foreach ((string _, string llvmAddr, RecordTypeInfo recordType) in _localRetainedVars)
+        {
+            EmitRetainedVarRelease(sb: sb, llvmAddr: llvmAddr, recordType: recordType);
+        }
+    }
+
+    /// <summary>
+    /// Bumps the strong count for an RC wrapper variable by calling retain() on it.
+    /// Used when copying an existing Retained[T] into a new variable (not from a .retain() call).
+    /// </summary>
+    private void EmitRetainedVarRetain(StringBuilder sb, string llvmAddr,
+        RecordTypeInfo recordType)
+    {
+        string llvmType = GetLLVMType(type: recordType);
+        string loaded = NextTemp();
+        EmitLine(sb: sb, line: $"  {loaded} = load {llvmType}, ptr {llvmAddr}");
+
+        RoutineInfo? retainMethod = _registry.LookupMethod(type: recordType, methodName: "retain");
+        if (retainMethod == null)
+        {
+            return;
+        }
+
+        GenerateFunctionDeclaration(routine: retainMethod);
+        string mangled = MangleFunctionName(routine: retainMethod);
+        string rcLlvm = GetParameterLLVMType(type: recordType);
+        // retain() returns Retained[T] (same struct value); discard — heap mutation already done
+        EmitLine(sb: sb, line: $"  {NextTemp()} = call {rcLlvm} @{mangled}({rcLlvm} {loaded})");
+    }
+
+    /// <summary>
+    /// Decrements the strong count for an RC wrapper variable by calling release() on it.
+    /// Potentially deallocates the inner data if strong count reaches zero.
+    /// </summary>
+    private void EmitRetainedVarRelease(StringBuilder sb, string llvmAddr,
+        RecordTypeInfo recordType)
+    {
+        string llvmType = GetLLVMType(type: recordType);
+        string loaded = NextTemp();
+        EmitLine(sb: sb, line: $"  {loaded} = load {llvmType}, ptr {llvmAddr}");
+
+        RoutineInfo? releaseMethod =
+            _registry.LookupMethod(type: recordType, methodName: "release");
+        if (releaseMethod == null)
+        {
+            return;
+        }
+
+        GenerateFunctionDeclaration(routine: releaseMethod);
+        string mangled = MangleFunctionName(routine: releaseMethod);
+        string rcLlvm = GetParameterLLVMType(type: recordType);
+        EmitLine(sb: sb, line: $"  call void @{mangled}({rcLlvm} {loaded})");
     }
 
     #endregion

@@ -88,7 +88,7 @@ internal sealed class BlankReturnNormalizationPass(DesugaringContext ctx)
                     Statement lowered = NormalizeStatement(stmt: stmts[i]);
                     if (!ReferenceEquals(lowered, stmts[i]))
                     {
-                        replaced ??= new List<Statement>(stmts);
+                        replaced ??= [..stmts];
                         replaced[i] = lowered;
                     }
                 }

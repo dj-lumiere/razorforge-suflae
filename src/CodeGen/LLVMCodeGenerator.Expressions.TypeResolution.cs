@@ -350,6 +350,15 @@ public partial class LLVMCodeGenerator
                     RoutineInfo? method = _registry.LookupMethod(type: receiverType,
                         methodName: lookupName);
 
+                    // Transparent protocol (e.g. Referring[Text] with no declared methods): fall back
+                    // to dispatching through the first concrete type argument T.
+                    if (method == null && receiverType is ProtocolTypeInfo protoRcvr &&
+                        protoRcvr.Methods.Count == 0 && protoRcvr.TypeArguments is { Count: > 0 })
+                    {
+                        receiverType = protoRcvr.TypeArguments[index: 0];
+                        method = _registry.LookupMethod(type: receiverType, methodName: lookupName);
+                    }
+
                     if (method?.ReturnType != null)
                     {
                         // Substitute generic type params in return type (e.g., T → Character)
@@ -463,6 +472,42 @@ public partial class LLVMCodeGenerator
                                             genericDef: genericDef,
                                             typeArguments: resolvedArgs);
                                     }
+                                }
+                            }
+                        }
+
+                        // Universal method (e.g. T.retain() -> Retained[T]): substitute the
+                        // universal parameter T → receiverType to get the concrete return type.
+                        if (method.OwnerType is GenericParameterTypeInfo universalParam &&
+                            method.ReturnType.IsGenericResolution &&
+                            method.ReturnType.TypeArguments != null)
+                        {
+                            string tName = universalParam.Name;
+                            var substitutedArgs = new List<TypeInfo>();
+                            bool anySubstituted = false;
+                            foreach (TypeInfo typeArg in method.ReturnType.TypeArguments)
+                            {
+                                if (typeArg.Name == tName)
+                                {
+                                    substitutedArgs.Add(item: receiverType);
+                                    anySubstituted = true;
+                                }
+                                else
+                                {
+                                    substitutedArgs.Add(item: typeArg);
+                                }
+                            }
+
+                            if (anySubstituted)
+                            {
+                                string baseName = method.ReturnType.Name;
+                                int bracketIdx = baseName.IndexOf(value: '[');
+                                if (bracketIdx > 0) baseName = baseName[..bracketIdx];
+                                TypeInfo? genericDef = _registry.LookupType(name: baseName);
+                                if (genericDef != null)
+                                {
+                                    return _registry.GetOrCreateResolution(genericDef: genericDef,
+                                        typeArguments: substitutedArgs);
                                 }
                             }
                         }

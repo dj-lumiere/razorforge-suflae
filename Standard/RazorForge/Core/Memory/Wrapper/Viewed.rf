@@ -3,7 +3,8 @@ module Core
 ### Defines the record `Viewed`.
 ### :typeparam T: The value used for `T`.
 @llvm("ptr")
-record Viewed[T]
+record Viewed[T] obeys Referring[T]
+needs T is EntityType
   pass
 
 ### Returns the result of `view`.

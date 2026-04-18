@@ -18,7 +18,7 @@ module IO/Console
 ### Performs `show` on this value.
 ### :param value: The value to use.
 ### :param end: The exclusive ending position.
-routine show(value: Text, end: Text = "\n")
+routine show(value: Referring[Text], end: Referring[Text] = "\n")
   var value_cstr = CStr(from: value)
   rf_console_show(value_cstr.ptr, value_cstr.count())
   var end_cstr = CStr(from: end)
@@ -28,7 +28,7 @@ routine show(value: Text, end: Text = "\n")
 ### Performs `show` on this value.
 ### :param value: The value to use.
 ### :param end: The exclusive ending position.
-routine show(value: Bytes, end: Text = "\n")
+routine show(value: Referring[Bytes], end: Referring[Text] = "\n")
   var value_cstr = CStr(from: value)
   rf_console_show(value_cstr.ptr, value_cstr.count())
   var end_cstr = CStr(from: end)
@@ -67,7 +67,7 @@ routine show[T](values...: T, sep: Text = " ", end: Text = "\n")
 ### Performs `alert` on this value.
 ### :param value: The value to use.
 ### :param end: The exclusive ending position.
-routine alert(value: Text, end: Text = "\n")
+routine alert(value: Referring[Text], end: Referring[Text] = "\n")
   var value_cstr = CStr(from: value)
   rf_console_alert(value_cstr.ptr, value_cstr.count())
   var end_cstr = CStr(from: end)
@@ -77,7 +77,7 @@ routine alert(value: Text, end: Text = "\n")
 ### Performs `alert` on this value.
 ### :param value: The value to use.
 ### :param end: The exclusive ending position.
-routine alert(value: Bytes, end: Text = "\n")
+routine alert(value: Referring[Bytes], end: Referring[Text] = "\n")
   var value_cstr = CStr(from: value)
   rf_console_alert(value_cstr.ptr, value_cstr.count())
   var end_cstr = CStr(from: end)

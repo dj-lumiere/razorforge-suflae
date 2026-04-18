@@ -319,6 +319,52 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         TypeInfo concreteOwner,
         Dictionary<string, TypeInfo> typeSubs)
     {
+        // Wrapper-forwarder special case: the generic forwarder's signature came from the
+        // inner-generic-def method (e.g. List[T].$getitem! returning T). Naive name-based
+        // substitution using the wrapper's typeSubs would map List[T]'s T to the wrapper's
+        // T-substitution (the whole inner type), not the inner's own T. Re-resolve the
+        // signature against the concrete inner method instead.
+        if (genMethod is { IsSynthesized: true, WrapperForwarderInnerMethod: { } innerGenMethod }
+            && concreteOwner.TypeArguments is { Count: 1 } wrapperArgs)
+        {
+            TypeInfo concreteInner = wrapperArgs[0];
+            RoutineInfo? concreteInnerMethod = ctx.Registry.LookupMethod(
+                type: concreteInner,
+                methodName: innerGenMethod.Name,
+                isFailable: innerGenMethod.IsFailable);
+            if (concreteInnerMethod != null)
+            {
+                var fwdParams = concreteInnerMethod.Parameters
+                    .Select(p => p.Name == "me"
+                        ? p.WithSubstitutedType(newType: concreteOwner)
+                        : p)
+                    .ToList();
+                return new RoutineInfo(name: genMethod.Name)
+                {
+                    Kind = genMethod.Kind,
+                    OwnerType = concreteOwner,
+                    Parameters = fwdParams,
+                    ReturnType = concreteInnerMethod.ReturnType,
+                    IsFailable = genMethod.IsFailable,
+                    DeclaredModification = genMethod.DeclaredModification,
+                    ModificationCategory = genMethod.ModificationCategory,
+                    Visibility = genMethod.Visibility,
+                    Location = genMethod.Location,
+                    Module = genMethod.Module,
+                    Annotations = genMethod.Annotations,
+                    CallingConvention = genMethod.CallingConvention,
+                    IsVariadic = genMethod.IsVariadic,
+                    IsDangerous = genMethod.IsDangerous,
+                    IsSynthesized = true,
+                    WrapperForwarderInnerMethod = concreteInnerMethod,
+                    WrapperForwarderInnerGenericDef = genMethod.WrapperForwarderInnerGenericDef,
+                    Storage = genMethod.Storage,
+                    AsyncStatus = genMethod.AsyncStatus,
+                    OriginalName = genMethod.OriginalName
+                };
+            }
+        }
+
         var resolvedParams = genMethod.Parameters
             .Select(p =>
             {

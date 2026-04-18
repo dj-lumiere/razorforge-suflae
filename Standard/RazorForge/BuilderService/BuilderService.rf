@@ -33,9 +33,9 @@ choice BuildMode
 ### Defines the entity `FieldInfo`.
 entity FieldInfo
   ### Stores the name member value.
-  name: Text
+  name: Owned[Text]
   ### Stores the type name member value.
-  type_name: Text
+  type_name: Owned[Text]
   ### Stores the visibility member value.
   visibility: Visibility
   ### Stores the offset member value.
@@ -44,22 +44,22 @@ entity FieldInfo
 ### Defines the entity `ProtocolInfo`.
 entity ProtocolInfo
   ### Stores the name member value.
-  name: Text
+  name: Owned[Text]
   ### Stores the routine names member value.
-  routine_names: List[Text]
+  routine_names: Owned[List[Owned[Text]]]
   ### Stores the is generated member value.
   is_generated: Bool
 
 ### Defines the entity `RoutineInfo`.
 entity RoutineInfo
   ### Stores the name member value.
-  name: Text
+  name: Owned[Text]
   ### Stores the param types member value.
-  param_types: List[Text]
+  param_types: Owned[List[Owned[Text]]]
   ### Stores the param names member value.
-  param_names: List[Text]
+  param_names: Owned[List[Owned[Text]]]
   ### Stores the return type member value.
-  return_type: Text
+  return_type: Owned[Text]
   ### Stores the is crashable member value.
   is_crashable: Bool
   ### Stores the is generated member value.

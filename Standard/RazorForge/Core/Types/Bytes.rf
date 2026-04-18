@@ -7,7 +7,7 @@ module Core
 ### Defines the entity `Bytes`.
 entity Bytes
   ### Stores the bytes member value.
-  secret bytes: List[Byte]
+  secret bytes: Owned[List[Byte]]
 
 # Creators
 
@@ -156,7 +156,7 @@ routine Bytes.$getslice[I obeys Integral](start: BackIndex[I], end: BackIndex[I]
 ### Returns a new value with `other` appended.
 ### :param other: The other value to compare against.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.concat(other: Bytes) -> Bytes
+routine Bytes.concat(other: Referring[Bytes]) -> Bytes
   var result = List[Byte]()
   var i: U64 = 0u64
   for i in 0 til me.count()
@@ -168,13 +168,13 @@ routine Bytes.concat(other: Bytes) -> Bytes
 ### Returns the sum of this value and the other value.
 ### :param other: The other value to compare against.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.$add(other: Bytes) -> Bytes
+routine Bytes.$add(other: Referring[Bytes]) -> Bytes
   return me.concat(other)
 
 ### Returns whether both values are equal.
 ### :param other: The other value to compare against.
 ### :returns: The resulting `Bool` value.
-routine Bytes.$eq(other: Bytes) -> Bool
+routine Bytes.$eq(other: Referring[Bytes]) -> Bool
   if me.count() != other.count()
     return false
   var i: U64 = 0u64
@@ -197,7 +197,7 @@ routine Bytes.contains(byte: Byte) -> Bool
 ### Returns true if this value starts with the requested value.
 ### :param prefix: The prefix to test or remove.
 ### :returns: The resulting `Bool` value.
-routine Bytes.starts_with(prefix: Bytes) -> Bool
+routine Bytes.starts_with(prefix: Referring[Bytes]) -> Bool
   if prefix.count() > me.count()
     return false
   for i in 0 til prefix.count()
@@ -208,7 +208,7 @@ routine Bytes.starts_with(prefix: Bytes) -> Bool
 ### Returns true if this value ends with the requested value.
 ### :param suffix: The suffix to test or remove.
 ### :returns: The resulting `Bool` value.
-routine Bytes.ends_with(suffix: Bytes) -> Bool
+routine Bytes.ends_with(suffix: Referring[Bytes]) -> Bool
   if suffix.count() > me.count()
     return false
   var offset = me.count() - suffix.count()

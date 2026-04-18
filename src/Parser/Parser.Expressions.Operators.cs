@@ -128,7 +128,7 @@ public partial class Parser
                 else if (Match(type: TokenType.Dot))
                 {
                     // Member variable update: .memberVar or .memberVar.nested
-                    fieldPath = new List<string>();
+                    fieldPath = [];
                     Token memberVariableToken = Consume(type: TokenType.Identifier,
                         errorMessage:
                         "Expected member variable name after '.' in with expression");

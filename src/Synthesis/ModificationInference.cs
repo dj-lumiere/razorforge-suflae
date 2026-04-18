@@ -87,15 +87,16 @@ public sealed class ModificationInference
     /// <returns>The computed modification category.</returns>
     private ModificationCategory ComputeCategory(CallGraphNode node)
     {
-        ModificationCategory category = ModificationCategory.Readonly;
+        // Start from the declared floor — user annotations are never downgraded.
+        ModificationCategory category = node.Routine.DeclaredModification;
 
         // Direct modifications
-        if (node.DirectlyModifies)
+        if (node.DirectlyModifies && category < ModificationCategory.Writable)
         {
             category = ModificationCategory.Writable;
         }
 
-        if (node.DirectlyMigrates)
+        if (node.DirectlyMigrates && category < ModificationCategory.Migratable)
         {
             category = ModificationCategory.Migratable;
         }

@@ -34,7 +34,7 @@ entity FileHandle
 ### :param mode: The `mode` value.
 ### :returns: The resulting `FileHandle` value.
 ### :throws: May throw {IOError}.
-routine open!(path: Text, mode: FileMode = FileMode.READ) -> FileHandle
+routine open!(path: Referring[Text], mode: FileMode = FileMode.READ) -> FileHandle
   var cstr = CStr(from: path)
   var mode_val = mode.S32()
   var fd = rf_file_open(cstr, cstr.count().S32(), mode_val)
@@ -74,7 +74,7 @@ routine FileHandle.read_bytes(count: U64) -> Bytes
 ### Performs `write` on this value.
 ### :param value: The value to use.
 ### :param end: The exclusive ending position.
-routine FileHandle.write(value: Text, end: Text = "\n")
+routine FileHandle.write(value: Referring[Text], end: Referring[Text] = "\n")
   var cstr = CStr(from: value)
   rf_file_write(me.fd, cstr.ptr, cstr.count())
   var end_cstr = CStr(from: end)
@@ -92,8 +92,9 @@ routine FileHandle.write[T](value: T, end: Text = "\n")
 ### Performs `write` on this value.
 ### :param value: The value to use.
 ### :param end: The exclusive ending position.
-routine FileHandle.write(value: Bytes, end: Text = "")
-  rf_file_write(me.fd, value.ptr, value.count())
+routine FileHandle.write(value: Referring[Bytes], end: Referring[Text] = "")
+  var val_cstr = CStr(from: value)
+  rf_file_write(me.fd, val_cstr.ptr, val_cstr.count())
   if end.count() > 0
     var end_cstr = CStr(from: end)
     rf_file_write(me.fd, end_cstr.ptr, end_cstr.count())
@@ -129,7 +130,7 @@ routine FileHandle.$exit()
 ### Returns the result of `read all`.
 ### :param path: The `path` value.
 ### :returns: The resulting `Text` value.
-routine read_all!(path: Text) -> Text
+routine read_all!(path: Referring[Text]) -> Text
   var file = open!(path, mode: FileMode.READ)
   var content = file.read_all()
   file.close()
@@ -138,7 +139,7 @@ routine read_all!(path: Text) -> Text
 ### Performs `write all` on this value.
 ### :param path: The `path` value.
 ### :param content: The `content` value.
-routine write_all!(path: Text, content: Text)
+routine write_all!(path: Referring[Text], content: Referring[Text])
   var file = open!(path, mode: FileMode.WRITE)
   file.write(content, end: "")
   file.close()
@@ -147,7 +148,7 @@ routine write_all!(path: Text, content: Text)
 ### Performs `append all` on this value.
 ### :param path: The `path` value.
 ### :param content: The `content` value.
-routine append_all!(path: Text, content: Text)
+routine append_all!(path: Referring[Text], content: Referring[Text])
   var file = open!(path, mode: FileMode.APPEND)
   file.write(content, end: "")
   file.close()

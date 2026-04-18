@@ -161,24 +161,6 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Tries to look up a method on the inner type of a wrapper type.
-    /// </summary>
-    /// <param name="wrapperType">The wrapper type.</param>
-    /// <param name="methodName">The name of the method to look up.</param>
-    /// <returns>The routine info if found, null otherwise.</returns>
-    private RoutineInfo? LookupMethodOnWrapperInnerType(TypeSymbol wrapperType, string methodName)
-    {
-        TypeSymbol? innerType = GetWrapperInnerType(wrapperType: wrapperType);
-        if (innerType == null)
-        {
-            return null;
-        }
-
-        // Look up the method on the inner type
-        return _registry.LookupRoutine(fullName: $"{innerType.Name}.{methodName}");
-    }
-
-    /// <summary>
     /// Validates that a method can be called through a read-only wrapper.
     /// Read-only wrappers (Viewed, Inspected) can only call @readonly methods.
     /// </summary>

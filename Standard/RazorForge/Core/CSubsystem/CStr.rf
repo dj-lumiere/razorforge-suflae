@@ -44,7 +44,7 @@ routine CStr.$create(from_ptr: Address) -> CStr
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `CStr` value.
-routine CStr.$create(from: Bytes) -> CStr
+routine CStr.$create(from: Referring[Bytes]) -> CStr
   var len = from.count()
   var buffer = Snatched[Byte](rf_allocate_dynamic(len + 1u64))
 
@@ -61,7 +61,7 @@ routine CStr.$create(from: Bytes) -> CStr
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `CStr` value.
-routine CStr.$create(from: Text) -> CStr
+routine CStr.$create(from: Referring[Text]) -> CStr
   var len = from.count()
   if len == 0u64
     var empty_buffer = Snatched[Byte](rf_allocate_dynamic(1u64))

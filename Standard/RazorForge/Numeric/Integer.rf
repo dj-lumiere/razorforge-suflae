@@ -40,7 +40,7 @@ routine Integer.$create(value: U64) -> Integer
 ### :param radix: The numeric base to use.
 ### :returns: The resulting `Integer` value.
 ### :throws: May throw {ValueError}.
-routine Integer.$create!(text: Text, radix: S32 = 10) -> Integer
+routine Integer.$create!(text: Referring[Text], radix: S32 = 10) -> Integer
   var int = Integer(handle: rf_bigint_new())
   var result = rf_bigint_set_str(int.handle, text.to_cstr(), radix)
   if result != 0
@@ -281,7 +281,7 @@ routine Integer.$represent(radix: S32 = 10) -> Text
 ### :param text: The `text` value.
 ### :returns: The resulting `Integer` value.
 ### :throws: May throw {ParseError}.
-routine Integer.$create!(text: Text) -> Integer
+routine Integer.$create!(text: Referring[Text]) -> Integer
   var int = Integer(handle: rf_bigint_new())
   var result = rf_bigint_set_str(int.handle, text.to_cstr(), 10)
   if result != 0
@@ -293,7 +293,7 @@ routine Integer.$create!(text: Text) -> Integer
 ### :param text: The `text` value.
 ### :returns: The resulting `Integer` value.
 ### :throws: May throw {ParseError}.
-routine Integer.from_binary!(text: Text) -> Integer
+routine Integer.from_binary!(text: Referring[Text]) -> Integer
   var int = Integer(handle: rf_bigint_new())
   var result = rf_bigint_set_str(int.handle, text.to_cstr(), 2)
   if result != 0
@@ -305,7 +305,7 @@ routine Integer.from_binary!(text: Text) -> Integer
 ### :param text: The `text` value.
 ### :returns: The resulting `Integer` value.
 ### :throws: May throw {ParseError}.
-routine Integer.from_hex!(text: Text) -> Integer
+routine Integer.from_hex!(text: Referring[Text]) -> Integer
   var int = Integer(handle: rf_bigint_new())
   var result = rf_bigint_set_str(int.handle, text.to_cstr(), 16)
   if result != 0

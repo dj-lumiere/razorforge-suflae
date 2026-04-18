@@ -651,6 +651,54 @@ internal sealed class MonomorphizationPlanner
         RoutineInfo generic = entry.GenericMethod;
         Dictionary<string, TypeInfo> subs = entry.TypeSubstitutions;
 
+        // Wrapper-forwarder: re-resolve signature against the concrete inner method
+        // instead of naive name-based substitution (inner-T vs wrapper-T collision).
+        if (generic is { IsSynthesized: true, WrapperForwarderInnerMethod: { } innerGen }
+            && entry.ResolvedOwnerType.TypeArguments is { Count: 1 } wrapperArgs)
+        {
+            TypeInfo concreteInner = wrapperArgs[0];
+            RoutineInfo? concreteInnerMethod = _registry.LookupMethod(
+                type: concreteInner,
+                methodName: innerGen.Name,
+                isFailable: innerGen.IsFailable);
+            if (concreteInnerMethod != null)
+            {
+                var fwdParams = concreteInnerMethod.Parameters
+                    .Select(selector: p => p.Name == "me"
+                        ? p.WithSubstitutedType(newType: entry.ResolvedOwnerType)
+                        : p)
+                    .ToList();
+                // Resolve generic parameters in the concrete inner method's return type
+                // (e.g., T.retain() -> Retained[T] with concreteInner=Node → Retained[Node]).
+                TypeInfo? resolvedFwdReturn = concreteInnerMethod.ReturnType != null
+                    ? ResolveSubstitutedType(type: concreteInnerMethod.ReturnType, subs: subs)
+                    : null;
+                return new RoutineInfo(name: generic.Name)
+                {
+                    Kind = generic.Kind,
+                    OwnerType = entry.ResolvedOwnerType,
+                    Parameters = fwdParams,
+                    ReturnType = resolvedFwdReturn,
+                    IsFailable = generic.IsFailable,
+                    DeclaredModification = generic.DeclaredModification,
+                    ModificationCategory = generic.ModificationCategory,
+                    Visibility = generic.Visibility,
+                    Location = generic.Location,
+                    Module = generic.Module,
+                    Annotations = generic.Annotations,
+                    CallingConvention = generic.CallingConvention,
+                    IsVariadic = generic.IsVariadic,
+                    IsDangerous = generic.IsDangerous,
+                    IsSynthesized = true,
+                    WrapperForwarderInnerMethod = concreteInnerMethod,
+                    WrapperForwarderInnerGenericDef = generic.WrapperForwarderInnerGenericDef,
+                    Storage = generic.Storage,
+                    AsyncStatus = generic.AsyncStatus,
+                    OriginalName = generic.OriginalName
+                };
+            }
+        }
+
         var resolvedParams = generic.Parameters
             .Select(selector: p =>
             {
@@ -711,6 +759,17 @@ internal sealed class MonomorphizationPlanner
                 if (genericBase != null)
                     return _registry.GetOrCreateResolution(genericDef: genericBase,
                         typeArguments: substitutedArgs);
+
+                // WrapperTypeInfo (Retained[T], Snatched[T], etc.) has no GenericDefinition —
+                // look up the RecordTypeInfo definition by wrapper name and resolve via that.
+                // Mirrors GenericAstRewriter.ResolveType's WrapperTypeInfo branch.
+                if (type is WrapperTypeInfo)
+                {
+                    TypeInfo? wrapperRecordDef = _registry.LookupType(name: type.Name);
+                    if (wrapperRecordDef is { IsGenericDefinition: true })
+                        return _registry.GetOrCreateResolution(genericDef: wrapperRecordDef,
+                            typeArguments: substitutedArgs);
+                }
             }
         }
 

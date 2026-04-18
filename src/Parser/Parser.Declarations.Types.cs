@@ -808,7 +808,7 @@ public partial class Parser
                 if (Match(type: TokenType.LeftBracket))
                 {
                     // Selective imports: Module.[A, B, C]
-                    specificImports = new List<string>();
+                    specificImports = [];
                     do
                     {
                         string name =

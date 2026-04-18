@@ -397,7 +397,11 @@ internal sealed class TypeBodyResolver
                 {
                     modification = ModificationCategory.Writable;
                 }
-                // else: "migratable" or no annotation = Migratable (default)
+                else if (sig.Annotations.Contains(item: "migrating"))
+                {
+                    modification = ModificationCategory.Migratable;
+                }
+                // else: no annotation = Migratable (default)
             }
 
             // Extract generation kind from annotations

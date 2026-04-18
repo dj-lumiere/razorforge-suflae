@@ -481,6 +481,16 @@ public sealed partial class SemanticAnalyzer
                     methodName: callLookupName,
                     isFailable: isFailableMethodCall);
 
+            // Phase D: Transparent wrapper forwarding — if the method isn't found directly on
+            // the wrapper, synthesize a forwarder that delegates to the inner type's method
+            // via `Snatched[T](me).read().method(...)`.
+            if (method == null && IsWrapperType(type: objectType))
+            {
+                method = TrySynthesizeWrapperForwarder(wrapperType: objectType,
+                    methodName: callLookupName,
+                    isFailable: isFailableMethodCall);
+            }
+
             if (method != null)
             {
                 // Import-gating: BuilderService routines require 'import BuilderService'
@@ -698,11 +708,11 @@ public sealed partial class SemanticAnalyzer
                 // #22: Reject migratable operations on collection being iterated
                 if (member.Object is IdentifierExpression iterTarget &&
                     _activeIterationSources.Contains(item: iterTarget.Name) &&
-                    method.ModificationCategory != ModificationCategory.Readonly)
+                    method.ModificationCategory == ModificationCategory.Migratable)
                 {
                     ReportError(code: SemanticDiagnosticCode.MigratableDuringIteration,
                         message:
-                        $"Cannot call modifying method '{method.Name}' on '{iterTarget.Name}' while iterating over it. " +
+                        $"Cannot call migratable method '{method.Name}' on '{iterTarget.Name}' while iterating over it. " +
                         "Collect changes and apply them after the loop.",
                         location: call.Location);
                 }

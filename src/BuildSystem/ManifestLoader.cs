@@ -201,11 +201,11 @@ public static class ManifestLoader
             return index;
         }
 
-        string[] extensions = new[]
-        {
+        string[] extensions =
+        [
             "*.rf",
             "*.sf"
-        };
+        ];
         foreach (string pattern in extensions)
         {
             foreach (string filePath in Directory.GetFiles(path: projectDir,

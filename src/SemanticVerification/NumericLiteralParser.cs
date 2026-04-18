@@ -318,7 +318,7 @@ public static class NumericLiteralParser
         nint handle = ParseInteger(str: str);
         if (handle == nint.Zero)
         {
-            return (Array.Empty<byte>(), 0);
+            return ([], 0);
         }
 
         try

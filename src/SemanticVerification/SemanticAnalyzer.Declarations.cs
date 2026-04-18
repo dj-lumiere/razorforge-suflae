@@ -500,7 +500,7 @@ public sealed partial class SemanticAnalyzer
                 mutationCount++;
             }
 
-            if (routine.Annotations.Contains(item: "migratable"))
+            if (routine.Annotations.Contains(item: "migrating"))
             {
                 mutationCount++;
             }
@@ -509,7 +509,7 @@ public sealed partial class SemanticAnalyzer
             {
                 ReportError(code: SemanticDiagnosticCode.MutationCategoryConflict,
                     message: "Routine has conflicting mutation annotations. " +
-                             "Only one of @readonly, @writable, or @migratable can be specified.",
+                             "Only one of @readonly, @writable, or @migrating can be specified.",
                     location: routine.Location);
             }
         }
@@ -659,7 +659,7 @@ public sealed partial class SemanticAnalyzer
             {
                 // #61: Protocol mutation contract validation
                 // Protocol @readonly -> impl must be @readonly
-                // Protocol @writable -> impl must be @readonly or @writable (not @migratable)
+                // Protocol @writable -> impl must be @readonly or @writable (not @migrating)
                 if (requiredMethod.Modification == ModificationCategory.Readonly &&
                     typeMethod.ModificationCategory != ModificationCategory.Readonly)
                 {
@@ -675,7 +675,7 @@ public sealed partial class SemanticAnalyzer
                     ReportError(code: SemanticDiagnosticCode.ProtocolMutationContractViolation,
                         message:
                         $"Protocol '{protocol.Name}' requires '{requiredMethod.Name}' to be at most @writable, " +
-                        $"but implementation on '{type.Name}' is @migratable.",
+                        $"but implementation on '{type.Name}' is @migrating.",
                         location: typeMethod.Location);
                 }
             }
