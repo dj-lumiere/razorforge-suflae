@@ -1,5 +1,6 @@
 using Compiler.Lexer;
 using Compiler.Desugaring;
+using Compiler.Targeting;
 using SemanticVerification.Enums;
 using SemanticVerification.Symbols;
 using SemanticVerification.Types;
@@ -70,6 +71,13 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 && TryHandleBuilderServiceConstant(routine: routine, textType: textType,
                     u64Type: u64Type, s64Type: s64Type, boolType: boolType,
                     typeKindType: typeKindType, listTextType: listTextType,
+                    byteSizeType: byteSizeType))
+                continue;
+
+            // Standalone BuilderService constants (no owner type): page_size, target_os, etc.
+            if (routine.OwnerType == null
+                && TryHandleStandaloneBuilderServiceConstant(routine: routine,
+                    textType: textType, u64Type: u64Type, s64Type: s64Type,
                     byteSizeType: byteSizeType))
                 continue;
 
@@ -1147,6 +1155,103 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             default:
                 return false;
         }
+    }
+
+    /// <summary>
+    /// Handles standalone (non-owner) BuilderService constants derived from
+    /// <see cref="DesugaringContext.Target"/> / <see cref="DesugaringContext.BuildMode"/>.
+    /// </summary>
+    private bool TryHandleStandaloneBuilderServiceConstant(RoutineInfo routine,
+        TypeInfo textType, TypeInfo? u64Type, TypeInfo? s64Type, TypeInfo? byteSizeType)
+    {
+        switch (routine.Name)
+        {
+            case "page_size":
+                return EmitByteSizeOrU64(routine: routine,
+                    value: (ulong)ctx.Target.PageSize,
+                    u64Type: u64Type, byteSizeType: byteSizeType);
+
+            case "cache_line":
+                return EmitByteSizeOrU64(routine: routine,
+                    value: (ulong)ctx.Target.CacheLineSize,
+                    u64Type: u64Type, byteSizeType: byteSizeType);
+
+            case "word_size":
+                return EmitByteSizeOrU64(routine: routine,
+                    value: (ulong)(ctx.Target.PointerBitWidth / 8),
+                    u64Type: u64Type, byteSizeType: byteSizeType);
+
+            case "target_os":
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    MakeLiteralReturn(value: ctx.Target.TargetOS, returnType: textType);
+                return true;
+
+            case "target_arch":
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    MakeLiteralReturn(value: ctx.Target.TargetArch, returnType: textType);
+                return true;
+
+            case "builder_version":
+            {
+                string version =
+                    typeof(WiredRoutinePass).Assembly.GetName().Version?.ToString(fieldCount: 3)
+                    ?? "0.0.0";
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    MakeLiteralReturn(value: version, returnType: textType);
+                return true;
+            }
+
+            case "build_timestamp":
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    MakeLiteralReturn(value: DateTime.UtcNow.ToString(format: "o"),
+                        returnType: textType);
+                return true;
+
+            case "build_mode":
+            {
+                if (routine.ReturnType is ChoiceTypeInfo buildModeChoice)
+                {
+                    string caseName = ctx.BuildMode == RfBuildMode.Debug ? "DEBUG" : "RELEASE";
+                    ChoiceCaseInfo? found =
+                        buildModeChoice.Cases.FirstOrDefault(c => c.Name == caseName);
+                    if (found == null) return false;
+                    ctx.VariantBodies[key: routine.RegistryKey] =
+                        MakeLiteralReturn(value: found.ComputedValue,
+                            returnType: buildModeChoice);
+                    return true;
+                }
+                if (s64Type != null)
+                {
+                    ctx.VariantBodies[key: routine.RegistryKey] =
+                        MakeLiteralReturn(value: (long)ctx.BuildMode, returnType: s64Type);
+                    return true;
+                }
+                return false;
+            }
+
+            default:
+                return false;
+        }
+    }
+
+    private bool EmitByteSizeOrU64(RoutineInfo routine, ulong value,
+        TypeInfo? u64Type, TypeInfo? byteSizeType)
+    {
+        if (byteSizeType != null && u64Type != null)
+        {
+            ctx.VariantBodies[key: routine.RegistryKey] = new ReturnStatement(
+                Value: Desugaring.Passes.BuilderServiceInliningPass.MakeByteSizeCreatorPublic(
+                    value: value, u64Type: u64Type, byteSizeType: byteSizeType, loc: _synthLoc),
+                Location: _synthLoc);
+            return true;
+        }
+        if (u64Type != null)
+        {
+            ctx.VariantBodies[key: routine.RegistryKey] =
+                MakeLiteralReturn(value: value, returnType: u64Type);
+            return true;
+        }
+        return false;
     }
 
     /// <summary>

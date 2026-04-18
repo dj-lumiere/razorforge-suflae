@@ -151,8 +151,6 @@ public partial class LLVMCodeGenerator
         var memberVariableTypes = new List<string>();
         foreach (MemberVariableInfo memberVariable in record.MemberVariables)
         {
-            Console.Error.WriteLine(
-                value: $"[CG-DBG] GenerateRecordType {record.FullName}: field '{memberVariable.Name}' type={memberVariable.Type?.GetType().Name}({memberVariable.Type?.FullName})");
             string memberVariableType = GetLLVMType(type: memberVariable.Type);
             memberVariableTypes.Add(item: memberVariableType);
         }

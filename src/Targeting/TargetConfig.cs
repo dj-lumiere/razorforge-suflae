@@ -1,4 +1,4 @@
-namespace Compiler.CodeGen;
+namespace Compiler.Targeting;
 
 using System.Runtime.InteropServices;
 

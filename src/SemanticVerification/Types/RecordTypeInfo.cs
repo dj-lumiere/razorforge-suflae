@@ -411,20 +411,30 @@ public sealed class RecordTypeInfo : TypeInfo
                                SubstituteType(type: arg, substitution: substitution))
                           .ToList();
 
+        // Route through the ambient TypeRegistry so entity-type specializations
+        // (e.g. Maybe[Text] → { Snatched[T] } layout) are picked up.
+        Compiler.Resolution.TypeRegistry? registry = Compiler.Resolution.TypeRegistry.Ambient;
+
         // Get the generic definition and create resolved instance with new args
         if (type is RecordTypeInfo { GenericDefinition: not null } recordType)
         {
-            return recordType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+            return registry != null
+                ? registry.GetOrCreateResolution(genericDef: recordType.GenericDefinition, typeArguments: newArgs)
+                : recordType.GenericDefinition.CreateInstance(typeArguments: newArgs);
         }
 
         if (type is EntityTypeInfo { GenericDefinition: not null } entityType)
         {
-            return entityType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+            return registry != null
+                ? registry.GetOrCreateResolution(genericDef: entityType.GenericDefinition, typeArguments: newArgs)
+                : entityType.GenericDefinition.CreateInstance(typeArguments: newArgs);
         }
 
         if (type is ProtocolTypeInfo { GenericDefinition: not null } protocolType)
         {
-            return protocolType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+            return registry != null
+                ? registry.GetOrCreateResolution(genericDef: protocolType.GenericDefinition, typeArguments: newArgs)
+                : protocolType.GenericDefinition.CreateInstance(typeArguments: newArgs);
         }
 
         if (type is WrapperTypeInfo wrapperType)

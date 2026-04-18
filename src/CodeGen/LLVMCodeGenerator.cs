@@ -5,6 +5,7 @@ namespace Compiler.CodeGen;
 using System.Text;
 using Compiler.Desugaring;
 using Compiler.Resolution;
+using Compiler.Targeting;
 using SemanticVerification;
 using SemanticVerification.Symbols;
 using SemanticVerification.Types;
@@ -198,12 +199,6 @@ public partial class LLVMCodeGenerator
     /// <summary>LLVM data layout string for the current platform.</summary>
     private readonly string _dataLayout;
 
-    /// <summary>OS virtual memory page size in bytes.</summary>
-    private readonly int _pageSize;
-
-    /// <summary>CPU cache line size in bytes.</summary>
-    private readonly int _cacheLineSize;
-
     /// <summary>Byte size of a collection header: { ptr data, i64 count, i64 capacity }.</summary>
     private readonly int _collectionHeaderSizeBytes;
 
@@ -283,8 +278,6 @@ public partial class LLVMCodeGenerator
         _pointerSizeBytes = _target.PointerBitWidth / 8;
         _targetTriple = _target.Triple;
         _dataLayout = _target.DataLayout;
-        _pageSize = _target.PageSize;
-        _cacheLineSize = _target.CacheLineSize;
         // Runtime object layout sizes — derived from field types, not from type definitions yet
         _collectionHeaderSizeBytes = _pointerSizeBytes + 8 + 8; // ptr + i64 count + i64 capacity
         _dataEntitySizeBytes =

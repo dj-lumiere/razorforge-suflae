@@ -1,6 +1,7 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
+using Compiler.Desugaring;
 using SemanticVerification.Symbols;
 using SemanticVerification.Types;
 
@@ -12,25 +13,8 @@ using SemanticVerification.Types;
 public partial class LLVMCodeGenerator
 {
 
-    /// <summary>
-    /// Computes a unique type ID using FNV-1a hash of the full type name.
-    /// Used by member_type_id() and all_member_variables() field boxing.
-    /// </summary>
-    private static ulong ComputeTypeId(string fullName)
-    {
-        // Blank is the unit type; type_id 0 is reserved for it (represents "absent" in carriers)
-        if (fullName is "Blank" || fullName.EndsWith(value: ".Blank"))
-            return 0UL;
-
-        ulong hash = 14695981039346656037UL; // FNV-1a offset basis
-        foreach (byte b in Encoding.UTF8.GetBytes(s: fullName))
-        {
-            hash ^= b;
-            hash *= 1099511628211UL; // FNV-1a prime
-        }
-
-        return hash;
-    }
+    private static ulong ComputeTypeId(string fullName) =>
+        TypeIdHelper.ComputeTypeId(fullName: fullName);
 
     /// <summary>
     /// Emits the body for a synthesized member_variable_info() routine.

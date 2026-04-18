@@ -1,7 +1,7 @@
 ﻿namespace SemanticVerification;
 
 using Enums;
-using Analysis;
+using Compiler.Synthesis;
 using Symbols;
 using SyntaxTree;
 using Compiler.Diagnostics;

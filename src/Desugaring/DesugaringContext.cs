@@ -1,4 +1,5 @@
 using Compiler.Resolution;
+using Compiler.Targeting;
 using SemanticVerification;
 using SyntaxTree;
 
@@ -34,10 +35,20 @@ public sealed class DesugaringContext
     /// </summary>
     public Dictionary<string, MonomorphizedBody> PreMonomorphizedBodies { get; } = new();
 
+    /// <summary>Target platform — drives BuilderService platform constants.</summary>
+    public TargetConfig Target { get; }
+
+    /// <summary>Build mode — drives BuilderService.build_mode.</summary>
+    public RfBuildMode BuildMode { get; }
+
     public DesugaringContext(TypeRegistry registry,
-        IReadOnlyDictionary<string, Statement> routineBodies)
+        IReadOnlyDictionary<string, Statement> routineBodies,
+        TargetConfig? target = null,
+        RfBuildMode buildMode = RfBuildMode.Debug)
     {
         Registry = registry;
         RoutineBodies = routineBodies;
+        Target = target ?? TargetConfig.ForCurrentHost();
+        BuildMode = buildMode;
     }
 }

@@ -275,8 +275,14 @@ internal sealed class MonomorphizationPlanner
         if (_preMonomorphizedBodies.TryGetValue(key: quickInfo.RegistryKey,
                 value: out MonomorphizedBody? preBuilt))
         {
-            // The synthesis pass built this body already — use it directly.
-            return preBuilt;
+            // The synthesis pass built this body already — use it.
+            // Replace preBuilt.Info with quickInfo: GMP's ResolveSubstitutedType uses
+            // TryGetResolution (lookup-only) and may have left generic parameters
+            // unresolved (e.g. Maybe[T] instead of Maybe[Core.Text]) if the entity
+            // specialization wasn't yet cached when GMP ran. quickInfo went through
+            // the planner's ResolveSubstitutedType which uses GetOrCreateResolution,
+            // so it picks up entity-type specializations correctly.
+            return preBuilt with { Info = quickInfo };
         }
 
         string? firstParamGenericType = null;

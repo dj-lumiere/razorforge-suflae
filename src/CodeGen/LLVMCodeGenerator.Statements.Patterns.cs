@@ -957,7 +957,7 @@ public partial class LLVMCodeGenerator
 
             if (isEntityMaybe)
             {
-                // Entity Maybe { Snatched[T] }: field 0 is a ptr — null check.
+                // Entity Maybe { ptr }: field 0 is the value pointer — null check.
                 string ptrValN = NextTemp();
                 EmitLine(sb: sb, line: $"  {ptrValN} = load ptr, ptr {field0PtrN}");
                 string cmp = NextTemp();
@@ -1477,7 +1477,7 @@ public partial class LLVMCodeGenerator
         if (IsMaybeType(type: subjectType))
         {
             // Record Maybe { i1 present, T value }: value at field 1.
-            // Entity Maybe { Snatched[T] }:         entity ptr at field 0 (only field).
+            // Entity Maybe { ptr }: entity ptr at field 0 (only field).
             if (innerType is EntityTypeInfo)
             {
                 string valPtr = NextTemp();

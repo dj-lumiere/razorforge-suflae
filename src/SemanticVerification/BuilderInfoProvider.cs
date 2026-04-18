@@ -319,15 +319,18 @@ public static class BuilderInfoProvider
             }
         }
 
-        // U64-returning standalone routines
-        foreach (string name in new[]
-                 {
-                     "page_size",
-                     "cache_line",
-                     "word_size"
-                 })
+        // ByteSize-returning standalone routines (fall back to U64 if ByteSize not yet loaded)
         {
-            RegisterStandalone(registry: registry, name: name, returnType: u64Type);
+            TypeSymbol? byteSizeType = registry.LookupType(name: "ByteSize") ?? u64Type;
+            foreach (string name in new[]
+                     {
+                         "page_size",
+                         "cache_line",
+                         "word_size"
+                     })
+            {
+                RegisterStandalone(registry: registry, name: name, returnType: byteSizeType);
+            }
         }
     }
 

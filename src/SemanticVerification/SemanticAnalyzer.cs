@@ -1,10 +1,11 @@
 using Compiler.Resolution;
 using Compiler.Desugaring;
+using Compiler.Targeting;
 
 namespace SemanticVerification;
 
 using Enums;
-using Analysis;
+using Compiler.Synthesis;
 using Results;
 using Scopes;
 using Symbols;
@@ -141,18 +142,26 @@ public sealed partial class SemanticAnalyzer
 
     #region Constructor
 
+    private readonly TargetConfig _target;
+    private readonly RfBuildMode _buildMode;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SemanticAnalyzer"/> class.
     /// </summary>
     /// <param name="language">The language being analyzed (RazorForge or Suflae).</param>
     /// <param name="stdlibPath">Optional path to the stdlib directory.</param>
-    public SemanticAnalyzer(Language language, string? stdlibPath = null)
+    /// <param name="target">Target platform — drives BuilderService platform constants. Defaults to host.</param>
+    /// <param name="buildMode">Build mode — drives BuilderService.build_mode. Defaults to Debug.</param>
+    public SemanticAnalyzer(Language language, string? stdlibPath = null,
+        TargetConfig? target = null, RfBuildMode buildMode = RfBuildMode.Debug)
     {
         _registry = new TypeRegistry(language: language, stdlibPath: stdlibPath);
         _typeResolver = new TypeResolver(sa: this);
         _typeBodyResolver = new TypeBodyResolver(sa: this, typeResolver: _typeResolver);
         _signatureResolver = new SignatureResolver(sa: this, typeResolver: _typeResolver);
         _conformanceAnalyzer = new ProtocolConformanceAnalyzer(sa: this);
+        _target = target ?? TargetConfig.ForCurrentHost();
+        _buildMode = buildMode;
     }
 
     #endregion
@@ -256,7 +265,8 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private void RunPhase4GlobalDesugaring()
     {
-        var ctx = new DesugaringContext(registry: _registry, routineBodies: _routineBodies);
+        var ctx = new DesugaringContext(registry: _registry, routineBodies: _routineBodies,
+            target: _target, buildMode: _buildMode);
         new DesugaringPipeline(ctx: ctx).RunGlobal();
         // Capture variant bodies produced by ErrorHandlingVariantPass for codegen.
         _variantBodies = ctx.VariantBodies;
@@ -272,7 +282,8 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private void RunPhase4Desugaring(Program program)
     {
-        var ctx = new DesugaringContext(registry: _registry, routineBodies: _routineBodies);
+        var ctx = new DesugaringContext(registry: _registry, routineBodies: _routineBodies,
+            target: _target, buildMode: _buildMode);
         new DesugaringPipeline(ctx: ctx).Run(program: program);
         // Capture any synthetic routine bodies produced by per-file passes
         foreach ((string key, Statement body) in ctx.VariantBodies)

@@ -15,6 +15,15 @@ using TypeInfo = SemanticVerification.Types.TypeInfo;
 /// </summary>
 public sealed partial class TypeRegistry
 {
+    /// <summary>
+    /// Ambient registry reference for static helpers that need to route generic resolutions
+    /// through <see cref="GetOrCreateResolution"/> (to pick up entity specializations) but
+    /// have no direct registry access — notably the static Substitute* methods on
+    /// <see cref="RoutineInfo"/> and <see cref="RecordTypeInfo"/>. Set by the constructor.
+    /// Compilation is single-registry per run, so a plain static is safe.
+    /// </summary>
+    public static TypeRegistry? Ambient { get; private set; }
+
     /// <summary>The language being built.</summary>
     public Language Language { get; }
 
@@ -149,6 +158,7 @@ public sealed partial class TypeRegistry
     public TypeRegistry(Language language, string? stdlibPath = null)
     {
         Language = language;
+        Ambient = this;
         GlobalScope = new Scope(kind: ScopeKind.Global);
         _currentScope = GlobalScope;
         _stdlibPath = stdlibPath ?? StdlibLoader.GetDefaultStdlibPath();

@@ -373,20 +373,31 @@ public sealed class RoutineInfo
                                    SubstituteType(type: arg, substitution: substitution))
                               .ToList();
 
+            // Route through the ambient TypeRegistry so entity-type specializations
+            // (e.g. Maybe[Text] → { Snatched[T] } layout) are picked up instead of
+            // blindly using the primary generic definition's layout.
+            Compiler.Resolution.TypeRegistry? registry = Compiler.Resolution.TypeRegistry.Ambient;
+
             // Use GenericDefinition to create the new resolution (not the resolution itself)
             if (type is Types.EntityTypeInfo { GenericDefinition: not null } entityType)
             {
-                return entityType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+                return registry != null
+                    ? registry.GetOrCreateResolution(genericDef: entityType.GenericDefinition, typeArguments: newArgs)
+                    : entityType.GenericDefinition.CreateInstance(typeArguments: newArgs);
             }
 
             if (type is Types.RecordTypeInfo { GenericDefinition: not null } recordType)
             {
-                return recordType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+                return registry != null
+                    ? registry.GetOrCreateResolution(genericDef: recordType.GenericDefinition, typeArguments: newArgs)
+                    : recordType.GenericDefinition.CreateInstance(typeArguments: newArgs);
             }
 
             if (type is Types.ProtocolTypeInfo { GenericDefinition: not null } protocolType)
             {
-                return protocolType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+                return registry != null
+                    ? registry.GetOrCreateResolution(genericDef: protocolType.GenericDefinition, typeArguments: newArgs)
+                    : protocolType.GenericDefinition.CreateInstance(typeArguments: newArgs);
             }
 
             return type.CreateInstance(typeArguments: newArgs);

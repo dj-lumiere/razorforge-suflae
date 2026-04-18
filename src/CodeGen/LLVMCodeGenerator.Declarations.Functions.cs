@@ -1,5 +1,6 @@
 using Compiler.Desugaring;
 using Compiler.Desugaring.Passes;
+using Compiler.Targeting;
 using SemanticVerification.Enums;
 
 namespace Compiler.CodeGen;

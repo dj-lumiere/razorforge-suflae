@@ -80,12 +80,6 @@ public partial class LLVMCodeGenerator
             case "$cmp":
                 EmitSynthesizedCmp(routine: routine, funcName: funcName);
                 break;
-            case "$represent":
-                EmitSynthesizedText(routine: routine, funcName: funcName, includeSecret: false);
-                break;
-            case "$diagnose":
-                EmitSynthesizedText(routine: routine, funcName: funcName, includeSecret: true);
-                break;
             case "$hash":
                 EmitSynthesizedHash(routine: routine, funcName: funcName);
                 break;
@@ -120,9 +114,6 @@ public partial class LLVMCodeGenerator
             case "all_cases":
                 EmitSynthesizedAllCases(routine: routine, funcName: funcName);
                 break;
-            case "crash_title":
-                EmitSynthesizedCrashTitle(routine: routine, funcName: funcName);
-                break;
             // BuilderService complex per-type (list/struct returns — handled in codegen)
             case "member_variable_info":
                 EmitSynthesizedMemberVariableInfo(routine: routine, funcName: funcName);
@@ -132,47 +123,6 @@ public partial class LLVMCodeGenerator
                 break;
             case "open_member_variables":
                 EmitSynthesizedOpenFields(routine: routine, funcName: funcName);
-                break;
-            // BuilderService platform/build info
-            case "page_size":
-                EmitSynthesizedBuilderServiceU64(routine: routine,
-                    funcName: funcName,
-                    value: _pageSize);
-                break;
-            case "cache_line":
-                EmitSynthesizedBuilderServiceU64(routine: routine,
-                    funcName: funcName,
-                    value: _cacheLineSize);
-                break;
-            case "word_size":
-                EmitSynthesizedBuilderServiceU64(routine: routine,
-                    funcName: funcName,
-                    value: _pointerBitWidth / 8);
-                break;
-            case "target_os":
-                EmitSynthesizedBuilderServiceText(routine: routine,
-                    funcName: funcName,
-                    value: DetectTargetOS());
-                break;
-            case "target_arch":
-                EmitSynthesizedBuilderServiceText(routine: routine,
-                    funcName: funcName,
-                    value: DetectTargetArch());
-                break;
-            case "builder_version":
-                EmitSynthesizedBuilderServiceText(routine: routine,
-                    funcName: funcName,
-                    value: typeof(LLVMCodeGenerator).Assembly.GetName().Version?.ToString(fieldCount: 3) ?? "0.0.0");
-                break;
-            case "build_mode":
-                EmitSynthesizedBuilderServiceI32(routine: routine,
-                    funcName: funcName,
-                    value: (int)_buildMode);
-                break;
-            case "build_timestamp":
-                EmitSynthesizedBuilderServiceText(routine: routine,
-                    funcName: funcName,
-                    value: DateTime.UtcNow.ToString(format: "o"));
                 break;
             // BuilderService per-field lookup (runtime string compare — not expressible in plain RF AST)
             case "member_type_id":
@@ -189,12 +139,14 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private void EmitSynthesizedBodyFromAst(RoutineInfo routine, string funcName, Statement body)
     {
-        if (routine.OwnerType == null) return;
-
-        string meType = GetImplicitMeParameterDeclaration(routine: routine, includeName: true);
         var paramList = new List<string>();
-        if (!meType.StartsWith(value: "void", comparisonType: StringComparison.Ordinal))
-            paramList.Add(item: meType);
+        if (routine.OwnerType != null)
+        {
+            string meType =
+                GetImplicitMeParameterDeclaration(routine: routine, includeName: true);
+            if (!meType.StartsWith(value: "void", comparisonType: StringComparison.Ordinal))
+                paramList.Add(item: meType);
+        }
         paramList.AddRange(collection:
             from param in routine.Parameters
             let paramType = GetParameterLLVMType(type: param.Type)
@@ -221,24 +173,6 @@ public partial class LLVMCodeGenerator
             _generatedFunctionDefs.Remove(item: funcName);
             throw;
         }
-        EmitLine(sb: _functionDefinitions, line: "}");
-        EmitLine(sb: _functionDefinitions, line: "");
-    }
-
-    /// <summary>
-    /// Emits the body for a synthesized crash_title() routine on a crashable type.
-    /// Returns the compile-time sentence-cased type name as a Text constant.
-    /// </summary>
-    private void EmitSynthesizedCrashTitle(RoutineInfo routine, string funcName)
-    {
-        if (routine.OwnerType is not CrashableTypeInfo crashable)
-            return;
-
-        string meType = GetParameterLLVMType(type: crashable);
-        string titleStr = EmitSynthesizedStringLiteral(value: crashable.CrashTitle);
-        EmitLine(sb: _functionDefinitions, line: $"define ptr @{funcName}({meType} %me) {{");
-        EmitLine(sb: _functionDefinitions, line: "entry:");
-        EmitLine(sb: _functionDefinitions, line: $"  ret ptr {titleStr}");
         EmitLine(sb: _functionDefinitions, line: "}");
         EmitLine(sb: _functionDefinitions, line: "");
     }

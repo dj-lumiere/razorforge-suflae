@@ -9,6 +9,7 @@ using SemanticVerification.Enums;
 using SemanticVerification.Results;
 using Compiler.CodeGen;
 using Compiler.Declaration;
+using Compiler.Targeting;
 
 namespace Builder;
 
@@ -569,7 +570,9 @@ internal partial class Program
             Console.WriteLine();
             Console.WriteLine(value: "=== SEMANTIC ANALYSIS ===");
 
-            var analyzer = new SemanticAnalyzer(language: language);
+            TargetConfig target = TargetConfig.ForCurrentHost();
+            var analyzer = new SemanticAnalyzer(language: language,
+                target: target, buildMode: buildMode);
             AnalysisResult result = analyzer.Analyze(program: ast);
 
             Console.WriteLine(
@@ -610,6 +613,7 @@ internal partial class Program
             var generator = new LLVMCodeGenerator(program: ast,
                 registry: result.Registry,
                 stdlibPrograms: stdlibPrograms,
+                target: target,
                 buildMode: buildMode,
                 synthesizedBodies: result.SynthesizedBodies,
                 preMonomorphizedBodies: result.PreMonomorphizedBodies);
@@ -952,7 +956,9 @@ internal partial class Program
             Console.WriteLine();
             Console.WriteLine(value: "=== SEMANTIC ANALYSIS ===");
 
-            var analyzer = new SemanticAnalyzer(language: language);
+            TargetConfig target = TargetConfig.ForCurrentHost();
+            var analyzer = new SemanticAnalyzer(language: language,
+                target: target, buildMode: buildMode);
             AnalysisResult result = analyzer.AnalyzeMultiple(files: orderedFiles);
 
             Console.WriteLine(
@@ -1002,6 +1008,7 @@ internal partial class Program
             var generator = new LLVMCodeGenerator(userPrograms: userPrograms,
                 registry: result.Registry,
                 stdlibPrograms: stdlibPrograms,
+                target: target,
                 buildMode: buildMode,
                 synthesizedBodies: result.SynthesizedBodies,
                 preMonomorphizedBodies: result.PreMonomorphizedBodies);
