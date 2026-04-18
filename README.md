@@ -34,7 +34,7 @@ routine acquire_connection(pool: Retained[ConnectionPool]) -> Maybe[Owned[Connec
         return conn
       else => return None  # Pool exhausted
 
-routine monitor_pool(weak: Watched[ConnectionPool])
+routine monitor_pool(weak: Tracked[ConnectionPool])
   # Try to recover weak reference
   when weak.try_recover()
     is None => show("Pool was deallocated")

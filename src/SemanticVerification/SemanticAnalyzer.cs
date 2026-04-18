@@ -108,8 +108,8 @@ public sealed partial class SemanticAnalyzer
     /// AST bodies synthesized for derived operators ($ne, $lt, $le, $gt, $ge, $notcontains).
     /// Keyed by RoutineInfo.RegistryKey. Analyzed in Phase 5 via AnalyzeSynthesizedBodies().
     /// </summary>
-    private readonly Dictionary<string, (RoutineInfo Routine, Statement Body)>
-        _synthesizedBodies = new();
+    private readonly Dictionary<string, (RoutineInfo Routine, Statement Body)> _synthesizedBodies =
+        new();
 
     /// <summary>Handles resolution of type expressions (TypeResolution logic).</summary>
     internal TypeResolver _typeResolver = null!;
@@ -197,8 +197,7 @@ public sealed partial class SemanticAnalyzer
         FinalizeReturnTypes();
 
         // Merge synthesized operator bodies and pre-transformed variant bodies
-        var allSynthesized = _synthesizedBodies.ToDictionary(
-            keySelector: kvp => kvp.Key,
+        var allSynthesized = _synthesizedBodies.ToDictionary(keySelector: kvp => kvp.Key,
             elementSelector: kvp => kvp.Value.Body);
         foreach ((string key, Statement variantBody) in _variantBodies)
         {
@@ -255,7 +254,8 @@ public sealed partial class SemanticAnalyzer
         int errorsBeforeStdlib = _errors.Count;
         AnalyzeStdlibBodies();
         if (_errors.Count > errorsBeforeStdlib)
-            _errors.RemoveRange(index: errorsBeforeStdlib, count: _errors.Count - errorsBeforeStdlib);
+            _errors.RemoveRange(index: errorsBeforeStdlib,
+                count: _errors.Count - errorsBeforeStdlib);
         InferModificationCategories();
     }
 
@@ -265,8 +265,10 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private void RunPhase4GlobalDesugaring()
     {
-        var ctx = new DesugaringContext(registry: _registry, routineBodies: _routineBodies,
-            target: _target, buildMode: _buildMode);
+        var ctx = new DesugaringContext(registry: _registry,
+            routineBodies: _routineBodies,
+            target: _target,
+            buildMode: _buildMode);
         new DesugaringPipeline(ctx: ctx).RunGlobal();
         // Capture variant bodies produced by ErrorHandlingVariantPass for codegen.
         _variantBodies = ctx.VariantBodies;
@@ -282,8 +284,10 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private void RunPhase4Desugaring(Program program)
     {
-        var ctx = new DesugaringContext(registry: _registry, routineBodies: _routineBodies,
-            target: _target, buildMode: _buildMode);
+        var ctx = new DesugaringContext(registry: _registry,
+            routineBodies: _routineBodies,
+            target: _target,
+            buildMode: _buildMode);
         new DesugaringPipeline(ctx: ctx).Run(program: program);
         // Capture any synthetic routine bodies produced by per-file passes
         foreach ((string key, Statement body) in ctx.VariantBodies)
@@ -355,8 +359,8 @@ public sealed partial class SemanticAnalyzer
         {
             stdlibIdx++;
             string shortName = Path.GetFileName(path: filePath);
-            Console.Error.WriteLine(
-                value: $"[SA] stdlib {stdlibIdx}/{stdlibTotal}: {shortName}");
+            // Console.Error.WriteLine(
+            //     value: $"[SA] stdlib {stdlibIdx}/{stdlibTotal}: {shortName}");
 
             _currentFilePath = filePath;
             _currentModuleName = module;
@@ -389,7 +393,7 @@ public sealed partial class SemanticAnalyzer
             }
 
             AnalyzeBodies(program: program);
-            Console.Error.WriteLine(value: $"[SA] done    {stdlibIdx}/{stdlibTotal}: {shortName}");
+            // Console.Error.WriteLine(value: $"[SA] done    {stdlibIdx}/{stdlibTotal}: " + $"{shortName}");
         }
 
         _currentFilePath = previousFilePath;
@@ -488,7 +492,8 @@ public sealed partial class SemanticAnalyzer
         int errorsBeforeStdlib = _errors.Count;
         AnalyzeStdlibBodies();
         if (_errors.Count > errorsBeforeStdlib)
-            _errors.RemoveRange(index: errorsBeforeStdlib, count: _errors.Count - errorsBeforeStdlib);
+            _errors.RemoveRange(index: errorsBeforeStdlib,
+                count: _errors.Count - errorsBeforeStdlib);
 
         // If SA produced errors in user code, skip desugaring. Lowering passes over a broken
         // AST produce garbage types and can drive GenericMonomorphizationPass's fixed-point loop
@@ -522,8 +527,7 @@ public sealed partial class SemanticAnalyzer
         FinalizeReturnTypes();
 
         // Merge synthesized operator bodies and pre-transformed variant bodies
-        var allSynthesized2 = _synthesizedBodies.ToDictionary(
-            keySelector: kvp => kvp.Key,
+        var allSynthesized2 = _synthesizedBodies.ToDictionary(keySelector: kvp => kvp.Key,
             elementSelector: kvp => kvp.Value.Body);
         foreach ((string key, Statement variantBody) in _variantBodies)
         {
@@ -708,7 +712,9 @@ public sealed partial class SemanticAnalyzer
     /// <summary>Validates that type arguments satisfy generic constraints. Delegates to <see cref="TypeResolver"/>.</summary>
     internal void ValidateGenericConstraints(TypeSymbol genericDef, List<TypeSymbol> typeArgs,
         SourceLocation location) =>
-        _typeResolver.ValidateGenericConstraints(genericDef: genericDef, typeArgs: typeArgs, location: location);
+        _typeResolver.ValidateGenericConstraints(genericDef: genericDef,
+            typeArgs: typeArgs,
+            location: location);
 
     #endregion
 
