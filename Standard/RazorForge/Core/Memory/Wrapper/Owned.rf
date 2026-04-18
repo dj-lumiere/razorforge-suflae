@@ -1,27 +1,27 @@
-# RazorForge Owned[T] - Unique (exclusive) ownership wrapper
-# Equivalent to unique_ptr in C++ or Box[T] in Rust
-#
-# Owned[T] is a transparent exclusive-ownership wrapper around an entity.
-# It forwards ALL of T's API by value — comparisons, protocol implementations,
-# method calls — everything goes through to T. The wrapper is invisible at the
-# API level; only ownership and lifetime semantics differ.
-#
-# Typical usage:
-#   var a = Node(42)                   # a is Owned[Node]
-#   show(a.value)                      # direct field access, forwarded to Node
-#   var b = steal a                    # transfer ownership; a is now invalid
-#                                      # freed automatically when b leaves scope
-#
-# Pairs naturally with steal:
-#   steal transfers what Owned declares.
-#
-# Properties:
-# - Single owner — zero reference-counting overhead (just one pointer)
-# - Transparent — all T methods and protocols work directly on Owned[T]
-# - Value semantics for comparison — compares inner T, not pointer address
-# - Transfer via steal — no dedicated move API needed
-# - Freed automatically at scope end via $destroy
-#
+### RazorForge Owned[T] - Unique (exclusive) ownership wrapper
+### Equivalent to unique_ptr in C++ or Box[T] in Rust
+###
+### Owned[T] is a transparent exclusive-ownership wrapper around an entity.
+### It forwards ALL of T's API by value — comparisons, protocol implementations,
+### method calls — everything goes through to T. The wrapper is invisible at the
+### API level; only ownership and lifetime semantics differ.
+###
+### Typical usage:
+###   var a = Node(42)                   # a is Owned[Node]
+###   show(a.value)                      # direct field access, forwarded to Node
+###   var b = steal a                    # transfer ownership; a is now invalid
+###                                      # freed automatically when b leaves scope
+###
+### Pairs naturally with steal:
+###   steal transfers what Owned declares.
+###
+### Properties:
+### - Single owner — zero reference-counting overhead (just one pointer)
+### - Transparent — all T methods and protocols work directly on Owned[T]
+### - Value semantics for comparison — compares inner T, not pointer address
+### - Transfer via steal — no dedicated move API needed
+### - Freed automatically at scope end via $destroy
+###
 module Core
 
 ### Exclusively owned heap pointer. Forwards all of {T}'s API transparently.
