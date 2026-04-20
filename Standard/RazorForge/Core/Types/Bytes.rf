@@ -231,9 +231,9 @@ routine Bytes.find!(byte: Byte) -> U64
 
 ### Splits this value into parts.
 ### :param separator: The separator to use.
-### :returns: The resulting `List[Bytes]` value.
-routine Bytes.split(separator: Byte) -> List[Bytes]
-  var parts = List[Bytes]()
+### :returns: The resulting `List[Owned[Bytes]]` value.
+routine Bytes.split(separator: Byte) -> List[Owned[Bytes]]
+  var parts = List[Owned[Bytes]]()
   var current = List[Byte]()
   for i in 0 til me.count()
     if me[i] == separator

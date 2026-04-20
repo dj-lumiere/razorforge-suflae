@@ -141,15 +141,15 @@ routine ask_all() -> Text
   return bytes.decode_as_utf8_lossy()
 
 ### Returns the result of `ask lines`.
-### :returns: The resulting `List[Text]` value.
-routine ask_lines() -> List[Text]
+### :returns: The resulting `List[Owned[Text]]` value.
+routine ask_lines() -> List[Owned[Text]]
   var all = ask_all()
   var normalized = all.replace("\r\n", "\n")
   return normalized.split(CHARACTER_NEWLINE)
 
 ### Returns the result of `ask words`.
-### :returns: The resulting `List[Text]` value.
-routine ask_words() -> List[Text]
+### :returns: The resulting `List[Owned[Text]]` value.
+routine ask_words() -> List[Owned[Text]]
   var all = ask_all()
   return all.words()
 

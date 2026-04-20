@@ -507,9 +507,9 @@ routine Text.pad_end(width: U64, fill: Character) -> Text
 
 ### Splits this value into parts.
 ### :param separator: The separator to use.
-### :returns: The resulting `List[Text]` value.
-routine Text.split(separator: Character) -> List[Text]
-  var parts = List[Text]()
+### :returns: The resulting `List[Owned[Text]]` value.
+routine Text.split(separator: Character) -> List[Owned[Text]]
+  var parts = List[Owned[Text]]()
   var current = List[Character]()
   for i in 0 til me.count()
     if me[i] == separator
@@ -522,14 +522,14 @@ routine Text.split(separator: Character) -> List[Text]
 
 ### Splits this value into parts.
 ### :param separator: The separator to use.
-### :returns: The resulting `List[Text]` value.
-routine Text.split(separator: Referring[Text]) -> List[Text]
+### :returns: The resulting `List[Owned[Text]]` value.
+routine Text.split(separator: Referring[Text]) -> List[Owned[Text]]
   if separator.is_empty()
-    var parts = List[Text]()
+    var parts = List[Owned[Text]]()
     for i in 0 til me.count()
       parts.add_last(Text(from_character: me[i]))
     return parts
-  var parts = List[Text]()
+  var parts = List[Owned[Text]]()
   var start: U64 = 0u64
   var i: U64 = 0u64
   loop
@@ -552,7 +552,7 @@ routine Text.split(separator: Referring[Text]) -> List[Text]
 ### Returns a new text formed by joining `parts` with this separator.
 ### :param parts: The parts to combine.
 ### :returns: The resulting `Text` value.
-routine Text.join(parts: List[Text]) -> Text
+routine Text.join(parts: List[Owned[Text]]) -> Text
   if parts.is_empty()
     return Text()
   var result = List[Character]()
@@ -567,15 +567,15 @@ routine Text.join(parts: List[Text]) -> Text
   return Text(from_list: result)
 
 ### Returns the lines in this text.
-### :returns: The resulting `List[Text]` value.
-routine Text.lines() -> List[Text]
+### :returns: The resulting `List[Owned[Text]]` value.
+routine Text.lines() -> List[Owned[Text]]
   var normalized = me.replace("\r\n", "\n")
   return normalized.split(CHARACTER_NEWLINE)
 
 ### Returns the whitespace-delimited words in this text.
-### :returns: The resulting `List[Text]` value.
-routine Text.words() -> List[Text]
-  var parts = List[Text]()
+### :returns: The resulting `List[Owned[Text]]` value.
+routine Text.words() -> List[Owned[Text]]
+  var parts = List[Owned[Text]]()
   var current = List[Character]()
   for i in 0 til me.count()
     if me[i].is_whitespace()
