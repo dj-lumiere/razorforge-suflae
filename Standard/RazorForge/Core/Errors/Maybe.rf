@@ -8,12 +8,6 @@ record Maybe[T] needs T is RecordType
   ### The stored value, valid only when present.
   secret value: T
 
-### Defines the record `Maybe` for entity types.
-### :typeparam T: The optional value type.
-record Maybe[T] needs T is EntityType
-  ### The stored value, valid only when it is not null.
-  secret value: Hijacked[T]
-
 routine Maybe[T].$represent() -> Text needs T is RecordType
   if not me.present
     return "None"
@@ -24,17 +18,6 @@ routine Maybe[T].$diagnose() -> Text needs T is RecordType
     return "Core.Maybe(None)"
   return f"Core.Maybe({me.value})"
 
-routine Maybe[T].$represent() -> Text needs T is EntityType
-  if icmp_eq[Hijacked[T]](me.value, hijacked_none[T]())
-    return "None"
-  var val = entity_from_hijacked[T](me.value)
-  return f"{val}"
-
-routine Maybe[T].$diagnose() -> Text needs T is EntityType
-  if icmp_eq[Hijacked[T]](me.value, hijacked_none[T]())
-    return "Core.Maybe(None)"
-  var val = entity_from_hijacked[T](me.value)
-  return f"Core.Maybe({val})"
 
 ### Returns the stored value, crashing if absent.
 ### :returns: The resulting `T` value.
@@ -59,25 +42,3 @@ routine Maybe[T].$unwrap_or(or_else: Routine[Me, T]) -> T needs T is RecordType
     return or_else()
   return me.value
 
-### Returns the stored value, crashing if absent.
-### :returns: The resulting `T` value.
-routine Maybe[T].$unwrap() -> T needs T is EntityType
-  if icmp_eq[Hijacked[T]](me.value, hijacked_none[T]())
-    throw AbsentValueError()
-  return entity_from_hijacked[T](me.value)
-
-### Returns the stored value or a fallback.
-### :param default: The fallback value to return.
-### :returns: The resulting `T` value.
-routine Maybe[T].$unwrap_or(default: T) -> T needs T is EntityType
-  if icmp_eq[Hijacked[T]](me.value, hijacked_none[T]())
-    return default
-  return entity_from_hijacked[T](me.value)
-
-### Returns the stored value or a fallback.
-### :param or_else: The fallback routine to call.
-### :returns: The resulting `T` value.
-routine Maybe[T].$unwrap_or(or_else: Routine[Me, T]) -> T needs T is EntityType
-  if icmp_eq[Hijacked[T]](me.value, hijacked_none[T]())
-    return or_else()
-  return entity_from_hijacked[T](me.value)
