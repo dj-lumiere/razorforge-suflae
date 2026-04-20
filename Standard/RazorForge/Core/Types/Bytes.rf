@@ -33,7 +33,7 @@ routine Bytes.$create(from_byte: Byte) -> Bytes
 ### Creates a new instance.
 ### :param ptr: The pointer value to use.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.$create(ptr: Snatched[Byte]) -> Bytes
+routine Bytes.$create(ptr: Hijacked[Byte]) -> Bytes
   var len: U64 = 0u64
   loop
     if ptr.offset(len).read() == BYTE_NULL
@@ -77,7 +77,7 @@ routine Bytes.$create(ptr: Address, count: U64) -> Bytes
   loop
     if i >= count
       break
-    var byte_val = Snatched[Byte](ptr + i).read()
+    var byte_val = Hijacked[Byte](ptr + i).read()
     list.add_last(byte_val)
     i += 1u64
   return Bytes(from_list: list)
@@ -86,7 +86,7 @@ routine Bytes.$create(ptr: Address, count: U64) -> Bytes
 ### :param ptr: The pointer value to use.
 ### :param count: The number of items to use.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.$create(ptr: Snatched[Byte], count: U64) -> Bytes
+routine Bytes.$create(ptr: Hijacked[Byte], count: U64) -> Bytes
   if count == 0u64
     return Bytes()
   var list = List[Byte]()
@@ -488,28 +488,30 @@ routine Bytes.decode_as_utf8!() -> Text
     result.add_last(Character(codepoint))
   return Text(from_list: result)
 
-### Defines the entity `BytesUtf8View`.
-entity BytesUtf8View obeys Iterable[Character]
-  ### Stores the bytes member value.
-  bytes: Bytes
+### Defines the record `BytesUtf8View`.
+record BytesUtf8View obeys Iterable[Character]
+  ### Raw pointer to the underlying `Bytes` entity. Caller guarantees lifetime.
+  secret bytes: Hijacked[Bytes]
 
-### Defines the entity `BytesUtf8Iterator`.
-entity BytesUtf8Iterator
-  ### Stores the bytes member value.
-  bytes: Bytes
+### Defines the record `BytesUtf8Iterator`.
+record BytesUtf8Iterator
+  ### Raw pointer to the underlying `Bytes` entity. Caller guarantees lifetime.
+  secret bytes: Hijacked[Bytes]
   ### Stores the index member value.
   index: U64
 
 ### Returns the result of `interpret as utf8`.
 ### :returns: The resulting `BytesUtf8View` value.
 routine Bytes.interpret_as_utf8() -> BytesUtf8View
-  return BytesUtf8View(bytes: me)
+  danger!
+    return BytesUtf8View(bytes: me.hijack())
 
 ### Returns the result of `interpret as utf8`.
 ### :returns: The resulting `BytesUtf8View` value.
 routine Bytes.interpret_as_utf8!() -> BytesUtf8View
   discard me.decode_as_utf8!()
-  return BytesUtf8View(bytes: me)
+  danger!
+    return BytesUtf8View(bytes: me.hijack())
 
 ### Returns the result of `interpret as utf8 lossy`.
 ### :returns: The resulting `BytesUtf8View` value.
@@ -525,70 +527,72 @@ routine BytesUtf8View.$iter() -> BytesUtf8Iterator
 ### :returns: The resulting `Character` value.
 ### :absent: Returns absent when the requested value is unavailable.
 routine BytesUtf8Iterator.$next!() -> Character
-  if me.index >= me.bytes.count()
-    absent
+  danger!
+    var bref = me.bytes.read()
+    if me.index >= bref.count()
+      absent
 
-  var b0 = U32(me.bytes[me.index].codepoint())
-  var codepoint: U32 = 0u32
+    var b0 = U32(bref[me.index].codepoint())
+    var codepoint: U32 = 0u32
 
-  when
-    (b0 & 0x80u32) == 0u32 =>
-      codepoint = b0
-      me.index += 1u64
-    (b0 & 0xE0u32) == 0xC0u32 =>
-      if me.index + 1u64 < me.bytes.count()
-        var b1 = U32(me.bytes[me.index + 1u64].codepoint())
-        if (b1 & 0xC0u32) == 0x80u32 and b0 >= 0xC2u32
-          codepoint = ((b0 & 0x1Fu32) << 6u32) | (b1 & 0x3Fu32)
-          me.index += 2u64
-        else
-          codepoint = CHARACTER_REPLACEMENT.codepoint()
-          me.index += 1u64
-      else
-        codepoint = CHARACTER_REPLACEMENT.codepoint()
+    when
+      (b0 & 0x80u32) == 0u32 =>
+        codepoint = b0
         me.index += 1u64
-    (b0 & 0xF0u32) == 0xE0u32 =>
-      if me.index + 2u64 < me.bytes.count()
-        var b1 = U32(me.bytes[me.index + 1u64].codepoint())
-        var b2 = U32(me.bytes[me.index + 2u64].codepoint())
-        var is_valid = (b1 & 0xC0u32) == 0x80u32 and (b2 & 0xC0u32) == 0x80u32
-        if is_valid
-          var candidate = ((b0 & 0x0Fu32) << 12u32) | ((b1 & 0x3Fu32) << 6u32) | (b2 & 0x3Fu32)
-          if candidate >= 0x800u32 and (candidate < 0xD800u32 or candidate > 0xDFFFu32)
-            codepoint = candidate
-            me.index += 3u64
+      (b0 & 0xE0u32) == 0xC0u32 =>
+        if me.index + 1u64 < bref.count()
+          var b1 = U32(bref[me.index + 1u64].codepoint())
+          if (b1 & 0xC0u32) == 0x80u32 and b0 >= 0xC2u32
+            codepoint = ((b0 & 0x1Fu32) << 6u32) | (b1 & 0x3Fu32)
+            me.index += 2u64
           else
             codepoint = CHARACTER_REPLACEMENT.codepoint()
             me.index += 1u64
         else
           codepoint = CHARACTER_REPLACEMENT.codepoint()
           me.index += 1u64
-      else
-        codepoint = CHARACTER_REPLACEMENT.codepoint()
-        me.index += 1u64
-    (b0 & 0xF8u32) == 0xF0u32 =>
-      if me.index + 3u64 < me.bytes.count()
-        var b1 = U32(me.bytes[me.index + 1u64].codepoint())
-        var b2 = U32(me.bytes[me.index + 2u64].codepoint())
-        var b3 = U32(me.bytes[me.index + 3u64].codepoint())
-        var is_valid = (b1 & 0xC0u32) == 0x80u32 and (b2 & 0xC0u32) == 0x80u32 and (b3 & 0xC0u32) == 0x80u32
-        if is_valid
-          var candidate = ((b0 & 0x07u32) << 18u32) | ((b1 & 0x3Fu32) << 12u32) | ((b2 & 0x3Fu32) << 6u32) | (b3 & 0x3Fu32)
-          if 0x10000u32 <= candidate <= 0x10FFFFu32
-            codepoint = candidate
-            me.index += 4u64
+      (b0 & 0xF0u32) == 0xE0u32 =>
+        if me.index + 2u64 < bref.count()
+          var b1 = U32(bref[me.index + 1u64].codepoint())
+          var b2 = U32(bref[me.index + 2u64].codepoint())
+          var is_valid = (b1 & 0xC0u32) == 0x80u32 and (b2 & 0xC0u32) == 0x80u32
+          if is_valid
+            var candidate = ((b0 & 0x0Fu32) << 12u32) | ((b1 & 0x3Fu32) << 6u32) | (b2 & 0x3Fu32)
+            if candidate >= 0x800u32 and (candidate < 0xD800u32 or candidate > 0xDFFFu32)
+              codepoint = candidate
+              me.index += 3u64
+            else
+              codepoint = CHARACTER_REPLACEMENT.codepoint()
+              me.index += 1u64
           else
             codepoint = CHARACTER_REPLACEMENT.codepoint()
             me.index += 1u64
         else
           codepoint = CHARACTER_REPLACEMENT.codepoint()
           me.index += 1u64
-      else
+      (b0 & 0xF8u32) == 0xF0u32 =>
+        if me.index + 3u64 < bref.count()
+          var b1 = U32(bref[me.index + 1u64].codepoint())
+          var b2 = U32(bref[me.index + 2u64].codepoint())
+          var b3 = U32(bref[me.index + 3u64].codepoint())
+          var is_valid = (b1 & 0xC0u32) == 0x80u32 and (b2 & 0xC0u32) == 0x80u32 and (b3 & 0xC0u32) == 0x80u32
+          if is_valid
+            var candidate = ((b0 & 0x07u32) << 18u32) | ((b1 & 0x3Fu32) << 12u32) | ((b2 & 0x3Fu32) << 6u32) | (b3 & 0x3Fu32)
+            if 0x10000u32 <= candidate <= 0x10FFFFu32
+              codepoint = candidate
+              me.index += 4u64
+            else
+              codepoint = CHARACTER_REPLACEMENT.codepoint()
+              me.index += 1u64
+          else
+            codepoint = CHARACTER_REPLACEMENT.codepoint()
+            me.index += 1u64
+        else
+          codepoint = CHARACTER_REPLACEMENT.codepoint()
+          me.index += 1u64
+      else =>
         codepoint = CHARACTER_REPLACEMENT.codepoint()
         me.index += 1u64
-    else =>
-      codepoint = CHARACTER_REPLACEMENT.codepoint()
-      me.index += 1u64
 
   return Character(codepoint)
 
@@ -600,14 +604,14 @@ routine BytesUtf8Iterator.$next!() -> Character
 ### :returns: The resulting `Address` value.
 routine Bytes.to_cstr() -> Address
   var len = me.count()
-  var buffer = Snatched[Byte]( rf_allocate_dynamic(len + 1u64))
+  var buffer = Hijacked[Byte]( rf_allocate_dynamic(len + 1u64))
   var i: U64 = 0u64
   loop
     if i >= len
       break
-    Snatched[Byte](buffer.get_address() +% Address(i)).write(me[i])
+    Hijacked[Byte](buffer.get_address() +% Address(i)).write(me[i])
     i += 1u64
-  Snatched[Byte](buffer.get_address() +% Address(len)).write(BYTE_NULL)
+  Hijacked[Byte](buffer.get_address() +% Address(len)).write(BYTE_NULL)
   return buffer.get_address()
 
 ### Converts this value to cstr.

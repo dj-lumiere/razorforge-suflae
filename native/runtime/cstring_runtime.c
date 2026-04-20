@@ -24,3 +24,8 @@ rf_address rf_cwstr_count(const wchar_t* cwstr)
 {
     return (rf_address)wcslen(cwstr);
 }
+
+rf_S32 rf_cwstr_compare(const wchar_t* s1, const wchar_t* s2)
+{
+    return (rf_S32)wcscmp(s1, s2);
+}

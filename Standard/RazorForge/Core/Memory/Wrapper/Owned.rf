@@ -40,7 +40,7 @@ needs T is EntityType
 ### Frees the owned allocation. Called automatically at scope end.
 routine Owned[T].$destroy()
   danger!
-    var raw = Snatched[T](me)
+    var raw = Hijacked[T](me)
     raw.invalidate!()
   return
 
@@ -48,18 +48,18 @@ routine Owned[T].$destroy()
 # Construction from raw pointer (FFI / danger contexts)
 # ============================================================================
 
-### Wraps a raw `Snatched[T]` into an `Owned[T]`, claiming sole ownership.
+### Wraps a raw `Hijacked[T]` into an `Owned[T]`, claiming sole ownership.
 ### The caller must guarantee that `raw` is uniquely owned after this call.
 ### :param raw: The raw pointer to take ownership of.
 ### :returns: The resulting `Owned[T]` value.
-dangerous routine Owned[T].from_raw(raw: Snatched[T]) -> Owned[T]
+dangerous routine Owned[T].from_raw(raw: Hijacked[T]) -> Owned[T]
   return Owned[T](raw)
 
 ### Returns the heap address of the owned allocation.
 ### :returns: The resulting `Address` value.
 dangerous routine Owned[T].get_address() -> Address
   danger!
-    var raw = Snatched[T](me)
+    var raw = Hijacked[T](me)
     return raw.get_address()
 
 # ============================================================================
@@ -71,14 +71,14 @@ dangerous routine Owned[T].get_address() -> Address
 @readonly
 routine Owned[T].$represent() -> Text
   danger!
-    var raw = Snatched[T](me)
-    return raw.read().$represent()
+    var raw = Hijacked[T](me)
+    return raw.unhijack().$represent()
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Owned[T].$diagnose() -> Text
   danger!
-    var raw = Snatched[T](me)
+    var raw = Hijacked[T](me)
     var addr = raw.get_address()
-    return me.type_name() + "(addr: " + addr.$represent() + ", " + raw.read().$diagnose() + ")"
+    return me.type_name() + "(addr: " + addr.$represent() + ", " + raw.unhijack().$diagnose() + ")"

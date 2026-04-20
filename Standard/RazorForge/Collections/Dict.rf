@@ -1,7 +1,8 @@
-# RazorForge Dict[K, V] — Robin Hood open-addressing hash map
+# RazorForge Dict[K, V] — Swiss Table scalar hash map
 # O(1) average insert / delete / lookup
 # Requires K obeys Hashable, Equatable (no ordering needed)
-# 75% load factor; capacity always a power of two
+# 87.5% load factor; capacity always a power of two
+# ctrl byte: 128=empty, 254=deleted (tombstone), 0-127=H2 fingerprint
 
 module Core
 
@@ -14,11 +15,12 @@ preset DICT_INITIAL_CAPACITY: U64 = 16u64
 ### :typeparam V: The value type.
 entity Dict[K, V] obeys Iterable[DictEntry[K, V]]
 needs K obeys Hashable, Equatable
-  secret hashes: List[U64]    # 0 = empty; otherwise normalized hash of stored key
-  secret keys: Snatched[K]    # raw key storage, capacity slots
-  secret vals: Snatched[V]    # raw value storage, capacity slots
-  secret count: U64
-  secret capacity: U64        # always a power of two
+  secret ctrl: Hijacked[Byte]   # 1 byte/slot: 128=empty, 254=deleted, 0-127=H2
+  secret keys: Hijacked[K]      # raw key storage, capacity slots
+  secret vals: Hijacked[V]      # raw value storage, capacity slots
+  secret count: U64             # live entry count
+  secret deleted: U64           # tombstone count
+  secret capacity: U64          # always a power of two
 
 # ============================================================================
 # Creators
@@ -29,19 +31,18 @@ needs K obeys Hashable, Equatable
 routine Dict[K, V].$create() -> Dict[K, V]
   var cap = DICT_INITIAL_CAPACITY
   var dict = Dict[K, V](
-    hashes: List[U64](cap),
-    keys: snatched_none[K](),
-    vals: snatched_none[V](),
+    ctrl: hijacked_none[Byte](),
+    keys: hijacked_none[K](),
+    vals: hijacked_none[V](),
     count: 0u64,
+    deleted: 0u64,
     capacity: cap
   )
-  var i = 0u64
-  while i < cap
-    dict.hashes.add_last(0u64)
-    i = i +% 1u64
   danger!
-    dict.keys = Snatched[K](rf_allocate_dynamic(K.data_size() * cap))
-    dict.vals = Snatched[V](rf_allocate_dynamic(V.data_size() * cap))
+    dict.ctrl = Hijacked[Byte](rf_allocate_dynamic_uninit(cap))
+    rf_set_bytes_at(dest: ptrtoint[Byte, Address](dict.ctrl), value: 128_u8, size: cap)
+    dict.keys = Hijacked[K](rf_allocate_dynamic_uninit(K.data_size() * cap))
+    dict.vals = Hijacked[V](rf_allocate_dynamic_uninit(V.data_size() * cap))
   return dict
 
 ### Creates a new instance pre-sized to hold at least `capacity` entries.
@@ -52,19 +53,18 @@ routine Dict[K, V].$create(capacity: U64) -> Dict[K, V]
   while cap < capacity
     cap = cap *% 2u64
   var dict = Dict[K, V](
-    hashes: List[U64](cap),
-    keys: snatched_none[K](),
-    vals: snatched_none[V](),
+    ctrl: hijacked_none[Byte](),
+    keys: hijacked_none[K](),
+    vals: hijacked_none[V](),
     count: 0u64,
+    deleted: 0u64,
     capacity: cap
   )
-  var i = 0u64
-  while i < cap
-    dict.hashes.add_last(0u64)
-    i = i +% 1u64
   danger!
-    dict.keys = Snatched[K](rf_allocate_dynamic(K.data_size() * cap))
-    dict.vals = Snatched[V](rf_allocate_dynamic(V.data_size() * cap))
+    dict.ctrl = Hijacked[Byte](rf_allocate_dynamic_uninit(cap))
+    rf_set_bytes_at(dest: ptrtoint[Byte, Address](dict.ctrl), value: 128_u8, size: cap)
+    dict.keys = Hijacked[K](rf_allocate_dynamic_uninit(K.data_size() * cap))
+    dict.vals = Hijacked[V](rf_allocate_dynamic_uninit(V.data_size() * cap))
   return dict
 
 ### Creates a new instance from varargs entries.
@@ -79,6 +79,8 @@ routine Dict[K, V].$create(entries...: DictEntry[K, V]) -> Dict[K, V]
 ### Releases raw key and value storage.
 routine Dict[K, V].$destroy()
   danger!
+    if not me.ctrl.is_none()
+      rf_invalidate(ptrtoint[Byte, Address](me.ctrl))
     if not me.keys.is_none()
       rf_invalidate(ptrtoint[K, Address](me.keys))
     if not me.vals.is_none()
@@ -89,18 +91,17 @@ routine Dict[K, V].$destroy()
 # Internal Helpers
 # ============================================================================
 
-### Returns `h` normalized to never be zero (0 is the empty sentinel).
-### :param h: The raw hash.
-### :returns: The resulting `U64` value.
-routine Dict[K, V].normalize_hash(h: U64) -> U64
-  return if h == 0u64 then 1u64 else h
+### Returns the H2 fingerprint: 7 low bits of hash, always in range 0-127.
+### :param hash: The raw hash.
+### :returns: The resulting `Byte` value.
+routine Dict[K, V].h2(hash: U64) -> Byte
+  return (hash & 127u64).Byte()
 
-### Returns the probe distance of a slot given its stored hash.
-### :param hash: The stored hash value.
-### :param slot: The slot index.
+### Returns the H1 slot position: upper bits of hash used for indexing.
+### :param hash: The raw hash.
 ### :returns: The resulting `U64` value.
-routine Dict[K, V].probe_dist(hash: U64, slot: U64) -> U64
-  return (slot +% me.capacity -% (hash & (me.capacity -% 1u64))) & (me.capacity -% 1u64)
+routine Dict[K, V].h1(hash: U64) -> U64
+  return hash >> 7u32
 
 ### Reads the key at `slot`.
 ### :param slot: The slot index.
@@ -128,101 +129,95 @@ routine Dict[K, V].write_val(slot: U64, val: V)
   me.vals.offset(V.data_size() * slot).write(val)
   return
 
-### Linear-probes for `key` using the Robin Hood invariant.
+### Linear-probes for `key` using H1 start + H2 fingerprint matching.
 ### Returns `capacity` when `key` is absent.
 ### :param key: The key to find.
 ### :returns: The resulting `U64` value.
 routine Dict[K, V].find_slot(key: K) -> U64
-  var h = me.normalize_hash(key.$hash())
+  var h = key.$hash()
+  var target = me.h2(h)
   var mask = me.capacity -% 1u64
-  var i = h & mask
-  var dist = 0u64
-  while me.hashes[i] != 0u64 and me.probe_dist(hash: me.hashes[i], slot: i) >= dist
-    if me.hashes[i] == h and me.read_key(i) == key
-      return i
-    i = (i +% 1u64) & mask
-    dist = dist +% 1u64
+  var i = me.h1(h) & mask
+  danger!
+    loop
+      var c = me.ctrl.offset(Byte.data_size() * i).read()
+      if c == 128_u8
+        return me.capacity
+      if c == target
+        if me.keys.offset(K.data_size() * i).read() == key
+          return i
+      i = (i +% 1u64) & mask
   return me.capacity
 
-### Inserts a pre-normalized hash + key + value using Robin Hood probing.
+### Inserts hash + key + value into the first empty or deleted slot from H1.
 ### Does not check for duplicates and does not update `count`.
-### :param h: The normalized hash.
+### :param h: The raw hash.
 ### :param key: The key to insert.
 ### :param val: The value to insert.
 routine Dict[K, V].insert_raw(h: U64, key: K, val: V)
+  var h2_val = me.h2(h)
   var mask = me.capacity -% 1u64
-  var i = h & mask
-  var dist = 0u64
-  var cur_h = h
-  var cur_key = key
-  var cur_val = val
-  while me.hashes[i] != 0u64
-    var occ_dist = me.probe_dist(hash: me.hashes[i], slot: i)
-    if occ_dist < dist
-      var tmp_h = me.hashes[i]
-      me.hashes[i] = cur_h
-      cur_h = tmp_h
-      var tmp_key = me.read_key(i)
-      me.write_key(slot: i, key: cur_key)
-      cur_key = tmp_key
-      var tmp_val = me.read_val(i)
-      me.write_val(slot: i, val: cur_val)
-      cur_val = tmp_val
-      dist = occ_dist
-    i = (i +% 1u64) & mask
-    dist = dist +% 1u64
-  me.hashes[i] = cur_h
-  me.write_key(slot: i, key: cur_key)
-  me.write_val(slot: i, val: cur_val)
+  var i = me.h1(h) & mask
+  danger!
+    loop
+      var c = me.ctrl.offset(Byte.data_size() * i).read()
+      if c == 128_u8
+        me.ctrl.offset(Byte.data_size() * i).write(h2_val)
+        me.keys.offset(K.data_size() * i).write(key)
+        me.vals.offset(V.data_size() * i).write(val)
+        return
+      if c == 254_u8
+        me.ctrl.offset(Byte.data_size() * i).write(h2_val)
+        me.keys.offset(K.data_size() * i).write(key)
+        me.vals.offset(V.data_size() * i).write(val)
+        me.deleted = me.deleted -% 1u64
+        return
+      i = (i +% 1u64) & mask
   return
 
-### Removes the entry at `slot` using backward-shift deletion (no tombstones).
+### Writes tombstone to ctrl[slot]. Caller must decrement count and increment deleted.
 ### :param slot: The occupied slot to vacate.
 routine Dict[K, V].delete_at(slot: U64)
-  var mask = me.capacity -% 1u64
-  var i = slot
-  var j = (i +% 1u64) & mask
-  while me.hashes[j] != 0u64 and me.probe_dist(hash: me.hashes[j], slot: j) > 0u64
-    me.hashes[i] = me.hashes[j]
-    me.write_key(slot: i, key: me.read_key(j))
-    me.write_val(slot: i, val: me.read_val(j))
-    i = j
-    j = (i +% 1u64) & mask
-  me.hashes[i] = 0u64
+  danger!
+    me.ctrl.offset(Byte.data_size() * slot).write(254_u8)
   return
 
-### Returns true if the next insert would exceed 75% load.
+### Returns true if the next insert would exceed 87.5% load (live + tombstones).
 ### :returns: The resulting `Bool` value.
 routine Dict[K, V].should_rehash() -> Bool
-  return me.count *% 4u64 >= me.capacity *% 3u64
+  return (me.count +% me.deleted) *% 8u64 >= me.capacity *% 7u64
 
 ### Doubles capacity and reinserts all live entries.
 routine Dict[K, V].rehash()
   var old_cap = me.capacity
-  var old_hashes = me.hashes
+  var old_ctrl = me.ctrl
   var old_keys = me.keys
   var old_vals = me.vals
   var new_cap = old_cap *% 2u64
 
-  me.hashes = List[U64](new_cap)
-  var i = 0u64
-  while i < new_cap
-    me.hashes.add_last(0u64)
-    i = i +% 1u64
   danger!
-    me.keys = Snatched[K](rf_allocate_dynamic(K.data_size() * new_cap))
-    me.vals = Snatched[V](rf_allocate_dynamic(V.data_size() * new_cap))
+    me.ctrl = Hijacked[Byte](rf_allocate_dynamic_uninit(new_cap))
+    rf_set_bytes_at(dest: ptrtoint[Byte, Address](me.ctrl), value: 128_u8, size: new_cap)
+    me.keys = Hijacked[K](rf_allocate_dynamic_uninit(K.data_size() * new_cap))
+    me.vals = Hijacked[V](rf_allocate_dynamic_uninit(V.data_size() * new_cap))
   me.capacity = new_cap
   me.count = 0u64
+  me.deleted = 0u64
 
-  i = 0u64
+  var i = 0u64
   while i < old_cap
-    if old_hashes[i] != 0u64
-      me.insert_raw(h: old_hashes[i], key: old_keys.offset(K.data_size() * i).read(), val: old_vals.offset(V.data_size() * i).read())
-      me.count = me.count +% 1u64
+    danger!
+      var c = old_ctrl.offset(Byte.data_size() * i).read()
+      if c != 128_u8 and c != 254_u8
+        var k = old_keys.offset(K.data_size() * i).read()
+        var v = old_vals.offset(V.data_size() * i).read()
+        me.insert_raw(h: k.$hash(), key: k, val: v)
+        me.count = me.count +% 1u64
     i = i +% 1u64
 
   danger!
+    if not old_ctrl.is_none()
+      rf_invalidate(ptrtoint[Byte, Address](old_ctrl))
     if not old_keys.is_none()
       rf_invalidate(ptrtoint[K, Address](old_keys))
     if not old_vals.is_none()
@@ -245,11 +240,10 @@ routine Dict[K, V].is_empty() -> Bool
 
 ### Removes all entries, keeping current capacity.
 routine Dict[K, V].clear()
-  var i = 0u64
-  while i < me.capacity
-    me.hashes[i] = 0u64
-    i = i +% 1u64
+  danger!
+    rf_set_bytes_at(dest: ptrtoint[Byte, Address](me.ctrl), value: 128_u8, size: me.capacity)
   me.count = 0u64
+  me.deleted = 0u64
   return
 
 ### Returns whether this dict contains `key`.
@@ -270,7 +264,7 @@ routine Dict[K, V].add(key: K, value: V) -> Bool
   if slot < me.capacity
     me.write_val(slot: slot, val: value)
     return false
-  me.insert_raw(h: me.normalize_hash(key.$hash()), key: key, val: value)
+  me.insert_raw(h: key.$hash(), key: key, val: value)
   me.count = me.count +% 1u64
   return true
 
@@ -283,6 +277,7 @@ routine Dict[K, V].remove(key: K) -> Bool
     return false
   me.delete_at(slot)
   me.count = me.count -% 1u64
+  me.deleted = me.deleted +% 1u64
   return true
 
 ### Returns the value for `key`, or `default_value` if not found.
@@ -319,7 +314,7 @@ routine Dict[K, V].$setitem!(key: K, value: V)
   if slot < me.capacity
     me.write_val(slot: slot, val: value)
     return
-  me.insert_raw(h: me.normalize_hash(key.$hash()), key: key, val: value)
+  me.insert_raw(h: key.$hash(), key: key, val: value)
   me.count = me.count + 1u64
   return
 
@@ -333,8 +328,10 @@ routine Dict[K, V].keys() -> List[K]
   var result = List[K](me.count)
   var i = 0u64
   while i < me.capacity
-    if me.hashes[i] != 0u64
-      result.add_last(me.read_key(i))
+    danger!
+      var c = me.ctrl.offset(Byte.data_size() * i).read()
+      if c != 128_u8 and c != 254_u8
+        result.add_last(me.read_key(i))
     i = i +% 1u64
   return result
 
@@ -344,8 +341,10 @@ routine Dict[K, V].values() -> List[V]
   var result = List[V](me.count)
   var i = 0u64
   while i < me.capacity
-    if me.hashes[i] != 0u64
-      result.add_last(me.read_val(i))
+    danger!
+      var c = me.ctrl.offset(Byte.data_size() * i).read()
+      if c != 128_u8 and c != 254_u8
+        result.add_last(me.read_val(i))
     i = i +% 1u64
   return result
 
@@ -355,8 +354,10 @@ routine Dict[K, V].entries() -> List[DictEntry[K, V]]
   var result = List[DictEntry[K, V]](me.count)
   var i = 0u64
   while i < me.capacity
-    if me.hashes[i] != 0u64
-      result.add_last(DictEntry[K, V](key: me.read_key(i), value: me.read_val(i)))
+    danger!
+      var c = me.ctrl.offset(Byte.data_size() * i).read()
+      if c != 128_u8 and c != 254_u8
+        result.add_last(DictEntry[K, V](key: me.read_key(i), value: me.read_val(i)))
     i = i +% 1u64
   return result
 
@@ -370,7 +371,7 @@ routine Dict[K, V].entries() -> List[DictEntry[K, V]]
 routine Dict[K, V].$iter() -> DictIterator[K, V]
   danger!
     return DictIterator[K, V](
-      hashes: me.hashes.data,
+      ctrl: me.ctrl,
       keys: me.keys,
       vals: me.vals,
       capacity: me.capacity,
@@ -381,12 +382,12 @@ routine Dict[K, V].$iter() -> DictIterator[K, V]
 ### :typeparam K: The key type.
 ### :typeparam V: The value type.
 entity DictIterator[K, V] obeys Iterator[DictEntry[K, V]]
-  ### Raw pointer into the source dict's hash array buffer.
-  secret hashes: Snatched[U64]
+  ### Raw pointer into the source dict's ctrl array.
+  secret ctrl: Hijacked[Byte]
   ### Raw pointer into the source dict's key storage.
-  secret keys: Snatched[K]
+  secret keys: Hijacked[K]
   ### Raw pointer into the source dict's value storage.
-  secret vals: Snatched[V]
+  secret vals: Hijacked[V]
   ### Slot capacity captured at iterator creation.
   secret capacity: U64
   ### Current slot index.
@@ -398,8 +399,8 @@ routine DictIterator[K, V].$next!() -> DictEntry[K, V]
     while me.slot < me.capacity
       var s = me.slot
       me.slot = me.slot + 1u64
-      var h = me.hashes.offset(U64.data_size() * s).read()
-      if h != 0u64
+      var c = me.ctrl.offset(Byte.data_size() * s).read()
+      if c != 128_u8 and c != 254_u8
         var k = me.keys.offset(K.data_size() * s).read()
         var v = me.vals.offset(V.data_size() * s).read()
         return DictEntry[K, V](key: k, value: v)
@@ -449,11 +450,13 @@ routine Dict[K, V].$eq(other: Dict[K, V]) -> Bool
     return false
   var i = 0u64
   while i < me.capacity
-    if me.hashes[i] != 0u64
-      var slot = other.find_slot(me.read_key(i))
-      if slot >= other.capacity
-        return false
-      if me.read_val(i) != other.read_val(slot)
-        return false
+    danger!
+      var c = me.ctrl.offset(Byte.data_size() * i).read()
+      if c != 128_u8 and c != 254_u8
+        var slot = other.find_slot(me.read_key(i))
+        if slot >= other.capacity
+          return false
+        if me.read_val(i) != other.read_val(slot)
+          return false
     i = i +% 1u64
   return true

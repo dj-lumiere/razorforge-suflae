@@ -25,8 +25,8 @@ needs TPriority obeys Comparable
 ### :typeparam TElement: The value used for `TElement`.
 entity PriorityQueue[TPriority, TElement] obeys Iterable[PQEntry[TPriority, TElement]]
 needs TPriority obeys Comparable
-  secret priorities: Snatched[TPriority]
-  secret elements: Snatched[TElement]
+  secret priorities: Hijacked[TPriority]
+  secret elements: Hijacked[TElement]
   secret count: U64
   secret capacity: U64
 
@@ -36,8 +36,8 @@ needs TPriority obeys Comparable
 
 routine PriorityQueue[TPriority, TElement].$create() -> PriorityQueue[TPriority, TElement]
   return PriorityQueue[TPriority, TElement](
-    priorities: snatched_none[TPriority](),
-    elements: snatched_none[TElement](),
+    priorities: hijacked_none[TPriority](),
+    elements: hijacked_none[TElement](),
     count: 0u64,
     capacity: 0u64
   )
@@ -45,11 +45,11 @@ routine PriorityQueue[TPriority, TElement].$create() -> PriorityQueue[TPriority,
 routine PriorityQueue[TPriority, TElement].$create(capacity: U64) -> PriorityQueue[TPriority, TElement]
   var priority_byte_size = TPriority.data_size() * capacity
   var element_byte_size = TElement.data_size() * capacity
-  var priority_ptr = rf_allocate_dynamic(priority_byte_size)
-  var element_ptr = rf_allocate_dynamic(element_byte_size)
+  var priority_ptr = rf_allocate_dynamic_uninit(priority_byte_size)
+  var element_ptr = rf_allocate_dynamic_uninit(element_byte_size)
   return PriorityQueue[TPriority, TElement](
-    priorities: Snatched[TPriority](priority_ptr),
-    elements: Snatched[TElement](element_ptr),
+    priorities: Hijacked[TPriority](priority_ptr),
+    elements: Hijacked[TElement](element_ptr),
     count: 0u64,
     capacity: capacity
   )
@@ -105,21 +105,21 @@ routine PriorityQueue[TPriority, TElement].reserve(new_capacity: U64)
 
     if me.priorities.is_none()
       danger!
-        var ptr = rf_allocate_dynamic(priority_byte_size)
-        me.priorities = Snatched[TPriority](ptr)
+        var ptr = rf_allocate_dynamic_uninit(priority_byte_size)
+        me.priorities = Hijacked[TPriority](ptr)
     else
       danger!
         var ptr = rf_reallocate_dynamic(ptrtoint[TPriority, Address](me.priorities), priority_byte_size)
-        me.priorities = Snatched[TPriority](ptr)
+        me.priorities = Hijacked[TPriority](ptr)
 
     if me.elements.is_none()
       danger!
-        var ptr = rf_allocate_dynamic(element_byte_size)
-        me.elements = Snatched[TElement](ptr)
+        var ptr = rf_allocate_dynamic_uninit(element_byte_size)
+        me.elements = Hijacked[TElement](ptr)
     else
       danger!
         var ptr = rf_reallocate_dynamic(ptrtoint[TElement, Address](me.elements), element_byte_size)
-        me.elements = Snatched[TElement](ptr)
+        me.elements = Hijacked[TElement](ptr)
 
     me.capacity = new_capacity
   return
@@ -363,9 +363,9 @@ routine PriorityQueue[TPriority, TElement].$diagnose() -> Text
 ### :typeparam TElement: The value used for `TElement`.
 entity PriorityQueueIterator[TPriority, TElement] obeys Iterator[PQEntry[TPriority, TElement]]
   ### Raw pointer into the source queue's priority buffer.
-  secret priorities: Snatched[TPriority]
+  secret priorities: Hijacked[TPriority]
   ### Raw pointer into the source queue's element buffer.
-  secret elements: Snatched[TElement]
+  secret elements: Hijacked[TElement]
   ### Element count captured at iterator creation.
   secret count: U64
   ### Current position.

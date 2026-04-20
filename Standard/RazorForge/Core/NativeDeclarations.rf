@@ -18,6 +18,15 @@ dangerous external("C") routine rf_allocate_dynamic(size: U64) -> Address
 ### :returns: The resulting `Address` value.
 dangerous routine rf_allocate_dynamic(size: ByteSize) -> Address
   return rf_allocate_dynamic(size: size.byte_size())
+### Returns uninitialized dynamic memory — caller must write before reading.
+### :param size: The byte count to allocate.
+### :returns: The resulting `Address` value.
+dangerous external("C") routine rf_allocate_dynamic_uninit(size: U64) -> Address
+### Returns uninitialized dynamic memory — caller must write before reading.
+### :param size: The byte count to allocate.
+### :returns: The resulting `Address` value.
+dangerous routine rf_allocate_dynamic_uninit(size: ByteSize) -> Address
+  return rf_allocate_dynamic_uninit(size: size.byte_size())
 ### Returns the result of `rf reallocate dynamic`.
 ### :param ptr: The pointer value to use.
 ### :param size: The size value to use.
@@ -869,25 +878,25 @@ external("C") routine rf_crash(type_name: Address, type_len: U64, file: Address,
 ### Performs `rf console show` on this value.
 ### :param ptr: The pointer value to use.
 ### :param len: The `len` value.
-external("C") routine rf_console_show(ptr: Snatched[Byte], len: U64)
+external("C") routine rf_console_show(ptr: Hijacked[Byte], len: U64)
 ### Performs `rf console alert` on this value.
 ### :param ptr: The pointer value to use.
 ### :param len: The `len` value.
-external("C") routine rf_console_alert(ptr: Snatched[Byte], len: U64)
+external("C") routine rf_console_alert(ptr: Hijacked[Byte], len: U64)
 
 ### Returns the result of `rf console ask line`.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_console_ask_line() -> Snatched[Byte]
+external("C") routine rf_console_ask_line() -> Hijacked[Byte]
 ### Returns the result of `rf console ask word`.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_console_ask_word() -> Snatched[Byte]
+external("C") routine rf_console_ask_word() -> Hijacked[Byte]
 ### Returns the result of `rf console ask all`.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_console_ask_all() -> Snatched[Byte]
+external("C") routine rf_console_ask_all() -> Hijacked[Byte]
 ### Returns the result of `rf console ask bytes`.
 ### :param count: The number of items to use.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_console_ask_bytes(count: U64) -> Snatched[Byte]
+external("C") routine rf_console_ask_bytes(count: U64) -> Hijacked[Byte]
 
 # ============================================================================
 # Integer (Arbitrary Precision) - LibTomMath
@@ -1285,22 +1294,22 @@ external("C") routine rf_file_close(fd: S32)
 ### Returns the result of `rf file read all`.
 ### :param fd: The `fd` value.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_file_read_all(fd: S32) -> Snatched[Byte]
+external("C") routine rf_file_read_all(fd: S32) -> Hijacked[Byte]
 ### Returns the result of `rf file read line`.
 ### :param fd: The `fd` value.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_file_read_line(fd: S32) -> Snatched[Byte]
+external("C") routine rf_file_read_line(fd: S32) -> Hijacked[Byte]
 ### Returns the result of `rf file read bytes`.
 ### :param fd: The `fd` value.
 ### :param count: The number of items to use.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_file_read_bytes(fd: S32, count: U64) -> Snatched[Byte]
+external("C") routine rf_file_read_bytes(fd: S32, count: U64) -> Hijacked[Byte]
 ### Returns the result of `rf file write`.
 ### :param fd: The `fd` value.
 ### :param ptr: The pointer value to use.
 ### :param len: The `len` value.
 ### :returns: The resulting `U64` value.
-external("C") routine rf_file_write(fd: S32, ptr: Snatched[Byte], len: U64) -> U64
+external("C") routine rf_file_write(fd: S32, ptr: Hijacked[Byte], len: U64) -> U64
 ### Performs `rf file flush` on this value.
 ### :param fd: The `fd` value.
 external("C") routine rf_file_flush(fd: S32)
@@ -1373,37 +1382,37 @@ external("C") routine rf_fs_file_size(path: CStr, len: S32) -> S64
 ### :param b: The right-hand value.
 ### :param b_len: The `b_len` value.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_fs_join_path(a: CStr, a_len: S32, b: CStr, b_len: S32) -> Snatched[Byte]
+external("C") routine rf_fs_join_path(a: CStr, a_len: S32, b: CStr, b_len: S32) -> Hijacked[Byte]
 ### Returns the result of `rf fs parent path`.
 ### :param path: The `path` value.
 ### :param len: The `len` value.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_fs_parent_path(path: CStr, len: S32) -> Snatched[Byte]
+external("C") routine rf_fs_parent_path(path: CStr, len: S32) -> Hijacked[Byte]
 ### Returns the result of `rf fs file name`.
 ### :param path: The `path` value.
 ### :param len: The `len` value.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_fs_file_name(path: CStr, len: S32) -> Snatched[Byte]
+external("C") routine rf_fs_file_name(path: CStr, len: S32) -> Hijacked[Byte]
 ### Returns the result of `rf fs file stem`.
 ### :param path: The `path` value.
 ### :param len: The `len` value.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_fs_file_stem(path: CStr, len: S32) -> Snatched[Byte]
+external("C") routine rf_fs_file_stem(path: CStr, len: S32) -> Hijacked[Byte]
 ### Returns the result of `rf fs extension`.
 ### :param path: The `path` value.
 ### :param len: The `len` value.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_fs_extension(path: CStr, len: S32) -> Snatched[Byte]
+external("C") routine rf_fs_extension(path: CStr, len: S32) -> Hijacked[Byte]
 ### Returns the result of `rf fs absolute path`.
 ### :param path: The `path` value.
 ### :param len: The `len` value.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_fs_absolute_path(path: CStr, len: S32) -> Snatched[Byte]
+external("C") routine rf_fs_absolute_path(path: CStr, len: S32) -> Hijacked[Byte]
 ### Returns the result of `rf fs canonical path`.
 ### :param path: The `path` value.
 ### :param len: The `len` value.
 ### :returns: The resulting `Address` value.
-external("C") routine rf_fs_canonical_path(path: CStr, len: S32) -> Snatched[Byte]
+external("C") routine rf_fs_canonical_path(path: CStr, len: S32) -> Hijacked[Byte]
 ### Returns the result of `rf fs can read`.
 ### :param path: The `path` value.
 ### :param len: The `len` value.

@@ -115,7 +115,7 @@ routine ValueList[T, N].index_of!(value: T) -> U64
 
 ### Returns the result of `iter`.
 ### :returns: The resulting `ValueListIterator[T, N]` value.
-routine ValueList[T, N].iter() -> ValueListIterator[T, N]
+routine ValueList[T, N].$iter() -> ValueListIterator[T, N]
   return ValueListIterator[T, N](list: me, index: 0u64)
 
 ### Defines the record `ValueListIterator`.
@@ -163,4 +163,8 @@ routine ValueList[T, N].$diagnose() -> Text
   result = result + "])"
   return result
 
-# Comparison (==, !=) is auto-generated using memcmp for records
+routine ValueList[T, N].$eq(you: ValueList[T, N]) -> Bool
+  for i in 0 til N
+    if me[i] != you[i]
+      return false
+  return true

@@ -1,7 +1,7 @@
 # RazorForge Wide C String Type (CWStr)
 # Null-terminated wchar_t* wrapper for C FFI interop
 #
-# CWStr is a value type that wraps a raw pointer (Snatched[CWChar]) to a
+# CWStr is a value type that wraps a raw pointer (Hijacked[CWChar]) to a
 # null-terminated sequence of wide characters. It provides safe access to
 # wide C strings without copying unless explicitly requested.
 #
@@ -10,7 +10,7 @@
 # - Unix/Linux: wchar_t is 32-bit (UTF-32)
 #
 # Memory ownership:
-# - CWStr(from_ptr: Snatched[CWChar]) - wraps existing memory, does NOT take ownership
+# - CWStr(from_ptr: Hijacked[CWChar]) - wraps existing memory, does NOT take ownership
 # - CWStr(from_text: Text) - allocates NEW memory, caller owns it
 # - CWStr.copy() - allocates NEW memory, caller owns it
 import Collections.List
@@ -27,21 +27,21 @@ preset CWCHAR_SIZE: U64 = 4u64
 ### Defines the record `CWStr`.
 record CWStr
   ### Stores the ptr member value.
-  ptr: Snatched[CWChar]
+  ptr: Hijacked[CWChar]
 
-preset cwstr_null: CWStr = CWStr(ptr: snatched_none[CWChar]())
+preset cwstr_null: CWStr = CWStr(ptr: hijacked_none[CWChar]())
 
 ### Creates a new instance.
 ### :param from_ptr: The `from_ptr` value.
 ### :returns: The resulting `CWStr` value.
-routine CWStr.$create(from_ptr: Snatched[CWChar]) -> CWStr
+routine CWStr.$create(from_ptr: Hijacked[CWChar]) -> CWStr
   return CWStr(ptr: from_ptr)
 
 ### Creates a new instance.
 ### :param from_ptr: The `from_ptr` value.
 ### :returns: The resulting `CWStr` value.
 routine CWStr.$create(from_ptr: Address) -> CWStr
-  return CWStr(ptr: Snatched[CWChar](from_ptr))
+  return CWStr(ptr: Hijacked[CWChar](from_ptr))
 
 ### Creates a new instance.
 ### :param from_codepoints: The `from_codepoints` value.
@@ -50,7 +50,7 @@ routine CWStr.$create(from_codepoints: Text) -> CWStr
   var len = from_codepoints.count()
   var max_units = len * 2u64
   var byte_len = (max_units + 1u64) * 2u64
-  var buffer = Snatched[U8](rf_allocate_dynamic(byte_len))
+  var buffer = Hijacked[U8](rf_allocate_dynamic(byte_len))
 
   var write_pos: U64 = 0u64
   var i: U64 = 0u64
@@ -58,21 +58,21 @@ routine CWStr.$create(from_codepoints: Text) -> CWStr
     var codepoint = from_codepoints[i].codepoint()
 
     if codepoint <= 0xFFFFu32
-      Snatched[U16](buffer.get_address() +% Address(write_pos * 2u64)).write(U16!(codepoint))
+      Hijacked[U16](buffer.get_address() +% Address(write_pos * 2u64)).write(U16!(codepoint))
       write_pos = write_pos +% 1u64
     elseif codepoint <= 0x10FFFFu32
       var adjusted = codepoint - 0x10000u32
       var high = U16!((adjusted >> 10u32) + 0xD800u32)
       var low = U16!((adjusted & 0x3FFu32) + 0xDC00u32)
-      Snatched[U16](buffer.get_address() +% Address(write_pos * 2u64)).write(high)
-      Snatched[U16](buffer.get_address() +% Address((write_pos +% 1u64) * 2u64)).write(low)
+      Hijacked[U16](buffer.get_address() +% Address(write_pos * 2u64)).write(high)
+      Hijacked[U16](buffer.get_address() +% Address((write_pos +% 1u64) * 2u64)).write(low)
       write_pos = write_pos +% 2u64
     else
-      Snatched[U16](buffer.get_address() +% Address(write_pos * 2u64)).write(0xFFFDu16)
+      Hijacked[U16](buffer.get_address() +% Address(write_pos * 2u64)).write(0xFFFDu16)
       write_pos = write_pos +% 1u64
 
     i = i +% 1u64
-  Snatched[U16](buffer.get_address() +% Address(write_pos * 2u64)).write(0u16)
+  Hijacked[U16](buffer.get_address() +% Address(write_pos * 2u64)).write(0u16)
 
   return CWStr(ptr: buffer.obtain_as[CWChar]())
 
@@ -82,13 +82,13 @@ routine CWStr.$create(from_codepoints: Text) -> CWStr
 routine CWStr.$create(from_units: List[U16]) -> CWStr
   var len = from_units.count()
   var byte_len = (len + 1u64) * 2u64
-  var buffer = Snatched[U8](rf_allocate_dynamic(byte_len))
+  var buffer = Hijacked[U8](rf_allocate_dynamic(byte_len))
 
   var i: U64 = 0u64
   while i < len
-    Snatched[U16](buffer.get_address() +% Address(i * 2u64)).write(from_units[i])
+    Hijacked[U16](buffer.get_address() +% Address(i * 2u64)).write(from_units[i])
     i = i +% 1u64
-  Snatched[U16](buffer.get_address() +% Address(len * 2u64)).write(0u16)
+  Hijacked[U16](buffer.get_address() +% Address(len * 2u64)).write(0u16)
 
   return CWStr(ptr: buffer.obtain_as[CWChar]())
 
@@ -114,7 +114,7 @@ routine CWStr.is_empty() -> Bool
 routine CWStr.$getitem!(index: U64) -> U16
   if index >= me.count()
     throw IndexOutOfBoundsError()
-  return Snatched[U16](me.ptr.get_address() +% Address(index * 2u64)).read()
+  return Hijacked[U16](me.ptr.get_address() +% Address(index * 2u64)).read()
 
 ### Returns whether both values are equal.
 ### :param other: The other value to compare against.
@@ -138,7 +138,7 @@ routine CWStr.$cmp(other: CWStr) -> ComparisonSign
 routine CWStr.copy() -> CWStr
   var len = me.count()
   var byte_len = (len + 1u64) * 2u64
-  var buffer = Snatched[U8](rf_allocate_dynamic(byte_len))
+  var buffer = Hijacked[U8](rf_allocate_dynamic(byte_len))
   rf_cwstr_copy(buffer.get_address(), me.ptr.get_address())
   return CWStr(ptr: buffer.obtain_as[CWChar]())
 
@@ -151,7 +151,7 @@ routine CWStr.to_units() -> List[U16]
   loop
     if i >= len
       break
-    list.add_last(Snatched[U16](me.ptr.get_address() +% Address(i * 2u64)).read())
+    list.add_last(Hijacked[U16](me.ptr.get_address() +% Address(i * 2u64)).read())
     i = i + 1u64
   return list
 
@@ -159,10 +159,10 @@ routine CWStr.to_units() -> List[U16]
 ### :param n: The `n` value.
 ### :returns: The resulting `CWStr` value.
 routine CWStr.offset(n: U64) -> CWStr
-  return CWStr(ptr: Snatched[CWChar](me.ptr.get_address() +% Address(n * 2u64)))
+  return CWStr(ptr: Hijacked[CWChar](me.ptr.get_address() +% Address(n * 2u64)))
 
 ### Creates a value from index.
 ### :param start: The inclusive starting position.
 ### :returns: The resulting `CWStr` value.
 routine CWStr.from_index(start: U64) -> CWStr
-  return CWStr(ptr: Snatched[CWChar](me.ptr.get_address() +% Address(start * 2u64)))
+  return CWStr(ptr: Hijacked[CWChar](me.ptr.get_address() +% Address(start * 2u64)))

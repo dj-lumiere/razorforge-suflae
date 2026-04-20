@@ -5,7 +5,7 @@
 # RESTRICTED SEMANTICS:
 # - Only wrapping arithmetic: +%, -%, *%, //
 # - No regular +, -, * operators
-# - No implicit conversions — use Snatched[T] for conversion
+# - No implicit conversions — use Hijacked[T] for conversion
 # - No type dominance — does not participate in mixed-type arithmetic
 # - Hex display by default
 # - Literal suffix: _addr (e.g., 0x40020000_addr)
@@ -21,7 +21,7 @@ WrappingMultiplicable, FloorDivisible
 
 # ============================================================================
 # No $create routines — Address has no implicit or explicit conversions.
-# Use Snatched[T] for converting between Address and other types.
+# Use Hijacked[T] for converting between Address and other types.
 # ============================================================================
 
 ### Creates a new instance.

@@ -6,7 +6,7 @@ import BuilderService
 ### :typeparam T: The value used for `T`.
 entity List[T] obeys Iterable[T]
   ### Stores the data member value.
-  secret data: Snatched[T]
+  secret data: Hijacked[T]
   ### Stores the count member value.
   secret count: U64
   ### Stores the capacity member value.
@@ -18,7 +18,7 @@ entity List[T] obeys Iterable[T]
 ### :returns: The resulting `List[T]` value.
 routine List[T].$create() -> List[T]
   return List[T](
-    data: snatched_none[T](),
+    data: hijacked_none[T](),
     count: 0u64,
     capacity: 0u64
   )
@@ -28,9 +28,9 @@ routine List[T].$create() -> List[T]
 ### :returns: The resulting `List[T]` value.
 routine List[T].$create(capacity: U64) -> List[T]
   var byte_size = T.data_size() * capacity
-  var ptr = rf_allocate_dynamic(byte_size)
+  var ptr = rf_allocate_dynamic_uninit(byte_size)
   return List[T](
-    data: Snatched[T](ptr),
+    data: Hijacked[T](ptr),
     count: 0u64,
     capacity: capacity
   )
@@ -268,12 +268,12 @@ routine List[T].reserve(new_capacity: U64)
 
     if me.data.is_none()
       danger!
-        var ptr = rf_allocate_dynamic(new_byte_size)
-        me.data = Snatched[T](ptr)
+        var ptr = rf_allocate_dynamic_uninit(new_byte_size)
+        me.data = Hijacked[T](ptr)
     else
       danger!
         var ptr = rf_reallocate_dynamic(ptrtoint[T, Address](me.data), new_byte_size)
-        me.data = Snatched[T](ptr)
+        me.data = Hijacked[T](ptr)
 
     me.capacity = new_capacity
   return
@@ -291,7 +291,7 @@ routine List[T].clear()
 ### :typeparam T: The value used for `T`.
 entity ListEmitter[T] obeys Iterator[T]
   ### Raw pointer into the source list's buffer.
-  secret data: Snatched[T]
+  secret data: Hijacked[T]
   ### Element count captured at iterator creation.
   secret count: U64
   ### Current position.

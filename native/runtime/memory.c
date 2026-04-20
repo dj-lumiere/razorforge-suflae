@@ -18,14 +18,27 @@ typedef size_t rf_size_t;
  */
 void* rf_allocate_dynamic(uint64_t bytes)
 {
+    void* ptr = calloc(bytes, 1);
+    if (!ptr)
+    {
+        fprintf(stderr, "\033[91mRazorForge: Failed to allocate %zu bytes\033[0m\n", (size_t)bytes);
+        return NULL;
+    }
+    return ptr;
+}
+
+/*
+ * Dynamic memory allocation without zero-initialization
+ * Caller must write before reading any allocated byte
+ */
+void* rf_allocate_dynamic_uninit(uint64_t bytes)
+{
     void* ptr = malloc(bytes);
     if (!ptr)
     {
         fprintf(stderr, "\033[91mRazorForge: Failed to allocate %zu bytes\033[0m\n", (size_t)bytes);
         return NULL;
     }
-
-    memset(ptr, 0, bytes);
     return ptr;
 }
 

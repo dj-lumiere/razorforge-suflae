@@ -1,49 +1,147 @@
+# RazorForge Hijacked[T] - Unmanaged raw pointer wrapper
+#
+# Hijacked[T] is created ONLY via .hijack() method inside danger! blocks.
+# It represents raw, unmanaged memory access with NO safety guarantees.
+#
+# Syntax:
+#   danger! {
+#       let raw = obj.hijack()  # Hijacked[T]
+#       let value = raw.read()   # Type-safe read
+#       raw.write(new_value)     # Type-safe write
+#   }
+#
+# Properties:
+# - Created ONLY inside danger! blocks via .hijack()
+# - NO lifetime tracking - can become dangling
+# - NO borrow checking - can alias freely
+# - NO reference counting - manual management required
+# - Undefined behavior if used after deallocation
+# - Use ONLY for FFI, low-level code, or unmanaged optimizations
+#
+# This is the "escape hatch" for unsafe code - use with extreme caution!
 module Core
 
 ### Defines the record `Hijacked`.
 ### :typeparam T: The value used for `T`.
 @llvm("ptr")
-record Hijacked[T] obeys Controlling[T]
-needs T is EntityType
+record Hijacked[T]
   pass
+
+### Returns the address component.
+### :returns: The resulting `Address` value.
+dangerous routine T.get_address() -> Address
+  return ptrtoint[T, Address](me)
+
+### Creates a new instance.
+### :param from: The source value to convert.
+### :returns: The resulting `Hijacked[T]` value.
+dangerous routine Hijacked[T].$create(from: Address) -> Hijacked[T]
+  return inttoptr[Address, T](from)
 
 ### Returns the result of `hijack`.
 ### :returns: The resulting `Hijacked[T]` value.
-routine T.hijack() -> Hijacked[T]
-  return Hijacked[T](me.snatch())
+dangerous routine T.hijack() -> Hijacked[T]
+  return Hijacked[T](me.get_address())
 
-# NOTE: No creators, no manual methods - all operations handled by compiler
-# The address member variable is managed internally by the `.hijack()` implementation
-# Users should NEVER create Hijacked[T] values directly
+### Returns the result of `read`.
+### :returns: The resulting `T` value.
+dangerous routine Hijacked[T].read() -> T
+needs T is RecordType
+  return load[T](me)
 
-# ============================================================================
-# Resource management — enables `using entity.hijack() as h`
-# ============================================================================
+### Returns the result of `read` for entity inner types.
+### :returns: The resulting `T` value.
+dangerous routine Hijacked[T].read() -> T
+needs T is EntityType
+  return load[T](me)
 
-### Implements the wired routine behavior for this value.
-routine Hijacked[T].$enter()
+### Reinterprets this pointer as the entity {T} it directly points to (no dereference).
+### Use when the Hijacked[T] value IS the entity ptr, not a slot holding one.
+### :returns: The resulting `T` value.
+dangerous routine Hijacked[T].unhijack() -> T
+needs T is EntityType
+  return inttoptr[Address, T](me.get_address())
+
+### Performs `write` on this value.
+### :param value: The value to use.
+dangerous routine Hijacked[T].write(value: T)
+  store[T](me, value)
   return
 
-### Implements the wired routine behavior for this value.
-routine Hijacked[T].$exit()
+### Returns the result of `reveal as`.
+### :returns: The resulting `U` value.
+dangerous routine Hijacked[T].reveal_as[U]() -> U
+  var as_u = me.obtain_as[U]()
+  return as_u.read()
+
+### Performs `write as` on this value.
+### :param value: The value to use.
+dangerous routine Hijacked[T].write_as[U](value: U)
+  var as_u = me.obtain_as[U]()
+  as_u.write(value)
   return
 
+### Returns the result of `obtain as`.
+### :returns: The resulting `Hijacked[U]` value.
+dangerous routine Hijacked[T].obtain_as[U]() -> Hijacked[U]
+  return Hijacked[U](me)
+
+### Executes `invalidate`.
+dangerous routine Hijacked[T].invalidate!()
+  rf_invalidate[T](me)
+  return
+
+### Returns the result of `hijacked none`.
+### :returns: The resulting `Hijacked[T]` value.
+routine hijacked_none[T]() -> Hijacked[T]
+  return Hijacked[T](0_addr)
+
+### Returns true if this value is none.
+### :returns: The resulting `Bool` value.
+routine Hijacked[T].is_none() -> Bool
+  return icmp_eq[Hijacked[T]](me, hijacked_none[T]())
+
+### Returns the result of `offset`.
+### :param bytes: The `bytes` value.
+### :returns: The resulting `Hijacked[T]` value.
+routine Hijacked[T].offset(bytes: ByteSize) -> Hijacked[T]
+  var addr = ptrtoint[T, Address](me)
+  return Hijacked[T](addr + bytes)
+
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
+routine Hijacked[T].$eq(you: Hijacked[T]) -> Bool
+  return icmp_eq[Hijacked[T]](me, you)
+
+# NOTE: All operations on Hijacked[T] are inherently unsafe
+# Undefined behavior can occur if:
+# - Pointer is dangling (object was deallocated)
+# - Pointer is misaligned
+# - Type U in reveal_as[U]() doesn't match actual data
+# - Writing to read-only memory
+# - Data races in multi-threaded code
+#
+# Use ONLY when:
+# - Interfacing with C/C++ FFI
+# - Implementing low-level memory allocators
+# - Performance-critical code with manual safety verification
+# - You absolutely know what you're doing
+
 # ============================================================================
-# Display (transparent - delegates to inner value)
+# Display (opaque - address only, no inner value access)
 # ============================================================================
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Hijacked[T].$represent() -> Text
-  danger!
-    var snatched = Snatched[T](me)
-    return snatched.read().$represent()
+  return me.type_name()
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Hijacked[T].$diagnose() -> Text
-  danger!
-    var snatched = Snatched[T](me)
-    return me.type_name() + "(" + snatched.read().$diagnose() + ")"
+  var addr = ptrtoint[Hijacked[T], Address](me)
+  var none = me.is_none()
+  return me.type_name() + "(addr: " + addr.$represent() + ", none: " + none.$represent() + ")"

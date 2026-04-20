@@ -32,8 +32,8 @@ preset MIN_KEYS_LIST: U64 = 31u64  # B_LIST/2 - 1
 ### :typeparam T: The value used for `T`.
 entity BTreeListNode[T]
 needs T obeys Comparable
-  keys: List[T]                                  # Keys in this node
-  children: List[BTreeListNode[T]]               # Child pointers (empty for leaf)
+  keys: Owned[List[T]]                                  # Keys in this node
+  children: Owned[List[BTreeListNode[T]]]               # Child pointers (empty for leaf)
   subtree_size: U64                              # Total elements in this subtree
   is_leaf: Bool
 
@@ -41,7 +41,7 @@ needs T obeys Comparable
 ### :typeparam T: The value used for `T`.
 entity SortedList[T] obeys Iterable[T]
 needs T obeys Comparable
-  secret root: BTreeListNode[T]?
+  secret root: Owned[BTreeListNode[T]]?
   secret count: U64
 
 # ============================================================================

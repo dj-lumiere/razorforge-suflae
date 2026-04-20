@@ -16,7 +16,7 @@ module Collections
 ### Defines the entity `BitList`.
 entity BitList obeys Iterable[Bool]
   ### Stores the data member value.
-  secret data: Snatched[U8]      # Heap-allocated byte array (8 bits per U8)
+  secret data: Hijacked[U8]      # Heap-allocated byte array (8 bits per U8)
   ### Stores the count member value.
   secret count: U64              # Current number of bits
   ### Stores the capacity member value.
@@ -31,7 +31,7 @@ entity BitList obeys Iterable[Bool]
 routine BitList.$create() -> BitList
   # Create empty bit list with default capacity
   return BitList(
-    data: snatched_none[U8](),
+    data: hijacked_none[U8](),
     count: 0u64,
     capacity: 0u64
   )
@@ -42,8 +42,11 @@ routine BitList.$create() -> BitList
 routine BitList.$create(capacity: U64) -> BitList
   # Create bit list with pre-allocated capacity (in bits)
   var byte_size = udiv[U64](capacity +% 7u64, 8u64)  # Round up to nearest byte
+  var data_ptr = Hijacked[U8](rf_allocate_dynamic_uninit(byte_size))
+  danger!
+    rf_set_bytes_at(dest: data_ptr.get_address(), value: 0u8, size: byte_size)
   return BitList(
-    data: Snatched[U8](rf_allocate_dynamic(byte_size)),
+    data: data_ptr,
     count: 0u64,
     capacity: capacity
   )
@@ -82,7 +85,7 @@ routine BitList.get_bit_internal(index: U64) -> Bool
   # Internal: get bit without bounds checking
   var byte_idx = udiv[U64](index, 8u64)
   var bit_off = U8(urem[U64](index, 8u64))
-  var ptr = Snatched[U8](me.data.get_address() +% Address(byte_idx))
+  var ptr = Hijacked[U8](me.data.get_address() +% Address(byte_idx))
   var byte_val = ptr.read()
   return (byte_val & (1u8 << bit_off)) != 0u8
 
@@ -93,7 +96,7 @@ routine BitList.set_bit_internal(index: U64, value: Bool)
   # Internal: set bit without bounds checking
   var byte_idx = udiv[U64](index, 8u64)
   var bit_off = U8(urem[U64](index, 8u64))
-  var byte_ptr = Snatched[U8](me.data.get_address() +% Address(byte_idx))
+  var byte_ptr = Hijacked[U8](me.data.get_address() +% Address(byte_idx))
   var byte_val = byte_ptr.read()
 
   if value
@@ -156,8 +159,8 @@ routine BitList.reserve(new_capacity: U64)
   # Ensure capacity is at least new_capacity (in bits)
   if new_capacity > me.capacity
     var new_byte_size = udiv[U64](new_capacity +% 7u64, 8u64)
-    var new_data = Snatched[U8](rf_allocate_dynamic(new_byte_size))
-    rf_set_bytes_at(new_data.get_address(), 0u8, new_byte_size)  # Initialize all bits to 0
+    var new_data = Hijacked[U8](rf_allocate_dynamic_uninit(new_byte_size))
+    rf_set_bytes_at(new_data.get_address(), 0u8, new_byte_size)
 
     # Copy existing bytes
     if me.count > 0u64
@@ -258,7 +261,7 @@ routine BitList.flip_all()
   var byte_count = udiv[U64](me.count +% 7u64, 8u64)
   var i = 0u64
   while i < byte_count
-    var byte_ptr = Snatched[U8](me.data.get_address() +% Address(i))
+    var byte_ptr = Hijacked[U8](me.data.get_address() +% Address(i))
     var byte_val = byte_ptr.read()
     byte_ptr.write(~byte_val)
     i = i +% 1u64
@@ -385,7 +388,7 @@ routine BitList.$iter() -> BitListIterator
 ### Defines the entity `BitListIterator`.
 entity BitListIterator obeys Iterator[Bool]
   ### Raw pointer into the source bit list's packed byte buffer.
-  secret data: Snatched[U8]
+  secret data: Hijacked[U8]
   ### Bit count captured at iterator creation.
   secret count: U64
   ### Current bit position.
@@ -398,7 +401,7 @@ routine BitListIterator.$next!() -> Bool
   danger!
     var byte_idx = me.index >> 3u32
     var bit_idx = U8(me.index & 7u64)
-    var ptr = Snatched[U8](me.data.get_address() +% Address(byte_idx))
+    var ptr = Hijacked[U8](me.data.get_address() +% Address(byte_idx))
     var byte_val = ptr.read()
     var _result = (byte_val >> bit_idx) & 1u8 != 0u8
   me.index = me.index + 1u64
@@ -478,7 +481,7 @@ routine BitList.to_u16!() -> U16
     absent
   danger!
     var low = U32(me.data.read())
-    var high = U32(Snatched[U8](me.data.get_address() +% Address(1u64)).read())
+    var high = U32(Hijacked[U8](me.data.get_address() +% Address(1u64)).read())
     var _result = U16(low | (high << 8u32))
   return _result
 
@@ -493,7 +496,7 @@ routine BitList.to_u32!() -> U32
     var _result = 0u32
     var i = 0u64
     while i < 4u64
-      var byte_val = U32(Snatched[U8](me.data.get_address() +% Address(i)).read())
+      var byte_val = U32(Hijacked[U8](me.data.get_address() +% Address(i)).read())
       _result = _result | (byte_val << (U32(U8(i)) *% 8u32))
       i = i +% 1u64
   return _result
@@ -509,7 +512,7 @@ routine BitList.to_u64!() -> U64
     var _result = 0u64
     var i = 0u64
     while i < 8u64
-      var byte_val = U64(Snatched[U8](me.data.get_address() +% Address(i)).read())
+      var byte_val = U64(Hijacked[U8](me.data.get_address() +% Address(i)).read())
       _result = _result | (byte_val << (i *% 8u64))
       i = i +% 1u64
   return _result

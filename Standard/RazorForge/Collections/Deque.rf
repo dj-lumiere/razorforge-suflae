@@ -17,7 +17,7 @@ import BuilderService
 ### :typeparam T: The value used for `T`.
 entity Deque[T] obeys Iterable[T]
   ### Stores the data member value.
-  secret data: Snatched[T]    # Circular buffer (raw storage for T elements)
+  secret data: Hijacked[T]    # Circular buffer (raw storage for T elements)
   ### Stores the start member value.
   secret start: U64          # Index of first element
   ### Stores the count member value.
@@ -33,7 +33,7 @@ entity Deque[T] obeys Iterable[T]
 ### :returns: The resulting `Deque[T]` value.
 routine Deque[T].$create() -> Deque[T]
   return Deque[T](
-    data: snatched_none[U8](),
+    data: hijacked_none[U8](),
     start: 0u64,
     count: 0u64,
     capacity: 0u64
@@ -49,7 +49,7 @@ routine Deque[T].$create(capacity: U64) -> Deque[T]
   var byte_size = T.data_size() * actual
   danger!
     return Deque[T](
-      data: Snatched[T](rf_allocate_dynamic(byte_size)),
+      data: Hijacked[T](rf_allocate_dynamic_uninit(byte_size)),
       start: 0u64,
       count: 0u64,
       capacity: actual
@@ -212,7 +212,7 @@ routine Deque[T].reserve(new_capacity: U64)
 
   var new_byte_size = T.data_size() * actual
   danger!
-    var _new_data = Snatched[T](rf_allocate_dynamic(new_byte_size))
+    var _new_data = Hijacked[T](rf_allocate_dynamic_uninit(new_byte_size))
 
     # Copy elements in logical order (unwrap the ring)
     var i = 0u64
@@ -328,7 +328,7 @@ routine Deque[T].$iter() -> DequeEmitter[T]
 ### :typeparam T: The value used for `T`.
 entity DequeEmitter[T] obeys Iterator[T]
   ### Raw pointer into the source deque's circular buffer.
-  secret data: Snatched[T]
+  secret data: Hijacked[T]
   ### Front-of-queue physical index captured at iterator creation.
   secret start: U64
   ### Element count captured at iterator creation.

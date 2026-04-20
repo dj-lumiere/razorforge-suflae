@@ -8,15 +8,15 @@
 #   - floating T (rvalue)
 #   - Owned[T]
 #   - Viewed[T]
-#   - Hijacked[T]
+#   - Grasped[T]
 #   - Retained[T]
-#   - Seized[T]
+#   - Claimed[T]
 #   - Inspected[T]
 #
 # Non-members:
 #   - Shared[T, P], Tracked[T], Marked[T, P]  -- gateway types (require
-#     .try_recover() / using .seize!() to reach the API).
-#   - Snatched[T]  -- raw unmanaged pointer; no transparent proxy.
+#     .try_recover() / using .claim!() to reach the API).
+#   - Hijacked[T]  -- raw unmanaged pointer; no transparent proxy.
 module Core
 
 ### Protocol of wrappers that transparently forward `T`'s read API.

@@ -12,9 +12,9 @@
 # - char / unsigned char → Byte / U8
 # - signed char → S8
 # - void → Blank
-# - void* → Snatched[Blank]
+# - void* → Hijacked[Blank]
 # - long long / unsigned long long → S64 / U64
-# - NULL → Snatched[Blank](0_addr)
+# - NULL → Hijacked[Blank](0_addr)
 
 module Core
 

@@ -40,7 +40,7 @@ needs T is EntityType
 ### Frees the owned allocation. Called automatically at scope end.
 routine Possessed[T].$destroy()
   danger!
-    var raw = Snatched[T](me)
+    var raw = Hijacked[T](me)
     raw.invalidate!()
   return
 
@@ -48,18 +48,18 @@ routine Possessed[T].$destroy()
 # Construction from raw pointer (FFI / danger contexts)
 # ============================================================================
 
-### Wraps a raw `Snatched[T]` into a `Possessed[T]`, claiming sole ownership.
+### Wraps a raw `Hijacked[T]` into a `Possessed[T]`, claiming sole ownership.
 ### The caller must guarantee that `raw` is uniquely owned after this call.
 ### :param raw: The raw pointer to take ownership of.
 ### :returns: The resulting `Possessed[T]` value.
-dangerous routine Possessed[T].from_raw(raw: Snatched[T]) -> Possessed[T]
+dangerous routine Possessed[T].from_raw(raw: Hijacked[T]) -> Possessed[T]
   return Possessed[T](raw)
 
 ### Returns the heap address of the owned allocation.
 ### :returns: The resulting `Address` value.
 dangerous routine Possessed[T].get_address() -> Address
   danger!
-    var raw = Snatched[T](me)
+    var raw = Hijacked[T](me)
     return raw.get_address()
 
 # ============================================================================
@@ -71,7 +71,7 @@ dangerous routine Possessed[T].get_address() -> Address
 @readonly
 routine Possessed[T].$represent() -> Text
   danger!
-    var raw = Snatched[T](me)
+    var raw = Hijacked[T](me)
     return raw.read().$represent()
 
 ### Returns the textual representation of this value.
@@ -79,6 +79,6 @@ routine Possessed[T].$represent() -> Text
 @readonly
 routine Possessed[T].$diagnose() -> Text
   danger!
-    var raw = Snatched[T](me)
+    var raw = Hijacked[T](me)
     var addr = raw.get_address()
     return me.type_name() + "(addr: " + addr.$represent() + ", " + raw.read().$diagnose() + ")"

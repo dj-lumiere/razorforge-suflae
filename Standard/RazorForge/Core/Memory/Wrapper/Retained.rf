@@ -7,22 +7,22 @@ module Core
 record Retained[T] obeys Controlling[T]
 needs T is EntityType
   ### Stores the controller member value.
-  secret controller: Snatched[RetainController]
+  secret controller: Hijacked[RetainController]
   ### Stores the data member value.
-  secret data: Snatched[T]
+  secret data: Hijacked[T]
 
 ### Returns the result of `retain`.
 ### :returns: The resulting `Retained[T]` value.
 routine T.retain() -> Retained[T]
   danger!
     # Allocate controller
-    var controller = RetainController().snatch()
+    var controller = RetainController().hijack()
     controller.increase_strong_count()
 
     # Create Retained record
     return Retained[T](
       controller: controller,
-      data: me.snatch()
+      data: me.hijack()
     )
 
 ### Returns the result of `retain`.
@@ -63,7 +63,7 @@ routine Retained[T].weak_count() -> S32
 
 # Direct member variable access allowed for single-threaded Retained
 # No locking needed - just dereference the data pointer
-# Use .view() or .hijack() for temporary access
+# Use .view() or .grasp() for temporary access
 
 # ============================================================================
 # Display (transparent - delegates to inner value)

@@ -7,16 +7,16 @@ module Core
 record Tracked[T]
 needs T is EntityType
   ### Stores the controller member value.
-  secret controller: Snatched[RetainController]
+  secret controller: Hijacked[RetainController]
   ### Stores the data member value.
-  secret data: Snatched[T]
+  secret data: Hijacked[T]
 
 ### Returns the result of `track`.
 ### :returns: The resulting `Tracked[T]` value.
 routine Retained[T].track() -> Tracked[T]
   danger!
-    me.controller.increase_weak_count!()
-    return me
+    me.controller.increase_weak_count()
+    return Tracked[T](controller: me.controller, data: me.data)
 
 ### Returns true if this value is alive.
 ### :returns: The resulting `Bool` value.
@@ -28,17 +28,17 @@ routine Tracked[T].is_alive() -> Bool
 ### :returns: The resulting `Tracked[T]` value.
 routine Tracked[T].track() -> Tracked[T]
   danger!
-    me.controller.increase_weak_count!()
+    me.controller.increase_weak_count()
     return me
 
 ### Returns the result of `recover`.
 ### :returns: The resulting `Retained[T]` value.
 ### :absent: Returns absent when the requested value is unavailable.
-routine Tracked[T].recover!() -> Retained[T]
+routine Tracked[T].recover!() -> Retained[T]?
   danger!
     if me.controller.strong_count() == 0
       absent
-    me.controller.increase_strong_count!()
+    me.controller.increase_strong_count()
     return Retained[T](
       controller: me.controller,
       data: me.data
@@ -47,7 +47,7 @@ routine Tracked[T].recover!() -> Retained[T]
 ### Executes `release`.
 routine Tracked[T].release!()
   danger!
-    me.controller.decrease_weak_count!()
+    me.controller.decrease_weak_count()
 
     # If both strong and weak counts are 0, deallocate controller
     when me.controller.strong_count() == 0 and me.controller.weak_count() == 0

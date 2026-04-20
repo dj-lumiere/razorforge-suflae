@@ -1,7 +1,8 @@
-# RazorForge Set[T] — Robin Hood open-addressing hash set
+# RazorForge Set[T] — Swiss Table scalar hash set
 # O(1) average insert / delete / contains
 # Requires T obeys Hashable, Equatable (no ordering needed)
-# 75% load factor; capacity always a power of two
+# 87.5% load factor; capacity always a power of two
+# ctrl byte: 128=empty, 254=deleted (tombstone), 0-127=H2 fingerprint
 
 module Core
 
@@ -13,10 +14,11 @@ preset SET_INITIAL_CAPACITY: U64 = 16u64
 ### :typeparam T: The element type.
 entity Set[T] obeys Iterable[T]
 needs T obeys Hashable, Equatable
-  secret hashes: List[U64]    # 0 = empty; otherwise normalized hash of stored element
-  secret slots: Snatched[T]   # raw element storage, capacity slots
-  secret count: U64
-  secret capacity: U64        # always a power of two
+  secret ctrl: Hijacked[Byte]   # 1 byte/slot: 128=empty, 254=deleted, 0-127=H2
+  secret slots: Hijacked[T]     # element storage, capacity slots
+  secret count: U64             # live element count
+  secret deleted: U64           # tombstone count
+  secret capacity: U64          # always a power of two
 
 # ============================================================================
 # Creators
@@ -27,17 +29,16 @@ needs T obeys Hashable, Equatable
 routine Set[T].$create() -> Set[T]
   var cap = SET_INITIAL_CAPACITY
   var set = Set[T](
-    hashes: List[U64](cap),
-    slots: snatched_none[T](),
+    ctrl: hijacked_none[Byte](),
+    slots: hijacked_none[T](),
     count: 0u64,
+    deleted: 0u64,
     capacity: cap
   )
-  var i = 0u64
-  while i < cap
-    set.hashes.add_last(0u64)
-    i = i +% 1u64
   danger!
-    set.slots = Snatched[T](rf_allocate_dynamic(T.data_size() * cap))
+    set.ctrl = Hijacked[Byte](rf_allocate_dynamic_uninit(cap))
+    rf_set_bytes_at(dest: ptrtoint[Byte, Address](set.ctrl), value: 128_u8, size: cap)
+    set.slots = Hijacked[T](rf_allocate_dynamic_uninit(T.data_size() * cap))
   return set
 
 ### Creates a new instance pre-sized to hold at least `capacity` elements.
@@ -48,17 +49,16 @@ routine Set[T].$create(capacity: U64) -> Set[T]
   while cap < capacity
     cap = cap *% 2u64
   var set = Set[T](
-    hashes: List[U64](cap),
-    slots: snatched_none[T](),
+    ctrl: hijacked_none[Byte](),
+    slots: hijacked_none[T](),
     count: 0u64,
+    deleted: 0u64,
     capacity: cap
   )
-  var i = 0u64
-  while i < cap
-    set.hashes.add_last(0u64)
-    i = i +% 1u64
   danger!
-    set.slots = Snatched[T](rf_allocate_dynamic(T.data_size() * cap))
+    set.ctrl = Hijacked[Byte](rf_allocate_dynamic_uninit(cap))
+    rf_set_bytes_at(dest: ptrtoint[Byte, Address](set.ctrl), value: 128_u8, size: cap)
+    set.slots = Hijacked[T](rf_allocate_dynamic_uninit(T.data_size() * cap))
   return set
 
 ### Creates a new instance from varargs values.
@@ -73,6 +73,8 @@ routine Set[T].$create(values...: T) -> Set[T]
 ### Releases raw element storage.
 routine Set[T].$destroy()
   danger!
+    if not me.ctrl.is_none()
+      rf_invalidate(ptrtoint[Byte, Address](me.ctrl))
     if not me.slots.is_none()
       rf_invalidate(ptrtoint[T, Address](me.slots))
   return
@@ -81,118 +83,94 @@ routine Set[T].$destroy()
 # Internal Helpers
 # ============================================================================
 
-### Returns `h` normalized to never be zero.
-### :param h: The raw hash.
+### Returns the H2 fingerprint: 7 low bits of hash, always in range 0-127.
+### :param hash: The raw hash.
+### :returns: The resulting `Byte` value.
+routine Set[T].h2(hash: U64) -> Byte
+  return (hash & 127u64).Byte()
+
+### Returns the H1 slot position: upper bits of hash used for indexing.
+### :param hash: The raw hash.
 ### :returns: The resulting `U64` value.
-routine Set[T].normalize_hash(h: U64) -> U64
-  return if h == 0u64 then 1u64 else h
+routine Set[T].h1(hash: U64) -> U64
+  return hash >> 7u32
 
-### Returns the probe distance of a slot given its stored hash.
-### :param hash: The stored hash value.
-### :param slot: The slot index.
-### :returns: The resulting `U64` value.
-routine Set[T].probe_dist(hash: U64, slot: U64) -> U64
-  return (slot +% me.capacity -% (hash & (me.capacity -% 1u64))) & (me.capacity -% 1u64)
-
-### Reads the element at `slot`.
-### :param slot: The slot index.
-### :returns: The resulting `T` value.
-routine Set[T].read_slot(slot: U64) -> T
-  return me.slots.offset(T.data_size() * slot).read()
-
-### Writes `val` to `slot`.
-### :param slot: The slot index.
-### :param val: The element to store.
-routine Set[T].write_slot(slot: U64, val: T)
-  me.slots.offset(T.data_size() * slot).write(val)
-  return
-
-### Linear-probes for `value` using the Robin Hood invariant.
+### Linear-probes for `value` using H1 start + H2 fingerprint matching.
 ### Returns `capacity` when `value` is absent.
 ### :param value: The element to find.
 ### :returns: The resulting `U64` value.
 routine Set[T].find_slot(value: T) -> U64
-  var h = me.normalize_hash(value.$hash())
+  var h = value.$hash()
+  var target = me.h2(h)
   var mask = me.capacity -% 1u64
-  var i = h & mask
-  var dist = 0u64
-  while me.hashes[i] != 0u64 and me.probe_dist(hash: me.hashes[i], slot: i) >= dist
-    if me.hashes[i] == h and me.read_slot(i) == value
-      return i
-    i = (i +% 1u64) & mask
-    dist = dist +% 1u64
+  var i = me.h1(h) & mask
+  danger!
+    loop
+      var c = me.ctrl.offset(Byte.data_size() * i).read()
+      if c == 128_u8
+        return me.capacity
+      if c == target
+        if me.slots.offset(T.data_size() * i).read() == value
+          return i
+      i = (i +% 1u64) & mask
   return me.capacity
 
-### Inserts a pre-normalized hash + value using Robin Hood probing.
+### Inserts hash + value into the first empty or deleted slot from H1.
 ### Does not check for duplicates and does not update `count`.
-### :param h: The normalized hash.
+### :param h: The raw hash.
 ### :param val: The element to insert.
 routine Set[T].insert_raw(h: U64, val: T)
+  var h2_val = me.h2(h)
   var mask = me.capacity -% 1u64
-  var i = h & mask
-  var dist = 0u64
-  var cur_h = h
-  var cur_val = val
-  while me.hashes[i] != 0u64
-    var occ_dist = me.probe_dist(hash: me.hashes[i], slot: i)
-    if occ_dist < dist
-      var tmp_h = me.hashes[i]
-      me.hashes[i] = cur_h
-      cur_h = tmp_h
-      var tmp_val = me.read_slot(i)
-      me.write_slot(slot: i, val: cur_val)
-      cur_val = tmp_val
-      dist = occ_dist
-    i = (i +% 1u64) & mask
-    dist = dist +% 1u64
-  me.hashes[i] = cur_h
-  me.write_slot(slot: i, val: cur_val)
+  var i = me.h1(h) & mask
+  danger!
+    loop
+      var c = me.ctrl.offset(Byte.data_size() * i).read()
+      if c == 128_u8
+        me.ctrl.offset(Byte.data_size() * i).write(h2_val)
+        me.slots.offset(T.data_size() * i).write(val)
+        return
+      if c == 254_u8
+        me.ctrl.offset(Byte.data_size() * i).write(h2_val)
+        me.slots.offset(T.data_size() * i).write(val)
+        me.deleted = me.deleted -% 1u64
+        return
+      i = (i +% 1u64) & mask
   return
 
-### Removes the element at `slot` using backward-shift deletion (no tombstones).
-### :param slot: The occupied slot to vacate.
-routine Set[T].delete_at(slot: U64)
-  var mask = me.capacity -% 1u64
-  var i = slot
-  var j = (i +% 1u64) & mask
-  while me.hashes[j] != 0u64 and me.probe_dist(hash: me.hashes[j], slot: j) > 0u64
-    me.hashes[i] = me.hashes[j]
-    me.write_slot(slot: i, val: me.read_slot(j))
-    i = j
-    j = (i +% 1u64) & mask
-  me.hashes[i] = 0u64
-  return
-
-### Returns true if the next insert would exceed 75% load.
+### Returns true if the next insert would exceed 87.5% load (live + tombstones).
 ### :returns: The resulting `Bool` value.
 routine Set[T].should_rehash() -> Bool
-  return me.count *% 4u64 >= me.capacity *% 3u64
+  return (me.count +% me.deleted) *% 8u64 >= me.capacity *% 7u64
 
 ### Doubles capacity and reinserts all live elements.
 routine Set[T].rehash()
   var old_cap = me.capacity
-  var old_hashes = me.hashes
+  var old_ctrl = me.ctrl
   var old_slots = me.slots
   var new_cap = old_cap *% 2u64
 
-  me.hashes = List[U64](new_cap)
-  var i = 0u64
-  while i < new_cap
-    me.hashes.add_last(0u64)
-    i = i +% 1u64
   danger!
-    me.slots = Snatched[T](rf_allocate_dynamic(T.data_size() * new_cap))
+    me.ctrl = Hijacked[Byte](rf_allocate_dynamic_uninit(new_cap))
+    rf_set_bytes_at(dest: ptrtoint[Byte, Address](me.ctrl), value: 128_u8, size: new_cap)
+    me.slots = Hijacked[T](rf_allocate_dynamic_uninit(T.data_size() * new_cap))
   me.capacity = new_cap
   me.count = 0u64
+  me.deleted = 0u64
 
-  i = 0u64
+  var i = 0u64
   while i < old_cap
-    if old_hashes[i] != 0u64
-      me.insert_raw(h: old_hashes[i], val: old_slots.offset(T.data_size() * i).read())
-      me.count = me.count +% 1u64
+    danger!
+      var c = old_ctrl.offset(Byte.data_size() * i).read()
+      if c != 128_u8 and c != 254_u8
+        var val = old_slots.offset(T.data_size() * i).read()
+        me.insert_raw(h: val.$hash(), val: val)
+        me.count = me.count +% 1u64
     i = i +% 1u64
 
   danger!
+    if not old_ctrl.is_none()
+      rf_invalidate(ptrtoint[Byte, Address](old_ctrl))
     if not old_slots.is_none()
       rf_invalidate(ptrtoint[T, Address](old_slots))
   return
@@ -213,11 +191,10 @@ routine Set[T].is_empty() -> Bool
 
 ### Removes all elements, keeping current capacity.
 routine Set[T].clear()
-  var i = 0u64
-  while i < me.capacity
-    me.hashes[i] = 0u64
-    i = i +% 1u64
+  danger!
+    rf_set_bytes_at(dest: ptrtoint[Byte, Address](me.ctrl), value: 128_u8, size: me.capacity)
   me.count = 0u64
+  me.deleted = 0u64
   return
 
 ### Returns whether this set contains `value`.
@@ -235,7 +212,7 @@ routine Set[T].add(value: T) -> Bool
     me.rehash()
   if me.find_slot(value) < me.capacity
     return false
-  me.insert_raw(h: me.normalize_hash(value.$hash()), val: value)
+  me.insert_raw(h: value.$hash(), val: value)
   me.count = me.count +% 1u64
   return true
 
@@ -246,8 +223,10 @@ routine Set[T].remove(value: T) -> Bool
   var slot = me.find_slot(value)
   if slot >= me.capacity
     return false
-  me.delete_at(slot)
+  danger!
+    me.ctrl.offset(Byte.data_size() * slot).write(254_u8)
   me.count = me.count -% 1u64
+  me.deleted = me.deleted +% 1u64
   return true
 
 # ============================================================================
@@ -345,7 +324,7 @@ routine List[T].$create(from: Set[T]) -> List[T]
 routine Set[T].$iter() -> SetIterator[T]
   danger!
     return SetIterator[T](
-      hashes: me.hashes.data,
+      ctrl: me.ctrl,
       slots: me.slots,
       capacity: me.capacity,
       slot: 0u64
@@ -354,10 +333,10 @@ routine Set[T].$iter() -> SetIterator[T]
 ### Defines the entity `SetIterator`.
 ### :typeparam T: The element type.
 entity SetIterator[T] obeys Iterator[T]
-  ### Raw pointer into the source set's hash array buffer.
-  secret hashes: Snatched[U64]
+  ### Raw pointer into the source set's ctrl array.
+  secret ctrl: Hijacked[Byte]
   ### Raw pointer into the source set's slot storage.
-  secret slots: Snatched[T]
+  secret slots: Hijacked[T]
   ### Slot capacity captured at iterator creation.
   secret capacity: U64
   ### Current slot index.
@@ -369,8 +348,8 @@ routine SetIterator[T].$next!() -> T
     while me.slot < me.capacity
       var s = me.slot
       me.slot = me.slot + 1u64
-      var h = me.hashes.offset(U64.data_size() * s).read()
-      if h != 0u64
+      var c = me.ctrl.offset(Byte.data_size() * s).read()
+      if c != 128_u8 and c != 254_u8
         return me.slots.offset(T.data_size() * s).read()
   absent
 

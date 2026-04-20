@@ -8,9 +8,9 @@ module Core
 record Shared[T, P]
 needs T is EntityType
 needs P obeys LockPolicy
-  secret controller: Snatched[ShareController]
-  secret data: Snatched[T]
-  secret lock: Snatched[P]
+  secret controller: Hijacked[ShareController]
+  secret data: Hijacked[T]
+  secret lock: Hijacked[P]
 
 ### Returns the result of `share`.
 ### :returns: The resulting `Shared[T, P]` value.
@@ -18,16 +18,16 @@ routine T.share[P]() -> Shared[T, P]
 needs P obeys LockPolicy
   danger!
     # Allocate control block with atomic ref counting
-    var controller = ShareController().snatch()
+    var controller = ShareController().hijack()
     controller.increase_strong_count!()
 
     # Allocate policy-specific lock
-    var lock = P().snatch()
+    var lock = P().hijack()
 
     # Create Shared record
     return Shared[T, P](
       controller: controller,
-      data: me.snatch(),
+      data: me.hijack(),
       lock: lock
     )
 

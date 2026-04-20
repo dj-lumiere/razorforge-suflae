@@ -6,14 +6,14 @@
 # Members (obey Controlling[T]):
 #   - floating T (rvalue)
 #   - Owned[T]
-#   - Hijacked[T]
+#   - Grasped[T]
 #   - Retained[T]
-#   - Seized[T]
+#   - Claimed[T]
 #
 # Non-members:
 #   - Viewed[T], Inspected[T]  -- read-only; cannot satisfy full-API contract.
 #   - Shared[T, P], Tracked[T], Marked[T, P]  -- gateway types.
-#   - Snatched[T]  -- raw unmanaged pointer; no transparent proxy.
+#   - Hijacked[T]  -- raw unmanaged pointer; no transparent proxy.
 module Core
 
 ### Protocol of wrappers that transparently forward `T`'s full (read + write) API.

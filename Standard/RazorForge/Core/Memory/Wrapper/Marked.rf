@@ -8,9 +8,9 @@ module Core
 record Marked[T, P]
 needs T is EntityType
 needs P obeys LockPolicy
-  secret controller: Snatched[ShareController]
-  secret data: Snatched[T]
-  secret lock: Snatched[P]
+  secret controller: Hijacked[ShareController]
+  secret data: Hijacked[T]
+  secret lock: Hijacked[P]
 
 ### Returns the result of `mark`.
 ### :returns: The resulting `Marked[T, P]` value.

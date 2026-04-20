@@ -31,7 +31,7 @@ module Core
 record Inspected[T] obeys Referring[T]
 needs T is EntityType
   ### Stores the ptr member value.
-  secret ptr: Snatched[T]    # Generic type - use Snatched[T]
+  secret ptr: Hijacked[T]    # Generic type - use Hijacked[T]
   ### Stores the lock guard member value.
   secret lock_guard: Address  # Fixed type - opaque lock handle
 

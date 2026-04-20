@@ -15,12 +15,12 @@ module Core
 ### :param address: The `address` value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = load {T}, ptr {address}")
-external("llvm") routine load[T](address: Snatched[T]) -> T
+external("llvm") routine load[T](address: Hijacked[T]) -> T
 ### Performs `store` on this value.
 ### :param address: The `address` value.
 ### :param value: The value to use.
 @llvm_ir("store {T} {value}, ptr {address}")
-dangerous external("llvm") routine store[T](address: Snatched[T], value: T)
+dangerous external("llvm") routine store[T](address: Hijacked[T], value: T)
 
 # ============================================================================
 # Type Conversions
@@ -50,18 +50,18 @@ external("llvm") routine bitcast[From, To](value: From) -> To
 ### :param value: The value to use.
 ### :returns: The resulting `To` value.
 @llvm_ir("{result} = ptrtoint ptr {value} to {To}")
-external("llvm") routine ptrtoint[From, To](value: Snatched[From]) -> To
+external("llvm") routine ptrtoint[From, To](value: Hijacked[From]) -> To
 ### Returns the result of `inttoptr`.
 ### :param value: The value to use.
-### :returns: The resulting `Snatched[To]` value.
+### :returns: The resulting `Hijacked[To]` value.
 @llvm_ir("{result} = inttoptr {From} {value} to ptr")
-external("llvm") routine inttoptr[From, To](value: From) -> Snatched[To]
-### Returns the entity reference stored in a Snatched pointer, without dereferencing.
-### Use only when T is an entity type and the Snatched holds the entity pointer directly.
+external("llvm") routine inttoptr[From, To](value: From) -> Hijacked[To]
+### Returns the entity reference stored in a Hijacked pointer, without dereferencing.
+### Use only when T is an entity type and the Hijacked holds the entity pointer directly.
 ### :param value: The raw pointer value.
 ### :returns: The resulting `T` entity reference.
 @llvm_ir("{result} = getelementptr i8, ptr {value}, i64 0")
-dangerous external("llvm") routine entity_from_snatched[T](value: Snatched[T]) -> T
+dangerous external("llvm") routine entity_from_hijacked[T](value: Hijacked[T]) -> T
 ### Returns the result of `sitofp`.
 ### :param value: The value to use.
 ### :returns: The resulting `To` value.
@@ -559,55 +559,55 @@ external("llvm") routine copysign[T](value: T, sign: T) -> T
 ### :param ptr: The pointer value to use.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = load atomic {T}, ptr {ptr} seq_cst, align {sizeof T}")
-external("llvm") routine atomic_load[T](ptr: Snatched[T]) -> T
+external("llvm") routine atomic_load[T](ptr: Hijacked[T]) -> T
 ### Performs `atomic store` on this value.
 ### :param ptr: The pointer value to use.
 ### :param value: The value to use.
 @llvm_ir("store atomic {T} {value}, ptr {ptr} seq_cst, align {sizeof T}")
-external("llvm") routine atomic_store[T](ptr: Snatched[T], value: T)
+external("llvm") routine atomic_store[T](ptr: Hijacked[T], value: T)
 ### Returns the result of `atomic add`.
 ### :param ptr: The pointer value to use.
 ### :param value: The value to use.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = atomicrmw add ptr {ptr}, {T} {value} seq_cst")
-external("llvm") routine atomic_add[T](ptr: Snatched[T], value: T) -> T
+external("llvm") routine atomic_add[T](ptr: Hijacked[T], value: T) -> T
 ### Returns the result of `atomic sub`.
 ### :param ptr: The pointer value to use.
 ### :param value: The value to use.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = atomicrmw sub ptr {ptr}, {T} {value} seq_cst")
-external("llvm") routine atomic_sub[T](ptr: Snatched[T], value: T) -> T
+external("llvm") routine atomic_sub[T](ptr: Hijacked[T], value: T) -> T
 ### Returns the result of `atomic and`.
 ### :param ptr: The pointer value to use.
 ### :param value: The value to use.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = atomicrmw and ptr {ptr}, {T} {value} seq_cst")
-external("llvm") routine atomic_and[T](ptr: Snatched[T], value: T) -> T
+external("llvm") routine atomic_and[T](ptr: Hijacked[T], value: T) -> T
 ### Returns the result of `atomic or`.
 ### :param ptr: The pointer value to use.
 ### :param value: The value to use.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = atomicrmw or ptr {ptr}, {T} {value} seq_cst")
-external("llvm") routine atomic_or[T](ptr: Snatched[T], value: T) -> T
+external("llvm") routine atomic_or[T](ptr: Hijacked[T], value: T) -> T
 ### Returns the result of `atomic xor`.
 ### :param ptr: The pointer value to use.
 ### :param value: The value to use.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = atomicrmw xor ptr {ptr}, {T} {value} seq_cst")
-external("llvm") routine atomic_xor[T](ptr: Snatched[T], value: T) -> T
+external("llvm") routine atomic_xor[T](ptr: Hijacked[T], value: T) -> T
 ### Returns the result of `atomic exchange`.
 ### :param ptr: The pointer value to use.
 ### :param value: The value to use.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = atomicrmw xchg ptr {ptr}, {T} {value} seq_cst")
-external("llvm") routine atomic_exchange[T](ptr: Snatched[T], value: T) -> T
+external("llvm") routine atomic_exchange[T](ptr: Hijacked[T], value: T) -> T
 ### Returns the result of `atomic compare and exchange`.
 ### :param ptr: The pointer value to use.
 ### :param expected: The value expected to be present.
 ### :param desired: The value to store on success.
 ### :returns: The resulting `(T, Bool)` value.
 @llvm_ir("{result} = cmpxchg ptr {ptr}, {T} {expected}, {T} {desired} seq_cst seq_cst")
-external("llvm") routine atomic_compare_and_exchange[T](ptr: Snatched[T], expected: T, desired: T) -> (T, Bool)
+external("llvm") routine atomic_compare_and_exchange[T](ptr: Hijacked[T], expected: T, desired: T) -> (T, Bool)
 
 # ============================================================================
 # Array element access (alloca + GEP pattern for [N x T] record types)

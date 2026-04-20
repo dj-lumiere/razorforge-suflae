@@ -1,31 +1,31 @@
 module Core
 
-### Defines the record `Viewed`.
+### Defines the record `Grasped`.
 ### :typeparam T: The value used for `T`.
 @llvm("ptr")
-record Viewed[T] obeys Referring[T]
+record Grasped[T] obeys Controlling[T]
 needs T is EntityType
   pass
 
-### Returns the result of `view`.
-### :returns: The resulting `Viewed[T]` value.
-routine T.view() -> Viewed[T]
-  return Viewed[T](me.hijack())
+### Returns the result of `grasp`.
+### :returns: The resulting `Grasped[T]` value.
+routine T.grasp() -> Grasped[T]
+  return Grasped[T](me.hijack())
 
 # NOTE: No creators, no manual methods - all operations handled by compiler
-# The address member variable is managed internally by the `.view()` implementation
-# Users should NEVER create Viewed[T] values directly
+# The address member variable is managed internally by the `.grasp()` implementation
+# Users should NEVER create Grasped[T] values directly
 
 # ============================================================================
-# Resource management — enables `using entity.view() as v`
+# Resource management — enables `using entity.grasp() as h`
 # ============================================================================
 
 ### Implements the wired routine behavior for this value.
-routine Viewed[T].$enter()
+routine Grasped[T].$enter()
   return
 
 ### Implements the wired routine behavior for this value.
-routine Viewed[T].$exit()
+routine Grasped[T].$exit()
   return
 
 # ============================================================================
@@ -35,7 +35,7 @@ routine Viewed[T].$exit()
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Viewed[T].$represent() -> Text
+routine Grasped[T].$represent() -> Text
   danger!
     var hijacked = Hijacked[T](me)
     return hijacked.read().$represent()
@@ -43,7 +43,7 @@ routine Viewed[T].$represent() -> Text
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Viewed[T].$diagnose() -> Text
+routine Grasped[T].$diagnose() -> Text
   danger!
     var hijacked = Hijacked[T](me)
     return me.type_name() + "(" + hijacked.read().$diagnose() + ")"

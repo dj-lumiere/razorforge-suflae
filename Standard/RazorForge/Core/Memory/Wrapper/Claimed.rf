@@ -1,16 +1,16 @@
-# RazorForge Seized[T] - Thread-safe write lock token
+# RazorForge Claimed[T] - Thread-safe write lock token
 #
-# Seized[T] is created ONLY by the `seizing` syntax on Shared[T, Policy].
+# Claimed[T] is created ONLY by the `seizing` syntax on Shared[T, Policy].
 # It provides thread-safe exclusive access with automatic lock acquisition/release.
 #
 # Syntax:
 #   var shared = data.share[Exclusive]()
-#   using shared.seize!() as s
+#   using shared.claim!() as s
 #     s.value = 42  # Exclusive write access, lock held
 #   Lock automatically released at block exit
 #
 # Properties:
-# - Created by compiler via `.seize!()` on Shared[T, Policy]
+# - Created by compiler via `.claim!()` on Shared[T, Policy]
 # - Scope-bound: cannot be stored, returned, or escape
 # - Exclusive: cannot be copied (only one handle at a time)
 # - Modifiable: allows modification through this handle
@@ -29,32 +29,32 @@
 # This type is a marker for the type system - the compiler handles lock operations.
 module Core
 
-### Defines the record `Seized`.
+### Defines the record `Claimed`.
 ### :typeparam T: The exclusively owned entity type.
-record Seized[T] obeys Controlling[T]
+record Claimed[T] obeys Controlling[T]
 needs T is EntityType
   ### Stores the ptr member value.
-  secret ptr: Snatched[T]    # Generic type - use Snatched[T]
+  secret ptr: Hijacked[T]    # Generic type - use Hijacked[T]
   ### Stores the lock guard member value.
   secret lock_guard: Address  # Fixed type - opaque lock handle
 
 # NOTE: No creators, no manual methods - all operations handled by compiler
-# The `.seize!()` syntax acquires the Exclusive or MultiRead write lock and creates this token
+# The `.claim!()` syntax acquires the Exclusive or MultiRead write lock and creates this token
 # The lock is automatically released when the scope exits
 # Only ONE thread can hold a write lock at a time
 #
-# Lock acquisition can fail (e.g., poisoned lock) - use `try_seize()` / `check_seize()` for fallible acquisition
+# Lock acquisition can fail (e.g., poisoned lock) - use `try_claim()` / `check_claim()` for fallible acquisition
 
 # ============================================================================
-# Resource management — enables `using shared.seize!() as s`
+# Resource management — enables `using shared.claim!() as s`
 # ============================================================================
 
 ### Implements the wired routine behavior for this value.
-routine Seized[T].$enter()
+routine Claimed[T].$enter()
   return
 
 ### Implements the wired routine behavior for this value.
-routine Seized[T].$exit()
+routine Claimed[T].$exit()
   # TODO: release lock_guard when lock runtime is implemented
   return
 
@@ -65,13 +65,13 @@ routine Seized[T].$exit()
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Seized[T].$represent() -> Text
+routine Claimed[T].$represent() -> Text
   danger!
     return me.ptr.read().$represent()
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Seized[T].$diagnose() -> Text
+routine Claimed[T].$diagnose() -> Text
   danger!
     return me.type_name() + "(state: " + WRITING.$represent() + ", " + me.ptr.read().$diagnose() + ")"

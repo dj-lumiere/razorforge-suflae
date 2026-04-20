@@ -1,7 +1,7 @@
 # RazorForge C String Type (CStr)
 # Null-terminated char* wrapper for C FFI interop
 #
-# CStr is a value type that wraps a raw pointer (Snatched[Byte]) to a
+# CStr is a value type that wraps a raw pointer (Hijacked[Byte]) to a
 # null-terminated sequence of bytes. It provides safe access to C strings
 # without copying unless explicitly requested.
 #
@@ -12,7 +12,7 @@
 # - Encoding-agnostic (typically ASCII or UTF-8 in modern code)
 #
 # Memory ownership:
-# - CStr(from_ptr: Snatched[Byte]) - wraps existing memory, does NOT take ownership
+# - CStr(from_ptr: Hijacked[Byte]) - wraps existing memory, does NOT take ownership
 # - CStr(from_text: Bytes) - allocates NEW memory, caller owns it
 # - CStr.copy() - allocates NEW memory, caller owns it
 #
@@ -25,28 +25,28 @@ module Core
 ### Defines the record `CStr`.
 record CStr
   ### Stores the ptr member value.
-  ptr: Snatched[Byte]
+  ptr: Hijacked[Byte]
 
-preset CSTR_NULL: CStr = CStr(ptr: snatched_none[Byte]())
+preset CSTR_NULL: CStr = CStr(ptr: hijacked_none[Byte]())
 
 ### Creates a new instance.
 ### :param from_ptr: The `from_ptr` value.
 ### :returns: The resulting `CStr` value.
-routine CStr.$create(from_ptr: Snatched[Byte]) -> CStr
+routine CStr.$create(from_ptr: Hijacked[Byte]) -> CStr
   return CStr(ptr: from_ptr)
 
 ### Creates a new instance.
 ### :param from_ptr: The `from_ptr` value.
 ### :returns: The resulting `CStr` value.
 routine CStr.$create(from_ptr: Address) -> CStr
-  return CStr(ptr: Snatched[Byte](from_ptr))
+  return CStr(ptr: Hijacked[Byte](from_ptr))
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `CStr` value.
 routine CStr.$create(from: Referring[Bytes]) -> CStr
   var len = from.count()
-  var buffer = Snatched[Byte](rf_allocate_dynamic(len + 1u64))
+  var buffer = Hijacked[Byte](rf_allocate_dynamic(len + 1u64))
 
   var i: U64 = 0u64
   loop
@@ -64,12 +64,12 @@ routine CStr.$create(from: Referring[Bytes]) -> CStr
 routine CStr.$create(from: Referring[Text]) -> CStr
   var len = from.count()
   if len == 0u64
-    var empty_buffer = Snatched[Byte](rf_allocate_dynamic(1u64))
+    var empty_buffer = Hijacked[Byte](rf_allocate_dynamic(1u64))
     empty_buffer.write(BYTE_NULL)
     return CStr(ptr: empty_buffer)
 
   var max_bytes = len * 4u64 + 1u64
-  var buffer = Snatched[Byte](rf_allocate_dynamic(max_bytes))
+  var buffer = Hijacked[Byte](rf_allocate_dynamic(max_bytes))
   var write_pos: U64 = 0u64
   var i: U64 = 0u64
 
@@ -142,7 +142,7 @@ routine CStr.$cmp(you: CStr) -> ComparisonSign
 ### :returns: The resulting `CStr` value.
 routine CStr.copy() -> CStr
   var len = me.count()
-  var buffer = Snatched[Byte](rf_allocate_dynamic(len + 1u64))
+  var buffer = Hijacked[Byte](rf_allocate_dynamic(len + 1u64))
   rf_cstr_copy(CStr(from_ptr: buffer), me)
   return CStr(ptr: buffer)
 
