@@ -568,15 +568,31 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             {
                 var hoisted = new List<Statement>();
                 var elems = new List<Expression>(capacity: tuple.Elements.Count);
-                bool changed = false;
                 foreach (Expression el in tuple.Elements)
                 {
                     var (h, lowered) = LowerExpr(el);
                     hoisted.AddRange(h);
                     elems.Add(lowered);
-                    if (!ReferenceEquals(lowered, el)) changed = true;
                 }
 
+                // ValueTuple (all record-like elements): lower to CreatorExpression so it
+                // goes through the normal EmitConstructorCall → EmitTupleConstruction path.
+                if (tuple.ResolvedType is TupleTypeInfo { IsValueTuple: true } tupleType)
+                {
+                    var memberVars = new List<(string Name, Expression Value)>(capacity: elems.Count);
+                    for (int i = 0; i < elems.Count; i++)
+                        memberVars.Add(($"item{i}", elems[i]));
+                    var creator = new CreatorExpression(
+                        TypeName: tupleType.Name,
+                        TypeArguments: null,
+                        MemberVariables: memberVars,
+                        Location: tuple.Location)
+                    { ResolvedType = tupleType };
+                    return (hoisted, creator);
+                }
+
+                // Tuple containing entity elements — deferred; pass through with lowered elements.
+                bool changed = elems.Zip(tuple.Elements, (a, b) => !ReferenceEquals(a, b)).Any(x => x);
                 if (!changed && hoisted.Count == 0) return ([], expr);
                 return (hoisted, tuple with { Elements = elems });
             }

@@ -996,6 +996,12 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         if (routine.OwnerType == null) return false;
         TypeInfo owner = routine.OwnerType;
 
+        // Skip compiler-internal/non-synthesizable categories.
+        if (owner.Category is TypeCategory.TypeParameter or TypeCategory.Error
+            or TypeCategory.Intrinsic or TypeCategory.ProtocolSelf
+            or TypeCategory.ConstGenericValue)
+            return false;
+
         switch (routine.Name)
         {
             case "type_name":
@@ -1083,6 +1089,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     TypeCategory.Flags => "FLAGS",
                     TypeCategory.Routine => "ROUTINE",
                     TypeCategory.Protocol => "PROTOCOL",
+                    TypeCategory.Tuple => "RECORD",
                     _ => throw new InvalidOperationException(
                         $"Unhandled TypeCategory '{owner.Category}' in type_kind BuilderService mapping.")
                 };
