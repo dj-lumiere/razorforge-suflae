@@ -1,72 +1,77 @@
-# RazorForge Retained[T] - Single-threaded reference counting
-# Equivalent to Rc[T] in Rust
 module Core
 
-### Defines the record `Retained`.
+### Single-threaded strong reference. Thin pointer to {RetainController[T]}.
+### Equivalent to `Rc[T]` in Rust. Copying bumps the strong count; dropping decrements it.
 ### :typeparam T: The exclusively owned entity type.
+@llvm("ptr")
 record Retained[T] obeys Controlling[T]
 needs T is EntityType
-  ### Stores the controller member value.
-  secret controller: Hijacked[RetainController]
-  ### Stores the data member value.
-  secret data: Hijacked[T]
+  pass
 
-### Returns the result of `retain`.
+# ============================================================================
+# Construction
+# ============================================================================
+
+### Wraps an exclusively owned entity in a reference-counted {Retained[T]}.
+### Ownership transfers to the RC system; the original binding is invalidated.
 ### :returns: The resulting `Retained[T]` value.
-routine T.retain() -> Retained[T]
+dangerous routine Owned[T].retain() -> Retained[T]
   danger!
-    # Allocate controller
-    var controller = RetainController().hijack()
-    controller.increase_strong_count()
+    var ctrl = RetainController[T](data: steal me).hijack()
+    return Retained[T](ctrl)
 
-    # Create Retained record
-    return Retained[T](
-      controller: controller,
-      data: me.hijack()
-    )
+# ============================================================================
+# Reference counting
+# ============================================================================
 
-### Returns the result of `retain`.
+### Returns a new strong reference to the same entity, incrementing the strong count.
 ### :returns: The resulting `Retained[T]` value.
 routine Retained[T].retain() -> Retained[T]
   danger!
-    me.controller.increase_strong_count()
+    var ctrl = Hijacked[RetainController[T]](me)
+    ctrl.increase_strong_count()
   return me
 
-### Executes `release`.
+### Decrements the strong count, destroying the entity when it reaches zero.
+### Destroys the controller when both strong and weak counts reach zero.
 dangerous routine Retained[T].release()
   danger!
-    me.controller.decrease_strong_count()
-
-    when me.controller.strong_count() == 0
-      == true =>
-        # Deallocate the data
-        rf_invalidate[T](me.data)
-
-        # Check if we should also deallocate the controller
-        when me.controller.weak_count() == 0
-          == true => rf_invalidate[RetainController](me.controller)
-          == false => pass  # Keep controller alive for weak references
-      == false => pass  # Still has strong references
+    var ctrl = Hijacked[RetainController[T]](me)
+    ctrl.decrease_strong_count()
+    if ctrl.should_deallocate_data()
+      ctrl.drop_data()
+      if ctrl.should_deallocate_controller()
+        ctrl.invalidate!()
   return
 
-### Returns the result of `strong count`.
+### Creates a weak reference to the same entity.
+### :returns: The resulting `Tracked[T]` value.
+routine Retained[T].track() -> Tracked[T]
+  danger!
+    var ctrl = Hijacked[RetainController[T]](me)
+    ctrl.increase_weak_count()
+    return Tracked[T](me)
+
+# ============================================================================
+# Inspection
+# ============================================================================
+
+### Returns the current strong reference count.
 ### :returns: The resulting `S32` value.
 routine Retained[T].strong_count() -> S32
   danger!
-    return me.controller.strong_count()
+    var ctrl = Hijacked[RetainController[T]](me)
+    return ctrl.strong_count()
 
-### Returns the result of `weak count`.
+### Returns the current weak reference count.
 ### :returns: The resulting `S32` value.
 routine Retained[T].weak_count() -> S32
   danger!
-    return me.controller.weak_count()
-
-# Direct member variable access allowed for single-threaded Retained
-# No locking needed - just dereference the data pointer
-# Use .view() or .grasp() for temporary access
+    var ctrl = Hijacked[RetainController[T]](me)
+    return ctrl.weak_count()
 
 # ============================================================================
-# Display (transparent - delegates to inner value)
+# Display (transparent — delegates to inner value)
 # ============================================================================
 
 ### Returns the textual representation of this value.
@@ -74,14 +79,16 @@ routine Retained[T].weak_count() -> S32
 @readonly
 routine Retained[T].$represent() -> Text
   danger!
-    return me.data.read().$represent()
+    var ctrl = Hijacked[RetainController[T]](me)
+    return ctrl.borrow_data().read().$represent()
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Retained[T].$diagnose() -> Text
   danger!
-    var rc = me.controller.strong_count()
-    var weak = me.controller.weak_count()
-    var addr = me.data.get_address()
-    return me.type_name() + "(holding: " + rc.$represent() + ", observing: " + weak.$represent() + ", addr: " + addr.$represent() + ", " + me.data.read().$diagnose() + ")"
+    var ctrl = Hijacked[RetainController[T]](me)
+    var rc = ctrl.strong_count()
+    var weak = ctrl.weak_count()
+    var addr = ctrl.borrow_data().get_address()
+    return me.type_name() + "(holding: " + rc.$represent() + ", observing: " + weak.$represent() + ", addr: " + addr.$represent() + ", " + ctrl.borrow_data().read().$diagnose() + ")"

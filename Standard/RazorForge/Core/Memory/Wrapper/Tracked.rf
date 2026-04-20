@@ -1,74 +1,72 @@
-# RazorForge Tracked[T] - Weak reference to Retained[T]
-# Single-threaded weak references
 module Core
 
-### Defines the record `Tracked`.
+### Single-threaded weak reference. Thin pointer to the same {RetainController[T]} as {Retained[T]}.
+### Does not keep the entity alive. Use {recover!()} to attempt upgrade to a strong reference.
 ### :typeparam T: The exclusively owned entity type.
+@llvm("ptr")
 record Tracked[T]
 needs T is EntityType
-  ### Stores the controller member value.
-  secret controller: Hijacked[RetainController]
-  ### Stores the data member value.
-  secret data: Hijacked[T]
+  pass
 
-### Returns the result of `track`.
-### :returns: The resulting `Tracked[T]` value.
-routine Retained[T].track() -> Tracked[T]
-  danger!
-    me.controller.increase_weak_count()
-    return Tracked[T](controller: me.controller, data: me.data)
+# ============================================================================
+# Reference counting
+# ============================================================================
 
-### Returns true if this value is alive.
-### :returns: The resulting `Bool` value.
-routine Tracked[T].is_alive() -> Bool
-  danger!
-    return me.controller.strong_count() > 0
-
-### Returns the result of `track`.
+### Returns a new weak reference to the same controller, incrementing the weak count.
 ### :returns: The resulting `Tracked[T]` value.
 routine Tracked[T].track() -> Tracked[T]
   danger!
-    me.controller.increase_weak_count()
-    return me
+    var ctrl = Hijacked[RetainController[T]](me)
+    ctrl.increase_weak_count()
+  return me
 
-### Returns the result of `recover`.
-### :returns: The resulting `Retained[T]` value.
-### :absent: Returns absent when the requested value is unavailable.
-routine Tracked[T].recover!() -> Retained[T]?
+### Decrements the weak count, destroying the controller when both counts reach zero.
+dangerous routine Tracked[T].release()
   danger!
-    if me.controller.strong_count() == 0
-      absent
-    me.controller.increase_strong_count()
-    return Retained[T](
-      controller: me.controller,
-      data: me.data
-    )
-
-### Executes `release`.
-routine Tracked[T].release!()
-  danger!
-    me.controller.decrease_weak_count()
-
-    # If both strong and weak counts are 0, deallocate controller
-    when me.controller.strong_count() == 0 and me.controller.weak_count() == 0
-      == true => me.controller.invalidate!()
-      == false => pass
+    var ctrl = Hijacked[RetainController[T]](me)
+    ctrl.decrease_weak_count()
+    if ctrl.should_deallocate_controller()
+      ctrl.invalidate!()
   return
 
-### Returns the result of `strong count`.
+### Attempts to upgrade to a strong reference.
+### :returns: The resulting `Retained[T]` value.
+### :absent: Returns absent when the entity has already been destroyed.
+routine Tracked[T].recover!() -> Retained[T]
+  danger!
+    var ctrl = Hijacked[RetainController[T]](me)
+    if ctrl.strong_count() == 0
+      absent
+    ctrl.increase_strong_count()
+    return Retained[T](me)
+
+# ============================================================================
+# Inspection
+# ============================================================================
+
+### Returns true if the entity is still alive (strong count > 0).
+### :returns: The resulting `Bool` value.
+routine Tracked[T].is_alive() -> Bool
+  danger!
+    var ctrl = Hijacked[RetainController[T]](me)
+    return ctrl.strong_count() > 0
+
+### Returns the current strong reference count.
 ### :returns: The resulting `S32` value.
 routine Tracked[T].strong_count() -> S32
   danger!
-    return me.controller.strong_count()
+    var ctrl = Hijacked[RetainController[T]](me)
+    return ctrl.strong_count()
 
-### Returns the result of `weak count`.
+### Returns the current weak reference count.
 ### :returns: The resulting `S32` value.
 routine Tracked[T].weak_count() -> S32
   danger!
-    return me.controller.weak_count()
+    var ctrl = Hijacked[RetainController[T]](me)
+    return ctrl.weak_count()
 
 # ============================================================================
-# Display (opaque - no inner value access)
+# Display (opaque — no inner value access on a weak reference)
 # ============================================================================
 
 ### Returns the textual representation of this value.
@@ -82,7 +80,7 @@ routine Tracked[T].$represent() -> Text
 @readonly
 routine Tracked[T].$diagnose() -> Text
   danger!
-    var rc = me.controller.strong_count()
-    var weak = me.controller.weak_count()
-    var alive = rc > 0
-    return me.type_name() + "(holding: " + rc.$represent() + ", observing: " + weak.$represent() + ", alive: " + alive.$represent() + ")"
+    var ctrl = Hijacked[RetainController[T]](me)
+    var rc = ctrl.strong_count()
+    var weak = ctrl.weak_count()
+    return me.type_name() + "(holding: " + rc.$represent() + ", observing: " + weak.$represent() + ", alive: " + (rc > 0).$represent() + ")"

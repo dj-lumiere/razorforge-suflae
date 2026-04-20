@@ -1,59 +1,74 @@
 module Core
 
-# RazorForge Multi-threaded Share Controller
-# Atomic reference counting mechanism for multi-threaded Shared[T, Policy] memory management
-
-### Defines the entity `ShareController`.
-entity ShareController
-  ### Stores the strong count member value.
+### Thread-safe reference counting controller with lock policy.
+### Owns the managed entity; shared between {Shared[T, P]} (strong) and {Marked[T, P]} (weak).
+### :typeparam T: The exclusively owned entity type.
+### :typeparam P: The lock policy type.
+entity ShareController[T, P]
+needs T is EntityType
+needs P obeys LockPolicy
   secret strong_count: Atomic[S32]
-  ### Stores the weak count member value.
   secret weak_count: Atomic[S32]
+  secret lock: Hijacked[P]
+  secret data: Hijacked[T]
 
-### Creates a new instance.
-### :returns: The resulting `ShareController` value.
-routine ShareController.$create() -> ShareController
-  return ShareController(
-    strong_count: Atomic(0),
-    weak_count: Atomic(0)
+### Creates a new controller with one strong reference.
+### :param data: The entity to manage; ownership transfers to this controller.
+### :returns: The resulting `ShareController[T, P]` value.
+dangerous routine ShareController[T, P].$create(data: Owned[T]) -> ShareController[T, P]
+  danger!
+    var lock = P().hijack()
+  return ShareController[T, P](
+    strong_count: Atomic(1),
+    weak_count: Atomic(0),
+    lock: lock,
+    data: Hijacked[T](steal data)
   )
 
-### Executes `increase strong count`.
-routine ShareController.increase_strong_count()
+routine ShareController[T, P].increase_strong_count()
   me.strong_count.fetch_add(1)
   return
 
-### Executes `decrease strong count`.
-routine ShareController.decrease_strong_count()
+routine ShareController[T, P].decrease_strong_count()
   me.strong_count.fetch_sub(1)
   return
 
-### Executes `increase weak count`.
-routine ShareController.increase_weak_count()
+routine ShareController[T, P].increase_weak_count()
   me.weak_count.fetch_add(1)
   return
 
-### Executes `decrease weak count`.
-routine ShareController.decrease_weak_count()
+routine ShareController[T, P].decrease_weak_count()
   me.weak_count.fetch_sub(1)
   return
 
-### Returns the result of `strong count`.
-### :returns: The resulting `S32` value.
-routine ShareController.strong_count() -> S32
+routine ShareController[T, P].strong_count() -> S32
   return me.strong_count.load()
 
-### Returns the result of `weak count`.
-### :returns: The resulting `S32` value.
-routine ShareController.weak_count() -> S32
+routine ShareController[T, P].weak_count() -> S32
   return me.weak_count.load()
 
-### Returns the result of `should deallocate data`.
-### :returns: The resulting `Bool` value.
-routine ShareController.should_deallocate_data() -> Bool
-  return me.strong_count() == 0
+routine ShareController[T, P].should_deallocate_data() -> Bool
+  return me.strong_count.load() == 0
 
-### Returns the result of `should deallocate controller`.
-### :returns: The resulting `Bool` value.
-routine ShareController.should_deallocate_controller() -> Bool
-  return me.strong_count() == 0 and me.weak_count() == 0
+routine ShareController[T, P].should_deallocate_controller() -> Bool
+  return me.strong_count.load() == 0 and me.weak_count.load() == 0
+
+### Returns a non-owning pointer to the managed data.
+### :returns: The resulting `Hijacked[T]` value.
+dangerous routine ShareController[T, P].borrow_data() -> Hijacked[T]
+  return me.data
+
+### Returns a non-owning pointer to the lock.
+### :returns: The resulting `Hijacked[P]` value.
+dangerous routine ShareController[T, P].borrow_lock() -> Hijacked[P]
+  return me.lock
+
+### Destroys the managed entity. Call only when strong count reaches zero.
+dangerous routine ShareController[T, P].drop_data()
+  me.data.invalidate!()
+  return
+
+### Destroys the lock. Call only when deallocating the controller.
+dangerous routine ShareController[T, P].drop_lock()
+  me.lock.invalidate!()
+  return

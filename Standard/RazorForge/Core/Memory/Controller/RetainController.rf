@@ -1,59 +1,60 @@
 module Core
 
-# RazorForge Single-threaded Share Controller
-# Core reference counting mechanism for single-threaded Retained[T] memory management
-
-### Defines the entity `RetainController`.
-entity RetainController
+### Single-threaded reference counting controller.
+### Owns the managed entity; shared between {Retained[T]} (strong) and {Tracked[T]} (weak).
+### :typeparam T: The exclusively owned entity type.
+entity RetainController[T]
+needs T is EntityType
   ### Stores the strong count member value.
   secret strong_count: S32
   ### Stores the weak count member value.
   secret weak_count: S32
+  secret data: Hijacked[T]
 
-### Creates a new instance.
-### :returns: The resulting `RetainController` value.
-routine RetainController.$create() -> RetainController
-  return RetainController(
-    strong_count: 0,
-    weak_count: 0
+### Creates a new controller with one strong reference.
+### :param data: The entity to manage; ownership transfers to this controller.
+### :returns: The resulting `RetainController[T]` value.
+dangerous routine RetainController[T].$create(data: Owned[T]) -> RetainController[T]
+  return RetainController[T](
+    strong_count: 1,
+    weak_count: 0,
+    data: Hijacked[T](steal data)
   )
 
-### Executes `increase strong count`.
-routine RetainController.increase_strong_count()
+routine RetainController[T].increase_strong_count()
   me.strong_count = me.strong_count + 1
   return
 
-### Executes `decrease strong count`.
-routine RetainController.decrease_strong_count()
+routine RetainController[T].decrease_strong_count()
   me.strong_count = me.strong_count - 1
   return
 
-### Executes `increase weak count`.
-routine RetainController.increase_weak_count()
+routine RetainController[T].increase_weak_count()
   me.weak_count = me.weak_count + 1
   return
 
-### Executes `decrease weak count`.
-routine RetainController.decrease_weak_count()
+routine RetainController[T].decrease_weak_count()
   me.weak_count = me.weak_count - 1
   return
 
-### Returns the result of `strong count`.
-### :returns: The resulting `S32` value.
-routine RetainController.strong_count() -> S32
+routine RetainController[T].strong_count() -> S32
   return me.strong_count
 
-### Returns the result of `weak count`.
-### :returns: The resulting `S32` value.
-routine RetainController.weak_count() -> S32
+routine RetainController[T].weak_count() -> S32
   return me.weak_count
 
-### Returns the result of `should deallocate data`.
-### :returns: The resulting `Bool` value.
-routine RetainController.should_deallocate_data() -> Bool
-  return me.strong_count() == 0
+routine RetainController[T].should_deallocate_data() -> Bool
+  return me.strong_count == 0
 
-### Returns the result of `should deallocate controller`.
-### :returns: The resulting `Bool` value.
-routine RetainController.should_deallocate_controller() -> Bool
-  return me.strong_count() == 0 and me.weak_count() == 0
+routine RetainController[T].should_deallocate_controller() -> Bool
+  return me.strong_count == 0 and me.weak_count == 0
+
+### Returns a non-owning pointer to the managed data.
+### :returns: The resulting `Hijacked[T]` value.
+dangerous routine RetainController[T].borrow_data() -> Hijacked[T]
+  return me.data
+
+### Destroys the managed entity. Call only when strong count reaches zero.
+dangerous routine RetainController[T].drop_data()
+  me.data.invalidate!()
+  return
