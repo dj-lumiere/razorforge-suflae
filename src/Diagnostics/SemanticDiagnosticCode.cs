@@ -654,15 +654,6 @@ public enum SemanticDiagnosticCode
     // MODIFICATION INFERENCE ERRORS (RF-S650 - RF-S699)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// <summary>Modifying method requires ! token.</summary>
-    ModifyingMethodRequiresToken = 650,
-
-    /// <summary>Cannot call modifying method through read-only token.</summary>
-    ModifyingMethodThroughReadOnlyToken = 651,
-
-    /// <summary>Cannot call migratable method through exclusive token.</summary>
-    MigratableMethodThroughExclusiveToken = 652,
-
     /// <summary>Modification category conflict detected.</summary>
     ModificationCategoryConflict = 653,
 
@@ -861,7 +852,10 @@ public enum SemanticDiagnosticCode
     UnresolvedRoutineBody = 951,
 
     /// <summary>'@thread_local' annotation is only valid on global variable declarations.</summary>
-    ThreadLocalOnNonGlobal = 952
+    ThreadLocalOnNonGlobal = 952,
+
+    /// <summary>Bare entity type used as type argument to Maybe/Result/Lookup. Wrap in Retained[T], Shared[T], or use Owned[T?] for unique ownership.</summary>
+    BareEntityInCarrierType = 953
 }
 /// <summary>
 /// Provides formatting helpers for <see cref="SemanticDiagnosticCode"/>.

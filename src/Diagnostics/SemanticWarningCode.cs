@@ -90,9 +90,6 @@ public enum SemanticWarningCode
     // REDUNDANT CODE WARNINGS (RF-W150 - RF-W199)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// <summary>Method is readonly, no ! token needed.</summary>
-    UnnecessaryModificationToken = 150,
-
     /// <summary>Redundant type annotation matches inferred type.</summary>
     RedundantTypeAnnotation = 151,
 

@@ -2,6 +2,8 @@ namespace SemanticVerification;
 
 using Compiler.Resolution;
 using TypeModel.Enums;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SemanticVerification.Enums;
 using SyntaxTree;
 
@@ -170,12 +172,38 @@ public sealed class ModificationInference
     private void AnalyzeAssignmentForModification(CallGraphNode node,
         AssignmentStatement assignment)
     {
-        // Check if the target is me.memberVar or me.memberVar.subfield...
-        if (IsMemberVariableOfMe(expression: assignment.Target))
+        if (!IsMemberVariableOfMe(expression: assignment.Target))
         {
-            node.DirectlyModifies = true;
-            node.InferredModification = ModificationCategory.Writable;
+            return;
         }
+
+        node.DirectlyModifies = true;
+        node.InferredModification = ModificationCategory.Writable;
+
+        // A direct write to a Hijacked[T] field relocates the buffer pointer — migratable.
+        if (assignment.Target is MemberExpression { Object: IdentifierExpression { Name: "me" } } direct
+            && IsHijackedField(ownerType: node.Routine.OwnerType, fieldName: direct.PropertyName))
+        {
+            node.DirectlyMigrates = true;
+            node.InferredModification = ModificationCategory.Migratable;
+        }
+    }
+
+    /// <summary>
+    /// Returns true if <paramref name="fieldName"/> is a <c>Hijacked[T]</c> field on <paramref name="ownerType"/>.
+    /// </summary>
+    private static bool IsHijackedField(TypeInfo? ownerType, string fieldName)
+    {
+        IReadOnlyList<MemberVariableInfo>? fields = ownerType switch
+        {
+            EntityTypeInfo e => e.MemberVariables,
+            RecordTypeInfo r => r.MemberVariables,
+            CrashableTypeInfo c => c.MemberVariables,
+            _ => null
+        };
+
+        MemberVariableInfo? field = fields?.FirstOrDefault(predicate: f => f.Name == fieldName);
+        return field?.Type.Name.StartsWith(value: "Hijacked", comparisonType: StringComparison.Ordinal) == true;
     }
 
     /// <summary>
