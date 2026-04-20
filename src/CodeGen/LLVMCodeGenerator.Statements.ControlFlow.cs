@@ -1,12 +1,12 @@
-using SemanticVerification.Symbols;
+using TypeModel.Symbols;
 
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticVerification.Types;
+using TypeModel.Types;
 using SyntaxTree;
 
-public partial class LLVMCodeGenerator
+public partial class LlvmCodeGenerator
 {
     private bool EmitIf(StringBuilder sb, IfStatement ifStmt)
     {

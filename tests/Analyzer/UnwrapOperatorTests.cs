@@ -1,7 +1,7 @@
 using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using SemanticVerification.Symbols;
-using SemanticVerification.Types;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;

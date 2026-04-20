@@ -1,8 +1,7 @@
 namespace Compiler.Resolution;
 
-using SemanticVerification.Enums;
-using SemanticVerification.Types;
-using TypeInfo = SemanticVerification.Types.TypeInfo;
+using TypeModel.Enums;
+using TypeInfo = TypeModel.Types.TypeInfo;
 
 public sealed partial class TypeRegistry
 {
@@ -31,7 +30,7 @@ public sealed partial class TypeRegistry
     /// <returns>True if the type is a memory wrapper, false otherwise.</returns>
     private static bool IsMemoryWrapperType(string typeName)
     {
-        return typeName is "Viewed" or "Hijacked" or "Inspected" or "Seized" or "Snatched"
+        return typeName is "Viewed" or "Grasped" or "Inspected" or "Claimed" or "Hijacked"
             or "Shared" or "Marked" or "Retained" or "Tracked";
     }
 

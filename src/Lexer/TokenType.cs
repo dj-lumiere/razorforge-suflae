@@ -230,7 +230,7 @@ public enum TokenType
     /// <summary>
     /// Entity declaration keyword.
     /// Reference type for complex, dynamically-sized objects with identity semantics.
-    /// Uses theatrical memory model (.view(), .hijack(), .share(), steal).
+    /// Uses theatrical memory model (.view(), .grasp(), .share(), steal).
     /// </summary>
     Entity,
 

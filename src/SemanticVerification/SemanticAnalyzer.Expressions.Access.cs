@@ -1,11 +1,12 @@
 namespace SemanticVerification;
 
 using Enums;
-using Symbols;
-using Types;
+using TypeModel.Enums;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
 using Compiler.Diagnostics;
-using TypeSymbol = Types.TypeInfo;
+using TypeSymbol = TypeModel.Types.TypeInfo;
 
 public sealed partial class SemanticAnalyzer
 {
@@ -27,7 +28,7 @@ public sealed partial class SemanticAnalyzer
                 return memberVariable.Type;
             }
 
-            // Wrapper type forwarding for record-based wrappers (Viewed[T], Hijacked[T], etc.)
+            // Wrapper type forwarding for record-based wrappers (Viewed[T], Grasped[T], etc.)
             if (IsWrapperType(type: objectType))
             {
                 MemberVariableInfo? innerMemberVariable =
@@ -79,7 +80,7 @@ public sealed partial class SemanticAnalyzer
                 return memberVariable.Type;
             }
         }
-        // Wrapper type forwarding: Viewed<T>, Hijacked<T>, Shared<T>, etc.
+        // Wrapper type forwarding: Viewed<T>, Grasped<T>, Shared<T>, etc.
         else if (IsWrapperType(type: objectType))
         {
             // Try to forward member variable access to the inner type
@@ -479,7 +480,7 @@ public sealed partial class SemanticAnalyzer
     {
         // Raw entities are entity types that are not wrapped
         return type.Category == TypeCategory.Entity && !IsMemoryToken(type: type) &&
-               !IsWrapperType(type: type) && !IsSnatched(type: type);
+               !IsWrapperType(type: type) && !IsHijacked(type: type);
     }
 
     /// <summary>

@@ -1,5 +1,5 @@
 using SemanticVerification.Results;
-using SemanticVerification.Types;
+using TypeModel.Types;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;

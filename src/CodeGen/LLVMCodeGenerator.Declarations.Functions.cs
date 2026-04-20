@@ -1,16 +1,17 @@
-using Compiler.Desugaring;
-using Compiler.Desugaring.Passes;
+using Compiler.Instantiation;
+using Compiler.Postprocessing.Passes;
 using Compiler.Targeting;
+using TypeModel.Enums;
 using SemanticVerification.Enums;
 
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticVerification.Symbols;
-using SemanticVerification.Types;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
 
-public partial class LLVMCodeGenerator
+public partial class LlvmCodeGenerator
 {
     private string GetImplicitMeParameterDeclaration(RoutineInfo routine, bool includeName)
     {
@@ -27,7 +28,7 @@ public partial class LLVMCodeGenerator
             return $"ptr{nameSuffix}";
         }
 
-        string meType = GetParameterLLVMType(type: routine.OwnerType);
+        string meType = GetParameterLlvmType(type: routine.OwnerType);
         string attrs = GetImplicitMeParameterAttributes(routine: routine);
         string nameSuffix2 = includeName ? " %me" : string.Empty;
 
@@ -38,6 +39,14 @@ public partial class LLVMCodeGenerator
 
     private static string GetImplicitMeParameterAttributes(RoutineInfo routine)
     {
+        // Exclusive owner/borrow: no other live reference can alias this pointer
+        if (routine.OwnerType is WrapperTypeInfo { Name: "Owned" or "Grasped" })
+        {
+            return routine.ModificationCategory == ModificationCategory.Readonly
+                ? "noalias readonly"
+                : "noalias";
+        }
+
         if (routine.ModificationCategory != ModificationCategory.Readonly)
         {
             return string.Empty;
@@ -49,6 +58,9 @@ public partial class LLVMCodeGenerator
             _ => string.Empty
         };
     }
+
+    private static string GetExplicitParameterAttributes(TypeInfo? type) =>
+        type is WrapperTypeInfo { Name: "Owned" or "Grasped" } ? "noalias" : string.Empty;
 
     private void GenerateFunctionDeclaration(RoutineInfo routine, string? nameOverride = null)
     {
@@ -90,10 +102,10 @@ public partial class LLVMCodeGenerator
         bool isCExtern = routine.CallingConvention == "C";
         paramTypes.AddRange(collection: routine.Parameters.Select(selector: param =>
         {
-            string t = GetParameterLLVMType(type: param.Type);
-            return isCExtern && t == "half"
-                ? "i16"
-                : t;
+            string t = GetParameterLlvmType(type: param.Type);
+            if (isCExtern && t == "half") return "i16";
+            string attrs = GetExplicitParameterAttributes(type: param.Type);
+            return string.IsNullOrEmpty(attrs) ? t : $"{t} {attrs}";
         }));
 
         // Ensure record type definitions exist for parameter and return types
@@ -115,18 +127,18 @@ public partial class LLVMCodeGenerator
 
         // Get return type
         string returnType = routine.ReturnType != null
-            ? GetLLVMType(type: routine.ReturnType)
+            ? GetLlvmType(type: routine.ReturnType)
             : "void";
         if (routine.AsyncStatus == AsyncStatus.LookupVariant)
         {
             // TODO(C121): if routine.ReturnType is Blank, degenerate Lookup[Blank] → Result[Blank]
             // (absent state on a Blank lookup is semantically meaningless). Use GetResultCarrierLLVMType
             // and AsyncStatus.CheckVariant for such routines instead.
-            returnType = GetLookupCarrierLLVMType(valueType: routine.ReturnType!);
+            returnType = GetLookupCarrierLlvmType(valueType: routine.ReturnType!);
         }
         else if (routine.AsyncStatus == AsyncStatus.CheckVariant)
         {
-            returnType = GetResultCarrierLLVMType(valueType: routine.ReturnType!);
+            returnType = GetResultCarrierLlvmType(valueType: routine.ReturnType!);
         }
         else if (routine.AsyncStatus == AsyncStatus.TryBoolVariant)
         {
@@ -151,10 +163,10 @@ public partial class LLVMCodeGenerator
         }
         else
         {
-            // Normal declaration
             string parameters = string.Join(separator: ", ", values: paramTypes);
+            string returnPrefix = isCreator && returnType == "ptr" ? "noalias " : "";
             _rfFunctionDeclarations[key: funcName] =
-                $"declare {returnType} @{funcName}({parameters})";
+                $"declare {returnPrefix}{returnType} @{funcName}({parameters})";
         }
     }
 
@@ -171,7 +183,7 @@ public partial class LLVMCodeGenerator
         }
 
         // Only record types that map to LLVM struct types (not intrinsics or single-wrapper) can need sret
-        string llvmType = GetLLVMType(type: routine.ReturnType);
+        string llvmType = GetLlvmType(type: routine.ReturnType);
         if (!llvmType.StartsWith(value: "%Record.") && !llvmType.StartsWith(value: "%\"Record.") &&
             !llvmType.StartsWith(value: "%Tuple.") && !llvmType.StartsWith(value: "%\"Tuple."))
         {
@@ -296,22 +308,27 @@ public partial class LLVMCodeGenerator
         }
 
         // Add explicit parameters
+        // Sanitize names that conflict with LLVM's reserved block label "entry"
         paramList.AddRange(collection:
             from param in routineInfo.Parameters
-            let paramType = GetParameterLLVMType(type: param.Type)
-            select $"{paramType} %{param.Name}");
+            let paramType = GetParameterLlvmType(type: param.Type)
+            let paramAttrs = GetExplicitParameterAttributes(type: param.Type)
+            let emittedName = param.Name == "entry" ? "entry_" : param.Name
+            select string.IsNullOrEmpty(paramAttrs)
+                ? $"{paramType} %{emittedName}"
+                : $"{paramType} {paramAttrs} %{emittedName}");
 
         // Get return type
         string returnType = routineInfo.ReturnType != null
-            ? GetLLVMType(type: routineInfo.ReturnType)
+            ? GetLlvmType(type: routineInfo.ReturnType)
             : "void";
         if (routineInfo.AsyncStatus == AsyncStatus.LookupVariant)
         {
-            returnType = GetLookupCarrierLLVMType(valueType: routineInfo.ReturnType!);
+            returnType = GetLookupCarrierLlvmType(valueType: routineInfo.ReturnType!);
         }
         else if (routineInfo.AsyncStatus == AsyncStatus.CheckVariant)
         {
-            returnType = GetResultCarrierLLVMType(valueType: routineInfo.ReturnType!);
+            returnType = GetResultCarrierLlvmType(valueType: routineInfo.ReturnType!);
         }
         else if (routineInfo.AsyncStatus == AsyncStatus.TryBoolVariant)
         {
@@ -324,9 +341,10 @@ public partial class LLVMCodeGenerator
         int savedTempCounter = _tempCounter;
 
         bool isInline = routineInfo.Annotations.Contains(value: "inline");
+        string returnPrefix = isCreator && returnType == "ptr" ? "noalias " : "";
         string funcAttrs = isInline ? " alwaysinline" : "";
         EmitLine(sb: _functionDefinitions,
-            line: $"define {returnType} @{funcName}({parameters}){funcAttrs} {{");
+            line: $"define {returnPrefix}{returnType} @{funcName}({parameters}){funcAttrs} {{");
         EmitLine(sb: _functionDefinitions, line: "entry:");
         var bodyBuilder = new StringBuilder();
 
@@ -360,10 +378,10 @@ public partial class LLVMCodeGenerator
     {
         // Clear local variables for this function
         _localVariables.Clear();
-        _localVarLLVMNames.Clear();
+        _localVarLlvmNames.Clear();
         _varNameCounts.Clear();
         _localEntityVars.Clear();
-        _localRCRecordVars.Clear();
+        _localRcRecordVars.Clear();
         _localRetainedVars.Clear();
         _currentBlock = "entry";
         _currentFunctionEntryAllocas.Clear();
@@ -387,7 +405,7 @@ public partial class LLVMCodeGenerator
             }
             else
             {
-                string meType = GetParameterLLVMType(type: routine.OwnerType);
+                string meType = GetParameterLlvmType(type: routine.OwnerType);
                 // Skip alloca/store for void me (Blank owner type — unit type, no data)
                 if (meType != "void")
                 {
@@ -403,11 +421,13 @@ public partial class LLVMCodeGenerator
         foreach (ParameterInfo param in routine.Parameters)
         {
             // Parameters are passed by value, create a local copy
+            // Use "entry_" instead of "entry" to avoid conflict with the entry: block label
+            string emittedParamName = param.Name == "entry" ? "entry_" : param.Name;
             string paramPtr = $"%{param.Name}.addr";
-            string llvmType = GetLLVMType(type: param.Type);
+            string llvmType = GetLlvmType(type: param.Type);
             EmitEntryAlloca(llvmName: paramPtr, llvmType: llvmType);
             EmitLine(sb: sb,
-                line: $"  store {llvmType} %{param.Name}, ptr {paramPtr}");
+                line: $"  store {llvmType} %{emittedParamName}, ptr {paramPtr}");
             _localVariables[key: param.Name] = param.Type;
         }
 
@@ -439,12 +459,12 @@ public partial class LLVMCodeGenerator
         }
 
         EmitUsingCleanup(sb: sb);
-        EmitRCRecordCleanup(sb: sb);
+        EmitRcRecordCleanup(sb: sb);
         EmitEntityCleanup(sb: sb, returnedVarName: null);
         if (_traceCurrentRoutine)
             EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
         string retType = routine.ReturnType != null
-            ? GetLLVMType(type: routine.ReturnType)
+            ? GetLlvmType(type: routine.ReturnType)
             : "void";
         if (retType == "void")
         {
@@ -512,7 +532,7 @@ public partial class LLVMCodeGenerator
         if (routine.IsLambda)
         {
             string fileName =
-                System.IO.Path.GetFileName(path: routine.Location?.FileName ?? "[unknown]");
+                Path.GetFileName(path: routine.Location?.FileName ?? "[unknown]");
             int line = routine.Location?.Line ?? 0;
             int col = routine.Location?.Column ?? 0;
             string paramTypes = string.Join(separator: ",",
@@ -526,15 +546,15 @@ public partial class LLVMCodeGenerator
         // so that LLVM IR symbols match the actual C linker symbols.
         if (routine.CallingConvention == "C")
         {
-            return Q(name: DecorateRoutineSymbolName(baseName: SanitizeLLVMName(name: routine.Name),
+            return Q(name: DecorateRoutineSymbolName(baseName: SanitizeLlvmName(name: routine.Name),
                 isFailable: routine.IsFailable));
         }
 
-        string name = SanitizeLLVMName(name: routine.Name);
+        string name = SanitizeLlvmName(name: routine.Name);
         if (routine.OwnerType == null)
         {
             // Top-level: Module.Name (BaseName preserves the old FullName format)
-            string fullName = SanitizeLLVMName(name: routine.BaseName);
+            string fullName = SanitizeLlvmName(name: routine.BaseName);
 
             // Generic instance: append type arguments (e.g., IO.show → IO.show#S64)
             if (routine.TypeArguments is { Count: > 0 })
@@ -589,7 +609,7 @@ public partial class LLVMCodeGenerator
     /// Sanitizes a name for use as an LLVM IR identifier.
     /// Replaces characters that are invalid in LLVM identifiers.
     /// </summary>
-    internal static string SanitizeLLVMName(string name)
+    internal static string SanitizeLlvmName(string name)
     {
         return name.Replace(oldValue: "!", newValue: "");
     }

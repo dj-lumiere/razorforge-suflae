@@ -3,12 +3,13 @@ using Compiler.Diagnostics;
 using Compiler.Lexer;
 using Compiler.Parser;
 using SyntaxTree;
-using Compiler.Resolution;
 using SemanticVerification;
-using SemanticVerification.Enums;
+using TypeModel.Enums;
 using SemanticVerification.Results;
 using Compiler.CodeGen;
 using Compiler.Declaration;
+using Compiler.Postprocessing;
+using Compiler.Resolution;
 using Compiler.Targeting;
 
 namespace Builder;
@@ -37,9 +38,7 @@ internal partial class Program
                         .TrimStart(trimChar: '-');
 
         // Check if first arg is a command or a file
-        bool isCommand = command == "parse" || command == "tokenize" || command == "codegen" ||
-                         command == "build" || command == "buildandrun" ||
-                         command == "check" || command == "validate-stdlib" || command == "help";
+        bool isCommand = command is "parse" or "tokenize" or "codegen" or "build" or "buildandrun" or "check" or "validate-stdlib" or "help";
 
         if (!isCommand)
         {
@@ -129,7 +128,7 @@ internal partial class Program
                     ? args[1]
                        .ToLowerInvariant()
                     : "rf";
-                Language stdlibLang = lang == "sf" || lang == "suflae"
+                Language stdlibLang = lang is "sf" or "suflae"
                     ? Language.Suflae
                     : Language.RazorForge;
                 return ValidateStdlib(language: stdlibLang);
@@ -258,10 +257,13 @@ internal partial class Program
 
             RfBuildMode buildMode = target.Mode.ToLowerInvariant() switch
             {
+                "debug" => RfBuildMode.Debug,
                 "release" => RfBuildMode.Release,
                 "release-time" => RfBuildMode.ReleaseTime,
                 "release-space" => RfBuildMode.ReleaseSpace,
-                _ => RfBuildMode.Debug
+                _ => throw new InvalidOperationException(
+                    $"Unknown build mode '{target.Mode}' in manifest target '{target.Name}'. " +
+                    "Valid modes are: debug, release, release-time, release-space.")
             };
 
             Console.WriteLine(value: $"Using manifest: {manifestPath}");
@@ -607,29 +609,34 @@ internal partial class Program
             Console.WriteLine();
             Console.WriteLine(value: "=== CODE GENERATION ===");
 
+            RunPostprocessing(programs: [ast],
+                registry: result.Registry,
+                target: target,
+                buildMode: buildMode);
+
             // Pass stdlib programs to codegen so intrinsic routines get built
             IReadOnlyList<(SyntaxTree.Program Program, string FilePath, string Module)>
                 stdlibPrograms = result.Registry.StdlibPrograms;
-            var generator = new LLVMCodeGenerator(program: ast,
+            var generator = new LlvmCodeGenerator(program: ast,
                 registry: result.Registry,
                 stdlibPrograms: stdlibPrograms,
                 target: target,
                 buildMode: buildMode,
                 synthesizedBodies: result.SynthesizedBodies,
                 preMonomorphizedBodies: result.PreMonomorphizedBodies);
-            string llvmIR = generator.Generate();
+            string llvmIr = generator.Generate();
 
             // Output
             if (outputFile != null)
             {
-                File.WriteAllText(path: outputFile, contents: llvmIR);
+                File.WriteAllText(path: outputFile, contents: llvmIr);
                 Console.WriteLine(value: $"LLVM IR written to: {outputFile}");
             }
             else
             {
                 // Default output file
                 string defaultOutput = Path.ChangeExtension(path: sourceFile, extension: ".ll");
-                File.WriteAllText(path: defaultOutput, contents: llvmIR);
+                File.WriteAllText(path: defaultOutput, contents: llvmIr);
                 Console.WriteLine(value: $"LLVM IR written to: {defaultOutput}");
             }
 
@@ -745,6 +752,19 @@ internal partial class Program
         catch (Exception)
         {
             return 0; // cmake not found ??skip silently
+        }
+    }
+
+    private static void RunPostprocessing(IEnumerable<SyntaxTree.Program> programs,
+        TypeRegistry registry, TargetConfig target, RfBuildMode buildMode)
+    {
+        var pipeline = new PostprocessingPipeline(new PostprocessingContext(registry: registry,
+            target: target,
+            buildMode: buildMode));
+
+        foreach (SyntaxTree.Program program in programs)
+        {
+            pipeline.Run(program);
         }
     }
 
@@ -1003,20 +1023,25 @@ internal partial class Program
                                             })
                                            .ToList();
 
+            RunPostprocessing(programs: userPrograms.Select(entry => entry.Program),
+                registry: result.Registry,
+                target: target,
+                buildMode: buildMode);
+
             IReadOnlyList<(SyntaxTree.Program Program, string FilePath, string Module)>
                 stdlibPrograms = result.Registry.StdlibPrograms;
-            var generator = new LLVMCodeGenerator(userPrograms: userPrograms,
+            var generator = new LlvmCodeGenerator(userPrograms: userPrograms,
                 registry: result.Registry,
                 stdlibPrograms: stdlibPrograms,
                 target: target,
                 buildMode: buildMode,
                 synthesizedBodies: result.SynthesizedBodies,
                 preMonomorphizedBodies: result.PreMonomorphizedBodies);
-            string llvmIR = generator.Generate();
+            string llvmIr = generator.Generate();
 
             // Output
             string outPath = outputFile ?? Path.ChangeExtension(path: entryFile, extension: ".ll");
-            File.WriteAllText(path: outPath, contents: llvmIR);
+            File.WriteAllText(path: outPath, contents: llvmIr);
             Console.WriteLine(value: $"LLVM IR written to: {outPath}");
 
             if (dumpAst)

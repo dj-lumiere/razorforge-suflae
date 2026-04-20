@@ -1,8 +1,8 @@
 ﻿namespace SemanticVerification.Scopes;
 
 using Enums;
-using Symbols;
-using TypeSymbol = Types.TypeInfo;
+using TypeModel.Symbols;
+using TypeSymbol = TypeModel.Types.TypeInfo;
 
 /// <summary>
 /// Represents a scope in the program for variable and symbol lookup.

@@ -3,7 +3,7 @@ namespace Compiler.Parser;
 using Lexer;
 using SyntaxTree;
 using Diagnostics;
-using SemanticVerification.Enums;
+using TypeModel.Enums;
 
 /// <summary>
 /// Partial class containing external block and external routine declaration parsing.
@@ -15,7 +15,7 @@ public partial class Parser
     {
         if (_language == Language.Suflae)
         {
-            throw ThrowParseError(code: GrammarDiagnosticCode.RFOnlyConstruct,
+            throw ThrowParseError(code: GrammarDiagnosticCode.RfOnlyConstruct,
                 message: "External declarations are only available in RazorForge.");
         }
 
@@ -124,7 +124,7 @@ public partial class Parser
     {
         if (_language == Language.Suflae)
         {
-            throw ThrowParseError(code: GrammarDiagnosticCode.RFOnlyConstruct,
+            throw ThrowParseError(code: GrammarDiagnosticCode.RfOnlyConstruct,
                 message: "External block declarations are only available in RazorForge.");
         }
 

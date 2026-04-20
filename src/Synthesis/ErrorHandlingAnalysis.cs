@@ -1,6 +1,6 @@
 namespace Compiler.Synthesis;
 
-using SemanticVerification.Types;
+using TypeModel.Types;
 
 /// <summary>
 /// Result of analyzing throw/absent keywords in a failable function body.

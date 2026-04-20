@@ -1,4 +1,4 @@
-using SemanticVerification.Enums;
+using TypeModel.Enums;
 using Compiler.Diagnostics;
 
 namespace Compiler.Lexer;

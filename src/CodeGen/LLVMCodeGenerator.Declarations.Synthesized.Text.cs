@@ -1,13 +1,12 @@
 namespace Compiler.CodeGen;
 
-using System.Text;
-using SemanticVerification.Symbols;
-using SemanticVerification.Types;
+using TypeModel.Symbols;
+using TypeModel.Types;
 
 /// <summary>
 /// Declaration code generation for synthesized text conversion and hashing routines.
 /// </summary>
-public partial class LLVMCodeGenerator
+public partial class LlvmCodeGenerator
 {
     private void EmitSynthesizedEq(RoutineInfo routine, string funcName)
     {
@@ -16,9 +15,21 @@ public partial class LLVMCodeGenerator
             return;
         }
 
-        string meType = GetParameterLLVMType(type: routine.OwnerType);
+        string meType = GetParameterLlvmType(type: routine.OwnerType);
+
+        // Blank (void) has no LLVM representation — trivially equal (only one possible value)
+        if (meType == "void")
+        {
+            EmitLine(sb: _functionDefinitions, line: $"define i1 @{funcName}() {{");
+            EmitLine(sb: _functionDefinitions, line: "entry:");
+            EmitLine(sb: _functionDefinitions, line: "  ret i1 true");
+            EmitLine(sb: _functionDefinitions, line: "}");
+            EmitLine(sb: _functionDefinitions, line: "");
+            return;
+        }
+
         string youType = routine.Parameters.Count > 0
-            ? GetParameterLLVMType(type: routine.Parameters[index: 0].Type)
+            ? GetParameterLlvmType(type: routine.Parameters[index: 0].Type)
             : meType;
         string youName = routine.Parameters.Count > 0
             ? routine.Parameters[index: 0].Name
@@ -46,7 +57,7 @@ public partial class LLVMCodeGenerator
             case RecordTypeInfo { IsSingleMemberVariableWrapper: true } record:
             {
                 // Single-member-variable wrapper: compare the underlying value
-                string llvmType = GetLLVMType(type: record.UnderlyingIntrinsic!);
+                string llvmType = GetLlvmType(type: record.UnderlyingIntrinsic!);
                 string result = NextTemp();
                 EmitLine(sb: _functionDefinitions,
                     line: $"  {result} = icmp eq {llvmType} %me, %{youName}");
@@ -67,7 +78,7 @@ public partial class LLVMCodeGenerator
                 for (int i = 0; i < record.MemberVariables.Count; i++)
                 {
                     MemberVariableInfo mv = record.MemberVariables[index: i];
-                    string fieldType = GetLLVMType(type: mv.Type);
+                    string fieldType = GetLlvmType(type: mv.Type);
                     string meField = NextTemp();
                     string youField = NextTemp();
                     EmitLine(sb: _functionDefinitions,
@@ -114,7 +125,7 @@ public partial class LLVMCodeGenerator
                 for (int i = 0; i < entity.MemberVariables.Count; i++)
                 {
                     MemberVariableInfo mv = entity.MemberVariables[index: i];
-                    string fieldType = GetLLVMType(type: mv.Type);
+                    string fieldType = GetLlvmType(type: mv.Type);
                     string meFp = NextTemp();
                     string youFp = NextTemp();
                     string meField = NextTemp();
@@ -163,7 +174,7 @@ public partial class LLVMCodeGenerator
                 for (int i = 0; i < tuple.ElementTypes.Count; i++)
                 {
                     TypeInfo elemType = tuple.ElementTypes[index: i];
-                    string elemLlvmType = GetLLVMType(type: elemType);
+                    string elemLlvmType = GetLlvmType(type: elemType);
                     string meElem = NextTemp();
                     string youElem = NextTemp();
                     EmitLine(sb: _functionDefinitions,
@@ -209,10 +220,7 @@ public partial class LLVMCodeGenerator
         string youField)
     {
         // Primitive/intrinsic types and backend-annotated records use icmp/fcmp
-        if (fieldType is IntrinsicTypeInfo ||
-            fieldType is RecordTypeInfo { HasDirectBackendType: true } ||
-            fieldType is RecordTypeInfo { IsSingleMemberVariableWrapper: true } ||
-            fieldType is ChoiceTypeInfo)
+        if (fieldType is IntrinsicTypeInfo or RecordTypeInfo { HasDirectBackendType: true } or RecordTypeInfo { IsSingleMemberVariableWrapper: true } or ChoiceTypeInfo)
         {
             string cmpResult = NextTemp();
             if (llvmType is "float" or "double" or "half" or "fp128")
@@ -229,8 +237,8 @@ public partial class LLVMCodeGenerator
             return cmpResult;
         }
 
-        // Entity types: pointer equality
-        if (fieldType is EntityTypeInfo)
+        // Entity types and wrapper types: pointer equality (all stored as ptr in LLVM)
+        if (fieldType is EntityTypeInfo or WrapperTypeInfo)
         {
             string cmpResult = NextTemp();
             EmitLine(sb: _functionDefinitions,
@@ -239,7 +247,7 @@ public partial class LLVMCodeGenerator
         }
 
         // Complex types: call their $eq method
-        string eqName = Q(name: $"{fieldType.Name}.$eq");
+        string eqName = Q(name: $"{fieldType.FullName}.$eq");
         string result = NextTemp();
         EmitLine(sb: _functionDefinitions,
             line: $"  {result} = call i1 @{eqName}({llvmType} {meField}, {llvmType} {youField})");
@@ -283,7 +291,7 @@ public partial class LLVMCodeGenerator
         for (int i = 0; i < tuple.ElementTypes.Count; i++)
         {
             TypeInfo elemType = tuple.ElementTypes[index: i];
-            string elemLlvmType = GetLLVMType(type: elemType);
+            string elemLlvmType = GetLlvmType(type: elemType);
 
             string meElem = NextTemp();
             string youElem = NextTemp();

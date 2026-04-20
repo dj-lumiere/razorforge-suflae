@@ -180,7 +180,7 @@ public class TypeProhibitionTests
                           return
                         """;
 
-        Assert.ThrowsAny<Compiler.Diagnostics.GrammarException>(() => Analyze(source: source));
+        Assert.ThrowsAny<GrammarException>(() => Analyze(source: source));
     }
     /// <summary>
     /// Tests Analyze_ByteLiteralAscii_NoGrammarError.

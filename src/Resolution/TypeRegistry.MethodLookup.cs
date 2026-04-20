@@ -1,9 +1,9 @@
 namespace Compiler.Resolution;
 
-using SemanticVerification.Symbols;
+using TypeModel.Symbols;
 using SyntaxTree;
-using SemanticVerification.Types;
-using TypeInfo = SemanticVerification.Types.TypeInfo;
+using TypeModel.Types;
+using TypeInfo = TypeModel.Types.TypeInfo;
 
 public sealed partial class TypeRegistry
 {
@@ -92,10 +92,11 @@ public sealed partial class TypeRegistry
     /// <param name="argTypes">The argument types to match against.</param>
     public RoutineInfo? LookupRoutineOverload(string baseName, IReadOnlyList<TypeInfo> argTypes)
     {
-        // Try exact overload match by RegistryKey format
+        // Try exact overload match by RegistryKey format.
+        // Zero-arg routines register under baseName (no '#' suffix) — match that directly.
         string paramTypeNames =
             string.Join(separator: ",", values: argTypes.Select(selector: t => t.Name));
-        string registryKey = $"{baseName}#{paramTypeNames}";
+        string registryKey = argTypes.Count == 0 ? baseName : $"{baseName}#{paramTypeNames}";
         if (_routines.TryGetValue(key: registryKey, value: out RoutineInfo? overload))
         {
             return overload;
@@ -232,20 +233,24 @@ public sealed partial class TypeRegistry
     /// Finds a generic overload of a free function by name (e.g., show[T] for "show").
     /// O(1): backed by <see cref="_genericFreeFunctions"/> index populated in <see cref="RegisterRoutine"/>.
     /// </summary>
-    public RoutineInfo? LookupGenericOverload(string name)
+    /// <param name="name">The routine name (without generic params).</param>
+    /// <param name="preferredArity">Expected argument count; -1 means any arity is acceptable.</param>
+    public RoutineInfo? LookupGenericOverload(string name, int preferredArity = -1)
     {
         if (!_genericFreeFunctions.TryGetValue(key: name, value: out List<RoutineInfo>? candidates))
             return null;
 
-        // Prefer non-variadic overloads (e.g., show[T](value: T) over show[T](values...: T))
-        RoutineInfo? fallback = null;
+        // Prefer non-variadic overloads matching the preferred arity first.
+        RoutineInfo? arityMismatch = null;
+        RoutineInfo? variadicFallback = null;
         foreach (RoutineInfo routine in candidates)
         {
-            if (!routine.IsVariadic) return routine;
-            fallback ??= routine;
+            if (routine.IsVariadic) { variadicFallback ??= routine; continue; }
+            if (preferredArity < 0 || routine.Parameters.Count == preferredArity) return routine;
+            arityMismatch ??= routine;
         }
 
-        return fallback;
+        return variadicFallback ?? arityMismatch;
     }
 
     /// <summary>
@@ -409,8 +414,11 @@ public sealed partial class TypeRegistry
                 RecordTypeInfo r => r.GenericDefinition,
                 EntityTypeInfo e => e.GenericDefinition,
                 ProtocolTypeInfo p => p.GenericDefinition,
-                // Wrapper types (Snatched[Byte], Viewed[T], etc.) — look up by base name
-                WrapperTypeInfo => LookupType(name: type.Name),
+                // Wrapper types: methods are registered on the corresponding RecordTypeInfo
+                // (e.g. _routinesByOwner["Core.Retained"] holds strong_count, retain, etc.).
+                // Look up the RecordTypeInfo by base name to find those methods.
+                WrapperTypeInfo wt when wt.InnerType is not GenericParameterTypeInfo
+                    => LookupType(name: wt.Name),
                 _ => null
             };
 
@@ -420,7 +428,7 @@ public sealed partial class TypeRegistry
                     LookupMethod(type: genericDef, methodName: methodName, isFailable: isFailable);
                 if (genericMethod != null)
                 {
-                    // Universal methods on bare type params (e.g., T.get_address(), T.snatch())
+                    // Universal methods on bare type params (e.g., T.get_address(), T.hijack())
                     // must keep their GenericParameterTypeInfo owner so codegen can record
                     // the correct monomorphization (T → concrete receiver type).
                     if (genericMethod.OwnerType is GenericParameterTypeInfo)
@@ -628,7 +636,7 @@ public sealed partial class TypeRegistry
             RecordTypeInfo r => r.GenericDefinition,
             EntityTypeInfo e => e.GenericDefinition,
             ProtocolTypeInfo p => p.GenericDefinition,
-            // Wrapper types (Snatched[Byte], etc.) — look up generic def by base name
+            // Wrapper types (Hijacked[Byte], etc.) — look up generic def by base name
             WrapperTypeInfo => LookupType(name: resolvedOwner.Name),
             _ => null
         };
@@ -652,6 +660,54 @@ public sealed partial class TypeRegistry
             return method;
         }
 
+        // Wrapper-forwarder: re-resolve signature against the concrete inner method instead of
+        // naive name substitution (inner-T vs wrapper-T collision: both Owned[T] and List[T] use T,
+        // so {T: List[Character]} would map List[T].$getitem!'s T to List[Character], not Character).
+        // Note: wrapper types like Owned[T] may be RecordTypeInfo (declared as `record` in RF),
+        // not WrapperTypeInfo, so check TypeArguments.Count rather than the runtime type.
+        if (method is { IsSynthesized: true, WrapperForwarderInnerMethod: { } innerGenMethod } &&
+            resolvedOwner.TypeArguments is { Count: 1 } && resolvedOwner is not GenericParameterTypeInfo)
+        {
+            TypeInfo concreteInner = resolvedOwner.TypeArguments![index: 0];
+            RoutineInfo? concreteInnerMethod = LookupMethod(
+                type: concreteInner,
+                methodName: innerGenMethod.Name,
+                isFailable: innerGenMethod.IsFailable);
+            if (concreteInnerMethod != null)
+            {
+                var fwdParams = concreteInnerMethod.Parameters
+                    .Select(p => p.Name == "me"
+                        ? p.WithSubstitutedType(newType: resolvedOwner)
+                        : p)
+                    .ToList();
+                return new RoutineInfo(name: method.Name)
+                {
+                    Kind = method.Kind,
+                    OwnerType = resolvedOwner,
+                    Parameters = fwdParams,
+                    ReturnType = concreteInnerMethod.ReturnType,
+                    IsFailable = method.IsFailable,
+                    DeclaredModification = method.DeclaredModification,
+                    ModificationCategory = method.ModificationCategory,
+                    Visibility = method.Visibility,
+                    Location = method.Location,
+                    Module = method.Module,
+                    ModulePath = method.ModulePath,
+                    Annotations = method.Annotations,
+                    CallingConvention = method.CallingConvention,
+                    IsVariadic = method.IsVariadic,
+                    IsDangerous = method.IsDangerous,
+                    IsSynthesized = true,
+                    WrapperForwarderInnerMethod = concreteInnerMethod,
+                    WrapperForwarderInnerGenericDef = method.WrapperForwarderInnerGenericDef,
+                    Storage = method.Storage,
+                    AsyncStatus = method.AsyncStatus,
+                    OriginalName = method.OriginalName
+                };
+            }
+            // If concrete inner method not found, fall through to naive substitution
+        }
+
         // Substitute types in parameters
         var substitutedParams = method.Parameters
                                       .Select(selector: p =>
@@ -660,9 +716,32 @@ public sealed partial class TypeRegistry
                                       .ToList();
 
         // Substitute return type
-        TypeInfo? substitutedReturn = method.ReturnType != null
-            ? RoutineInfo.SubstituteType(type: method.ReturnType, substitution: substitution)
-            : null;
+        // Special case: if return type IS the owner's generic def (e.g. Maybe.$copy returns Maybe_def),
+        // the concrete return type is resolvedOwner itself (Maybe[ListNode[S64]], not Maybe_def).
+        TypeInfo? substitutedReturn;
+        if (method.ReturnType != null && genericDef != null &&
+            (ReferenceEquals(objA: method.ReturnType, objB: genericDef) ||
+             method.ReturnType.Name == genericDef.Name && method.ReturnType.IsGenericDefinition))
+        {
+            substitutedReturn = resolvedOwner;
+        }
+        else
+        {
+            substitutedReturn = method.ReturnType != null
+                ? RoutineInfo.SubstituteType(type: method.ReturnType, substitution: substitution)
+                : null;
+        }
+
+        // If return type is still a generic definition (e.g., track() -> Tracked_def when
+        // Tracked[T] was declared), instantiate it using the substitution map.
+        if (substitutedReturn is { IsGenericDefinition: true, GenericParameters: { } retGenericParams } retDef)
+        {
+            var retArgs = retGenericParams
+                .Select(selector: p => substitution.TryGetValue(p, out TypeInfo? subType) ? subType : null)
+                .ToList();
+            if (retArgs.All(predicate: a => a != null))
+                substitutedReturn = retDef.CreateInstance(typeArguments: retArgs.Select(selector: a => a!).ToList());
+        }
 
         // Only keep method-level generic parameters (owner params are now resolved)
         IReadOnlyList<string>? methodOnlyGenericParams = method.GenericParameters?
@@ -946,6 +1025,17 @@ public sealed partial class TypeRegistry
         }
 
         return type;
+    }
+
+    /// <summary>
+    /// Returns all methods registered for the given owner type (by FullName key).
+    /// Used by SA's eager wrapper-forwarder synthesis to enumerate inner-type methods.
+    /// </summary>
+    public IReadOnlyList<RoutineInfo> GetMethodsForOwner(TypeInfo ownerType)
+    {
+        if (_routinesByOwner.TryGetValue(key: ownerType.FullName, value: out List<RoutineInfo>? list))
+            return list;
+        return [];
     }
 
     #endregion

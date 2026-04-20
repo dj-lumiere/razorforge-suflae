@@ -107,7 +107,7 @@ public partial class Parser
                     {
                         throw new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
                             message: "Step ('by') is not supported in slice syntax.",
-                            fileName: fileName,
+                            fileName: FileName,
                             line: CurrentToken.Line,
                             column: CurrentToken.Column,
                             language: _language);

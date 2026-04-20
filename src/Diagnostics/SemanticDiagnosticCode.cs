@@ -587,8 +587,8 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot steal scope-bound token.</summary>
     StealScopeBoundToken = 604,
 
-    /// <summary>Cannot steal Snatched type.</summary>
-    StealSnatched = 605,
+    /// <summary>Cannot steal Hijacked type.</summary>
+    StealHijacked = 605,
 
     /// <summary>Cannot capture scope-bound token in lambda.</summary>
     LambdaCaptureToken = 606,
@@ -596,7 +596,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot capture raw entity in lambda.</summary>
     LambdaCaptureRawEntity = 607,
 
-    /// <summary>Nested hijacking is not allowed - cannot hijack a member of an already-hijacked object.</summary>
+    /// <summary>Nested grasping is not allowed - cannot grasp a member of an already-grasped object.</summary>
     NestedHijackingNotAllowed = 608,
 
     /// <summary>Dangerous routine called outside a danger! block.</summary>
@@ -620,34 +620,34 @@ public enum SemanticDiagnosticCode
     /// <summary>Partial access on entity (e.g., entity.field.view()) is not allowed.</summary>
     PartialAccessOnEntity = 616,
 
-    /// <summary>Cannot downgrade token permission (e.g., .view() on Hijacked/Seized).</summary>
+    /// <summary>Cannot downgrade token permission (e.g., .view() on Grasped/Claimed).</summary>
     TokenDowngradeProhibited = 618,
 
-    /// <summary>Same entity cannot be hijacked multiple times in one call.</summary>
+    /// <summary>Same entity cannot be grasped multiple times in one call.</summary>
     HijackDuplicateInCall = 620,
 
-    /// <summary>Cannot hijack an already-hijacked token.</summary>
+    /// <summary>Cannot grasp an already-grasped token.</summary>
     ReHijackingProhibited = 621,
 
     /// <summary>Migratable operation on collection during iteration is not allowed.</summary>
     MigratableDuringIteration = 625,
 
-    /// <summary>Seized[T] cannot be copied or aliased.</summary>
-    SeizedCopyNotAllowed = 626,
+    /// <summary>Claimed[T] cannot be copied or aliased.</summary>
+    ClaimedCopyNotAllowed = 626,
 
     /// <summary>Cannot write to member variable through read-only wrapper (Viewed, Inspected).</summary>
     WriteThroughReadOnlyWrapper = 631,
 
-    /// <summary>Snatched[T] method calls require danger! block.</summary>
-    SnatchedRequiresDanger = 627,
+    /// <summary>Hijacked[T] method calls require danger! block.</summary>
+    HijackedRequiresDanger = 627,
 
-    /// <summary>.snatch() on Shared/Marked requires danger! block.</summary>
+    /// <summary>.hijack() on Shared/Marked requires danger! block.</summary>
     SnatchRequiresDanger = 628,
 
     /// <summary>inspect!() only valid with MultiRead lock policy.</summary>
     InspectRequiresMultiRead = 629,
 
-    /// <summary>ReadOnly lock policy does not support seize!() or inspect!().</summary>
+    /// <summary>ReadOnly lock policy does not support claim!() or inspect!().</summary>
     ReadOnlyRejectsLocking = 630,
 
     // ═══════════════════════════════════════════════════════════════════════════

@@ -1,10 +1,8 @@
 using System.Text;
 using Compiler.Lexer;
-using Compiler.Synthesis;
-using Compiler.Desugaring;
+using Compiler.Instantiation;
 using Compiler.Resolution;
-using SemanticVerification;
-using SemanticVerification.Symbols;
+using TypeModel.Symbols;
 using SyntaxTree;
 
 namespace Builder;

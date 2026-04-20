@@ -1,8 +1,7 @@
 ﻿namespace SemanticVerification;
 
 using Enums;
-using Compiler.Synthesis;
-using Symbols;
+using TypeModel.Symbols;
 using SyntaxTree;
 using Compiler.Diagnostics;
 
@@ -152,7 +151,7 @@ public sealed partial class SemanticAnalyzer
     /// Validates token-based access for modification.
     /// Viewed/Inspected tokens can only call readonly methods.
     /// </summary>
-    /// <param name="tokenType">The wrapper type (Viewed, Inspected, Hijacked, Seized).</param>
+    /// <param name="tokenType">The wrapper type (Viewed, Inspected, Grasped, Claimed).</param>
     /// <param name="callee">The routine being called.</param>
     /// <param name="callExpr">The call expression for error location.</param>
     private void ValidateTokenAccess(string tokenType, RoutineInfo callee, Expression callExpr)
@@ -174,8 +173,8 @@ public sealed partial class SemanticAnalyzer
 
                 break;
 
-            case "Hijacked":
-            case "Seized":
+            case "Grasped":
+            case "Claimed":
                 // Write tokens can call readonly or writable
                 // TODO: Migratable is possible unless iterating.
                 if (calleeCategory == ModificationCategory.Migratable)

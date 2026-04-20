@@ -37,16 +37,16 @@ public enum UnaryOperator
     ///
     /// Non-stealable types (caught by semantic analyzer):
     /// <list type="bullet">
-    /// <item>Scope-bound tokens (Viewed, Hijacked, Inspected, Seized)</item>
+    /// <item>Scope-bound tokens (Viewed, Grasped, Inspected, Claimed)</item>
     /// <item>Handles and links (Retained, Tracked, Shared, Marked)</item>
-    /// <item>Snatched&lt;T&gt; - internal ownership type</item>
+    /// <item>Hijacked[T] - internal ownership type</item>
     /// </list>
     /// </remarks>
     Steal,
 
     /// <summary>
     /// Force unwrap operator (x!!).
-    /// Extracts the value from a Maybe&lt;T&gt;, panicking if None.
+    /// Extracts the value from a Maybe[T], panicking if None.
     /// </summary>
     /// <remarks>
     /// The force unwrap operator is a postfix unary operator that:

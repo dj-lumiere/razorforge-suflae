@@ -1,6 +1,6 @@
 namespace Compiler.Lexer;
 
-using SemanticVerification.Enums;
+using TypeModel.Enums;
 
 /// <summary>
 /// Unified tokenizer for both RazorForge and Suflae programming languages.

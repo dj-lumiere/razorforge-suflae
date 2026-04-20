@@ -1,7 +1,6 @@
 using Compiler.Resolution;
-using SemanticVerification;
-using SemanticVerification.Symbols;
-using SemanticVerification.Types;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
 
 namespace Compiler.Desugaring.Passes;

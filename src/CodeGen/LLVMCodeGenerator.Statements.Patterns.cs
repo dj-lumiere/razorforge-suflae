@@ -1,12 +1,12 @@
-using SemanticVerification.Symbols;
+using TypeModel.Symbols;
 
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticVerification.Types;
+using TypeModel.Types;
 using SyntaxTree;
 
-public partial class LLVMCodeGenerator
+public partial class LlvmCodeGenerator
 {
     // Returns true if ALL clauses of the when statement are guaranteed to terminate
     // (i.e. the when_end block is unreachable).
@@ -23,7 +23,7 @@ public partial class LLVMCodeGenerator
         if (subjectType != null &&
             (IsCarrierType(type: subjectType) || subjectType is VariantTypeInfo))
         {
-            string llvmType = GetLLVMType(type: subjectType);
+            string llvmType = GetLlvmType(type: subjectType);
             string spillAddr = NextTemp();
             EmitLine(sb: sb, line: $"  {spillAddr} = alloca {llvmType}");
             EmitLine(sb: sb, line: $"  store {llvmType} {subject}, ptr {spillAddr}");
@@ -348,7 +348,7 @@ public partial class LLVMCodeGenerator
                     string variantTypeName = GetVariantTypeName(variant: variant);
                     string payloadPtr = NextTemp();
                     string payloadVal = NextTemp();
-                    string payloadLlvm = GetLLVMType(type: member.Type);
+                    string payloadLlvm = GetLlvmType(type: member.Type);
                     EmitLine(sb: sb,
                         line: $"  {payloadPtr} = getelementptr {variantTypeName}, ptr {subject}, i32 0, i32 1");
                     EmitLine(sb: sb, line: $"  {payloadVal} = load {payloadLlvm}, ptr {payloadPtr}");
@@ -438,7 +438,7 @@ public partial class LLVMCodeGenerator
                 // Always matches; optionally bind value to variable
                 if (elseP.VariableName != null && subjectType != null)
                 {
-                    string elseType = GetLLVMType(type: subjectType);
+                    string elseType = GetLlvmType(type: subjectType);
                     string elseAddr = $"%{elseP.VariableName}.addr";
                     EmitEntryAlloca(llvmName: elseAddr, llvmType: elseType);
                     EmitLine(sb: sb, line: $"  store {elseType} {subject}, ptr {elseAddr}");
@@ -585,7 +585,7 @@ public partial class LLVMCodeGenerator
             Lexer.TokenType.F128Literal => "fp128",
             Lexer.TokenType.True or Lexer.TokenType.False => "i1",
             _ => subjectType != null
-                ? GetLLVMType(type: subjectType)
+                ? GetLlvmType(type: subjectType)
                 : "i64"
         };
 
@@ -637,7 +637,7 @@ public partial class LLVMCodeGenerator
         string matchLabel, TypeInfo? subjectType)
     {
         string llvmType = subjectType != null
-            ? GetLLVMType(type: subjectType)
+            ? GetLlvmType(type: subjectType)
             : "i64";
         string varAddr = $"%{id.Name}.addr";
 
@@ -695,18 +695,18 @@ public partial class LLVMCodeGenerator
         // Result/Lookup compare i64 type_id.
         if (subjectType != null && IsCarrierType(type: subjectType))
         {
-            string carrierLlvmType = GetCarrierLLVMType(type: subjectType);
+            string carrierLlvmType = GetCarrierLlvmType(type: subjectType);
             string field0PtrP = NextTemp();
             EmitLine(sb: sb,
                 line: $"  {field0PtrP} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 0");
 
-            bool isEntityMaybeTP = IsMaybeType(type: subjectType)
+            bool isEntityMaybeTp = IsMaybeType(type: subjectType)
                 && subjectType.TypeArguments?.Count > 0
                 && subjectType.TypeArguments[0] is EntityTypeInfo;
 
-            if (isEntityMaybeTP)
+            if (isEntityMaybeTp)
             {
-                // Entity Maybe { Snatched[T] }: non-null check — ptr != null means present.
+                // Entity Maybe { Hijacked[T] }: non-null check — ptr != null means present.
                 string ptrValP = NextTemp();
                 EmitLine(sb: sb, line: $"  {ptrValP} = load ptr, ptr {field0PtrP}");
                 string cmp = NextTemp();
@@ -716,7 +716,7 @@ public partial class LLVMCodeGenerator
                 if (needsBind && targetType != null)
                 {
                     EmitLine(sb: sb, line: $"{branchTarget}:");
-                    // For entity Maybe, field 0 IS the entity ptr (Snatched[T] = ptr).
+                    // For entity Maybe, field 0 IS the entity ptr (Hijacked[T] = ptr).
                     string varAddr = $"%{typePattern.VariableName}.addr";
                     EmitEntryAlloca(llvmName: varAddr, llvmType: "ptr");
                     EmitLine(sb: sb, line: $"  store ptr {ptrValP}, ptr {varAddr}");
@@ -750,7 +750,7 @@ public partial class LLVMCodeGenerator
                         EmitLine(sb: sb,
                             line:
                             $"  {valPtr} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 1");
-                        string valLlvm = GetLLVMType(type: targetType);
+                        string valLlvm = GetLlvmType(type: targetType);
                         string val = NextTemp();
                         EmitLine(sb: sb, line: $"  {val} = load {valLlvm}, ptr {valPtr}");
                         EmitEntryAlloca(llvmName: varAddr, llvmType: valLlvm);
@@ -837,7 +837,7 @@ public partial class LLVMCodeGenerator
         if (needsBind)
         {
             EmitLine(sb: sb, line: $"{branchTarget}:");
-            string bindType = GetLLVMType(type: targetType!);
+            string bindType = GetLlvmType(type: targetType!);
             string varAddr = $"%{typePattern.VariableName}.addr";
             EmitEntryAlloca(llvmName: varAddr, llvmType: bindType);
             EmitLine(sb: sb, line: $"  store {bindType} {subject}, ptr {varAddr}");
@@ -946,7 +946,7 @@ public partial class LLVMCodeGenerator
                 return;
             }
 
-            string carrierLlvmType = GetCarrierLLVMType(type: subjectType);
+            string carrierLlvmType = GetCarrierLlvmType(type: subjectType);
             string field0PtrN = NextTemp();
             EmitLine(sb: sb,
                 line: $"  {field0PtrN} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 0");
@@ -1045,7 +1045,7 @@ public partial class LLVMCodeGenerator
 
             if (payloadType != null)
             {
-                string payloadLlvm = GetLLVMType(type: payloadType);
+                string payloadLlvm = GetLlvmType(type: payloadType);
                 string payloadVal = NextTemp();
                 EmitLine(sb: sb, line: $"  {payloadVal} = load {payloadLlvm}, ptr {payloadPtr}");
 
@@ -1215,7 +1215,7 @@ public partial class LLVMCodeGenerator
     {
         string rhs = EmitExpression(sb: sb, expr: cmpPattern.Value);
         string llvmType = subjectType != null
-            ? GetLLVMType(type: subjectType)
+            ? GetLlvmType(type: subjectType)
             : "i64";
         bool isFloat = llvmType is "half" or "float" or "double" or "fp128";
         bool isPtr = llvmType == "ptr";
@@ -1376,11 +1376,11 @@ public partial class LLVMCodeGenerator
                 :
                 record.IsSingleMemberVariableWrapper
                     ?
-                    GetLLVMType(type: record.UnderlyingIntrinsic!)
+                    GetLlvmType(type: record.UnderlyingIntrinsic!)
                     : GetRecordTypeName(record: record),
             EntityTypeInfo entity => GetEntityTypeName(entity: entity),
             TupleTypeInfo tuple =>
-                $"{{ {string.Join(separator: ", ", values: tuple.ElementTypes.Select(selector: e => GetLLVMType(type: e)))} }}",
+                $"{{ {string.Join(separator: ", ", values: tuple.ElementTypes.Select(selector: e => GetLlvmType(type: e)))} }}",
             _ => "{ }"
         };
 
@@ -1425,7 +1425,7 @@ public partial class LLVMCodeGenerator
                 continue;
             }
 
-            string memberLlvmType = GetLLVMType(type: memberVar.Type);
+            string memberLlvmType = GetLlvmType(type: memberVar.Type);
             string memberPtr = NextTemp();
             EmitLine(sb: sb,
                 line:
@@ -1471,7 +1471,7 @@ public partial class LLVMCodeGenerator
     private void EmitCarrierElsePatternExtract(StringBuilder sb, string subject,
         TypeInfo subjectType, TypeInfo innerType, string variableName, string? matchLabel = null)
     {
-        string carrierLlvmType = GetCarrierLLVMType(type: subjectType);
+        string carrierLlvmType = GetCarrierLlvmType(type: subjectType);
         string varAddr = $"%{variableName}.addr";
 
         if (IsMaybeType(type: subjectType))
@@ -1493,7 +1493,7 @@ public partial class LLVMCodeGenerator
                 string valPtr = NextTemp();
                 EmitLine(sb: sb,
                     line: $"  {valPtr} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 1");
-                string innerLlvm = GetLLVMType(type: innerType);
+                string innerLlvm = GetLlvmType(type: innerType);
                 string val = NextTemp();
                 EmitLine(sb: sb, line: $"  {val} = load {innerLlvm}, ptr {valPtr}");
                 EmitEntryAlloca(llvmName: varAddr, llvmType: innerLlvm);
@@ -1511,7 +1511,7 @@ public partial class LLVMCodeGenerator
             string dataVal = NextTemp();
             EmitLine(sb: sb, line: $"  {dataVal} = load i64, ptr {dataPtr}");
 
-            string innerLlvm = GetLLVMType(type: innerType);
+            string innerLlvm = GetLlvmType(type: innerType);
             if (innerType is EntityTypeInfo)
             {
                 string ptrVal = NextTemp();

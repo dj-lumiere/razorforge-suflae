@@ -6,7 +6,7 @@ using static TestHelpers;
 
 /// <summary>
 /// Tests for parsing scoped access blocks in RazorForge:
-/// using x.view()/x.hijack() (single-threaded), using x.inspect!()/x.seize!() (multi-threaded),
+/// using x.view()/x.grasp() (single-threaded), using x.inspect!()/x.claim!() (multi-threaded),
 /// using (resources).
 /// </summary>
 public class AccessBlockTests
@@ -100,7 +100,7 @@ public class AccessBlockTests
         string source = """
                         routine test()
                           var data = SomeEntity()
-                          using data.hijack() as h
+                          using data.grasp() as h
                             h.value = 42
                           return
                         """;
@@ -117,7 +117,7 @@ public class AccessBlockTests
         string source = """
                         routine test()
                           var node = Node(42)
-                          using node.hijack() as h
+                          using node.grasp() as h
                             h.value = 42
                             h.name = "foo"
                             process(h)
@@ -136,7 +136,7 @@ public class AccessBlockTests
         string source = """
                         routine test()
                           var counter = Counter()
-                          using counter.hijack() as c
+                          using counter.grasp() as c
                             if c.value < 100
                               c.value += 1
                             else
@@ -147,8 +147,8 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
 
-    // Nested hijacking test moved til Analyzer/MutabilityTests.cs
-    // It parses correctly but should be rejected by semantic analysis (partial hijacking)
+    // Nested grasping test moved til Analyzer/MutabilityTests.cs
+    // It parses correctly but should be rejected by semantic analysis (partial grasping)
 
     #endregion
 
@@ -202,7 +202,7 @@ public class AccessBlockTests
         string source = """
                         routine test!()
                           var shared = data.share[Mutex]()
-                          using shared.seize!() as w
+                          using shared.claim!() as w
                             w.value = 42
                           return
                         """;
@@ -219,7 +219,7 @@ public class AccessBlockTests
         string source = """
                         routine test!()
                           var shared = counter.share[Mutex]()
-                          using shared.seize!() as s
+                          using shared.claim!() as s
                             s.count += 1
                             s.last_updated = now()
                             s.notify_listeners()
@@ -238,7 +238,7 @@ public class AccessBlockTests
         string source = """
                         routine test!()
                           var shared = data.share[MultiReadLock]()
-                          using shared.seize!() as w
+                          using shared.claim!() as w
                             w.value = 42
                             using w.view() as v
                               show(v.value)
@@ -357,7 +357,7 @@ public class AccessBlockTests
                           using data.view() as v
                             if v.needs_update()
                               pass
-                          using data.hijack() as h
+                          using data.grasp() as h
                             h.update()
                           return
                         """;
@@ -396,7 +396,7 @@ public class AccessBlockTests
                           var shared = remote.share[MultiReadLock]()
 
                           using local.view() as l
-                            using shared.seize!() as s
+                            using shared.claim!() as s
                               for item in l.items
                                 s.add(item.clone())
 
@@ -437,7 +437,7 @@ public class AccessBlockTests
         string source = """
                         routine test()
                           var node = Node(42)
-                          node.hijack().value += 1
+                          node.grasp().value += 1
                           return
                         """;
 

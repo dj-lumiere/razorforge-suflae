@@ -3,13 +3,13 @@ using SemanticVerification;
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticVerification.Types;
+using TypeModel.Types;
 using SyntaxTree;
 
 /// <summary>
 /// Expression code generation for literals and scalar literal helpers.
 /// </summary>
-public partial class LLVMCodeGenerator
+public partial class LlvmCodeGenerator
 {
     private string EmitLiteral(StringBuilder sb, LiteralExpression literal)
     {
@@ -169,7 +169,7 @@ public partial class LLVMCodeGenerator
         // ByteSize is %Record.ByteSize = type { i64 } ? construct the aggregate.
         TypeInfo? bsType = _registry.LookupType(name: "ByteSize");
         string llvmType = bsType != null
-            ? GetLLVMType(type: bsType)
+            ? GetLlvmType(type: bsType)
             : "%Record.ByteSize";
 
         // If ByteSize resolves to a struct, use insertvalue; if it's a plain i64, return directly
@@ -242,7 +242,7 @@ public partial class LLVMCodeGenerator
 
         TypeInfo? durationType = _registry.LookupType(name: "Duration");
         string llvmType = durationType != null
-            ? GetLLVMType(type: durationType)
+            ? GetLlvmType(type: durationType)
             : "%Record.Duration";
 
         string tmp1 = NextTemp();
@@ -263,7 +263,7 @@ public partial class LLVMCodeGenerator
 
         TypeInfo? letterType = _registry.LookupType(name: "Character");
         string llvmType = letterType != null
-            ? GetLLVMType(type: letterType)
+            ? GetLlvmType(type: letterType)
             : "%\"Record.Character\"";
 
         if (llvmType.StartsWith(value: "%"))
@@ -285,7 +285,7 @@ public partial class LLVMCodeGenerator
 
         TypeInfo? byteType = _registry.LookupType(name: "Byte");
         string llvmType = byteType != null
-            ? GetLLVMType(type: byteType)
+            ? GetLlvmType(type: byteType)
             : "%\"Record.Byte\"";
 
         if (llvmType.StartsWith(value: "%"))

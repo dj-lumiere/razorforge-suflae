@@ -1,11 +1,12 @@
 namespace SemanticVerification;
 
 using Enums;
-using Symbols;
-using Types;
+using TypeModel.Enums;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
 using Compiler.Diagnostics;
-using TypeSymbol = Types.TypeInfo;
+using TypeSymbol = TypeModel.Types.TypeInfo;
 
 public sealed partial class SemanticAnalyzer
 {

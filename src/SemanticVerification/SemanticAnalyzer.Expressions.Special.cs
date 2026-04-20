@@ -1,11 +1,11 @@
 namespace SemanticVerification;
 
 using Enums;
-using Symbols;
-using Types;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
 using Compiler.Diagnostics;
-using TypeSymbol = Types.TypeInfo;
+using TypeSymbol = TypeModel.Types.TypeInfo;
 
 public sealed partial class SemanticAnalyzer
 {
@@ -165,14 +165,14 @@ public sealed partial class SemanticAnalyzer
     ///
     /// Non-stealable types (build error):
     /// - Viewed[T]    (read-only wrapper, scope-bound)
-    /// - Hijacked[T]  (exclusive wrapper, scope-bound)
+    /// - Grasped[T]  (exclusive wrapper, scope-bound)
     /// - Inspected[T] (thread-safe read wrapper, scope-bound)
-    /// - Seized[T]    (thread-safe exclusive wrapper, scope-bound)
+    /// - Claimed[T]    (thread-safe exclusive wrapper, scope-bound)
     /// - Retained[T]  (shared-ownership wrapper)
     /// - Tracked[T]   (reference-counted wrapper)
     /// - Shared[T, P] (shared-ownership wrapper)
     /// - Marked[T, P] (reference-counted wrapper)
-    /// - Snatched[T]  (internal ownership wrapper)
+    /// - Hijacked[T]  (internal ownership wrapper)
     /// </remarks>
     private TypeSymbol AnalyzeStealExpression(StealExpression steal)
     {
@@ -190,11 +190,11 @@ public sealed partial class SemanticAnalyzer
             return operandType;
         }
 
-        // Check for Snatched[T] (internal ownership, not for user code)
-        if (IsSnatched(type: operandType))
+        // Check for Hijacked[T] (internal ownership, not for user code)
+        if (IsHijacked(type: operandType))
         {
-            ReportError(code: SemanticDiagnosticCode.StealSnatched,
-                message: "Cannot steal 'Snatched[T]' - internal ownership type cannot be stolen.",
+            ReportError(code: SemanticDiagnosticCode.StealHijacked,
+                message: "Cannot steal 'Hijacked[T]' - internal ownership type cannot be stolen.",
                 location: steal.Location);
             return operandType;
         }
@@ -221,15 +221,15 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Checks if a type is a scope-bound wrapper (Viewed, Hijacked, Inspected, Seized).
+    /// Checks if a type is a scope-bound wrapper (Viewed, Grasped, Inspected, Claimed).
     /// Scope-bound wrappers cannot be stolen.
     /// </summary>
     private static bool IsMemoryToken(TypeSymbol type)
     {
-        return type.Name is "Viewed" or "Hijacked" or "Inspected" or "Seized" ||
+        return type.Name is "Viewed" or "Grasped" or "Inspected" or "Claimed" ||
                type.Name.StartsWith(value: "Viewed[") ||
-               type.Name.StartsWith(value: "Hijacked[") ||
-               type.Name.StartsWith(value: "Inspected[") || type.Name.StartsWith(value: "Seized[");
+               type.Name.StartsWith(value: "Grasped[") ||
+               type.Name.StartsWith(value: "Inspected[") || type.Name.StartsWith(value: "Claimed[");
     }
 
     /// <summary>
@@ -242,9 +242,9 @@ public sealed partial class SemanticAnalyzer
             return "Viewed[T]";
         }
 
-        if (type.Name.StartsWith(value: "Hijacked"))
+        if (type.Name.StartsWith(value: "Grasped"))
         {
-            return "Hijacked[T]";
+            return "Grasped[T]";
         }
 
         if (type.Name.StartsWith(value: "Inspected"))
@@ -252,20 +252,20 @@ public sealed partial class SemanticAnalyzer
             return "Inspected[T]";
         }
 
-        if (type.Name.StartsWith(value: "Seized"))
+        if (type.Name.StartsWith(value: "Claimed"))
         {
-            return "Seized[T]";
+            return "Claimed[T]";
         }
 
         return type.Name;
     }
 
     /// <summary>
-    /// Checks if a type is Snatched[T] (internal ownership type).
+    /// Checks if a type is Hijacked[T] (internal ownership type).
     /// </summary>
-    private static bool IsSnatched(TypeSymbol type)
+    private static bool IsHijacked(TypeSymbol type)
     {
-        return type.Name == "Snatched" || type.Name.StartsWith(value: "Snatched[");
+        return type.Name == "Hijacked" || type.Name.StartsWith(value: "Hijacked[");
     }
 
     /// <summary>

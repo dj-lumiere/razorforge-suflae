@@ -1,6 +1,6 @@
 using SyntaxTree;
 using Compiler.Lexer;
-using SemanticVerification.Enums;
+using TypeModel.Enums;
 using Compiler.Diagnostics;
 
 namespace Compiler.Parser;
@@ -17,17 +17,17 @@ public partial class Parser
     /// <summary>
     /// The list of tokens to parse.
     /// </summary>
-    private readonly List<Token> Tokens;
+    private readonly List<Token> _tokens;
 
     /// <summary>
     /// Current position in the token stream.
     /// </summary>
-    private int Position = 0;
+    private int _position = 0;
 
     /// <summary>
     /// Collection of warnings generated during parsing.
     /// </summary>
-    private readonly List<BuildWarning> Warnings = [];
+    private readonly List<BuildWarning> _warnings = [];
 
     /// <summary>
     /// Collection of errors accumulated during error recovery.
@@ -50,7 +50,7 @@ public partial class Parser
     /// <summary>
     /// The source file name for error reporting.
     /// </summary>
-    public string fileName = "";
+    public string FileName = "";
 
     /// <summary>
     /// The language being parsed (RazorForge or Suflae).
@@ -125,9 +125,9 @@ public partial class Parser
     /// <param name="fileName">Optional source file name for error reporting.</param>
     public Parser(List<Token> tokens, Language language, string? fileName = null)
     {
-        Tokens = tokens;
+        _tokens = tokens;
         _language = language;
-        this.fileName = fileName ?? "unknown";
+        this.FileName = fileName ?? "unknown";
         _indentationStack.Push(item: 0); // Base indentation level
     }
 
@@ -357,7 +357,7 @@ public partial class Parser
                     message:
                     $"'{visibility.ToString().ToLower()}' is not valid for record member variables. " +
                     "Record member variables can use 'secret', 'posted', or 'open'",
-                    fileName: fileName,
+                    fileName: FileName,
                     line: CurrentToken.Line,
                     column: CurrentToken.Column,
                     language: _language);
@@ -374,7 +374,7 @@ public partial class Parser
             {
                 throw new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
                     message: "'var' is not valid after 'global'. Use 'global name: Type = value' directly.",
-                    fileName: fileName,
+                    fileName: FileName,
                     line: CurrentToken.Line,
                     column: CurrentToken.Column,
                     language: _language);
@@ -387,7 +387,7 @@ public partial class Parser
                 throw new GrammarException(code: GrammarDiagnosticCode.InvalidDeclarationInBody,
                     message: "Type member variables cannot use 'var' or 'preset'. " +
                              "Use 'name: Type' syntax instead",
-                    fileName: fileName,
+                    fileName: FileName,
                     line: CurrentToken.Line,
                     column: CurrentToken.Column,
                     language: _language);
@@ -447,7 +447,7 @@ public partial class Parser
                 throw new GrammarException(code: GrammarDiagnosticCode.InvalidDeclarationInBody,
                     message: "'global' storage class is not valid for routines. " +
                              "'global' can only be used for file-scope static variables",
-                    fileName: fileName,
+                    fileName: FileName,
                     line: CurrentToken.Line,
                     column: CurrentToken.Column,
                     language: _language);
@@ -471,7 +471,7 @@ public partial class Parser
             };
             throw new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
                 message: $"'{modifier}' must be followed by 'routine'",
-                fileName: fileName,
+                fileName: FileName,
                 line: CurrentToken.Line,
                 column: CurrentToken.Column,
                 language: _language);
@@ -493,7 +493,7 @@ public partial class Parser
                 throw new GrammarException(code: GrammarDiagnosticCode.InvalidDeclarationInBody,
                     message:
                     $"'{storage.ToString().ToLower()}' storage class is not valid for type declarations",
-                    fileName: fileName,
+                    fileName: FileName,
                     line: CurrentToken.Line,
                     column: CurrentToken.Column,
                     language: _language);

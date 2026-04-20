@@ -1,13 +1,13 @@
 namespace Compiler.CodeGen;
 
-using SemanticVerification.Symbols;
-using SemanticVerification.Types;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
 
 /// <summary>
 /// Expression code generation helpers for result type resolution and conditional lowering.
 /// </summary>
-public partial class LLVMCodeGenerator
+public partial class LlvmCodeGenerator
 {
     private TypeInfo? ResolveIdentifierType(IdentifierExpression id)
     {
@@ -35,6 +35,133 @@ public partial class LLVMCodeGenerator
         }
 
         return null;
+    }
+
+    private TypeInfo? ResolvePresetConstGenericType(string name)
+    {
+        VariableInfo? preset = LookupPresetByName(name: name);
+        if (preset is not { IsPreset: true, PresetValue: not null })
+        {
+            return null;
+        }
+
+        return ResolvePresetConstGenericValue(preset: preset,
+            visited: new HashSet<string>(StringComparer.Ordinal));
+    }
+
+    private VariableInfo? LookupPresetByName(string name)
+    {
+        VariableInfo? preset = _registry.LookupVariable(name: name);
+        if (preset is { IsPreset: true })
+        {
+            return preset;
+        }
+
+        string? moduleName = _currentEmittingRoutine?.OwnerType?.Module ??
+                             _currentEmittingRoutine?.Module;
+        if (moduleName != null && !name.Contains(value: '.'))
+        {
+            preset = _registry.LookupVariable(name: $"{moduleName}.{name}");
+            if (preset is { IsPreset: true })
+            {
+                return preset;
+            }
+        }
+
+        return null;
+    }
+
+    private TypeInfo? ResolvePresetConstGenericValue(VariableInfo preset,
+        HashSet<string> visited)
+    {
+        if (!visited.Add(item: preset.QualifiedName))
+        {
+            return null;
+        }
+
+        switch (preset.PresetValue)
+        {
+            case LiteralExpression literal when
+                TryBuildConstGenericFromLiteral(literal: literal,
+                    declaredType: preset.Type,
+                    value: out ConstGenericValueTypeInfo? constValue):
+                return constValue;
+
+            case IdentifierExpression id:
+            {
+                VariableInfo? nestedPreset = LookupPresetByName(name: id.Name);
+                if (nestedPreset is { IsPreset: true, PresetValue: not null })
+                {
+                    return ResolvePresetConstGenericValue(preset: nestedPreset,
+                        visited: visited);
+                }
+
+                break;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool TryBuildConstGenericFromLiteral(LiteralExpression literal,
+        TypeInfo declaredType, out ConstGenericValueTypeInfo? value)
+    {
+        value = null;
+
+        switch (literal.LiteralType)
+        {
+            case Compiler.Lexer.TokenType.True:
+                value = new ConstGenericValueTypeInfo(literalText: "true",
+                    value: 1,
+                    explicitTypeName: "Bool");
+                return true;
+
+            case Compiler.Lexer.TokenType.False:
+                value = new ConstGenericValueTypeInfo(literalText: "false",
+                    value: 0,
+                    explicitTypeName: "Bool");
+                return true;
+
+            case Compiler.Lexer.TokenType.Integer:
+            case Compiler.Lexer.TokenType.S8Literal:
+            case Compiler.Lexer.TokenType.S16Literal:
+            case Compiler.Lexer.TokenType.S32Literal:
+            case Compiler.Lexer.TokenType.S64Literal:
+            case Compiler.Lexer.TokenType.S128Literal:
+            case Compiler.Lexer.TokenType.U8Literal:
+            case Compiler.Lexer.TokenType.U16Literal:
+            case Compiler.Lexer.TokenType.U32Literal:
+            case Compiler.Lexer.TokenType.U64Literal:
+            case Compiler.Lexer.TokenType.U128Literal:
+            case Compiler.Lexer.TokenType.AddressLiteral:
+                if (literal.Value is string rawNumeric)
+                {
+                    if (TryParseConstGenericLiteral(name: rawNumeric,
+                            value: out long parsed,
+                            explicitType: out string? explicitType))
+                    {
+                        value = new ConstGenericValueTypeInfo(literalText: rawNumeric,
+                            value: parsed,
+                            explicitTypeName: explicitType ?? GetConstGenericExplicitTypeName(
+                                declaredType: declaredType));
+                        return true;
+                    }
+                }
+
+                return false;
+        }
+
+        return false;
+    }
+
+    private static string? GetConstGenericExplicitTypeName(TypeInfo declaredType)
+    {
+        return declaredType.Name switch
+        {
+            "Bool" or "Address" or "U8" or "U16" or "U32" or "U64" or "U128" or
+                "S8" or "S16" or "S32" or "S64" or "S128" => declaredType.Name,
+            _ => null
+        };
     }
 
     /// <summary>
@@ -112,22 +239,63 @@ public partial class LLVMCodeGenerator
             }
         }
 
+        // For identifier expressions (and named-argument wrappers around them) during
+        // monomorphization, prefer the concrete type from _localVariables over
+        // ResolvedType+substitution. This fixes the wrapper-forwarder inner-T vs outer-T
+        // collision: SA annotates the generic forwarder body with ResolvedType=T (the inner
+        // method's T), but _typeSubstitutions maps T to the wrapper's inner type
+        // (e.g., ListNode[S64]), not the inner method's element type (S64).
+        if (_typeSubstitutions != null)
+        {
+            string? innerIdName = expr switch
+            {
+                IdentifierExpression idE => idE.Name,
+                NamedArgumentExpression { Value: IdentifierExpression namedId } => namedId.Name,
+                _ => null
+            };
+            if (innerIdName != null &&
+                _localVariables.TryGetValue(key: innerIdName, value: out TypeInfo? localVarType) &&
+                localVarType is not GenericParameterTypeInfo &&
+                !localVarType.IsGenericDefinition)
+            {
+                return localVarType;
+            }
+        }
+
         // First, check if the semantic analyzer has already resolved the type
         if (expr.ResolvedType != null && expr.ResolvedType is not ErrorTypeInfo)
         {
-            // During monomorphization, resolve unsubstituted generic params (e.g., Snatched[U] → Snatched[S64])
-            TypeInfo resolved = ApplyTypeSubstitutions(type: expr.ResolvedType);
-            // If the type is still an unresolved generic parameter or an error placeholder,
-            // fall through to the expression-specific resolution which can use call-site type arguments
-            if (resolved is not GenericParameterTypeInfo and not ErrorTypeInfo)
+            // Skip SA-resolved type for CallExpression through transparent protocols (e.g., Referring[T]).
+            // The SA may resolve "other[j]" on a Referring[Text] parameter to "Text" (the inner type),
+            // but the correct return type is "Character" (from Text.$getitem!). GetCallReturnType
+            // handles this via the transparent-protocol fallback path.
+            bool skipSaResolved = false;
+            if (expr is CallExpression { Callee: MemberExpression calleeMember })
             {
-                // Const generic values resolve to their underlying primitive type for method dispatch
-                if (resolved is ConstGenericValueTypeInfo constVal)
+                TypeInfo? rcvrType = GetExpressionType(expr: calleeMember.Object);
+                if (rcvrType is ProtocolTypeInfo { Methods.Count: 0 } protoRcvr2 &&
+                    protoRcvr2.TypeArguments is { Count: > 0 })
                 {
-                    return ResolveConstGenericUnderlyingType(constVal: constVal);
+                    skipSaResolved = true;
                 }
+            }
 
-                return resolved;
+            if (!skipSaResolved)
+            {
+                // During monomorphization, resolve unsubstituted generic params (e.g., Hijacked[U] → Hijacked[S64])
+                TypeInfo resolved = ApplyTypeSubstitutions(type: expr.ResolvedType);
+                // If the type is still an unresolved generic parameter or an error placeholder,
+                // fall through to the expression-specific resolution which can use call-site type arguments
+                if (resolved is not GenericParameterTypeInfo and not ErrorTypeInfo)
+                {
+                    // Const generic values resolve to their underlying primitive type for method dispatch
+                    if (resolved is ConstGenericValueTypeInfo constVal)
+                    {
+                        return ResolveConstGenericUnderlyingType(constVal: constVal);
+                    }
+
+                    return resolved;
+                }
             }
         }
 
@@ -137,7 +305,7 @@ public partial class LLVMCodeGenerator
             LiteralExpression literal => GetLiteralType(literal: literal),
             IdentifierExpression id => ResolveIdentifierType(id: id),
             MemberExpression member => GetMemberType(member: member),
-            CreatorExpression ctor => LookupTypeInCurrentModule(name: ctor.TypeName),
+            CreatorExpression ctor => ResolveCreatorType(creator: ctor),
             BinaryExpression binary => GetBinaryExpressionType(binary: binary),
             ChainedComparisonExpression => _registry.LookupType(
                 name: "Bool"), // Comparisons return Bool
@@ -153,6 +321,52 @@ public partial class LLVMCodeGenerator
             RangeExpression range => GetRangeType(range: range),
             _ => null
         };
+    }
+
+    private TypeInfo? ResolveCreatorType(CreatorExpression creator)
+    {
+        if (creator.ResolvedType is not null and not ErrorTypeInfo)
+        {
+            return ApplyTypeSubstitutions(type: creator.ResolvedType);
+        }
+
+        TypeInfo? tupleType = ResolveTupleTypeExpression(typeExpr: new TypeExpression(
+            Name: creator.TypeName,
+            GenericArguments: creator.TypeArguments,
+            Location: creator.Location));
+        if (tupleType != null)
+        {
+            return tupleType;
+        }
+
+        TypeInfo? type = LookupTypeInCurrentModule(name: creator.TypeName);
+        if (type == null)
+        {
+            return null;
+        }
+
+        if (type.IsGenericDefinition && creator.TypeArguments is { Count: > 0 })
+        {
+            var resolvedArgs = new List<TypeInfo>(capacity: creator.TypeArguments.Count);
+            foreach (TypeExpression ta in creator.TypeArguments)
+            {
+                TypeInfo? resolved = ResolveTypeArgument(ta: ta);
+                if (resolved == null)
+                {
+                    return type;
+                }
+
+                resolvedArgs.Add(item: resolved);
+            }
+
+            if (resolvedArgs.Count == type.GenericParameters?.Count)
+            {
+                return _registry.GetOrCreateResolution(genericDef: type,
+                    typeArguments: resolvedArgs);
+            }
+        }
+
+        return type;
     }
 
     /// <summary>
@@ -328,7 +542,7 @@ public partial class LLVMCodeGenerator
 
                 if (receiverType != null)
                 {
-                    // Normalize WrapperTypeInfo (e.g., Snatched[Byte]) to the real RecordTypeInfo
+                    // Normalize WrapperTypeInfo (e.g., Hijacked[Byte]) to the real RecordTypeInfo
                     // so LookupMethod can find methods via the generic definition path.
                     if (receiverType is WrapperTypeInfo wrapperRcvr)
                     {
@@ -369,8 +583,8 @@ public partial class LLVMCodeGenerator
                             return sub;
                         }
 
-                        // WrapperTypeInfo with same name as return type: receiver is Snatched[Byte],
-                        // method returns Snatched[T] → return Snatched[Byte] (same concrete wrapper).
+                        // WrapperTypeInfo with same name as return type: receiver is Hijacked[Byte],
+                        // method returns Hijacked[T] → return Hijacked[Byte] (same concrete wrapper).
                         if (receiverType is WrapperTypeInfo rcvrWrapper &&
                             method.ReturnType is WrapperTypeInfo retWrapper &&
                             rcvrWrapper.Name == retWrapper.Name)
@@ -379,14 +593,14 @@ public partial class LLVMCodeGenerator
                         }
 
                         // WrapperTypeInfo receiver with method returning T (generic param): T → InnerType.
-                        // e.g., Snatched[Byte].read() → T; T becomes Byte.
+                        // e.g., Hijacked[Byte].read() → T; T becomes Byte.
                         if (receiverType is WrapperTypeInfo wrapperRcvr2 &&
                             method.ReturnType is GenericParameterTypeInfo)
                         {
                             return wrapperRcvr2.InnerType;
                         }
 
-                        // For generic resolution receivers (e.g., Snatched[U8].read() → T should become U8),
+                        // For generic resolution receivers (e.g., Hijacked[U8].read() → T should become U8),
                         // substitute using the receiver's type arguments when no _typeSubstitutions available
                         if (receiverType is
                                 { IsGenericResolution: true, TypeArguments: not null } &&
@@ -414,7 +628,7 @@ public partial class LLVMCodeGenerator
                             }
                         }
 
-                        // For parameterized return types (e.g., Snatched[T] → Snatched[Character]),
+                        // For parameterized return types (e.g., Hijacked[T] → Hijacked[Character]),
                         // resolve through receiver's type arguments even without _typeSubstitutions
                         if (receiverType is
                                 { IsGenericResolution: true, TypeArguments: not null } &&
@@ -546,6 +760,44 @@ public partial class LLVMCodeGenerator
                                 {
                                     return _registry.GetOrCreateResolution(genericDef: genericDef,
                                         typeArguments: substitutedArgs);
+                                }
+                            }
+                        }
+
+                        // Universal method on a WrapperTypeInfo (e.g. Owned[List[Character]].$getitem! → V).
+                        // Resolve by looking up the same method on the inner entity type and returning
+                        // its concrete return type (e.g., List[Character].$getitem! → Character).
+                        if (method.OwnerType is GenericParameterTypeInfo &&
+                            method.ReturnType is GenericParameterTypeInfo &&
+                            receiverType is WrapperTypeInfo wrapRcvr && wrapRcvr.InnerType != null)
+                        {
+                            string innerLookupName = member.PropertyName.EndsWith(value: '!')
+                                ? member.PropertyName[..^1]
+                                : member.PropertyName;
+                            RoutineInfo? innerMethod =
+                                _registry.LookupMethod(type: wrapRcvr.InnerType,
+                                    methodName: innerLookupName);
+                            if (innerMethod?.ReturnType != null &&
+                                innerMethod.ReturnType is not GenericParameterTypeInfo)
+                            {
+                                return innerMethod.ReturnType;
+                            }
+                            // Inner method also has a generic return type — substitute using inner type's args
+                            if (innerMethod?.ReturnType is GenericParameterTypeInfo &&
+                                wrapRcvr.InnerType is { IsGenericResolution: true, TypeArguments: not null } innerGeneric)
+                            {
+                                TypeInfo? innerGenericDef = innerGeneric switch
+                                {
+                                    RecordTypeInfo r => r.GenericDefinition,
+                                    EntityTypeInfo e => e.GenericDefinition,
+                                    _ => null
+                                };
+                                if (innerGenericDef?.GenericParameters != null)
+                                {
+                                    int idx = innerGenericDef.GenericParameters.ToList()
+                                                              .IndexOf(innerMethod.ReturnType.Name);
+                                    if (idx >= 0 && idx < innerGeneric.TypeArguments.Count)
+                                        return innerGeneric.TypeArguments[index: idx];
                                 }
                             }
                         }

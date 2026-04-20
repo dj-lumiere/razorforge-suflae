@@ -1,9 +1,9 @@
 namespace Compiler.Resolution;
 
 using SemanticVerification;
-using SemanticVerification.Enums;
-using SemanticVerification.Types;
-using TypeSymbol = SemanticVerification.Types.TypeInfo;
+using TypeModel.Enums;
+using TypeModel.Types;
+using TypeSymbol = TypeModel.Types.TypeInfo;
 
 /// <summary>
 /// Handles implicit marker protocol conformance for the semantic analyzer.

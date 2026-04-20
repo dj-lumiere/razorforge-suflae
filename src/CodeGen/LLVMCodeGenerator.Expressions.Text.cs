@@ -1,14 +1,14 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticVerification.Symbols;
-using SemanticVerification.Types;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
 
 /// <summary>
 /// Expression code generation for inserted text and represent/diagnose conversion.
 /// </summary>
-public partial class LLVMCodeGenerator
+public partial class LlvmCodeGenerator
 {
     private string EmitInsertedText(StringBuilder sb, InsertedTextExpression inserted)
     {
@@ -155,7 +155,7 @@ public partial class LLVMCodeGenerator
         }
 
         string argType = type != null
-            ? GetParameterLLVMType(type: type)
+            ? GetParameterLlvmType(type: type)
             : "i64";
         string result = NextTemp();
         EmitLine(sb: sb, line: $"  {result} = call ptr @{mangledName}({argType} {value})");
@@ -214,7 +214,7 @@ public partial class LLVMCodeGenerator
         }
 
         string argType = type != null
-            ? GetParameterLLVMType(type: type)
+            ? GetParameterLlvmType(type: type)
             : "i64";
         string result = NextTemp();
         EmitLine(sb: sb, line: $"  {result} = call ptr @{mangledName}({argType} {value})");

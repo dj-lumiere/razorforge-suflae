@@ -9,7 +9,7 @@
 ///
 /// Phase 1 (Direct Analysis):
 ///   - If method writes to any member variable of me → Writable
-///   - If method calls .hijack() on me member variables → Writable
+///   - If method calls .grasp() on me member variables → Writable
 ///
 /// Phase 2 (Call Graph Propagation):
 ///   - If method calls a Writable method on me → Writable
@@ -18,20 +18,20 @@
 ///
 /// Phase 3 (Token Checking):
 ///   - Viewed/Inspected tokens can only call Readonly methods
-///   - Hijacked/Seized tokens can call Readonly or Writable methods
+///   - Grasped/Claimed tokens can call Readonly or Writable methods
 ///   - Only owned/non-token access can call Migratable methods
 /// </remarks>
 public enum ModificationCategory
 {
     /// <summary>
     /// Read-only access, doesn't modify me.
-    /// Works with all token types: Viewed, Hijacked, Inspected, Seized.
+    /// Works with all token types: Viewed, Grasped, Inspected, Claimed.
     /// </summary>
     Readonly,
 
     /// <summary>
     /// Modifies in-place within existing memory allocation.
-    /// Requires modifiable token: Hijacked or Seized.
+    /// Requires modifiable token: Grasped or Claimed.
     /// Cannot be called through Viewed or Inspected tokens.
     /// </summary>
     Writable,

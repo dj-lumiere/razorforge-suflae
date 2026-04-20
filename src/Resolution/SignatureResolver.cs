@@ -2,11 +2,12 @@ namespace Compiler.Resolution;
 
 using SemanticVerification;
 using SemanticVerification.Enums;
-using SemanticVerification.Symbols;
-using SemanticVerification.Types;
+using TypeModel.Enums;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
-using Compiler.Diagnostics;
-using TypeSymbol = SemanticVerification.Types.TypeInfo;
+using Diagnostics;
+using TypeSymbol = TypeModel.Types.TypeInfo;
 
 /// <summary>
 /// Handles resolution and registration of routine signatures for the semantic analyzer.
@@ -65,13 +66,23 @@ internal sealed class SignatureResolver
             routine.Annotations.Contains(item: "migrating") ? ModificationCategory.Migratable :
             ModificationCategory.Migratable;
 
+        // Phase 2 (ResolveTypeBodies) replaces user-defined entity/record types in the registry
+        // with new objects that carry resolved member variables. pending.OwnerType was captured
+        // in Phase 1 and still points to the empty-member Phase 1 object. Re-look up by FullName
+        // so that routines see the correct member variable list at body-analysis time (Phase 5).
+        // For stdlib types the Phase 1 object is mutated in-place, so the lookup returns the
+        // same object — no behaviour change there.
+        TypeSymbol? refreshedOwnerType = pending.OwnerType != null
+            ? (_sa._registry.LookupType(name: pending.OwnerType.FullName) ?? pending.OwnerType)
+            : null;
+
         // Create preliminary RoutineInfo for generic parameter resolution context.
         // IsGenericParameter() checks _currentRoutine.GenericParameters to know which
         // type names are generic params (e.g., T, U) vs real types.
         var contextRoutine = new RoutineInfo(name: pending.RoutineName)
         {
             Kind = pending.Kind,
-            OwnerType = pending.OwnerType,
+            OwnerType = refreshedOwnerType,
             GenericParameters = routine.GenericParameters,
             GenericConstraints = routine.GenericConstraints,
             Module = pending.Module,
@@ -213,7 +224,7 @@ internal sealed class SignatureResolver
         var finalRoutine = new RoutineInfo(name: pending.RoutineName)
         {
             Kind = pending.Kind,
-            OwnerType = pending.OwnerType,
+            OwnerType = refreshedOwnerType,
             Parameters = parameters,
             ReturnType = returnType,
             IsFailable = routine.IsFailable,

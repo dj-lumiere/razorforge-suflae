@@ -1,19 +1,19 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticVerification.Symbols;
-using SemanticVerification.Types;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
 
 /// <summary>
 /// Expression code generation for generic routine and member routine calls.
 /// </summary>
-public partial class LLVMCodeGenerator
+public partial class LlvmCodeGenerator
 {
     private string EmitGenericMethodCall(StringBuilder sb, GenericMethodCallExpression generic)
     {
         // Check for generic type constructor call: TypeName[T](args)
-        // e.g., Snatched[U8](ptr_value) → just pass through the argument
+        // e.g., Hijacked[U8](ptr_value) → just pass through the argument
         if (generic.Object is IdentifierExpression id && id.Name == generic.MethodName)
         {
             // Only use id.ResolvedType as a type-constructor fallback when it is an actual
@@ -154,7 +154,7 @@ public partial class LLVMCodeGenerator
                                     ? namedArg.Value
                                     : (Expression)generic.Arguments[index: 0];
                             string argVal = EmitExpression(sb: sb, expr: argExpr);
-                            string argLlvm = GetLLVMType(type: singleArgType);
+                            string argLlvm = GetLlvmType(type: singleArgType);
 
                             // Use resolved type name for generic resolutions (same as zero-arg path)
                             string funcName;
@@ -181,7 +181,7 @@ public partial class LLVMCodeGenerator
                                 :
                                 creator.ReturnType != null
                                     ?
-                                    GetLLVMType(
+                                    GetLlvmType(
                                         type: ResolveTypeSubstitution(type: creator.ReturnType))
                                     : "ptr";
                             if (!_generatedFunctions.Contains(item: funcName))
@@ -198,13 +198,13 @@ public partial class LLVMCodeGenerator
                         }
                     }
 
-                    // For @llvm types (like Snatched[T] → ptr), the constructor is identity
+                    // For @llvm types (like Hijacked[T] → ptr), the constructor is identity
                     string argValue = EmitExpression(sb: sb, expr: generic.Arguments[index: 0]);
-                    string targetType = GetLLVMType(type: resolvedFullType);
+                    string targetType = GetLlvmType(type: resolvedFullType);
                     TypeInfo? argTypeForCast =
                         GetExpressionType(expr: generic.Arguments[index: 0]);
                     string argLlvmType = argTypeForCast != null
-                        ? GetLLVMType(type: argTypeForCast)
+                        ? GetLlvmType(type: argTypeForCast)
                         : targetType;
 
                     // If types match, identity. Otherwise, cast.
@@ -292,7 +292,7 @@ public partial class LLVMCodeGenerator
 
                         // Ensure declared
                         string retType = creator.ReturnType != null
-                            ? GetLLVMType(type: creator.ReturnType)
+                            ? GetLlvmType(type: creator.ReturnType)
                             : "ptr";
                         if (!_generatedFunctions.Contains(item: funcName))
                         {
@@ -336,7 +336,7 @@ public partial class LLVMCodeGenerator
             string addr = EmitExpression(sb: sb, expr: generic.Arguments[index: 0]);
             TypeInfo? addrType = GetExpressionType(expr: generic.Arguments[index: 0]);
             string addrLlvm = addrType != null
-                ? GetLLVMType(type: addrType)
+                ? GetLlvmType(type: addrType)
                 : "ptr";
             if (addrLlvm == "ptr")
             {
@@ -361,8 +361,8 @@ public partial class LLVMCodeGenerator
             return result;
         }
 
-        // snatched_none[T]() → null pointer
-        if (baseName == "snatched_none" && generic.Arguments.Count == 0)
+        // hijacked_none[T]() → null pointer
+        if (baseName == "hijacked_none" && generic.Arguments.Count == 0)
         {
             return "null";
         }
@@ -414,7 +414,7 @@ public partial class LLVMCodeGenerator
         var llvmTypeArgs = new List<string>();
         foreach (TypeExpression typeArg in generic.TypeArguments)
         {
-            llvmTypeArgs.Add(item: ResolveTypeExpressionToLLVM(typeExpr: typeArg));
+            llvmTypeArgs.Add(item: ResolveTypeExpressionToLlvm(typeExpr: typeArg));
         }
 
         if (llvmTypeArgs.Count == 0)
@@ -554,7 +554,7 @@ public partial class LLVMCodeGenerator
         var argTypes = new List<string>
         {
             receiverType != null
-                ? GetParameterLLVMType(type: receiverType)
+                ? GetParameterLlvmType(type: receiverType)
                 : "ptr"
         };
 
@@ -571,7 +571,7 @@ public partial class LLVMCodeGenerator
                     $"Cannot determine type for argument in generic method call to '{generic.MethodName}'");
             }
 
-            argTypes.Add(item: GetLLVMType(type: argType));
+            argTypes.Add(item: GetLlvmType(type: argType));
         }
 
         // Resolve method-level type arguments (e.g., U → S32)
@@ -623,7 +623,7 @@ public partial class LLVMCodeGenerator
         }
 
         // Build the mangled name — include method type args for double-generic calls
-        string methodNamePart = SanitizeLLVMName(name: generic.MethodName);
+        string methodNamePart = SanitizeLlvmName(name: generic.MethodName);
         if (resolvedMethodTypeArgNames.Count > 0)
         {
             methodNamePart +=
@@ -660,7 +660,7 @@ public partial class LLVMCodeGenerator
         }
 
         string returnType = resolvedReturnType != null
-            ? GetLLVMType(type: resolvedReturnType)
+            ? GetLlvmType(type: resolvedReturnType)
             : "void";
 
         // Ensure the function is declared
@@ -696,15 +696,78 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
+    /// Resolves a TypeExpression (AST node) to its TypeInfo, handling nested generics,
+    /// type substitutions, and const generic literals (e.g., "16" in ValueList[T, 16]).
+    /// </summary>
+    private TypeInfo? ResolveTypeExpressionToTypeInfo(TypeExpression typeExpr)
+    {
+        // Apply type substitutions first (e.g., T → S64 during monomorphization)
+        if (_typeSubstitutions != null &&
+            _typeSubstitutions.TryGetValue(key: typeExpr.Name, value: out TypeInfo? sub))
+        {
+            return sub;
+        }
+
+        // Const generic literal (e.g., "16", "8u64") used as a type argument
+        if (long.TryParse(s: typeExpr.Name, result: out long constVal))
+        {
+            return new ConstGenericValueTypeInfo(literalText: typeExpr.Name, value: constVal,
+                explicitTypeName: null);
+        }
+
+        TypeInfo? presetConst = ResolvePresetConstGenericType(name: typeExpr.Name);
+        if (presetConst != null)
+        {
+            return presetConst;
+        }
+
+        TypeInfo? tupleType = ResolveTupleTypeExpression(typeExpr: typeExpr);
+        if (tupleType != null)
+        {
+            return tupleType;
+        }
+
+        // Look up the type in the registry
+        TypeInfo? type = _registry.LookupType(name: typeExpr.Name) ??
+                         LookupTypeInCurrentModule(name: typeExpr.Name);
+        if (type == null)
+        {
+            return null;
+        }
+
+        // If generic definition with arguments, recursively resolve them
+        if (type.IsGenericDefinition && typeExpr.GenericArguments is { Count: > 0 })
+        {
+            var resolvedArgs = new List<TypeInfo>();
+            foreach (TypeExpression ga in typeExpr.GenericArguments)
+            {
+                TypeInfo? resolved = ResolveTypeExpressionToTypeInfo(typeExpr: ga);
+                if (resolved != null)
+                {
+                    resolvedArgs.Add(item: resolved);
+                }
+            }
+
+            if (resolvedArgs.Count == type.GenericParameters!.Count)
+            {
+                return _registry.GetOrCreateResolution(genericDef: type,
+                    typeArguments: resolvedArgs);
+            }
+        }
+
+        return type;
+    }
+
+    /// <summary>
     /// Resolves a TypeExpression (AST node) to its LLVM type string.
     /// </summary>
-    private string ResolveTypeExpressionToLLVM(TypeExpression typeExpr)
+    private string ResolveTypeExpressionToLlvm(TypeExpression typeExpr)
     {
         // Apply type substitutions first (e.g., T → Character during monomorphization)
         if (_typeSubstitutions != null &&
             _typeSubstitutions.TryGetValue(key: typeExpr.Name, value: out TypeInfo? sub))
         {
-            return GetLLVMType(type: sub);
+            return GetLlvmType(type: sub);
         }
 
         // Look up the type in the registry
@@ -720,20 +783,13 @@ public partial class LLVMCodeGenerator
                 TypeInfo? fullType = _registry.LookupType(name: fullName);
                 if (fullType != null)
                 {
-                    return GetLLVMType(type: fullType);
+                    return GetLlvmType(type: fullType);
                 }
 
                 var resolvedArgs = new List<TypeInfo>();
                 foreach (TypeExpression ga in typeExpr.GenericArguments)
                 {
-                    TypeInfo? resolved = null;
-                    if (_typeSubstitutions != null &&
-                        _typeSubstitutions.TryGetValue(key: ga.Name, value: out TypeInfo? gaSub))
-                    {
-                        resolved = gaSub;
-                    }
-
-                    resolved ??= _registry.LookupType(name: ga.Name);
+                    TypeInfo? resolved = ResolveTypeExpressionToTypeInfo(typeExpr: ga);
                     if (resolved != null)
                     {
                         resolvedArgs.Add(item: resolved);
@@ -745,18 +801,18 @@ public partial class LLVMCodeGenerator
                     TypeInfo resolvedType =
                         _registry.GetOrCreateResolution(genericDef: type,
                             typeArguments: resolvedArgs);
-                    return GetLLVMType(type: resolvedType);
+                    return GetLlvmType(type: resolvedType);
                 }
             }
 
-            return GetLLVMType(type: type);
+            return GetLlvmType(type: type);
         }
 
         // Try module-qualified lookup (e.g., SortedDict → Collections.SortedDict)
         type = LookupTypeInCurrentModule(name: typeExpr.Name);
         if (type != null)
         {
-            return GetLLVMType(type: type);
+            return GetLlvmType(type: type);
         }
 
         // During monomorphization, the AST rewriter may produce rewritten type names
@@ -767,7 +823,7 @@ public partial class LLVMCodeGenerator
             {
                 if (sub2.Name == typeExpr.Name)
                 {
-                    return GetLLVMType(type: sub2);
+                    return GetLlvmType(type: sub2);
                 }
             }
         }
@@ -783,7 +839,7 @@ public partial class LLVMCodeGenerator
     {
         // Check for generic type constructor call: TypeName[T](args)
         // Parser produces GenericMethodCallExpression where Object and MethodName
-        // are both the type name (e.g., Snatched[U8](x) → Object=Snatched, MethodName=Snatched)
+        // are both the type name (e.g., Hijacked[U8](x) → Object=Hijacked, MethodName=Hijacked)
         if (generic.Object is IdentifierExpression id && id.Name == generic.MethodName)
         {
             TypeInfo? calledType = LookupTypeInCurrentModule(name: id.Name);
@@ -937,7 +993,7 @@ public partial class LLVMCodeGenerator
             {
                 returnType = directSub;
             }
-            // Case 2: Return type is a generic resolution with unresolved params (e.g., Snatched[U])
+            // Case 2: Return type is a generic resolution with unresolved params (e.g., Hijacked[U])
             else if (returnType.IsGenericResolution && returnType.TypeArguments != null)
             {
                 bool needsResolution = false;
@@ -973,15 +1029,15 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Resolves unsubstituted generic parameters in a type through _typeSubstitutions.
-    /// E.g., during monomorphization with {U→S64}: Snatched[U] → Snatched[S64], U → S64.
+    /// E.g., during monomorphization with {U→S64}: Hijacked[U] → Hijacked[S64], U → S64.
     /// Also unconditionally converts WrapperTypeInfo to RecordTypeInfo so that LookupMethod
     /// and LLVM name mangling work correctly even in non-generic (non-monomorphized) contexts.
     /// </summary>
     private TypeInfo ApplyTypeSubstitutions(TypeInfo type)
     {
-        // WrapperTypeInfo (e.g., Snatched[Byte]) must always be converted to the real RecordTypeInfo
-        // (e.g., Core.Snatched[Byte]) so LookupMethod uses the right key and the LLVM mangled name
-        // uses "Core.Snatched[Byte]" rather than "Snatched[Core.Byte]". This is needed even in
+        // WrapperTypeInfo (e.g., Hijacked[Byte]) must always be converted to the real RecordTypeInfo
+        // (e.g., Core.Hijacked[Byte]) so LookupMethod uses the right key and the LLVM mangled name
+        // uses "Core.Hijacked[Byte]" rather than "Hijacked[Core.Byte]". This is needed even in
         // non-generic contexts (_typeSubstitutions == null) because the SA stores WrapperTypeInfo
         // as ResolvedType on call expressions even when the inner type is already concrete.
         if (type is WrapperTypeInfo wrapper)
@@ -1011,9 +1067,9 @@ public partial class LLVMCodeGenerator
 
     /// <summary>
     /// Recursively substitutes generic type parameters in a type using the given substitution map.
-    /// Handles direct params (T → S64), generic resolutions (Snatched[T] → Snatched[S64]),
+    /// Handles direct params (T → S64), generic resolutions (Hijacked[T] → Hijacked[S64]),
     /// nested generics (BTreeListNode[T] → BTreeListNode[S64]), and bare generic definitions
-    /// (Snatched → Snatched[S64]).
+    /// (Hijacked → Hijacked[S64]).
     /// </summary>
     private TypeInfo SubstituteTypeParams(TypeInfo type, Dictionary<string, TypeInfo> substitutions)
     {
@@ -1023,7 +1079,7 @@ public partial class LLVMCodeGenerator
             return sub;
         }
 
-        // Generic resolution with unresolved params (e.g., Snatched[U] → Snatched[S64])
+        // Generic resolution with unresolved params (e.g., Hijacked[U] → Hijacked[S64])
         if (type is { IsGenericResolution: true, TypeArguments: not null })
         {
             bool needsResolution = false;
@@ -1095,12 +1151,12 @@ public partial class LLVMCodeGenerator
             }
         }
 
-        // WrapperTypeInfo (e.g., Snatched[T] → Snatched[S64] when T→S64, or Snatched[S64] stays
-        // Snatched[S64]). WrapperTypeInfo is used for member variable types when the stdlib loader
-        // resolves Snatched[T] as a wrapper rather than the RecordTypeInfo generic resolution.
+        // WrapperTypeInfo (e.g., Hijacked[T] → Hijacked[S64] when T→S64, or Hijacked[S64] stays
+        // Hijacked[S64]). WrapperTypeInfo is used for member variable types when the stdlib loader
+        // resolves Hijacked[T] as a wrapper rather than the RecordTypeInfo generic resolution.
         // Always resolve to the real RecordTypeInfo so LookupMethod works correctly and the LLVM
-        // mangled name uses "Core.Snatched[S64]" (from RecordTypeInfo.FullName) not
-        // "Snatched[Core.S64]" (from WrapperTypeInfo.FullName with Module=null).
+        // mangled name uses "Core.Hijacked[S64]" (from RecordTypeInfo.FullName) not
+        // "Hijacked[Core.S64]" (from WrapperTypeInfo.FullName with Module=null).
         if (type is WrapperTypeInfo wrapper)
         {
             TypeInfo resolvedInner = SubstituteTypeParams(type: wrapper.InnerType, substitutions: substitutions);

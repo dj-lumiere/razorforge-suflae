@@ -1,13 +1,12 @@
 using SemanticVerification.Results;
-using SemanticVerification.Symbols;
-using SemanticVerification.Types;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using Compiler.Diagnostics;
-using Compiler.Resolution;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
 
-using SemanticVerification.Enums;
+using TypeModel.Enums;
 using static TestHelpers;
 
 /// <summary>
@@ -1071,6 +1070,57 @@ public class TypeResolutionTests
         AnalysisResult result = Analyze(source: source);
         Assert.Contains(result.Errors,
             e => e.Code == SemanticDiagnosticCode.ConstGenericTypeMismatch);
+    }
+
+    /// <summary>
+    /// Tests Analyze_ConstGeneric_PresetLiteral_NoError.
+    /// </summary>
+
+    [Fact]
+    public void Analyze_ConstGeneric_PresetLiteral_NoError()
+    {
+        string source = """
+                        preset WIDTH: Address = 16addr
+
+                        entity Buffer[T, N]
+                        needs N is Address
+                          data: T
+
+                        routine test(buf: Buffer[U8, WIDTH])
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(result.Errors,
+            e => e.Code == SemanticDiagnosticCode.UnknownType ||
+                 e.Code == SemanticDiagnosticCode.ConstGenericTypeMismatch ||
+                 e.Code == SemanticDiagnosticCode.PresetNotConstant);
+    }
+
+    /// <summary>
+    /// Tests Analyze_ConstGeneric_PresetAlias_NoError.
+    /// </summary>
+
+    [Fact]
+    public void Analyze_ConstGeneric_PresetAlias_NoError()
+    {
+        string source = """
+                        preset BASE_WIDTH: Address = 16addr
+                        preset WIDTH: Address = BASE_WIDTH
+
+                        entity Buffer[T, N]
+                        needs N is Address
+                          data: T
+
+                        routine test(buf: Buffer[U8, WIDTH])
+                          return
+                        """;
+
+        AnalysisResult result = Analyze(source: source);
+        Assert.DoesNotContain(result.Errors,
+            e => e.Code == SemanticDiagnosticCode.UnknownType ||
+                 e.Code == SemanticDiagnosticCode.ConstGenericTypeMismatch ||
+                 e.Code == SemanticDiagnosticCode.PresetNotConstant);
     }
 
     #endregion

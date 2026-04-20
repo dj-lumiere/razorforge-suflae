@@ -1,21 +1,20 @@
-using SemanticVerification.Enums;
+using Compiler.Instantiation;
+using TypeModel.Enums;
 
 namespace Compiler.CodeGen;
 
 using System.Text;
-using Compiler.Desugaring;
-using Compiler.Resolution;
-using Compiler.Targeting;
-using SemanticVerification;
-using SemanticVerification.Symbols;
-using SemanticVerification.Types;
+using Resolution;
+using Targeting;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
 
 /// <summary>
 /// LLVM IR code generator for RazorForge and Suflae.
 /// Consumes a fully-typed AST from the semantic analyzer.
 /// </summary>
-public partial class LLVMCodeGenerator
+public partial class LlvmCodeGenerator
 {
     #region Fields
 
@@ -26,10 +25,10 @@ public partial class LLVMCodeGenerator
     private IReadOnlyDictionary<string, Statement> _synthesizedBodies = new Dictionary<string, Statement>();
 
     /// <summary>Wrapper type base names for member forwarding in codegen.</summary>
-    private static readonly HashSet<string> _wrapperTypeNames =
+    private static readonly HashSet<string> WrapperTypeNames =
     [
-        "Viewed", "Hijacked", "Retained", "Tracked", "Inspected", "Seized", "Shared",
-        "Marked", "Snatched", "Owned"
+        "Viewed", "Grasped", "Retained", "Tracked", "Inspected", "Claimed", "Shared",
+        "Marked", "Hijacked", "Owned"
     ];
 
     /// <summary>The user program ASTs to generate code for (single-file or multi-file).</summary>
@@ -108,7 +107,7 @@ public partial class LLVMCodeGenerator
     private readonly Dictionary<string, TypeInfo> _localVariables = new();
 
     /// <summary>Map of source variable names to unique LLVM variable names (handles shadowing).</summary>
-    private readonly Dictionary<string, string> _localVarLLVMNames = new();
+    private readonly Dictionary<string, string> _localVarLlvmNames = new();
 
     /// <summary>Counter for deduplicating variable names within a function.</summary>
     private readonly Dictionary<string, int> _varNameCounts = new();
@@ -118,7 +117,7 @@ public partial class LLVMCodeGenerator
 
     /// <summary>List of local record variables with RC wrapper fields for retain/release.</summary>
     private readonly List<(string Name, string LLVMAddr, RecordTypeInfo RecordType)>
-        _localRCRecordVars = [];
+        _localRcRecordVars = [];
 
     /// <summary>List of local variables whose type IS an RC wrapper (Retained[T], Shared[T], etc.).</summary>
     private readonly List<(string Name, string LLVMAddr, RecordTypeInfo RecordType)>
@@ -227,12 +226,12 @@ public partial class LLVMCodeGenerator
     /// <param name="stdlibPrograms">Optional stdlib programs for intrinsic routine definitions.</param>
     /// <param name="target">Target platform configuration (defaults to current host).</param>
     /// <param name="buildMode">Build optimization mode (defaults to Debug).</param>
-    public LLVMCodeGenerator(Program program, TypeRegistry registry,
+    public LlvmCodeGenerator(Program program, TypeRegistry registry,
         IReadOnlyList<(Program Program, string FilePath, string Module)>? stdlibPrograms = null,
         TargetConfig? target = null,
         RfBuildMode buildMode = RfBuildMode.Debug,
         IReadOnlyDictionary<string, Statement>? synthesizedBodies = null,
-        IReadOnlyDictionary<string, Desugaring.MonomorphizedBody>? preMonomorphizedBodies = null)
+        IReadOnlyDictionary<string, Instantiation.MonomorphizedBody>? preMonomorphizedBodies = null)
         : this(userPrograms: [(program, program.Location.FileName, "")],
         registry: registry,
         stdlibPrograms: stdlibPrograms,
@@ -251,14 +250,14 @@ public partial class LLVMCodeGenerator
     /// <param name="stdlibPrograms">Optional stdlib programs for intrinsic routine definitions.</param>
     /// <param name="target">Target platform configuration (defaults to current host).</param>
     /// <param name="buildMode">Build optimization mode (defaults to Debug).</param>
-    public LLVMCodeGenerator(
+    public LlvmCodeGenerator(
         IReadOnlyList<(Program Program, string FilePath, string Module)> userPrograms,
         TypeRegistry registry,
         IReadOnlyList<(Program Program, string FilePath, string Module)>? stdlibPrograms = null,
         TargetConfig? target = null,
         RfBuildMode buildMode = RfBuildMode.Debug,
         IReadOnlyDictionary<string, Statement>? synthesizedBodies = null,
-        IReadOnlyDictionary<string, Desugaring.MonomorphizedBody>? preMonomorphizedBodies = null)
+        IReadOnlyDictionary<string, Instantiation.MonomorphizedBody>? preMonomorphizedBodies = null)
     {
         _target = target ?? TargetConfig.ForCurrentHost();
         if (_target.PointerBitWidth != 64)
@@ -404,7 +403,7 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private void GenerateGlobalVariableDeclarations()
     {
-        var initStmts = new List<(string LlvmName, TypeInfo Type, SyntaxTree.Expression Init)>();
+        var initStmts = new List<(string LlvmName, TypeInfo Type, Expression Init)>();
 
         foreach ((Program userProgram, string _, string module) in _userPrograms)
         {
@@ -449,7 +448,7 @@ public partial class LLVMCodeGenerator
         var sb = _functionDefinitions;
         EmitLine(sb: sb, line: "define private void @.rf_global_init() {");
         EmitLine(sb: sb, line: "entry:");
-        foreach ((string llvmName, TypeInfo type, SyntaxTree.Expression init) in initStmts)
+        foreach ((string llvmName, TypeInfo type, Expression init) in initStmts)
         {
             string val = EmitExpression(sb: sb, expr: init);
             EmitLine(sb: sb, line: $"  store ptr {val}, ptr {llvmName}");
@@ -1048,9 +1047,10 @@ public partial class LLVMCodeGenerator
         }
 
         // Normalize to Unix line endings (clang/LLVM requires LF, not CRLF)
-        return output.ToString()
-                     .Replace(oldValue: "\r\n", newValue: "\n")
-                     .Replace(oldValue: "\r", newValue: "\n");
+        var normalized = output.ToString()
+                               .Replace(oldValue: "\r\n", newValue: "\n")
+                               .Replace(oldValue: "\r", newValue: "\n");
+        return ApplyTbaa(normalized);
     }
 
     #endregion
@@ -1246,7 +1246,7 @@ public partial class LLVMCodeGenerator
         if (ownerIsGenericResolution && methodOwnerIsGeneric || hasMethodTypeArgs ||
             methodOwnerIsGenericParam)
         {
-            string baseName = $"{receiverType.FullName}.{SanitizeLLVMName(name: method.Name)}";
+            string baseName = $"{receiverType.FullName}.{SanitizeLlvmName(name: method.Name)}";
             // Disambiguate $create overloads by first parameter type (mirrors MangleFunctionName)
             if (method.Name == "$create" && method.Parameters.Count > 0)
             {

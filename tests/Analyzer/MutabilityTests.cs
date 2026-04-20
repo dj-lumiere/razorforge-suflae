@@ -358,8 +358,8 @@ public class MutabilityTests
     [Fact]
     public void Analyze_NestedHijacking_ReportsError()
     {
-        // Nested hijacking (partial hijacking) should not be allowed
-        // You cannot hijack a child of an already-hijacked object
+        // Nested grasping (partial grasping) should not be allowed
+        // You cannot grasp a child of an already-grasped object
         string source = """
                         entity Child
                           value: S64
@@ -369,8 +369,8 @@ public class MutabilityTests
 
                         routine test()
                           var parent = Parent(child: Child(value: 0))
-                          using parent.hijack() as p
-                            using p.child.hijack() as c
+                          using parent.grasp() as p
+                            using p.child.grasp() as c
                               c.value = 10
                           return
                         """;
@@ -379,7 +379,7 @@ public class MutabilityTests
         Assert.True(condition: result.Errors.Count > 0);
         Assert.Contains(collection: result.Errors,
             filter: e =>
-                e.Message.Contains(value: "hijack",
+                e.Message.Contains(value: "grasp",
                     comparisonType: StringComparison.OrdinalIgnoreCase) ||
                 e.Message.Contains(value: "nested",
                     comparisonType: StringComparison.OrdinalIgnoreCase));

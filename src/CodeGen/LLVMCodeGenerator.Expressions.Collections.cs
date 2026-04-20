@@ -1,14 +1,14 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticVerification.Symbols;
-using SemanticVerification.Types;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
 
 /// <summary>
 /// Expression code generation for collection and aggregate literals.
 /// </summary>
-public partial class LLVMCodeGenerator
+public partial class LlvmCodeGenerator
 {
     private string EmitListLiteral(StringBuilder sb, ListLiteralExpression list)
     {
@@ -49,8 +49,8 @@ public partial class LLVMCodeGenerator
             ? listType.Name
             : $"List[{elemType?.Name ?? "S64"}]";
         string listPtr = EmitCollectionCreate(sb: sb, resolvedType: listType, typeName: listTypeName);
-        string elemLLVMType = elemType != null
-            ? GetLLVMType(type: elemType)
+        string elemLlvmType = elemType != null
+            ? GetLlvmType(type: elemType)
             : "i64";
 
         ResolvedMethod? resolvedAdd = listType != null
@@ -62,12 +62,12 @@ public partial class LLVMCodeGenerator
         {
             string mangledAdd = resolvedAdd.MangledName;
             string addReturnType = resolvedAdd.Routine.ReturnType != null
-                ? GetLLVMType(type: ResolveTypeSubstitution(type: resolvedAdd.Routine.ReturnType))
+                ? GetLlvmType(type: ResolveTypeSubstitution(type: resolvedAdd.Routine.ReturnType))
                 : "void";
             if (!_generatedFunctions.Contains(item: mangledAdd))
             {
                 _rfFunctionDeclarations[key: mangledAdd] =
-                    $"declare {addReturnType} @{mangledAdd}(ptr, {elemLLVMType})";
+                    $"declare {addReturnType} @{mangledAdd}(ptr, {elemLlvmType})";
                 _generatedFunctions.Add(item: mangledAdd);
             }
 
@@ -77,14 +77,14 @@ public partial class LLVMCodeGenerator
                 if (addReturnType == "void")
                 {
                     EmitLine(sb: sb,
-                        line: $"  call void @{mangledAdd}(ptr {listPtr}, {elemLLVMType} {elemValue})");
+                        line: $"  call void @{mangledAdd}(ptr {listPtr}, {elemLlvmType} {elemValue})");
                 }
                 else
                 {
                     string ignored = NextTemp();
                     EmitLine(sb: sb,
                         line:
-                        $"  {ignored} = call {addReturnType} @{mangledAdd}(ptr {listPtr}, {elemLLVMType} {elemValue})");
+                        $"  {ignored} = call {addReturnType} @{mangledAdd}(ptr {listPtr}, {elemLlvmType} {elemValue})");
                 }
             }
         }
@@ -107,8 +107,8 @@ public partial class LLVMCodeGenerator
         {
             string elemValue = EmitExpression(sb: sb, expr: elem);
             TypeInfo? elemType = GetExpressionType(expr: elem);
-            string elemLLVMType = elemType != null
-                ? GetLLVMType(type: elemType)
+            string elemLlvmType = elemType != null
+                ? GetLlvmType(type: elemType)
                 : "i64";
 
             if (resolvedAdd != null)
@@ -117,12 +117,12 @@ public partial class LLVMCodeGenerator
                 if (!_generatedFunctions.Contains(item: mangledAdd))
                 {
                     _rfFunctionDeclarations[key: mangledAdd] =
-                        $"declare i1 @{mangledAdd}(ptr, {elemLLVMType})";
+                        $"declare i1 @{mangledAdd}(ptr, {elemLlvmType})";
                     _generatedFunctions.Add(item: mangledAdd);
                 }
 
                 EmitLine(sb: sb,
-                    line: $"  call i1 @{mangledAdd}(ptr {setPtr}, {elemLLVMType} {elemValue})");
+                    line: $"  call i1 @{mangledAdd}(ptr {setPtr}, {elemLlvmType} {elemValue})");
             }
         }
 
@@ -162,11 +162,11 @@ public partial class LLVMCodeGenerator
 
             TypeInfo? keyType = GetExpressionType(expr: key);
             TypeInfo? valueType = GetExpressionType(expr: value);
-            string keyLLVMType = keyType != null
-                ? GetLLVMType(type: keyType)
+            string keyLlvmType = keyType != null
+                ? GetLlvmType(type: keyType)
                 : "i64";
-            string valueLLVMType = valueType != null
-                ? GetLLVMType(type: valueType)
+            string valueLlvmType = valueType != null
+                ? GetLlvmType(type: valueType)
                 : "i64";
 
             if (resolvedAdd != null)
@@ -175,13 +175,13 @@ public partial class LLVMCodeGenerator
                 if (!_generatedFunctions.Contains(item: mangledAdd))
                 {
                     _rfFunctionDeclarations[key: mangledAdd] =
-                        $"declare i1 @{mangledAdd}(ptr, {keyLLVMType}, {valueLLVMType})";
+                        $"declare i1 @{mangledAdd}(ptr, {keyLlvmType}, {valueLlvmType})";
                     _generatedFunctions.Add(item: mangledAdd);
                 }
 
                 EmitLine(sb: sb,
                     line:
-                    $"  call i1 @{mangledAdd}(ptr {dictPtr}, {keyLLVMType} {keyValue}, {valueLLVMType} {valValue})");
+                    $"  call i1 @{mangledAdd}(ptr {dictPtr}, {keyLlvmType} {keyValue}, {valueLlvmType} {valValue})");
             }
         }
 
@@ -254,7 +254,7 @@ public partial class LLVMCodeGenerator
         string mangledAdd = resolvedAddLast.MangledName;
 
         // Declare add_last if needed
-        string elemLlvm = GetLLVMType(type: elemType);
+        string elemLlvm = GetLlvmType(type: elemType);
         if (!_generatedFunctions.Contains(item: mangledAdd))
         {
             _rfFunctionDeclarations[key: mangledAdd] =
@@ -308,7 +308,7 @@ public partial class LLVMCodeGenerator
             {
                 string value = EmitExpression(sb: sb, expr: param.DefaultValue!);
                 newArgValues.Add(item: value);
-                newArgTypes.Add(item: GetLLVMType(type: param.Type));
+                newArgTypes.Add(item: GetLlvmType(type: param.Type));
             }
         }
 
@@ -406,13 +406,11 @@ public partial class LLVMCodeGenerator
             return result;
         }
 
-        // Last resort: direct allocation with collection header size
-        // TODO(C41): this fallback should not exist — collection $create should always be
-        // resolvable from stdlib. Remove once all collection types have registered $create bodies.
-        string ptr = NextTemp();
-        EmitLine(sb: sb,
-            line: $"  {ptr} = call ptr @rf_allocate_dynamic(i64 {_collectionHeaderSizeBytes})");
-        return ptr;
+        // TODO(C41): this fallback has been replaced with a hard error.
+        // Collection $create must always be resolvable from stdlib.
+        throw new InvalidOperationException(
+            $"No '$create' routine found for collection type '{resolvedType.Name}'. " +
+            "All collection types must have a registered '$create' body in the stdlib.");
     }
 
     /// <summary>
@@ -430,16 +428,16 @@ public partial class LLVMCodeGenerator
             return "undef";
         }
 
-        string llvmType = GetLLVMType(type: entryType);
+        string llvmType = GetLlvmType(type: entryType);
         string tmp1 = NextTemp();
         string tmp2 = NextTemp();
         TypeInfo? keyType = GetExpressionType(expr: dictEntry.Key);
         TypeInfo? valueType = GetExpressionType(expr: dictEntry.Value);
         string keyLlvm = keyType != null
-            ? GetLLVMType(type: keyType)
+            ? GetLlvmType(type: keyType)
             : "i64";
         string valLlvm = valueType != null
-            ? GetLLVMType(type: valueType)
+            ? GetLlvmType(type: valueType)
             : "i64";
 
         EmitLine(sb: sb, line: $"  {tmp1} = insertvalue {llvmType} zeroinitializer, {keyLlvm} {keyVal}, 0");
@@ -462,14 +460,14 @@ public partial class LLVMCodeGenerator
         // ValueList[T, N]: inline array construction via insertvalue
         if (baseName == "ValueList")
         {
-            string llvmType = GetLLVMType(type: resolvedType);
+            string llvmType = GetLlvmType(type: resolvedType);
             string current = "zeroinitializer";
             for (int i = 0; i < arguments.Count; i++)
             {
                 string elemVal = EmitExpression(sb: sb, expr: arguments[index: i]);
                 TypeInfo? elemType = GetExpressionType(expr: arguments[index: i]);
                 string elemLlvm = elemType != null
-                    ? GetLLVMType(type: elemType)
+                    ? GetLlvmType(type: elemType)
                     : "i64";
                 string next = NextTemp();
                 EmitLine(sb: sb,
@@ -484,7 +482,7 @@ public partial class LLVMCodeGenerator
         // ValueBitList[N]: inline bit-packed array construction
         if (baseName == "ValueBitList")
         {
-            string llvmType = GetLLVMType(type: resolvedType);
+            string llvmType = GetLlvmType(type: resolvedType);
             // Calculate byte count from number of bits
             int bitCount = arguments.Count;
             int byteCount = (bitCount + 7) / 8;
@@ -531,15 +529,6 @@ public partial class LLVMCodeGenerator
             return current;
         }
 
-        // PriorityQueue[TPriority, TElement]: $create() + add(element, priority) from tuple args
-        if (baseName == "PriorityQueue")
-        {
-            return EmitPriorityQueueLiteral(sb: sb,
-                resolvedType: resolvedType,
-                typeName: typeName,
-                arguments: arguments);
-        }
-
         // Entity collections: $create() + add/add_last calls
         string collectionPtr =
             EmitCollectionCreate(sb: sb, resolvedType: resolvedType, typeName: typeName);
@@ -581,10 +570,10 @@ public partial class LLVMCodeGenerator
                     TypeInfo? keyType = GetExpressionType(expr: entry.Key);
                     TypeInfo? valueType = GetExpressionType(expr: entry.Value);
                     string keyLlvm = keyType != null
-                        ? GetLLVMType(type: keyType)
+                        ? GetLlvmType(type: keyType)
                         : "i64";
                     string valLlvm = valueType != null
-                        ? GetLLVMType(type: valueType)
+                        ? GetLlvmType(type: valueType)
                         : "i64";
 
                     // Declare the add function if not yet declared
@@ -609,7 +598,7 @@ public partial class LLVMCodeGenerator
                 string elemVal = EmitExpression(sb: sb, expr: arg);
                 TypeInfo? elemType = GetExpressionType(expr: arg);
                 string elemLlvm = elemType != null
-                    ? GetLLVMType(type: elemType)
+                    ? GetLlvmType(type: elemType)
                     : "i64";
 
                 // Declare the add function if not yet declared
@@ -656,7 +645,7 @@ public partial class LLVMCodeGenerator
     private string EmitValueBitListRuntime(StringBuilder sb, TypeInfo resolvedType,
         List<Expression> arguments)
     {
-        string llvmType = GetLLVMType(type: resolvedType);
+        string llvmType = GetLlvmType(type: resolvedType);
         int bitCount = arguments.Count;
         int byteCount = (bitCount + 7) / 8;
 
@@ -694,8 +683,8 @@ public partial class LLVMCodeGenerator
     }
 
     /// <summary>
-    /// Emits PriorityQueue literal constructor: PriorityQueue[S32, Text]((1, "high"), (10, "low"))
-    /// Each argument is a tuple (priority, element) unpacked into add(element: element, priority: priority).
+    /// Emits a dict-literal-backed PriorityQueue constructor:
+    /// <c>var items: PriorityQueue[S32, Text] = {1: "high", 10: "low"}</c>.
     /// </summary>
     private string EmitPriorityQueueLiteral(StringBuilder sb, TypeInfo resolvedType,
         string typeName, List<Expression> arguments)
@@ -722,32 +711,19 @@ public partial class LLVMCodeGenerator
             ? resolvedType.TypeArguments[index: 1]
             : null;
         string priorityLlvm = priorityType != null
-            ? GetLLVMType(type: priorityType)
+            ? GetLlvmType(type: priorityType)
             : "i32";
         string elementLlvm = elementType != null
-            ? GetLLVMType(type: elementType)
+            ? GetLlvmType(type: elementType)
             : "ptr";
 
         foreach (Expression arg in arguments)
         {
-            string? priorityVal = null;
-            string? elementVal = null;
-
-            // DictEntryLiteralExpression: PriorityQueue(1: "high", 2: "low")
             if (arg is DictEntryLiteralExpression dictEntry)
             {
-                priorityVal = EmitExpression(sb: sb, expr: dictEntry.Key);
-                elementVal = EmitExpression(sb: sb, expr: dictEntry.Value);
-            }
-            // TupleLiteralExpression: PriorityQueue((1, "high"), (2, "low"))
-            else if (arg is TupleLiteralExpression tuple && tuple.Elements.Count == 2)
-            {
-                priorityVal = EmitExpression(sb: sb, expr: tuple.Elements[index: 0]);
-                elementVal = EmitExpression(sb: sb, expr: tuple.Elements[index: 1]);
-            }
+                string priorityVal = EmitExpression(sb: sb, expr: dictEntry.Key);
+                string elementVal = EmitExpression(sb: sb, expr: dictEntry.Value);
 
-            if (priorityVal != null && elementVal != null)
-            {
                 // add(element: TElement, priority: TPriority)
                 if (!_generatedFunctions.Contains(item: mangledAdd))
                 {
@@ -759,6 +735,11 @@ public partial class LLVMCodeGenerator
                 EmitLine(sb: sb,
                     line:
                     $"  call void @{mangledAdd}(ptr {pqPtr}, {elementLlvm} {elementVal}, {priorityLlvm} {priorityVal})");
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    message: "PriorityQueue literal reached codegen without dict-entry lowering.");
             }
         }
 

@@ -105,7 +105,7 @@ public partial class Parser
     /// </remarks>
     private bool IsArrowLambdaParameters()
     {
-        int savedPosition = Position;
+        int savedPosition = _position;
 
         try
         {
@@ -116,7 +116,7 @@ public partial class Parser
             {
                 Advance(); // consume )
                 bool result = Check(type: TokenType.FatArrow) || Check(type: TokenType.Given);
-                Position = savedPosition;
+                _position = savedPosition;
                 return result;
             }
 
@@ -130,7 +130,7 @@ public partial class Parser
                 // ─────────────────────────────────────────────────────────────────────
                 if (!Check(type: TokenType.Identifier))
                 {
-                    Position = savedPosition;
+                    _position = savedPosition;
                     return false;
                 }
 
@@ -177,20 +177,20 @@ public partial class Parser
                     Advance(); // consume )
                     // Accept either direct => or given ... =>
                     bool result = Check(type: TokenType.FatArrow) || Check(type: TokenType.Given);
-                    Position = savedPosition;
+                    _position = savedPosition;
                     return result;
                 }
                 else
                 {
                     // Not a valid lambda parameter list (e.g., expression like (x + y))
-                    Position = savedPosition;
+                    _position = savedPosition;
                     return false;
                 }
             }
         }
         catch
         {
-            Position = savedPosition;
+            _position = savedPosition;
             return false;
         }
     }

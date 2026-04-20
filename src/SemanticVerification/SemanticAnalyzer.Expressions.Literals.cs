@@ -1,12 +1,13 @@
 namespace SemanticVerification;
 
 using Enums;
+using TypeModel.Enums;
 using Results;
-using Types;
+using TypeModel.Types;
 using Compiler.Lexer;
 using SyntaxTree;
 using Compiler.Diagnostics;
-using TypeSymbol = Types.TypeInfo;
+using TypeSymbol = TypeModel.Types.TypeInfo;
 
 /// <summary>
 /// Phase 3: Literal expression analysis and deferred numeric parsing.
@@ -17,6 +18,14 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol? expectedType = null)
     {
         // Map token type to the corresponding type (PascalCase)
+        // None literal: return the expected Maybe type if known, otherwise generic Maybe def.
+        if (literal.LiteralType == TokenType.None)
+        {
+            if (expectedType != null && IsMaybeType(type: expectedType))
+                return expectedType;
+            return _registry.LookupType(name: "Maybe") ?? ErrorTypeInfo.Instance;
+        }
+
         string? typeName = literal.LiteralType switch
         {
             // Signed integers
@@ -97,8 +106,7 @@ public sealed partial class SemanticAnalyzer
         // If expected type is a fixed-width integer type and literal is Integer or S64 (default unsuffixed),
         // infer to expected type
         if (expectedType != null &&
-            (literal.LiteralType == TokenType.Integer ||
-             literal.LiteralType == TokenType.S64Literal) &&
+            literal.LiteralType is TokenType.Integer or TokenType.S64Literal &&
             IsFixedWidthIntegerType(type: expectedType))
         {
             // Check if the literal value fits in the expected type
@@ -181,11 +189,18 @@ public sealed partial class SemanticAnalyzer
         }
         else if (literal.Value is string strValue)
         {
-            // Clean underscores from numeric literal string and parse
-            string cleaned = strValue.Replace(oldValue: "_", newValue: "");
+            // Strip type suffix before removing digit-separator underscores.
+            // e.g. "20_s64" → strip "_s64" → "20" → parses fine.
+            // A suffix starts at the last '_' when what follows is a letter.
+            int lastUnderscore = strValue.LastIndexOf(value: '_');
+            string withoutSuffix = lastUnderscore >= 0 && lastUnderscore < strValue.Length - 1 &&
+                                   char.IsLetter(c: strValue[lastUnderscore + 1])
+                ? strValue[..lastUnderscore]
+                : strValue;
+            string cleaned = withoutSuffix.Replace(oldValue: "_", newValue: "");
             if (!long.TryParse(s: cleaned, result: out value))
             {
-                // Value doesn't fit in long ? only S128/U128 could hold it
+                // Value doesn't fit in long — only S128/U128 could hold it
                 return targetType.Name is "S128" or "U128";
             }
         }

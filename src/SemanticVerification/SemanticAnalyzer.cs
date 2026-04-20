@@ -1,17 +1,19 @@
 using Compiler.Resolution;
 using Compiler.Desugaring;
+using Compiler.Instantiation;
+using Compiler.Postprocessing;
 using Compiler.Targeting;
 
 namespace SemanticVerification;
 
 using Enums;
-using Compiler.Synthesis;
+using TypeModel.Enums;
 using Results;
 using Scopes;
-using Symbols;
+using TypeModel.Symbols;
 using SyntaxTree;
 using Compiler.Diagnostics;
-using TypeSymbol = Types.TypeInfo;
+using TypeSymbol = TypeModel.Types.TypeInfo;
 
 /// <summary>
 /// Semantic analyzer for RazorForge and Suflae programs.
@@ -125,13 +127,13 @@ public sealed partial class SemanticAnalyzer
 
     /// <summary>
     /// Pre-transformed bodies for error-handling variant routines (try_/check_/lookup_), produced
-    /// by <see cref="Desugaring.Passes.ErrorHandlingVariantPass"/> during Phase 4 global desugaring.
+    /// by <see cref="Synthesis.ErrorHandlingVariantPass"/> during Phase 4 global desugaring.
     /// Merged into <see cref="SynthesizedBodies"/> when building the <see cref="AnalysisResult"/>.
     /// </summary>
     private Dictionary<string, Statement> _variantBodies = new();
 
     /// <summary>
-    /// Pre-rewritten generic method bodies produced by <see cref="Desugaring.Passes.GenericMonomorphizationPass"/>.
+    /// Pre-rewritten generic method bodies produced by <see cref="Instantiation.Passes.GenericMonomorphizationPass"/>.
     /// Captured from <see cref="Desugaring.DesugaringContext.PreMonomorphizedBodies"/> in
     /// <see cref="RunPhase4GlobalDesugaring"/> and forwarded to <see cref="AnalysisResult"/>.
     /// </summary>
@@ -150,8 +152,8 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     /// <param name="language">The language being analyzed (RazorForge or Suflae).</param>
     /// <param name="stdlibPath">Optional path to the stdlib directory.</param>
-    /// <param name="target">Target platform — drives BuilderService platform constants. Defaults to host.</param>
-    /// <param name="buildMode">Build mode — drives BuilderService.build_mode. Defaults to Debug.</param>
+    /// <param name="target">Target platform ??drives BuilderService platform constants. Defaults to host.</param>
+    /// <param name="buildMode">Build mode ??drives BuilderService.build_mode. Defaults to Debug.</param>
     public SemanticAnalyzer(Language language, string? stdlibPath = null,
         TargetConfig? target = null, RfBuildMode buildMode = RfBuildMode.Debug)
     {
@@ -184,6 +186,7 @@ public sealed partial class SemanticAnalyzer
         RunPhase1Declaration(program: program);
         RunPhase2Resolution(program: program);
         RunPhase3Synthesis(program: program);
+        RunPhase3Desugaring(program: program);
         RunPhase5Verification(program: program);
         // Register user program before global desugaring so GenericMonomorphizationPass can
         // search user-program ASTs for generic routine bodies (like FindInStdlib does for stdlib).
@@ -192,7 +195,8 @@ public sealed partial class SemanticAnalyzer
             module: _currentModuleName ?? "");
         CollectStdlibBodiesForVariantGeneration();
         RunPhase4GlobalDesugaring();
-        RunPhase4Desugaring(program: program);
+        RunPhase6Instantiation();
+        RunPhase7Postprocessing(program: program);
         RunPhase5bPostDesugarChecks();
         FinalizeReturnTypes();
 
@@ -212,7 +216,7 @@ public sealed partial class SemanticAnalyzer
             PreMonomorphizedBodies: _preMonomorphizedBodies);
     }
 
-    /// <summary>Phase 1: Collect all type shapes and routine stubs — no names resolved.</summary>
+    /// <summary>Phase 1: Collect all type shapes and routine stubs ??no names resolved.</summary>
     private void RunPhase1Declaration(Program program)
     {
         CollectDeclarations(program: program);
@@ -250,18 +254,21 @@ public sealed partial class SemanticAnalyzer
         AnalyzeSynthesizedBodies();
         // M-0: Annotate stdlib expression types so desugaring passes can lower stdlib bodies
         // uniformly (OperatorLoweringPass, ExpressionLoweringPass, etc.).
-        // Stdlib errors are suppressed from user-visible output — use 'validate-stdlib' to surface them.
+        // Stdlib errors are suppressed from user-visible output ??use 'validate-stdlib' to surface them.
         int errorsBeforeStdlib = _errors.Count;
         AnalyzeStdlibBodies();
         if (_errors.Count > errorsBeforeStdlib)
             _errors.RemoveRange(index: errorsBeforeStdlib,
                 count: _errors.Count - errorsBeforeStdlib);
+        EagerSynthesizeAllWrapperForwarders();
         InferModificationCategories();
     }
 
     /// <summary>
-    /// Phase 4 (global): Runs registry-wide desugaring passes once after all Phase 5 analysis.
-    /// Includes error handling variant generation (try_/check_/lookup_) and future global passes.
+    /// Phase 4 (global): Runs registry-wide synthesis once after all Phase 5 analysis.
+    /// Generates error-handling variants, wired routine bodies, prunes unused generics,
+    /// then applies Phase 3 passes to generated variant bodies and stdlib programs.
+    /// Immediately followed by Phase 7 global: lowers variant bodies and stdlib with type-aware passes.
     /// </summary>
     private void RunPhase4GlobalDesugaring()
     {
@@ -272,26 +279,59 @@ public sealed partial class SemanticAnalyzer
         new DesugaringPipeline(ctx: ctx).RunGlobal();
         // Capture variant bodies produced by ErrorHandlingVariantPass for codegen.
         _variantBodies = ctx.VariantBodies;
-        // Capture pre-rewritten generic method bodies for codegen.
+
+        // Phase 7 global: lower variant bodies and stdlib programs with type-aware passes.
+        var p7ctx = new PostprocessingContext(registry: _registry,
+            variantBodies: _variantBodies,
+            target: _target,
+            buildMode: _buildMode);
+        new PostprocessingPipeline(ctx: p7ctx).RunGlobal();
+    }
+
+    /// <summary>
+    /// Phase 6: close reachable generic bodies up front so codegen no longer owns the
+    /// common-case monomorphization entry point.
+    /// </summary>
+    private void RunPhase6Instantiation()
+    {
+        var ctx = new InstantiationContext(registry: _registry,
+            userPrograms: _registry.UserPrograms,
+            routineBodies: _routineBodies,
+            variantBodies: _variantBodies,
+            preMonomorphizedBodies: _preMonomorphizedBodies is Dictionary<string, MonomorphizedBody> dict
+                ? dict
+                : _preMonomorphizedBodies.ToDictionary(kvp => kvp.Key, kvp => kvp.Value),
+            target: _target,
+            buildMode: _buildMode);
+        new InstantiationPipeline(ctx: ctx).Run();
+        _variantBodies = ctx.VariantBodies;
         _preMonomorphizedBodies = ctx.PreMonomorphizedBodies;
     }
 
     /// <summary>
-    /// Phase 4 (per-file): Lowers high-level constructs to uniform field/call AST.
-    /// Runs after Phase 5's type annotation because desugaring needs expression types.
-    /// Passes mutate the program AST in-place; any synthetic bodies are merged into
-    /// <see cref="_variantBodies"/> for the code generator.
+    /// Phase 3 (per-file): Syntax-only lowering that requires no type information.
+    /// Runs before SA annotates ResolvedType on expressions.
     /// </summary>
-    private void RunPhase4Desugaring(Program program)
+    private void RunPhase3Desugaring(Program program)
     {
         var ctx = new DesugaringContext(registry: _registry,
             routineBodies: _routineBodies,
             target: _target,
             buildMode: _buildMode);
         new DesugaringPipeline(ctx: ctx).Run(program: program);
-        // Capture any synthetic routine bodies produced by per-file passes
-        foreach ((string key, Statement body) in ctx.VariantBodies)
-            _variantBodies[key] = body;
+    }
+
+    /// <summary>
+    /// Phase 7 (per-file): Type-aware lowering on a verified, type-annotated program.
+    /// Runs after SA has annotated ResolvedType on all expressions.
+    /// </summary>
+    private void RunPhase7Postprocessing(Program program)
+    {
+        var ctx = new PostprocessingContext(registry: _registry,
+            variantBodies: _variantBodies,
+            target: _target,
+            buildMode: _buildMode);
+        new PostprocessingPipeline(ctx: ctx).Run(program: program);
     }
 
     /// <summary>Phase 5b: Placeholder for verification passes on desugared AST.</summary>
@@ -338,7 +378,7 @@ public sealed partial class SemanticAnalyzer
     ///
     /// Assumes the caller has already run the Phase 2/3 prerequisites
     /// (<see cref="ApplyImplicitMarkerConformance"/>, <see cref="AutoRegisterWiredRoutines"/>,
-    /// <see cref="GenerateDerivedOperators"/>). Errors are appended to <c>_errors</c> —
+    /// <see cref="GenerateDerivedOperators"/>). Errors are appended to <c>_errors</c> ??
     /// callers that need to partition stdlib errors must snapshot <c>_errors.Count</c> themselves.
     /// </summary>
     private void AnalyzeStdlibBodies()
@@ -414,7 +454,7 @@ public sealed partial class SemanticAnalyzer
     /// <returns>Analysis result containing errors, warnings, and the populated type registry.</returns>
     public AnalysisResult AnalyzeMultiple(IReadOnlyList<(Program Program, string FilePath)> files)
     {
-        // Snapshot storage: file path → imported modules after Phase 1
+        // Snapshot storage: file path ??imported modules after Phase 1
         var importSnapshots =
             new Dictionary<string, HashSet<string>>(comparer: StringComparer.OrdinalIgnoreCase);
         var symbolNameSnapshots =
@@ -453,7 +493,7 @@ public sealed partial class SemanticAnalyzer
             _signatureResolver.ResolveExternalSignatures(program: program);
         }
 
-        // Phase 2 global: once, registry-only — no per-file import scoping needed
+        // Phase 2 global: once, registry-only ??no per-file import scoping needed
         _conformanceAnalyzer.ApplyImplicitMarkerConformance();
 
         // Phase 3 global: synthesized routines, derived operators, protocol validation
@@ -472,6 +512,17 @@ public sealed partial class SemanticAnalyzer
             PreRegisterUserVariants(program: program);
         }
 
+        // Phase 3 per-file: syntax-only lowering (no type info needed; runs before SA annotates types)
+        foreach ((Program program, string filePath) in files)
+        {
+            RestoreImportState(filePath: filePath,
+                importSnapshots: importSnapshots,
+                symbolNameSnapshots: symbolNameSnapshots,
+                moduleNameSnapshots: moduleNameSnapshots);
+
+            RunPhase3Desugaring(program: program);
+        }
+
         // Phase 5: Analyze bodies per file (expressions need correct import scoping)
         foreach ((Program program, string filePath) in files)
         {
@@ -488,12 +539,13 @@ public sealed partial class SemanticAnalyzer
         InferModificationCategories();
         // M-0: Annotate stdlib expression types so desugaring passes can lower stdlib bodies
         // uniformly (OperatorLoweringPass, ExpressionLoweringPass, etc.).
-        // Stdlib errors are suppressed from user-visible output — use 'validate-stdlib' to surface them.
+        // Stdlib errors are suppressed from user-visible output ??use 'validate-stdlib' to surface them.
         int errorsBeforeStdlib = _errors.Count;
         AnalyzeStdlibBodies();
         if (_errors.Count > errorsBeforeStdlib)
             _errors.RemoveRange(index: errorsBeforeStdlib,
                 count: _errors.Count - errorsBeforeStdlib);
+        EagerSynthesizeAllWrapperForwarders();
 
         // If SA produced errors in user code, skip desugaring. Lowering passes over a broken
         // AST produce garbage types and can drive GenericMonomorphizationPass's fixed-point loop
@@ -508,11 +560,18 @@ public sealed partial class SemanticAnalyzer
                 PreMonomorphizedBodies: _preMonomorphizedBodies);
         }
 
+        foreach ((Program program, string filePath) in files)
+        {
+            string moduleName = moduleNameSnapshots.GetValueOrDefault(key: filePath) ?? "";
+            _registry.RegisterUserProgram(program: program, filePath: filePath, module: moduleName);
+        }
+
         // Phase 4 global: error handling variants + future global passes (runs once)
         CollectStdlibBodiesForVariantGeneration();
         RunPhase4GlobalDesugaring();
+        RunPhase6Instantiation();
 
-        // Phase 4 per-file: structural lowering passes
+        // Phase 7 per-file: type-aware lowering on verified, type-annotated AST
         foreach ((Program program, string filePath) in files)
         {
             RestoreImportState(filePath: filePath,
@@ -520,7 +579,7 @@ public sealed partial class SemanticAnalyzer
                 symbolNameSnapshots: symbolNameSnapshots,
                 moduleNameSnapshots: moduleNameSnapshots);
 
-            RunPhase4Desugaring(program: program);
+            RunPhase7Postprocessing(program: program);
         }
 
         RunPhase5bPostDesugarChecks();
@@ -573,7 +632,7 @@ public sealed partial class SemanticAnalyzer
             _registry.DeclareVariable(name: param.Name, type: param.Type);
         }
 
-        // Suppress errors for synthesized bodies — they are compiler-generated and correct by construction.
+        // Suppress errors for synthesized bodies ??they are compiler-generated and correct by construction.
         // Any error indicates a compiler bug, not user code error, so we don't surface them.
         int errorsBefore = _errors.Count;
         AnalyzeStatement(statement: body);
@@ -706,7 +765,7 @@ public sealed partial class SemanticAnalyzer
         _typeResolver.ResolveProtocolType(typeExpr: typeExpr);
 
     /// <summary>Looks up a routine by name, searching Core and imported modules. Delegates to <see cref="TypeResolver"/>.</summary>
-    internal Symbols.RoutineInfo? LookupRoutineWithImports(string name) =>
+    internal RoutineInfo? LookupRoutineWithImports(string name) =>
         _typeResolver.LookupRoutineWithImports(name: name);
 
     /// <summary>Validates that type arguments satisfy generic constraints. Delegates to <see cref="TypeResolver"/>.</summary>

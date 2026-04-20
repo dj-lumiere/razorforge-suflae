@@ -1,14 +1,14 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticVerification.Symbols;
-using SemanticVerification.Types;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
 
 /// <summary>
 /// Expression code generation for unary, binary, and intrinsic operator lowering.
 /// </summary>
-public partial class LLVMCodeGenerator
+public partial class LlvmCodeGenerator
 {
     private string EmitCompoundAssignment(StringBuilder sb, CompoundAssignmentExpression compound)
     {
@@ -82,7 +82,7 @@ public partial class LLVMCodeGenerator
         string right = EmitExpression(sb: sb, expr: binary.Right);
         TypeInfo? leftType = GetExpressionType(expr: binary.Left);
         string llvmType = leftType != null
-            ? GetLLVMType(type: leftType)
+            ? GetLlvmType(type: leftType)
             : "i64";
         bool isUnsigned = IsUnsignedIntegerType(type: leftType);
         bool isFloat = llvmType is "half" or "float" or "double" or "fp128";
@@ -120,7 +120,7 @@ public partial class LLVMCodeGenerator
         {
             // Coerce operands to a common type when widths differ.
             // LLVM requires both icmp/fcmp operands to have identical types.
-            string rightLlvmTypeCmp = rightType != null ? GetLLVMType(type: rightType) : llvmType;
+            string rightLlvmTypeCmp = rightType != null ? GetLlvmType(type: rightType) : llvmType;
             string cmpType = llvmType;
             if (rightLlvmTypeCmp != llvmType && !isFloat)
             {
@@ -177,7 +177,7 @@ public partial class LLVMCodeGenerator
                     string funcName = MangleFunctionName(routine: method);
                     GenerateFunctionDeclaration(routine: method, nameOverride: funcName);
                     string retType = method.ReturnType != null
-                        ? GetLLVMType(type: method.ReturnType) : llvmType;
+                        ? GetLlvmType(type: method.ReturnType) : llvmType;
                     string result = NextTemp();
                     EmitLine(sb: sb,
                         line: $"  {result} = call {retType} @{funcName}({llvmType} {left}, {llvmType} {right})");
@@ -225,7 +225,7 @@ public partial class LLVMCodeGenerator
         {
             // Ensure right operand matches left operand's type width
             string rightLlvmType = rightType != null
-                ? GetLLVMType(type: rightType)
+                ? GetLlvmType(type: rightType)
                 : llvmType;
             if (rightLlvmType != llvmType)
             {
@@ -290,14 +290,14 @@ public partial class LLVMCodeGenerator
                                  _registry.LookupMethod(type: leftType, methodName: methodName);
             if (method != null)
             {
-                // For generic resolutions (e.g., Snatched[Point].$eq), use the concrete type name
+                // For generic resolutions (e.g., Hijacked[Point].$eq), use the concrete type name
                 // and record monomorphization so the specialized function body gets generated
                 string funcName;
                 if (leftType.IsGenericResolution && method.OwnerType is
                         { IsGenericDefinition: true } or { IsGenericResolution: true })
                 {
                     funcName =
-                        Q(name: $"{leftType.FullName}.{SanitizeLLVMName(name: methodName)}");
+                        Q(name: $"{leftType.FullName}.{SanitizeLlvmName(name: methodName)}");
                     RecordMonomorphization(mangledName: funcName,
                         genericMethod: method,
                         resolvedOwnerType: leftType);
@@ -309,7 +309,7 @@ public partial class LLVMCodeGenerator
 
                 GenerateFunctionDeclaration(routine: method, nameOverride: funcName);
                 string retType = method.ReturnType != null
-                    ? GetLLVMType(type: method.ReturnType)
+                    ? GetLlvmType(type: method.ReturnType)
                     : llvmType;
                 string result = NextTemp();
                 EmitLine(sb: sb,
@@ -361,45 +361,45 @@ public partial class LLVMCodeGenerator
                 message: "'is Blank' is only valid for Result[T]/Lookup[T] carriers.");
         }
 
-        string maybeType = GetLLVMType(type: operandType!);
+        string maybeType = GetLlvmType(type: operandType!);
         string allocaPtr = NextTemp();
         EmitEntryAlloca(llvmName: allocaPtr, llvmType: maybeType);
         EmitLine(sb: sb, line: $"  store {maybeType} {operand}, ptr {allocaPtr}");
 
-        string field0PtrIS = NextTemp();
+        string field0PtrIs = NextTemp();
         EmitLine(sb: sb,
-            line: $"  {field0PtrIS} = getelementptr {maybeType}, ptr {allocaPtr}, i32 0, i32 0");
+            line: $"  {field0PtrIs} = getelementptr {maybeType}, ptr {allocaPtr}, i32 0, i32 0");
 
-        // Entity Maybe { Snatched[T] }: field 0 is ptr; null = None.
+        // Entity Maybe { Hijacked[T] }: field 0 is ptr; null = None.
         // Record Maybe { i1 present, T } / Result / Lookup: field 0 is a tag integer.
-        bool isEntityMaybeIS = isNoneCheck
+        bool isEntityMaybeIs = isNoneCheck
             && operandType!.TypeArguments?.Count > 0
             && operandType.TypeArguments[0] is EntityTypeInfo;
 
         string result;
-        if (isEntityMaybeIS)
+        if (isEntityMaybeIs)
         {
-            string ptrValIS = NextTemp();
-            EmitLine(sb: sb, line: $"  {ptrValIS} = load ptr, ptr {field0PtrIS}");
+            string ptrValIs = NextTemp();
+            EmitLine(sb: sb, line: $"  {ptrValIs} = load ptr, ptr {field0PtrIs}");
             result = NextTemp();
             EmitLine(sb: sb,
                 line: isPattern.IsNegated
-                    ? $"  {result} = icmp ne ptr {ptrValIS}, null"
-                    : $"  {result} = icmp eq ptr {ptrValIS}, null");
+                    ? $"  {result} = icmp ne ptr {ptrValIs}, null"
+                    : $"  {result} = icmp eq ptr {ptrValIs}, null");
         }
         else
         {
-            string tagTypeIS = GetCarrierTagType(kind: GetCarrierKind(type: operandType!));
-            string expectedTagIS = isNoneCheck
+            string tagTypeIs = GetCarrierTagType(kind: GetCarrierKind(type: operandType!));
+            string expectedTagIs = isNoneCheck
                 ? "0"
                 : ComputeTypeId(fullName: "Blank").ToString();
-            string tagIS = NextTemp();
-            EmitLine(sb: sb, line: $"  {tagIS} = load {tagTypeIS}, ptr {field0PtrIS}");
+            string tagIs = NextTemp();
+            EmitLine(sb: sb, line: $"  {tagIs} = load {tagTypeIs}, ptr {field0PtrIs}");
             result = NextTemp();
             EmitLine(sb: sb,
                 line: isPattern.IsNegated
-                    ? $"  {result} = icmp ne {tagTypeIS} {tagIS}, {expectedTagIS}"
-                    : $"  {result} = icmp eq {tagTypeIS} {tagIS}, {expectedTagIS}");
+                    ? $"  {result} = icmp ne {tagTypeIs} {tagIs}, {expectedTagIs}"
+                    : $"  {result} = icmp eq {tagTypeIs} {tagIs}, {expectedTagIs}");
         }
 
         return result;
@@ -519,6 +519,13 @@ public partial class LLVMCodeGenerator
                 member: member,
                 value: value,
                 valueType: GetExpressionType(expr: binary.Right));
+            // Move semantics: if the RHS is an RC wrapper variable, transferring it into an
+            // entity field transfers ownership — remove it from scope-exit tracking so the
+            // scope-exit cleanup doesn't double-release it.
+            if (binary.Right is IdentifierExpression { Name: var srcRcName })
+            {
+                _localRetainedVars.RemoveAll(match: e => e.Name == srcRcName);
+            }
         }
         else if (binary.Left is IndexExpression index)
         {
@@ -544,7 +551,7 @@ public partial class LLVMCodeGenerator
 
         TypeInfo? type = GetExpressionType(expr: binary.Left);
         string llvmType = type != null
-            ? GetLLVMType(type: type)
+            ? GetLlvmType(type: type)
             : "i64";
 
         string inverted = NextTemp();
@@ -592,7 +599,7 @@ public partial class LLVMCodeGenerator
 
         ResolvedMethod? resolved = ResolveMethod(receiverType: collectionType, methodName: methodName);
         string mangledName = resolved?.MangledName
-            ?? Q(name: $"{collectionType.FullName}.{SanitizeLLVMName(name: methodName)}");
+            ?? Q(name: $"{collectionType.FullName}.{SanitizeLlvmName(name: methodName)}");
 
         if (resolved != null)
         {
@@ -606,11 +613,11 @@ public partial class LLVMCodeGenerator
         }
 
         var argValues = new List<string> { collection, element };
-        var argTypes = new List<string> { GetParameterLLVMType(type: collectionType) };
+        var argTypes = new List<string> { GetParameterLlvmType(type: collectionType) };
 
         TypeInfo? elemType = GetExpressionType(expr: binary.Left);
         argTypes.Add(item: elemType != null
-            ? GetLLVMType(type: elemType)
+            ? GetLlvmType(type: elemType)
             : "i64");
 
         string result = NextTemp();
@@ -666,7 +673,7 @@ public partial class LLVMCodeGenerator
         TypeInfo? operandType = GetExpressionType(expr: unary.Operand);
         if (operandType != null)
         {
-            string llvmType = GetLLVMType(type: operandType);
+            string llvmType = GetLlvmType(type: operandType);
             if (llvmType.StartsWith(value: "i") && llvmType != "i1")
             {
                 string result = NextTemp();
@@ -695,14 +702,14 @@ public partial class LLVMCodeGenerator
 
         ResolvedMethod? resolved = ResolveMethod(receiverType: operandType, methodName: methodName);
         string mangledName = resolved?.MangledName
-            ?? Q(name: $"{operandType.Name}.{SanitizeLLVMName(name: methodName)}");
+            ?? Q(name: $"{operandType.Name}.{SanitizeLlvmName(name: methodName)}");
 
         string returnType = resolved?.Routine.ReturnType != null
-            ? GetLLVMType(type: resolved.Routine.ReturnType)
-            : GetLLVMType(type: operandType);
+            ? GetLlvmType(type: resolved.Routine.ReturnType)
+            : GetLlvmType(type: operandType);
 
         var argValues = new List<string> { operand };
-        var argTypes = new List<string> { GetParameterLLVMType(type: operandType) };
+        var argTypes = new List<string> { GetParameterLlvmType(type: operandType) };
 
         string result = NextTemp();
         string args = BuildCallArgs(types: argTypes, values: argValues);

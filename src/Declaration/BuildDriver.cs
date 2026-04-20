@@ -1,11 +1,11 @@
 namespace Compiler.Declaration;
 
-using SemanticVerification.Enums;
+using TypeModel.Enums;
 using SemanticVerification.Results;
 using SyntaxTree;
-using Compiler.Lexer;
-using Compiler.Parser;
-using Compiler.Diagnostics;
+using Lexer;
+using Parser;
+using Diagnostics;
 
 /// <summary>
 /// Result of building a single source file.

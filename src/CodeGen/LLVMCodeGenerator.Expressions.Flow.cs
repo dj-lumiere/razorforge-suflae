@@ -1,14 +1,14 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticVerification.Symbols;
-using SemanticVerification.Types;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
 
 /// <summary>
 /// Expression code generation for conditional and flow-oriented expressions.
 /// </summary>
-public partial class LLVMCodeGenerator
+public partial class LlvmCodeGenerator
 {
     /// <summary>
     /// Emits a lambda expression as an internal auxiliary function and returns its function pointer.
@@ -32,22 +32,22 @@ public partial class LLVMCodeGenerator
             TypeInfo paramType = i < routineType.ParameterTypes.Count
                 ? routineType.ParameterTypes[index: i]
                 : ErrorTypeInfo.Instance;
-            string llvmType = GetLLVMType(type: paramType);
+            string llvmType = GetLlvmType(type: paramType);
             paramDecls.Add(item: $"{llvmType} %{paramName}");
         }
 
         string retLlvmType = routineType.ReturnType != null
-            ? GetLLVMType(type: routineType.ReturnType)
+            ? GetLlvmType(type: routineType.ReturnType)
             : "void";
         string paramStr = string.Join(separator: ", ", values: paramDecls);
 
         // Save current function state
         Dictionary<string, TypeInfo> savedLocals = new(_localVariables);
-        Dictionary<string, string> savedLocalLLVM = new(_localVarLLVMNames);
+        Dictionary<string, string> savedLocalLlvm = new(_localVarLlvmNames);
         Dictionary<string, int> savedVarCounts = new(_varNameCounts);
         List<(string Name, string LLVMAddr)> savedEntityVars = new(_localEntityVars);
-        List<(string Name, string LLVMAddr, RecordTypeInfo RecordType)> savedRCVars =
-            new(_localRCRecordVars);
+        List<(string Name, string LLVMAddr, RecordTypeInfo RecordType)> savedRcVars =
+            new(_localRcRecordVars);
         List<(string Name, string LLVMAddr, RecordTypeInfo RecordType)> savedRetainedVars =
             new(_localRetainedVars);
         HashSet<string> savedEmittedAllocas = new(_emittedAllocaNames);
@@ -61,10 +61,10 @@ public partial class LLVMCodeGenerator
 
         // Set up clean state for lambda body
         _localVariables.Clear();
-        _localVarLLVMNames.Clear();
+        _localVarLlvmNames.Clear();
         _varNameCounts.Clear();
         _localEntityVars.Clear();
-        _localRCRecordVars.Clear();
+        _localRcRecordVars.Clear();
         _localRetainedVars.Clear();
         _emittedAllocaNames.Clear();
         _currentFunctionReturnType = routineType.ReturnType;
@@ -82,7 +82,7 @@ public partial class LLVMCodeGenerator
             TypeInfo paramType = i < routineType.ParameterTypes.Count
                 ? routineType.ParameterTypes[index: i]
                 : ErrorTypeInfo.Instance;
-            string llvmType = GetLLVMType(type: paramType);
+            string llvmType = GetLlvmType(type: paramType);
             string addrName = $"%{paramName}.addr";
             _currentFunctionEntryAllocas.AppendLine(value: $"  {addrName} = alloca {llvmType}, align 8");
             _emittedAllocaNames.Add(item: addrName);
@@ -110,10 +110,10 @@ public partial class LLVMCodeGenerator
             _localVariables[key: kv.Key] = kv.Value;
         }
 
-        _localVarLLVMNames.Clear();
-        foreach (KeyValuePair<string, string> kv in savedLocalLLVM)
+        _localVarLlvmNames.Clear();
+        foreach (KeyValuePair<string, string> kv in savedLocalLlvm)
         {
-            _localVarLLVMNames[key: kv.Key] = kv.Value;
+            _localVarLlvmNames[key: kv.Key] = kv.Value;
         }
 
         _varNameCounts.Clear();
@@ -124,8 +124,8 @@ public partial class LLVMCodeGenerator
 
         _localEntityVars.Clear();
         _localEntityVars.AddRange(collection: savedEntityVars);
-        _localRCRecordVars.Clear();
-        _localRCRecordVars.AddRange(collection: savedRCVars);
+        _localRcRecordVars.Clear();
+        _localRcRecordVars.AddRange(collection: savedRcVars);
         _localRetainedVars.Clear();
         _localRetainedVars.AddRange(collection: savedRetainedVars);
 
@@ -177,7 +177,7 @@ public partial class LLVMCodeGenerator
                 message: "Cannot determine type for conditional expression");
         }
 
-        string llvmType = GetLLVMType(type: resultType);
+        string llvmType = GetLlvmType(type: resultType);
         EmitLine(sb: sb,
             line:
             $"  {result} = phi {llvmType} [ {thenValue}, %{thenLabel} ], [ {elseValue}, %{elseLabel} ]");
@@ -206,7 +206,7 @@ public partial class LLVMCodeGenerator
         TypeInfo? elemType =
             GetExpressionType(expr: range.Start) ?? GetExpressionType(expr: range.End);
         string elemLlvmType = elemType != null
-            ? GetLLVMType(type: elemType)
+            ? GetLlvmType(type: elemType)
             : "i64";
 
         // Try to use registered Range type, resolved with element type
@@ -243,56 +243,6 @@ public partial class LLVMCodeGenerator
 
         return v3;
     }
-
-    /// <summary>
-    /// Generates code for a tuple literal expression.
-    /// Tuples are always inline LLVM structs built via insertvalue chain.
-    /// </summary>
-    private string EmitTupleLiteral(StringBuilder sb, TupleLiteralExpression tuple)
-    {
-        // Both ValueTuple and Tuple are inline LLVM structs (value semantics, never heap-allocated).
-        // Tuple's entity elements require RC bump on copy / RC decrement on drop, but that
-        // copy/drop emission is deferred to RecordCopyLoweringPass once it handles TupleTypeInfo.
-        // Evaluate all element expressions
-        var elemValues = new List<string>();
-        var elemLLVMTypes = new List<string>();
-        foreach (Expression element in tuple.Elements)
-        {
-            elemValues.Add(item: EmitExpression(sb: sb, expr: element));
-            TypeInfo? elemType = GetExpressionType(expr: element);
-            elemLLVMTypes.Add(item: elemType != null
-                ? GetLLVMType(type: elemType)
-                : "i64");
-        }
-
-        // Resolve tuple type from semantic analysis
-        var tupleType = tuple.ResolvedType as TupleTypeInfo;
-
-        string structType;
-        if (tupleType != null)
-        {
-            structType = GetTupleTypeName(tuple: tupleType);
-        }
-        else
-        {
-            // Fall back to anonymous struct type
-            structType = $"{{ {string.Join(separator: ", ", values: elemLLVMTypes)} }}";
-        }
-
-        string result = "zeroinitializer";
-        for (int i = 0; i < elemValues.Count; i++)
-        {
-            string newResult = NextTemp();
-            EmitLine(sb: sb,
-                line:
-                $"  {newResult} = insertvalue {structType} {result}, {elemLLVMTypes[index: i]} {elemValues[index: i]}, {i}");
-            result = newResult;
-        }
-
-        return result;
-    }
-
-
     /// <summary>
     /// Resolves generic type parameters in a member's type using the owner's type arguments.
     /// Builds a substitution map from the owner and delegates to SubstituteTypeParams.
@@ -346,7 +296,7 @@ public partial class LLVMCodeGenerator
         string carrierVal = EmitExpression(sb: sb, expr: payload.Carrier);
 
         TypeInfo carrierType = payload.Carrier.ResolvedType!;
-        string carrierLlvmType = GetCarrierLLVMType(type: carrierType);
+        string carrierLlvmType = GetCarrierLlvmType(type: carrierType);
 
         string spillAddr = NextTemp();
         EmitLine(sb: sb, line: $"  {spillAddr} = alloca {carrierLlvmType}");
@@ -372,7 +322,7 @@ public partial class LLVMCodeGenerator
         }
 
         // Value type: zero-extend stored as i64; truncate/bitcast to target type.
-        string llvmType = concreteType != null ? GetLLVMType(type: concreteType) : "i64";
+        string llvmType = concreteType != null ? GetLlvmType(type: concreteType) : "i64";
         if (llvmType == "i64") return dataI64;
 
         // If the LLVM type is a pointer (protocol, opaque handle), use inttoptr — not trunc.

@@ -1,12 +1,12 @@
-using SemanticVerification.Symbols;
+using TypeModel.Symbols;
 
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticVerification.Types;
+using TypeModel.Types;
 using SyntaxTree;
 
-public partial class LLVMCodeGenerator
+public partial class LlvmCodeGenerator
 {
     private void EmitUsing(StringBuilder sb, UsingStatement usingStmt)
     {
@@ -14,7 +14,7 @@ public partial class LLVMCodeGenerator
         string resourceValue = EmitExpression(sb: sb, expr: usingStmt.Resource);
         TypeInfo? resourceType = GetExpressionType(expr: usingStmt.Resource);
         string llvmType = resourceType != null
-            ? GetLLVMType(type: resourceType)
+            ? GetLlvmType(type: resourceType)
             : "ptr";
 
         // Check if $enter exists for this type — LookupMethod handles generic type fallback
@@ -30,13 +30,13 @@ public partial class LLVMCodeGenerator
             // Resource path: call $enter(), bind result (or resource if void)
             GenerateFunctionDeclaration(routine: enterMethod);
             string enterMangled = MangleFunctionName(routine: enterMethod);
-            string receiverType = GetParameterLLVMType(type: resourceType!);
+            string receiverType = GetParameterLlvmType(type: resourceType!);
 
             if (enterMethod.ReturnType != null &&
-                GetLLVMType(type: enterMethod.ReturnType) != "void")
+                GetLlvmType(type: enterMethod.ReturnType) != "void")
             {
                 string enterResult = NextTemp();
-                string returnType = GetLLVMType(type: enterMethod.ReturnType);
+                string returnType = GetLlvmType(type: enterMethod.ReturnType);
                 EmitLine(sb: sb,
                     line:
                     $"  {enterResult} = call {returnType} @{enterMangled}({receiverType} {resourceValue})");
@@ -60,7 +60,7 @@ public partial class LLVMCodeGenerator
 
         // Allocate and store the bound variable
         string bindLlvmType = boundType != null
-            ? GetLLVMType(type: boundType)
+            ? GetLlvmType(type: boundType)
             : llvmType;
         string varAddr = $"%{usingStmt.Name}.addr";
         EmitEntryAlloca(llvmName: varAddr, llvmType: bindLlvmType);
@@ -91,7 +91,7 @@ public partial class LLVMCodeGenerator
         {
             _usingCleanupStack.Pop();
             string exitMangled = MangleFunctionName(routine: exitMethod);
-            string receiverType = GetParameterLLVMType(type: resourceType);
+            string receiverType = GetParameterLlvmType(type: resourceType);
             EmitLine(sb: sb, line: $"  call void @{exitMangled}({receiverType} {resourceValue})");
         }
     }

@@ -1,6 +1,6 @@
 using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using SemanticVerification.Symbols;
+using TypeModel.Symbols;
 using Xunit;
 
 namespace RazorForge.Tests.Analyzer;

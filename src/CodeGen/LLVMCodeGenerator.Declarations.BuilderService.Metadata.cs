@@ -1,16 +1,17 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using Compiler.Desugaring;
-using SemanticVerification.Symbols;
-using SemanticVerification.Types;
+using Desugaring;
+using Compiler.Postprocessing;
+using TypeModel.Symbols;
+using TypeModel.Types;
 
 // Remaining codegen-level BuilderService routines:
 // - member_variable_info / all_member_variables / open_member_variables — struct-building IR
 // - member_type_id — runtime string-compare dispatch
 // - Platform/build info — page_size, cache_line, etc. (in BuilderService.Platform.cs)
 // Simple scalar/list BS routines have been moved to WiredRoutinePass.TryHandleBuilderServiceConstant.
-public partial class LLVMCodeGenerator
+public partial class LlvmCodeGenerator
 {
 
     private static ulong ComputeTypeId(string fullName) =>
@@ -27,7 +28,7 @@ public partial class LLVMCodeGenerator
             return;
         }
 
-        string meType = GetParameterLLVMType(type: routine.OwnerType);
+        string meType = GetParameterLlvmType(type: routine.OwnerType);
 
         IReadOnlyList<MemberVariableInfo>? fields = routine.OwnerType switch
         {
@@ -163,7 +164,7 @@ public partial class LLVMCodeGenerator
         }
 
         StringBuilder sb = _functionDefinitions;
-        string meType = GetParameterLLVMType(type: routine.OwnerType);
+        string meType = GetParameterLlvmType(type: routine.OwnerType);
 
         // Get fields for this type
         IReadOnlyList<MemberVariableInfo> allFields = routine.OwnerType switch
@@ -219,7 +220,7 @@ public partial class LLVMCodeGenerator
         {
             EntityTypeInfo ent => GetEntityTypeName(entity: ent),
             RecordTypeInfo rec => GetRecordTypeName(record: rec),
-            _ => GetLLVMType(type: routine.OwnerType)
+            _ => GetLlvmType(type: routine.OwnerType)
         };
 
         // For records (pass-by-value), we need a pointer to GEP into.
@@ -242,7 +243,7 @@ public partial class LLVMCodeGenerator
         for (int i = 0; i < fields.Count; i++)
         {
             MemberVariableInfo field = fields[index: i];
-            string fieldLlvmType = GetLLVMType(type: field.Type);
+            string fieldLlvmType = GetLlvmType(type: field.Type);
             string nameStr = EmitSynthesizedStringLiteral(value: field.Name);
 
             // Extract field value from %me (use pointer for GEP)
@@ -414,7 +415,7 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private long GetFieldByteSize(TypeInfo type)
     {
-        string llvmType = GetLLVMType(type: type);
+        string llvmType = GetLlvmType(type: type);
         return LlvmTypeSizeBytes(llvmType: llvmType);
     }
 
@@ -423,7 +424,7 @@ public partial class LLVMCodeGenerator
     /// </summary>
     private long GetFieldAlignment(TypeInfo type)
     {
-        string llvmType = GetLLVMType(type: type);
+        string llvmType = GetLlvmType(type: type);
         return LlvmTypeAlignment(llvmType: llvmType);
     }
 
@@ -445,7 +446,8 @@ public partial class LLVMCodeGenerator
             "double" => 8,
             "fp128" => 16,
             "ptr" => _pointerBitWidth / 8,
-            _ => _pointerBitWidth / 8 // Default to pointer size for struct/unknown types
+            _ => throw new InvalidOperationException(
+                $"Unknown LLVM type '{llvmType}' in LlvmTypeByteSize — cannot determine byte size.")
         };
     }
 
@@ -522,7 +524,7 @@ public partial class LLVMCodeGenerator
             return;
         }
 
-        string meType = GetParameterLLVMType(type: routine.OwnerType);
+        string meType = GetParameterLlvmType(type: routine.OwnerType);
 
         IReadOnlyList<MemberVariableInfo>? fields = routine.OwnerType switch
         {

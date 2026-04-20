@@ -1,11 +1,12 @@
 namespace SemanticVerification;
 
 using Enums;
-using Symbols;
-using Types;
+using TypeModel.Enums;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
 using Compiler.Diagnostics;
-using TypeSymbol = Types.TypeInfo;
+using TypeSymbol = TypeModel.Types.TypeInfo;
 
 public sealed partial class SemanticAnalyzer
 {
@@ -57,6 +58,45 @@ public sealed partial class SemanticAnalyzer
                     isFailable: isFailableCall);
             }
 
+            // Overload resolution: re-resolve when the initial lookup (first-wins by base name)
+            // returns a routine with a different arity than the call site. This handles the case
+            // where a zero-arg overload was registered first but the call has arguments, or where
+            // a same-first-param overload was registered first but the call has different arity.
+            if (routine != null && !routine.IsGenericDefinition && !routine.IsVariadic &&
+                call.Arguments.Count != routine.Parameters.Count)
+            {
+                var arityArgTypes = new List<TypeSymbol>();
+                foreach (Expression arg in call.Arguments)
+                {
+                    Expression actual = arg is NamedArgumentExpression nai ? nai.Value : arg;
+                    TypeSymbol t = AnalyzeExpression(expression: actual);
+                    if (t != ErrorTypeInfo.Instance) arityArgTypes.Add(item: t);
+                }
+                RoutineInfo? arityMatch =
+                    _registry.LookupRoutineOverload(baseName: callName, argTypes: arityArgTypes);
+                if (arityMatch != null && arityMatch != routine)
+                {
+                    routine = arityMatch;
+                    call.ResolvedRoutine = routine;
+                }
+                else
+                {
+                    RoutineInfo? generic =
+                        _registry.LookupGenericOverload(name: callName,
+                            preferredArity: call.Arguments.Count);
+                    if (generic != null)
+                    {
+                        IReadOnlyList<TypeInfo>? inferred =
+                            InferGenericTypeArguments(genericRoutine: generic,
+                                arguments: call.Arguments);
+                        routine = inferred != null
+                            ? generic.CreateInstance(typeArguments: inferred)
+                            : generic;
+                        call.ResolvedRoutine = routine;
+                    }
+                }
+            }
+
             // Overload resolution: if the found routine is non-generic and the first
             // argument doesn't match, try a specific or generic overload (e.g., show[T])
             if (routine != null && !routine.IsGenericDefinition && call.Arguments.Count > 0 &&
@@ -96,7 +136,9 @@ public sealed partial class SemanticAnalyzer
                     }
                     else
                     {
-                        RoutineInfo? generic = _registry.LookupGenericOverload(name: callName);
+                        RoutineInfo? generic =
+                            _registry.LookupGenericOverload(name: callName,
+                                preferredArity: call.Arguments.Count);
                         if (generic != null)
                         {
                             IReadOnlyList<TypeInfo>? inferred =
@@ -177,7 +219,7 @@ public sealed partial class SemanticAnalyzer
                         location: call.Location);
                 }
 
-                // Validate exclusive token uniqueness (cannot pass same Hijacked/Seized twice)
+                // Validate exclusive token uniqueness (cannot pass same Grasped/Claimed twice)
                 ValidateExclusiveTokenUniqueness(arguments: call.Arguments,
                     location: call.Location);
 
@@ -237,6 +279,15 @@ public sealed partial class SemanticAnalyzer
                         call.ResolvedRoutine = creator;
                         return creator.ReturnType ?? type;
                     }
+
+                    // Entity types can only be constructed via $create — no fallback
+                    if (type is EntityTypeInfo)
+                    {
+                        ReportError(code: SemanticDiagnosticCode.TypeNotCallable,
+                            message: $"No matching '$create' overload found for entity type '{type.Name}' " +
+                                     $"with {argTypes.Count} argument(s).",
+                            location: call.Location);
+                    }
                 }
 
                 // #115: Data boxing restrictions — certain types cannot be boxed to Data
@@ -246,11 +297,11 @@ public sealed partial class SemanticAnalyzer
                     if ((IsCarrierType(type: argType) && !IsMaybeType(type: argType)) || argType is VariantTypeInfo
                             or WrapperTypeInfo { IsReadOnly: true } // Viewed, Inspected
                         || argType is WrapperTypeInfo wrapper && wrapper.InnerType != null &&
-                        wrapper.Name is "Hijacked" or "Seized")
+                        wrapper.Name is "Grasped" or "Claimed")
                     {
                         ReportError(code: SemanticDiagnosticCode.DataBoxingProhibited,
                             message: $"Type '{argType.Name}' cannot be boxed to Data. " +
-                                     "Result, Lookup, variants, and access tokens (Viewed, Hijacked, Inspected, Seized) cannot be stored in Data.",
+                                     "Result, Lookup, variants, and access tokens (Viewed, Grasped, Inspected, Claimed) cannot be stored in Data.",
                             location: call.Location);
                     }
 
@@ -451,9 +502,11 @@ public sealed partial class SemanticAnalyzer
             }
 
             // Wired routines ($-prefixed) cannot be called directly by user code, except
-            // $represent and $diagnose which are composable for custom display implementations.
+            // $represent and $diagnose which are composable for custom display implementations,
+            // and $iter which is emitted by ControlFlowLoweringPass for for-loop desugaring.
             if (member.PropertyName.StartsWith(value: '$')
-                && member.PropertyName != "$represent" && member.PropertyName != "$diagnose")
+                && member.PropertyName != "$represent" && member.PropertyName != "$diagnose"
+                && member.PropertyName != "$iter")
             {
                 ReportError(code: SemanticDiagnosticCode.DirectWiredRoutineCall,
                     message: $"Wired routine '{member.PropertyName}' cannot be called directly. " +
@@ -462,12 +515,12 @@ public sealed partial class SemanticAnalyzer
                 return ErrorTypeInfo.Instance;
             }
 
-            // #137: Nested hijacking detection — checked before method resolution
-            // since hijack() is generic extension T.hijack() that may not resolve by concrete type name
-            if (member.PropertyName == "hijack" && IsNestedHijacking(source: member.Object))
+            // #137: Nested grasping detection — checked before method resolution
+            // since grasp() is generic extension T.grasp() that may not resolve by concrete type name
+            if (member.PropertyName == "grasp" && IsNestedHijacking(source: member.Object))
             {
                 ReportError(code: SemanticDiagnosticCode.NestedHijackingNotAllowed,
-                    message: "Cannot hijack a member of an already-hijacked object. " +
+                    message: "Cannot grasp a member of an already-grasped object. " +
                              "Hijack the parent entity directly instead.",
                     location: call.Location);
             }
@@ -483,7 +536,7 @@ public sealed partial class SemanticAnalyzer
 
             // Phase D: Transparent wrapper forwarding — if the method isn't found directly on
             // the wrapper, synthesize a forwarder that delegates to the inner type's method
-            // via `Snatched[T](me).read().method(...)`.
+            // via `Hijacked[T](me).read().method(...)`.
             if (method == null && IsWrapperType(type: objectType))
             {
                 method = TrySynthesizeWrapperForwarder(wrapperType: objectType,
@@ -594,7 +647,7 @@ public sealed partial class SemanticAnalyzer
                 }
 
                 // #12: Partial access rule — entity.field.view() is not allowed
-                if (member.PropertyName is "view" or "hijack" &&
+                if (member.PropertyName is "view" or "grasp" &&
                     member.Object is MemberExpression innerMember)
                 {
                     TypeSymbol innerObjectType =
@@ -609,58 +662,58 @@ public sealed partial class SemanticAnalyzer
                     }
                 }
 
-                // #137: Nested hijacking detection
-                if (member.PropertyName == "hijack" && IsNestedHijacking(source: member.Object))
+                // #137: Nested grasping detection
+                if (member.PropertyName == "grasp" && IsNestedHijacking(source: member.Object))
                 {
                     ReportError(code: SemanticDiagnosticCode.NestedHijackingNotAllowed,
-                        message: "Cannot hijack a member of an already-hijacked object. " +
+                        message: "Cannot grasp a member of an already-grasped object. " +
                                  "Hijack the parent entity directly instead.",
                         location: call.Location);
                 }
 
-                // #92: Re-hijacking prohibition — cannot hijack an already-hijacked token
-                if (member.PropertyName == "hijack" && IsHijackedType(type: objectType))
+                // #92: Re-grasping prohibition — cannot grasp an already-grasped token
+                if (member.PropertyName == "grasp" && IsGraspedType(type: objectType))
                 {
                     ReportError(code: SemanticDiagnosticCode.ReHijackingProhibited,
                         message:
-                        $"Cannot re-hijack an already-hijacked token '{objectType.Name}'. " +
+                        $"Cannot re-grasp an already-grasped token '{objectType.Name}'. " +
                         "The entity is already exclusively accessed.",
                         location: call.Location);
                 }
 
-                // #170: Downgrade prohibition — cannot call .view() on Hijacked/Seized
-                if (member.PropertyName == "view" && (IsHijackedType(type: objectType) ||
-                                                      IsSeizedType(type: objectType)))
+                // #170: Downgrade prohibition — cannot call .view() on Grasped/Claimed
+                if (member.PropertyName == "view" && (IsGraspedType(type: objectType) ||
+                                                      IsClaimedType(type: objectType)))
                 {
                     ReportError(code: SemanticDiagnosticCode.TokenDowngradeProhibited,
                         message: $"Cannot downgrade '{objectType.Name}' with '.view()'. " +
-                                 "Hijacked/Seized tokens already have write access — use them directly.",
+                                 "Grasped/Claimed tokens already have write access — use them directly.",
                         location: call.Location);
                 }
 
-                // #97: Snatched[T] method calls require danger! block
-                if (IsSnatched(type: objectType) && !InDangerBlock)
+                // #97: Hijacked[T] method calls require danger! block
+                if (IsHijacked(type: objectType) && !InDangerBlock)
                 {
-                    ReportError(code: SemanticDiagnosticCode.SnatchedRequiresDanger,
+                    ReportError(code: SemanticDiagnosticCode.HijackedRequiresDanger,
                         message:
-                        $"Method call on 'Snatched[T]' type requires a 'danger!' block. " +
-                        "Snatched values bypass ownership safety checks.",
+                        $"Method call on 'Hijacked[T]' type requires a 'danger!' block. " +
+                        "Hijacked values bypass ownership safety checks.",
                         location: call.Location);
                 }
 
-                // #98: .snatch() on Shared/Marked requires danger! block
-                if (member.PropertyName == "snatch" && !InDangerBlock &&
+                // #98: .hijack() on Shared/Marked requires danger! block
+                if (member.PropertyName == "hijack" && !InDangerBlock &&
                     (IsSharedType(type: objectType) || IsMarkedType(type: objectType)))
                 {
                     ReportError(code: SemanticDiagnosticCode.SnatchRequiresDanger,
                         message:
-                        $"Calling '.snatch()' on '{objectType.Name}' requires a 'danger!' block. " +
+                        $"Calling '.hijack()' on '{objectType.Name}' requires a 'danger!' block. " +
                         "Snatching bypasses reference counting safety.",
                         location: call.Location);
                 }
 
-                // #100/#101: inspect!/seize! only valid on Shared entity handles
-                if (member.PropertyName is "inspect" or "seize" &&
+                // #100/#101: inspect!/claim! only valid on Shared entity handles
+                if (member.PropertyName is "inspect" or "claim" &&
                     !IsSharedType(type: objectType) && objectType is not ErrorTypeInfo)
                 {
                     ReportError(code: member.PropertyName == "inspect"
@@ -671,8 +724,8 @@ public sealed partial class SemanticAnalyzer
                         location: call.Location);
                 }
 
-                // #19: Lock policy validation — inspect!/seize! must match the lock policy
-                if (member.PropertyName is "inspect" or "seize" &&
+                // #19: Lock policy validation — inspect!/claim! must match the lock policy
+                if (member.PropertyName is "inspect" or "claim" &&
                     member.Object is IdentifierExpression lockPolicyTarget &&
                     _variableLockPolicies.TryGetValue(key: lockPolicyTarget.Name,
                         value: out string? policy))
@@ -682,15 +735,15 @@ public sealed partial class SemanticAnalyzer
                         ReportError(code: SemanticDiagnosticCode.InspectRequiresMultiRead,
                             message:
                             $"Cannot use 'inspect!()' on '{lockPolicyTarget.Name}' — it uses Exclusive lock policy. " +
-                            "Exclusive locks do not support concurrent readers. Use 'seize!()' instead.",
+                            "Exclusive locks do not support concurrent readers. Use 'claim!()' instead.",
                             location: call.Location);
                     }
 
-                    if (member.PropertyName == "seize" && policy == "ReadOnly")
+                    if (member.PropertyName == "claim" && policy == "ReadOnly")
                     {
                         ReportError(code: SemanticDiagnosticCode.ReadOnlyRejectsLocking,
                             message:
-                            $"Cannot use 'seize!()' on '{lockPolicyTarget.Name}' — it uses ReadOnly lock policy. " +
+                            $"Cannot use 'claim!()' on '{lockPolicyTarget.Name}' — it uses ReadOnly lock policy. " +
                             "ReadOnly does not support exclusive write access. Use 'inspect!()' instead.",
                             location: call.Location);
                     }
@@ -717,20 +770,20 @@ public sealed partial class SemanticAnalyzer
                         location: call.Location);
                 }
 
-                // #47: .hijack() on @initonly record warns — record is frozen after construction
-                if (member.PropertyName == "hijack" && objectType is RecordTypeInfo)
+                // #47: .grasp() on @initonly record warns — record is frozen after construction
+                if (member.PropertyName == "grasp" && objectType is RecordTypeInfo)
                 {
                     // Check if the variable holding the record is @initonly bound
-                    if (member.Object is IdentifierExpression hijackTarget)
+                    if (member.Object is IdentifierExpression graspTarget)
                     {
                         VariableInfo? targetVar =
-                            _registry.LookupVariable(name: hijackTarget.Name);
+                            _registry.LookupVariable(name: graspTarget.Name);
                         if (targetVar is { IsModifiable: false })
                         {
                             ReportWarning(code: SemanticWarningCode.HijackOnInitOnly,
                                 message:
-                                $"Calling '.hijack()' on @initonly-bound record '{hijackTarget.Name}'. " +
-                                "The record is frozen after construction — hijacking has no practical effect.",
+                                $"Calling '.grasp()' on @initonly-bound record '{graspTarget.Name}'. " +
+                                "The record is frozen after construction — grasping has no practical effect.",
                                 location: call.Location);
                         }
                     }
@@ -747,7 +800,7 @@ public sealed partial class SemanticAnalyzer
                     }
                 }
 
-                // Validate exclusive token uniqueness (cannot pass same Hijacked/Seized twice)
+                // Validate exclusive token uniqueness (cannot pass same Grasped/Claimed twice)
                 ValidateExclusiveTokenUniqueness(arguments: call.Arguments,
                     location: call.Location);
 

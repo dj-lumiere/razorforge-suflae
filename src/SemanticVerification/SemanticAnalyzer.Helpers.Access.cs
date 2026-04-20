@@ -1,11 +1,12 @@
 namespace SemanticVerification;
 
 using Enums;
-using Symbols;
-using Types;
+using TypeModel.Enums;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
 using Compiler.Diagnostics;
-using TypeSymbol = Types.TypeInfo;
+using TypeSymbol = TypeModel.Types.TypeInfo;
 
 public sealed partial class SemanticAnalyzer
 {
@@ -24,9 +25,9 @@ public sealed partial class SemanticAnalyzer
         return baseName switch
         {
             "Viewed" => "read-only token (Viewed)",
-            "Hijacked" => "exclusive write token (Hijacked)",
+            "Grasped" => "exclusive write token (Grasped)",
             "Inspected" => "shared read token (Inspected)",
-            "Seized" => "exclusive shared write token (Seized)",
+            "Claimed" => "exclusive shared write token (Claimed)",
             _ => "token"
         };
     }
@@ -71,7 +72,7 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
-    /// Validates that exclusive tokens (Hijacked, Seized) are not passed multiple times in a single call.
+    /// Validates that exclusive tokens (Grasped, Claimed) are not passed multiple times in a single call.
     /// </summary>
     private void ValidateExclusiveTokenUniqueness(List<Expression> arguments,
         SourceLocation location)

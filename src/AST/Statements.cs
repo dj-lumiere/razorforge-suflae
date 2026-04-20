@@ -612,7 +612,7 @@ public record TypePattern(
 /// Pattern that matches when a value is NOT a specific type.
 /// Used for negated type checking in when clauses: when value { isnot Text => ... }
 /// </summary>
-/// <param name="Type">The type to check against (negated — matches if NOT this type)</param>
+/// <param name="Type">The type to check against (negated ??matches if NOT this type)</param>
 /// <param name="Location">Source location information</param>
 public record NegatedTypePattern(TypeExpression Type, SourceLocation Location)
     : Pattern(Location: Location);
@@ -878,7 +878,7 @@ public enum VariantSiteKind
 
 /// <summary>
 /// Synthesized return statement inserted into error-handling variant bodies by
-/// <see cref="Desugaring.Passes.ErrorHandlingVariantPass"/>.
+/// <see cref="Synthesis.ErrorHandlingVariantPass"/>.
 /// Replaces <see cref="ThrowStatement"/>, <see cref="AbsentStatement"/>, and
 /// <see cref="ReturnStatement"/> so that codegen can emit carrier construction via
 /// <c>EmitVariantReturn</c> without relying on mutable flags.

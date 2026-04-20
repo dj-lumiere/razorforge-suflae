@@ -1,14 +1,14 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticVerification.Symbols;
-using SemanticVerification.Types;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
 
 /// <summary>
 /// Expression code generation for entity construction and entity member operations.
 /// </summary>
-public partial class LLVMCodeGenerator
+public partial class LlvmCodeGenerator
 {
     private string EmitEntityAllocation(StringBuilder sb, EntityTypeInfo entity,
         List<string>? memberVariableValues = null)
@@ -25,7 +25,7 @@ public partial class LLVMCodeGenerator
         for (int i = 0; i < entity.MemberVariables.Count; i++)
         {
             MemberVariableInfo memberVariable = entity.MemberVariables[index: i];
-            string memberVariableType = GetLLVMType(type: memberVariable.Type);
+            string memberVariableType = GetLlvmType(type: memberVariable.Type);
 
             // Get member variable pointer using GEP
             string memberVariablePtr = NextTemp();
@@ -60,32 +60,16 @@ public partial class LLVMCodeGenerator
     /// <returns>The temporary variable holding the result.</returns>
     private string EmitConstructorCall(StringBuilder sb, CreatorExpression expr)
     {
-        // Look up the type (try module-qualified name for user types)
-        TypeInfo? type = LookupTypeInCurrentModule(name: expr.TypeName);
+        if (ResolveCreatorType(creator: expr) is TupleTypeInfo tupleType)
+        {
+            return EmitTupleConstruction(sb: sb, tuple: tupleType, expr: expr);
+        }
+
+        TypeInfo? type = ResolveCreatorType(creator: expr);
         if (type == null)
         {
             throw new InvalidOperationException(
                 message: $"Unknown type in constructor: {expr.TypeName}");
-        }
-
-        // When the name resolves to a generic definition but the expression has a concrete
-        // ResolvedType (e.g. Range[S64] lowered from RangeExpression), use the resolved type
-        // so EmitRecordConstruction gets the correct monomorphized LLVM struct name.
-        if (type.IsGenericDefinition && expr.ResolvedType != null)
-            type = expr.ResolvedType;
-
-        // In monomorphized generic bodies the AST has explicit TypeArguments (e.g. List[T](...)
-        // rewritten to List[DictEntry[...]](...)). Resolve them so we get the concrete type
-        // (e.g. List[DictEntry[S64,S64]]) instead of the generic definition (%Entity.List).
-        if (type.IsGenericDefinition && expr.TypeArguments is { Count: > 0 })
-        {
-            var resolvedArgs = expr.TypeArguments
-                .Select(ta => ResolveTypeArgument(ta: ta))
-                .Where(a => a != null)
-                .Select(a => a!)
-                .ToList();
-            if (resolvedArgs.Count == expr.TypeArguments.Count)
-                type = _registry.GetOrCreateResolution(genericDef: type, typeArguments: resolvedArgs);
         }
 
         return type switch
@@ -138,10 +122,10 @@ public partial class LLVMCodeGenerator
             string argValue = EmitExpression(sb: sb, expr: expr.MemberVariables[index: 0].Value);
             if (record.HasDirectBackendType)
             {
-                string targetLlvm = GetLLVMType(type: record);
+                string targetLlvm = GetLlvmType(type: record);
                 TypeInfo? argType = GetExpressionType(expr: expr.MemberVariables[index: 0].Value);
                 string argLlvm = argType != null
-                    ? GetLLVMType(type: argType)
+                    ? GetLlvmType(type: argType)
                     : targetLlvm;
                 if (argLlvm != targetLlvm)
                 {
@@ -176,7 +160,7 @@ public partial class LLVMCodeGenerator
         for (int i = 0; i < expr.MemberVariables.Count && i < record.MemberVariables.Count; i++)
         {
             string value = EmitExpression(sb: sb, expr: expr.MemberVariables[index: i].Value);
-            string memberVariableType = GetLLVMType(type: record.MemberVariables[index: i].Type);
+            string memberVariableType = GetLlvmType(type: record.MemberVariables[index: i].Type);
 
             string newResult = NextTemp();
             EmitLine(sb: sb,
@@ -186,6 +170,46 @@ public partial class LLVMCodeGenerator
         }
 
         return result;
+    }
+
+    private string EmitTupleConstruction(StringBuilder sb, TupleTypeInfo tuple,
+        CreatorExpression expr)
+    {
+        string typeName = GetTupleTypeName(tuple: tuple);
+        string result = "zeroinitializer";
+
+        for (int i = 0; i < tuple.ElementTypes.Count; i++)
+        {
+            Expression? element = TryGetTupleCreatorElement(creator: expr, index: i);
+            if (element == null)
+            {
+                continue;
+            }
+
+            string value = EmitExpression(sb: sb, expr: element);
+            string elementLlvmType = GetLlvmType(type: tuple.ElementTypes[index: i]);
+            string next = NextTemp();
+            EmitLine(sb: sb,
+                line:
+                $"  {next} = insertvalue {typeName} {result}, {elementLlvmType} {value}, {i}");
+            result = next;
+        }
+
+        return result;
+    }
+
+    private static Expression? TryGetTupleCreatorElement(CreatorExpression creator, int index)
+    {
+        string expectedName = $"item{index}";
+        foreach ((string name, Expression value) in creator.MemberVariables)
+        {
+            if (name == expectedName)
+            {
+                return value;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -201,10 +225,10 @@ public partial class LLVMCodeGenerator
             string argValue = EmitExpression(sb: sb, expr: arguments[index: 0]);
             if (record.HasDirectBackendType)
             {
-                string targetLlvm = GetLLVMType(type: record);
+                string targetLlvm = GetLlvmType(type: record);
                 TypeInfo? argType = GetExpressionType(expr: arguments[index: 0]);
                 string argLlvm = argType != null
-                    ? GetLLVMType(type: argType)
+                    ? GetLlvmType(type: argType)
                     : targetLlvm;
                 if (argLlvm != targetLlvm)
                 {
@@ -241,7 +265,7 @@ public partial class LLVMCodeGenerator
                 ? named.Value
                 : arguments[index: i];
             string value = EmitExpression(sb: sb, expr: arg);
-            string memberVariableType = GetLLVMType(type: record.MemberVariables[index: i].Type);
+            string memberVariableType = GetLlvmType(type: record.MemberVariables[index: i].Type);
 
             string newResult = NextTemp();
             EmitLine(sb: sb,
@@ -275,7 +299,7 @@ public partial class LLVMCodeGenerator
                 ? named.Value
                 : arguments[index: i];
             string value = EmitExpression(sb: sb, expr: arg);
-            string fieldType = GetLLVMType(type: entity.MemberVariables[index: i].Type);
+            string fieldType = GetLlvmType(type: entity.MemberVariables[index: i].Type);
             string fieldPtr = NextTemp();
             EmitLine(sb: sb,
                 line: $"  {fieldPtr} = getelementptr {typeName}, ptr {entityPtr}, i32 0, i32 {i}");
@@ -306,7 +330,7 @@ public partial class LLVMCodeGenerator
                 ? named.Value
                 : arguments[index: i];
             string value = EmitExpression(sb: sb, expr: arg);
-            string fieldType = GetLLVMType(type: crashable.MemberVariables[index: i].Type);
+            string fieldType = GetLlvmType(type: crashable.MemberVariables[index: i].Type);
             string fieldPtr = NextTemp();
             EmitLine(sb: sb,
                 line: $"  {fieldPtr} = getelementptr {typeName}, ptr {crashablePtr}, i32 0, i32 {i}");
@@ -367,17 +391,17 @@ public partial class LLVMCodeGenerator
                 message: "Cannot determine type of member variable access target");
         }
 
-        // Wrapper type forwarding: Viewed[T], Hijacked[T], etc.
-        // These are records wrapping a Snatched[T] (ptr) — forward member access to the inner entity type
+        // Wrapper type forwarding: Viewed[T], Grasped[T], etc.
+        // These are records wrapping a Hijacked[T] (ptr) — forward member access to the inner entity type
         if (targetType is RecordTypeInfo wrapperRecord &&
             GetGenericBaseName(type: wrapperRecord) is { } wrapBaseName &&
-            _wrapperTypeNames.Contains(item: wrapBaseName) &&
+            WrapperTypeNames.Contains(item: wrapBaseName) &&
             wrapperRecord.TypeArguments is { Count: > 0 } &&
             wrapperRecord.TypeArguments[index: 0] is EntityTypeInfo innerEntity &&
             !wrapperRecord.MemberVariables.Any(predicate: mv => mv.Name == propertyName))
         {
             // For @llvm("ptr") wrappers, the value IS the pointer directly
-            // For struct wrappers, extract the inner Snatched[T] (ptr) from field 0
+            // For struct wrappers, extract the inner Hijacked[T] (ptr) from field 0
             string innerPtr;
             if (wrapperRecord.HasDirectBackendType)
             {
@@ -387,8 +411,23 @@ public partial class LLVMCodeGenerator
             {
                 string recordTypeName = GetRecordTypeName(record: wrapperRecord);
                 innerPtr = NextTemp();
+                // Find the index of the Hijacked[T] field that holds the inner entity pointer.
+                // (e.g. Retained[T] has controller=0, data=1; Inspected[T] has ptr=0)
+                int dataFieldIndex = 0;
+                for (int fi = 0; fi < wrapperRecord.MemberVariables.Count; fi++)
+                {
+                    if (wrapperRecord.MemberVariables[index: fi].Type is WrapperTypeInfo
+                            { Name: "Hijacked" } hijacked
+                        && hijacked.TypeArguments is { Count: > 0 }
+                        && hijacked.TypeArguments[index: 0] is EntityTypeInfo fieldInner
+                        && fieldInner.FullName == innerEntity.FullName)
+                    {
+                        dataFieldIndex = fi;
+                        break;
+                    }
+                }
                 EmitLine(sb: sb,
-                    line: $"  {innerPtr} = extractvalue {recordTypeName} {target}, 0");
+                    line: $"  {innerPtr} = extractvalue {recordTypeName} {target}, {dataFieldIndex}");
             }
 
             return EmitEntityMemberVariableRead(sb: sb,
@@ -452,13 +491,21 @@ public partial class LLVMCodeGenerator
 
         if (memberVariableIndex < 0 || memberVariable == null)
         {
+            string memberList = string.Join(", ", entity.MemberVariables.Select(mv => mv.Name));
+            string genDefName = entity.GenericDefinition?.FullName ?? "(null)";
+            string genDefMembers = entity.GenericDefinition != null
+                ? string.Join(", ", entity.GenericDefinition.MemberVariables.Select(mv => mv.Name))
+                : "(null)";
+            string typeArgNames = entity.TypeArguments != null
+                ? string.Join(", ", entity.TypeArguments.Select(t => t.FullName))
+                : "(null)";
             throw new InvalidOperationException(
                 message:
-                $"Member variable '{memberVariableName}' not found on entity '{entity.Name}'");
+                $"Member variable '{memberVariableName}' not found on entity '{entity.FullName}' (members: [{memberList}], GenericDef={genDefName}, GenericDefMembers=[{genDefMembers}], TypeArgs=[{typeArgNames}])");
         }
 
         string typeName = GetEntityTypeName(entity: entity);
-        string memberVariableType = GetLLVMType(type: memberVariable.Type);
+        string memberVariableType = GetLlvmType(type: memberVariable.Type);
 
         // GEP to get member variable pointer
         string memberVariablePtr = NextTemp();
@@ -500,7 +547,7 @@ public partial class LLVMCodeGenerator
         }
 
         string typeName = GetCrashableTypeName(crashable: crashable);
-        string memberVariableType = GetLLVMType(type: memberVariable.Type);
+        string memberVariableType = GetLlvmType(type: memberVariable.Type);
 
         string memberVariablePtr = NextTemp();
         EmitLine(sb: sb,
@@ -520,7 +567,7 @@ public partial class LLVMCodeGenerator
     private string EmitRecordMemberVariableRead(StringBuilder sb, string recordValue,
         RecordTypeInfo record, string memberVariableName)
     {
-        // Snatched[T] (@llvm("ptr")): .address → ptrtoint ptr to i64
+        // Hijacked[T] (@llvm("ptr")): .address → ptrtoint ptr to i64
         if (record is { HasDirectBackendType: true, LlvmType: "ptr" } &&
             memberVariableName == "address")
         {
@@ -556,7 +603,7 @@ public partial class LLVMCodeGenerator
         }
 
         string typeName = GetRecordTypeName(record: record);
-        string memberVariableType = GetLLVMType(type: memberVariable.Type);
+        string memberVariableType = GetLlvmType(type: memberVariable.Type);
 
         // Extract the member variable value
         string value = NextTemp();
@@ -633,39 +680,27 @@ public partial class LLVMCodeGenerator
         }
 
         string typeName = GetEntityTypeName(entity: entity);
-        string memberVariableType = GetLLVMType(type: memberVariable.Type);
+        string memberVariableType = GetLlvmType(type: memberVariable.Type);
 
         // Auto-wrap non-Maybe values into Maybe when assigning to nullable member variables.
         // Skip wrapping if: value is already a Maybe type, or value is zeroinitializer (None literal).
         // Record Maybe { i1 present, T value }: insertvalue i1 1 at 0, T at 1.
-        // Entity Maybe { Snatched[T] }:         single ptr field — non-null ptr = present.
+        // Entity Maybe { Hijacked[T] }:         single ptr field — non-null ptr = present.
         if (IsMaybeType(type: memberVariable.Type) &&
             !(valueType != null && IsMaybeType(type: valueType)) && value != "zeroinitializer")
         {
-            string memberCarrierType = GetLLVMType(type: memberVariable.Type);
-            bool innerIsEntity = memberVariable.Type.TypeArguments is { Count: 1 }
-                && memberVariable.Type.TypeArguments[0] is EntityTypeInfo;
-            if (innerIsEntity)
-            {
-                // Entity Maybe { Snatched[T] }: single ptr field.
-                string wrapped = NextTemp();
-                EmitLine(sb: sb,
-                    line: $"  {wrapped} = insertvalue {memberCarrierType} zeroinitializer, ptr {value}, 0");
-                value = wrapped;
-            }
-            else
-            {
-                string innerLlvm = memberVariable.Type.TypeArguments is { Count: 1 }
-                    ? GetLLVMType(type: memberVariable.Type.TypeArguments[index: 0])
-                    : "ptr";
-                string wrapped = NextTemp();
-                EmitLine(sb: sb,
-                    line: $"  {wrapped} = insertvalue {memberCarrierType} zeroinitializer, i1 1, 0");
-                string wrapped2 = NextTemp();
-                EmitLine(sb: sb,
-                    line: $"  {wrapped2} = insertvalue {memberCarrierType} {wrapped}, {innerLlvm} {value}, 1");
-                value = wrapped2;
-            }
+            string memberCarrierType = GetLlvmType(type: memberVariable.Type);
+            // All Maybe[T] types are { i1, ptr } (C118: entity T is also 2-field, not single-ptr).
+            string innerLlvm = memberVariable.Type.TypeArguments is { Count: 1 }
+                ? GetLlvmType(type: memberVariable.Type.TypeArguments[index: 0])
+                : "ptr";
+            string wrapped = NextTemp();
+            EmitLine(sb: sb,
+                line: $"  {wrapped} = insertvalue {memberCarrierType} zeroinitializer, i1 1, 0");
+            string wrapped2 = NextTemp();
+            EmitLine(sb: sb,
+                line: $"  {wrapped2} = insertvalue {memberCarrierType} {wrapped}, {innerLlvm} {value}, 1");
+            value = wrapped2;
         }
 
         // GEP to get member variable pointer
@@ -703,6 +738,18 @@ public partial class LLVMCodeGenerator
             return new ConstGenericValueTypeInfo(literalText: ta.Name,
                 value: constValue,
                 explicitTypeName: explicitType);
+        }
+
+        TypeInfo? presetConst = ResolvePresetConstGenericType(name: ta.Name);
+        if (presetConst != null)
+        {
+            return presetConst;
+        }
+
+        TypeInfo? tupleType = ResolveTupleTypeExpression(typeExpr: ta);
+        if (tupleType != null)
+        {
+            return tupleType;
         }
 
         // If the type argument itself has generic arguments (e.g., SortedDict[K, V]),
@@ -750,6 +797,33 @@ public partial class LLVMCodeGenerator
         }
 
         return _registry.LookupType(name: ta.Name);
+    }
+
+    private TypeInfo? ResolveTupleTypeExpression(TypeExpression typeExpr)
+    {
+        if (typeExpr.Name is not "Tuple" and not "ValueTuple")
+        {
+            return null;
+        }
+
+        if (typeExpr.GenericArguments is not { Count: > 0 } elementTypeExprs)
+        {
+            return null;
+        }
+
+        var elementTypes = new List<TypeInfo>(capacity: elementTypeExprs.Count);
+        foreach (TypeExpression elementTypeExpr in elementTypeExprs)
+        {
+            TypeInfo? elementType = ResolveTypeArgument(ta: elementTypeExpr);
+            if (elementType == null)
+            {
+                return null;
+            }
+
+            elementTypes.Add(item: elementType);
+        }
+
+        return _registry.GetOrCreateTupleType(elementTypes: elementTypes);
     }
 
     private static bool TryParseConstGenericLiteral(string name, out long value,

@@ -1,10 +1,9 @@
 namespace Compiler.Synthesis;
 
-using Compiler.Resolution;
-using SemanticVerification;
-using SemanticVerification.Symbols;
+using Resolution;
+using TypeModel.Symbols;
 using SyntaxTree;
-using TypeInfo = SemanticVerification.Types.TypeInfo;
+using TypeInfo = TypeModel.Types.TypeInfo;
 
 /// <summary>
 /// Generates error handling variants for failable (!) routines.

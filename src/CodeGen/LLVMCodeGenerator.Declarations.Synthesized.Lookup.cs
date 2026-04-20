@@ -1,14 +1,14 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticVerification.Symbols;
-using SemanticVerification.Types;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
 
 /// <summary>
 /// Declaration code generation for synthesized equality and lookup-style routines.
 /// </summary>
-public partial class LLVMCodeGenerator
+public partial class LlvmCodeGenerator
 {
 /// <summary>
     /// Generates LLVM IR bodies for all synthesized routines.
@@ -68,7 +68,6 @@ public partial class LLVMCodeGenerator
         // produced by the semantic analyzer. Emit them via the normal code path.
         if (_synthesizedBodies.TryGetValue(key: routine.RegistryKey, out Statement? astBody))
         {
-            Console.Error.WriteLine($"[synth-ast] Emitting AST body for: {routine.RegistryKey}");
             EmitSynthesizedBodyFromAst(routine: routine, funcName: funcName, body: astBody);
             return;
         }
@@ -105,6 +104,9 @@ public partial class LLVMCodeGenerator
                 break;
             case "$same":
                 EmitSynthesizedSame(routine: routine, funcName: funcName);
+                break;
+            case "$copy":
+                EmitSynthesizedRecordCopy(routine: routine, funcName: funcName);
                 break;
             case "all_on":
                 EmitSynthesizedAllOn(routine: routine, funcName: funcName);
@@ -150,10 +152,11 @@ public partial class LLVMCodeGenerator
         }
         paramList.AddRange(collection:
             from param in routine.Parameters
-            let paramType = GetParameterLLVMType(type: param.Type)
-            select $"{paramType} %{param.Name}");
+            let paramType = GetParameterLlvmType(type: param.Type)
+            let emittedName = param.Name == "entry" ? "entry_" : param.Name
+            select $"{paramType} %{emittedName}");
 
-        string returnType = routine.ReturnType != null ? GetLLVMType(type: routine.ReturnType) : "void";
+        string returnType = routine.ReturnType != null ? GetLlvmType(type: routine.ReturnType) : "void";
         string parameters = string.Join(separator: ", ", values: paramList);
 
         int savedLength = _functionDefinitions.Length;
@@ -188,9 +191,9 @@ public partial class LLVMCodeGenerator
             return;
         }
 
-        string meType = GetParameterLLVMType(type: routine.OwnerType);
+        string meType = GetParameterLlvmType(type: routine.OwnerType);
         string youType = routine.Parameters.Count > 0
-            ? GetParameterLLVMType(type: routine.Parameters[index: 0].Type)
+            ? GetParameterLlvmType(type: routine.Parameters[index: 0].Type)
             : meType;
 
         EmitLine(sb: _functionDefinitions,
@@ -198,6 +201,31 @@ public partial class LLVMCodeGenerator
         EmitLine(sb: _functionDefinitions, line: "entry:");
         EmitLine(sb: _functionDefinitions, line: $"  %same = icmp eq {meType} %me, %you");
         EmitLine(sb: _functionDefinitions, line: "  ret i1 %same");
+        EmitLine(sb: _functionDefinitions, line: "}");
+        EmitLine(sb: _functionDefinitions, line: "");
+    }
+
+    /// <summary>
+    /// Emits a synthesized $copy routine as a trivial value copy (identity function).
+    /// Records are passed/returned by value in LLVM IR, so returning the input struct
+    /// is a correct field-by-field copy for wrapper records whose fields are pointers.
+    /// </summary>
+    private void EmitSynthesizedRecordCopy(RoutineInfo routine, string funcName)
+    {
+        if (routine.OwnerType == null)
+        {
+            return;
+        }
+
+        string meType = GetParameterLlvmType(type: routine.OwnerType);
+        string retType = routine.ReturnType != null
+            ? GetLlvmType(type: routine.ReturnType)
+            : meType;
+
+        EmitLine(sb: _functionDefinitions,
+            line: $"define {retType} @{funcName}({meType} %me) {{");
+        EmitLine(sb: _functionDefinitions, line: "entry:");
+        EmitLine(sb: _functionDefinitions, line: $"  ret {retType} %me");
         EmitLine(sb: _functionDefinitions, line: "}");
         EmitLine(sb: _functionDefinitions, line: "");
     }

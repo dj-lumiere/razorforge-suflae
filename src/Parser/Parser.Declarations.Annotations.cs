@@ -86,7 +86,7 @@ public partial class Parser
                 TokenType nextToken = PeekToken(offset: 1)
                    .Type;
                 if (Check(type: TokenType.Identifier) &&
-                    (nextToken == TokenType.Colon || nextToken == TokenType.Assign))
+                    nextToken is TokenType.Colon or TokenType.Assign)
                 {
                     string argName = ConsumeIdentifier(errorMessage: "Expected argument name");
                     // Accept both ':' and '=' as separators

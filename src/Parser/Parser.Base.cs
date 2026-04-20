@@ -11,18 +11,18 @@ public partial class Parser
 {
     #region Token Management
 
-    private Token CurrentToken => Position < Tokens.Count
-        ? Tokens[index: Position]
-        : Tokens[^1];
+    private Token CurrentToken => _position < _tokens.Count
+        ? _tokens[index: _position]
+        : _tokens[^1];
 
     private Token PeekToken(int offset = 1)
     {
-        return Position + offset < Tokens.Count
-            ? Tokens[index: Position + offset]
-            : Tokens[^1];
+        return _position + offset < _tokens.Count
+            ? _tokens[index: _position + offset]
+            : _tokens[^1];
     }
 
-    private bool IsAtEnd => Position >= Tokens.Count || CurrentToken.Type == TokenType.Eof;
+    private bool IsAtEnd => _position >= _tokens.Count || CurrentToken.Type == TokenType.Eof;
 
     /// <summary>
     /// Advance to the next token and return the current one
@@ -32,7 +32,7 @@ public partial class Parser
         Token token = CurrentToken;
         if (!IsAtEnd)
         {
-            Position++;
+            _position++;
         }
 
         return token;
@@ -67,7 +67,7 @@ public partial class Parser
         Token current = CurrentToken;
         throw new GrammarException(code: GetExpectedTokenCode(type: type),
             message: $"{errorMessage}. Expected {type}, got {current.Type}",
-            fileName: fileName,
+            fileName: FileName,
             line: current.Line,
             column: current.Column,
             language: _language);
@@ -440,7 +440,7 @@ public partial class Parser
     /// <returns>A <see cref="SourceLocation"/> for error reporting.</returns>
     protected SourceLocation GetLocation(Token token)
     {
-        return new SourceLocation(FileName: fileName,
+        return new SourceLocation(FileName: FileName,
             Line: token.Line,
             Column: token.Column,
             Position: token.Position);
@@ -457,7 +457,7 @@ public partial class Parser
         Token token = CurrentToken;
         return new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
             message: message,
-            fileName: fileName,
+            fileName: FileName,
             line: token.Line,
             column: token.Column,
             language: _language);
@@ -474,7 +474,7 @@ public partial class Parser
     {
         return new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
             message: message,
-            fileName: fileName,
+            fileName: FileName,
             line: token.Line,
             column: token.Column,
             language: _language);
@@ -492,7 +492,7 @@ public partial class Parser
         Token token = CurrentToken;
         return new GrammarException(code: code,
             message: message,
-            fileName: fileName,
+            fileName: FileName,
             line: token.Line,
             column: token.Column,
             language: _language);
@@ -511,7 +511,7 @@ public partial class Parser
     {
         return new GrammarException(code: code,
             message: message,
-            fileName: fileName,
+            fileName: FileName,
             line: token.Line,
             column: token.Column,
             language: _language);
@@ -586,7 +586,7 @@ public partial class Parser
 
             _ => throw new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
                 message: $"Unknown binary operator: {tokenType}",
-                fileName: fileName,
+                fileName: FileName,
                 line: CurrentToken.Line,
                 column: CurrentToken.Column,
                 language: _language)
@@ -606,7 +606,7 @@ public partial class Parser
 
             _ => throw new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
                 message: $"Unknown unary operator: {tokenType}",
-                fileName: fileName,
+                fileName: FileName,
                 line: CurrentToken.Line,
                 column: CurrentToken.Column,
                 language: _language)
@@ -714,7 +714,7 @@ public partial class Parser
     protected void AddWarning(string message, Token token, string warningCode,
         WarningSeverity severity = WarningSeverity.Warning)
     {
-        Warnings.Add(item: new BuildWarning(message: message,
+        _warnings.Add(item: new BuildWarning(message: message,
             line: token.Line,
             column: token.Column,
             severity: severity,
@@ -726,7 +726,7 @@ public partial class Parser
     /// </summary>
     public IReadOnlyList<BuildWarning> GetWarnings()
     {
-        return Warnings.AsReadOnly();
+        return _warnings.AsReadOnly();
     }
 
     /// <summary>

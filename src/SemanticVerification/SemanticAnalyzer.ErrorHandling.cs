@@ -1,9 +1,9 @@
 namespace SemanticVerification;
 
 using Compiler.Synthesis;
-using Symbols;
+using TypeModel.Symbols;
 using SyntaxTree;
-using TypeSymbol = Types.TypeInfo;
+using TypeSymbol = TypeModel.Types.TypeInfo;
 
 /// <summary>
 /// Phase 5: Error handling variant support.
@@ -14,11 +14,11 @@ using TypeSymbol = Types.TypeInfo;
 /// - absent statement: signals "not found" without error
 ///
 /// Variant generation rules:
-/// - Only absent: try_ (returns T? → None on absent)
-/// - Only throw: try_ (returns T? → None on throw) + check_ (returns Result&lt;T&gt;)
+/// - Only absent: try_ (returns T? ??None on absent)
+/// - Only throw: try_ (returns T? ??None on throw) + check_ (returns Result&lt;T&gt;)
 /// - Both throw and absent: try_ + lookup_ (returns Lookup&lt;T&gt;)
 ///
-/// The actual variant generation is delegated to <see cref="Desugaring.Passes.ErrorHandlingVariantPass"/>
+/// The actual variant generation is delegated to <see cref="Synthesis.ErrorHandlingVariantPass"/>
 /// which runs in Phase 4 (global desugaring) after body analysis populates <c>_routineBodies</c>.
 /// </summary>
 public sealed partial class SemanticAnalyzer
@@ -47,7 +47,7 @@ public sealed partial class SemanticAnalyzer
     /// Phase 2.8: Pre-register error handling variant stubs for user-defined failable routines.
     /// Called before Phase 5 body analysis so that try_/check_/lookup_ variants are in scope
     /// when user code calls them from within the same module.
-    /// Uses AST-level throw/absent detection — no full semantic analysis required.
+    /// Uses AST-level throw/absent detection ??no full semantic analysis required.
     /// </summary>
     internal void PreRegisterUserVariants(Program program)
     {
@@ -61,7 +61,7 @@ public sealed partial class SemanticAnalyzer
                 continue;
             }
 
-            // Quick AST scan — skip routines with no throw/absent nodes
+            // Quick AST scan ??skip routines with no throw/absent nodes
             if (!generator.BodyHasThrowOrAbsent(body: routineDecl.Body))
             {
                 continue;
@@ -95,7 +95,7 @@ public sealed partial class SemanticAnalyzer
     /// Collects failable stdlib routine bodies into <c>_routineBodies</c> without running
     /// full semantic analysis. Scans stdlib program ASTs for failable member routine declarations,
     /// looks up their <see cref="RoutineInfo"/> in the registry, and stores the bodies so that
-    /// <see cref="Desugaring.Passes.ErrorHandlingVariantPass"/> can generate try_/check_/lookup_
+    /// <see cref="Synthesis.ErrorHandlingVariantPass"/> can generate try_/check_/lookup_
     /// variants for stdlib iterators (e.g., ListEmitter[T].$next!).
     /// Called before RunPhase4GlobalDesugaring() so variants exist when for-loops are lowered.
     /// </summary>
@@ -108,7 +108,7 @@ public sealed partial class SemanticAnalyzer
                 if (node is not RoutineDeclaration decl || !decl.IsFailable || decl.Body == null)
                     continue;
 
-                // Only member routines — standalone routines don't need $next variants
+                // Only member routines ??standalone routines don't need $next variants
                 if (!decl.Name.Contains('.'))
                     continue;
 
@@ -116,7 +116,7 @@ public sealed partial class SemanticAnalyzer
                 string ownerTypeName = decl.Name[..dotIdx];
                 string methodName = decl.Name[(dotIdx + 1)..];
 
-                // Strip generic params for type lookup (e.g., "ListEmitter[T]" → "ListEmitter")
+                // Strip generic params for type lookup (e.g., "ListEmitter[T]" ??"ListEmitter")
                 string lookupName = ownerTypeName.Contains('[')
                     ? ownerTypeName[..ownerTypeName.IndexOf('[')]
                     : ownerTypeName;

@@ -2,11 +2,12 @@ namespace Compiler.Resolution;
 
 using SemanticVerification;
 using SemanticVerification.Enums;
-using SemanticVerification.Symbols;
-using SemanticVerification.Types;
+using TypeModel.Enums;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
-using Compiler.Diagnostics;
-using TypeSymbol = SemanticVerification.Types.TypeInfo;
+using Diagnostics;
+using TypeSymbol = TypeModel.Types.TypeInfo;
 
 /// <summary>
 /// Handles resolution of type bodies (member variables, protocols, variants, etc.)
@@ -150,8 +151,8 @@ internal sealed class TypeBodyResolver
                     ? _typeResolver.ResolveType(typeExpr: memberVariable.Type)
                     : ErrorTypeInfo.Instance;
 
-                // Records can only contain value types + storable wrappers (Snatched, Retained, Shared, Tracked, Marked)
-                // Scoped tokens (Viewed, Hijacked, Inspected, Seized), entities, and reference tuples are not allowed
+                // Records can only contain value types + storable wrappers (Hijacked, Retained, Shared, Tracked, Marked)
+                // Scoped tokens (Viewed, Grasped, Inspected, Claimed), entities, and reference tuples are not allowed
                 if (memberVariableType != null &&
                     memberVariableType is not ErrorTypeInfo &&
                     memberVariableType is not GenericParameterTypeInfo &&
@@ -162,7 +163,7 @@ internal sealed class TypeBodyResolver
                     _sa.ReportError(code: SemanticDiagnosticCode.RecordContainsNonValueType,
                         message:
                         $"Record member variable '{memberVariable.Name}' has type '{memberVariableType.Name}' which is not a value type. " +
-                        "Records can only contain value types, Snatched[T], and RC wrappers (Retained, Shared, Tracked, Marked).",
+                        "Records can only contain value types, Hijacked[T], and RC wrappers (Retained, Shared, Tracked, Marked).",
                         location: memberVariable.Location);
                 }
 
@@ -619,7 +620,7 @@ internal sealed class TypeBodyResolver
                     location: caseDecl.Location);
                 if (longValue.HasValue)
                 {
-                    if (longValue.Value < int.MinValue || longValue.Value > int.MaxValue)
+                    if (longValue.Value is < int.MinValue or > int.MaxValue)
                     {
                         _sa.ReportError(code: SemanticDiagnosticCode.ChoiceCaseValueOverflow,
                             message:
@@ -857,7 +858,7 @@ internal sealed class TypeBodyResolver
 
     private static readonly HashSet<string> StorableWrapperTypes =
     [
-        "Snatched", // Unmanaged raw pointer handle
+        "Hijacked", // Unmanaged raw pointer handle
         "Retained", // Reference-counted handle
         "Shared",   // Reference-counted multi-threaded handle
         "Tracked",  // Weak reference handle

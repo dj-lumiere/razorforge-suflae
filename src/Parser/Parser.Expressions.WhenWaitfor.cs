@@ -192,7 +192,7 @@ public partial class Parser
     private bool IsTupleDependencyPattern()
     {
         // Save position for backtracking
-        int savedPosition = Position;
+        int savedPosition = _position;
 
         try
         {
@@ -224,7 +224,7 @@ public partial class Parser
         }
         finally
         {
-            Position = savedPosition;
+            _position = savedPosition;
         }
     }
 
@@ -268,7 +268,7 @@ public partial class Parser
             throw new GrammarException(code: GrammarDiagnosticCode.TupleDependencyCountMismatch,
                 message:
                 $"Tuple dependency count ({expressions.Count}) does not match binding count ({bindings.Count})",
-                fileName: fileName,
+                fileName: FileName,
                 line: current.Line,
                 column: current.Column,
                 language: _language);
@@ -293,7 +293,7 @@ public partial class Parser
     /// Checks whether the current <c>[</c> starts a generic type argument list.
     /// Verifies that bracket contents look like type arguments (identifiers, commas, <c>?</c>, nested <c>[]</c>)
     /// and that the closing <c>]</c> is followed by <c>(</c> (or <c>.</c> if <paramref name="acceptDotAfterBracket"/> is true).
-    /// Does not modify <see cref="Position"/>.
+    /// Does not modify <see cref="_position"/>.
     /// </summary>
     /// <param name="acceptDotAfterBracket">If true, also returns true when <c>]</c> is followed by <c>.</c> (for member access generics).</param>
     private bool IsLikelyGenericBracket(bool acceptDotAfterBracket)
@@ -303,13 +303,13 @@ public partial class Parser
             return false;
         }
 
-        int scanPos = Position + 1; // start after [
+        int scanPos = _position + 1; // start after [
         int depth = 1;
         int matchingBracketPos = -1;
 
-        while (scanPos < Tokens.Count && depth > 0)
+        while (scanPos < _tokens.Count && depth > 0)
         {
-            TokenType tt = Tokens[index: scanPos].Type;
+            TokenType tt = _tokens[index: scanPos].Type;
             if (tt == TokenType.LeftBracket)
             {
                 depth++;
@@ -342,12 +342,12 @@ public partial class Parser
             return false;
         }
 
-        if (matchingBracketPos + 1 >= Tokens.Count)
+        if (matchingBracketPos + 1 >= _tokens.Count)
         {
             return false;
         }
 
-        TokenType afterBracket = Tokens[index: matchingBracketPos + 1].Type;
+        TokenType afterBracket = _tokens[index: matchingBracketPos + 1].Type;
         return afterBracket == TokenType.LeftParen ||
                acceptDotAfterBracket && afterBracket == TokenType.Dot;
     }
@@ -380,14 +380,14 @@ public partial class Parser
         }
 
         // Scan the bracket contents without modifying Position
-        int scanPos = Position + 1; // start after [
+        int scanPos = _position + 1; // start after [
         int depth = 1;
         int matchingBracketPos = -1;
         bool hasTopLevelComma = false;
 
-        while (scanPos < Tokens.Count && depth > 0)
+        while (scanPos < _tokens.Count && depth > 0)
         {
-            TokenType tt = Tokens[index: scanPos].Type;
+            TokenType tt = _tokens[index: scanPos].Type;
             if (tt == TokenType.LeftBracket)
             {
                 depth++;
@@ -432,12 +432,12 @@ public partial class Parser
             return false;
         }
 
-        if (matchingBracketPos + 1 >= Tokens.Count)
+        if (matchingBracketPos + 1 >= _tokens.Count)
         {
             return false;
         }
 
-        TokenType afterBracket = Tokens[index: matchingBracketPos + 1].Type;
+        TokenType afterBracket = _tokens[index: matchingBracketPos + 1].Type;
 
         // ] followed by ( → always generic: Type[T](...)
         if (afterBracket == TokenType.LeftParen)

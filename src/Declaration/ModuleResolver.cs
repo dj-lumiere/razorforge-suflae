@@ -2,7 +2,7 @@ namespace Compiler.Declaration;
 
 using SemanticVerification.Results;
 using SyntaxTree;
-using Compiler.Diagnostics;
+using Diagnostics;
 
 /// <summary>
 /// Resolves import paths to actual source files.
@@ -196,9 +196,10 @@ public sealed class ModuleResolver
                 _namespaceIndex!.TryAdd(key: crossLangKey, value: filePath);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Skip files that can't be read/parsed
+            Console.Error.WriteLine(
+                value: $"Warning: Could not index '{filePath}': {ex.Message}");
         }
     }
 
@@ -300,6 +301,8 @@ public sealed class ModuleResolver
             string? fileDir = Path.GetDirectoryName(path: filePath);
             if (fileDir == null)
             {
+                Console.Error.WriteLine(
+                    value: $"Warning: Cannot derive module name — no directory for '{filePath}'. Defaulting to 'Core'.");
                 return "Core";
             }
 
@@ -310,6 +313,8 @@ public sealed class ModuleResolver
             if (!normalizedFileDir.StartsWith(value: languageStdlibPath,
                     comparisonType: StringComparison.OrdinalIgnoreCase))
             {
+                Console.Error.WriteLine(
+                    value: $"Warning: File '{filePath}' is outside the expected stdlib root '{languageStdlibPath}'. Defaulting module to 'Core'.");
                 return "Core";
             }
 

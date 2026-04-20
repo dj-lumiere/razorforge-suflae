@@ -2,7 +2,7 @@ namespace Compiler.Declaration;
 
 using SemanticVerification.Results;
 using SyntaxTree;
-using Compiler.Diagnostics;
+using Diagnostics;
 
 /// <summary>
 /// Represents a module in the dependency graph.

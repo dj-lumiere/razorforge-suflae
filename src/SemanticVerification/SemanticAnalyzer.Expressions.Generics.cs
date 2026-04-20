@@ -1,11 +1,12 @@
 namespace SemanticVerification;
 
 using Enums;
-using Symbols;
-using Types;
+using TypeModel.Enums;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
 using Compiler.Diagnostics;
-using TypeSymbol = Types.TypeInfo;
+using TypeSymbol = TypeModel.Types.TypeInfo;
 
 public sealed partial class SemanticAnalyzer
 {
@@ -28,7 +29,7 @@ public sealed partial class SemanticAnalyzer
             _lastSharePolicy = (shareTarget.Name, typeArgs[index: 0].Name);
         }
 
-        // Check if this is a generic type constructor call (e.g., Snatched[U8](addr))
+        // Check if this is a generic type constructor call (e.g., Hijacked[U8](addr))
         // The parser creates GenericMethodCallExpression for both Type[Args](args) and obj.method[Args](args)
         if (generic.Object is IdentifierExpression typeId && objectType is TypeInfo typeInfo &&
             typeInfo.IsGenericDefinition && typeId.Name == generic.MethodName)
@@ -69,13 +70,13 @@ public sealed partial class SemanticAnalyzer
                     generic.ResolvedRoutine = creator;
                     ValidateExclusiveTokenUniqueness(arguments: generic.Arguments,
                         location: generic.Location);
-                    // Prefer the concrete resolvedType (e.g. Snatched[Byte]) over the creator's
-                    // return type when that return type is still generic (e.g. Snatched[T]).
-                    // creator.ReturnType for Snatched[T].$create is "Snatched[T]" — a resolution
+                    // Prefer the concrete resolvedType (e.g. Hijacked[Byte]) over the creator's
+                    // return type when that return type is still generic (e.g. Hijacked[T]).
+                    // creator.ReturnType for Hijacked[T].$create is "Hijacked[T]" — a resolution
                     // whose TypeArguments contain GenericParameterTypeInfo placeholders.  Returning
                     // that causes downstream callers (.read(), etc.) to see an unresolved type and
-                    // mangle method names as "Core.Snatched[T].read" instead of the correct
-                    // "Core.Snatched[Core.Byte].read".
+                    // mangle method names as "Core.Hijacked[T].read" instead of the correct
+                    // "Core.Hijacked[Core.Byte].read".
                     bool returnTypeIsGenericOrUnresolved =
                         creator.ReturnType is null or { IsGenericDefinition: true } ||
                         creator.ReturnType.TypeArguments?.Any(
@@ -150,7 +151,7 @@ public sealed partial class SemanticAnalyzer
                     }
                 }
 
-                // Resolution containing method's params (e.g., Snatched[U])
+                // Resolution containing method's params (e.g., Hijacked[U])
                 if (returnType is { IsGenericResolution: true, TypeArguments: not null })
                 {
                     var substitutedArgs = new List<TypeInfo>();
@@ -187,7 +188,7 @@ public sealed partial class SemanticAnalyzer
             return returnType;
         }
 
-        // Standalone generic function call (e.g., ptrtoint[Point, Address](p), snatched_none[T]())
+        // Standalone generic function call (e.g., ptrtoint[Point, Address](p), hijacked_none[T]())
         // The object is an identifier that resolves to a routine, not a type or variable
         if (generic.Object is IdentifierExpression funcId)
         {
@@ -219,7 +220,7 @@ public sealed partial class SemanticAnalyzer
                     }
                 }
 
-                // Return type is a generic resolution (e.g., Snatched[T] → Snatched[U8])
+                // Return type is a generic resolution (e.g., Hijacked[T] → Hijacked[U8])
                 if (returnType.IsGenericResolution && returnType.TypeArguments != null &&
                     routine.GenericParameters != null)
                 {

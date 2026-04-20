@@ -1,4 +1,4 @@
-using SemanticVerification.Enums;
+using TypeModel.Enums;
 
 namespace Compiler.Diagnostics;
 

@@ -8,7 +8,7 @@ using static TestHelpers;
 
 /// <summary>
 /// Tests for record fixed-size containment validation.
-/// Records can only contain value types (records, choices, value tuples) and Snatched&lt;T&gt;.
+/// Records can only contain value types (records, choices, value tuples) and Hijacked&lt;T&gt;.
 /// Entities, wrappers (handles/tokens), and other reference types are not allowed.
 /// </summary>
 public class RecordContainmentTests
@@ -137,13 +137,13 @@ public class RecordContainmentTests
     }
 
     [Fact]
-    public void Analyze_RecordWithSnatchedField_NoErrors()
+    public void Analyze_RecordWithHijackedField_NoErrors()
     {
         string source = """
                         entity Node
                           value: S32
                         record RawHandle
-                          ptr: Snatched[Node]
+                          ptr: Hijacked[Node]
                         """;
 
         AnalysisResult result = Analyze(source: source);
@@ -229,20 +229,20 @@ public class RecordContainmentTests
     }
 
     [Fact]
-    public void Analyze_RecordWithHijackedField_ReportsError()
+    public void Analyze_RecordWithGraspedField_ReportsError()
     {
         // Scoped tokens are caught by S601 (TokenMemberVariableNotAllowed) before S412
         string source = """
                         entity Node
                           value: S32
                         record BadRecord
-                          hijacked: Hijacked[Node]
+                          grasped: Grasped[Node]
                         """;
 
         AnalysisResult result = Analyze(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TokenMemberVariableNotAllowed
-                         && e.Message.Contains("hijacked"));
+                         && e.Message.Contains("grasped"));
     }
 
     #endregion

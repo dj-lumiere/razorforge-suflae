@@ -1,9 +1,11 @@
 namespace SemanticVerification;
 
 using Enums;
-using Symbols;
-using Types;
-using TypeSymbol = Types.TypeInfo;
+using TypeModel.Enums;
+using TypeModel.Symbols;
+using SyntaxTree;
+using TypeModel.Types;
+using TypeSymbol = TypeModel.Types.TypeInfo;
 
 public sealed partial class SemanticAnalyzer
 {
@@ -78,6 +80,38 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol? protocol = LookupTypeWithImports(name: protocolName);
         if (protocol is not { Category: TypeCategory.Protocol })
         {
+            return false;
+        }
+
+        // Generic parameter: check current routine/owner type constraints for obeys declarations.
+        // e.g. needs T obeys Equatable means T satisfies Equatable inside this routine's body.
+        if (type is GenericParameterTypeInfo)
+        {
+            if (_currentRoutine?.GenericConstraints != null)
+            {
+                foreach (GenericConstraintDeclaration c in _currentRoutine.GenericConstraints)
+                {
+                    if (c.ParameterName == type.Name &&
+                        c.ConstraintType == ConstraintKind.Obeys &&
+                        c.ConstraintTypes != null &&
+                        c.ConstraintTypes.Any(ct => ct.Name == protocolName))
+                        return true;
+                }
+            }
+
+            TypeSymbol? ownerType = _currentRoutine?.OwnerType;
+            if (ownerType?.GenericConstraints != null)
+            {
+                foreach (GenericConstraintDeclaration c in ownerType.GenericConstraints)
+                {
+                    if (c.ParameterName == type.Name &&
+                        c.ConstraintType == ConstraintKind.Obeys &&
+                        c.ConstraintTypes != null &&
+                        c.ConstraintTypes.Any(ct => ct.Name == protocolName))
+                        return true;
+                }
+            }
+
             return false;
         }
 

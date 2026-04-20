@@ -1,4 +1,4 @@
-using SemanticVerification.Enums;
+using TypeModel.Enums;
 
 namespace Compiler.Diagnostics;
 
@@ -158,7 +158,7 @@ public enum GrammarDiagnosticCode
     TupleDependencyCountMismatch = 207,
 
     /// <summary>A RazorForge-only language construct was used in a Suflae source file.</summary>
-    RFOnlyConstruct = 210,
+    RfOnlyConstruct = 210,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PATTERN ERRORS (250 - 299)

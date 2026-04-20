@@ -69,7 +69,7 @@ public partial class Parser
                 throw new GrammarException(code: GrammarDiagnosticCode.ExpectedIdentifier,
                     message:
                     $"Expected intrinsic type name after '@intrinsic.', got {CurrentToken.Type}",
-                    fileName: fileName,
+                    fileName: FileName,
                     line: CurrentToken.Line,
                     column: CurrentToken.Column,
                     language: _language);

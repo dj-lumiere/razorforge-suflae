@@ -118,7 +118,7 @@ public enum SemanticWarningCode
     /// <summary>Method could be marked @readonly but is not.</summary>
     MethodCouldBeReadonly = 201,
 
-    /// <summary>Calling .hijack() on @initonly record — the record is frozen after construction.</summary>
+    /// <summary>Calling .grasp() on @initonly record — the record is frozen after construction.</summary>
     HijackOnInitOnly = 210,
 
     /// <summary>Task[T] result is not awaited — potential fire-and-forget bug.</summary>

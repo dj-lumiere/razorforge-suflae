@@ -1,5 +1,5 @@
 using Compiler.Resolution;
-using Compiler.Desugaring;
+using Compiler.Instantiation;
 using SyntaxTree;
 
 namespace SemanticVerification.Results;
@@ -13,9 +13,9 @@ namespace SemanticVerification.Results;
 /// <param name="ParsedLiterals">Parsed literal values for code generation (f128, d32, d64, d128, Integer, Decimal).</param>
 /// <param name="SynthesizedBodies">AST bodies for compiler-generated routines (derived operators + variant bodies),
 /// keyed by RoutineInfo.RegistryKey. Includes both $ne/$lt/etc. operators and pre-transformed
-/// try_/check_/lookup_ variant bodies produced by <see cref="Desugaring.Passes.ErrorHandlingVariantPass"/>.</param>
+/// try_/check_/lookup_ variant bodies produced by <see cref="Synthesis.ErrorHandlingVariantPass"/>.</param>
 /// <param name="PreMonomorphizedBodies">Pre-rewritten generic method bodies produced by
-/// <see cref="Desugaring.Passes.GenericMonomorphizationPass"/>, keyed by the concrete
+/// <see cref="Instantiation.Passes.GenericMonomorphizationPass"/>, keyed by the concrete
 /// RoutineInfo.RegistryKey.  Codegen uses these to skip AST search and re-rewriting
 /// for all generic instantiations visible during semantic analysis.</param>
 public sealed record AnalysisResult(

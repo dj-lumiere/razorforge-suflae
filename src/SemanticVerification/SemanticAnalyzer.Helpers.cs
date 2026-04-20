@@ -1,11 +1,12 @@
 namespace SemanticVerification;
 
 using Enums;
-using Symbols;
-using Types;
+using TypeModel.Enums;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
 using Compiler.Diagnostics;
-using TypeSymbol = Types.TypeInfo;
+using TypeSymbol = TypeModel.Types.TypeInfo;
 
 #region Numeric Type Classification
 
@@ -380,6 +381,23 @@ public sealed partial class SemanticAnalyzer
             return ImplementsProtocol(type: source, protocolName: target.Name);
         }
 
+        // None (Maybe generic def) is assignable to any Maybe[T]
+        if (source.IsGenericDefinition && source.Name == "Maybe" && IsMaybeType(type: target))
+            return true;
+
+        // Entity, record, or wrapper type is implicitly assignable to Maybe[SameType].
+        // Covers: entity fields, RC wrappers (Retained[T], Tracked[T] → Maybe[Retained[T]]).
+        if ((source.Category == TypeCategory.Entity || source.Category == TypeCategory.Record ||
+             source.Category == TypeCategory.Wrapper) &&
+            IsMaybeType(type: target) && target.TypeArguments is { Count: 1 })
+        {
+            TypeSymbol typeArg = target.TypeArguments[0];
+            return source.Name == typeArg.Name ||
+                   source.FullName == typeArg.FullName ||
+                   source.FullName == typeArg.Name ||
+                   source.Name == typeArg.FullName;
+        }
+
         // No implicit conversions - all type conversions must be explicit via creator syntax
         return false;
     }
@@ -454,8 +472,48 @@ public sealed partial class SemanticAnalyzer
             return false;
         }
 
-        // Use LookupMethod which handles generic resolutions (e.g., Snatched[Point].$eq)
-        return _registry.LookupMethod(type: type, methodName: methodName) != null;
+        // Use LookupMethod which handles generic resolutions (e.g., Hijacked[Point].$eq)
+        if (_registry.LookupMethod(type: type, methodName: methodName) != null)
+            return true;
+
+        // For generic parameters, check if any constrained protocol declares the method.
+        if (type is GenericParameterTypeInfo)
+        {
+            foreach (GenericConstraintDeclaration c in ActiveConstraintsFor(paramName: type.Name))
+            {
+                if (c.ConstraintType != ConstraintKind.Obeys || c.ConstraintTypes == null)
+                    continue;
+                foreach (TypeExpression protocolExpr in c.ConstraintTypes)
+                {
+                    TypeSymbol? proto = _registry.LookupType(name: protocolExpr.Name);
+                    if (proto is ProtocolTypeInfo protoType &&
+                        protoType.Methods.Any(m => m.Name == methodName || m.Name + "!" == methodName))
+                        return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Yields all active generic constraints for the named parameter from the current routine
+    /// and its owner type.
+    /// </summary>
+    private IEnumerable<GenericConstraintDeclaration> ActiveConstraintsFor(string paramName)
+    {
+        if (_currentRoutine?.GenericConstraints != null)
+        {
+            foreach (GenericConstraintDeclaration c in _currentRoutine.GenericConstraints)
+                if (c.ParameterName == paramName) yield return c;
+        }
+
+        TypeSymbol? ownerType = _currentRoutine?.OwnerType;
+        if (ownerType?.GenericConstraints != null)
+        {
+            foreach (GenericConstraintDeclaration c in ownerType.GenericConstraints)
+                if (c.ParameterName == paramName) yield return c;
+        }
     }
 
     /// <summary>

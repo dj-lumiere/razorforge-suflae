@@ -1,11 +1,12 @@
 namespace Compiler.Resolution;
 
 using SemanticVerification;
-using SemanticVerification.Enums;
-using SemanticVerification.Types;
+using TypeModel.Enums;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
-using Compiler.Diagnostics;
-using TypeSymbol = SemanticVerification.Types.TypeInfo;
+using Diagnostics;
+using TypeSymbol = TypeModel.Types.TypeInfo;
 
 /// <summary>
 /// Handles resolution of type expressions for the semantic analyzer.
@@ -63,12 +64,12 @@ internal sealed class TypeResolver
     /// Called after type creator resolution to avoid shadowing type creators
     /// with identically-named convenience functions (e.g., "routine U32(from: U8)").
     /// </summary>
-    internal SemanticVerification.Symbols.RoutineInfo? LookupRoutineWithImports(string name)
+    internal TypeModel.Symbols.RoutineInfo? LookupRoutineWithImports(string name)
     {
         // Try Core module prefix (Core routines are auto-imported)
         if (!name.Contains(value: '.'))
         {
-            SemanticVerification.Symbols.RoutineInfo? result = _sa._registry.LookupRoutine(fullName: $"Core.{name}");
+            TypeModel.Symbols.RoutineInfo? result = _sa._registry.LookupRoutine(fullName: $"Core.{name}");
             if (result != null)
             {
                 return result;
@@ -78,7 +79,7 @@ internal sealed class TypeResolver
         // Try each imported module
         foreach (string ns in _sa._importedModules)
         {
-            SemanticVerification.Symbols.RoutineInfo? result = _sa._registry.LookupRoutine(fullName: $"{ns}.{name}");
+            TypeModel.Symbols.RoutineInfo? result = _sa._registry.LookupRoutine(fullName: $"{ns}.{name}");
             if (result != null)
             {
                 return result;
@@ -168,6 +169,13 @@ internal sealed class TypeResolver
             return new ConstGenericValueTypeInfo(literalText: typeExpr.Name,
                 value: constValue,
                 explicitTypeName: explicitType);
+        }
+
+        // Check for preset constants used as const generic arguments
+        TypeSymbol? presetConst = ResolvePresetConstGeneric(typeExpr: typeExpr);
+        if (presetConst != null)
+        {
+            return presetConst;
         }
 
         // Type not found
@@ -683,6 +691,150 @@ internal sealed class TypeResolver
         }
 
         return false;
+    }
+
+    private TypeSymbol? ResolvePresetConstGeneric(TypeExpression typeExpr)
+    {
+        VariableInfo? preset = LookupPresetWithImports(name: typeExpr.Name);
+        if (preset is not { IsPreset: true, PresetValue: not null })
+        {
+            return null;
+        }
+
+        return ResolvePresetConstGenericValue(preset: preset,
+            useLocation: typeExpr.Location,
+            visited: new HashSet<string>(StringComparer.Ordinal));
+    }
+
+    private VariableInfo? LookupPresetWithImports(string name)
+    {
+        VariableInfo? preset = _sa._registry.LookupVariable(name: name);
+        if (preset is { IsPreset: true })
+        {
+            return preset;
+        }
+
+        if (_sa._currentModuleName != null && !name.Contains(value: '.'))
+        {
+            preset = _sa._registry.LookupVariable(name: $"{_sa._currentModuleName}.{name}");
+            if (preset is { IsPreset: true })
+            {
+                return preset;
+            }
+        }
+
+        foreach (string ns in _sa._importedModules)
+        {
+            preset = _sa._registry.LookupVariable(name: $"{ns}.{name}");
+            if (preset is { IsPreset: true })
+            {
+                return preset;
+            }
+        }
+
+        return null;
+    }
+
+    private TypeSymbol ResolvePresetConstGenericValue(VariableInfo preset,
+        SourceLocation useLocation, HashSet<string> visited)
+    {
+        if (!visited.Add(item: preset.QualifiedName))
+        {
+            _sa.ReportError(code: SemanticDiagnosticCode.PresetNotConstant,
+                message:
+                $"Preset '{preset.QualifiedName}' cannot be used as a const generic because it forms a cycle.",
+                location: useLocation);
+            return ErrorTypeInfo.Instance;
+        }
+
+        switch (preset.PresetValue)
+        {
+            case LiteralExpression literal when
+                TryBuildConstGenericFromLiteral(literal: literal,
+                    declaredType: preset.Type,
+                    value: out ConstGenericValueTypeInfo? constValue):
+                return constValue;
+
+            case IdentifierExpression id:
+            {
+                VariableInfo? nestedPreset = LookupPresetWithImports(name: id.Name);
+                if (nestedPreset is { IsPreset: true, PresetValue: not null })
+                {
+                    return ResolvePresetConstGenericValue(preset: nestedPreset,
+                        useLocation: useLocation,
+                        visited: visited);
+                }
+
+                break;
+            }
+        }
+
+        _sa.ReportError(code: SemanticDiagnosticCode.PresetNotConstant,
+            message:
+            $"Preset '{preset.QualifiedName}' cannot be used as a const generic because its initializer is not a supported build-time literal.",
+            location: useLocation);
+        return ErrorTypeInfo.Instance;
+    }
+
+    private static bool TryBuildConstGenericFromLiteral(LiteralExpression literal,
+        TypeInfo declaredType, out ConstGenericValueTypeInfo? value)
+    {
+        value = null;
+
+        switch (literal.LiteralType)
+        {
+            case Compiler.Lexer.TokenType.True:
+                value = new ConstGenericValueTypeInfo(literalText: "true",
+                    value: 1,
+                    explicitTypeName: "Bool");
+                return true;
+
+            case Compiler.Lexer.TokenType.False:
+                value = new ConstGenericValueTypeInfo(literalText: "false",
+                    value: 0,
+                    explicitTypeName: "Bool");
+                return true;
+
+            case Compiler.Lexer.TokenType.Integer:
+            case Compiler.Lexer.TokenType.S8Literal:
+            case Compiler.Lexer.TokenType.S16Literal:
+            case Compiler.Lexer.TokenType.S32Literal:
+            case Compiler.Lexer.TokenType.S64Literal:
+            case Compiler.Lexer.TokenType.S128Literal:
+            case Compiler.Lexer.TokenType.U8Literal:
+            case Compiler.Lexer.TokenType.U16Literal:
+            case Compiler.Lexer.TokenType.U32Literal:
+            case Compiler.Lexer.TokenType.U64Literal:
+            case Compiler.Lexer.TokenType.U128Literal:
+            case Compiler.Lexer.TokenType.AddressLiteral:
+                if (literal.Value is string rawNumeric)
+                {
+                    if (TryParseConstGenericLiteral(name: rawNumeric,
+                            value: out long parsed,
+                            explicitType: out string? explicitType))
+                    {
+                        value = new ConstGenericValueTypeInfo(literalText: rawNumeric,
+                            value: parsed,
+                            explicitTypeName: explicitType ?? GetConstGenericExplicitTypeName(
+                                declaredType: declaredType));
+                        return true;
+                    }
+                }
+
+                return false;
+        }
+
+        return false;
+    }
+
+    private static string? GetConstGenericExplicitTypeName(TypeInfo declaredType)
+    {
+        return declaredType.Name switch
+        {
+            "Bool" or "Address" or "U8" or "U16" or "U32" or "U64" or "U128" or
+                "S8" or "S16" or "S32" or "S64" or "S128" => declaredType.Name,
+            _ => null
+        };
     }
 
     // Static helpers duplicated from SA (originally private static)

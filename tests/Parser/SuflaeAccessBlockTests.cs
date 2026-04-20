@@ -7,7 +7,7 @@ using static TestHelpers;
 /// <summary>
 /// Tests for parsing resource management blocks in Suflae.
 /// Suflae uses automatic memory management (GC-assisted), so it only has 'using' for resources.
-/// Unlike RazorForge, Suflae does not have viewing/hijacking/inspecting/seizing.
+/// Unlike RazorForge, Suflae does not have viewing/grasping/inspecting/seizing.
 /// </summary>
 public class SuflaeAccessBlockTests
 {

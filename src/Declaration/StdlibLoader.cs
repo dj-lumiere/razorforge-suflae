@@ -1,13 +1,12 @@
 using Compiler.Resolution;
-using SemanticVerification;
-using SemanticVerification.Types;
+using TypeModel.Types;
 
 namespace Compiler.Declaration;
 
-using SemanticVerification.Enums;
+using TypeModel.Enums;
 using SyntaxTree;
-using Compiler.Lexer;
-using Compiler.Parser;
+using Lexer;
+using Parser;
 
 /// <summary>
 /// Loads the standard library based on module declarations.
@@ -500,10 +499,8 @@ public sealed partial class StdlibLoader
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine(
-                value:
-                $"Warning: Failed to load module '{moduleId}' from {filePath}: {ex.Message}");
-            return null;
+            throw new InvalidOperationException(
+                $"Failed to load stdlib module '{moduleId}' from '{filePath}': {ex.Message}", ex);
         }
     }
 
@@ -531,6 +528,28 @@ public sealed partial class StdlibLoader
         if (genericParams != null && genericParams.Contains(value: typeName))
         {
             return new GenericParameterTypeInfo(name: typeName);
+        }
+
+        // Const generic literal (e.g., 16, 8u64) used as a type argument (e.g., ValueList[T, 16])
+        if (long.TryParse(s: typeName, result: out long constValue))
+        {
+            return new TypeModel.Types.ConstGenericValueTypeInfo(
+                literalText: typeName, value: constValue, explicitTypeName: null);
+        }
+        {
+            // Check typed suffixes: "16u64", "8s32", etc.
+            (string suffix, string suffixType)[] suffixes =
+                [("u64", "U64"), ("s64", "S64"), ("u32", "U32"), ("s32", "S32"),
+                 ("u16", "U16"), ("s16", "S16"), ("u8", "U8"), ("s8", "S8")];
+            foreach ((string suffix, string suffixType) in suffixes)
+            {
+                if (typeName.EndsWith(value: suffix, comparisonType: StringComparison.OrdinalIgnoreCase) &&
+                    long.TryParse(s: typeName[..^suffix.Length], result: out long suffixVal))
+                {
+                    return new TypeModel.Types.ConstGenericValueTypeInfo(
+                        literalText: typeName, value: suffixVal, explicitTypeName: suffixType);
+                }
+            }
         }
 
         // Routine type: Routine[(T, T), Bool] → RoutineTypeInfo
@@ -583,9 +602,9 @@ public sealed partial class StdlibLoader
         // Parameterized type like List[Character], Dict[Text, S32]
         if (typeExpr.GenericArguments is { Count: > 0 })
         {
-            // Wrapper types (Snatched, Viewed, Hijacked, etc.) are not in _types — create directly
+            // Wrapper types (Hijacked, Viewed, Grasped, etc.) are not in _types — create directly
             if (typeExpr.GenericArguments.Count == 1 &&
-                typeName is "Snatched" or "Viewed" or "Hijacked" or "Inspected" or "Seized"
+                typeName is "Hijacked" or "Viewed" or "Grasped" or "Inspected" or "Claimed"
                     or "Retained" or "Shared" or "Tracked" or "Marked" or "Owned")
             {
                 TypeInfo? wrapperInner = ResolveSimpleType(registry: registry,

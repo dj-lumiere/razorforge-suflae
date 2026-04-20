@@ -1,11 +1,12 @@
 namespace SemanticVerification;
 
 using Enums;
-using Symbols;
-using Types;
+using TypeModel.Enums;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
 using Compiler.Diagnostics;
-using TypeSymbol = Types.TypeInfo;
+using TypeSymbol = TypeModel.Types.TypeInfo;
 
 /// <summary>
 /// Phase 3: Statement analysis.
@@ -178,6 +179,9 @@ public sealed partial class SemanticAnalyzer
 
         RoutineInfo? previousRoutine = _currentRoutine;
         _currentRoutine = routineInfo;
+
+        // Deadref tracking is per-routine — clear carries from previous routines.
+        _deadrefVariables.Clear();
 
         _registry.EnterScope(kind: ScopeKind.Function, name: routine.Name);
 
@@ -489,12 +493,12 @@ public sealed partial class SemanticAnalyzer
                 location: varDecl.Location);
         }
 
-        // #96: Seized[T] cannot be copied or aliased — exclusive lock token
-        if (varDecl.Initializer is IdentifierExpression && IsSeizedType(type: varType))
+        // #96: Claimed[T] cannot be copied or aliased — exclusive lock token
+        if (varDecl.Initializer is IdentifierExpression && IsClaimedType(type: varType))
         {
-            ReportError(code: SemanticDiagnosticCode.SeizedCopyNotAllowed,
-                message: $"Cannot copy or alias 'Seized[T]' variable to '{varDecl.Name}'. " +
-                         "Seized tokens are exclusive and cannot be duplicated — use the original variable directly.",
+            ReportError(code: SemanticDiagnosticCode.ClaimedCopyNotAllowed,
+                message: $"Cannot copy or alias 'Claimed[T]' variable to '{varDecl.Name}'. " +
+                         "Claimed tokens are exclusive and cannot be duplicated — use the original variable directly.",
                 location: varDecl.Location);
         }
 
@@ -531,6 +535,9 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Register variable in current scope
+        // A new declaration shadows any prior steal of the same name in this scope.
+        _deadrefVariables.Remove(item: varDecl.Name);
+
         bool declared = _registry.DeclareVariable(name: varDecl.Name, type: varType);
 
         if (!declared)
@@ -685,7 +692,7 @@ public sealed partial class SemanticAnalyzer
                 ReportError(code: SemanticDiagnosticCode.WriteThroughReadOnlyWrapper,
                     message:
                     $"Cannot write to member '{member.PropertyName}' through read-only wrapper '{objectType.Name}'. " +
-                    "Use Hijacked[T] for exclusive write access or Seized[T] for locked write access.",
+                    "Use Grasped[T] for exclusive write access or Claimed[T] for locked write access.",
                     location: assign.Location);
             }
 

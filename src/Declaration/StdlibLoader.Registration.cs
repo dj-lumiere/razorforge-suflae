@@ -1,11 +1,10 @@
 using Compiler.Resolution;
-using SemanticVerification;
-using SemanticVerification.Types;
-using SemanticVerification.Symbols;
+using TypeModel.Types;
+using TypeModel.Symbols;
 
 namespace Compiler.Declaration;
 
-using SemanticVerification.Enums;
+using TypeModel.Enums;
 using SyntaxTree;
 
 public sealed partial class StdlibLoader
@@ -606,7 +605,7 @@ public sealed partial class StdlibLoader
         // (e.g. `record Maybe[T] needs T is EntityType`).
         // In stdlib .rf files, `needs T is EntityType` is parsed as a ConstGeneric constraint
         // with ConstraintTypes[0].Name == "EntityType". These create a second layout specialization
-        // (e.g. Maybe[Text] uses { Snatched[T] } instead of { Bool, T }) and must be stored
+        // (e.g. Maybe[Text] uses { Hijacked[T] } instead of { Bool, T }) and must be stored
         // separately so GetOrCreateResolution can select the right definition.
         string? entityConstraintParam = record.GenericConstraints?
             .Where(predicate: c =>
@@ -628,7 +627,7 @@ public sealed partial class StdlibLoader
         }
 
         // Records whose member variables are all known @llvm("ptr") wrapper types (e.g.
-        // Retained[T] with two Snatched fields) have a fixed struct layout regardless of T.
+        // Retained[T] with two Hijacked fields) have a fixed struct layout regardless of T.
         // They are NOT entity specializations — register them normally.
         if (isEntitySpecialization &&
             record.Members.Any(predicate: m => m is VariableDeclaration { Type: not null }))
@@ -641,8 +640,8 @@ public sealed partial class StdlibLoader
                     string baseName = m.Type!.Name.Contains('[')
                         ? m.Type.Name[..m.Type.Name.IndexOf('[')]
                         : m.Type.Name;
-                    return baseName is "Snatched" or "Owned" or "Viewed" or "Hijacked"
-                        or "Inspected" or "Seized" or "Shared" or "Marked" or "Tracked";
+                    return baseName is "Hijacked" or "Owned" or "Viewed" or "Grasped"
+                        or "Inspected" or "Claimed" or "Shared" or "Marked" or "Tracked";
                 });
             if (allMembersPtrWrapper)
             {
@@ -720,7 +719,7 @@ public sealed partial class StdlibLoader
         if (isEntitySpecialization)
         {
             // This is the entity-type specialization of a constrained generic
-            // (e.g. Maybe[T] needs T is EntityType → { Snatched[T] } layout).
+            // (e.g. Maybe[T] needs T is EntityType → { Hijacked[T] } layout).
             // Register it so GetOrCreateResolution can select it for entity type arguments.
             registry.RegisterEntitySpecialization(type: typeInfo);
         }

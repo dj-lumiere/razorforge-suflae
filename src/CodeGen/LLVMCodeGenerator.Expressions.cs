@@ -1,15 +1,15 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticVerification.Enums;
-using SemanticVerification.Symbols;
-using SemanticVerification.Types;
+using TypeModel.Enums;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
 
 /// <summary>
 /// Expression code generation: allocation, member variable access, method calls, operators.
 /// </summary>
-public partial class LLVMCodeGenerator
+public partial class LlvmCodeGenerator
 {
     /// <summary>
     /// Emits code for any expression node.
@@ -30,7 +30,6 @@ public partial class LLVMCodeGenerator
             UnaryExpression unary => EmitUnaryOp(sb: sb, unary: unary),
             ConditionalExpression cond => EmitConditional(sb: sb, cond: cond),
             RangeExpression range => EmitRange(sb: sb, range: range),
-            TupleLiteralExpression tuple => EmitTupleLiteral(sb: sb, tuple: tuple),
             GenericMethodCallExpression generic => EmitGenericMethodCall(sb: sb, generic: generic),
             InsertedTextExpression inserted => EmitInsertedText(sb: sb, inserted: inserted),
             ListLiteralExpression list => EmitListLiteral(sb: sb, list: list),
@@ -45,13 +44,42 @@ public partial class LLVMCodeGenerator
                 dictEntry: dictEntry),
             CarrierPayloadExpression payload => EmitCarrierPayloadExpression(sb: sb,
                 payload: payload),
+            TupleLiteralExpression tuple => EmitTupleLiteral(sb: sb, tuple: tuple),
             // Named arguments appear inside synthesized AST bodies (e.g., me.$eq(you: you)).
             // The name is irrelevant to codegen — just emit the inner value positionally.
             NamedArgumentExpression named => EmitExpression(sb: sb, expr: named.Value),
-            LambdaExpression lambda => EmitLambdaExpression(lambda: lambda),
+            LambdaExpression => throw new InvalidOperationException(
+                "LambdaExpression reached codegen before Phase 7 lambda lifting."),
             _ => throw new NotImplementedException(
                 message: $"Expression type not implemented: {expr.GetType().Name}")
         };
+    }
+
+    /// <summary>
+    /// Emits a tuple literal as an LLVM inline struct using <c>insertvalue</c>.
+    /// e.g. <c>(result, overflow)</c> → <c>insertvalue { i64, i1 } ...</c>
+    /// </summary>
+    private string EmitTupleLiteral(StringBuilder sb, TupleLiteralExpression tuple)
+    {
+        TupleTypeInfo? tupleType = tuple.ResolvedType as TupleTypeInfo;
+        if (tupleType == null)
+            throw new InvalidOperationException("TupleLiteralExpression has no resolved TupleTypeInfo.");
+
+        string llvmStructType = GetTupleTypeName(tuple: tupleType);
+
+        string current = "undef";
+        for (int i = 0; i < tuple.Elements.Count; i++)
+        {
+            string elemVal = EmitExpression(sb: sb, expr: tuple.Elements[index: i]);
+            TypeInfo elemType = ResolveTypeSubstitution(type: tupleType.ElementTypes[index: i]);
+            string elemLlvmType = GetLlvmType(type: elemType);
+            string tmp = NextTemp();
+            sb.AppendLine(
+                $"  {tmp} = insertvalue {llvmStructType} {current}, {elemLlvmType} {elemVal}, {i}");
+            current = tmp;
+        }
+
+        return current;
     }
 
     /// <summary>
@@ -98,10 +126,17 @@ public partial class LLVMCodeGenerator
         if (_globalVariables.TryGetValue(key: identifier.Name, value: out TypeInfo? globalType) &&
             _globalVariableLlvmNames.TryGetValue(key: identifier.Name, value: out string? globalLlvm))
         {
-            string globalLlvmType = GetLLVMType(type: globalType);
+            string globalLlvmType = GetLlvmType(type: globalType);
             string tmp2 = NextTemp();
             EmitLine(sb: sb, line: $"  {tmp2} = load {globalLlvmType}, ptr {globalLlvm}");
             return tmp2;
+        }
+
+        if (identifier.ResolvedType is RoutineTypeInfo routineType &&
+            TryResolveRoutineReference(name: identifier.Name, routineType: routineType,
+                routine: out RoutineInfo? routine))
+        {
+            return $"@{MangleFunctionName(routine)}";
         }
 
         // Look up the variable in local variables first
@@ -114,13 +149,38 @@ public partial class LLVMCodeGenerator
         // Variables are stored in allocas (%name.addr), need to load them
         // Use unique LLVM name to handle shadowing
         string llvmName =
-            _localVarLLVMNames.TryGetValue(key: identifier.Name, value: out string? unique)
+            _localVarLlvmNames.TryGetValue(key: identifier.Name, value: out string? unique)
                 ? unique
                 : identifier.Name;
-        string llvmType = GetLLVMType(type: varType);
+        string llvmType = GetLlvmType(type: varType);
         string tmp = NextTemp();
         EmitLine(sb: sb, line: $"  {tmp} = load {llvmType}, ptr %{llvmName}.addr");
         return tmp;
+    }
+
+    private bool TryResolveRoutineReference(string name, RoutineTypeInfo routineType,
+        out RoutineInfo? routine)
+    {
+        routine = null;
+        string bareName = name.EndsWith(value: '!')
+            ? name[..^1]
+            : name;
+        string? moduleName = _currentEmittingRoutine?.OwnerType?.Module ??
+                             _currentEmittingRoutine?.Module;
+
+        IReadOnlyList<TypeInfo> paramTypes = routineType.ParameterTypes.ToList();
+
+        if (moduleName != null && !bareName.Contains(value: '.'))
+        {
+            routine = _registry.LookupRoutineOverload(baseName: $"{moduleName}.{bareName}",
+                argTypes: paramTypes);
+            routine ??= _registry.LookupRoutine(fullName: $"{moduleName}.{bareName}");
+        }
+
+        routine ??= _registry.LookupRoutineOverload(baseName: bareName, argTypes: paramTypes);
+        routine ??= _registry.LookupRoutine(fullName: bareName);
+        routine ??= _registry.LookupRoutineByName(name: bareName, isFailable: routineType.IsFailable);
+        return routine != null;
     }
 
     /// <summary>
@@ -208,9 +268,9 @@ public partial class LLVMCodeGenerator
     {
         string argValue = EmitExpression(sb: sb, expr: arg);
         TypeInfo? argType = GetExpressionType(expr: arg);
-        string targetLlvm = GetLLVMType(type: targetType);
+        string targetLlvm = GetLlvmType(type: targetType);
         string sourceLlvm = argType != null
-            ? GetLLVMType(type: argType)
+            ? GetLlvmType(type: argType)
             : targetLlvm;
 
 

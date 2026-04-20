@@ -1,13 +1,13 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticVerification.Symbols;
-using SemanticVerification.Types;
+using TypeModel.Symbols;
+using TypeModel.Types;
 
 /// <summary>
 /// Declaration code generation for LLVM types and routine signatures.
 /// </summary>
-public partial class LLVMCodeGenerator
+public partial class LlvmCodeGenerator
 {
     private void GenerateEntityType(EntityTypeInfo entity)
     {
@@ -44,7 +44,7 @@ public partial class LLVMCodeGenerator
         var memberVariableTypes = new List<string>();
         foreach (MemberVariableInfo memberVariable in entity.MemberVariables)
         {
-            string memberVariableType = GetLLVMType(type: memberVariable.Type);
+            string memberVariableType = GetLlvmType(type: memberVariable.Type);
             memberVariableTypes.Add(item: memberVariableType);
         }
 
@@ -94,7 +94,7 @@ public partial class LLVMCodeGenerator
 
         var memberVariableTypes = new List<string>();
         foreach (MemberVariableInfo memberVariable in crashable.MemberVariables)
-            memberVariableTypes.Add(item: GetLLVMType(type: memberVariable.Type));
+            memberVariableTypes.Add(item: GetLlvmType(type: memberVariable.Type));
 
         var decl = new StringBuilder();
         if (memberVariableTypes.Count == 0)
@@ -151,7 +151,7 @@ public partial class LLVMCodeGenerator
         var memberVariableTypes = new List<string>();
         foreach (MemberVariableInfo memberVariable in record.MemberVariables)
         {
-            string memberVariableType = GetLLVMType(type: memberVariable.Type);
+            string memberVariableType = GetLlvmType(type: memberVariable.Type);
             memberVariableTypes.Add(item: memberVariableType);
         }
 

@@ -1,6 +1,6 @@
 namespace Compiler.Synthesis;
 
-using SemanticVerification.Symbols;
+using TypeModel.Symbols;
 
 /// <summary>
 /// A generated error handling variant.

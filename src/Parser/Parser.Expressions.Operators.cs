@@ -148,7 +148,7 @@ public partial class Parser
                 {
                     throw new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
                         message: "Expected '.' or '[' in with expression",
-                        fileName: fileName,
+                        fileName: FileName,
                         line: CurrentToken.Line,
                         column: CurrentToken.Column,
                         language: _language);

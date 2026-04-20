@@ -220,8 +220,14 @@ public static class ManifestLoader
                 string? moduleName = ExtractModuleName(filePath: filePath);
                 if (moduleName != null)
                 {
-                    // First file wins for a given module name
-                    index.TryAdd(key: moduleName, value: Path.GetFullPath(path: filePath));
+                    string fullPath = Path.GetFullPath(path: filePath);
+                    if (!index.TryAdd(key: moduleName, value: fullPath))
+                    {
+                        Console.Error.WriteLine(
+                            value: $"Warning: Duplicate module name '{moduleName}' — " +
+                                   $"'{fullPath}' conflicts with '{index[moduleName]}'. " +
+                                   "First file wins; second file will be ignored.");
+                    }
                 }
             }
         }
@@ -261,9 +267,10 @@ public static class ManifestLoader
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Skip unreadable files
+            Console.Error.WriteLine(
+                value: $"Warning: Could not read or parse '{filePath}' for module name extraction: {ex.Message}");
         }
 
         return null;

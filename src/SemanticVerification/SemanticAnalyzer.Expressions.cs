@@ -1,11 +1,12 @@
 namespace SemanticVerification;
 
 using Enums;
-using Symbols;
-using Types;
+using TypeModel.Enums;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
 using Compiler.Diagnostics;
-using TypeSymbol = Types.TypeInfo;
+using TypeSymbol = TypeModel.Types.TypeInfo;
 
 /// <summary>
 /// Phase 3: Expression analysis.
@@ -556,7 +557,7 @@ public sealed partial class SemanticAnalyzer
                 ReportError(code: SemanticDiagnosticCode.WriteThroughReadOnlyWrapper,
                     message:
                     $"Cannot write to member '{member.PropertyName}' through read-only wrapper '{objectType.Name}'. " +
-                    "Use Hijacked[T] for exclusive write access or Seized[T] for locked write access.",
+                    "Use Grasped[T] for exclusive write access or Claimed[T] for locked write access.",
                     location: location);
             }
 

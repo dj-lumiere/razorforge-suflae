@@ -2,12 +2,13 @@ using Compiler.Declaration;
 
 namespace Compiler.Resolution;
 
+using TypeModel.Enums;
 using SemanticVerification.Enums;
 using SemanticVerification.Scopes;
-using SemanticVerification.Symbols;
-using SemanticVerification.Types;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
-using TypeInfo = SemanticVerification.Types.TypeInfo;
+using TypeInfo = TypeModel.Types.TypeInfo;
 
 /// <summary>
 /// Central registry for all type information in a RazorForge/Suflae program.
@@ -40,10 +41,10 @@ public sealed partial class TypeRegistry
 
     /// <summary>
     /// Wrapper type resolutions cache for synthesized scoped/RC wrappers
-    /// (Viewed, Hijacked, Inspected, Seized, Snatched, Retained, Shared, Tracked, Marked, Owned).
+    /// (Viewed, Grasped, Inspected, Claimed, Hijacked, Retained, Shared, Tracked, Marked, Owned).
     /// Kept separate from <see cref="_resolutions"/> to prevent key collisions when both
     /// <see cref="GetOrCreateWrapperType"/> and <see cref="GetOrCreateResolution"/> produce
-    /// the same FullName-based key (e.g., "Snatched[Core.Byte]").
+    /// the same FullName-based key (e.g., "Hijacked[Core.Byte]").
     /// </summary>
     private readonly Dictionary<string, WrapperTypeInfo> _wrapperResolutions = new();
 
@@ -53,7 +54,7 @@ public sealed partial class TypeRegistry
     /// (e.g. <c>Maybe[T] needs T is EntityType</c>) — the entity layout is stored here.
     /// <see cref="GetOrCreateResolution"/> consults this table when a type argument is an
     /// <see cref="EntityTypeInfo"/> so it can pick the correct struct layout
-    /// (e.g. <c>{ Snatched[T] }</c> for <c>Maybe[Text]</c> instead of <c>{ Bool, T }</c>).
+    /// (e.g. <c>{ Hijacked[T] }</c> for <c>Maybe[Text]</c> instead of <c>{ Bool, T }</c>).
     /// </summary>
     private readonly Dictionary<string, TypeInfo> _entitySpecializations = new();
 
@@ -516,21 +517,14 @@ public sealed partial class TypeRegistry
             return;
         }
 
-        var updatedEntity = new EntityTypeInfo(name: entity.Name)
-        {
-            MemberVariables = memberVariables,
-            ImplementedProtocols = entity.ImplementedProtocols,
-            GenericParameters = entity.GenericParameters,
-            GenericConstraints = entity.GenericConstraints,
-            TypeArguments = entity.TypeArguments,
-            GenericDefinition = entity.GenericDefinition,
-            Visibility = entity.Visibility,
-            Location = entity.Location,
-            Module = entity.Module
-        };
-
-        _types[key: entityName] = updatedEntity;
-        _typesByShortName.Remove(key: entity.Name);
+        // Mutate in-place so that all existing references (pending routine OwnerType pointers,
+        // cached resolutions in _resolutions, etc.) see the updated member variable list.
+        // Creating a new object here would leave _resolutions entries with stale GenericDefinition
+        // pointers that have empty MemberVariables — causing S450 "no member" errors when the SA
+        // later resolves fields on resolved generic instances (e.g., ListNode[T].value).
+        entity.MemberVariables = memberVariables;
+        // Propagate to any already-cached generic resolutions of this entity definition.
+        RefreshEntityResolutions(genericDef: entity);
     }
 
     /// <summary>
@@ -550,21 +544,7 @@ public sealed partial class TypeRegistry
             return;
         }
 
-        var updatedEntity = new EntityTypeInfo(name: entity.Name)
-        {
-            MemberVariables = entity.MemberVariables,
-            ImplementedProtocols = protocols,
-            GenericParameters = entity.GenericParameters,
-            GenericConstraints = entity.GenericConstraints,
-            TypeArguments = entity.TypeArguments,
-            GenericDefinition = entity.GenericDefinition,
-            Visibility = entity.Visibility,
-            Location = entity.Location,
-            Module = entity.Module
-        };
-
-        _types[key: entityName] = updatedEntity;
-        _typesByShortName.Remove(key: entity.Name);
+        entity.ImplementedProtocols = protocols;
     }
 
     /// <summary>Updates a crashable type's member variables.</summary>
@@ -854,15 +834,18 @@ public sealed partial class TypeRegistry
         if (typeArguments.Any(predicate: t => t is ErrorTypeInfo))
             return genericDef;
 
-        // Primary key uses FullName for each type argument (e.g. "Snatched[Core.Byte]").
-        // A short-name alias (e.g. "Snatched[Byte]") is stored as a backward-compatible fallback.
+        // Primary key uses FullName for each type argument (e.g. "Hijacked[Core.Byte]").
+        // A short-name alias (e.g. "Hijacked[Byte]") is stored as a backward-compatible fallback.
         // Both keys map to the same TypeInfo, so AllConcreteGenericInstances uses .Distinct()
         // to avoid double-processing. Wrapper types are stored in _wrapperResolutions (not here)
         // to prevent key collisions at the FullName level.
         string fullKey =
             $"{genericDef.Name}[{string.Join(separator: ", ", values: typeArguments.Select(selector: t => t.FullName))}]";
+        // WrapperTypeInfo.Name is bare ("Owned") without inner type args, so using Name alone
+        // collapses "Maybe[Owned[X]]" and "Maybe[Owned[Y]]" to the same shortKey "Maybe[Owned]".
+        // GetShortName expands wrappers to "Wrapper[Inner.Name]" to keep shortKeys distinct.
         string shortKey =
-            $"{genericDef.Name}[{string.Join(separator: ", ", values: typeArguments.Select(selector: t => t.Name))}]";
+            $"{genericDef.Name}[{string.Join(separator: ", ", values: typeArguments.Select(selector: GetShortName))}]";
         // Module-qualified full key: used when @llvm_ir type args are rewritten to fully-qualified
         // names by GenericAstRewriter (e.g. "Collections.BTreeSetNode[Core.S64]").
         string? moduleFullKey = genericDef.FullName != genericDef.Name
@@ -878,7 +861,7 @@ public sealed partial class TypeRegistry
 
         // If an entity-type specialization exists for this generic and the first type argument
         // is an entity type, use that specialization instead of the primary (record-type) definition.
-        // This ensures e.g. Maybe[Text] gets { Snatched[T] } layout instead of { Bool, T }.
+        // This ensures e.g. Maybe[Text] gets { Hijacked[T] } layout instead of { Bool, T }.
         TypeInfo bestDef = genericDef;
         if (typeArguments.Count > 0 &&
             typeArguments[index: 0] is EntityTypeInfo &&
@@ -889,7 +872,7 @@ public sealed partial class TypeRegistry
 
         TypeInfo resolved = bestDef.CreateInstance(typeArguments: typeArguments);
         _resolutions[key: fullKey] = resolved;
-        // Short-name alias for backward-compatible lookups via LookupType("Snatched[Byte]")
+        // Short-name alias for backward-compatible lookups via LookupType("Hijacked[Byte]")
         if (fullKey != shortKey) _resolutions[key: shortKey] = resolved;
         // Module-qualified full key for ResolveTypeExpressionToLLVM (GMP rewrites type args
         // to fully-qualified names like "Collections.BTreeSetNode[Core.S64]")
@@ -910,10 +893,10 @@ public sealed partial class TypeRegistry
         if (_resolutions.TryGetValue(key: fullKey, value: out TypeInfo? existing))
             return existing;
         string shortKey =
-            $"{genericDef.Name}[{string.Join(separator: ", ", values: typeArguments.Select(selector: t => t.Name))}]";
+            $"{genericDef.Name}[{string.Join(separator: ", ", values: typeArguments.Select(selector: GetShortName))}]";
         if (fullKey != shortKey && _resolutions.TryGetValue(key: shortKey, value: out existing))
             return existing;
-        // Wrapper types (Snatched, Retained, etc.) are stored in _wrapperResolutions, not _resolutions.
+        // Wrapper types (Hijacked, Retained, etc.) are stored in _wrapperResolutions, not _resolutions.
         if (_wrapperResolutions.TryGetValue(key: fullKey, value: out WrapperTypeInfo? wrapper))
             return wrapper;
         if (fullKey != shortKey && _wrapperResolutions.TryGetValue(key: shortKey, value: out wrapper))
@@ -940,6 +923,14 @@ public sealed partial class TypeRegistry
             }
         }
     }
+
+    /// Short name for a type argument used in the shortKey of GetOrCreateResolution / TryGetResolution.
+    /// WrapperTypeInfo.Name is bare ("Owned") without inner args, so we expand it recursively to
+    /// "Owned[InnerName]" to prevent shortKey collisions across different inner types.
+    private static string GetShortName(TypeModel.Types.TypeInfo t) =>
+        t is TypeModel.Types.WrapperTypeInfo wt
+            ? $"{wt.Name}[{GetShortName(wt.InnerType)}]"
+            : t.Name;
 
     /// <summary>
     /// Gets or creates a function type with the given parameter and return types.
@@ -1134,10 +1125,10 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
-    /// Gets or creates a synthesized wrapper type (Hijacked, Inspected, Seized, Viewed).
+    /// Gets or creates a synthesized wrapper type (Grasped, Inspected, Claimed, Viewed).
     /// These are builder-intrinsic types that don't need to be defined in the program.
     /// </summary>
-    /// <param name="wrapperName">The name of the wrapper type (e.g., "Hijacked").</param>
+    /// <param name="wrapperName">The name of the wrapper type (e.g., "Grasped").</param>
     /// <param name="innerType">The type being wrapped.</param>
     /// <param name="isReadOnly">Whether this is a read-only wrapper (Viewed, Inspected).</param>
     /// <returns>The cached or newly created wrapper type.</returns>
@@ -1146,7 +1137,7 @@ public sealed partial class TypeRegistry
     {
         // Build the cache key using the inner type's FullName for uniqueness.
         // Stored in _wrapperResolutions (not _resolutions) to avoid collisions with
-        // GetOrCreateResolution's FullName-based keys for record types like Snatched[Core.Byte].
+        // GetOrCreateResolution's FullName-based keys for record types like Hijacked[Core.Byte].
         string key = $"{wrapperName}[{innerType.FullName}]";
 
         // Check cache
@@ -1230,6 +1221,18 @@ public sealed partial class TypeRegistry
                 t.TypeArguments is { Count: > 0 } args &&
                 args.All(predicate: a => a is not ErrorTypeInfo and not GenericParameterTypeInfo))
             .Distinct(); // dual-index stores the same TypeInfo under two keys; deduplicate by reference.
+
+    /// <summary>
+    /// Returns all concrete WrapperTypeInfo instances (e.g. Hijacked[RetainController])
+    /// whose type argument is fully resolved (no generic parameters or error types).
+    /// Used by eager wrapper-forwarder synthesis.
+    /// </summary>
+    public IEnumerable<WrapperTypeInfo> AllConcreteWrapperInstances =>
+        _wrapperResolutions.Values
+            .Where(predicate: t =>
+                t.TypeArguments is { Count: > 0 } args &&
+                args.All(predicate: a => a is not ErrorTypeInfo and not GenericParameterTypeInfo))
+            .Distinct();
 
     /// <summary>
     /// Gets all types that can have methods (records, entities, choices, flags).

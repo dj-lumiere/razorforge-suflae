@@ -1,4 +1,5 @@
-using SemanticVerification.Types;
+using TypeModel.Types;
+using TypeModel.Enums;
 using Compiler.Lexer;
 
 namespace SyntaxTree;
@@ -332,13 +333,13 @@ public record CallExpression(
     /// The resolved dispatch strategy for this call, set by the semantic analyzer.
     /// Null for non-varargs calls. Buildtime or Runtime for protocol-constrained varargs.
     /// </summary>
-    public SemanticVerification.Enums.DispatchStrategy? ResolvedDispatch { get; set; }
+    public DispatchStrategy? ResolvedDispatch { get; set; }
 
     /// <summary>
     /// The resolved routine for this call, set by the semantic analyzer during overload resolution.
     /// When set, the codegen should use this instead of performing its own lookup.
     /// </summary>
-    public SemanticVerification.Symbols.RoutineInfo? ResolvedRoutine { get; set; }
+    public TypeModel.Symbols.RoutineInfo? ResolvedRoutine { get; set; }
 
     /// <summary>
     /// When true, this call is a collection literal constructor (e.g., List(1, 2, 3), Set(1, 2, 3)).
@@ -840,7 +841,7 @@ public record GenericMethodCallExpression(
     /// The fully resolved RoutineInfo from semantic analysis (with owner-level and method-level
     /// generic substitution applied). Set for generic method calls on objects (e.g., obj.method[U](args)).
     /// </summary>
-    public SemanticVerification.Symbols.RoutineInfo? ResolvedRoutine { get; set; }
+    public TypeModel.Symbols.RoutineInfo? ResolvedRoutine { get; set; }
 }
 
 /// <summary>
@@ -914,7 +915,7 @@ public record CarrierPayloadExpression(
 /// Steal expression rules:
 /// <list type="bullet">
 /// <item>Can steal: raw entities</item>
-/// <item>Cannot steal: Viewed&lt;T&gt;, Hijacked&lt;T&gt;, Retained&lt;T&gt;, Tracked&lt;T&gt;, Shared&lt;T, P&gt;, Marked&lt;T, P&gt;, Inspected&lt;T&gt;, Seized&lt;T&gt;, Snatched&lt;T&gt;</item>
+/// <item>Cannot steal: Viewed&lt;T&gt;, Grasped&lt;T&gt;, Retained&lt;T&gt;, Tracked&lt;T&gt;, Shared&lt;T, P&gt;, Marked&lt;T, P&gt;, Inspected&lt;T&gt;, Claimed&lt;T&gt;, Hijacked&lt;T&gt;</item>
 /// <item>After stealing, source becomes deadref (using it is a build error)</item>
 /// <item>Used for: ownership transfer (steal node), container push (list.push(steal node)),
 /// and consuming iteration (for item in steal list)</item>

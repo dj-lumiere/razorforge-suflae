@@ -1,6 +1,6 @@
+using Compiler.Instantiation;
 using Compiler.Resolution;
 using Compiler.Targeting;
-using SemanticVerification;
 using SyntaxTree;
 
 namespace Compiler.Desugaring;
@@ -29,7 +29,7 @@ public sealed class DesugaringContext
 
     /// <summary>
     /// Pre-rewritten monomorphized bodies produced by <see cref="Passes.GenericMonomorphizationPass"/>,
-    /// keyed by the concrete <see cref="SemanticVerification.Symbols.RoutineInfo.RegistryKey"/>.
+    /// keyed by the concrete <see cref="TypeModel.Symbols.RoutineInfo.RegistryKey"/>.
     /// Codegen checks this map before doing its own AST search and rewriting, so most
     /// generic method bodies are ready before the first IR line is emitted.
     /// </summary>

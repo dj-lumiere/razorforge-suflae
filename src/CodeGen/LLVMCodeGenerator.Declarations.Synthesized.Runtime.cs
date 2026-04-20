@@ -1,13 +1,13 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticVerification.Symbols;
-using SemanticVerification.Types;
+using TypeModel.Symbols;
+using TypeModel.Types;
 
 /// <summary>
 /// Declaration code generation for synthesized runtime-support routines.
 /// </summary>
-public partial class LLVMCodeGenerator
+public partial class LlvmCodeGenerator
 {
     private void EmitSynthesizedHash(RoutineInfo routine, string funcName)
     {
@@ -16,7 +16,7 @@ public partial class LLVMCodeGenerator
             return;
         }
 
-        string meType = GetParameterLLVMType(type: routine.OwnerType);
+        string meType = GetParameterLlvmType(type: routine.OwnerType);
 
         EmitLine(sb: _functionDefinitions, line: $"define i64 @{funcName}({meType} %me) {{");
         EmitLine(sb: _functionDefinitions, line: "entry:");
@@ -66,7 +66,7 @@ public partial class LLVMCodeGenerator
                 for (int i = 0; i < record.MemberVariables.Count; i++)
                 {
                     MemberVariableInfo mv = record.MemberVariables[index: i];
-                    string fieldType = GetLLVMType(type: mv.Type);
+                    string fieldType = GetLlvmType(type: mv.Type);
                     string field = NextTemp();
                     EmitLine(sb: _functionDefinitions,
                         line: $"  {field} = extractvalue {typeName} %me, {i}");
@@ -106,7 +106,7 @@ public partial class LLVMCodeGenerator
                 for (int i = 0; i < tuple.ElementTypes.Count; i++)
                 {
                     TypeInfo elemType = tuple.ElementTypes[index: i];
-                    string elemLlvmType = GetLLVMType(type: elemType);
+                    string elemLlvmType = GetLlvmType(type: elemType);
                     string elem = NextTemp();
                     EmitLine(sb: _functionDefinitions,
                         line: $"  {elem} = extractvalue {tupleStructType} %me, {i}");
@@ -150,8 +150,8 @@ public partial class LLVMCodeGenerator
     {
         if (routine.ReturnType == null || routine.Parameters.Count != 1) return;
 
-        string paramLlvmType = GetParameterLLVMType(type: routine.Parameters[0].Type);
-        string retLlvmType = GetLLVMType(type: routine.ReturnType);
+        string paramLlvmType = GetParameterLlvmType(type: routine.Parameters[0].Type);
+        string retLlvmType = GetLlvmType(type: routine.ReturnType);
 
         EmitLine(sb: _functionDefinitions,
             line: $"define {retLlvmType} @{funcName}({paramLlvmType} %from) {{");
@@ -220,7 +220,7 @@ public partial class LLVMCodeGenerator
         for (int i = 0; i < entity.MemberVariables.Count; i++)
         {
             MemberVariableInfo mv = entity.MemberVariables[index: i];
-            string fieldType = GetLLVMType(type: mv.Type);
+            string fieldType = GetLlvmType(type: mv.Type);
 
             // Load from source
             string srcFp = NextTemp();
@@ -253,7 +253,7 @@ public partial class LLVMCodeGenerator
         }
 
         TypeInfo paramType = routine.Parameters[index: 0].Type;
-        string paramLlvmType = GetParameterLLVMType(type: paramType);
+        string paramLlvmType = GetParameterLlvmType(type: paramType);
         string paramName = routine.Parameters[index: 0].Name;
 
         // Text.$create(from: T) → T.$represent()
@@ -292,7 +292,7 @@ public partial class LLVMCodeGenerator
         }
 
         TypeInfo paramType = routine.Parameters[index: 0].Type;
-        string paramLlvmType = GetParameterLLVMType(type: paramType);
+        string paramLlvmType = GetParameterLlvmType(type: paramType);
         string paramName = routine.Parameters[index: 0].Name;
 
         // Data entity layout: { i64 type_id, i64 size, ptr data_ptr } = 24 bytes
@@ -351,7 +351,7 @@ public partial class LLVMCodeGenerator
             return;
         }
 
-        string meType = GetParameterLLVMType(type: routine.OwnerType);
+        string meType = GetParameterLlvmType(type: routine.OwnerType);
 
         EmitLine(sb: _functionDefinitions,
             line: $"define i64 @{funcName}({meType} %me, ptr %from) {{");

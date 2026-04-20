@@ -248,7 +248,7 @@ public class GenericResolutionTests
 
         Program program = Parse(source: source);
         var analyzer = new SemanticVerification.SemanticAnalyzer(
-            language: SemanticVerification.Enums.Language.RazorForge);
+            language: TypeModel.Enums.Language.RazorForge);
         AnalysisResult result = analyzer.Analyze(program: program);
         Assert.Empty(collection: result.Errors);
 
@@ -287,7 +287,7 @@ public class GenericResolutionTests
 
         Program program = Parse(source: source);
         var analyzer = new SemanticVerification.SemanticAnalyzer(
-            language: SemanticVerification.Enums.Language.RazorForge);
+            language: TypeModel.Enums.Language.RazorForge);
         AnalysisResult result = analyzer.Analyze(program: program);
         Assert.Empty(collection: result.Errors);
 
@@ -321,7 +321,7 @@ public class GenericResolutionTests
 
         Program program = Parse(source: source);
         var analyzer = new SemanticVerification.SemanticAnalyzer(
-            language: SemanticVerification.Enums.Language.RazorForge);
+            language: TypeModel.Enums.Language.RazorForge);
         AnalysisResult result = analyzer.Analyze(program: program);
         Assert.Empty(collection: result.Errors);
 

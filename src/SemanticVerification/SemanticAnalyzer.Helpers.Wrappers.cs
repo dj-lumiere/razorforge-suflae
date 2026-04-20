@@ -1,10 +1,10 @@
 namespace SemanticVerification;
 
-using Symbols;
-using Types;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
 using Compiler.Diagnostics;
-using TypeSymbol = Types.TypeInfo;
+using TypeSymbol = TypeModel.Types.TypeInfo;
 
 public sealed partial class SemanticAnalyzer
 {
@@ -23,31 +23,31 @@ public sealed partial class SemanticAnalyzer
             return IsNestedHijacking(source: member.Object);
         }
 
-        // Look up the variable and check if its type is Hijacked<T>
+        // Look up the variable and check if its type is Grasped<T>
         VariableInfo? varInfo = _registry.LookupVariable(name: id.Name);
         if (varInfo == null)
         {
             return false;
         }
 
-        // Check if the variable's type is Hijacked<T>
-        return IsHijackedType(type: varInfo.Type);
+        // Check if the variable's type is Grasped<T>
+        return IsGraspedType(type: varInfo.Type);
     }
 
     /// <summary>
-    /// Checks if a type is a Hijacked&lt;T&gt; token type.
+    /// Checks if a type is a Grasped&lt;T&gt; token type.
     /// </summary>
-    private static bool IsHijackedType(TypeSymbol type)
+    private static bool IsGraspedType(TypeSymbol type)
     {
-        return type.Name == "Hijacked" || type.Name.StartsWith(value: "Hijacked[");
+        return type.Name == "Grasped" || type.Name.StartsWith(value: "Grasped[");
     }
 
     /// <summary>
-    /// Checks if a type is a Seized&lt;T&gt; token type.
+    /// Checks if a type is a Claimed&lt;T&gt; token type.
     /// </summary>
-    private static bool IsSeizedType(TypeSymbol type)
+    private static bool IsClaimedType(TypeSymbol type)
     {
-        return type.Name == "Seized" || type.Name.StartsWith(value: "Seized[");
+        return type.Name == "Claimed" || type.Name.StartsWith(value: "Claimed[");
     }
 
     /// <summary>
@@ -72,14 +72,14 @@ public sealed partial class SemanticAnalyzer
     private static readonly HashSet<string> WrapperTypes =
     [
         "Viewed",    // Read-only single-threaded token
-        "Hijacked",  // Exclusive write single-threaded token
+        "Grasped",  // Exclusive write single-threaded token
         "Inspected", // Read-only multi-threaded token
-        "Seized",    // Exclusive write multi-threaded token
+        "Claimed",    // Exclusive write multi-threaded token
         "Shared",    // Reference-counted multi-threaded handle
         "Marked",    // Weak reference multi-threaded handle
         "Retained",  // Reference-counted handle
         "Tracked",   // Weak reference handle
-        "Snatched",  // Unmanaged raw pointer handle
+        "Hijacked",  // Unmanaged raw pointer handle
         "Owned"      // Exclusive ownership wrapper (unique_ptr equivalent)
     ];
 
@@ -93,7 +93,7 @@ public sealed partial class SemanticAnalyzer
     ];
 
     /// <summary>
-    /// Checks if a type is a wrapper type (Viewed, Hijacked, Shared, etc.).
+    /// Checks if a type is a wrapper type (Viewed, Grasped, Shared, etc.).
     /// </summary>
     /// <param name="type">The type to check.</param>
     /// <returns>True if the type is a wrapper type.</returns>
@@ -194,18 +194,18 @@ public sealed partial class SemanticAnalyzer
     private static readonly HashSet<string> InlineOnlyTokenTypes =
     [
         "Viewed", // Read-only single-threaded token
-        "Hijacked", // Exclusive write single-threaded token
+        "Grasped", // Exclusive write single-threaded token
         "Inspected", // Read-only multi-threaded token
-        "Seized" // Exclusive write multi-threaded token
+        "Claimed" // Exclusive write multi-threaded token
     ];
 
     /// <summary>
-    /// RC handles + Snatched: allowed as record member variable types.
-    /// Scoped tokens (Viewed, Hijacked, Inspected, Seized) remain banned.
+    /// RC handles + Hijacked: allowed as record member variable types.
+    /// Scoped tokens (Viewed, Grasped, Inspected, Claimed) remain banned.
     /// </summary>
     private static readonly HashSet<string> StorableWrapperTypes =
     [
-        "Snatched", // Unmanaged raw pointer handle
+        "Hijacked", // Unmanaged raw pointer handle
         "Retained", // Reference-counted handle
         "Shared", // Reference-counted multi-threaded handle
         "Tracked", // Weak reference handle
@@ -218,7 +218,7 @@ public sealed partial class SemanticAnalyzer
     /// </summary>
     private static readonly HashSet<string> ExclusiveTokenTypes =
     [
-        "Hijacked", // Cannot pass same Hijacked token twice
-        "Seized" // Cannot pass same Seized token twice
+        "Grasped", // Cannot pass same Grasped token twice
+        "Claimed" // Cannot pass same Claimed token twice
     ];
 }

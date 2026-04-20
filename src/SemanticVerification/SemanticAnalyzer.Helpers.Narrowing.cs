@@ -1,9 +1,9 @@
 namespace SemanticVerification;
 
-using Symbols;
-using Types;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
-using TypeSymbol = Types.TypeInfo;
+using TypeSymbol = TypeModel.Types.TypeInfo;
 
 public sealed partial class SemanticAnalyzer
 {
@@ -174,6 +174,7 @@ public sealed partial class SemanticAnalyzer
                                           c.Pattern is ElsePattern or WildcardPattern) &&
                                       whenStmt.Clauses.All(predicate: c =>
                                           StatementAlwaysTerminates(statement: c.Body)),
+            DangerStatement danger => StatementAlwaysTerminates(statement: danger.Body),
             _ => false
         };
     }

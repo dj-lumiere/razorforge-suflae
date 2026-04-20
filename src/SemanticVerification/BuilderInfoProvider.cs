@@ -2,8 +2,9 @@ namespace SemanticVerification;
 
 using Compiler.Resolution;
 using Enums;
-using Symbols;
-using TypeSymbol = Types.TypeInfo;
+using TypeModel.Enums;
+using TypeModel.Symbols;
+using TypeSymbol = TypeModel.Types.TypeInfo;
 
 /// <summary>
 /// Central authority for BuilderService routine registration and import-gating.
@@ -116,7 +117,7 @@ public static class BuilderInfoProvider
                 returnType: u64Type,
                 existingMethods: existingMethods,
                 registry: registry);
-            // data_size is RazorForge-only (used by collection internals via Snatched pointer arithmetic)
+            // data_size is RazorForge-only (used by collection internals via Hijacked pointer arithmetic)
             // Returns ByteSize for type-safe arithmetic; falls back to U64 if ByteSize not loaded yet.
             if (registry.Language == Language.RazorForge)
             {

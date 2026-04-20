@@ -1,12 +1,13 @@
 ﻿namespace SemanticVerification;
 
 using Enums;
+using TypeModel.Enums;
 using Scopes;
-using Types;
+using TypeModel.Types;
 using SyntaxTree;
 using Compiler.Lexer;
 using Compiler.Diagnostics;
-using TypeSymbol = Types.TypeInfo;
+using TypeSymbol = TypeModel.Types.TypeInfo;
 
 /// <summary>
 /// Pattern analysis for when/is expressions.

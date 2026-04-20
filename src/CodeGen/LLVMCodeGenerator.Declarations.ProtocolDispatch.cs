@@ -1,11 +1,11 @@
 namespace Compiler.CodeGen;
 
 using System.Text;
-using SemanticVerification.Enums;
-using SemanticVerification.Symbols;
-using SemanticVerification.Types;
+using TypeModel.Enums;
+using TypeModel.Symbols;
+using TypeModel.Types;
 
-public partial class LLVMCodeGenerator
+public partial class LlvmCodeGenerator
 {
     private void GenerateProtocolDispatchStubs()
     {
@@ -30,7 +30,7 @@ public partial class LLVMCodeGenerator
                .FirstOrDefault(predicate: m => m.Name == info.MethodName);
 
             string retType = protoMethod?.ReturnType != null
-                ? GetLLVMType(type: protoMethod.ReturnType)
+                ? GetLlvmType(type: protoMethod.ReturnType)
                 : "void";
 
             // Trigger compilation of every uncompiled implementer, then defer if any were added.
@@ -63,7 +63,7 @@ public partial class LLVMCodeGenerator
             EmitLine(sb: sb, line: "entry:");
 
             // Build switch: switch i64 %type_id, label %default [ i64 X, label %dN ... ]
-            var switchSb = new System.Text.StringBuilder();
+            var switchSb = new StringBuilder();
             switchSb.Append($"  switch i64 %type_id, label %{defaultLabel} [");
             for (int i = 0; i < implementers.Count; i++)
             {
@@ -85,7 +85,7 @@ public partial class LLVMCodeGenerator
                 if (concreteType is RecordTypeInfo)
                 {
                     // Record methods take the struct by value — load it from the pointer
-                    string llvmType = GetLLVMType(type: concreteType);
+                    string llvmType = GetLlvmType(type: concreteType);
                     string loaded = NextTemp();
                     EmitLine(sb: sb, line: $"  {loaded} = load {llvmType}, ptr %self");
 
@@ -178,7 +178,7 @@ public partial class LLVMCodeGenerator
             }
 
             string candidateName =
-                Q(name: $"{type.FullName}.{SanitizeLLVMName(name: methodName)}");
+                Q(name: $"{type.FullName}.{SanitizeLlvmName(name: methodName)}");
             if (_generatedFunctionDefs.Contains(item: candidateName))
             {
                 result.Add(item: (type, candidateName));
@@ -346,7 +346,7 @@ public partial class LLVMCodeGenerator
 
                 // Check if the concrete method exists in generated functions
                 string candidateName =
-                    Q(name: $"{concreteType.FullName}.{SanitizeLLVMName(name: methodName)}");
+                    Q(name: $"{concreteType.FullName}.{SanitizeLlvmName(name: methodName)}");
                 if (_generatedFunctionDefs.Contains(item: candidateName))
                 {
                     return candidateName;
@@ -505,7 +505,7 @@ public partial class LLVMCodeGenerator
                 }
 
                 string candidateName =
-                    Q(name: $"{concreteType.FullName}.{SanitizeLLVMName(name: methodName)}");
+                    Q(name: $"{concreteType.FullName}.{SanitizeLlvmName(name: methodName)}");
 
                 // Skip if already compiled
                 if (_generatedFunctionDefs.Contains(item: candidateName))

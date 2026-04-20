@@ -953,7 +953,7 @@ public partial class Parser
             throw new GrammarException(code: GrammarDiagnosticCode.DiscardRequiresCall,
                 message: "The 'discard' keyword must be followed by a routine call. " +
                          "Use 'discard routine_call()' to explicitly ignore a return value.",
-                fileName: fileName,
+                fileName: FileName,
                 line: location.Line,
                 column: location.Column,
                 language: _language);
