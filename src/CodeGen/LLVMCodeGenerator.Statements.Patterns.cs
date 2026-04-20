@@ -700,31 +700,6 @@ public partial class LlvmCodeGenerator
             EmitLine(sb: sb,
                 line: $"  {field0PtrP} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 0");
 
-            bool isEntityMaybeTp = IsMaybeType(type: subjectType)
-                && subjectType.TypeArguments?.Count > 0
-                && subjectType.TypeArguments[0] is EntityTypeInfo;
-
-            if (isEntityMaybeTp)
-            {
-                // Entity Maybe { Hijacked[T] }: non-null check — ptr != null means present.
-                string ptrValP = NextTemp();
-                EmitLine(sb: sb, line: $"  {ptrValP} = load ptr, ptr {field0PtrP}");
-                string cmp = NextTemp();
-                EmitLine(sb: sb, line: $"  {cmp} = icmp ne ptr {ptrValP}, null");
-                EmitLine(sb: sb, line: $"  br i1 {cmp}, label %{branchTarget}, label %{failLabel}");
-
-                if (needsBind && targetType != null)
-                {
-                    EmitLine(sb: sb, line: $"{branchTarget}:");
-                    // For entity Maybe, field 0 IS the entity ptr (Hijacked[T] = ptr).
-                    string varAddr = $"%{typePattern.VariableName}.addr";
-                    EmitEntryAlloca(llvmName: varAddr, llvmType: "ptr");
-                    EmitLine(sb: sb, line: $"  store ptr {ptrValP}, ptr {varAddr}");
-                    _localVariables[key: typePattern.VariableName!] = targetType;
-                    EmitLine(sb: sb, line: $"  br label %{matchLabel}");
-                }
-            }
-            else
             {
                 string tagTypeP = GetCarrierTagType(kind: GetCarrierKind(type: subjectType));
                 string expectedTagP = IsMaybeType(type: subjectType)
@@ -951,29 +926,14 @@ public partial class LlvmCodeGenerator
             EmitLine(sb: sb,
                 line: $"  {field0PtrN} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 0");
 
-            bool isEntityMaybe = IsMaybeType(type: subjectType)
-                && subjectType.TypeArguments?.Count > 0
-                && subjectType.TypeArguments[0] is EntityTypeInfo;
-
-            if (isEntityMaybe)
-            {
-                // Entity Maybe { ptr }: field 0 is the value pointer — null check.
-                string ptrValN = NextTemp();
-                EmitLine(sb: sb, line: $"  {ptrValN} = load ptr, ptr {field0PtrN}");
-                string cmp = NextTemp();
-                EmitLine(sb: sb, line: $"  {cmp} = icmp eq ptr {ptrValN}, null");
-                EmitLine(sb: sb, line: $"  br i1 {cmp}, label %{matchLabel}, label %{failLabel}");
-            }
-            else
-            {
-                // Record Maybe { i1, T } or Lookup: compare tag field to 0.
-                string tagTypeN = GetCarrierTagType(kind: GetCarrierKind(type: subjectType));
-                string tagN = NextTemp();
-                EmitLine(sb: sb, line: $"  {tagN} = load {tagTypeN}, ptr {field0PtrN}");
-                string cmp = NextTemp();
-                EmitLine(sb: sb, line: $"  {cmp} = icmp eq {tagTypeN} {tagN}, 0");
-                EmitLine(sb: sb, line: $"  br i1 {cmp}, label %{matchLabel}, label %{failLabel}");
-            }
+            // Maybe { i1, T } or Lookup: compare tag field (i1/i64) to 0.
+            // Entity Maybe uses same { i1, ptr } layout as record Maybe since C118.
+            string tagTypeN = GetCarrierTagType(kind: GetCarrierKind(type: subjectType));
+            string tagN = NextTemp();
+            EmitLine(sb: sb, line: $"  {tagN} = load {tagTypeN}, ptr {field0PtrN}");
+            string cmp = NextTemp();
+            EmitLine(sb: sb, line: $"  {cmp} = icmp eq {tagTypeN} {tagN}, 0");
+            EmitLine(sb: sb, line: $"  br i1 {cmp}, label %{matchLabel}, label %{failLabel}");
         }
         else
         {
@@ -1476,30 +1436,15 @@ public partial class LlvmCodeGenerator
 
         if (IsMaybeType(type: subjectType))
         {
-            // Record Maybe { i1 present, T value }: value at field 1.
-            // Entity Maybe { ptr }: entity ptr at field 0 (only field).
-            if (innerType is EntityTypeInfo)
-            {
-                string valPtr = NextTemp();
-                EmitLine(sb: sb,
-                    line: $"  {valPtr} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 0");
-                string val = NextTemp();
-                EmitLine(sb: sb, line: $"  {val} = load ptr, ptr {valPtr}");
-                EmitEntryAlloca(llvmName: varAddr, llvmType: "ptr");
-                EmitLine(sb: sb, line: $"  store ptr {val}, ptr {varAddr}");
-            }
-            else
-            {
-                string valPtr = NextTemp();
-                EmitLine(sb: sb,
-                    line: $"  {valPtr} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 1");
-                string innerLlvm = GetLlvmType(type: innerType);
-                string val = NextTemp();
-                EmitLine(sb: sb, line: $"  {val} = load {innerLlvm}, ptr {valPtr}");
-                EmitEntryAlloca(llvmName: varAddr, llvmType: innerLlvm);
-                EmitLine(sb: sb, line: $"  store {innerLlvm} {val}, ptr {varAddr}");
-            }
-
+            // Maybe { i1 present, T value }: value at field 1 for both record and entity T (since C118).
+            string valPtr = NextTemp();
+            EmitLine(sb: sb,
+                line: $"  {valPtr} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 1");
+            string innerLlvm = innerType is EntityTypeInfo ? "ptr" : GetLlvmType(type: innerType);
+            string val = NextTemp();
+            EmitLine(sb: sb, line: $"  {val} = load {innerLlvm}, ptr {valPtr}");
+            EmitEntryAlloca(llvmName: varAddr, llvmType: innerLlvm);
+            EmitLine(sb: sb, line: $"  store {innerLlvm} {val}, ptr {varAddr}");
             _localVariables[key: variableName] = innerType;
         }
         else

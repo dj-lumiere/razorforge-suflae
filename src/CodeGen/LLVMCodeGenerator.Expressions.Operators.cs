@@ -370,37 +370,19 @@ public partial class LlvmCodeGenerator
         EmitLine(sb: sb,
             line: $"  {field0PtrIs} = getelementptr {maybeType}, ptr {allocaPtr}, i32 0, i32 0");
 
-        // Entity Maybe { Hijacked[T] }: field 0 is ptr; null = None.
-        // Record Maybe { i1 present, T } / Result / Lookup: field 0 is a tag integer.
-        bool isEntityMaybeIs = isNoneCheck
-            && operandType!.TypeArguments?.Count > 0
-            && operandType.TypeArguments[0] is EntityTypeInfo;
-
-        string result;
-        if (isEntityMaybeIs)
-        {
-            string ptrValIs = NextTemp();
-            EmitLine(sb: sb, line: $"  {ptrValIs} = load ptr, ptr {field0PtrIs}");
-            result = NextTemp();
-            EmitLine(sb: sb,
-                line: isPattern.IsNegated
-                    ? $"  {result} = icmp ne ptr {ptrValIs}, null"
-                    : $"  {result} = icmp eq ptr {ptrValIs}, null");
-        }
-        else
-        {
-            string tagTypeIs = GetCarrierTagType(kind: GetCarrierKind(type: operandType!));
-            string expectedTagIs = isNoneCheck
-                ? "0"
-                : ComputeTypeId(fullName: "Blank").ToString();
-            string tagIs = NextTemp();
-            EmitLine(sb: sb, line: $"  {tagIs} = load {tagTypeIs}, ptr {field0PtrIs}");
-            result = NextTemp();
-            EmitLine(sb: sb,
-                line: isPattern.IsNegated
-                    ? $"  {result} = icmp ne {tagTypeIs} {tagIs}, {expectedTagIs}"
-                    : $"  {result} = icmp eq {tagTypeIs} {tagIs}, {expectedTagIs}");
-        }
+        // Maybe { i1, T } / Result / Lookup: field 0 is a tag integer.
+        // Entity Maybe uses same { i1, ptr } layout as record Maybe since C118.
+        string tagTypeIs = GetCarrierTagType(kind: GetCarrierKind(type: operandType!));
+        string expectedTagIs = isNoneCheck
+            ? "0"
+            : ComputeTypeId(fullName: "Blank").ToString();
+        string tagIs = NextTemp();
+        EmitLine(sb: sb, line: $"  {tagIs} = load {tagTypeIs}, ptr {field0PtrIs}");
+        string result = NextTemp();
+        EmitLine(sb: sb,
+            line: isPattern.IsNegated
+                ? $"  {result} = icmp ne {tagTypeIs} {tagIs}, {expectedTagIs}"
+                : $"  {result} = icmp eq {tagTypeIs} {tagIs}, {expectedTagIs}");
 
         return result;
 

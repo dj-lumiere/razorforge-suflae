@@ -468,7 +468,23 @@ public partial class LlvmCodeGenerator
             : "void";
         if (retType == "void")
         {
-            EmitLine(sb: sb, line: "  ret void");
+            // For check_/try_ variant wrappers with Blank return type, emit the success
+            // carrier instead of ret void — the define header uses the carrier type.
+            switch (routine.AsyncStatus)
+            {
+                case AsyncStatus.CheckVariant:
+                {
+                    string carrier = GetResultCarrierLlvmType(valueType: routine.ReturnType!);
+                    EmitLine(sb: sb, line: $"  ret {carrier} zeroinitializer");
+                    break;
+                }
+                case AsyncStatus.TryBoolVariant:
+                    EmitLine(sb: sb, line: "  ret i1 false");
+                    break;
+                default:
+                    EmitLine(sb: sb, line: "  ret void");
+                    break;
+            }
         }
         else
         {

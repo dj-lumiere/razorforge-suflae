@@ -697,7 +697,21 @@ public partial class LlvmCodeGenerator
                 EmitEntityCleanup(sb: sb, returnedVarName: null);
                 if (_traceCurrentRoutine)
                     EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
-                EmitLine(sb: sb, line: "  ret void");
+                // For check_/try_ variant wrappers with Blank (void) return, emit success carrier.
+                if (_currentEmittingRoutine?.AsyncStatus == AsyncStatus.CheckVariant &&
+                    _currentFunctionReturnType != null)
+                {
+                    string carrier = GetResultCarrierLlvmType(valueType: _currentFunctionReturnType);
+                    EmitLine(sb: sb, line: $"  ret {carrier} zeroinitializer");
+                }
+                else if (_currentEmittingRoutine?.AsyncStatus == AsyncStatus.TryBoolVariant)
+                {
+                    EmitLine(sb: sb, line: "  ret i1 false");
+                }
+                else
+                {
+                    EmitLine(sb: sb, line: "  ret void");
+                }
                 return;
             }
 
@@ -735,8 +749,7 @@ public partial class LlvmCodeGenerator
                 EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
 
             // Auto-wrap bare values in Maybe when function returns Maybe[T] but expression is T.
-            // Record Maybe { i1 present, T value }: insertvalue i1 1 at 0, T at 1.
-            // Entity Maybe { Hijacked[T] }:         single ptr field ??non-null ptr = present.
+            // Maybe { i1 present, T value }: insertvalue i1 1 at 0, T at 1 (same for entity and record T).
             if (IsMaybeType(type: retType) && value != "zeroinitializer")
             {
                 TypeInfo? exprType = GetExpressionType(expr: ret.Value);
@@ -746,23 +759,13 @@ public partial class LlvmCodeGenerator
                         ? retType.TypeArguments[index: 0]
                         : retType;
                     string carrierType = GetLlvmType(type: retType);
-                    if (innerType is EntityTypeInfo)
-                    {
-                        string v0 = NextTemp();
-                        EmitLine(sb: sb,
-                            line: $"  {v0} = insertvalue {carrierType} zeroinitializer, ptr {value}, 0");
-                        EmitLine(sb: sb, line: $"  ret {carrierType} {v0}");
-                    }
-                    else
-                    {
-                        string innerLlvm = GetLlvmType(type: innerType);
-                        string v0 = NextTemp();
-                        EmitLine(sb: sb, line: $"  {v0} = insertvalue {carrierType} zeroinitializer, i1 1, 0");
-                        string v1 = NextTemp();
-                        EmitLine(sb: sb,
-                            line: $"  {v1} = insertvalue {carrierType} {v0}, {innerLlvm} {value}, 1");
-                        EmitLine(sb: sb, line: $"  ret {carrierType} {v1}");
-                    }
+                    string innerLlvm = innerType is EntityTypeInfo ? "ptr" : GetLlvmType(type: innerType);
+                    string v0 = NextTemp();
+                    EmitLine(sb: sb, line: $"  {v0} = insertvalue {carrierType} zeroinitializer, i1 1, 0");
+                    string v1 = NextTemp();
+                    EmitLine(sb: sb,
+                        line: $"  {v1} = insertvalue {carrierType} {v0}, {innerLlvm} {value}, 1");
+                    EmitLine(sb: sb, line: $"  ret {carrierType} {v1}");
                 }
                 else
                 {
@@ -925,6 +928,9 @@ public partial class LlvmCodeGenerator
                 if (_traceCurrentRoutine)
                     EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
 
+                // Blank (IdentifierExpression("Blank")) means void/no-value success return.
+                bool tryRetIsBlank = variantRet.Value is IdentifierExpression { Name: "Blank" };
+
                 if (tryRetIsCrashable)
                 {
                     // Return of a crashable from a Try variant ??absent in Maybe (error is dropped).
@@ -933,9 +939,9 @@ public partial class LlvmCodeGenerator
                     string tryCarrier = GetMaybeCarrierLlvmType(valueType: innerType);
                     EmitLine(sb: sb, line: $"  ret {tryCarrier} zeroinitializer");
                 }
-                else if (variantRet.Value == null)
+                else if (variantRet.Value == null || tryRetIsBlank)
                 {
-                    // Bare return in Try variant (Blank inner type): present with no payload.
+                    // Bare return or Blank return in Try variant (Blank inner type): present with no payload.
                     // Record Maybe { i1, Blank }: set i1 tag to 1 (present), zeroinitializer for Blank payload.
                     string tryCarrier = GetMaybeCarrierLlvmType(valueType: innerType);
                     string tv0 = NextTemp();
@@ -945,19 +951,11 @@ public partial class LlvmCodeGenerator
                 else
                 {
                     // Present value: wrap in Maybe carrier.
-                    // Record Maybe { i1 present, T value }: insertvalue i1 1 at 0, T at 1.
-                    // Entity Maybe { Hijacked[T] }:         single ptr field ??non-null ptr = present.
+                    // Maybe { i1 present, T value }: insertvalue i1 1 at 0, T at 1 (same for entity and record T).
                     string value = EmitExpression(sb: sb, expr: variantRet.Value);
                     string tryCarrier = GetMaybeCarrierLlvmType(valueType: innerType);
-                    if (innerType is EntityTypeInfo)
                     {
-                        string v0 = NextTemp();
-                        EmitLine(sb: sb, line: $"  {v0} = insertvalue {tryCarrier} zeroinitializer, ptr {value}, 0");
-                        EmitLine(sb: sb, line: $"  ret {tryCarrier} {v0}");
-                    }
-                    else
-                    {
-                        string innerLlvm = GetLlvmType(type: innerType);
+                        string innerLlvm = innerType is EntityTypeInfo ? "ptr" : GetLlvmType(type: innerType);
                         string v0 = NextTemp();
                         EmitLine(sb: sb, line: $"  {v0} = insertvalue {tryCarrier} zeroinitializer, i1 1, 0");
                         string v1 = NextTemp();
@@ -1074,6 +1072,9 @@ public partial class LlvmCodeGenerator
 
                 string lookupCarrier = GetLookupCarrierLlvmType(valueType: innerType);
 
+                // Blank (IdentifierExpression("Blank")) means void/no-value success return.
+                bool lookupRetIsBlank = variantRet.Value is IdentifierExpression { Name: "Blank" };
+
                 if (lookupRetIsCrashable)
                 {
                     // "return ErrorType(...)" ??store error in carrier field 1.
@@ -1088,7 +1089,7 @@ public partial class LlvmCodeGenerator
                     EmitLine(sb: sb, line: $"  {lev1} = insertvalue {lookupCarrier} {lev0}, i64 {errDataAddr}, 1");
                     EmitLine(sb: sb, line: $"  ret {lookupCarrier} {lev1}");
                 }
-                else if (variantRet.Value == null)
+                else if (variantRet.Value == null || lookupRetIsBlank)
                 {
                     EmitLine(sb: sb, line: $"  ret {lookupCarrier} zeroinitializer");
                 }
@@ -1170,6 +1171,9 @@ public partial class LlvmCodeGenerator
 
                 string checkCarrier = GetResultCarrierLlvmType(valueType: innerType);
 
+                // Blank (IdentifierExpression("Blank")) means void/no-value success return.
+                bool checkRetIsBlank = variantRet.Value is IdentifierExpression { Name: "Blank" };
+
                 if (checkRetIsCrashable)
                 {
                     // "return ErrorType(...)" ??store error in carrier field 1.
@@ -1184,7 +1188,7 @@ public partial class LlvmCodeGenerator
                     EmitLine(sb: sb, line: $"  {cev1} = insertvalue {checkCarrier} {cev0}, i64 {errDataAddr}, 1");
                     EmitLine(sb: sb, line: $"  ret {checkCarrier} {cev1}");
                 }
-                else if (variantRet.Value == null)
+                else if (variantRet.Value == null || checkRetIsBlank)
                 {
                     EmitLine(sb: sb, line: $"  ret {checkCarrier} zeroinitializer");
                 }

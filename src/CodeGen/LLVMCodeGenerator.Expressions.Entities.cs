@@ -684,8 +684,7 @@ public partial class LlvmCodeGenerator
 
         // Auto-wrap non-Maybe values into Maybe when assigning to nullable member variables.
         // Skip wrapping if: value is already a Maybe type, or value is zeroinitializer (None literal).
-        // Record Maybe { i1 present, T value }: insertvalue i1 1 at 0, T at 1.
-        // Entity Maybe { Hijacked[T] }:         single ptr field — non-null ptr = present.
+        // Maybe { i1 present, T value }: insertvalue i1 1 at 0, T at 1 (entity and record T, since C118).
         if (IsMaybeType(type: memberVariable.Type) &&
             !(valueType != null && IsMaybeType(type: valueType)) && value != "zeroinitializer")
         {
