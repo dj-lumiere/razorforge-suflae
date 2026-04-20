@@ -1,6 +1,6 @@
 # RazorForge BitList - Dynamic growable bit vector
 # Entity type with heap allocation
-# Stores individual bits packed into bytes for space efficiency
+# Stores individual bits packed into 64-bit words for efficient word-level operations
 # Grows by doubling capacity for O(1) amortized push
 #
 # Usage:
@@ -16,11 +16,11 @@ module Collections
 ### Defines the entity `BitList`.
 entity BitList obeys Iterable[Bool]
   ### Stores the data member value.
-  secret data: Hijacked[U8]      # Heap-allocated byte array (8 bits per U8)
+  secret data: Hijacked[U64]      # Heap-allocated word array (64 bits per U64)
   ### Stores the count member value.
   secret count: U64              # Current number of bits
   ### Stores the capacity member value.
-  secret capacity: U64           # Total bit capacity (in bits, not bytes)
+  secret capacity: U64           # Total bit capacity (in bits, not words)
 
 # ============================================================================
 # Creators
@@ -31,7 +31,7 @@ entity BitList obeys Iterable[Bool]
 routine BitList.$create() -> BitList
   # Create empty bit list with default capacity
   return BitList(
-    data: hijacked_none[U8](),
+    data: hijacked_none[U64](),
     count: 0u64,
     capacity: 0u64
   )
@@ -41,10 +41,10 @@ routine BitList.$create() -> BitList
 ### :returns: The resulting `BitList` value.
 routine BitList.$create(capacity: U64) -> BitList
   # Create bit list with pre-allocated capacity (in bits)
-  var byte_size = udiv[U64](capacity +% 7u64, 8u64)  # Round up to nearest byte
-  var data_ptr = Hijacked[U8](rf_allocate_dynamic_uninit(byte_size))
-  danger!
-    rf_set_bytes_at(dest: data_ptr.get_address(), value: 0u8, size: byte_size)
+  var word_size = (capacity +% 63u64) >> 6u32
+  var data_ptr = Hijacked[U64](rf_allocate_dynamic_uninit(word_size *% 8u64))
+  # No zero-init: add_last writes whole words at word boundaries (bit_off == 0),
+  # and mid-word appends only read bits we've already written ourselves.
   return BitList(
     data: data_ptr,
     count: 0u64,
@@ -64,47 +64,42 @@ routine BitList.$create(values...: Bool) -> BitList
 # Internal Helpers
 # ============================================================================
 
-### Returns the result of `byte index`.
+### Returns the result of `word index`.
 ### :param bit_index: The `bit_index` value.
 ### :returns: The resulting `U64` value.
-routine BitList.byte_index(bit_index: U64) -> U64
-  # Get the byte index for a given bit index
-  return udiv[U64](bit_index, 8u64)
+routine BitList.word_index(bit_index: U64) -> U64
+  # Get the word index for a given bit index
+  return bit_index >> 6u32
 
 ### Returns the result of `bit offset`.
 ### :param bit_index: The `bit_index` value.
 ### :returns: The resulting `U8` value.
 routine BitList.bit_offset(bit_index: U64) -> U8
-  # Get the bit position within the byte (0-7)
-  return U8(urem[U64](bit_index, 8u64))
+  # Get the bit position within the word (0-63)
+  return U8(bit_index & 63u64)
 
 ### Returns the bit internal component.
 ### :param index: The zero-based position to use.
 ### :returns: The resulting `Bool` value.
 routine BitList.get_bit_internal(index: U64) -> Bool
   # Internal: get bit without bounds checking
-  var byte_idx = udiv[U64](index, 8u64)
-  var bit_off = U8(urem[U64](index, 8u64))
-  var ptr = Hijacked[U8](me.data.get_address() +% Address(byte_idx))
-  var byte_val = ptr.read()
-  return (byte_val & (1u8 << bit_off)) != 0u8
+  var word_idx = index >> 6u32
+  var bit_off = U8(index & 63u64)
+  var ptr = Hijacked[U64](me.data.get_address() +% Address(word_idx *% 8u64))
+  var word_val = ptr.read()
+  return (word_val & (1u64 << bit_off)) != 0u64
 
 ### Sets the bit internal component.
 ### :param index: The zero-based position to use.
 ### :param value: The value to use.
 routine BitList.set_bit_internal(index: U64, value: Bool)
-  # Internal: set bit without bounds checking
-  var byte_idx = udiv[U64](index, 8u64)
-  var bit_off = U8(urem[U64](index, 8u64))
-  var byte_ptr = Hijacked[U8](me.data.get_address() +% Address(byte_idx))
-  var byte_val = byte_ptr.read()
-
-  if value
-    # Set bit to 1
-    byte_ptr.write(byte_val | (1u8 << bit_off))
-  else
-    # Set bit to 0
-    byte_ptr.write(byte_val & ~(1u8 << bit_off))
+  # Internal: set bit without bounds checking — branchless RMW
+  var word_idx = index >> 6u32
+  var bit_off = U8(index & 63u64)
+  var word_ptr = Hijacked[U64](me.data.get_address() +% Address(word_idx *% 8u64))
+  var mask = 1u64 << bit_off
+  var set_mask = if value then mask else 0u64
+  word_ptr.write((word_ptr.read() & ~mask) | set_mask)
   return
 
 # ============================================================================
@@ -134,10 +129,21 @@ routine BitList.add_last(value: Bool)
   # Append bit to end - O(1) amortized
   if me.count >= me.capacity
     # Need to grow - double capacity (in bits)
-    var new_capacity = if me.capacity == 0u64 then 64u64 else me.capacity *% 2u64  # Start with 64 bits (8 bytes)
+    var new_capacity = if me.capacity == 0u64 then 64u64 else me.capacity *% 2u64  # Start with 64 bits (1 word)
     me.reserve(new_capacity)
 
-  me.set_bit_internal(me.count, value)
+  # Inlined set_bit_internal with a write-only fast path at word boundaries.
+  # When bit_off == 0, every bit in this word (positions 1..63) is beyond the
+  # current valid range, so we can overwrite rather than RMW.
+  var word_idx = me.count >> 6u32
+  var bit_off = U8(me.count & 63u64)
+  var word_ptr = Hijacked[U64](me.data.get_address() +% Address(word_idx *% 8u64))
+  var mask = 1u64 << bit_off
+  var set_mask = if value then mask else 0u64
+  if bit_off == 0u8
+    word_ptr.write(set_mask)
+  else
+    word_ptr.write((word_ptr.read() & ~mask) | set_mask)
   me.count = me.count +% 1u64
   return
 
@@ -158,14 +164,14 @@ routine BitList.remove_last!() -> Bool
 routine BitList.reserve(new_capacity: U64)
   # Ensure capacity is at least new_capacity (in bits)
   if new_capacity > me.capacity
-    var new_byte_size = udiv[U64](new_capacity +% 7u64, 8u64)
-    var new_data = Hijacked[U8](rf_allocate_dynamic_uninit(new_byte_size))
-    rf_set_bytes_at(new_data.get_address(), 0u8, new_byte_size)
+    var new_word_size = (new_capacity +% 63u64) >> 6u32
+    var new_data = Hijacked[U64](rf_allocate_dynamic_uninit(new_word_size *% 8u64))
 
-    # Copy existing bytes
+    # Copy existing words; remainder stays uninitialized — add_last overwrites
+    # whole words at word boundaries, so the untouched tail is never read.
     if me.count > 0u64
-      var copy_bytes = udiv[U64](me.count +% 7u64, 8u64)
-      rf_copy_bytes_at(new_data.get_address(), me.data.get_address(), copy_bytes)
+      var copy_words = (me.count +% 63u64) >> 6u32
+      rf_copy_bytes_at(new_data.get_address(), me.data.get_address(), copy_words *% 8u64)
 
     me.data = new_data
     me.capacity = new_capacity
@@ -237,7 +243,7 @@ needs I obeys Integral
 ### :param value: The value to use.
 routine BitList.set_all(value: Bool)
   # Set all bits to the same value
-  var byte_count = udiv[U64](me.count +% 7u64, 8u64)
+  var byte_count = (me.count +% 7u64) >> 3u32
   var fill_byte = if value then 0xFFu8 else 0x00u8
   rf_set_bytes_at(me.data.get_address(), fill_byte, byte_count)
   return
@@ -257,13 +263,13 @@ needs I obeys Integral
 
 ### Executes `flip all`.
 routine BitList.flip_all()
-  # Toggle all bits
-  var byte_count = udiv[U64](me.count +% 7u64, 8u64)
+  # Toggle all bits word-at-a-time
+  var word_count = (me.count +% 63u64) >> 6u32
   var i = 0u64
-  while i < byte_count
-    var byte_ptr = Hijacked[U8](me.data.get_address() +% Address(i))
-    var byte_val = byte_ptr.read()
-    byte_ptr.write(~byte_val)
+  while i < word_count
+    var word_ptr = Hijacked[U64](me.data.get_address() +% Address(i *% 8u64))
+    var word_val = word_ptr.read()
+    word_ptr.write(~word_val)
     i = i +% 1u64
   return
 
@@ -387,8 +393,8 @@ routine BitList.$iter() -> BitListIterator
 
 ### Defines the entity `BitListIterator`.
 entity BitListIterator obeys Iterator[Bool]
-  ### Raw pointer into the source bit list's packed byte buffer.
-  secret data: Hijacked[U8]
+  ### Raw pointer into the source bit list's packed word buffer.
+  secret data: Hijacked[U64]
   ### Bit count captured at iterator creation.
   secret count: U64
   ### Current bit position.
@@ -399,11 +405,11 @@ routine BitListIterator.$next!() -> Bool
   if me.index >= me.count
     absent
   danger!
-    var byte_idx = me.index >> 3u32
-    var bit_idx = U8(me.index & 7u64)
-    var ptr = Hijacked[U8](me.data.get_address() +% Address(byte_idx))
-    var byte_val = ptr.read()
-    var _result = (byte_val >> bit_idx) & 1u8 != 0u8
+    var word_idx = me.index >> 6u32
+    var bit_idx = U8(me.index & 63u64)
+    var ptr = Hijacked[U64](me.data.get_address() +% Address(word_idx *% 8u64))
+    var word_val = ptr.read()
+    var _result = (word_val >> bit_idx) & 1u64 != 0u64
   me.index = me.index + 1u64
   return _result
 
@@ -469,7 +475,7 @@ routine BitList.to_u8!() -> U8
   if me.count < 8u64
     absent
   danger!
-    var _result = me.data.read()
+    var _result = U8(me.data.read() & 0xFFu64)
   return _result
 
 ### Converts this value to u16.
@@ -480,9 +486,7 @@ routine BitList.to_u16!() -> U16
   if me.count < 16u64
     absent
   danger!
-    var low = U32(me.data.read())
-    var high = U32(Hijacked[U8](me.data.get_address() +% Address(1u64)).read())
-    var _result = U16(low | (high << 8u32))
+    var _result = U16(me.data.read() & 0xFFFFu64)
   return _result
 
 ### Converts this value to u32.
@@ -493,12 +497,7 @@ routine BitList.to_u32!() -> U32
   if me.count < 32u64
     absent
   danger!
-    var _result = 0u32
-    var i = 0u64
-    while i < 4u64
-      var byte_val = U32(Hijacked[U8](me.data.get_address() +% Address(i)).read())
-      _result = _result | (byte_val << (U32(U8(i)) *% 8u32))
-      i = i +% 1u64
+    var _result = U32(me.data.read() & 0xFFFFFFFFu64)
   return _result
 
 ### Converts this value to u64.
@@ -509,12 +508,7 @@ routine BitList.to_u64!() -> U64
   if me.count < 64u64
     absent
   danger!
-    var _result = 0u64
-    var i = 0u64
-    while i < 8u64
-      var byte_val = U64(Hijacked[U8](me.data.get_address() +% Address(i)).read())
-      _result = _result | (byte_val << (i *% 8u64))
-      i = i +% 1u64
+    var _result = me.data.read()
   return _result
 
 ### Creates a value from u8.
