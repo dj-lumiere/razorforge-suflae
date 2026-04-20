@@ -73,8 +73,6 @@ routine Deque[T].$create(values...: T) -> Deque[T]
 ### :returns: The resulting `U64` value.
 routine Deque[T].wrap_index(index: U64) -> U64
   # Capacity is always a power of 2 — use bitmask instead of modulo.
-  if me.capacity == 0u64
-    return 0u64
   return index & (me.capacity -% 1u64)
 
 ### Returns the result of `physical index`.
