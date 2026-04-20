@@ -1,7 +1,0 @@
-module Core
-
-### Defines the choice `DataState`.
-choice DataState
-  VALID: 1
-  ABSENT: 0
-  ERROR: -1

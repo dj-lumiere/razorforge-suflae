@@ -12,8 +12,3 @@ crashable NotImplementedError
 ### :returns: The resulting `Text` value.
 routine NotImplementedError.crash_message() -> Text
   return f"Not implemented: {me.feature}"
-
-### Returns the result of `NotImplementedError`.
-### :returns: The resulting `NotImplementedError` value.
-routine NotImplementedError() -> NotImplementedError
-  return NotImplementedError(feature: "")
