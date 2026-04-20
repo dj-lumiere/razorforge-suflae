@@ -57,3 +57,19 @@ routine Bool.$represent() -> Text
   if me
     return "true"
   return "false"
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns a hash of this value.
+### :returns: The resulting `U64` value.
+routine Bool.$hash() -> U64
+  return __hash_leaf(v: zext[Bool, U64](me))
+
+### Returns a keyed hash of this value using SipHash-2-4.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: The resulting `U64` value.
+routine Bool.$secure_hash(k0: U64, k1: U64) -> U64
+  return __secure_hash_u64(v: zext[Bool, U64](me), k0: k0, k1: k1)

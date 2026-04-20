@@ -1,0 +1,405 @@
+# RazorForge SecureDict[K, V] — Swiss Table hash map with SipHash-2-4 keyed hashing.
+# Identical structure to Dict[K, V] but uses $secure_hash(k0, k1) instead of $hash().
+# Prevents hash-flooding attacks; each instance holds its own random key.
+# ctrl byte: 128=empty, 254=deleted (tombstone), 0-127=H2 fingerprint
+
+module Collections
+
+import BuilderService
+import Core.SecureHashKey
+
+preset SECURE_DICT_INITIAL_CAPACITY: U64 = 16u64
+
+### Hash map from K to V, protected against hash-flooding attacks.
+### :typeparam K: The key type.
+### :typeparam V: The value type.
+entity SecureDict[K, V] obeys Iterable[DictEntry[K, V]]
+needs K obeys SecureHashable, Equatable
+  secret ctrl: Hijacked[Byte]
+  secret keys: Hijacked[K]
+  secret vals: Hijacked[V]
+  secret count: U64
+  secret deleted: U64
+  secret capacity: U64
+  secret k0: U64
+  secret k1: U64
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+### Creates a new empty instance with a fresh OS-entropy key.
+### :returns: The resulting `SecureDict[K, V]` value.
+routine SecureDict[K, V].$create() -> SecureDict[K, V]
+  return SecureDict[K, V](key: SecureHashKey.random())
+
+### Creates a new empty instance with the given hash key.
+### :param key: The SipHash-2-4 key for this instance.
+### :returns: The resulting `SecureDict[K, V]` value.
+routine SecureDict[K, V].$create(key: SecureHashKey) -> SecureDict[K, V]
+  var cap = SECURE_DICT_INITIAL_CAPACITY
+  var dict = SecureDict[K, V](
+    ctrl: hijacked_none[Byte](),
+    keys: hijacked_none[K](),
+    vals: hijacked_none[V](),
+    count: 0u64,
+    deleted: 0u64,
+    capacity: cap,
+    k0: key.k0,
+    k1: key.k1
+  )
+  danger!
+    dict.ctrl = Hijacked[Byte](rf_allocate_dynamic_uninit(cap))
+    rf_set_bytes_at(dest: ptrtoint[Byte, Address](dict.ctrl), value: 128_u8, size: cap)
+    dict.keys = Hijacked[K](rf_allocate_dynamic_uninit(K.data_size() * cap))
+    dict.vals = Hijacked[V](rf_allocate_dynamic_uninit(V.data_size() * cap))
+  return dict
+
+### Creates a new instance pre-sized for at least `capacity` entries.
+### :param key: The SipHash-2-4 key for this instance.
+### :param capacity: The minimum number of entries before the first rehash.
+### :returns: The resulting `SecureDict[K, V]` value.
+routine SecureDict[K, V].$create(key: SecureHashKey, capacity: U64) -> SecureDict[K, V]
+  var cap = SECURE_DICT_INITIAL_CAPACITY
+  while cap < capacity
+    cap = cap *% 2u64
+  var dict = SecureDict[K, V](
+    ctrl: hijacked_none[Byte](),
+    keys: hijacked_none[K](),
+    vals: hijacked_none[V](),
+    count: 0u64,
+    deleted: 0u64,
+    capacity: cap,
+    k0: key.k0,
+    k1: key.k1
+  )
+  danger!
+    dict.ctrl = Hijacked[Byte](rf_allocate_dynamic_uninit(cap))
+    rf_set_bytes_at(dest: ptrtoint[Byte, Address](dict.ctrl), value: 128_u8, size: cap)
+    dict.keys = Hijacked[K](rf_allocate_dynamic_uninit(K.data_size() * cap))
+    dict.vals = Hijacked[V](rf_allocate_dynamic_uninit(V.data_size() * cap))
+  return dict
+
+### Releases raw key and value storage.
+routine SecureDict[K, V].$destroy()
+  danger!
+    if not me.ctrl.is_none()
+      rf_invalidate(ptrtoint[Byte, Address](me.ctrl))
+    if not me.keys.is_none()
+      rf_invalidate(ptrtoint[K, Address](me.keys))
+    if not me.vals.is_none()
+      rf_invalidate(ptrtoint[V, Address](me.vals))
+  return
+
+# ============================================================================
+# Internal Helpers
+# ============================================================================
+
+### Returns the H2 fingerprint: 7 low bits of hash, always in range 0-127.
+### :param hash: The raw hash.
+### :returns: The resulting `Byte` value.
+routine SecureDict[K, V].h2(hash: U64) -> Byte
+  return (hash & 127u64).Byte()
+
+### Returns the H1 slot position: upper bits of hash used for indexing.
+### :param hash: The raw hash.
+### :returns: The resulting `U64` value.
+routine SecureDict[K, V].h1(hash: U64) -> U64
+  return hash >> 7u32
+
+### Reads the key at `slot`.
+### :param slot: The slot index.
+### :returns: The resulting `K` value.
+routine SecureDict[K, V].read_key(slot: U64) -> K
+  return me.keys.offset(K.data_size() * slot).read()
+
+### Reads the value at `slot`.
+### :param slot: The slot index.
+### :returns: The resulting `V` value.
+routine SecureDict[K, V].read_val(slot: U64) -> V
+  return me.vals.offset(V.data_size() * slot).read()
+
+### Writes `val` to `slot`.
+### :param slot: The slot index.
+### :param val: The value to store.
+routine SecureDict[K, V].write_val(slot: U64, val: V)
+  me.vals.offset(V.data_size() * slot).write(val)
+  return
+
+### Linear-probes for `key` using H1 start + H2 fingerprint matching.
+### Returns `capacity` when `key` is absent.
+### :param key: The key to find.
+### :returns: The resulting `U64` value.
+routine SecureDict[K, V].find_slot(key: K) -> U64
+  var h = key.$secure_hash(k0: me.k0, k1: me.k1)
+  var target = me.h2(h)
+  var mask = me.capacity -% 1u64
+  var i = me.h1(h) & mask
+  danger!
+    loop
+      var c = me.ctrl.offset(Byte.data_size() * i).read()
+      if c == 128_u8
+        return me.capacity
+      if c == target
+        if me.keys.offset(K.data_size() * i).read() == key
+          return i
+      i = (i +% 1u64) & mask
+  return me.capacity
+
+### Inserts hash + key + value into the first empty or deleted slot from H1.
+### Does not check for duplicates and does not update `count`.
+### :param h: The raw hash.
+### :param key: The key to insert.
+### :param val: The value to insert.
+routine SecureDict[K, V].insert_raw(h: U64, key: K, val: V)
+  var h2_val = me.h2(h)
+  var mask = me.capacity -% 1u64
+  var i = me.h1(h) & mask
+  danger!
+    loop
+      var c = me.ctrl.offset(Byte.data_size() * i).read()
+      if c == 128_u8
+        me.ctrl.offset(Byte.data_size() * i).write(h2_val)
+        me.keys.offset(K.data_size() * i).write(key)
+        me.vals.offset(V.data_size() * i).write(val)
+        return
+      if c == 254_u8
+        me.ctrl.offset(Byte.data_size() * i).write(h2_val)
+        me.keys.offset(K.data_size() * i).write(key)
+        me.vals.offset(V.data_size() * i).write(val)
+        me.deleted = me.deleted -% 1u64
+        return
+      i = (i +% 1u64) & mask
+  return
+
+### Returns true if the next insert would exceed 87.5% load (live + tombstones).
+### :returns: The resulting `Bool` value.
+routine SecureDict[K, V].should_rehash() -> Bool
+  return (me.count +% me.deleted) *% 8u64 >= me.capacity *% 7u64
+
+### Doubles capacity and reinserts all live entries.
+routine SecureDict[K, V].rehash()
+  var old_cap = me.capacity
+  var old_ctrl = me.ctrl
+  var old_keys = me.keys
+  var old_vals = me.vals
+  var new_cap = old_cap *% 2u64
+
+  danger!
+    me.ctrl = Hijacked[Byte](rf_allocate_dynamic_uninit(new_cap))
+    rf_set_bytes_at(dest: ptrtoint[Byte, Address](me.ctrl), value: 128_u8, size: new_cap)
+    me.keys = Hijacked[K](rf_allocate_dynamic_uninit(K.data_size() * new_cap))
+    me.vals = Hijacked[V](rf_allocate_dynamic_uninit(V.data_size() * new_cap))
+  me.capacity = new_cap
+  me.count = 0u64
+  me.deleted = 0u64
+
+  var i = 0u64
+  while i < old_cap
+    danger!
+      var c = old_ctrl.offset(Byte.data_size() * i).read()
+      if c != 128_u8 and c != 254_u8
+        var k = old_keys.offset(K.data_size() * i).read()
+        var v = old_vals.offset(V.data_size() * i).read()
+        me.insert_raw(h: k.$secure_hash(k0: me.k0, k1: me.k1), key: k, val: v)
+        me.count = me.count +% 1u64
+    i = i +% 1u64
+
+  danger!
+    if not old_ctrl.is_none()
+      rf_invalidate(ptrtoint[Byte, Address](old_ctrl))
+    if not old_keys.is_none()
+      rf_invalidate(ptrtoint[K, Address](old_keys))
+    if not old_vals.is_none()
+      rf_invalidate(ptrtoint[V, Address](old_vals))
+  return
+
+# ============================================================================
+# Core Operations
+# ============================================================================
+
+### Returns the number of stored entries.
+### :returns: The resulting `U64` value.
+routine SecureDict[K, V].count() -> U64
+  return me.count
+
+### Returns true if this dict contains no entries.
+### :returns: The resulting `Bool` value.
+routine SecureDict[K, V].is_empty() -> Bool
+  return me.count == 0u64
+
+### Removes all entries, keeping current capacity.
+routine SecureDict[K, V].clear()
+  danger!
+    rf_set_bytes_at(dest: ptrtoint[Byte, Address](me.ctrl), value: 128_u8, size: me.capacity)
+  me.count = 0u64
+  me.deleted = 0u64
+  return
+
+### Returns whether this dict contains `key`.
+### :param key: The key to look up.
+### :returns: The resulting `Bool` value.
+@readonly
+routine SecureDict[K, V].$contains(key: K) -> Bool
+  return me.find_slot(key) < me.capacity
+
+### Inserts or updates a key-value entry.
+### :param key: The key to insert or update.
+### :param value: The value to associate.
+### :returns: `true` if a new entry was inserted, `false` if an existing entry was updated.
+routine SecureDict[K, V].add(key: K, value: V) -> Bool
+  if me.should_rehash()
+    me.rehash()
+  var slot = me.find_slot(key)
+  if slot < me.capacity
+    me.write_val(slot: slot, val: value)
+    return false
+  me.insert_raw(h: key.$secure_hash(k0: me.k0, k1: me.k1), key: key, val: value)
+  me.count = me.count +% 1u64
+  return true
+
+### Removes the entry with `key`.
+### :param key: The key to remove.
+### :returns: `true` if removed, `false` if not found.
+routine SecureDict[K, V].remove(key: K) -> Bool
+  var slot = me.find_slot(key)
+  if slot >= me.capacity
+    return false
+  danger!
+    me.ctrl.offset(Byte.data_size() * slot).write(254_u8)
+  me.count = me.count -% 1u64
+  me.deleted = me.deleted +% 1u64
+  return true
+
+### Returns the value for `key`, or `default_value` if not found.
+### :param key: The key to look up.
+### :param default_value: The fallback value.
+### :returns: The resulting `V` value.
+routine SecureDict[K, V].get_or_default(key: K, default_value: V) -> V
+  var slot = me.find_slot(key)
+  if slot >= me.capacity
+    return default_value
+  return me.read_val(slot)
+
+# ============================================================================
+# Indexing
+# ============================================================================
+
+### Returns the value for `key`.
+### :param key: The key to look up.
+### :returns: The resulting `V` value.
+### :absent: Returns absent when the key is not found.
+routine SecureDict[K, V].$getitem!(key: K) -> V
+  var slot = me.find_slot(key)
+  if slot >= me.capacity
+    absent
+  return me.read_val(slot)
+
+### Sets the value for `key`, inserting a new entry if needed.
+### :param key: The key to set.
+### :param value: The value to associate.
+routine SecureDict[K, V].$setitem!(key: K, value: V)
+  if me.should_rehash()
+    me.rehash()
+  var slot = me.find_slot(key)
+  if slot < me.capacity
+    me.write_val(slot: slot, val: value)
+    return
+  me.insert_raw(h: key.$secure_hash(k0: me.k0, k1: me.k1), key: key, val: value)
+  me.count = me.count + 1u64
+  return
+
+# ============================================================================
+# Iteration
+# ============================================================================
+
+### Creates an iterator over this dict's entries.
+### :returns: The resulting `SecureDictIterator[K, V]` value.
+@readonly
+routine SecureDict[K, V].$iter() -> SecureDictIterator[K, V]
+  danger!
+    return SecureDictIterator[K, V](
+      ctrl: me.ctrl,
+      keys: me.keys,
+      vals: me.vals,
+      capacity: me.capacity,
+      slot: 0u64
+    )
+
+### Defines the entity `SecureDictIterator`.
+### :typeparam K: The key type.
+### :typeparam V: The value type.
+entity SecureDictIterator[K, V] obeys Iterator[DictEntry[K, V]]
+  secret ctrl: Hijacked[Byte]
+  secret keys: Hijacked[K]
+  secret vals: Hijacked[V]
+  secret capacity: U64
+  secret slot: U64
+
+@writable
+routine SecureDictIterator[K, V].$next!() -> DictEntry[K, V]
+  danger!
+    while me.slot < me.capacity
+      var s = me.slot
+      me.slot = me.slot + 1u64
+      var c = me.ctrl.offset(Byte.data_size() * s).read()
+      if c != 128_u8 and c != 254_u8
+        var k = me.keys.offset(K.data_size() * s).read()
+        var v = me.vals.offset(V.data_size() * s).read()
+        return DictEntry[K, V](key: k, value: v)
+  absent
+
+# ============================================================================
+# Display
+# ============================================================================
+
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
+routine SecureDict[K, V].$represent() -> Text
+  if me.is_empty()
+    return "{:}"
+  var result = "{"
+  var first = true
+  for entry in me
+    if not first
+      result = result + ", "
+    result = result + entry.key.$represent() + ": " + entry.value.$represent()
+    first = false
+  result = result + "}"
+  return result
+
+### Returns the diagnostic representation of this value.
+### :returns: The resulting `Text` value.
+routine SecureDict[K, V].$diagnose() -> Text
+  var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
+  var first = true
+  for entry in me
+    if not first
+      result = result + ", "
+    result = result + entry.key.$represent() + ": " + entry.value.$represent()
+    first = false
+  result = result + "})"
+  return result
+
+# ============================================================================
+# Comparison
+# ============================================================================
+
+### Returns whether both dicts contain the same key-value entries.
+### :param other: The other dict to compare against.
+### :returns: The resulting `Bool` value.
+routine SecureDict[K, V].$eq(other: SecureDict[K, V]) -> Bool
+  if me.count != other.count
+    return false
+  var i = 0u64
+  while i < me.capacity
+    danger!
+      var c = me.ctrl.offset(Byte.data_size() * i).read()
+      if c != 128_u8 and c != 254_u8
+        var slot = other.find_slot(me.read_key(i))
+        if slot >= other.capacity
+          return false
+        if me.read_val(i) != other.read_val(slot)
+          return false
+    i = i +% 1u64
+  return true

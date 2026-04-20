@@ -627,3 +627,18 @@ routine S8.$create!(from_text: Text) -> S8
   if negative
     return S8(0u32 - result)
   return S8(result)
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns a hash of this value.
+### :returns: The resulting `U64` value.
+routine S8.$hash() -> U64
+  return __hash_leaf(v: zext[S8, U64](me))
+
+### Returns a keyed hash of this value using SipHash-2-4.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: The resulting `U64` value.
+routine S8.$secure_hash(k0: U64, k1: U64) -> U64
+  return __secure_hash_u64(v: zext[S8, U64](me), k0: k0, k1: k1)

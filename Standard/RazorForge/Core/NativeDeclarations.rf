@@ -813,6 +813,14 @@ external("C") routine rf_f128_copysign(value: F128, sign: F128) -> F128
 external("C") routine rf_moment_now() -> Moment
 
 # ============================================================================
+# Cryptographic Random
+# ============================================================================
+
+### Returns a cryptographically-random 64-bit value from OS entropy.
+### :returns: The resulting `U64` value.
+external("C") routine rf_random_u64() -> U64
+
+# ============================================================================
 # C String Operations (CStr / char*)
 # ============================================================================
 

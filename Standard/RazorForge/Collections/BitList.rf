@@ -128,8 +128,9 @@ routine BitList.is_empty() -> Bool
 routine BitList.add_last(value: Bool)
   # Append bit to end - O(1) amortized
   if me.count >= me.capacity
-    # Need to grow - double capacity (in bits)
-    var new_capacity = if me.capacity == 0u64 then 64u64 else me.capacity *% 2u64  # Start with 64 bits (1 word)
+    var new_capacity = me.capacity *% 2u64
+    if me.capacity == 0u64
+      new_capacity = 64u64
     me.reserve(new_capacity)
 
   # Inlined set_bit_internal with a write-only fast path at word boundaries.
@@ -139,7 +140,9 @@ routine BitList.add_last(value: Bool)
   var bit_off = U8(me.count & 63u64)
   var word_ptr = Hijacked[U64](me.data.get_address() +% Address(word_idx *% 8u64))
   var mask = 1u64 << bit_off
-  var set_mask = if value then mask else 0u64
+  var set_mask = 0u64
+  if value
+    set_mask = mask
   if bit_off == 0u8
     word_ptr.write(set_mask)
   else

@@ -1,0 +1,39 @@
+# xxHash64-based helpers for $hash synthesis.
+# All routines are module-private (secret) — used only by numeric $hash implementations.
+# Algorithm: https://github.com/Cyan4973/xxHash
+module Core
+
+# xxHash64 primes
+preset XX_PRIME1: U64 = 11400714785074694791_u64
+preset XX_PRIME2: U64 = 14029467366897019727_u64
+preset XX_PRIME3: U64 = 1609587929392839161_u64
+preset XX_PRIME4: U64 = 9650029242287828579_u64
+
+### Hashes a single 64-bit value using the xxHash64 leaf-mix step.
+secret routine __hash_leaf(v: U64) -> U64
+  var a = mul[U64](v, XX_PRIME3)
+  var b = bit_or[U64](shl[U64](a, 27_u64), lshr[U64](a, 37_u64))
+  var c = mul[U64](b, XX_PRIME1)
+  return add[U64](c, XX_PRIME4)
+
+### Folds one field hash into an accumulator using the xxHash64 round step.
+secret routine __hash_round(acc: U64, h: U64) -> U64
+  var a = add[U64](acc, mul[U64](h, XX_PRIME2))
+  var b = bit_or[U64](shl[U64](a, 31_u64), lshr[U64](a, 33_u64))
+  return mul[U64](b, XX_PRIME1)
+
+### Applies the xxHash64 avalanche finalization to an accumulator.
+secret routine __hash_finalize(h: U64) -> U64
+  var a = xor[U64](h, lshr[U64](h, 33_u64))
+  var b = mul[U64](a, XX_PRIME2)
+  var c = xor[U64](b, lshr[U64](b, 29_u64))
+  var d = mul[U64](c, XX_PRIME3)
+  return xor[U64](d, lshr[U64](d, 32_u64))
+
+### Hashes a 128-bit value by splitting into two U64 rounds.
+secret routine __hash_u128(v: U128) -> U64
+  var lo = trunc[U128, U64](v)
+  var hi = trunc[U128, U64](lshr[U128](v, 64_u128))
+  var acc = __hash_round(acc: 0_u64, h: lo)
+  acc = __hash_round(acc: acc, h: hi)
+  return __hash_finalize(h: acc)

@@ -1,0 +1,314 @@
+# RazorForge SecureSet[T] — Swiss Table hash set with SipHash-2-4 keyed hashing.
+# Identical structure to Set[T] but uses $secure_hash(k0, k1) instead of $hash().
+# Prevents hash-flooding attacks; each instance holds its own random key.
+# ctrl byte: 128=empty, 254=deleted (tombstone), 0-127=H2 fingerprint
+
+module Collections
+
+import BuilderService
+import Core.SecureHashKey
+
+preset SECURE_SET_INITIAL_CAPACITY: U64 = 16u64
+
+### Hash set of unique T values, protected against hash-flooding attacks.
+### :typeparam T: The element type.
+entity SecureSet[T] obeys Iterable[T]
+needs T obeys SecureHashable, Equatable
+  secret ctrl: Hijacked[Byte]
+  secret slots: Hijacked[T]
+  secret count: U64
+  secret deleted: U64
+  secret capacity: U64
+  secret k0: U64
+  secret k1: U64
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+### Creates a new empty instance with a fresh OS-entropy key.
+### :returns: The resulting `SecureSet[T]` value.
+routine SecureSet[T].$create() -> SecureSet[T]
+  return SecureSet[T](key: SecureHashKey.random())
+
+### Creates a new empty instance with the given hash key.
+### :param key: The SipHash-2-4 key for this instance.
+### :returns: The resulting `SecureSet[T]` value.
+routine SecureSet[T].$create(key: SecureHashKey) -> SecureSet[T]
+  var cap = SECURE_SET_INITIAL_CAPACITY
+  var set = SecureSet[T](
+    ctrl: hijacked_none[Byte](),
+    slots: hijacked_none[T](),
+    count: 0u64,
+    deleted: 0u64,
+    capacity: cap,
+    k0: key.k0,
+    k1: key.k1
+  )
+  danger!
+    set.ctrl = Hijacked[Byte](rf_allocate_dynamic_uninit(cap))
+    rf_set_bytes_at(dest: ptrtoint[Byte, Address](set.ctrl), value: 128_u8, size: cap)
+    set.slots = Hijacked[T](rf_allocate_dynamic_uninit(T.data_size() * cap))
+  return set
+
+### Creates a new instance pre-sized for at least `capacity` elements.
+### :param key: The SipHash-2-4 key for this instance.
+### :param capacity: The minimum number of elements before the first rehash.
+### :returns: The resulting `SecureSet[T]` value.
+routine SecureSet[T].$create(key: SecureHashKey, capacity: U64) -> SecureSet[T]
+  var cap = SECURE_SET_INITIAL_CAPACITY
+  while cap < capacity
+    cap = cap *% 2u64
+  var set = SecureSet[T](
+    ctrl: hijacked_none[Byte](),
+    slots: hijacked_none[T](),
+    count: 0u64,
+    deleted: 0u64,
+    capacity: cap,
+    k0: key.k0,
+    k1: key.k1
+  )
+  danger!
+    set.ctrl = Hijacked[Byte](rf_allocate_dynamic_uninit(cap))
+    rf_set_bytes_at(dest: ptrtoint[Byte, Address](set.ctrl), value: 128_u8, size: cap)
+    set.slots = Hijacked[T](rf_allocate_dynamic_uninit(T.data_size() * cap))
+  return set
+
+### Releases raw element storage.
+routine SecureSet[T].$destroy()
+  danger!
+    if not me.ctrl.is_none()
+      rf_invalidate(ptrtoint[Byte, Address](me.ctrl))
+    if not me.slots.is_none()
+      rf_invalidate(ptrtoint[T, Address](me.slots))
+  return
+
+# ============================================================================
+# Internal Helpers
+# ============================================================================
+
+### Returns the H2 fingerprint: 7 low bits of hash, always in range 0-127.
+### :param hash: The raw hash.
+### :returns: The resulting `Byte` value.
+routine SecureSet[T].h2(hash: U64) -> Byte
+  return (hash & 127u64).Byte()
+
+### Returns the H1 slot position: upper bits of hash used for indexing.
+### :param hash: The raw hash.
+### :returns: The resulting `U64` value.
+routine SecureSet[T].h1(hash: U64) -> U64
+  return hash >> 7u32
+
+### Linear-probes for `value` using H1 start + H2 fingerprint matching.
+### Returns `capacity` when `value` is absent.
+### :param value: The element to find.
+### :returns: The resulting `U64` value.
+routine SecureSet[T].find_slot(value: T) -> U64
+  var h = value.$secure_hash(k0: me.k0, k1: me.k1)
+  var target = me.h2(h)
+  var mask = me.capacity -% 1u64
+  var i = me.h1(h) & mask
+  danger!
+    loop
+      var c = me.ctrl.offset(Byte.data_size() * i).read()
+      if c == 128_u8
+        return me.capacity
+      if c == target
+        if me.slots.offset(T.data_size() * i).read() == value
+          return i
+      i = (i +% 1u64) & mask
+  return me.capacity
+
+### Inserts hash + value into the first empty or deleted slot from H1.
+### Does not check for duplicates and does not update `count`.
+### :param h: The raw hash.
+### :param val: The element to insert.
+routine SecureSet[T].insert_raw(h: U64, val: T)
+  var h2_val = me.h2(h)
+  var mask = me.capacity -% 1u64
+  var i = me.h1(h) & mask
+  danger!
+    loop
+      var c = me.ctrl.offset(Byte.data_size() * i).read()
+      if c == 128_u8
+        me.ctrl.offset(Byte.data_size() * i).write(h2_val)
+        me.slots.offset(T.data_size() * i).write(val)
+        return
+      if c == 254_u8
+        me.ctrl.offset(Byte.data_size() * i).write(h2_val)
+        me.slots.offset(T.data_size() * i).write(val)
+        me.deleted = me.deleted -% 1u64
+        return
+      i = (i +% 1u64) & mask
+  return
+
+### Returns true if the next insert would exceed 87.5% load (live + tombstones).
+### :returns: The resulting `Bool` value.
+routine SecureSet[T].should_rehash() -> Bool
+  return (me.count +% me.deleted) *% 8u64 >= me.capacity *% 7u64
+
+### Doubles capacity and reinserts all live elements.
+routine SecureSet[T].rehash()
+  var old_cap = me.capacity
+  var old_ctrl = me.ctrl
+  var old_slots = me.slots
+  var new_cap = old_cap *% 2u64
+
+  danger!
+    me.ctrl = Hijacked[Byte](rf_allocate_dynamic_uninit(new_cap))
+    rf_set_bytes_at(dest: ptrtoint[Byte, Address](me.ctrl), value: 128_u8, size: new_cap)
+    me.slots = Hijacked[T](rf_allocate_dynamic_uninit(T.data_size() * new_cap))
+  me.capacity = new_cap
+  me.count = 0u64
+  me.deleted = 0u64
+
+  var i = 0u64
+  while i < old_cap
+    danger!
+      var c = old_ctrl.offset(Byte.data_size() * i).read()
+      if c != 128_u8 and c != 254_u8
+        var val = old_slots.offset(T.data_size() * i).read()
+        me.insert_raw(h: val.$secure_hash(k0: me.k0, k1: me.k1), val: val)
+        me.count = me.count +% 1u64
+    i = i +% 1u64
+
+  danger!
+    if not old_ctrl.is_none()
+      rf_invalidate(ptrtoint[Byte, Address](old_ctrl))
+    if not old_slots.is_none()
+      rf_invalidate(ptrtoint[T, Address](old_slots))
+  return
+
+# ============================================================================
+# Core Operations
+# ============================================================================
+
+### Returns the number of stored elements.
+### :returns: The resulting `U64` value.
+routine SecureSet[T].count() -> U64
+  return me.count
+
+### Returns true if this set contains no elements.
+### :returns: The resulting `Bool` value.
+routine SecureSet[T].is_empty() -> Bool
+  return me.count == 0u64
+
+### Removes all elements, keeping current capacity.
+routine SecureSet[T].clear()
+  danger!
+    rf_set_bytes_at(dest: ptrtoint[Byte, Address](me.ctrl), value: 128_u8, size: me.capacity)
+  me.count = 0u64
+  me.deleted = 0u64
+  return
+
+### Returns whether this set contains `value`.
+### :param value: The element to look up.
+### :returns: The resulting `Bool` value.
+@readonly
+routine SecureSet[T].$contains(value: T) -> Bool
+  return me.find_slot(value) < me.capacity
+
+### Inserts `value` if not already present.
+### :param value: The element to insert.
+### :returns: `true` if inserted, `false` if already present.
+routine SecureSet[T].add(value: T) -> Bool
+  if me.should_rehash()
+    me.rehash()
+  if me.find_slot(value) < me.capacity
+    return false
+  me.insert_raw(h: value.$secure_hash(k0: me.k0, k1: me.k1), val: value)
+  me.count = me.count +% 1u64
+  return true
+
+### Removes `value` if present.
+### :param value: The element to remove.
+### :returns: `true` if removed, `false` if not found.
+routine SecureSet[T].remove(value: T) -> Bool
+  var slot = me.find_slot(value)
+  if slot >= me.capacity
+    return false
+  danger!
+    me.ctrl.offset(Byte.data_size() * slot).write(254_u8)
+  me.count = me.count -% 1u64
+  me.deleted = me.deleted +% 1u64
+  return true
+
+# ============================================================================
+# Iteration
+# ============================================================================
+
+@readonly
+routine SecureSet[T].$iter() -> SecureSetIterator[T]
+  danger!
+    return SecureSetIterator[T](
+      ctrl: me.ctrl,
+      slots: me.slots,
+      capacity: me.capacity,
+      slot: 0u64
+    )
+
+### Defines the entity `SecureSetIterator`.
+### :typeparam T: The element type.
+entity SecureSetIterator[T] obeys Iterator[T]
+  secret ctrl: Hijacked[Byte]
+  secret slots: Hijacked[T]
+  secret capacity: U64
+  secret slot: U64
+
+@writable
+routine SecureSetIterator[T].$next!() -> T
+  danger!
+    while me.slot < me.capacity
+      var s = me.slot
+      me.slot = me.slot + 1u64
+      var c = me.ctrl.offset(Byte.data_size() * s).read()
+      if c != 128_u8 and c != 254_u8
+        return me.slots.offset(T.data_size() * s).read()
+  absent
+
+# ============================================================================
+# Display
+# ============================================================================
+
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
+routine SecureSet[T].$represent() -> Text
+  if me.is_empty()
+    return "{}"
+  var result = "{"
+  var first = true
+  for val in me
+    if not first
+      result = result + ", "
+    result = result + val.$represent()
+    first = false
+  result = result + "}"
+  return result
+
+### Returns the diagnostic representation of this value.
+### :returns: The resulting `Text` value.
+routine SecureSet[T].$diagnose() -> Text
+  var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
+  var first = true
+  for val in me
+    if not first
+      result = result + ", "
+    result = result + val.$represent()
+    first = false
+  result = result + "})"
+  return result
+
+# ============================================================================
+# Comparison
+# ============================================================================
+
+### Returns whether both sets contain the same elements.
+### :param other: The other set to compare against.
+### :returns: The resulting `Bool` value.
+routine SecureSet[T].$eq(other: SecureSet[T]) -> Bool
+  if me.count != other.count
+    return false
+  for val in me
+    if val notin other
+      return false
+  return true

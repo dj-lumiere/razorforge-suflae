@@ -143,3 +143,19 @@ routine Byte.$represent() -> Text
 ### :returns: The resulting `Text` value.
 routine Byte.$diagnose() -> Text
   return "Byte(" + U8(me).$represent() + ", " + me.$represent() + ")"
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns a hash of this value.
+### :returns: The resulting `U64` value.
+routine Byte.$hash() -> U64
+  return __hash_leaf(v: zext[Byte, U64](me))
+
+### Returns a keyed hash of this value using SipHash-2-4.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: The resulting `U64` value.
+routine Byte.$secure_hash(k0: U64, k1: U64) -> U64
+  return __secure_hash_u64(v: zext[Byte, U64](me), k0: k0, k1: k1)
