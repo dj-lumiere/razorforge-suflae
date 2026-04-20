@@ -514,13 +514,16 @@ public sealed partial class SemanticAnalyzer
                 location: varDecl.Location);
         }
 
-        // #57: The 'global' keyword is only valid for entity type variables
+        // #57: The 'global' keyword is only valid for entity types, unless @thread_local is present
+        // (thread-local globals may hold value types for per-thread state like counters).
+        bool isThreadLocalAnnotated = varDecl.Annotations?.Any(a => a == "thread_local") == true;
         if (varDecl.Storage == StorageClass.Global && varType is not EntityTypeInfo &&
-            varType is not ErrorTypeInfo)
+            varType is not ErrorTypeInfo && !isThreadLocalAnnotated)
         {
             ReportError(code: SemanticDiagnosticCode.GlobalOnlyForEntities,
                 message:
-                $"The 'global' keyword is only valid for entity type variables, not for type '{varType.Name}'.",
+                $"The 'global' keyword is only valid for entity type variables, not for type '{varType.Name}'. " +
+                "Use '@thread_local global' for per-thread value type storage.",
                 location: varDecl.Location);
         }
 

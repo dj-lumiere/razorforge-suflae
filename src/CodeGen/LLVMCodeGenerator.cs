@@ -421,14 +421,19 @@ public partial class LlvmCodeGenerator
                 bool isThreadLocal = varDecl.Annotations?.Any(a => a == "thread_local") == true;
                 string prefix = isThreadLocal ? "thread_local global" : "global";
 
-                // Entity globals are ptr-typed (heap-allocated)
-                // Use module-qualified LLVM name to avoid collisions
-                string llvmName = string.IsNullOrEmpty(value: module)
-                    ? $"@{varDecl.Name}"
-                    : $"@{module}.{varDecl.Name}";
+                // Use module-qualified LLVM name to avoid collisions.
+                // Q() quotes names that contain '/' or other non-identifier characters.
+                string rawGlobalName = string.IsNullOrEmpty(value: module)
+                    ? varDecl.Name
+                    : $"{module}.{varDecl.Name}";
+                string llvmName = $"@{Q(name: rawGlobalName)}";
 
+                // Entity globals are ptr-typed (heap-allocated); value-type globals use their
+                // concrete LLVM type with zeroinitializer (only valid with @thread_local).
+                string llvmVarType = varType is EntityTypeInfo ? "ptr" : GetLlvmType(type: varType);
+                string llvmInit = varType is EntityTypeInfo ? "null" : "zeroinitializer";
                 EmitLine(sb: _globalDeclarations,
-                    line: $"{llvmName} = {prefix} ptr null");
+                    line: $"{llvmName} = {prefix} {llvmVarType} {llvmInit}");
 
                 _globalVariables[key: varDecl.Name] = varType;
                 _globalVariableLlvmNames[key: varDecl.Name] = llvmName;
@@ -451,7 +456,8 @@ public partial class LlvmCodeGenerator
         foreach ((string llvmName, TypeInfo type, Expression init) in initStmts)
         {
             string val = EmitExpression(sb: sb, expr: init);
-            EmitLine(sb: sb, line: $"  store ptr {val}, ptr {llvmName}");
+            string storeType = type is EntityTypeInfo ? "ptr" : GetLlvmType(type: type);
+            EmitLine(sb: sb, line: $"  store {storeType} {val}, ptr {llvmName}");
         }
         EmitLine(sb: sb, line: "  ret void");
         EmitLine(sb: sb, line: "}");
