@@ -76,3 +76,4 @@ old
 /rust_bench
 /.cache/clangd/index/
 /scripts/
+/.dotnet_cli/.dotnet/

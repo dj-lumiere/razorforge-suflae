@@ -47,7 +47,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="src\Postprocessing\" />
+    <Folder Include="src\" />
     <Folder Include="tests\" />
   </ItemGroup>
 </Project>
