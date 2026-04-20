@@ -283,6 +283,25 @@ internal sealed class TypeResolver
                 location: typeExpr.Location);
         }
 
+        // Reject Maybe/Result/Lookup with a bare entity or crashable type argument.
+        // Entities are rvalue references — storing one unowned inside a carrier has no defined
+        // ownership semantics. Use Retained[T] / Shared[T] for RC entities, or Owned[T?] for
+        // unique-ownership nullable. (Generic-parameter T is allowed; the check fires only on
+        // concrete entity types resolved at this call site.)
+        if (genericDefCarrierName is "Maybe" or "Result" or "Lookup" &&
+            typeArgs[index: 0].Category is TypeCategory.Entity or TypeCategory.Crashable)
+        {
+            string carrier = genericDefCarrierName!;
+            string inner = typeArgs[index: 0].Name;
+            string hint = carrier == "Maybe"
+                ? $"Use 'Maybe[Retained[{inner}]]' for RC ownership, or 'Owned[{inner}]?' for unique ownership."
+                : $"Use '{carrier}[Retained[{inner}]]' for RC ownership.";
+            _sa.ReportError(code: SemanticDiagnosticCode.BareEntityInCarrierType,
+                message:
+                $"'{carrier}[{inner}]' is not allowed: '{inner}' is a bare entity type with no ownership semantics in a carrier. {hint}",
+                location: typeExpr.Location);
+        }
+
         // Validate generic constraints
         ValidateGenericConstraints(genericDef: genericDef,
             typeArgs: typeArgs,

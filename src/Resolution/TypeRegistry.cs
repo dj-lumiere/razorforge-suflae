@@ -1184,18 +1184,6 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
-    /// Gets the underlying intrinsic type for a single-member-variable wrapper.
-    /// </summary>
-    /// <param name="type">The type to extract the intrinsic from.</param>
-    /// <returns>The underlying intrinsic type, or null if not a single-member-variable wrapper.</returns>
-    public IntrinsicTypeInfo? GetUnderlyingIntrinsic(TypeInfo type)
-    {
-        return type is RecordTypeInfo record
-            ? record.UnderlyingIntrinsic
-            : null;
-    }
-
-    /// <summary>
     /// Gets all types of a specific category.
     /// </summary>
     /// <param name="category">The category of types to retrieve.</param>

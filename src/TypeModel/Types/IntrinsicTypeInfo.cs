@@ -6,7 +6,6 @@ using TypeModel.Enums;
 /// LLVM intrinsic types (@intrinsic.*) - internal implementation details only.
 /// These are never exposed to user code, only used inside stdlib record definitions.
 /// </summary>
-// TODO: This whole thing is dead and we use @llvm annotation for this
 public sealed class IntrinsicTypeInfo : TypeInfo
 {
     /// <inheritdoc/>
@@ -53,7 +52,6 @@ public sealed class IntrinsicTypeInfo : TypeInfo
     /// <summary>
     /// Well-known intrinsic types.
     /// </summary>
-    // TODO: This is dead
     public static class WellKnown
     {
         // Boolean

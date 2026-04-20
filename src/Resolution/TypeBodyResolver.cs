@@ -520,13 +520,13 @@ internal sealed class TypeBodyResolver
                              "Use failable routines (!) instead of storing Result/Lookup in variants.",
                     location: member.Location);
             }
-            // #207: RazorForge only — bare entities must be wrapped in RC wrappers in variants
+            // #207: RazorForge only — bare entities are banned in variants (ownership undefined)
             else if (_sa._registry.Language == Language.RazorForge &&
-                     memberType.Category == TypeCategory.Entity)
+                     memberType.Category is TypeCategory.Entity or TypeCategory.Crashable)
             {
-                _sa.ReportWarning(code: SemanticWarningCode.BareEntityInVariantMember,
+                _sa.ReportError(code: SemanticDiagnosticCode.BareEntityInCarrierType,
                     message: $"Variant member '{memberTypeName}' is a bare entity type. " +
-                             "Use an RC wrapper (Retained[T], Shared[T], Tracked[T]) to make ownership explicit.",
+                             "Use an RC wrapper (Retained[T], Shared[T], Tracked[T]) or Owned[T] to make ownership explicit.",
                     location: member.Location);
             }
 
