@@ -20,13 +20,13 @@ preset S32_ONE: S32 = 1_s32
 ### :param from: The source value to convert.
 ### :returns: The resulting `S32` value.
 routine S32.$create(from: S8) -> S32
-  return sext[S8, S32](from)
+  return sign_extend[S8, S32](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `S32` value.
 routine S32.$create(from: S16) -> S32
-  return sext[S16, S32](from)
+  return sign_extend[S16, S32](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
@@ -41,7 +41,7 @@ routine S32.$create(from: S32) -> S32
 routine S32.$create!(from: S64) -> S32
   unless S64(S32_MIN) <= from <= S64(S32_MAX)
     throw IntegerOverflowError()
-  return trunc[S64, S32](from)
+  return int_truncate[S64, S32](from)
 
 ### Implements the wired routine behavior for this value.
 ### :param from: The source value to convert.
@@ -50,19 +50,19 @@ routine S32.$create!(from: S64) -> S32
 routine S32.$create!(from: S128) -> S32
   unless S128(S32_MIN) <= from <= S128(S32_MAX)
     throw IntegerOverflowError()
-  return trunc[S128, S32](from)
+  return int_truncate[S128, S32](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `S32` value.
 routine S32.$create(from: U8) -> S32
-  return zext[U8, S32](from)
+  return zero_extend[U8, S32](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `S32` value.
 routine S32.$create(from: U16) -> S32
-  return zext[U16, S32](from)
+  return zero_extend[U16, S32](from)
 
 ### Implements the wired routine behavior for this value.
 ### :param from: The source value to convert.
@@ -71,7 +71,7 @@ routine S32.$create(from: U16) -> S32
 routine S32.$create!(from: U32) -> S32
   unless from <= U32(S32_MAX)
     throw IntegerOverflowError()
-  return bitcast[U32, S32](from)
+  return reinterpret_bits[U32, S32](from)
 
 ### Implements the wired routine behavior for this value.
 ### :param from: The source value to convert.
@@ -80,7 +80,7 @@ routine S32.$create!(from: U32) -> S32
 routine S32.$create!(from: U64) -> S32
   unless from <= U64(S32_MAX)
     throw IntegerOverflowError()
-  return trunc[U64, S32](from)
+  return int_truncate[U64, S32](from)
 
 ### Implements the wired routine behavior for this value.
 ### :param from: The source value to convert.
@@ -89,7 +89,7 @@ routine S32.$create!(from: U64) -> S32
 routine S32.$create!(from: U128) -> S32
   unless from <= U128(S32_MAX)
     throw IntegerOverflowError()
-  return trunc[U128, S32](from)
+  return int_truncate[U128, S32](from)
 
 ### Implements the wired routine behavior for this value.
 ### :param from: The source value to convert.
@@ -101,13 +101,13 @@ routine S32.$create!(from: F16) -> S32
 ### :param from: The source value to convert.
 ### :returns: The resulting `S32` value.
 routine S32.$create!(from: F32) -> S32
-  return fptosi[F32, S32](from)
+  return float_to_signed[F32, S32](from)
 
 ### Implements the wired routine behavior for this value.
 ### :param from: The source value to convert.
 ### :returns: The resulting `S32` value.
 routine S32.$create!(from: F64) -> S32
-  return fptosi[F64, S32](from)
+  return float_to_signed[F64, S32](from)
 
 ### Implements the wired routine behavior for this value.
 ### :param from: The source value to convert.
@@ -119,14 +119,14 @@ routine S32.$create!(from: F128) -> S32
 ### :param from: The source value to convert.
 ### :returns: The resulting `S32` value.
 routine S32.$create!(from: D32) -> S32
-  var bits = bitcast[D32, U32](from)
+  var bits = reinterpret_bits[D32, U32](from)
   return d32_to_s32(bits)
 
 ### Implements the wired routine behavior for this value.
 ### :param from: The source value to convert.
 ### :returns: The resulting `S32` value.
 routine S32.$create!(from: D64) -> S32
-  var bits = bitcast[D64, U64](from)
+  var bits = reinterpret_bits[D64, U64](from)
   return d64_to_s32(bits)
 
 ### Implements the wired routine behavior for this value.
@@ -143,19 +143,19 @@ routine S32.$create!(from: D128) -> S32
 ### :param you: The other value to compare against.
 ### :returns: The resulting `(S32, Bool)` value.
 routine S32.add_with_overflow(you: S32) -> (S32, Bool)
-  return sadd_with_overflow[S32](me, you)
+  return signed_add_checked[S32](me, you)
 
 ### Returns the difference and whether it overflowed.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `(S32, Bool)` value.
 routine S32.sub_with_overflow(you: S32) -> (S32, Bool)
-  return ssub_with_overflow[S32](me, you)
+  return signed_sub_checked[S32](me, you)
 
 ### Returns the product and whether it overflowed.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `(S32, Bool)` value.
 routine S32.mul_with_overflow(you: S32) -> (S32, Bool)
-  return smul_with_overflow[S32](me, you)
+  return signed_mul_checked[S32](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
@@ -193,8 +193,8 @@ routine S32.$floordiv!(you: S32) -> S32
     throw DivisionByZeroError()
   if me == S32_MIN and you == -1_s32
     throw IntegerOverflowError()
-  var quotient = sdiv[S32](me, you)
-  var remainder = srem[S32](me, you)
+  var quotient = signed_div[S32](me, you)
+  var remainder = signed_rem[S32](me, you)
   if remainder < 0_s32
     if you > 0_s32
       return quotient - 1_s32
@@ -207,7 +207,7 @@ routine S32.$floordiv!(you: S32) -> S32
 routine S32.$mod!(you: S32) -> S32
   if you == 0
     throw DivisionByZeroError()
-  var remainder = srem[S32](me, you)
+  var remainder = signed_rem[S32](me, you)
   if remainder < 0_s32
     if you > 0_s32
       return remainder + you
@@ -249,26 +249,26 @@ routine S32.$mul_wrap(you: S32) -> S32
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S32` value.
 routine S32.$add_unchecked(you: S32) -> S32
-  return add_nsw[S32](me, you)
+  return signed_add_exact[S32](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S32` value.
 routine S32.$sub_unchecked(you: S32) -> S32
-  return sub_nsw[S32](me, you)
+  return signed_sub_exact[S32](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S32` value.
 routine S32.$mul_unchecked(you: S32) -> S32
-  return mul_nsw[S32](me, you)
+  return signed_mul_exact[S32](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S32` value.
 routine S32.$floordiv_unchecked(you: S32) -> S32
-  var quotient = sdiv[S32](me, you)
-  var remainder = srem[S32](me, you)
+  var quotient = signed_div[S32](me, you)
+  var remainder = signed_rem[S32](me, you)
   if remainder < 0_s32
     if you > 0_s32
       return quotient - 1_s32
@@ -279,7 +279,7 @@ routine S32.$floordiv_unchecked(you: S32) -> S32
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S32` value.
 routine S32.$mod_unchecked(you: S32) -> S32
-  var remainder = srem[S32](me, you)
+  var remainder = signed_rem[S32](me, you)
   if remainder < 0_s32
     if you > 0_s32
       return remainder + you
@@ -294,24 +294,24 @@ routine S32.$mod_unchecked(you: S32) -> S32
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S32` value.
 routine S32.$add_clamp(you: S32) -> S32
-  return sadd_sat[S32](me, you)
+  return signed_add_sat[S32](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S32` value.
 routine S32.$sub_clamp(you: S32) -> S32
-  return ssub_sat[S32](me, you)
+  return signed_sub_sat[S32](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S32` value.
 routine S32.$mul_clamp(you: S32) -> S32
-  var wide = mul[S64](sext[S32, S64](me), sext[S32, S64](you))
-  if icmp_sgt[S64](wide, 2147483647_s64)
+  var wide = mul[S64](sign_extend[S32, S64](me), sign_extend[S32, S64](you))
+  if signed_gt[S64](wide, 2147483647_s64)
     return S32_MAX
-  if icmp_slt[S64](wide, -2147483648_s64)
+  if signed_lt[S64](wide, -2147483648_s64)
     return S32_MIN
-  return trunc[S64, S32](wide)
+  return int_truncate[S64, S32](wide)
 
 # ============================================================================
 # Power Operations (**)
@@ -412,12 +412,12 @@ routine S32.$bitor(you: S32) -> S32
 ### :param you: The other value to compare against.
 ### :returns: The resulting `S32` value.
 routine S32.$bitxor(you: S32) -> S32
-  return xor[S32](me, you)
+  return bit_xor[S32](me, you)
 
 ### Returns the result of the requested bitwise operation.
 ### :returns: The resulting `S32` value.
 routine S32.$bitnot() -> S32
-  return xor[S32](me, -1)
+  return bit_xor[S32](me, -1)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)
@@ -427,25 +427,25 @@ routine S32.$bitnot() -> S32
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `S32` value.
 routine S32.$ashl(bits: U32) -> S32
-  return shl[S32](me, bits)
+  return shift_left[S32](me, bits)
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `S32` value.
-routine S32.$ashr(bits: U32) -> S32
-  return ashr[S32](me, bits)
+routine S32.$shift_right_signed(bits: U32) -> S32
+  return shift_right_signed[S32](me, bits)
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `S32` value.
 routine S32.$lshl(bits: U32) -> S32
-  return shl[S32](me, bits)
+  return shift_left[S32](me, bits)
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `S32` value.
-routine S32.$lshr(bits: U32) -> S32
-  return lshr[S32](me, bits)
+routine S32.$shift_right_unsigned(bits: U32) -> S32
+  return shift_right_unsigned[S32](me, bits)
 
 # ============================================================================
 # Comparison Operations
@@ -455,15 +455,15 @@ routine S32.$lshr(bits: U32) -> S32
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine S32.$eq(you: S32) -> Bool
-  return icmp_eq[S32](me, you)
+  return int_eq[S32](me, you)
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine S32.$cmp(you: S32) -> ComparisonSign
-  if icmp_slt[S32](me, you)
+  if signed_lt[S32](me, you)
     return ME_SMALL
-  if icmp_sgt[S32](me, you)
+  if signed_gt[S32](me, you)
     return ME_LARGE
   return SAME
 
@@ -474,7 +474,7 @@ routine S32.$cmp(you: S32) -> ComparisonSign
 ### Returns the absolute value.
 ### :returns: The resulting `S32` value.
 routine S32.abs() -> S32
-  return abs[S32](me)
+  return int_abs[S32](me)
 
 ### Returns the result of `min`.
 ### :param you: The other value to compare against.
@@ -502,7 +502,7 @@ routine S32.clamp(min_val: S32, max_val: S32) -> S32
 ### Returns the number of stored values.
 ### :returns: The resulting `S32` value.
 routine S32.count_ones() -> S32
-  return ctpop[S32](me)
+  return count_ones[S32](me)
 
 ### Returns the number of stored values.
 ### :returns: The resulting `S32` value.
@@ -512,12 +512,12 @@ routine S32.count_zeros() -> S32
 ### Returns the result of `leading zeros`.
 ### :returns: The resulting `S32` value.
 routine S32.leading_zeros() -> S32
-  return ctlz[S32](me)
+  return leading_zeros[S32](me)
 
 ### Returns the result of `trailing zeros`.
 ### :returns: The resulting `S32` value.
 routine S32.trailing_zeros() -> S32
-  return cttz[S32](me)
+  return trailing_zeros[S32](me)
 
 ### Returns the result of `leading ones`.
 ### :returns: The resulting `S32` value.
@@ -532,12 +532,12 @@ routine S32.trailing_ones() -> S32
 ### Returns the result of `reverse bits`.
 ### :returns: The resulting `S32` value.
 routine S32.reverse_bits() -> S32
-  return bitreverse[S32](me)
+  return reverse_bits[S32](me)
 
 ### Returns the result of `swap bytes`.
 ### :returns: The resulting `S32` value.
 routine S32.swap_bytes() -> S32
-  return bswap[S32](me)
+  return byte_swap[S32](me)
 
 # ============================================================================
 # Utility Methods
@@ -562,7 +562,7 @@ routine S32.is_zero() -> Bool
 ### :returns: The resulting `Bool` value.
 routine S32.is_even() -> Bool
   var result = bit_and[S32](me, 1_s32)
-  return icmp_eq[S32](result, 0_s32)
+  return int_eq[S32](result, 0_s32)
 
 ### Returns true if this value is odd.
 ### :returns: The resulting `Bool` value.
@@ -580,10 +580,10 @@ routine S32.signum() -> S32
 ### Returns true if this value is power of two.
 ### :returns: The resulting `Bool` value.
 routine S32.is_power_of_two() -> Bool
-  var is_pos = icmp_sgt[S32](me, 0_s32)
+  var is_pos = signed_gt[S32](me, 0_s32)
   var minus_one = sub[S32](me, 1_s32)
   var anded = bit_and[S32](me, minus_one)
-  var is_zero = icmp_eq[S32](anded, 0_s32)
+  var is_zero = int_eq[S32](anded, 0_s32)
   return is_pos and is_zero
 
 # ============================================================================
@@ -640,11 +640,11 @@ routine S32.$create!(from_text: Text) -> S32
 ### Returns a hash of this value.
 ### :returns: The resulting `U64` value.
 routine S32.$hash() -> U64
-  return __hash_leaf(v: zext[S32, U64](me))
+  return __hash_leaf(v: zero_extend[S32, U64](me))
 
 ### Returns a keyed hash of this value using SipHash-2-4.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
 routine S32.$secure_hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u64(v: zext[S32, U64](me), k0: k0, k1: k1)
+  return __secure_hash_u64(v: zero_extend[S32, U64](me), k0: k0, k1: k1)

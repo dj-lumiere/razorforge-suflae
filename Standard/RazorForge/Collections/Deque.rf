@@ -88,7 +88,7 @@ routine Deque[T].physical_index(logical_index: U64) -> U64
 routine Deque[T].read_at(physical_idx: U64) -> T
   var byte_offset = T.data_size() * physical_idx
   danger!
-    return me.data.offset(byte_offset).read()
+    return me.data.offset(byte_offset).extract()
 
 ### Performs `write at` on this value.
 ### :param physical_idx: The `physical_idx` value.
@@ -96,7 +96,7 @@ routine Deque[T].read_at(physical_idx: U64) -> T
 routine Deque[T].write_at(physical_idx: U64, value: T)
   var byte_offset = T.data_size() * physical_idx
   danger!
-    me.data.offset(byte_offset).write(value)
+    me.data.offset(byte_offset).inject(value)
   return
 
 # ============================================================================
@@ -218,7 +218,7 @@ routine Deque[T].reserve(new_capacity: U64)
       var old_idx = me.physical_index(i)
       var value = me.read_at(old_idx)
       var new_byte_offset = T.data_size() * i
-      _new_data.offset(new_byte_offset).write(value)
+      _new_data.offset(new_byte_offset).inject(value)
       i = i +% 1u64
 
     me.data = _new_data
@@ -289,7 +289,7 @@ routine Deque[T].rotate_left(n: U64)
   # Front elements move to back
   if me.count == 0u64
     return
-  var shift = urem[U64](n, me.count)
+  var shift = unsigned_rem[U64](n, me.count)
   me.start = me.wrap_index(me.start +% shift)
   return
 
@@ -300,7 +300,7 @@ routine Deque[T].rotate_right(n: U64)
   # Back elements move to front
   if me.count == 0u64
     return
-  var shift = urem[U64](n, me.count)
+  var shift = unsigned_rem[U64](n, me.count)
   if shift > me.start
     me.start = me.capacity -% (shift -% me.start)
   else
@@ -342,7 +342,7 @@ routine DequeEmitter[T].$next!() -> T
     absent
   danger!
     var physical = (me.start +% me.index) & (me.capacity -% 1u64)
-    var _result = me.data.offset(T.data_size() * physical).read()
+    var _result = me.data.offset(T.data_size() * physical).extract()
   me.index = me.index + 1u64
   return _result
 

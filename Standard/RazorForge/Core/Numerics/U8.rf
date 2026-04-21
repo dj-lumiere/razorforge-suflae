@@ -23,7 +23,7 @@ preset U8_ONE: U8 = 1_u8
 routine U8.$create!(from: S8) -> U8
   if from < 0_s8
     throw IntegerOverflowError()
-  return bitcast[S8, U8](from)
+  return reinterpret_bits[S8, U8](from)
 
 ### Implements the wired routine behavior for this value.
 ### :param from: The source value to convert.
@@ -32,7 +32,7 @@ routine U8.$create!(from: S8) -> U8
 routine U8.$create!(from: S16) -> U8
   if not (0_s16 <= from <= 255_s16)
     throw IntegerOverflowError()
-  return trunc[S16, U8](from)
+  return int_truncate[S16, U8](from)
 
 ### Implements the wired routine behavior for this value.
 ### :param from: The source value to convert.
@@ -41,7 +41,7 @@ routine U8.$create!(from: S16) -> U8
 routine U8.$create!(from: S32) -> U8
   if not (0_s32 <= from <= 255_s32)
     throw IntegerOverflowError()
-  return trunc[S32, U8](from)
+  return int_truncate[S32, U8](from)
 
 ### Implements the wired routine behavior for this value.
 ### :param from: The source value to convert.
@@ -50,7 +50,7 @@ routine U8.$create!(from: S32) -> U8
 routine U8.$create!(from: S64) -> U8
   if not (0_s64 <= from <= 255_s64)
     throw IntegerOverflowError()
-  return trunc[S64, U8](from)
+  return int_truncate[S64, U8](from)
 
 ### Implements the wired routine behavior for this value.
 ### :param from: The source value to convert.
@@ -59,7 +59,7 @@ routine U8.$create!(from: S64) -> U8
 routine U8.$create!(from: S128) -> U8
   if not (0_s128 <= from <= 255_s128)
     throw IntegerOverflowError()
-  return trunc[S128, U8](from)
+  return int_truncate[S128, U8](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
@@ -74,7 +74,7 @@ routine U8.$create(from: U8) -> U8
 routine U8.$create!(from: U16) -> U8
   if from > 255_u16
     throw IntegerOverflowError()
-  return trunc[U16, U8](from)
+  return int_truncate[U16, U8](from)
 
 ### Implements the wired routine behavior for this value.
 ### :param from: The source value to convert.
@@ -83,7 +83,7 @@ routine U8.$create!(from: U16) -> U8
 routine U8.$create!(from: U32) -> U8
   if from > 255_u32
     throw IntegerOverflowError()
-  return trunc[U32, U8](from)
+  return int_truncate[U32, U8](from)
 
 ### Implements the wired routine behavior for this value.
 ### :param from: The source value to convert.
@@ -92,7 +92,7 @@ routine U8.$create!(from: U32) -> U8
 routine U8.$create!(from: U64) -> U8
   if from > 255_u64
     throw IntegerOverflowError()
-  return trunc[U64, U8](from)
+  return int_truncate[U64, U8](from)
 
 ### Implements the wired routine behavior for this value.
 ### :param from: The source value to convert.
@@ -101,7 +101,7 @@ routine U8.$create!(from: U64) -> U8
 routine U8.$create!(from: U128) -> U8
   if from > 255_u128
     throw IntegerOverflowError()
-  return trunc[U128, U8](from)
+  return int_truncate[U128, U8](from)
 
 ### Implements the wired routine behavior for this value.
 ### :param from: The source value to convert.
@@ -153,19 +153,19 @@ routine U8.$create!(from: D128) -> U8
 ### :param you: The other value to compare against.
 ### :returns: The resulting `(U8, Bool)` value.
 routine U8.add_with_overflow(you: U8) -> (U8, Bool)
-  return uadd_with_overflow[U8](me, you)
+  return unsigned_add_checked[U8](me, you)
 
 ### Returns the difference and whether it overflowed.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `(U8, Bool)` value.
 routine U8.sub_with_overflow(you: U8) -> (U8, Bool)
-  return usub_with_overflow[U8](me, you)
+  return unsigned_sub_checked[U8](me, you)
 
 ### Returns the product and whether it overflowed.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `(U8, Bool)` value.
 routine U8.mul_with_overflow(you: U8) -> (U8, Bool)
-  return umul_with_overflow[U8](me, you)
+  return unsigned_mul_checked[U8](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
@@ -201,13 +201,13 @@ routine U8.$mul!(you: U8) -> U8
 routine U8.$floordiv!(you: U8) -> U8
   if you == 0
     throw DivisionByZeroError()
-  return udiv[U8](me, you)
+  return unsigned_div[U8](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U8` value.
 routine U8.$mod!(you: U8) -> U8
-  return urem[U8](me, you)
+  return unsigned_rem[U8](me, you)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -239,31 +239,31 @@ routine U8.$mul_wrap(you: U8) -> U8
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U8` value.
 routine U8.$add_unchecked(you: U8) -> U8
-  return add_nuw[U8](me, you)
+  return unsigned_add_exact[U8](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U8` value.
 routine U8.$sub_unchecked(you: U8) -> U8
-  return sub_nuw[U8](me, you)
+  return unsigned_sub_exact[U8](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U8` value.
 routine U8.$mul_unchecked(you: U8) -> U8
-  return mul_nuw[U8](me, you)
+  return unsigned_mul_exact[U8](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U8` value.
 routine U8.$floordiv_unchecked(you: U8) -> U8
-  return udiv[U8](me, you)
+  return unsigned_div[U8](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U8` value.
 routine U8.$mod_unchecked(you: U8) -> U8
-  return urem[U8](me, you)
+  return unsigned_rem[U8](me, you)
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
@@ -273,22 +273,22 @@ routine U8.$mod_unchecked(you: U8) -> U8
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U8` value.
 routine U8.$add_clamp(you: U8) -> U8
-  return uadd_sat[U8](me, you)
+  return unsigned_add_sat[U8](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U8` value.
 routine U8.$sub_clamp(you: U8) -> U8
-  return usub_sat[U8](me, you)
+  return unsigned_sub_sat[U8](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U8` value.
 routine U8.$mul_clamp(you: U8) -> U8
-  var wide = mul[U16](zext[U8, U16](me), zext[U8, U16](you))
-  if icmp_ugt[U16](wide, 255_u16)
+  var wide = mul[U16](zero_extend[U8, U16](me), zero_extend[U8, U16](you))
+  if unsigned_gt[U16](wide, 255_u16)
     return U8_MAX
-  return trunc[U16, U8](wide)
+  return int_truncate[U16, U8](wide)
 
 # ============================================================================
 # Power Operations (**)
@@ -382,12 +382,12 @@ routine U8.$bitor(you: U8) -> U8
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U8` value.
 routine U8.$bitxor(you: U8) -> U8
-  return xor[U8](me, you)
+  return bit_xor[U8](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :returns: The resulting `U8` value.
 routine U8.$bitnot() -> U8
-  return xor[U8](me, -1)
+  return bit_xor[U8](me, -1)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)
@@ -398,25 +398,25 @@ routine U8.$bitnot() -> U8
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U8` value.
 routine U8.$ashl(bits: U32) -> U8
-  return shl[U8](me, U8(bits))
+  return shift_left[U8](me, U8(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U8` value.
-routine U8.$ashr(bits: U32) -> U8
-  return lshr[U8](me, U8(bits))
+routine U8.$shift_right_signed(bits: U32) -> U8
+  return shift_right_unsigned[U8](me, U8(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U8` value.
 routine U8.$lshl(bits: U32) -> U8
-  return shl[U8](me, U8(bits))
+  return shift_left[U8](me, U8(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U8` value.
-routine U8.$lshr(bits: U32) -> U8
-  return lshr[U8](me, U8(bits))
+routine U8.$shift_right_unsigned(bits: U32) -> U8
+  return shift_right_unsigned[U8](me, U8(bits))
 
 # ============================================================================
 # Comparison Operations
@@ -426,15 +426,15 @@ routine U8.$lshr(bits: U32) -> U8
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine U8.$eq(you: U8) -> Bool
-  return icmp_eq[U8](me, you)
+  return int_eq[U8](me, you)
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine U8.$cmp(you: U8) -> ComparisonSign
-  if icmp_ult[U8](me, you)
+  if unsigned_lt[U8](me, you)
     return ME_SMALL
-  if icmp_ugt[U8](me, you)
+  if unsigned_gt[U8](me, you)
     return ME_LARGE
   return SAME
 
@@ -468,7 +468,7 @@ routine U8.clamp(min_val: U8, max_val: U8) -> U8
 ### Returns the number of stored values.
 ### :returns: The resulting `U8` value.
 routine U8.count_ones() -> U8
-  return ctpop[U8](me)
+  return count_ones[U8](me)
 
 ### Returns the number of stored values.
 ### :returns: The resulting `U8` value.
@@ -478,12 +478,12 @@ routine U8.count_zeros() -> U8
 ### Returns the result of `leading zeros`.
 ### :returns: The resulting `U8` value.
 routine U8.leading_zeros() -> U8
-  return ctlz[U8](me)
+  return leading_zeros[U8](me)
 
 ### Returns the result of `trailing zeros`.
 ### :returns: The resulting `U8` value.
 routine U8.trailing_zeros() -> U8
-  return cttz[U8](me)
+  return trailing_zeros[U8](me)
 
 ### Returns the result of `leading ones`.
 ### :returns: The resulting `U8` value.
@@ -498,7 +498,7 @@ routine U8.trailing_ones() -> U8
 ### Returns the result of `reverse bits`.
 ### :returns: The resulting `U8` value.
 routine U8.reverse_bits() -> U8
-  return bitreverse[U8](me)
+  return reverse_bits[U8](me)
 
 ### Returns true if this value is power of two.
 ### :returns: The resulting `Bool` value.
@@ -513,49 +513,49 @@ routine U8.is_power_of_two() -> Bool
 ### :param from: The source value to convert.
 ### :returns: The resulting `S8` value.
 routine S8(from: U8) -> S8
-  return bitcast[U8, S8](from)
+  return reinterpret_bits[U8, S8](from)
 
 ### Returns the result of `U16`.
 ### :param from: The source value to convert.
 ### :returns: The resulting `U16` value.
 routine U16(from: U8) -> U16
-  return zext[U8, U16](from)
+  return zero_extend[U8, U16](from)
 
 ### Returns the result of `U32`.
 ### :param from: The source value to convert.
 ### :returns: The resulting `U32` value.
 routine U32(from: U8) -> U32
-  return zext[U8, U32](from)
+  return zero_extend[U8, U32](from)
 
 ### Returns the result of `U64`.
 ### :param from: The source value to convert.
 ### :returns: The resulting `U64` value.
 routine U64(from: U8) -> U64
-  return zext[U8, U64](from)
+  return zero_extend[U8, U64](from)
 
 ### Returns the result of `U128`.
 ### :param from: The source value to convert.
 ### :returns: The resulting `U128` value.
 routine U128(from: U8) -> U128
-  return zext[U8, U128](from)
+  return zero_extend[U8, U128](from)
 
 ### Returns the result of `F32`.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F32` value.
 routine F32(from: U8) -> F32
-  return uitofp[U8, F32](from)
+  return unsigned_to_float[U8, F32](from)
 
 ### Returns the result of `F64`.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F64` value.
 routine F64(from: U8) -> F64
-  return uitofp[U8, F64](from)
+  return unsigned_to_float[U8, F64](from)
 
 ### Returns the result of `Bool`.
 ### :param from: The source value to convert.
 ### :returns: The resulting `Bool` value.
 routine Bool(from: U8) -> Bool
-  return icmp_ne[U8](from, 0_u8)
+  return int_ne[U8](from, 0_u8)
 
 # ============================================================================
 # Utility Methods
@@ -570,7 +570,7 @@ routine U8.is_zero() -> Bool
 ### :returns: The resulting `Bool` value.
 routine U8.is_even() -> Bool
   var result = bit_and[U8](me, 1_u8)
-  return icmp_eq[U8](result, 0_u8)
+  return int_eq[U8](result, 0_u8)
 
 ### Returns true if this value is odd.
 ### :returns: The resulting `Bool` value.
@@ -615,11 +615,11 @@ routine U8.$create!(from_text: Text) -> U8
 ### Returns a hash of this value.
 ### :returns: The resulting `U64` value.
 routine U8.$hash() -> U64
-  return __hash_leaf(v: zext[U8, U64](me))
+  return __hash_leaf(v: zero_extend[U8, U64](me))
 
 ### Returns a keyed hash of this value using SipHash-2-4.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
 routine U8.$secure_hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u64(v: zext[U8, U64](me), k0: k0, k1: k1)
+  return __secure_hash_u64(v: zero_extend[U8, U64](me), k0: k0, k1: k1)

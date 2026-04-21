@@ -72,7 +72,7 @@ dangerous routine Owned[T].get_address() -> Address
 routine Owned[T].$represent() -> Text
   danger!
     var raw = Hijacked[T](me)
-    return raw.unhijack().$represent()
+    return raw.reveal().$represent()
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
@@ -81,4 +81,4 @@ routine Owned[T].$diagnose() -> Text
   danger!
     var raw = Hijacked[T](me)
     var addr = raw.get_address()
-    return me.type_name() + "(addr: " + addr.$represent() + ", " + raw.unhijack().$diagnose() + ")"
+    return me.type_name() + "(addr: " + addr.$represent() + ", " + raw.reveal().$diagnose() + ")"

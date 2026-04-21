@@ -9,13 +9,16 @@ import BuilderService
 import Core.SecureHashKey
 
 preset SECURE_DICT_INITIAL_CAPACITY: U64 = 16u64
+preset CTRL_EMPTY: U8 = 128_u8
+preset CTRL_DELETED: U8 = 254_u8
+preset CTRL_H2_MASK: U8 = 127_u8
 
 ### Hash map from K to V, protected against hash-flooding attacks.
 ### :typeparam K: The key type.
 ### :typeparam V: The value type.
 entity SecureDict[K, V] obeys Iterable[DictEntry[K, V]]
 needs K obeys SecureHashable, Equatable
-  secret ctrl: Hijacked[Byte]
+  secret ctrl: Hijacked[U8]
   secret keys: Hijacked[K]
   secret vals: Hijacked[V]
   secret count: U64
@@ -39,7 +42,7 @@ routine SecureDict[K, V].$create() -> SecureDict[K, V]
 routine SecureDict[K, V].$create(key: SecureHashKey) -> SecureDict[K, V]
   var cap = SECURE_DICT_INITIAL_CAPACITY
   var dict = SecureDict[K, V](
-    ctrl: hijacked_none[Byte](),
+    ctrl: hijacked_none[U8](),
     keys: hijacked_none[K](),
     vals: hijacked_none[V](),
     count: 0u64,
@@ -49,8 +52,8 @@ routine SecureDict[K, V].$create(key: SecureHashKey) -> SecureDict[K, V]
     k1: key.k1
   )
   danger!
-    dict.ctrl = Hijacked[Byte](rf_allocate_dynamic_uninit(cap))
-    rf_set_bytes_at(dest: ptrtoint[Byte, Address](dict.ctrl), value: 128_u8, size: cap)
+    dict.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(cap))
+    rf_set_bytes_at(dest: pointer_to_int[U8, Address](dict.ctrl), value: CTRL_EMPTY, size: cap)
     dict.keys = Hijacked[K](rf_allocate_dynamic_uninit(K.data_size() * cap))
     dict.vals = Hijacked[V](rf_allocate_dynamic_uninit(V.data_size() * cap))
   return dict
@@ -64,7 +67,7 @@ routine SecureDict[K, V].$create(key: SecureHashKey, capacity: U64) -> SecureDic
   while cap < capacity
     cap = cap *% 2u64
   var dict = SecureDict[K, V](
-    ctrl: hijacked_none[Byte](),
+    ctrl: hijacked_none[U8](),
     keys: hijacked_none[K](),
     vals: hijacked_none[V](),
     count: 0u64,
@@ -74,8 +77,8 @@ routine SecureDict[K, V].$create(key: SecureHashKey, capacity: U64) -> SecureDic
     k1: key.k1
   )
   danger!
-    dict.ctrl = Hijacked[Byte](rf_allocate_dynamic_uninit(cap))
-    rf_set_bytes_at(dest: ptrtoint[Byte, Address](dict.ctrl), value: 128_u8, size: cap)
+    dict.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(cap))
+    rf_set_bytes_at(dest: pointer_to_int[U8, Address](dict.ctrl), value: CTRL_EMPTY, size: cap)
     dict.keys = Hijacked[K](rf_allocate_dynamic_uninit(K.data_size() * cap))
     dict.vals = Hijacked[V](rf_allocate_dynamic_uninit(V.data_size() * cap))
   return dict
@@ -84,11 +87,11 @@ routine SecureDict[K, V].$create(key: SecureHashKey, capacity: U64) -> SecureDic
 routine SecureDict[K, V].$destroy()
   danger!
     if not me.ctrl.is_none()
-      rf_invalidate(ptrtoint[Byte, Address](me.ctrl))
+      rf_invalidate(pointer_to_int[U8, Address](me.ctrl))
     if not me.keys.is_none()
-      rf_invalidate(ptrtoint[K, Address](me.keys))
+      rf_invalidate(pointer_to_int[K, Address](me.keys))
     if not me.vals.is_none()
-      rf_invalidate(ptrtoint[V, Address](me.vals))
+      rf_invalidate(pointer_to_int[V, Address](me.vals))
   return
 
 # ============================================================================
@@ -97,9 +100,9 @@ routine SecureDict[K, V].$destroy()
 
 ### Returns the H2 fingerprint: 7 low bits of hash, always in range 0-127.
 ### :param hash: The raw hash.
-### :returns: The resulting `Byte` value.
-routine SecureDict[K, V].h2(hash: U64) -> Byte
-  return (hash & 127u64).Byte()
+### :returns: The resulting `U8` value.
+routine SecureDict[K, V].h2(hash: U64) -> U8
+  return U8(hash & U64(CTRL_H2_MASK))
 
 ### Returns the H1 slot position: upper bits of hash used for indexing.
 ### :param hash: The raw hash.
@@ -111,19 +114,19 @@ routine SecureDict[K, V].h1(hash: U64) -> U64
 ### :param slot: The slot index.
 ### :returns: The resulting `K` value.
 routine SecureDict[K, V].read_key(slot: U64) -> K
-  return me.keys.offset(K.data_size() * slot).read()
+  return me.keys.offset(K.data_size() * slot).extract()
 
 ### Reads the value at `slot`.
 ### :param slot: The slot index.
 ### :returns: The resulting `V` value.
 routine SecureDict[K, V].read_val(slot: U64) -> V
-  return me.vals.offset(V.data_size() * slot).read()
+  return me.vals.offset(V.data_size() * slot).extract()
 
 ### Writes `val` to `slot`.
 ### :param slot: The slot index.
 ### :param val: The value to store.
 routine SecureDict[K, V].write_val(slot: U64, val: V)
-  me.vals.offset(V.data_size() * slot).write(val)
+  me.vals.offset(V.data_size() * slot).inject(val)
   return
 
 ### Linear-probes for `key` using H1 start + H2 fingerprint matching.
@@ -137,11 +140,11 @@ routine SecureDict[K, V].find_slot(key: K) -> U64
   var i = me.h1(h) & mask
   danger!
     loop
-      var c = me.ctrl.offset(Byte.data_size() * i).read()
-      if c == 128_u8
+      var c = me.ctrl.offset(U8.data_size() * i).extract()
+      if c == CTRL_EMPTY
         return me.capacity
       if c == target
-        if me.keys.offset(K.data_size() * i).read() == key
+        if me.keys.offset(K.data_size() * i).extract() == key
           return i
       i = (i +% 1u64) & mask
   return me.capacity
@@ -157,16 +160,16 @@ routine SecureDict[K, V].insert_raw(h: U64, key: K, val: V)
   var i = me.h1(h) & mask
   danger!
     loop
-      var c = me.ctrl.offset(Byte.data_size() * i).read()
-      if c == 128_u8
-        me.ctrl.offset(Byte.data_size() * i).write(h2_val)
-        me.keys.offset(K.data_size() * i).write(key)
-        me.vals.offset(V.data_size() * i).write(val)
+      var c = me.ctrl.offset(U8.data_size() * i).extract()
+      if c == CTRL_EMPTY
+        me.ctrl.offset(U8.data_size() * i).inject(h2_val)
+        me.keys.offset(K.data_size() * i).inject(key)
+        me.vals.offset(V.data_size() * i).inject(val)
         return
-      if c == 254_u8
-        me.ctrl.offset(Byte.data_size() * i).write(h2_val)
-        me.keys.offset(K.data_size() * i).write(key)
-        me.vals.offset(V.data_size() * i).write(val)
+      if c == CTRL_DELETED
+        me.ctrl.offset(U8.data_size() * i).inject(h2_val)
+        me.keys.offset(K.data_size() * i).inject(key)
+        me.vals.offset(V.data_size() * i).inject(val)
         me.deleted = me.deleted -% 1u64
         return
       i = (i +% 1u64) & mask
@@ -186,8 +189,8 @@ routine SecureDict[K, V].rehash()
   var new_cap = old_cap *% 2u64
 
   danger!
-    me.ctrl = Hijacked[Byte](rf_allocate_dynamic_uninit(new_cap))
-    rf_set_bytes_at(dest: ptrtoint[Byte, Address](me.ctrl), value: 128_u8, size: new_cap)
+    me.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(new_cap))
+    rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: new_cap)
     me.keys = Hijacked[K](rf_allocate_dynamic_uninit(K.data_size() * new_cap))
     me.vals = Hijacked[V](rf_allocate_dynamic_uninit(V.data_size() * new_cap))
   me.capacity = new_cap
@@ -197,21 +200,21 @@ routine SecureDict[K, V].rehash()
   var i = 0u64
   while i < old_cap
     danger!
-      var c = old_ctrl.offset(Byte.data_size() * i).read()
-      if c != 128_u8 and c != 254_u8
-        var k = old_keys.offset(K.data_size() * i).read()
-        var v = old_vals.offset(V.data_size() * i).read()
+      var c = old_ctrl.offset(U8.data_size() * i).extract()
+      if c != CTRL_EMPTY and c != CTRL_DELETED
+        var k = old_keys.offset(K.data_size() * i).extract()
+        var v = old_vals.offset(V.data_size() * i).extract()
         me.insert_raw(h: k.$secure_hash(k0: me.k0, k1: me.k1), key: k, val: v)
         me.count = me.count +% 1u64
     i = i +% 1u64
 
   danger!
     if not old_ctrl.is_none()
-      rf_invalidate(ptrtoint[Byte, Address](old_ctrl))
+      rf_invalidate(pointer_to_int[U8, Address](old_ctrl))
     if not old_keys.is_none()
-      rf_invalidate(ptrtoint[K, Address](old_keys))
+      rf_invalidate(pointer_to_int[K, Address](old_keys))
     if not old_vals.is_none()
-      rf_invalidate(ptrtoint[V, Address](old_vals))
+      rf_invalidate(pointer_to_int[V, Address](old_vals))
   return
 
 # ============================================================================
@@ -231,7 +234,7 @@ routine SecureDict[K, V].is_empty() -> Bool
 ### Removes all entries, keeping current capacity.
 routine SecureDict[K, V].clear()
   danger!
-    rf_set_bytes_at(dest: ptrtoint[Byte, Address](me.ctrl), value: 128_u8, size: me.capacity)
+    rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: me.capacity)
   me.count = 0u64
   me.deleted = 0u64
   return
@@ -266,7 +269,7 @@ routine SecureDict[K, V].remove(key: K) -> Bool
   if slot >= me.capacity
     return false
   danger!
-    me.ctrl.offset(Byte.data_size() * slot).write(254_u8)
+    me.ctrl.offset(U8.data_size() * slot).inject(CTRL_DELETED)
   me.count = me.count -% 1u64
   me.deleted = me.deleted +% 1u64
   return true
@@ -330,7 +333,7 @@ routine SecureDict[K, V].$iter() -> SecureDictIterator[K, V]
 ### :typeparam K: The key type.
 ### :typeparam V: The value type.
 entity SecureDictIterator[K, V] obeys Iterator[DictEntry[K, V]]
-  secret ctrl: Hijacked[Byte]
+  secret ctrl: Hijacked[U8]
   secret keys: Hijacked[K]
   secret vals: Hijacked[V]
   secret capacity: U64
@@ -342,10 +345,10 @@ routine SecureDictIterator[K, V].$next!() -> DictEntry[K, V]
     while me.slot < me.capacity
       var s = me.slot
       me.slot = me.slot + 1u64
-      var c = me.ctrl.offset(Byte.data_size() * s).read()
-      if c != 128_u8 and c != 254_u8
-        var k = me.keys.offset(K.data_size() * s).read()
-        var v = me.vals.offset(V.data_size() * s).read()
+      var c = me.ctrl.offset(U8.data_size() * s).extract()
+      if c != CTRL_EMPTY and c != CTRL_DELETED
+        var k = me.keys.offset(K.data_size() * s).extract()
+        var v = me.vals.offset(V.data_size() * s).extract()
         return DictEntry[K, V](key: k, value: v)
   absent
 
@@ -394,8 +397,8 @@ routine SecureDict[K, V].$eq(other: SecureDict[K, V]) -> Bool
   var i = 0u64
   while i < me.capacity
     danger!
-      var c = me.ctrl.offset(Byte.data_size() * i).read()
-      if c != 128_u8 and c != 254_u8
+      var c = me.ctrl.offset(U8.data_size() * i).extract()
+      if c != CTRL_EMPTY and c != CTRL_DELETED
         var slot = other.find_slot(me.read_key(i))
         if slot >= other.capacity
           return false

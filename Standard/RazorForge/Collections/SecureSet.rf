@@ -9,12 +9,15 @@ import BuilderService
 import Core.SecureHashKey
 
 preset SECURE_SET_INITIAL_CAPACITY: U64 = 16u64
+preset CTRL_EMPTY: U8 = 128_u8
+preset CTRL_DELETED: U8 = 254_u8
+preset CTRL_H2_MASK: U8 = 127_u8
 
 ### Hash set of unique T values, protected against hash-flooding attacks.
 ### :typeparam T: The element type.
 entity SecureSet[T] obeys Iterable[T]
 needs T obeys SecureHashable, Equatable
-  secret ctrl: Hijacked[Byte]
+  secret ctrl: Hijacked[U8]
   secret slots: Hijacked[T]
   secret count: U64
   secret deleted: U64
@@ -37,7 +40,7 @@ routine SecureSet[T].$create() -> SecureSet[T]
 routine SecureSet[T].$create(key: SecureHashKey) -> SecureSet[T]
   var cap = SECURE_SET_INITIAL_CAPACITY
   var set = SecureSet[T](
-    ctrl: hijacked_none[Byte](),
+    ctrl: hijacked_none[U8](),
     slots: hijacked_none[T](),
     count: 0u64,
     deleted: 0u64,
@@ -46,8 +49,8 @@ routine SecureSet[T].$create(key: SecureHashKey) -> SecureSet[T]
     k1: key.k1
   )
   danger!
-    set.ctrl = Hijacked[Byte](rf_allocate_dynamic_uninit(cap))
-    rf_set_bytes_at(dest: ptrtoint[Byte, Address](set.ctrl), value: 128_u8, size: cap)
+    set.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(cap))
+    rf_set_bytes_at(dest: pointer_to_int[U8, Address](set.ctrl), value: CTRL_EMPTY, size: cap)
     set.slots = Hijacked[T](rf_allocate_dynamic_uninit(T.data_size() * cap))
   return set
 
@@ -60,7 +63,7 @@ routine SecureSet[T].$create(key: SecureHashKey, capacity: U64) -> SecureSet[T]
   while cap < capacity
     cap = cap *% 2u64
   var set = SecureSet[T](
-    ctrl: hijacked_none[Byte](),
+    ctrl: hijacked_none[U8](),
     slots: hijacked_none[T](),
     count: 0u64,
     deleted: 0u64,
@@ -69,8 +72,8 @@ routine SecureSet[T].$create(key: SecureHashKey, capacity: U64) -> SecureSet[T]
     k1: key.k1
   )
   danger!
-    set.ctrl = Hijacked[Byte](rf_allocate_dynamic_uninit(cap))
-    rf_set_bytes_at(dest: ptrtoint[Byte, Address](set.ctrl), value: 128_u8, size: cap)
+    set.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(cap))
+    rf_set_bytes_at(dest: pointer_to_int[U8, Address](set.ctrl), value: CTRL_EMPTY, size: cap)
     set.slots = Hijacked[T](rf_allocate_dynamic_uninit(T.data_size() * cap))
   return set
 
@@ -78,9 +81,9 @@ routine SecureSet[T].$create(key: SecureHashKey, capacity: U64) -> SecureSet[T]
 routine SecureSet[T].$destroy()
   danger!
     if not me.ctrl.is_none()
-      rf_invalidate(ptrtoint[Byte, Address](me.ctrl))
+      rf_invalidate(pointer_to_int[U8, Address](me.ctrl))
     if not me.slots.is_none()
-      rf_invalidate(ptrtoint[T, Address](me.slots))
+      rf_invalidate(pointer_to_int[T, Address](me.slots))
   return
 
 # ============================================================================
@@ -89,9 +92,9 @@ routine SecureSet[T].$destroy()
 
 ### Returns the H2 fingerprint: 7 low bits of hash, always in range 0-127.
 ### :param hash: The raw hash.
-### :returns: The resulting `Byte` value.
-routine SecureSet[T].h2(hash: U64) -> Byte
-  return (hash & 127u64).Byte()
+### :returns: The resulting `U8` value.
+routine SecureSet[T].h2(hash: U64) -> U8
+  return U8(hash & U64(CTRL_H2_MASK))
 
 ### Returns the H1 slot position: upper bits of hash used for indexing.
 ### :param hash: The raw hash.
@@ -110,11 +113,11 @@ routine SecureSet[T].find_slot(value: T) -> U64
   var i = me.h1(h) & mask
   danger!
     loop
-      var c = me.ctrl.offset(Byte.data_size() * i).read()
-      if c == 128_u8
+      var c = me.ctrl.offset(U8.data_size() * i).extract()
+      if c == CTRL_EMPTY
         return me.capacity
       if c == target
-        if me.slots.offset(T.data_size() * i).read() == value
+        if me.slots.offset(T.data_size() * i).extract() == value
           return i
       i = (i +% 1u64) & mask
   return me.capacity
@@ -129,14 +132,14 @@ routine SecureSet[T].insert_raw(h: U64, val: T)
   var i = me.h1(h) & mask
   danger!
     loop
-      var c = me.ctrl.offset(Byte.data_size() * i).read()
-      if c == 128_u8
-        me.ctrl.offset(Byte.data_size() * i).write(h2_val)
-        me.slots.offset(T.data_size() * i).write(val)
+      var c = me.ctrl.offset(U8.data_size() * i).extract()
+      if c == CTRL_EMPTY
+        me.ctrl.offset(U8.data_size() * i).inject(h2_val)
+        me.slots.offset(T.data_size() * i).inject(val)
         return
-      if c == 254_u8
-        me.ctrl.offset(Byte.data_size() * i).write(h2_val)
-        me.slots.offset(T.data_size() * i).write(val)
+      if c == CTRL_DELETED
+        me.ctrl.offset(U8.data_size() * i).inject(h2_val)
+        me.slots.offset(T.data_size() * i).inject(val)
         me.deleted = me.deleted -% 1u64
         return
       i = (i +% 1u64) & mask
@@ -155,8 +158,8 @@ routine SecureSet[T].rehash()
   var new_cap = old_cap *% 2u64
 
   danger!
-    me.ctrl = Hijacked[Byte](rf_allocate_dynamic_uninit(new_cap))
-    rf_set_bytes_at(dest: ptrtoint[Byte, Address](me.ctrl), value: 128_u8, size: new_cap)
+    me.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(new_cap))
+    rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: new_cap)
     me.slots = Hijacked[T](rf_allocate_dynamic_uninit(T.data_size() * new_cap))
   me.capacity = new_cap
   me.count = 0u64
@@ -165,18 +168,18 @@ routine SecureSet[T].rehash()
   var i = 0u64
   while i < old_cap
     danger!
-      var c = old_ctrl.offset(Byte.data_size() * i).read()
-      if c != 128_u8 and c != 254_u8
-        var val = old_slots.offset(T.data_size() * i).read()
+      var c = old_ctrl.offset(U8.data_size() * i).extract()
+      if c != CTRL_EMPTY and c != CTRL_DELETED
+        var val = old_slots.offset(T.data_size() * i).extract()
         me.insert_raw(h: val.$secure_hash(k0: me.k0, k1: me.k1), val: val)
         me.count = me.count +% 1u64
     i = i +% 1u64
 
   danger!
     if not old_ctrl.is_none()
-      rf_invalidate(ptrtoint[Byte, Address](old_ctrl))
+      rf_invalidate(pointer_to_int[U8, Address](old_ctrl))
     if not old_slots.is_none()
-      rf_invalidate(ptrtoint[T, Address](old_slots))
+      rf_invalidate(pointer_to_int[T, Address](old_slots))
   return
 
 # ============================================================================
@@ -196,7 +199,7 @@ routine SecureSet[T].is_empty() -> Bool
 ### Removes all elements, keeping current capacity.
 routine SecureSet[T].clear()
   danger!
-    rf_set_bytes_at(dest: ptrtoint[Byte, Address](me.ctrl), value: 128_u8, size: me.capacity)
+    rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: me.capacity)
   me.count = 0u64
   me.deleted = 0u64
   return
@@ -228,7 +231,7 @@ routine SecureSet[T].remove(value: T) -> Bool
   if slot >= me.capacity
     return false
   danger!
-    me.ctrl.offset(Byte.data_size() * slot).write(254_u8)
+    me.ctrl.offset(U8.data_size() * slot).inject(CTRL_DELETED)
   me.count = me.count -% 1u64
   me.deleted = me.deleted +% 1u64
   return true
@@ -250,7 +253,7 @@ routine SecureSet[T].$iter() -> SecureSetIterator[T]
 ### Defines the entity `SecureSetIterator`.
 ### :typeparam T: The element type.
 entity SecureSetIterator[T] obeys Iterator[T]
-  secret ctrl: Hijacked[Byte]
+  secret ctrl: Hijacked[U8]
   secret slots: Hijacked[T]
   secret capacity: U64
   secret slot: U64
@@ -261,9 +264,9 @@ routine SecureSetIterator[T].$next!() -> T
     while me.slot < me.capacity
       var s = me.slot
       me.slot = me.slot + 1u64
-      var c = me.ctrl.offset(Byte.data_size() * s).read()
-      if c != 128_u8 and c != 254_u8
-        return me.slots.offset(T.data_size() * s).read()
+      var c = me.ctrl.offset(U8.data_size() * s).extract()
+      if c != CTRL_EMPTY and c != CTRL_DELETED
+        return me.slots.offset(T.data_size() * s).extract()
   absent
 
 # ============================================================================

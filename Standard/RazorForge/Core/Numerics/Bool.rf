@@ -9,7 +9,7 @@ record Bool obeys Equatable, ConstCompatible
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine Bool.$eq(you: Bool) -> Bool
-  return icmp_eq[Bool](me, you)
+  return int_eq[Bool](me, you)
 
 # ============================================================================
 # Type Conversions
@@ -65,11 +65,11 @@ routine Bool.$represent() -> Text
 ### Returns a hash of this value.
 ### :returns: The resulting `U64` value.
 routine Bool.$hash() -> U64
-  return __hash_leaf(v: zext[Bool, U64](me))
+  return __hash_leaf(v: zero_extend[Bool, U64](me))
 
 ### Returns a keyed hash of this value using SipHash-2-4.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
 routine Bool.$secure_hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u64(v: zext[Bool, U64](me), k0: k0, k1: k1)
+  return __secure_hash_u64(v: zero_extend[Bool, U64](me), k0: k0, k1: k1)

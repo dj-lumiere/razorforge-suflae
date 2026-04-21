@@ -58,23 +58,23 @@ routine CWStr.$create(from_codepoints: Text) -> CWStr
     var codepoint = from_codepoints[i].codepoint()
 
     if codepoint <= 0xFFFFu32
-      Hijacked[U16](buffer.get_address() +% Address(write_pos * 2u64)).write(U16!(codepoint))
+      Hijacked[U16](buffer.get_address() +% Address(write_pos * 2u64)).inject(U16!(codepoint))
       write_pos = write_pos +% 1u64
     elseif codepoint <= 0x10FFFFu32
       var adjusted = codepoint - 0x10000u32
       var high = U16!((adjusted >> 10u32) + 0xD800u32)
       var low = U16!((adjusted & 0x3FFu32) + 0xDC00u32)
-      Hijacked[U16](buffer.get_address() +% Address(write_pos * 2u64)).write(high)
-      Hijacked[U16](buffer.get_address() +% Address((write_pos +% 1u64) * 2u64)).write(low)
+      Hijacked[U16](buffer.get_address() +% Address(write_pos * 2u64)).inject(high)
+      Hijacked[U16](buffer.get_address() +% Address((write_pos +% 1u64) * 2u64)).inject(low)
       write_pos = write_pos +% 2u64
     else
-      Hijacked[U16](buffer.get_address() +% Address(write_pos * 2u64)).write(0xFFFDu16)
+      Hijacked[U16](buffer.get_address() +% Address(write_pos * 2u64)).inject(0xFFFDu16)
       write_pos = write_pos +% 1u64
 
     i = i +% 1u64
-  Hijacked[U16](buffer.get_address() +% Address(write_pos * 2u64)).write(0u16)
+  Hijacked[U16](buffer.get_address() +% Address(write_pos * 2u64)).inject(0u16)
 
-  return CWStr(ptr: buffer.obtain_as[CWChar]())
+  return CWStr(ptr: buffer.recast_as[CWChar]())
 
 ### Creates a new instance.
 ### :param from_units: The `from_units` value.
@@ -86,11 +86,11 @@ routine CWStr.$create(from_units: List[U16]) -> CWStr
 
   var i: U64 = 0u64
   while i < len
-    Hijacked[U16](buffer.get_address() +% Address(i * 2u64)).write(from_units[i])
+    Hijacked[U16](buffer.get_address() +% Address(i * 2u64)).inject(from_units[i])
     i = i +% 1u64
-  Hijacked[U16](buffer.get_address() +% Address(len * 2u64)).write(0u16)
+  Hijacked[U16](buffer.get_address() +% Address(len * 2u64)).inject(0u16)
 
-  return CWStr(ptr: buffer.obtain_as[CWChar]())
+  return CWStr(ptr: buffer.recast_as[CWChar]())
 
 ### Returns the number of stored values.
 ### :returns: The resulting `U64` value.
@@ -114,7 +114,7 @@ routine CWStr.is_empty() -> Bool
 routine CWStr.$getitem!(index: U64) -> U16
   if index >= me.count()
     throw IndexOutOfBoundsError()
-  return Hijacked[U16](me.ptr.get_address() +% Address(index * 2u64)).read()
+  return Hijacked[U16](me.ptr.get_address() +% Address(index * 2u64)).extract()
 
 ### Returns whether both values are equal.
 ### :param other: The other value to compare against.
@@ -140,7 +140,7 @@ routine CWStr.copy() -> CWStr
   var byte_len = (len + 1u64) * 2u64
   var buffer = Hijacked[U8](rf_allocate_dynamic(byte_len))
   rf_cwstr_copy(buffer.get_address(), me.ptr.get_address())
-  return CWStr(ptr: buffer.obtain_as[CWChar]())
+  return CWStr(ptr: buffer.recast_as[CWChar]())
 
 ### Converts this value to units.
 ### :returns: The resulting `List[U16]` value.
@@ -151,7 +151,7 @@ routine CWStr.to_units() -> List[U16]
   loop
     if i >= len
       break
-    list.add_last(Hijacked[U16](me.ptr.get_address() +% Address(i * 2u64)).read())
+    list.add_last(Hijacked[U16](me.ptr.get_address() +% Address(i * 2u64)).extract())
     i = i + 1u64
   return list
 

@@ -26,61 +26,61 @@ preset F16_SQRT_2: F16 = 1.414063_f16
 ### :param from: The source value to convert.
 ### :returns: The resulting `F16` value.
 routine F16.$create(from: S8) -> F16
-  return sitofp[S8, F16](from)
+  return signed_to_float[S8, F16](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F16` value.
 routine F16.$create(from: S16) -> F16
-  return sitofp[S16, F16](from)
+  return signed_to_float[S16, F16](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F16` value.
 routine F16.$create(from: S32) -> F16
-  return sitofp[S32, F16](from)
+  return signed_to_float[S32, F16](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F16` value.
 routine F16.$create(from: S64) -> F16
-  return sitofp[S64, F16](from)
+  return signed_to_float[S64, F16](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F16` value.
 routine F16.$create(from: S128) -> F16
-  return sitofp[S128, F16](from)
+  return signed_to_float[S128, F16](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F16` value.
 routine F16.$create(from: U8) -> F16
-  return uitofp[U8, F16](from)
+  return unsigned_to_float[U8, F16](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F16` value.
 routine F16.$create(from: U16) -> F16
-  return uitofp[U16, F16](from)
+  return unsigned_to_float[U16, F16](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F16` value.
 routine F16.$create(from: U32) -> F16
-  return uitofp[U32, F16](from)
+  return unsigned_to_float[U32, F16](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F16` value.
 routine F16.$create(from: U64) -> F16
-  return uitofp[U64, F16](from)
+  return unsigned_to_float[U64, F16](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F16` value.
 routine F16.$create(from: U128) -> F16
-  return uitofp[U128, F16](from)
+  return unsigned_to_float[U128, F16](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
@@ -92,40 +92,40 @@ routine F16.$create(from: F16) -> F16
 ### :param from: The source value to convert.
 ### :returns: The resulting `F16` value.
 routine F16.$create(from: F32) -> F16
-  return fptrunc[F32, F16](from)
+  return float_narrow[F32, F16](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F16` value.
 routine F16.$create(from: F64) -> F16
-  return fptrunc[F64, F16](from)
+  return float_narrow[F64, F16](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F16` value.
 routine F16.$create(from: F128) -> F16
-  return fptrunc[F128, F16](from)
+  return float_narrow[F128, F16](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F16` value.
 routine F16.$create(from: D32) -> F16
   var f32_val = rf_d32_to_f32(from.to_bits())
-  return fptrunc[F32, F16](f32_val)
+  return float_narrow[F32, F16](f32_val)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F16` value.
 routine F16.$create(from: D64) -> F16
   var f32_val = rf_d64_to_f32(from.to_bits())
-  return fptrunc[F32, F16](f32_val)
+  return float_narrow[F32, F16](f32_val)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F16` value.
 routine F16.$create(from: D128) -> F16
   var f32_val = rf_d128_to_f32(from.low_bits(), from.high_bits())
-  return fptrunc[F32, F16](f32_val)
+  return float_narrow[F32, F16](f32_val)
 
 # ============================================================================
 # Arithmetic Operations (IEEE 754 semantics)
@@ -135,7 +135,7 @@ routine F16.$create(from: D128) -> F16
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F16` value.
 routine F16.$add!(you: F16) -> F16
-  var result = fadd[F16](me, you)
+  var result = float_add[F16](me, you)
   if not result.is_finite()
     throw NumericOverflowError(description: f"F16 addition produced non-finite result: {me} + {you}")
   return result
@@ -144,7 +144,7 @@ routine F16.$add!(you: F16) -> F16
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F16` value.
 routine F16.$sub!(you: F16) -> F16
-  var result = fsub[F16](me, you)
+  var result = float_sub[F16](me, you)
   if not result.is_finite()
     throw NumericOverflowError(description: f"F16 subtraction produced non-finite result: {me} - {you}")
   return result
@@ -153,7 +153,7 @@ routine F16.$sub!(you: F16) -> F16
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F16` value.
 routine F16.$mul!(you: F16) -> F16
-  var result = fmul[F16](me, you)
+  var result = float_mul[F16](me, you)
   if not result.is_finite()
     throw NumericOverflowError(description: f"F16 multiplication produced non-finite result: {me} * {you}")
   return result
@@ -162,7 +162,7 @@ routine F16.$mul!(you: F16) -> F16
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F16` value.
 routine F16.$truediv!(you: F16) -> F16
-  var result = fdiv[F16](me, you)
+  var result = float_div[F16](me, you)
   if not result.is_finite()
     throw NumericOverflowError(description: f"F16 division produced non-finite result: {me} / {you}")
   return result
@@ -170,13 +170,13 @@ routine F16.$truediv!(you: F16) -> F16
 ### Returns the negated value.
 ### :returns: The resulting `F16` value.
 routine F16.$neg() -> F16
-  return fneg[F16](me)
+  return float_neg[F16](me)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F16` value.
 routine F16.$truediv_unchecked(you: F16) -> F16
-  return fdiv_fast[F16](me, you)
+  return float_div_fast[F16](me, you)
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)
@@ -186,15 +186,15 @@ routine F16.$truediv_unchecked(you: F16) -> F16
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine F16.$eq(you: F16) -> Bool
-  return fcmp_oeq[F16](me, you)
+  return float_eq[F16](me, you)
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine F16.$cmp(you: F16) -> ComparisonSign
-  if fcmp_olt[F16](me, you)
+  if float_lt[F16](me, you)
     return ME_SMALL
-  if fcmp_ogt[F16](me, you)
+  if float_gt[F16](me, you)
     return ME_LARGE
   return SAME
 
@@ -210,7 +210,7 @@ routine F16.sqrt() -> F16
 ### Returns the absolute value.
 ### :returns: The resulting `F16` value.
 routine F16.abs() -> F16
-  return fabs[F16](me)
+  return float_abs[F16](me)
 
 ### Returns the result of `floor`.
 ### :returns: The resulting `F16` value.
@@ -227,10 +227,10 @@ routine F16.ceil() -> F16
 routine F16.round() -> F16
   return round[F16](me)
 
-### Returns the result of `trunc`.
+### Returns the result of `int_truncate`.
 ### :returns: The resulting `F16` value.
-routine F16.trunc() -> F16
-  return trunc_float[F16](me)
+routine F16.int_truncate() -> F16
+  return float_truncate[F16](me)
 
 ### Returns the result of `copysign`.
 ### :param sign: The `sign` value.
@@ -312,13 +312,13 @@ routine F16.signum() -> F16
 ### Converts this value to bits.
 ### :returns: The resulting `U16` value.
 routine F16.to_bits() -> U16
-  return bitcast[F16, U16](me)
+  return reinterpret_bits[F16, U16](me)
 
 ### Creates a value from bits.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `F16` value.
 routine F16.from_bits(bits: U16) -> F16
-  return bitcast[U16, F16](bits)
+  return reinterpret_bits[U16, F16](bits)
 
 # ============================================================================
 # Text Representation and Parsing
@@ -403,7 +403,7 @@ routine F16.$create!(from_text: Text) -> F16
 ### Returns a hash of this value.
 ### :returns: The resulting `U64` value.
 routine F16.$hash() -> U64
-  return __hash_leaf(v: zext[U16, U64](bitcast[F16, U16](me)))
+  return __hash_leaf(v: zero_extend[U16, U64](reinterpret_bits[F16, U16](me)))
 
 # ============================================================================
 # Byte Representation
@@ -412,19 +412,19 @@ routine F16.$hash() -> U64
 ### Returns the raw bytes of this value in little-endian order.
 ### :returns: The resulting `ValueList[Byte, 2]` value.
 routine F16.to_bytes_le() -> ValueList[Byte, 2]
-  var raw = bitcast[F16, U16](me)
+  var raw = reinterpret_bits[F16, U16](me)
   var result = ValueList[Byte, 2]()
-  result = set_byte_at(result, 0_u64, trunc[U16, U8](raw))
-  result = set_byte_at(result, 1_u64, trunc[U16, U8](lshr[U16](raw, 8_u16)))
+  result = set_byte_at(result, 0_u64, int_truncate[U16, U8](raw))
+  result = set_byte_at(result, 1_u64, int_truncate[U16, U8](lshr[U16](raw, 8_u16)))
   return result
 
 ### Returns the raw bytes of this value in big-endian order.
 ### :returns: The resulting `ValueList[Byte, 2]` value.
 routine F16.to_bytes_be() -> ValueList[Byte, 2]
-  var raw = bswap[U16](bitcast[F16, U16](me))
+  var raw = bswap[U16](reinterpret_bits[F16, U16](me))
   var result = ValueList[Byte, 2]()
-  result = set_byte_at(result, 0_u64, trunc[U16, U8](raw))
-  result = set_byte_at(result, 1_u64, trunc[U16, U8](lshr[U16](raw, 8_u16)))
+  result = set_byte_at(result, 0_u64, int_truncate[U16, U8](raw))
+  result = set_byte_at(result, 1_u64, int_truncate[U16, U8](lshr[U16](raw, 8_u16)))
   return result
 
 ### Returns a keyed hash of this value using SipHash-2-4.
@@ -432,4 +432,4 @@ routine F16.to_bytes_be() -> ValueList[Byte, 2]
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
 routine F16.$secure_hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u64(v: zext[U16, U64](bitcast[F16, U16](me)), k0: k0, k1: k1)
+  return __secure_hash_u64(v: zero_extend[U16, U64](reinterpret_bits[F16, U16](me)), k0: k0, k1: k1)

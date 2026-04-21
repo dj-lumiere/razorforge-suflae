@@ -15,13 +15,14 @@ needs P obeys LockPolicy
 # Construction
 # ============================================================================
 
-### Wraps an exclusively owned entity in a thread-safe reference-counted {Shared[T, P]}.
+### Wraps this entity in a thread-safe reference-counted {Shared[T, P]}.
 ### Ownership transfers to the RC system; the original binding is invalidated.
 ### :returns: The resulting `Shared[T, P]` value.
-dangerous routine Owned[T].share[P]() -> Shared[T, P]
+routine T.share[P]() -> Shared[T, P]
+needs T is EntityType
 needs P obeys LockPolicy
   danger!
-    var ctrl = ShareController[T, P](data: steal me).hijack()
+    var ctrl = ShareController[T, P](data: me.hijack()).hijack()
     return Shared[T, P](ctrl)
 
 # ============================================================================
@@ -94,5 +95,5 @@ routine Shared[T, P].$diagnose() -> Text
     var arc = ctrl.strong_count()
     var weak = ctrl.weak_count()
     var data_addr = ctrl.borrow_data().get_address()
-    var lock_state = ctrl.borrow_lock().read().state()
+    var lock_state = ctrl.borrow_lock().extract().state()
     return me.type_name() + "(holding: " + arc.$represent() + ", observing: " + weak.$represent() + ", state: " + lock_state.$represent() + ", data_addr: " + data_addr.$represent() + ")"

@@ -64,11 +64,11 @@ routine Inspected[T].$exit()
 @readonly
 routine Inspected[T].$represent() -> Text
   danger!
-    return me.ptr.read().$represent()
+    return me.ptr.extract().$represent()
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Inspected[T].$diagnose() -> Text
   danger!
-    return me.type_name() + "(state: " + READING.$represent() + ", " + me.ptr.read().$diagnose() + ")"
+    return me.type_name() + "(state: " + READING.$represent() + ", " + me.ptr.extract().$diagnose() + ")"

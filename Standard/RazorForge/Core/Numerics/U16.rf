@@ -23,7 +23,7 @@ preset U16_ONE: U16 = 1_u16
 routine U16.$create!(from: S8) -> U16
   if from < 0_s8
     throw IntegerOverflowError()
-  return sext[S8, U16](from)
+  return sign_extend[S8, U16](from)
 
 ### Implements the wired routine behavior for this value.
 ### :param from: The source value to convert.
@@ -32,7 +32,7 @@ routine U16.$create!(from: S8) -> U16
 routine U16.$create!(from: S16) -> U16
   if from < 0_s16
     throw IntegerOverflowError()
-  return bitcast[S16, U16](from)
+  return reinterpret_bits[S16, U16](from)
 
 ### Implements the wired routine behavior for this value.
 ### :param from: The source value to convert.
@@ -41,7 +41,7 @@ routine U16.$create!(from: S16) -> U16
 routine U16.$create!(from: S32) -> U16
   if not (0_s32 <= from <= 65535_s32)
     throw IntegerOverflowError()
-  return trunc[S32, U16](from)
+  return int_truncate[S32, U16](from)
 
 ### Implements the wired routine behavior for this value.
 ### :param from: The source value to convert.
@@ -50,7 +50,7 @@ routine U16.$create!(from: S32) -> U16
 routine U16.$create!(from: S64) -> U16
   if not (0_s64 <= from <= 65535_s64)
     throw IntegerOverflowError()
-  return trunc[S64, U16](from)
+  return int_truncate[S64, U16](from)
 
 ### Implements the wired routine behavior for this value.
 ### :param from: The source value to convert.
@@ -59,13 +59,13 @@ routine U16.$create!(from: S64) -> U16
 routine U16.$create!(from: S128) -> U16
   if not (0_s128 <= from <= 65535_s128)
     throw IntegerOverflowError()
-  return trunc[S128, U16](from)
+  return int_truncate[S128, U16](from)
 
 ### Implements the wired routine behavior for this value.
 ### :param from: The source value to convert.
 ### :returns: The resulting `U16` value.
 routine U16.$create!(from: U8) -> U16
-  return zext[U8, U16](from)
+  return zero_extend[U8, U16](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
@@ -80,7 +80,7 @@ routine U16.$create(from: U16) -> U16
 routine U16.$create!(from: U32) -> U16
   if from > 65535_u32
     throw IntegerOverflowError()
-  return trunc[U32, U16](from)
+  return int_truncate[U32, U16](from)
 
 ### Implements the wired routine behavior for this value.
 ### :param from: The source value to convert.
@@ -89,7 +89,7 @@ routine U16.$create!(from: U32) -> U16
 routine U16.$create!(from: U64) -> U16
   if from > 65535_u64
     throw IntegerOverflowError()
-  return trunc[U64, U16](from)
+  return int_truncate[U64, U16](from)
 
 ### Implements the wired routine behavior for this value.
 ### :param from: The source value to convert.
@@ -98,7 +98,7 @@ routine U16.$create!(from: U64) -> U16
 routine U16.$create!(from: U128) -> U16
   if from > 65535_u128
     throw IntegerOverflowError()
-  return trunc[U128, U16](from)
+  return int_truncate[U128, U16](from)
 
 ### Implements the wired routine behavior for this value.
 ### :param from: The source value to convert.
@@ -150,19 +150,19 @@ routine U16.$create!(from: D128) -> U16
 ### :param you: The other value to compare against.
 ### :returns: The resulting `(U16, Bool)` value.
 routine U16.add_with_overflow(you: U16) -> (U16, Bool)
-  return uadd_with_overflow[U16](me, you)
+  return unsigned_add_checked[U16](me, you)
 
 ### Returns the difference and whether it overflowed.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `(U16, Bool)` value.
 routine U16.sub_with_overflow(you: U16) -> (U16, Bool)
-  return usub_with_overflow[U16](me, you)
+  return unsigned_sub_checked[U16](me, you)
 
 ### Returns the product and whether it overflowed.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `(U16, Bool)` value.
 routine U16.mul_with_overflow(you: U16) -> (U16, Bool)
-  return umul_with_overflow[U16](me, you)
+  return unsigned_mul_checked[U16](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
@@ -204,13 +204,13 @@ routine U16.$mul(you: U16) -> U16
 routine U16.$floordiv!(you: U16) -> U16
   if you == 0
     throw DivisionByZeroError()
-  return udiv[U16](me, you)
+  return unsigned_div[U16](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U16` value.
 routine U16.$mod!(you: U16) -> U16
-  return urem[U16](me, you)
+  return unsigned_rem[U16](me, you)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -242,31 +242,31 @@ routine U16.$mul_wrap(you: U16) -> U16
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U16` value.
 routine U16.$add_unchecked(you: U16) -> U16
-  return add_nuw[U16](me, you)
+  return unsigned_add_exact[U16](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U16` value.
 routine U16.$sub_unchecked(you: U16) -> U16
-  return sub_nuw[U16](me, you)
+  return unsigned_sub_exact[U16](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U16` value.
 routine U16.$mul_unchecked(you: U16) -> U16
-  return mul_nuw[U16](me, you)
+  return unsigned_mul_exact[U16](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U16` value.
 routine U16.$floordiv_unchecked(you: U16) -> U16
-  return udiv[U16](me, you)
+  return unsigned_div[U16](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U16` value.
 routine U16.$mod_unchecked(you: U16) -> U16
-  return urem[U16](me, you)
+  return unsigned_rem[U16](me, you)
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
@@ -276,22 +276,22 @@ routine U16.$mod_unchecked(you: U16) -> U16
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U16` value.
 routine U16.$add_clamp(you: U16) -> U16
-  return uadd_sat[U16](me, you)
+  return unsigned_add_sat[U16](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U16` value.
 routine U16.$sub_clamp(you: U16) -> U16
-  return usub_sat[U16](me, you)
+  return unsigned_sub_sat[U16](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U16` value.
 routine U16.$mul_clamp(you: U16) -> U16
-  var wide = mul[U32](zext[U16, U32](me), zext[U16, U32](you))
-  if icmp_ugt[U32](wide, 65535_u32)
+  var wide = mul[U32](zero_extend[U16, U32](me), zero_extend[U16, U32](you))
+  if unsigned_gt[U32](wide, 65535_u32)
     return U16_MAX
-  return trunc[U32, U16](wide)
+  return int_truncate[U32, U16](wide)
 
 # ============================================================================
 # Power Operations (**)
@@ -385,12 +385,12 @@ routine U16.$bitor(you: U16) -> U16
 ### :param you: The other value to compare against.
 ### :returns: The resulting `U16` value.
 routine U16.$bitxor(you: U16) -> U16
-  return xor[U16](me, you)
+  return bit_xor[U16](me, you)
 
 ### Implements the wired routine behavior for this value.
 ### :returns: The resulting `U16` value.
 routine U16.$bitnot() -> U16
-  return xor[U16](me, -1)
+  return bit_xor[U16](me, -1)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)
@@ -401,25 +401,25 @@ routine U16.$bitnot() -> U16
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U16` value.
 routine U16.$ashl(bits: U32) -> U16
-  return shl[U16](me, U16(bits))
+  return shift_left[U16](me, U16(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U16` value.
-routine U16.$ashr(bits: U32) -> U16
-  return lshr[U16](me, U16(bits))
+routine U16.$shift_right_signed(bits: U32) -> U16
+  return shift_right_unsigned[U16](me, U16(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U16` value.
 routine U16.$lshl(bits: U32) -> U16
-  return shl[U16](me, U16(bits))
+  return shift_left[U16](me, U16(bits))
 
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U16` value.
-routine U16.$lshr(bits: U32) -> U16
-  return lshr[U16](me, U16(bits))
+routine U16.$shift_right_unsigned(bits: U32) -> U16
+  return shift_right_unsigned[U16](me, U16(bits))
 
 # ============================================================================
 # Comparison Operations
@@ -429,15 +429,15 @@ routine U16.$lshr(bits: U32) -> U16
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine U16.$eq(you: U16) -> Bool
-  return icmp_eq[U16](me, you)
+  return int_eq[U16](me, you)
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine U16.$cmp(you: U16) -> ComparisonSign
-  if icmp_ult[U16](me, you)
+  if unsigned_lt[U16](me, you)
     return ME_SMALL
-  if icmp_ugt[U16](me, you)
+  if unsigned_gt[U16](me, you)
     return ME_LARGE
   return SAME
 
@@ -471,7 +471,7 @@ routine U16.clamp(min_val: U16, max_val: U16) -> U16
 ### Returns the number of stored values.
 ### :returns: The resulting `U16` value.
 routine U16.count_ones() -> U16
-  return ctpop[U16](me)
+  return count_ones[U16](me)
 
 ### Returns the number of stored values.
 ### :returns: The resulting `U16` value.
@@ -481,12 +481,12 @@ routine U16.count_zeros() -> U16
 ### Returns the result of `leading zeros`.
 ### :returns: The resulting `U16` value.
 routine U16.leading_zeros() -> U16
-  return ctlz[U16](me)
+  return leading_zeros[U16](me)
 
 ### Returns the result of `trailing zeros`.
 ### :returns: The resulting `U16` value.
 routine U16.trailing_zeros() -> U16
-  return cttz[U16](me)
+  return trailing_zeros[U16](me)
 
 ### Returns the result of `leading ones`.
 ### :returns: The resulting `U16` value.
@@ -501,12 +501,12 @@ routine U16.trailing_ones() -> U16
 ### Returns the result of `reverse bits`.
 ### :returns: The resulting `U16` value.
 routine U16.reverse_bits() -> U16
-  return bitreverse[U16](me)
+  return reverse_bits[U16](me)
 
 ### Returns the result of `swap bytes`.
 ### :returns: The resulting `U16` value.
 routine U16.swap_bytes() -> U16
-  return bswap[U16](me)
+  return byte_swap[U16](me)
 
 ### Returns true if this value is power of two.
 ### :returns: The resulting `Bool` value.
@@ -526,7 +526,7 @@ routine U16.is_zero() -> Bool
 ### :returns: The resulting `Bool` value.
 routine U16.is_even() -> Bool
   var result = bit_and[U16](me, 1_u16)
-  return icmp_eq[U16](result, 0_u16)
+  return int_eq[U16](result, 0_u16)
 
 ### Returns true if this value is odd.
 ### :returns: The resulting `Bool` value.
@@ -571,11 +571,11 @@ routine U16.$create!(from_text: Text) -> U16
 ### Returns a hash of this value.
 ### :returns: The resulting `U64` value.
 routine U16.$hash() -> U64
-  return __hash_leaf(v: zext[U16, U64](me))
+  return __hash_leaf(v: zero_extend[U16, U64](me))
 
 ### Returns a keyed hash of this value using SipHash-2-4.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
 routine U16.$secure_hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u64(v: zext[U16, U64](me), k0: k0, k1: k1)
+  return __secure_hash_u64(v: zero_extend[U16, U64](me), k0: k0, k1: k1)

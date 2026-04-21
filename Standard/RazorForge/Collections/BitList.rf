@@ -86,7 +86,7 @@ routine BitList.get_bit_internal(index: U64) -> Bool
   var word_idx = index >> 6u32
   var bit_off = U8(index & 63u64)
   var ptr = Hijacked[U64](me.data.get_address() +% Address(word_idx *% 8u64))
-  var word_val = ptr.read()
+  var word_val = ptr.extract()
   return (word_val & (1u64 << bit_off)) != 0u64
 
 ### Sets the bit internal component.
@@ -99,7 +99,7 @@ routine BitList.set_bit_internal(index: U64, value: Bool)
   var word_ptr = Hijacked[U64](me.data.get_address() +% Address(word_idx *% 8u64))
   var mask = 1u64 << bit_off
   var set_mask = if value then mask else 0u64
-  word_ptr.write((word_ptr.read() & ~mask) | set_mask)
+  word_ptr.inject((word_ptr.extract() & ~mask) | set_mask)
   return
 
 # ============================================================================
@@ -144,9 +144,9 @@ routine BitList.add_last(value: Bool)
   if value
     set_mask = mask
   if bit_off == 0u8
-    word_ptr.write(set_mask)
+    word_ptr.inject(set_mask)
   else
-    word_ptr.write((word_ptr.read() & ~mask) | set_mask)
+    word_ptr.inject((word_ptr.extract() & ~mask) | set_mask)
   me.count = me.count +% 1u64
   return
 
@@ -271,8 +271,8 @@ routine BitList.flip_all()
   var i = 0u64
   while i < word_count
     var word_ptr = Hijacked[U64](me.data.get_address() +% Address(i *% 8u64))
-    var word_val = word_ptr.read()
-    word_ptr.write(~word_val)
+    var word_val = word_ptr.extract()
+    word_ptr.inject(~word_val)
     i = i +% 1u64
   return
 
@@ -411,7 +411,7 @@ routine BitListIterator.$next!() -> Bool
     var word_idx = me.index >> 6u32
     var bit_idx = U8(me.index & 63u64)
     var ptr = Hijacked[U64](me.data.get_address() +% Address(word_idx *% 8u64))
-    var word_val = ptr.read()
+    var word_val = ptr.extract()
     var _result = (word_val >> bit_idx) & 1u64 != 0u64
   me.index = me.index + 1u64
   return _result
@@ -478,7 +478,7 @@ routine BitList.to_u8!() -> U8
   if me.count < 8u64
     absent
   danger!
-    var _result = U8(me.data.read() & 0xFFu64)
+    var _result = U8(me.data.extract() & 0xFFu64)
   return _result
 
 ### Converts this value to u16.
@@ -489,7 +489,7 @@ routine BitList.to_u16!() -> U16
   if me.count < 16u64
     absent
   danger!
-    var _result = U16(me.data.read() & 0xFFFFu64)
+    var _result = U16(me.data.extract() & 0xFFFFu64)
   return _result
 
 ### Converts this value to u32.
@@ -500,7 +500,7 @@ routine BitList.to_u32!() -> U32
   if me.count < 32u64
     absent
   danger!
-    var _result = U32(me.data.read() & 0xFFFFFFFFu64)
+    var _result = U32(me.data.extract() & 0xFFFFFFFFu64)
   return _result
 
 ### Converts this value to u64.
@@ -511,7 +511,7 @@ routine BitList.to_u64!() -> U64
   if me.count < 64u64
     absent
   danger!
-    var _result = me.data.read()
+    var _result = me.data.extract()
   return _result
 
 ### Creates a value from u8.

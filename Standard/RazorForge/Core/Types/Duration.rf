@@ -52,11 +52,11 @@ routine normalize_duration(seconds: S64, nanoseconds: S64) -> Duration
   var ns = nanoseconds
 
   if ns >= NS_PER_SECOND
-    s = s +% sdiv[S64](ns, NS_PER_SECOND)
-    ns = srem[S64](ns, NS_PER_SECOND)
+    s = s +% signed_div[S64](ns, NS_PER_SECOND)
+    ns = signed_rem[S64](ns, NS_PER_SECOND)
   elseif ns < 0_s64
     # For negative nanoseconds, borrow from seconds to keep nanoseconds non-negative
-    var borrow = sdiv[S64](0_s64 -% ns -% 1_s64, NS_PER_SECOND) +% 1_s64
+    var borrow = signed_div[S64](0_s64 -% ns -% 1_s64, NS_PER_SECOND) +% 1_s64
     s = s -% borrow
     ns = ns + borrow *% NS_PER_SECOND
 
@@ -88,16 +88,16 @@ routine Duration.from_nanoseconds(ns: S64) -> Duration
 ### :param us: The duration in microseconds.
 ### :returns: The resulting `Duration` value.
 routine Duration.from_microseconds(us: S64) -> Duration
-  var s = sdiv[S64](us, 1_000_000_s64)
-  var ns = srem[S64](us, 1_000_000_s64) *% NS_PER_MICROSECOND
+  var s = signed_div[S64](us, 1_000_000_s64)
+  var ns = signed_rem[S64](us, 1_000_000_s64) *% NS_PER_MICROSECOND
   return normalize_duration(s, ns)
 
 ### Creates a value from milliseconds.
 ### :param ms: The duration in milliseconds.
 ### :returns: The resulting `Duration` value.
 routine Duration.from_milliseconds(ms: S64) -> Duration
-  var s = sdiv[S64](ms, 1_000_s64)
-  var ns = srem[S64](ms, 1_000_s64) *% NS_PER_MILLISECOND
+  var s = signed_div[S64](ms, 1_000_s64)
+  var ns = signed_rem[S64](ms, 1_000_s64) *% NS_PER_MILLISECOND
   return normalize_duration(s, ns)
 
 ### Creates a value from seconds.
@@ -144,13 +144,13 @@ routine Duration.total_nanoseconds() -> S64
 ### :returns: The resulting `S64` value.
 @readonly
 routine Duration.total_microseconds() -> S64
-  return me.seconds *% 1_000_000_s64 +% sdiv[S64](S64(me.nanoseconds), NS_PER_MICROSECOND)
+  return me.seconds *% 1_000_000_s64 +% signed_div[S64](S64(me.nanoseconds), NS_PER_MICROSECOND)
 
 ### Returns the total duration in milliseconds.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Duration.total_milliseconds() -> S64
-  return me.seconds *% 1_000_s64 +% sdiv[S64](S64(me.nanoseconds), NS_PER_MILLISECOND)
+  return me.seconds *% 1_000_s64 +% signed_div[S64](S64(me.nanoseconds), NS_PER_MILLISECOND)
 
 ### Returns the total duration in seconds.
 ### :returns: The resulting `S64` value.
@@ -190,37 +190,37 @@ routine Duration.get_days() -> S64
 ### :returns: The resulting `S64` value.
 @readonly
 routine Duration.get_hours() -> S64
-  return sdiv[S64](srem[S64](me.seconds, SECONDS_PER_DAY), SECONDS_PER_HOUR)
+  return signed_div[S64](signed_rem[S64](me.seconds, SECONDS_PER_DAY), SECONDS_PER_HOUR)
 
 ### Returns the minutes component.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Duration.get_minutes() -> S64
-  return sdiv[S64](srem[S64](me.seconds, SECONDS_PER_HOUR), SECONDS_PER_MINUTE)
+  return signed_div[S64](signed_rem[S64](me.seconds, SECONDS_PER_HOUR), SECONDS_PER_MINUTE)
 
 ### Returns the seconds component.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Duration.get_seconds() -> S64
-  return srem[S64](me.seconds, SECONDS_PER_MINUTE)
+  return signed_rem[S64](me.seconds, SECONDS_PER_MINUTE)
 
 ### Returns the milliseconds component.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Duration.get_milliseconds() -> S64
-  return sdiv[S64](S64(me.nanoseconds), NS_PER_MILLISECOND)
+  return signed_div[S64](S64(me.nanoseconds), NS_PER_MILLISECOND)
 
 ### Returns the microseconds component.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Duration.get_microseconds() -> S64
-  return sdiv[S64](srem[S64](S64(me.nanoseconds), NS_PER_MILLISECOND), NS_PER_MICROSECOND)
+  return signed_div[S64](signed_rem[S64](S64(me.nanoseconds), NS_PER_MILLISECOND), NS_PER_MICROSECOND)
 
 ### Returns the nanoseconds component.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Duration.get_nanoseconds() -> S64
-  return srem[S64](S64(me.nanoseconds), NS_PER_MICROSECOND)
+  return signed_rem[S64](S64(me.nanoseconds), NS_PER_MICROSECOND)
 
 ### Returns the nanosecond remainder within the current second.
 ### :returns: The resulting `U32` value.
@@ -247,7 +247,7 @@ routine Duration.is_negative() -> Bool
 ### Returns the absolute value.
 ### :returns: The resulting `Duration` value.
 @readonly
-routine Duration.abs() -> Duration
+routine Duration.int_abs() -> Duration
   if me.seconds >= 0_s64
     return me
   return me.$neg()
@@ -309,7 +309,7 @@ routine Duration.$mul(factor: S64) -> Duration
 routine Duration.$floordiv(you: Duration) -> S64
   var me_ns = me.total_nanoseconds()
   var you_ns = you.total_nanoseconds()
-  return sdiv[S64](me_ns, you_ns)
+  return signed_div[S64](me_ns, you_ns)
 
 ### Returns the remainder after division.
 ### :param you: The other value to compare against.
@@ -318,7 +318,7 @@ routine Duration.$floordiv(you: Duration) -> S64
 routine Duration.$mod(you: Duration) -> Duration
   var me_ns = me.total_nanoseconds()
   var you_ns = you.total_nanoseconds()
-  return Duration.from_nanoseconds(srem[S64](me_ns, you_ns))
+  return Duration.from_nanoseconds(signed_rem[S64](me_ns, you_ns))
 
 ### Returns this duration divided by `divisor`.
 ### :param divisor: The divisor to apply.
@@ -326,7 +326,7 @@ routine Duration.$mod(you: Duration) -> Duration
 @readonly
 routine Duration.div_by(divisor: S64) -> Duration
   var total_ns = me.total_nanoseconds()
-  return Duration.from_nanoseconds(sdiv[S64](total_ns, divisor))
+  return Duration.from_nanoseconds(signed_div[S64](total_ns, divisor))
 
 ### Returns the quotient of this value and the other value.
 ### :param divisor: The divisor to apply.
@@ -371,7 +371,7 @@ routine Duration.$represent() -> Text
   if me.is_zero()
     return "0s"
 
-  var d = me.abs()
+  var d = me.int_abs()
   var parts = ""
 
   if me.is_negative()

@@ -176,7 +176,7 @@ routine SortedList[T].lower_bound(keys: List[T], value: T) -> U64
   var lo = 0u64
   var hi = keys.count()
   while lo < hi
-    var mid = lo +% udiv[U64](hi -% lo, 2u64)
+    var mid = lo +% unsigned_div[U64](hi -% lo, 2u64)
     if keys.get_raw(mid) < value
       lo = mid +% 1u64
     else
@@ -194,7 +194,7 @@ routine SortedList[T].upper_bound(keys: List[T], value: T) -> U64
   var lo = 0u64
   var hi = keys.count()
   while lo < hi
-    var mid = lo +% udiv[U64](hi -% lo, 2u64)
+    var mid = lo +% unsigned_div[U64](hi -% lo, 2u64)
     if keys.get_raw(mid) <= value
       # keys[mid] is <= value, so the first strictly-greater key is further right.
       lo = mid +% 1u64
@@ -273,7 +273,7 @@ routine SortedList[T].insert_non_full(node: BTreeListNode[T], value: T)
 @inline
 routine SortedList[T].split_child(parent_node: BTreeListNode[T], child_idx: U64)
   var child = parent_node.children.get_raw(child_idx)
-  var mid = udiv[U64](B_LIST -% 1u64, 2u64)
+  var mid = unsigned_div[U64](B_LIST -% 1u64, 2u64)
 
   # Create the right half node.
   var new_node = BTreeListNode[T](is_leaf: child.is_leaf)

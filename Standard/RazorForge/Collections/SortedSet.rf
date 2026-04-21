@@ -158,7 +158,7 @@ routine SortedSet[T].lower_bound(keys: List[T], value: T) -> U64
   # Invariant: all keys[0..lo) < value, all keys[hi..count) >= value.
   # We narrow [lo, hi) until lo == hi, which is the answer.
   while lo < hi
-    var mid = lo +% udiv[U64](hi -% lo, 2u64)
+    var mid = lo +% unsigned_div[U64](hi -% lo, 2u64)
     if keys.get_raw(mid) < value
       # keys[mid] is too small, so the answer is at least mid+1.
       lo = mid +% 1u64
@@ -265,7 +265,7 @@ routine SortedSet[T].insert_non_full(node: BTreeSetNode[T], value: T) -> Bool
 @inline
 routine SortedSet[T].split_child(parent_node: BTreeSetNode[T], child_idx: U64)
   var child = parent_node.children.get_raw(child_idx)
-  var mid = udiv[U64](B -% 1u64, 2u64)
+  var mid = unsigned_div[U64](B -% 1u64, 2u64)
 
   # Create the right half node.
   var new_node = BTreeSetNode[T](is_leaf: child.is_leaf)

@@ -15,14 +15,14 @@ needs P obeys LockPolicy
 ### Creates a new controller with one strong reference.
 ### :param data: The entity to manage; ownership transfers to this controller.
 ### :returns: The resulting `ShareController[T, P]` value.
-dangerous routine ShareController[T, P].$create(data: Owned[T]) -> ShareController[T, P]
+dangerous routine ShareController[T, P].$create(data: Hijacked[T]) -> ShareController[T, P]
   danger!
     var lock = P().hijack()
   return ShareController[T, P](
     strong_count: Atomic(1),
     weak_count: Atomic(0),
     lock: lock,
-    data: Hijacked[T](steal data)
+    data: data
   )
 
 routine ShareController[T, P].increase_strong_count()

@@ -12,12 +12,13 @@ needs T is EntityType
 # Construction
 # ============================================================================
 
-### Wraps an exclusively owned entity in a reference-counted {Retained[T]}.
+### Wraps this entity in a reference-counted {Retained[T]}.
 ### Ownership transfers to the RC system; the original binding is invalidated.
 ### :returns: The resulting `Retained[T]` value.
-dangerous routine Owned[T].retain() -> Retained[T]
+routine T.retain() -> Retained[T]
+needs T is EntityType
   danger!
-    var ctrl = RetainController[T](data: steal me).hijack()
+    var ctrl = RetainController[T](data: me.hijack()).hijack()
     return Retained[T](ctrl)
 
 # ============================================================================
@@ -80,7 +81,7 @@ routine Retained[T].weak_count() -> S32
 routine Retained[T].$represent() -> Text
   danger!
     var ctrl = Hijacked[RetainController[T]](me)
-    return ctrl.borrow_data().read().$represent()
+    return ctrl.borrow_data().extract().$represent()
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
@@ -91,4 +92,4 @@ routine Retained[T].$diagnose() -> Text
     var rc = ctrl.strong_count()
     var weak = ctrl.weak_count()
     var addr = ctrl.borrow_data().get_address()
-    return me.type_name() + "(holding: " + rc.$represent() + ", observing: " + weak.$represent() + ", addr: " + addr.$represent() + ", " + ctrl.borrow_data().read().$diagnose() + ")"
+    return me.type_name() + "(holding: " + rc.$represent() + ", observing: " + weak.$represent() + ", addr: " + addr.$represent() + ", " + ctrl.borrow_data().extract().$diagnose() + ")"

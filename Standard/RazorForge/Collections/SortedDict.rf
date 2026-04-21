@@ -104,7 +104,7 @@ routine SortedDict[K, V].lower_bound(keys: List[K], key: K) -> U64
   var lo = 0u64
   var hi = keys.count()
   while lo < hi
-    var mid = lo +% udiv[U64](hi -% lo, 2u64)
+    var mid = lo +% unsigned_div[U64](hi -% lo, 2u64)
     if keys.get_raw(mid) < key
       lo = mid +% 1u64
     else
@@ -235,7 +235,7 @@ routine SortedDict[K, V].insert_non_full(node: BTreeDictNode[K, V], key: K, valu
 @inline
 routine SortedDict[K, V].split_child(parent_node: BTreeDictNode[K, V], child_idx: U64)
   var child = parent_node.children.get_raw(child_idx)
-  var mid = udiv[U64](B_DICT -% 1u64, 2u64)
+  var mid = unsigned_div[U64](B_DICT -% 1u64, 2u64)
 
   var new_node = BTreeDictNode[K, V](is_leaf: child.is_leaf)
 

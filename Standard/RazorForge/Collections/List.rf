@@ -39,7 +39,7 @@ routine List[T].$create(capacity: U64) -> List[T]
 routine List[T].$destroy()
   if not me.data.is_none()
     danger!
-      rf_invalidate(ptrtoint[T, Address](me.data))
+      rf_invalidate(pointer_to_int[T, Address](me.data))
   return
 
 # Core operations
@@ -67,7 +67,7 @@ routine List[T].add_last(value: T)
     me.reserve(new_capacity)
 
   var byte_offset = T.data_size() * me.count
-  me.data.offset(byte_offset).write(value)
+  me.data.offset(byte_offset).inject(value)
   me.count = me.count +% 1u64
   return
 
@@ -80,7 +80,7 @@ routine List[T].remove_last!() -> T
 
   me.count = me.count - 1u64
   var byte_offset = T.data_size() * me.count
-  return me.data.offset(byte_offset).read()
+  return me.data.offset(byte_offset).extract()
 
 ### Adds a value using `add_first`.
 ### :param value: The value to use.
@@ -108,7 +108,7 @@ routine List[T].add_at!(index: U64, value: T)
       var dst_ptr = me.data.offset(elem_size * (index + 1u64))
       rf_copy_bytes_at(src_ptr.get_address(), dst_ptr.get_address(), elem_size * (me.count - index))
 
-  me.data.offset(T.data_size() * index).write(value)
+  me.data.offset(T.data_size() * index).inject(value)
   me.count = me.count + 1u64
   return
 
@@ -126,7 +126,7 @@ routine List[T].remove_at!(index: U64) -> T
     throw IndexOutOfBoundsError(index: index.U64(), count: me.count.U64())
 
   var byte_offset = T.data_size() * index
-  var value = me.data.offset(byte_offset).read()
+  var value = me.data.offset(byte_offset).extract()
 
   # Shift elements left via memmove
   if index < me.count - 1u64
@@ -153,7 +153,7 @@ needs I obeys Integral
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx.U64(), count: me.count.U64())
   var byte_offset = T.data_size() * idx
-  return me.data.offset(byte_offset).read()
+  return me.data.offset(byte_offset).extract()
 
 ### Implements the wired routine behavior for this value.
 ### :param index: The zero-based position to use.
@@ -165,7 +165,7 @@ needs I obeys Integral
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx.U64(), count: me.count.U64())
   var byte_offset = T.data_size() * idx
-  me.data.offset(byte_offset).write(value)
+  me.data.offset(byte_offset).inject(value)
   return
 
 # ============================================================================
@@ -179,7 +179,7 @@ routine List[T].$getitem![I](index: BackIndex[I]) -> T
 needs I obeys Integral
   var idx = index.resolve(me.count)
   var byte_offset = T.data_size() * idx
-  return me.data.offset(byte_offset).read()
+  return me.data.offset(byte_offset).extract()
 
 ### Implements the wired routine behavior for this value.
 ### :param index: The zero-based position to use.
@@ -188,7 +188,7 @@ routine List[T].$setitem![I](index: BackIndex[I], value: T)
 needs I obeys Integral
   var idx = index.resolve(me.count)
   var byte_offset = T.data_size() * idx
-  me.data.offset(byte_offset).write(value)
+  me.data.offset(byte_offset).inject(value)
   return
 
 # ============================================================================
@@ -199,13 +199,13 @@ needs I obeys Integral
 ### Caller must guarantee index < count.
 @inline
 routine List[T].get_raw(index: U64) -> T
-  return me.data.offset(T.data_size() * index).read()
+  return me.data.offset(T.data_size() * index).extract()
 
 ### Sets the element at `index` without bounds checking.
 ### Caller must guarantee index < count.
 @inline
 routine List[T].set_raw(index: U64, value: T)
-  me.data.offset(T.data_size() * index).write(value)
+  me.data.offset(T.data_size() * index).inject(value)
   return
 
 # ============================================================================
@@ -231,7 +231,7 @@ needs I obeys Integral
     if i >= e
       break
     var byte_offset = T.data_size() * i
-    result.add_last(me.data.offset(byte_offset).read())
+    result.add_last(me.data.offset(byte_offset).extract())
     i = i + 1u64
 
   return result
@@ -255,7 +255,7 @@ needs I obeys Integral
     if i >= e
       break
     var byte_offset = T.data_size() * i
-    result.add_last(me.data.offset(byte_offset).read())
+    result.add_last(me.data.offset(byte_offset).extract())
     i = i + 1u64
 
   return result
@@ -272,7 +272,7 @@ routine List[T].reserve(new_capacity: U64)
         me.data = Hijacked[T](ptr)
     else
       danger!
-        var ptr = rf_reallocate_dynamic(ptrtoint[T, Address](me.data), new_byte_size)
+        var ptr = rf_reallocate_dynamic(pointer_to_int[T, Address](me.data), new_byte_size)
         me.data = Hijacked[T](ptr)
 
     me.capacity = new_capacity
@@ -307,7 +307,7 @@ routine ListEmitter[T].$next!() -> T
   if me.index >= me.count
     absent
   danger!
-    var _result = me.data.offset(T.data_size() * me.index).read()
+    var _result = me.data.offset(T.data_size() * me.index).extract()
   me.index = me.index + 1u64
   return _result
 

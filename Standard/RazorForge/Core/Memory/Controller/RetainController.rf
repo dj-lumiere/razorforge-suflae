@@ -12,13 +12,13 @@ needs T is EntityType
   secret data: Hijacked[T]
 
 ### Creates a new controller with one strong reference.
-### :param data: The entity to manage; ownership transfers to this controller.
+### :param data: The raw pointer to the entity; ownership transfers to this controller.
 ### :returns: The resulting `RetainController[T]` value.
-dangerous routine RetainController[T].$create(data: Owned[T]) -> RetainController[T]
+dangerous routine RetainController[T].$create(data: Hijacked[T]) -> RetainController[T]
   return RetainController[T](
     strong_count: 1,
     weak_count: 0,
-    data: Hijacked[T](steal data)
+    data: data
   )
 
 routine RetainController[T].increase_strong_count()

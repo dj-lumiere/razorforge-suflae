@@ -62,7 +62,7 @@ routine Address.$mul_wrap(you: Address) -> Address
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Address` value.
 routine Address.$floordiv(you: Address) -> Address
-  return udiv[Address](me, you)
+  return unsigned_div[Address](me, you)
 
 # ============================================================================
 # Comparison Operations
@@ -72,15 +72,15 @@ routine Address.$floordiv(you: Address) -> Address
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine Address.$eq(you: Address) -> Bool
-  return icmp_eq[Address](me, you)
+  return int_eq[Address](me, you)
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine Address.$cmp(you: Address) -> ComparisonSign
-  if icmp_ult[Address](me, you)
+  if unsigned_lt[Address](me, you)
     return ME_SMALL
-  if icmp_ugt[Address](me, you)
+  if unsigned_gt[Address](me, you)
     return ME_LARGE
   return SAME
 

@@ -9,13 +9,13 @@ record Task[T]
 ### Returns the address component.
 ### :returns: The resulting `Address` value.
 dangerous routine Task[T].get_address() -> Address
-  return ptrtoint[Task[T], Address](me)
+  return pointer_to_int[Task[T], Address](me)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `Task[T]` value.
 dangerous routine Task[T].$create(from: Address) -> Task[T]
-  return inttoptr[Address, Task[T]](from)
+  return int_to_pointer[Address, Task[T]](from)
 
 ### Returns the result of `task none`.
 ### :returns: The resulting `Task[T]` value.
@@ -25,7 +25,7 @@ routine task_none[T]() -> Task[T]
 ### Returns true if this value is none.
 ### :returns: The resulting `Bool` value.
 routine Task[T].is_none() -> Bool
-  return icmp_eq[Task[T]](me, task_none[T]())
+  return int_eq[Task[T]](me, task_none[T]())
 
 ### Returns the result of `id`.
 ### :returns: The resulting `U64` value.

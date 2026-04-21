@@ -26,72 +26,78 @@ dangerous external("llvm") routine store[T](address: Hijacked[T], value: T)
 # Type Conversions
 # ============================================================================
 
-### Returns the result of `sext`.
+### Returns the result of `sign_extend`.
 ### :param value: The value to use.
 ### :returns: The resulting `To` value.
 @llvm_ir("{result} = sext {From} {value} to {To}")
-external("llvm") routine sext[From, To](value: From) -> To
-### Returns the result of `zext`.
+external("llvm") routine sign_extend[From, To](value: From) -> To
+### Returns the result of `zero_extend`.
 ### :param value: The value to use.
 ### :returns: The resulting `To` value.
 @llvm_ir("{result} = zext {From} {value} to {To}")
-external("llvm") routine zext[From, To](value: From) -> To
-### Returns the result of `trunc`.
+external("llvm") routine zero_extend[From, To](value: From) -> To
+### Returns the result of `int_truncate`.
 ### :param value: The value to use.
 ### :returns: The resulting `To` value.
 @llvm_ir("{result} = trunc {From} {value} to {To}")
-external("llvm") routine trunc[From, To](value: From) -> To
-### Returns the result of `bitcast`.
+external("llvm") routine int_truncate[From, To](value: From) -> To
+### Returns the result of `reinterpret_bits`.
 ### :param value: The value to use.
 ### :returns: The resulting `To` value.
 @llvm_ir("{result} = bitcast {From} {value} to {To}")
-external("llvm") routine bitcast[From, To](value: From) -> To
-### Returns the result of `ptrtoint`.
+external("llvm") routine reinterpret_bits[From, To](value: From) -> To
+### Returns the result of `pointer_to_int`.
 ### :param value: The value to use.
 ### :returns: The resulting `To` value.
 @llvm_ir("{result} = ptrtoint ptr {value} to {To}")
-external("llvm") routine ptrtoint[From, To](value: Hijacked[From]) -> To
-### Returns the result of `inttoptr`.
+external("llvm") routine pointer_to_int[From, To](value: Hijacked[From]) -> To
+### Returns the result of `int_to_pointer`.
 ### :param value: The value to use.
 ### :returns: The resulting `Hijacked[To]` value.
 @llvm_ir("{result} = inttoptr {From} {value} to ptr")
-external("llvm") routine inttoptr[From, To](value: From) -> Hijacked[To]
+external("llvm") routine int_to_pointer[From, To](value: From) -> Hijacked[To]
 ### Returns the entity reference stored in a Hijacked pointer, without dereferencing.
 ### Use only when T is an entity type and the Hijacked holds the entity pointer directly.
 ### :param value: The raw pointer value.
 ### :returns: The resulting `T` entity reference.
 @llvm_ir("{result} = getelementptr i8, ptr {value}, i64 0")
 dangerous external("llvm") routine entity_from_hijacked[T](value: Hijacked[T]) -> T
-### Returns the result of `sitofp`.
+### Steps a pointer forward by {count} elements of type {T} (element-sized stride).
+### :param ptr: The base pointer.
+### :param count: Number of elements to advance (may be negative to step backward).
+### :returns: The resulting `Hijacked[T]` value.
+@llvm_ir("{result} = getelementptr {T}, ptr {ptr}, i64 {count}")
+dangerous external("llvm") routine element_pointer[T](ptr: Hijacked[T], count: S64) -> Hijacked[T]
+### Returns the result of `signed_to_float`.
 ### :param value: The value to use.
 ### :returns: The resulting `To` value.
 @llvm_ir("{result} = sitofp {From} {value} to {To}")
-external("llvm") routine sitofp[From, To](value: From) -> To
-### Returns the result of `uitofp`.
+external("llvm") routine signed_to_float[From, To](value: From) -> To
+### Returns the result of `unsigned_to_float`.
 ### :param value: The value to use.
 ### :returns: The resulting `To` value.
 @llvm_ir("{result} = uitofp {From} {value} to {To}")
-external("llvm") routine uitofp[From, To](value: From) -> To
-### Returns the result of `fptosi`.
+external("llvm") routine unsigned_to_float[From, To](value: From) -> To
+### Returns the result of `float_to_signed`.
 ### :param value: The value to use.
 ### :returns: The resulting `To` value.
 @llvm_ir("{result} = fptosi {From} {value} to {To}")
-external("llvm") routine fptosi[From, To](value: From) -> To
-### Returns the result of `fptoui`.
+external("llvm") routine float_to_signed[From, To](value: From) -> To
+### Returns the result of `float_to_unsigned`.
 ### :param value: The value to use.
 ### :returns: The resulting `To` value.
 @llvm_ir("{result} = fptoui {From} {value} to {To}")
-external("llvm") routine fptoui[From, To](value: From) -> To
-### Returns the result of `fpext`.
+external("llvm") routine float_to_unsigned[From, To](value: From) -> To
+### Returns the result of `float_extend`.
 ### :param value: The value to use.
 ### :returns: The resulting `To` value.
 @llvm_ir("{result} = fpext {From} {value} to {To}")
-external("llvm") routine fpext[From, To](value: From) -> To
-### Returns the result of `fptrunc`.
+external("llvm") routine float_extend[From, To](value: From) -> To
+### Returns the result of `float_narrow`.
 ### :param value: The value to use.
 ### :returns: The resulting `To` value.
 @llvm_ir("{result} = fptrunc {From} {value} to {To}")
-external("llvm") routine fptrunc[From, To](value: From) -> To
+external("llvm") routine float_narrow[From, To](value: From) -> To
 
 # ============================================================================
 # Integer Arithmetic Instructions
@@ -103,124 +109,124 @@ external("llvm") routine fptrunc[From, To](value: From) -> To
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = add {T} {a}, {b}")
 external("llvm") routine add[T](a: T, b: T) -> T
-### Returns the result of `add nsw` (no signed wrap — UB on signed overflow).
+### Returns the result of `signed_add_exact` (no signed wrap — UB on signed overflow).
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = add nsw {T} {a}, {b}")
-dangerous external("llvm") routine add_nsw[T](a: T, b: T) -> T
-### Returns the result of `add nuw` (no unsigned wrap — UB on unsigned overflow).
+dangerous external("llvm") routine signed_add_exact[T](a: T, b: T) -> T
+### Returns the result of `unsigned_add_exact` (no unsigned wrap — UB on unsigned overflow).
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = add nuw {T} {a}, {b}")
-dangerous external("llvm") routine add_nuw[T](a: T, b: T) -> T
+dangerous external("llvm") routine unsigned_add_exact[T](a: T, b: T) -> T
 ### Returns the result of `sub`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = sub {T} {a}, {b}")
 external("llvm") routine sub[T](a: T, b: T) -> T
-### Returns the result of `sub nsw` (no signed wrap — UB on signed overflow).
+### Returns the result of `signed_sub_exact` (no signed wrap — UB on signed overflow).
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = sub nsw {T} {a}, {b}")
-dangerous external("llvm") routine sub_nsw[T](a: T, b: T) -> T
-### Returns the result of `sub nuw` (no unsigned wrap — UB on unsigned overflow).
+dangerous external("llvm") routine signed_sub_exact[T](a: T, b: T) -> T
+### Returns the result of `unsigned_sub_exact` (no unsigned wrap — UB on unsigned overflow).
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = sub nuw {T} {a}, {b}")
-dangerous external("llvm") routine sub_nuw[T](a: T, b: T) -> T
+dangerous external("llvm") routine unsigned_sub_exact[T](a: T, b: T) -> T
 ### Returns the result of `mul`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = mul {T} {a}, {b}")
 external("llvm") routine mul[T](a: T, b: T) -> T
-### Returns the result of `mul nsw` (no signed wrap — UB on signed overflow).
+### Returns the result of `signed_mul_exact` (no signed wrap — UB on signed overflow).
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = mul nsw {T} {a}, {b}")
-dangerous external("llvm") routine mul_nsw[T](a: T, b: T) -> T
-### Returns the result of `mul nuw` (no unsigned wrap — UB on unsigned overflow).
+dangerous external("llvm") routine signed_mul_exact[T](a: T, b: T) -> T
+### Returns the result of `unsigned_mul_exact` (no unsigned wrap — UB on unsigned overflow).
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = mul nuw {T} {a}, {b}")
-dangerous external("llvm") routine mul_nuw[T](a: T, b: T) -> T
-### Returns the result of `sdiv`.
+dangerous external("llvm") routine unsigned_mul_exact[T](a: T, b: T) -> T
+### Returns the result of `signed_div`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = sdiv {T} {a}, {b}")
-external("llvm") routine sdiv[T](a: T, b: T) -> T
-### Returns the result of `udiv`.
+external("llvm") routine signed_div[T](a: T, b: T) -> T
+### Returns the result of `unsigned_div`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = udiv {T} {a}, {b}")
-external("llvm") routine udiv[T](a: T, b: T) -> T
-### Returns the result of `srem`.
+external("llvm") routine unsigned_div[T](a: T, b: T) -> T
+### Returns the result of `signed_rem`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = srem {T} {a}, {b}")
-external("llvm") routine srem[T](a: T, b: T) -> T
-### Returns the result of `urem`.
+external("llvm") routine signed_rem[T](a: T, b: T) -> T
+### Returns the result of `unsigned_rem`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = urem {T} {a}, {b}")
-external("llvm") routine urem[T](a: T, b: T) -> T
+external("llvm") routine unsigned_rem[T](a: T, b: T) -> T
 
 # ============================================================================
 # Float Arithmetic Instructions
 # ============================================================================
 
-### Returns the result of `fadd`.
+### Returns the result of `float_add`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = fadd {T} {a}, {b}")
-external("llvm") routine fadd[T](a: T, b: T) -> T
-### Returns the result of `fsub`.
+external("llvm") routine float_add[T](a: T, b: T) -> T
+### Returns the result of `float_sub`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = fsub {T} {a}, {b}")
-external("llvm") routine fsub[T](a: T, b: T) -> T
-### Returns the result of `fmul`.
+external("llvm") routine float_sub[T](a: T, b: T) -> T
+### Returns the result of `float_mul`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = fmul {T} {a}, {b}")
-external("llvm") routine fmul[T](a: T, b: T) -> T
-### Returns the result of `fdiv`.
+external("llvm") routine float_mul[T](a: T, b: T) -> T
+### Returns the result of `float_div`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = fdiv {T} {a}, {b}")
-external("llvm") routine fdiv[T](a: T, b: T) -> T
-### Returns the result of `fdiv fast` (no NaN/inf checks — UB if result is non-finite).
+external("llvm") routine float_div[T](a: T, b: T) -> T
+### Returns the result of `float_div_fast` (no NaN/inf checks — UB if result is non-finite).
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = fdiv fast {T} {a}, {b}")
-dangerous external("llvm") routine fdiv_fast[T](a: T, b: T) -> T
-### Returns the result of `frem`.
+dangerous external("llvm") routine float_div_fast[T](a: T, b: T) -> T
+### Returns the result of `float_rem`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = frem {T} {a}, {b}")
-external("llvm") routine frem[T](a: T, b: T) -> T
-### Returns the result of `fneg`.
+external("llvm") routine float_rem[T](a: T, b: T) -> T
+### Returns the result of `float_neg`.
 ### :param value: The value to use.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = fneg {T} {value}")
-external("llvm") routine fneg[T](value: T) -> T
+external("llvm") routine float_neg[T](value: T) -> T
 
 # ============================================================================
 # Bitwise Instructions (and/or are RF keywords, prefixed with bit_)
@@ -238,246 +244,246 @@ external("llvm") routine bit_and[T](a: T, b: T) -> T
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = or {T} {a}, {b}")
 external("llvm") routine bit_or[T](a: T, b: T) -> T
-### Returns the result of `xor`.
+### Returns the result of `bit_xor`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = xor {T} {a}, {b}")
-external("llvm") routine xor[T](a: T, b: T) -> T
+external("llvm") routine bit_xor[T](a: T, b: T) -> T
 
 # ============================================================================
 # Shift Instructions
 # ============================================================================
 
-### Returns the result of `shl`.
+### Returns the result of `shift_left`.
 ### :param value: The value to use.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = shl {T} {value}, {bits}")
-external("llvm") routine shl[T](value: T, bits: T) -> T
-### Returns the result of `ashr`.
+external("llvm") routine shift_left[T](value: T, bits: T) -> T
+### Returns the result of `shift_right_signed`.
 ### :param value: The value to use.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = ashr {T} {value}, {bits}")
-external("llvm") routine ashr[T](value: T, bits: T) -> T
-### Returns the result of `lshr`.
+external("llvm") routine shift_right_signed[T](value: T, bits: T) -> T
+### Returns the result of `shift_right_unsigned`.
 ### :param value: The value to use.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = lshr {T} {value}, {bits}")
-external("llvm") routine lshr[T](value: T, bits: T) -> T
+external("llvm") routine shift_right_unsigned[T](value: T, bits: T) -> T
 
 # ============================================================================
 # Integer Comparison Instructions
 # ============================================================================
 
-### Returns the result of `icmp eq`.
+### Returns the result of `int_eq`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `Bool` value.
 @llvm_ir("{result} = icmp eq {T} {a}, {b}")
-external("llvm") routine icmp_eq[T](a: T, b: T) -> Bool
-### Returns the result of `icmp ne`.
+external("llvm") routine int_eq[T](a: T, b: T) -> Bool
+### Returns the result of `int_ne`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `Bool` value.
 @llvm_ir("{result} = icmp ne {T} {a}, {b}")
-external("llvm") routine icmp_ne[T](a: T, b: T) -> Bool
-### Returns the result of `icmp slt`.
+external("llvm") routine int_ne[T](a: T, b: T) -> Bool
+### Returns the result of `signed_lt`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `Bool` value.
 @llvm_ir("{result} = icmp slt {T} {a}, {b}")
-external("llvm") routine icmp_slt[T](a: T, b: T) -> Bool
-### Returns the result of `icmp sle`.
+external("llvm") routine signed_lt[T](a: T, b: T) -> Bool
+### Returns the result of `signed_le`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `Bool` value.
 @llvm_ir("{result} = icmp sle {T} {a}, {b}")
-external("llvm") routine icmp_sle[T](a: T, b: T) -> Bool
-### Returns the result of `icmp sgt`.
+external("llvm") routine signed_le[T](a: T, b: T) -> Bool
+### Returns the result of `signed_gt`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `Bool` value.
 @llvm_ir("{result} = icmp sgt {T} {a}, {b}")
-external("llvm") routine icmp_sgt[T](a: T, b: T) -> Bool
-### Returns the result of `icmp sge`.
+external("llvm") routine signed_gt[T](a: T, b: T) -> Bool
+### Returns the result of `signed_ge`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `Bool` value.
 @llvm_ir("{result} = icmp sge {T} {a}, {b}")
-external("llvm") routine icmp_sge[T](a: T, b: T) -> Bool
-### Returns the result of `icmp ult`.
+external("llvm") routine signed_ge[T](a: T, b: T) -> Bool
+### Returns the result of `unsigned_lt`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `Bool` value.
 @llvm_ir("{result} = icmp ult {T} {a}, {b}")
-external("llvm") routine icmp_ult[T](a: T, b: T) -> Bool
-### Returns the result of `icmp ule`.
+external("llvm") routine unsigned_lt[T](a: T, b: T) -> Bool
+### Returns the result of `unsigned_le`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `Bool` value.
 @llvm_ir("{result} = icmp ule {T} {a}, {b}")
-external("llvm") routine icmp_ule[T](a: T, b: T) -> Bool
-### Returns the result of `icmp ugt`.
+external("llvm") routine unsigned_le[T](a: T, b: T) -> Bool
+### Returns the result of `unsigned_gt`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `Bool` value.
 @llvm_ir("{result} = icmp ugt {T} {a}, {b}")
-external("llvm") routine icmp_ugt[T](a: T, b: T) -> Bool
-### Returns the result of `icmp uge`.
+external("llvm") routine unsigned_gt[T](a: T, b: T) -> Bool
+### Returns the result of `unsigned_ge`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `Bool` value.
 @llvm_ir("{result} = icmp uge {T} {a}, {b}")
-external("llvm") routine icmp_uge[T](a: T, b: T) -> Bool
+external("llvm") routine unsigned_ge[T](a: T, b: T) -> Bool
 
 # ============================================================================
 # Float Comparison Instructions
 # ============================================================================
 
-### Returns the result of `fcmp oeq`.
+### Returns the result of `float_eq`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `Bool` value.
 @llvm_ir("{result} = fcmp oeq {T} {a}, {b}")
-external("llvm") routine fcmp_oeq[T](a: T, b: T) -> Bool
-### Returns the result of `fcmp one`.
+external("llvm") routine float_eq[T](a: T, b: T) -> Bool
+### Returns the result of `float_ne`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `Bool` value.
 @llvm_ir("{result} = fcmp one {T} {a}, {b}")
-external("llvm") routine fcmp_one[T](a: T, b: T) -> Bool
-### Returns the result of `fcmp olt`.
+external("llvm") routine float_ne[T](a: T, b: T) -> Bool
+### Returns the result of `float_lt`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `Bool` value.
 @llvm_ir("{result} = fcmp olt {T} {a}, {b}")
-external("llvm") routine fcmp_olt[T](a: T, b: T) -> Bool
-### Returns the result of `fcmp ole`.
+external("llvm") routine float_lt[T](a: T, b: T) -> Bool
+### Returns the result of `float_le`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `Bool` value.
 @llvm_ir("{result} = fcmp ole {T} {a}, {b}")
-external("llvm") routine fcmp_ole[T](a: T, b: T) -> Bool
-### Returns the result of `fcmp ogt`.
+external("llvm") routine float_le[T](a: T, b: T) -> Bool
+### Returns the result of `float_gt`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `Bool` value.
 @llvm_ir("{result} = fcmp ogt {T} {a}, {b}")
-external("llvm") routine fcmp_ogt[T](a: T, b: T) -> Bool
-### Returns the result of `fcmp oge`.
+external("llvm") routine float_gt[T](a: T, b: T) -> Bool
+### Returns the result of `float_ge`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `Bool` value.
 @llvm_ir("{result} = fcmp oge {T} {a}, {b}")
-external("llvm") routine fcmp_oge[T](a: T, b: T) -> Bool
+external("llvm") routine float_ge[T](a: T, b: T) -> Bool
 
 # ============================================================================
 # Saturating Arithmetic (@llvm.s/u{add,sub}.sat)
 # ============================================================================
 
-### Returns the result of `sadd sat`.
+### Returns the result of `signed_add_sat`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = call {T} @llvm.sadd.sat.{T}({T} {a}, {T} {b})")
-external("llvm") routine sadd_sat[T](a: T, b: T) -> T
-### Returns the result of `uadd sat`.
+external("llvm") routine signed_add_sat[T](a: T, b: T) -> T
+### Returns the result of `unsigned_add_sat`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = call {T} @llvm.uadd.sat.{T}({T} {a}, {T} {b})")
-external("llvm") routine uadd_sat[T](a: T, b: T) -> T
-### Returns the result of `ssub sat`.
+external("llvm") routine unsigned_add_sat[T](a: T, b: T) -> T
+### Returns the result of `signed_sub_sat`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = call {T} @llvm.ssub.sat.{T}({T} {a}, {T} {b})")
-external("llvm") routine ssub_sat[T](a: T, b: T) -> T
-### Returns the result of `usub sat`.
+external("llvm") routine signed_sub_sat[T](a: T, b: T) -> T
+### Returns the result of `unsigned_sub_sat`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = call {T} @llvm.usub.sat.{T}({T} {a}, {T} {b})")
-external("llvm") routine usub_sat[T](a: T, b: T) -> T
+external("llvm") routine unsigned_sub_sat[T](a: T, b: T) -> T
 
 # ============================================================================
 # Overflow Detection (@llvm.s/u{add,sub,mul}.with.overflow)
 # ============================================================================
 
-### Returns the result of `sadd with overflow`.
+### Returns the result of `signed_add_checked`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `(T, Bool)` value.
 @llvm_ir("{result} = call { {T}, i1 } @llvm.sadd.with.overflow.{T}({T} {a}, {T} {b})")
-external("llvm") routine sadd_with_overflow[T](a: T, b: T) -> (T, Bool)
-### Returns the result of `uadd with overflow`.
+external("llvm") routine signed_add_checked[T](a: T, b: T) -> (T, Bool)
+### Returns the result of `unsigned_add_checked`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `(T, Bool)` value.
 @llvm_ir("{result} = call { {T}, i1 } @llvm.uadd.with.overflow.{T}({T} {a}, {T} {b})")
-external("llvm") routine uadd_with_overflow[T](a: T, b: T) -> (T, Bool)
-### Returns the result of `ssub with overflow`.
+external("llvm") routine unsigned_add_checked[T](a: T, b: T) -> (T, Bool)
+### Returns the result of `signed_sub_checked`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `(T, Bool)` value.
 @llvm_ir("{result} = call { {T}, i1 } @llvm.ssub.with.overflow.{T}({T} {a}, {T} {b})")
-external("llvm") routine ssub_with_overflow[T](a: T, b: T) -> (T, Bool)
-### Returns the result of `usub with overflow`.
+external("llvm") routine signed_sub_checked[T](a: T, b: T) -> (T, Bool)
+### Returns the result of `unsigned_sub_checked`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `(T, Bool)` value.
 @llvm_ir("{result} = call { {T}, i1 } @llvm.usub.with.overflow.{T}({T} {a}, {T} {b})")
-external("llvm") routine usub_with_overflow[T](a: T, b: T) -> (T, Bool)
-### Returns the result of `smul with overflow`.
+external("llvm") routine unsigned_sub_checked[T](a: T, b: T) -> (T, Bool)
+### Returns the result of `signed_mul_checked`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `(T, Bool)` value.
 @llvm_ir("{result} = call { {T}, i1 } @llvm.smul.with.overflow.{T}({T} {a}, {T} {b})")
-external("llvm") routine smul_with_overflow[T](a: T, b: T) -> (T, Bool)
-### Returns the result of `umul with overflow`.
+external("llvm") routine signed_mul_checked[T](a: T, b: T) -> (T, Bool)
+### Returns the result of `unsigned_mul_checked`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `(T, Bool)` value.
 @llvm_ir("{result} = call { {T}, i1 } @llvm.umul.with.overflow.{T}({T} {a}, {T} {b})")
-external("llvm") routine umul_with_overflow[T](a: T, b: T) -> (T, Bool)
+external("llvm") routine unsigned_mul_checked[T](a: T, b: T) -> (T, Bool)
 
 # ============================================================================
 # Integer Bit Manipulation (@llvm.ctpop, @llvm.ctlz, etc.)
 # ============================================================================
 
-### Returns the result of `ctpop`.
+### Returns the result of `count_ones`.
 ### :param value: The value to use.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = call {T} @llvm.ctpop.{T}({T} {value})")
-external("llvm") routine ctpop[T](value: T) -> T
-### Returns the result of `ctlz`.
+external("llvm") routine count_ones[T](value: T) -> T
+### Returns the result of `leading_zeros`.
 ### :param value: The value to use.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = call {T} @llvm.ctlz.{T}({T} {value}, i1 false)")
-external("llvm") routine ctlz[T](value: T) -> T
-### Returns the result of `cttz`.
+external("llvm") routine leading_zeros[T](value: T) -> T
+### Returns the result of `trailing_zeros`.
 ### :param value: The value to use.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = call {T} @llvm.cttz.{T}({T} {value}, i1 false)")
-external("llvm") routine cttz[T](value: T) -> T
-### Returns the result of `bitreverse`.
+external("llvm") routine trailing_zeros[T](value: T) -> T
+### Returns the result of `reverse_bits`.
 ### :param value: The value to use.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = call {T} @llvm.bitreverse.{T}({T} {value})")
-external("llvm") routine bitreverse[T](value: T) -> T
-### Returns the result of `bswap`.
+external("llvm") routine reverse_bits[T](value: T) -> T
+### Returns the result of `byte_swap`.
 ### :param value: The value to use.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = call {T} @llvm.bswap.{T}({T} {value})")
-external("llvm") routine bswap[T](value: T) -> T
+external("llvm") routine byte_swap[T](value: T) -> T
 ### Returns the absolute value.
 ### :param value: The value to use.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = call {T} @llvm.abs.{T}({T} {value}, i1 false)")
-external("llvm") routine abs[T](value: T) -> T
+external("llvm") routine int_abs[T](value: T) -> T
 
 # ============================================================================
 # Float Math (@llvm.sqrt, @llvm.fabs, etc.)
@@ -488,11 +494,11 @@ external("llvm") routine abs[T](value: T) -> T
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = call {T} @llvm.sqrt.{T}({T} {value})")
 external("llvm") routine sqrt[T](value: T) -> T
-### Returns the result of `fabs`.
+### Returns the result of `float_abs`.
 ### :param value: The value to use.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = call {T} @llvm.fabs.{T}({T} {value})")
-external("llvm") routine fabs[T](value: T) -> T
+external("llvm") routine float_abs[T](value: T) -> T
 ### Returns the result of `floor`.
 ### :param value: The value to use.
 ### :returns: The resulting `T` value.
@@ -508,11 +514,11 @@ external("llvm") routine ceil[T](value: T) -> T
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = call {T} @llvm.round.{T}({T} {value})")
 external("llvm") routine round[T](value: T) -> T
-### Returns the result of `trunc float`.
+### Returns the result of `float_truncate`.
 ### :param value: The value to use.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = call {T} @llvm.trunc.{T}({T} {value})")
-external("llvm") routine trunc_float[T](value: T) -> T
+external("llvm") routine float_truncate[T](value: T) -> T
 ### Returns the result of `sin`.
 ### :param value: The value to use.
 ### :returns: The resulting `T` value.

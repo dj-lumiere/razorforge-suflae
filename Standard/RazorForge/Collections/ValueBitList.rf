@@ -74,8 +74,8 @@ routine ValueBitList[N].with_set(index: U64, value: Bool) -> ValueBitList[N]
     return me
   var result = me
   # Modify the bit in the copy
-  var byte_idx = udiv[U64](index, 8u64)
-  var bit_off = U8(urem[U64](index, 8u64))
+  var byte_idx = unsigned_div[U64](index, 8u64)
+  var bit_off = U8(unsigned_rem[U64](index, 8u64))
   var byte_val = byte_at[ValueBitList[N]](result,byte_idx)
   if value
     result = set_byte_at[ValueBitList[N]](result,byte_idx, byte_val | (1u8 << bit_off))

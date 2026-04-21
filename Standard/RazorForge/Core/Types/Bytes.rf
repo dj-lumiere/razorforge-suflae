@@ -6,47 +6,65 @@ module Core
 
 ### Defines the entity `Bytes`.
 entity Bytes
-  ### Stores the bytes member value.
-  secret bytes: Owned[List[Byte]]
+  ### Raw buffer of byte values.
+  secret data: Hijacked[Byte]
+  ### Number of bytes in the buffer.
+  secret count: U64
+
+### Frees the byte buffer.
+routine Bytes.$destroy()
+  danger!
+    me.data.invalidate!()
+  return
 
 # Creators
 
 ### Creates a new instance.
 ### :returns: The resulting `Bytes` value.
 routine Bytes.$create() -> Bytes
-  return Bytes(bytes: List[Byte]())
+  return Bytes(data: hijacked_none[Byte](), count: 0u64)
 
 ### Creates a new instance.
 ### :param from_list: The list value to convert.
 ### :returns: The resulting `Bytes` value.
 routine Bytes.$create(from_list: List[Byte]) -> Bytes
-  return Bytes(bytes: from_list)
+  var n = from_list.count()
+  if n == 0u64
+    return Bytes(data: hijacked_none[Byte](), count: 0u64)
+  danger!
+    var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * n))
+    var i: U64 = 0u64
+    loop
+      if i >= n
+        break
+      buf.stride(count: S64(i)).inject(value: from_list[i])
+      i += 1u64
+    return Bytes(data: buf, count: n)
 
 ### Creates a new instance.
 ### :param from_byte: The `from_byte` value.
 ### :returns: The resulting `Bytes` value.
 routine Bytes.$create(from_byte: Byte) -> Bytes
-  var list = List[Byte]()
-  list.add_last(from_byte)
-  return Bytes(bytes: list)
+  danger!
+    var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size()))
+    buf.inject(value: from_byte)
+    return Bytes(data: buf, count: 1u64)
 
 ### Creates a new instance.
 ### :param ptr: The pointer value to use.
 ### :returns: The resulting `Bytes` value.
 routine Bytes.$create(ptr: Hijacked[Byte]) -> Bytes
-  var len: U64 = 0u64
-  loop
-    if ptr.offset(len).read() == BYTE_NULL
-      break
-    len += 1u64
-  var list = List[Byte](len)
-  var i: U64 = 0u64
-  loop
-    if i >= len
-      break
-    list.add_last(ptr.offset(i).read())
-    i += 1u64
-  return Bytes(bytes: list)
+  danger!
+    var len: U64 = 0u64
+    loop
+      if ptr.stride(count: S64(len)).extract() == BYTE_NULL
+        break
+      len += 1u64
+    if len == 0u64
+      return Bytes()
+    var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * len))
+    rf_copy_bytes_at(dest: buf.address(), src: ptr.address(), size: Byte.data_size() * len)
+    return Bytes(data: buf, count: len)
 
 ### Creates a new instance.
 ### :param ptr: The pointer value to use.
@@ -55,15 +73,10 @@ routine Bytes.$create(ptr: CStr) -> Bytes
   var len = rf_cstr_count(ptr)
   if len == 0u64
     return Bytes()
-  var list = List[Byte](len)
-  var i: U64 = 0u64
-  loop
-    if i >= len
-      break
-    var byte_val = ptr.ptr.offset(i.bytes()).read()
-    list.add_last(byte_val)
-    i += 1u64
-  return Bytes(from_list: list)
+  danger!
+    var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * len))
+    rf_copy_bytes_at(dest: buf.address(), src: ptr.ptr.address(), size: Byte.data_size() * len)
+    return Bytes(data: buf, count: len)
 
 ### Creates a new instance.
 ### :param ptr: The pointer value to use.
@@ -72,15 +85,10 @@ routine Bytes.$create(ptr: CStr) -> Bytes
 routine Bytes.$create(ptr: Address, count: U64) -> Bytes
   if count == 0u64
     return Bytes()
-  var list = List[Byte]()
-  var i: U64 = 0u64
-  loop
-    if i >= count
-      break
-    var byte_val = Hijacked[Byte](ptr + i).read()
-    list.add_last(byte_val)
-    i += 1u64
-  return Bytes(from_list: list)
+  danger!
+    var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * count))
+    rf_copy_bytes_at(dest: buf.address(), src: ptr, size: Byte.data_size() * count)
+    return Bytes(data: buf, count: count)
 
 ### Creates a new instance.
 ### :param ptr: The pointer value to use.
@@ -89,22 +97,17 @@ routine Bytes.$create(ptr: Address, count: U64) -> Bytes
 routine Bytes.$create(ptr: Hijacked[Byte], count: U64) -> Bytes
   if count == 0u64
     return Bytes()
-  var list = List[Byte]()
-  var i: U64 = 0u64
-  loop
-    if i >= count
-      break
-    var byte_val = ptr.offset(i.bytes()).read()
-    list.add_last(byte_val)
-    i += 1u64
-  return Bytes(from_list: list)
+  danger!
+    var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * count))
+    rf_copy_bytes_at(dest: buf.address(), src: ptr.address(), size: Byte.data_size() * count)
+    return Bytes(data: buf, count: count)
 
 # Core operations
 
 ### Returns the number of stored values.
 ### :returns: The resulting `U64` value.
 routine Bytes.count() -> U64
-  return me.bytes.count()
+  return me.count
 
 ### Returns the number of occurrences of a byte.
 ### :param byte: The byte to search for.
@@ -119,7 +122,7 @@ routine Bytes.count_of(byte: Byte) -> U64
 ### Returns true if this value is empty.
 ### :returns: The resulting `Bool` value.
 routine Bytes.is_empty() -> Bool
-  return me.bytes.is_empty()
+  return me.count == 0u64
 
 # Indexing
 
@@ -127,29 +130,51 @@ routine Bytes.is_empty() -> Bool
 ### :param index: The zero-based position to use.
 ### :returns: The resulting `Byte` value.
 routine Bytes.$getitem![I obeys Integral](index: I) -> Byte
-  return me.bytes[index]
+  var i = U64(index)
+  if i >= me.count
+    absent
+  danger!
+    return me.data.stride(count: S64(i)).extract()
 
 ### Returns the element at the requested position.
 ### :param index: The zero-based position to use.
 ### :returns: The resulting `Byte` value.
 routine Bytes.$getitem![I obeys Integral](index: BackIndex[I]) -> Byte
-  return me.bytes[index]
+  var i = index.resolve(length: me.count)
+  danger!
+    return me.data.stride(count: S64(i)).extract()
 
 ### Returns the slice between the requested bounds.
 ### :param start: The inclusive starting position.
 ### :param end: The exclusive ending position.
 ### :returns: The resulting `Bytes` value.
 routine Bytes.$getslice[I obeys Integral](start: I, end: I) -> Bytes
-  var sliced_list = me.bytes[start til end]
-  return Bytes(from_list: sliced_list)
+  var s = U64(start)
+  var e = U64(end)
+  if s >= e or e > me.count
+    return Bytes()
+  var n = e - s
+  danger!
+    var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * n))
+    var src_ptr = me.data.stride(count: S64(s))
+    rf_copy_bytes_at(dest: buf.address(), src: src_ptr.address(), size: Byte.data_size() * n)
+    return Bytes(data: buf, count: n)
 
 ### Returns the slice between the requested bounds.
 ### :param start: The inclusive starting position.
 ### :param end: The exclusive ending position.
 ### :returns: The resulting `Bytes` value.
 routine Bytes.$getslice[I obeys Integral](start: BackIndex[I], end: BackIndex[I]) -> Bytes
-  var sliced_list = me.bytes[start til end]
-  return Bytes(from_list: sliced_list)
+  var s = start.resolve(length: me.count)
+  var e = end.resolve(length: me.count)
+  if s >= e
+    return Bytes()
+  var n = e - s
+  danger!
+    var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * n))
+    var src_ptr = me.data.stride(count: S64(s))
+    rf_copy_bytes_at(dest: buf.address(), src: src_ptr.address(), size: Byte.data_size() * n)
+    return Bytes(data: buf, count: n)
 
 # String operations
 
@@ -157,13 +182,17 @@ routine Bytes.$getslice[I obeys Integral](start: BackIndex[I], end: BackIndex[I]
 ### :param other: The other value to compare against.
 ### :returns: The resulting `Bytes` value.
 routine Bytes.concat(other: Referring[Bytes]) -> Bytes
-  var result = List[Byte]()
-  var i: U64 = 0u64
-  for i in 0 til me.count()
-    result.add_last(me[i])
-  for i in 0 til other.count()
-    result.add_last(other[i])
-  return Bytes(from_list: result)
+  var n = me.count + other.count
+  if n == 0u64
+    return Bytes()
+  danger!
+    var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * n))
+    if me.count > 0u64
+      rf_copy_bytes_at(dest: buf.address(), src: me.data.address(), size: Byte.data_size() * me.count)
+    if other.count > 0u64
+      var dest = buf.stride(count: S64(me.count))
+      rf_copy_bytes_at(dest: dest.address(), src: other.data.address(), size: Byte.data_size() * other.count)
+    return Bytes(data: buf, count: n)
 
 ### Returns the sum of this value and the other value.
 ### :param other: The other value to compare against.
@@ -175,10 +204,10 @@ routine Bytes.$add(other: Referring[Bytes]) -> Bytes
 ### :param other: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine Bytes.$eq(other: Referring[Bytes]) -> Bool
-  if me.count() != other.count()
+  if me.count != other.count
     return false
   var i: U64 = 0u64
-  for i in 0 til me.count()
+  for i in 0 til me.count
     if me[i] != other[i]
       return false
   return true
@@ -189,7 +218,7 @@ routine Bytes.$eq(other: Referring[Bytes]) -> Bool
 ### :param byte: The `byte` value.
 ### :returns: The resulting `Bool` value.
 routine Bytes.contains(byte: Byte) -> Bool
-  for i in 0 til me.count()
+  for i in 0 til me.count
     if me[i] == byte
       return true
   return false
@@ -198,9 +227,9 @@ routine Bytes.contains(byte: Byte) -> Bool
 ### :param prefix: The prefix to test or remove.
 ### :returns: The resulting `Bool` value.
 routine Bytes.starts_with(prefix: Referring[Bytes]) -> Bool
-  if prefix.count() > me.count()
+  if prefix.count > me.count
     return false
-  for i in 0 til prefix.count()
+  for i in 0 til prefix.count
     if me[i] != prefix[i]
       return false
   return true
@@ -209,10 +238,10 @@ routine Bytes.starts_with(prefix: Referring[Bytes]) -> Bool
 ### :param suffix: The suffix to test or remove.
 ### :returns: The resulting `Bool` value.
 routine Bytes.ends_with(suffix: Referring[Bytes]) -> Bool
-  if suffix.count() > me.count()
+  if suffix.count > me.count
     return false
-  var offset = me.count() - suffix.count()
-  for i in 0 til suffix.count()
+  var offset = me.count - suffix.count
+  for i in 0 til suffix.count
     if me[offset + i] != suffix[i]
       return false
   return true
@@ -222,7 +251,7 @@ routine Bytes.ends_with(suffix: Referring[Bytes]) -> Bool
 ### :returns: The resulting `U64` value.
 ### :absent: Returns absent when the requested value is unavailable.
 routine Bytes.find!(byte: Byte) -> U64
-  for i in 0 til me.count()
+  for i in 0 til me.count
     if me[i] == byte
       return i
   absent
@@ -235,7 +264,7 @@ routine Bytes.find!(byte: Byte) -> U64
 routine Bytes.split(separator: Byte) -> List[Owned[Bytes]]
   var parts = List[Owned[Bytes]]()
   var current = List[Byte]()
-  for i in 0 til me.count()
+  for i in 0 til me.count
     if me[i] == separator
       parts.add_last(Bytes(from_list: current))
       current = List[Byte]()
@@ -250,7 +279,7 @@ routine Bytes.split(separator: Byte) -> List[Owned[Bytes]]
 ### :returns: The resulting `Bytes` value.
 routine Bytes.reverse() -> Bytes
   var result = List[Byte]()
-  var i = me.count()
+  var i = me.count
   loop
     if i == 0u64
       break
@@ -262,13 +291,19 @@ routine Bytes.reverse() -> Bytes
 ### :param times: The number of repetitions to produce.
 ### :returns: The resulting `Bytes` value.
 routine Bytes.repeat(times: U64) -> Bytes
-  if times == 0u64
+  if times == 0u64 or me.count == 0u64
     return Bytes()
-  var result = List[Byte]()
-  for t in 0 til times
-    for i in 0 til me.count()
-      result.add_last(me[i])
-  return Bytes(from_list: result)
+  var n = me.count * times
+  danger!
+    var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * n))
+    var t: U64 = 0u64
+    loop
+      if t >= times
+        break
+      var dest = buf.stride(count: S64(t * me.count))
+      rf_copy_bytes_at(dest: dest.address(), src: me.data.address(), size: Byte.data_size() * me.count)
+      t += 1u64
+    return Bytes(data: buf, count: n)
 
 # Conversion to modifiable list
 
@@ -276,7 +311,15 @@ routine Bytes.repeat(times: U64) -> Bytes
 ### :param from: The source value to convert.
 ### :returns: The resulting `List[Byte]` value.
 routine List[Byte].$create(from: Bytes) -> List[Byte]
-  return from.bytes
+  var result = List[Byte](from.count)
+  var i: U64 = 0u64
+  loop
+    if i >= from.count
+      break
+    danger!
+      result.add_last(from.data.stride(count: S64(i)).extract())
+    i += 1u64
+  return result
 
 # Iteration
 
@@ -296,7 +339,7 @@ routine Bytes.$iter() -> BytesIterator
 ### :returns: The resulting `Byte` value.
 ### :absent: Returns absent when the requested value is unavailable.
 routine BytesIterator.$next!() -> Byte
-  if me.index >= me.bytes.count()
+  if me.index >= me.bytes.count
     absent
   var value = me.bytes[me.index]
   me.index = me.index + 1u64
@@ -312,7 +355,7 @@ routine Bytes.$represent() -> Text
   var result = List[Character]()
   var i: U64 = 0u64
   loop
-    if i >= me.count()
+    if i >= me.count
       break
     var byte_text = me[i].$represent()
     var j: U64 = 0u64
@@ -327,7 +370,7 @@ routine Bytes.$represent() -> Text
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 routine Bytes.$diagnose() -> Text
-  return "Bytes(count: " + me.count().$represent() + ", " + me.$represent() + ")"
+  return "Bytes(count: " + me.count.$represent() + ", " + me.$represent() + ")"
 
 # ============================================================================
 # Encoding Conversions
@@ -362,7 +405,7 @@ routine Text.encode_as_utf8() -> Bytes
 ### :returns: The resulting `Text` value.
 routine Bytes.decode_as_utf8_lossy() -> Text
   var result = List[Character]()
-  var len = me.count()
+  var len = me.count
   var i: U64 = 0u64
   loop
     if i >= len
@@ -435,7 +478,7 @@ routine Bytes.decode_as_utf8_lossy() -> Text
 ### :throws: May throw {MalformedUtf8Error}.
 routine Bytes.decode_as_utf8!() -> Text
   var result = List[Character]()
-  var len = me.count()
+  var len = me.count
   var i: U64 = 0u64
   loop
     if i >= len
@@ -528,8 +571,8 @@ routine BytesUtf8View.$iter() -> BytesUtf8Iterator
 ### :absent: Returns absent when the requested value is unavailable.
 routine BytesUtf8Iterator.$next!() -> Character
   danger!
-    var bref = me.bytes.read()
-    if me.index >= bref.count()
+    var bref = me.bytes.extract()
+    if me.index >= bref.count
       absent
 
     var b0 = U32(bref[me.index].codepoint())
@@ -540,7 +583,7 @@ routine BytesUtf8Iterator.$next!() -> Character
         codepoint = b0
         me.index += 1u64
       (b0 & 0xE0u32) == 0xC0u32 =>
-        if me.index + 1u64 < bref.count()
+        if me.index + 1u64 < bref.count
           var b1 = U32(bref[me.index + 1u64].codepoint())
           if (b1 & 0xC0u32) == 0x80u32 and b0 >= 0xC2u32
             codepoint = ((b0 & 0x1Fu32) << 6u32) | (b1 & 0x3Fu32)
@@ -552,7 +595,7 @@ routine BytesUtf8Iterator.$next!() -> Character
           codepoint = CHARACTER_REPLACEMENT.codepoint()
           me.index += 1u64
       (b0 & 0xF0u32) == 0xE0u32 =>
-        if me.index + 2u64 < bref.count()
+        if me.index + 2u64 < bref.count
           var b1 = U32(bref[me.index + 1u64].codepoint())
           var b2 = U32(bref[me.index + 2u64].codepoint())
           var is_valid = (b1 & 0xC0u32) == 0x80u32 and (b2 & 0xC0u32) == 0x80u32
@@ -571,7 +614,7 @@ routine BytesUtf8Iterator.$next!() -> Character
           codepoint = CHARACTER_REPLACEMENT.codepoint()
           me.index += 1u64
       (b0 & 0xF8u32) == 0xF0u32 =>
-        if me.index + 3u64 < bref.count()
+        if me.index + 3u64 < bref.count
           var b1 = U32(bref[me.index + 1u64].codepoint())
           var b2 = U32(bref[me.index + 2u64].codepoint())
           var b3 = U32(bref[me.index + 3u64].codepoint())
@@ -603,16 +646,13 @@ routine BytesUtf8Iterator.$next!() -> Character
 ### Converts this value to cstr.
 ### :returns: The resulting `Address` value.
 routine Bytes.to_cstr() -> Address
-  var len = me.count()
-  var buffer = Hijacked[Byte]( rf_allocate_dynamic(len + 1u64))
-  var i: U64 = 0u64
-  loop
-    if i >= len
-      break
-    Hijacked[Byte](buffer.get_address() +% Address(i)).write(me[i])
-    i += 1u64
-  Hijacked[Byte](buffer.get_address() +% Address(len)).write(BYTE_NULL)
-  return buffer.get_address()
+  var len = me.count
+  danger!
+    var buffer = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * (len + 1u64)))
+    if len > 0u64
+      rf_copy_bytes_at(dest: buffer.address(), src: me.data.address(), size: Byte.data_size() * len)
+    buffer.stride(count: S64(len)).inject(value: BYTE_NULL)
+    return buffer.address()
 
 ### Converts this value to cstr.
 ### :returns: The resulting `Address` value.

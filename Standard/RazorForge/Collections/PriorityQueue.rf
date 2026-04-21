@@ -57,10 +57,10 @@ routine PriorityQueue[TPriority, TElement].$create(capacity: U64) -> PriorityQue
 routine PriorityQueue[TPriority, TElement].$destroy()
   if not me.priorities.is_none()
     danger!
-      rf_invalidate(ptrtoint[TPriority, Address](me.priorities))
+      rf_invalidate(pointer_to_int[TPriority, Address](me.priorities))
   if not me.elements.is_none()
     danger!
-      rf_invalidate(ptrtoint[TElement, Address](me.elements))
+      rf_invalidate(pointer_to_int[TElement, Address](me.elements))
   return
 
 # ============================================================================
@@ -69,20 +69,20 @@ routine PriorityQueue[TPriority, TElement].$destroy()
 
 @inline
 routine PriorityQueue[TPriority, TElement].get_priority_raw(index: U64) -> TPriority
-  return me.priorities.offset(TPriority.data_size() * index).read()
+  return me.priorities.offset(TPriority.data_size() * index).extract()
 
 @inline
 routine PriorityQueue[TPriority, TElement].set_priority_raw(index: U64, value: TPriority)
-  me.priorities.offset(TPriority.data_size() * index).write(value)
+  me.priorities.offset(TPriority.data_size() * index).inject(value)
   return
 
 @inline
 routine PriorityQueue[TPriority, TElement].get_element_raw(index: U64) -> TElement
-  return me.elements.offset(TElement.data_size() * index).read()
+  return me.elements.offset(TElement.data_size() * index).extract()
 
 @inline
 routine PriorityQueue[TPriority, TElement].set_element_raw(index: U64, value: TElement)
-  me.elements.offset(TElement.data_size() * index).write(value)
+  me.elements.offset(TElement.data_size() * index).inject(value)
   return
 
 @inline
@@ -109,7 +109,7 @@ routine PriorityQueue[TPriority, TElement].reserve(new_capacity: U64)
         me.priorities = Hijacked[TPriority](ptr)
     else
       danger!
-        var ptr = rf_reallocate_dynamic(ptrtoint[TPriority, Address](me.priorities), priority_byte_size)
+        var ptr = rf_reallocate_dynamic(pointer_to_int[TPriority, Address](me.priorities), priority_byte_size)
         me.priorities = Hijacked[TPriority](ptr)
 
     if me.elements.is_none()
@@ -118,7 +118,7 @@ routine PriorityQueue[TPriority, TElement].reserve(new_capacity: U64)
         me.elements = Hijacked[TElement](ptr)
     else
       danger!
-        var ptr = rf_reallocate_dynamic(ptrtoint[TElement, Address](me.elements), element_byte_size)
+        var ptr = rf_reallocate_dynamic(pointer_to_int[TElement, Address](me.elements), element_byte_size)
         me.elements = Hijacked[TElement](ptr)
 
     me.capacity = new_capacity
@@ -134,7 +134,7 @@ routine PriorityQueue[TPriority, TElement].grow()
 # ============================================================================
 
 routine PriorityQueue[TPriority, TElement].parent_index(index: U64) -> U64
-  return udiv[U64](index -% 1u64, 2u64)
+  return unsigned_div[U64](index -% 1u64, 2u64)
 
 routine PriorityQueue[TPriority, TElement].left_child(index: U64) -> U64
   return 2u64 *% index +% 1u64
@@ -376,8 +376,8 @@ routine PriorityQueueIterator[TPriority, TElement].$next!() -> PQEntry[TPriority
   if me.index >= me.count
     absent
   danger!
-    var p = me.priorities.offset(TPriority.data_size() * me.index).read()
-    var e = me.elements.offset(TElement.data_size() * me.index).read()
+    var p = me.priorities.offset(TPriority.data_size() * me.index).extract()
+    var e = me.elements.offset(TElement.data_size() * me.index).extract()
     var _result = PQEntry[TPriority, TElement](priority: p, element: e)
   me.index = me.index + 1u64
   return _result

@@ -29,7 +29,7 @@ routine Character.$create(from: Character) -> Character
 ### :param from: The source value to convert.
 ### :returns: The resulting `Character` value.
 routine Character.$create(from: U32) -> Character
-  return bitcast[Character](from)
+  return reinterpret_bits[Character](from)
 
 # Unicode constants
 preset CHARACTER_NULL: Character = Character(0x0000u32)

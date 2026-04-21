@@ -38,7 +38,7 @@ routine Viewed[T].$exit()
 routine Viewed[T].$represent() -> Text
   danger!
     var hijacked = Hijacked[T](me)
-    return hijacked.read().$represent()
+    return hijacked.extract().$represent()
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
@@ -46,4 +46,4 @@ routine Viewed[T].$represent() -> Text
 routine Viewed[T].$diagnose() -> Text
   danger!
     var hijacked = Hijacked[T](me)
-    return me.type_name() + "(" + hijacked.read().$diagnose() + ")"
+    return me.type_name() + "(" + hijacked.extract().$diagnose() + ")"

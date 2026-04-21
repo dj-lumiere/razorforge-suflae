@@ -5,9 +5,11 @@
 #
 # Syntax:
 #   danger! {
-#       let raw = obj.hijack()  # Hijacked[T]
-#       let value = raw.read()   # Type-safe read
-#       raw.write(new_value)     # Type-safe write
+#       let raw = obj.hijack()      # Hijacked[T]
+#       let value = raw.extract()   # Type-safe read
+#       raw.inject(value)           # Type-safe write
+#       raw.detonate!()             # Zero out the memory
+#       raw.invalidate!()           # Deallocate
 #   }
 #
 # Properties:
@@ -30,65 +32,95 @@ record Hijacked[T]
 ### Returns the address component.
 ### :returns: The resulting `Address` value.
 dangerous routine T.get_address() -> Address
-  return ptrtoint[T, Address](me)
+  return pointer_to_int[T, Address](me)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `Hijacked[T]` value.
 dangerous routine Hijacked[T].$create(from: Address) -> Hijacked[T]
-  return inttoptr[Address, T](from)
+  return int_to_pointer[Address, T](from)
 
 ### Returns the result of `hijack`.
 ### :returns: The resulting `Hijacked[T]` value.
 dangerous routine T.hijack() -> Hijacked[T]
   return Hijacked[T](me.get_address())
 
-### Returns the result of `read`.
+### Returns the result of `extract`.
 ### :returns: The resulting `T` value.
-dangerous routine Hijacked[T].read() -> T
+dangerous routine Hijacked[T].extract() -> T
 needs T is RecordType
   return load[T](me)
 
-### Returns the result of `read` for entity inner types.
+### Returns the result of `extract` for entity inner types.
 ### :returns: The resulting `T` value.
-dangerous routine Hijacked[T].read() -> T
+dangerous routine Hijacked[T].extract() -> T
 needs T is EntityType
   return load[T](me)
 
 ### Reinterprets this pointer as the entity {T} it directly points to (no dereference).
 ### Use when the Hijacked[T] value IS the entity ptr, not a slot holding one.
 ### :returns: The resulting `T` value.
-dangerous routine Hijacked[T].unhijack() -> T
+dangerous routine Hijacked[T].reveal() -> T
 needs T is EntityType
-  return inttoptr[Address, T](me.get_address())
+  return int_to_pointer[Address, T](me.get_address())
 
-### Performs `write` on this value.
+### Performs `inject` on this value.
 ### :param value: The value to use.
-dangerous routine Hijacked[T].write(value: T)
+dangerous routine Hijacked[T].inject(value: T)
   store[T](me, value)
   return
 
-### Returns the result of `reveal as`.
+### Returns the result of `extract as`.
 ### :returns: The resulting `U` value.
-dangerous routine Hijacked[T].reveal_as[U]() -> U
-  var as_u = me.obtain_as[U]()
-  return as_u.read()
+dangerous routine Hijacked[T].extract_as[U]() -> U
+  var as_u = me.recast_as[U]()
+  return as_u.extract()
 
-### Performs `write as` on this value.
+### Performs `inject as` on this value.
 ### :param value: The value to use.
-dangerous routine Hijacked[T].write_as[U](value: U)
-  var as_u = me.obtain_as[U]()
-  as_u.write(value)
+dangerous routine Hijacked[T].inject_as[U](value: U)
+  var as_u = me.recast_as[U]()
+  as_u.inject(value: value)
   return
 
-### Returns the result of `obtain as`.
+### Returns the result of `recast as`.
 ### :returns: The resulting `Hijacked[U]` value.
-dangerous routine Hijacked[T].obtain_as[U]() -> Hijacked[U]
+dangerous routine Hijacked[T].recast_as[U]() -> Hijacked[U]
   return Hijacked[U](me)
 
-### Executes `invalidate`.
+### Returns the raw address of this pointer.
+### :returns: The resulting `Address` value.
+@readonly
+routine Hijacked[T].address() -> Address
+  return pointer_to_int[Hijacked[T], Address](me)
+
+### Steps this pointer forward by {count} elements (element-sized stride, may be negative).
+### :param count: Number of elements to advance.
+### :returns: The resulting `Hijacked[T]` value.
+dangerous routine Hijacked[T].stride(count: S64) -> Hijacked[T]
+  return element_pointer[T](ptr: me, count: count)
+
+### Returns the value at byte offset {offset} from this pointer without moving the pointer.
+### :param offset: The byte offset.
+### :returns: The resulting `T` value.
+dangerous routine Hijacked[T].extract_at_offset(offset: ByteSize) -> T
+  return me.offset(bytes: offset).extract()
+
+### Writes {value} at byte offset {at} from this pointer without moving the pointer.
+### :param at: The byte offset.
+### :param value: The value to write.
+dangerous routine Hijacked[T].inject_at_offset(at: ByteSize, value: T)
+  me.offset(bytes: at).inject(value: value)
+  return
+
+### Executes `invalidate` — deallocates the pointed-to memory.
 dangerous routine Hijacked[T].invalidate!()
   rf_invalidate[T](me)
+  return
+
+### Executes `detonate` — zeroes out the pointed-to memory without deallocating.
+dangerous routine Hijacked[T].detonate!()
+  rf_set_bytes_at(dest: me.address(), value: 0_u8, size: T.data_size())
   return
 
 ### Returns the result of `hijacked none`.
@@ -99,26 +131,44 @@ routine hijacked_none[T]() -> Hijacked[T]
 ### Returns true if this value is none.
 ### :returns: The resulting `Bool` value.
 routine Hijacked[T].is_none() -> Bool
-  return icmp_eq[Hijacked[T]](me, hijacked_none[T]())
+  return int_eq[Hijacked[T]](me, hijacked_none[T]())
 
 ### Returns the result of `offset`.
 ### :param bytes: The `bytes` value.
 ### :returns: The resulting `Hijacked[T]` value.
 routine Hijacked[T].offset(bytes: ByteSize) -> Hijacked[T]
-  var addr = ptrtoint[T, Address](me)
+  var addr = pointer_to_int[T, Address](me)
   return Hijacked[T](addr + bytes)
 
 ### Returns whether both values are equal.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine Hijacked[T].$eq(you: Hijacked[T]) -> Bool
-  return icmp_eq[Hijacked[T]](me, you)
+  return int_eq[Hijacked[T]](me, you)
+
+### Compares this pointer against another by address.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
+routine Hijacked[T].$cmp(you: Hijacked[T]) -> ComparisonSign
+  return me.address().$cmp(you: you.address())
+
+### Returns a hash of this pointer's address.
+### :returns: The resulting `U64` value.
+routine Hijacked[T].$hash() -> U64
+  return __hash_leaf(v: U64(me.address()))
+
+### Returns a keyed hash of this pointer's address using SipHash-2-4.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: The resulting `U64` value.
+routine Hijacked[T].$secure_hash(k0: U64, k1: U64) -> U64
+  return __secure_hash_u64(v: U64(me.address()), k0: k0, k1: k1)
 
 # NOTE: All operations on Hijacked[T] are inherently unsafe
 # Undefined behavior can occur if:
 # - Pointer is dangling (object was deallocated)
 # - Pointer is misaligned
-# - Type U in reveal_as[U]() doesn't match actual data
+# - Type U in extract_as[U]() doesn't match actual data
 # - Writing to read-only memory
 # - Data races in multi-threaded code
 #
@@ -142,6 +192,6 @@ routine Hijacked[T].$represent() -> Text
 ### :returns: The resulting `Text` value.
 @readonly
 routine Hijacked[T].$diagnose() -> Text
-  var addr = ptrtoint[Hijacked[T], Address](me)
+  var addr = pointer_to_int[Hijacked[T], Address](me)
   var none = me.is_none()
   return me.type_name() + "(addr: " + addr.$represent() + ", none: " + none.$represent() + ")"

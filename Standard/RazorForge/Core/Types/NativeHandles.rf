@@ -11,13 +11,13 @@ record BigIntHandle
 ### Returns the address component.
 ### :returns: The resulting `Address` value.
 dangerous routine BigIntHandle.get_address() -> Address
-  return ptrtoint[BigIntHandle, Address](me)
+  return pointer_to_int[BigIntHandle, Address](me)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `BigIntHandle` value.
 dangerous routine BigIntHandle.$create(from: Address) -> BigIntHandle
-  return inttoptr[Address, BigIntHandle](from)
+  return int_to_pointer[Address, BigIntHandle](from)
 
 ### Returns the result of `bigint handle none`.
 ### :returns: The resulting `BigIntHandle` value.
@@ -27,7 +27,7 @@ routine bigint_handle_none() -> BigIntHandle
 ### Returns true if this value is none.
 ### :returns: The resulting `Bool` value.
 routine BigIntHandle.is_none() -> Bool
-  return icmp_eq[BigIntHandle](me, bigint_handle_none())
+  return int_eq[BigIntHandle](me, bigint_handle_none())
 
 ### Defines the record `BigDecHandle`.
 @llvm("ptr")
@@ -37,13 +37,13 @@ record BigDecHandle
 ### Returns the address component.
 ### :returns: The resulting `Address` value.
 dangerous routine BigDecHandle.get_address() -> Address
-  return ptrtoint[BigDecHandle, Address](me)
+  return pointer_to_int[BigDecHandle, Address](me)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `BigDecHandle` value.
 dangerous routine BigDecHandle.$create(from: Address) -> BigDecHandle
-  return inttoptr[Address, BigDecHandle](from)
+  return int_to_pointer[Address, BigDecHandle](from)
 
 ### Returns the result of `bigdec handle none`.
 ### :returns: The resulting `BigDecHandle` value.
@@ -53,4 +53,4 @@ routine bigdec_handle_none() -> BigDecHandle
 ### Returns true if this value is none.
 ### :returns: The resulting `Bool` value.
 routine BigDecHandle.is_none() -> Bool
-  return icmp_eq[BigDecHandle](me, bigdec_handle_none())
+  return int_eq[BigDecHandle](me, bigdec_handle_none())

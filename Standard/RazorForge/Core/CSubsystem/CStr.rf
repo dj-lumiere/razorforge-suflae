@@ -52,9 +52,9 @@ routine CStr.$create(from: Referring[Bytes]) -> CStr
   loop
     if i >= len
       break
-    buffer.offset(i.bytes()).write(from[i])
+    buffer.offset(i.bytes()).inject(from[i])
     i = i + 1u64
-  buffer.offset(len.bytes()).write(BYTE_NULL)
+  buffer.offset(len.bytes()).inject(BYTE_NULL)
 
   return CStr(ptr: buffer)
 
@@ -65,7 +65,7 @@ routine CStr.$create(from: Referring[Text]) -> CStr
   var len = from.count()
   if len == 0u64
     var empty_buffer = Hijacked[Byte](rf_allocate_dynamic(1u64))
-    empty_buffer.write(BYTE_NULL)
+    empty_buffer.inject(BYTE_NULL)
     return CStr(ptr: empty_buffer)
 
   var max_bytes = len * 4u64 + 1u64
@@ -77,27 +77,27 @@ routine CStr.$create(from: Referring[Text]) -> CStr
     var cp = from[i].codepoint()
 
     if cp <= 0x7Fu32
-      buffer.offset(write_pos.bytes()).write(Byte(U8(cp)))
+      buffer.offset(write_pos.bytes()).inject(Byte(U8(cp)))
       write_pos = write_pos + 1u64
     elseif cp <= 0x7FFu32
-      buffer.offset(write_pos.bytes()).write(Byte(U8(0xC0u32 | (cp >> 6u32))))
-      buffer.offset((write_pos + 1u64).bytes()).write(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
+      buffer.offset(write_pos.bytes()).inject(Byte(U8(0xC0u32 | (cp >> 6u32))))
+      buffer.offset((write_pos + 1u64).bytes()).inject(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
       write_pos = write_pos + 2u64
     elseif cp <= 0xFFFFu32
-      buffer.offset(write_pos.bytes()).write(Byte(U8(0xE0u32 | (cp >> 12u32))))
-      buffer.offset((write_pos + 1u64).bytes()).write(Byte(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32))))
-      buffer.offset((write_pos + 2u64).bytes()).write(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
+      buffer.offset(write_pos.bytes()).inject(Byte(U8(0xE0u32 | (cp >> 12u32))))
+      buffer.offset((write_pos + 1u64).bytes()).inject(Byte(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32))))
+      buffer.offset((write_pos + 2u64).bytes()).inject(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
       write_pos = write_pos + 3u64
     else
-      buffer.offset(write_pos.bytes()).write(Byte(U8(0xF0u32 | (cp >> 18u32))))
-      buffer.offset((write_pos + 1u64).bytes()).write(Byte(U8(0x80u32 | ((cp >> 12u32) & 0x3Fu32))))
-      buffer.offset((write_pos + 2u64).bytes()).write(Byte(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32))))
-      buffer.offset((write_pos + 3u64).bytes()).write(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
+      buffer.offset(write_pos.bytes()).inject(Byte(U8(0xF0u32 | (cp >> 18u32))))
+      buffer.offset((write_pos + 1u64).bytes()).inject(Byte(U8(0x80u32 | ((cp >> 12u32) & 0x3Fu32))))
+      buffer.offset((write_pos + 2u64).bytes()).inject(Byte(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32))))
+      buffer.offset((write_pos + 3u64).bytes()).inject(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
       write_pos = write_pos + 4u64
 
     i = i + 1u64
 
-  buffer.offset(write_pos.bytes()).write(BYTE_NULL)
+  buffer.offset(write_pos.bytes()).inject(BYTE_NULL)
   return CStr(ptr: buffer)
 
 ### Returns the number of stored values.
@@ -119,7 +119,7 @@ routine CStr.is_empty() -> Bool
 ### :param index: The zero-based position to use.
 ### :returns: The resulting `Byte` value.
 routine CStr.$getitem!(index: U64) -> Byte
-  return me.ptr.offset(index.bytes()).read()
+  return me.ptr.offset(index.bytes()).extract()
 
 ### Returns whether both values are equal.
 ### :param you: The other value to compare against.
@@ -156,7 +156,7 @@ routine Bytes.$create(from: Cstr) -> Bytes
   loop
     if i >= len
       break
-    list.add_last(from.ptr.offset(i.bytes()).read())
+    list.add_last(from.ptr.offset(i.bytes()).extract())
     i = i + 1u64
   return Bytes(from_list: list)
 

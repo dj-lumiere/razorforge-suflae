@@ -27,79 +27,79 @@ preset F128_LN_10: F128 = 2.302585092994045684017991454684364208_f128
 ### :param from: The source value to convert.
 ### :returns: The resulting `F128` value.
 routine F128.$create(from: S8) -> F128
-  return sitofp[S8, F128](from)
+  return signed_to_float[S8, F128](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F128` value.
 routine F128.$create(from: S16) -> F128
-  return sitofp[S16, F128](from)
+  return signed_to_float[S16, F128](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F128` value.
 routine F128.$create(from: S32) -> F128
-  return sitofp[S32, F128](from)
+  return signed_to_float[S32, F128](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F128` value.
 routine F128.$create(from: S64) -> F128
-  return sitofp[S64, F128](from)
+  return signed_to_float[S64, F128](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F128` value.
 routine F128.$create(from: S128) -> F128
-  return sitofp[S128, F128](from)
+  return signed_to_float[S128, F128](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F128` value.
 routine F128.$create(from: U8) -> F128
-  return uitofp[U8, F128](from)
+  return unsigned_to_float[U8, F128](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F128` value.
 routine F128.$create(from: U16) -> F128
-  return uitofp[U16, F128](from)
+  return unsigned_to_float[U16, F128](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F128` value.
 routine F128.$create(from: U32) -> F128
-  return uitofp[U32, F128](from)
+  return unsigned_to_float[U32, F128](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F128` value.
 routine F128.$create(from: U64) -> F128
-  return uitofp[U64, F128](from)
+  return unsigned_to_float[U64, F128](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F128` value.
 routine F128.$create(from: U128) -> F128
-  return uitofp[U128, F128](from)
+  return unsigned_to_float[U128, F128](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F128` value.
 routine F128.$create(from: F16) -> F128
-  return fpext[F16, F128](from)
+  return float_extend[F16, F128](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F128` value.
 routine F128.$create(from: F32) -> F128
-  return fpext[F32, F128](from)
+  return float_extend[F32, F128](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `F128` value.
 routine F128.$create(from: F64) -> F128
-  return fpext[F64, F128](from)
+  return float_extend[F64, F128](from)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
@@ -133,7 +133,7 @@ routine F128.$create(from: D128) -> F128
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F128` value.
 routine F128.$add!(you: F128) -> F128
-  var result = fadd[F128](me, you)
+  var result = float_add[F128](me, you)
   if not result.is_finite()
     throw NumericOverflowError(description: f"F128 addition produced non-finite result: {me} + {you}")
   return result
@@ -142,7 +142,7 @@ routine F128.$add!(you: F128) -> F128
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F128` value.
 routine F128.$sub!(you: F128) -> F128
-  var result = fsub[F128](me, you)
+  var result = float_sub[F128](me, you)
   if not result.is_finite()
     throw NumericOverflowError(description: f"F128 subtraction produced non-finite result: {me} - {you}")
   return result
@@ -151,7 +151,7 @@ routine F128.$sub!(you: F128) -> F128
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F128` value.
 routine F128.$mul!(you: F128) -> F128
-  var result = fmul[F128](me, you)
+  var result = float_mul[F128](me, you)
   if not result.is_finite()
     throw NumericOverflowError(description: f"F128 multiplication produced non-finite result: {me} * {you}")
   return result
@@ -160,7 +160,7 @@ routine F128.$mul!(you: F128) -> F128
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F128` value.
 routine F128.$truediv!(you: F128) -> F128
-  var result = fdiv[F128](me, you)
+  var result = float_div[F128](me, you)
   if not result.is_finite()
     throw NumericOverflowError(description: f"F128 division produced non-finite result: {me} / {you}")
   return result
@@ -168,13 +168,13 @@ routine F128.$truediv!(you: F128) -> F128
 ### Returns the negated value.
 ### :returns: The resulting `F128` value.
 routine F128.$neg() -> F128
-  return fneg[F128](me)
+  return float_neg[F128](me)
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F128` value.
 routine F128.$truediv_unchecked(you: F128) -> F128
-  return fdiv_fast[F128](me, you)
+  return float_div_fast[F128](me, you)
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)
@@ -184,15 +184,15 @@ routine F128.$truediv_unchecked(you: F128) -> F128
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine F128.$eq(you: F128) -> Bool
-  return fcmp_oeq[F128](me, you)
+  return float_eq[F128](me, you)
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine F128.$cmp(you: F128) -> ComparisonSign
-  if fcmp_olt[F128](me, you)
+  if float_lt[F128](me, you)
     return ME_SMALL
-  if fcmp_ogt[F128](me, you)
+  if float_gt[F128](me, you)
     return ME_LARGE
   return SAME
 
@@ -208,7 +208,7 @@ routine F128.sqrt() -> F128
 ### Returns the absolute value.
 ### :returns: The resulting `F128` value.
 routine F128.abs() -> F128
-  return fabs[F128](me)
+  return float_abs[F128](me)
 
 ### Returns the result of `floor`.
 ### :returns: The resulting `F128` value.
@@ -225,10 +225,10 @@ routine F128.ceil() -> F128
 routine F128.round() -> F128
   return round[F128](me)
 
-### Returns the result of `trunc`.
+### Returns the result of `int_truncate`.
 ### :returns: The resulting `F128` value.
-routine F128.trunc() -> F128
-  return trunc_float[F128](me)
+routine F128.int_truncate() -> F128
+  return float_truncate[F128](me)
 
 # ============================================================================
 # Trigonometric Functions (via LibBF native runtime)
@@ -428,23 +428,23 @@ routine F128.signum() -> F128
 ### Converts this value to bits.
 ### :returns: The resulting `U128` value.
 routine F128.to_bits() -> U128
-  return bitcast[F128, U128](me)
+  return reinterpret_bits[F128, U128](me)
 
 ### Returns the result of `low bits`.
 ### :returns: The resulting `U64` value.
 routine F128.low_bits() -> U64
-  return trunc[U128, U64](me.to_bits())
+  return int_truncate[U128, U64](me.to_bits())
 
 ### Returns the result of `high bits`.
 ### :returns: The resulting `U64` value.
 routine F128.high_bits() -> U64
-  return trunc[U128, U64](me.to_bits() >>> 64u32)
+  return int_truncate[U128, U64](me.to_bits() >>> 64u32)
 
 ### Creates a value from bits.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `F128` value.
 routine F128.from_bits(bits: U128) -> F128
-  return bitcast[U128, F128](bits)
+  return reinterpret_bits[U128, F128](bits)
 
 # ============================================================================
 # Classification
@@ -456,8 +456,8 @@ routine F128.is_nan() -> Bool
   # F128: bit 127=sign, bits 126-112=exponent (15 bits), bits 111-0=mantissa (112 bits)
   # NaN = exponent all-ones (0x7FFF) AND mantissa != 0
   var bits = me.to_bits()
-  var hi = trunc[U128, U64](lshr[U128](bits, 64_u32))
-  var lo = trunc[U128, U64](bits)
+  var hi = int_truncate[U128, U64](lshr[U128](bits, 64_u32))
+  var lo = int_truncate[U128, U64](bits)
   var exponent = bit_and[U64](lshr[U64](hi, 48_u32), 0x7FFF_u64)
   var hi_mantissa = bit_and[U64](hi, 0x0000_FFFF_FFFF_FFFF_u64)
   return exponent == 0x7FFF_u64 and (hi_mantissa != 0_u64 or lo != 0_u64)
@@ -468,8 +468,8 @@ routine F128.is_infinite() -> Bool
   # F128: bit 127=sign, bits 126-112=exponent (15 bits), bits 111-0=mantissa (112 bits)
   # Infinity = exponent all-ones (0x7FFF) AND mantissa == 0
   var bits = me.to_bits()
-  var hi = trunc[U128, U64](lshr[U128](bits, 64_u32))
-  var lo = trunc[U128, U64](bits)
+  var hi = int_truncate[U128, U64](lshr[U128](bits, 64_u32))
+  var lo = int_truncate[U128, U64](bits)
   var exponent = bit_and[U64](lshr[U64](hi, 48_u32), 0x7FFF_u64)
   var hi_mantissa = bit_and[U64](hi, 0x0000_FFFF_FFFF_FFFF_u64)
   return exponent == 0x7FFF_u64 and hi_mantissa == 0_u64 and lo == 0_u64
@@ -488,7 +488,7 @@ routine F128.is_normal() -> Bool
 ### :returns: The resulting `Bool` value.
 routine F128.is_subnormal() -> Bool
   var bits = me.to_bits()
-  var hi = trunc[U128, U64](lshr[U128](bits, 64_u32))
+  var hi = int_truncate[U128, U64](lshr[U128](bits, 64_u32))
   var exponent = bit_and[U64](lshr[U64](hi, 48_u32), 0x7FFF_u64)
   return exponent == 0_u64 and not me.is_zero()
 
@@ -500,36 +500,36 @@ routine F128.is_subnormal() -> Bool
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F128` value.
 routine F128.$add_clamp(you: F128) -> F128
-  var result = fadd[F128](me, you)
+  var result = float_add[F128](me, you)
   if result.is_infinite()
-    return if result.is_positive() then F128_MAX else fneg[F128](F128_MAX)
+    return if result.is_positive() then F128_MAX else float_neg[F128](F128_MAX)
   return result
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F128` value.
 routine F128.$sub_clamp(you: F128) -> F128
-  var result = fsub[F128](me, you)
+  var result = float_sub[F128](me, you)
   if result.is_infinite()
-    return if result.is_positive() then F128_MAX else fneg[F128](F128_MAX)
+    return if result.is_positive() then F128_MAX else float_neg[F128](F128_MAX)
   return result
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F128` value.
 routine F128.$mul_clamp(you: F128) -> F128
-  var result = fmul[F128](me, you)
+  var result = float_mul[F128](me, you)
   if result.is_infinite()
-    return if result.is_positive() then F128_MAX else fneg[F128](F128_MAX)
+    return if result.is_positive() then F128_MAX else float_neg[F128](F128_MAX)
   return result
 
 ### Implements the wired routine behavior for this value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F128` value.
 routine F128.$truediv_clamp(you: F128) -> F128
-  var result = fdiv[F128](me, you)
+  var result = float_div[F128](me, you)
   if result.is_infinite()
-    return if result.is_positive() then F128_MAX else fneg[F128](F128_MAX)
+    return if result.is_positive() then F128_MAX else float_neg[F128](F128_MAX)
   return result
 
 ### Implements the wired routine behavior for this value.
@@ -538,7 +538,7 @@ routine F128.$truediv_clamp(you: F128) -> F128
 routine F128.$pow_clamp(exp: F128) -> F128
   var result = rf_f128_pow(me, exp)
   if result.is_infinite()
-    return if result.is_positive() then F128_MAX else fneg[F128](F128_MAX)
+    return if result.is_positive() then F128_MAX else float_neg[F128](F128_MAX)
   return result
 
 # ============================================================================
@@ -562,12 +562,12 @@ routine F128.S128!() -> S128
 ### Returns the result of `F32`.
 ### :returns: The resulting `F32` value.
 routine F128.F32() -> F32
-  return fptrunc[F128, F32](me)
+  return float_narrow[F128, F32](me)
 
 ### Returns the result of `F64`.
 ### :returns: The resulting `F64` value.
 routine F128.F64() -> F64
-  return fptrunc[F128, F64](me)
+  return float_narrow[F128, F64](me)
 
 # ============================================================================
 # Diagnostics and Hashing
@@ -582,12 +582,12 @@ routine F128.$diagnose() -> Text
 ### :returns: The resulting `U64` value.
 routine F128.hash() -> U64
   var bits = me.to_bits()
-  var lo = trunc[U128, U64](bits)
-  var hi = trunc[U128, U64](lshr[U128](bits, 64_u32))
+  var lo = int_truncate[U128, U64](bits)
+  var hi = int_truncate[U128, U64](lshr[U128](bits, 64_u32))
   if me.is_nan()
     lo = 0_u64
     hi = 0x7FFF800000000000_u64
-  if bits == shl[U128](zext[U64, U128](0x8000000000000000_u64), 64_u32)
+  if bits == shl[U128](zero_extend[U64, U128](0x8000000000000000_u64), 64_u32)
     lo = 0_u64
     hi = 0_u64
   return xor[U64](lo, mul[U64](hi, 1099511628211_u64))
@@ -670,7 +670,7 @@ routine F128.$create!(from_text: Text) -> F128
 ### Returns a hash of this value.
 ### :returns: The resulting `U64` value.
 routine F128.$hash() -> U64
-  return __hash_u128(v: bitcast[F128, U128](me))
+  return __hash_u128(v: reinterpret_bits[F128, U128](me))
 
 # ============================================================================
 # Byte Representation
@@ -679,53 +679,53 @@ routine F128.$hash() -> U64
 ### Returns the raw bytes of this value in little-endian order.
 ### :returns: The resulting `ValueList[Byte, 16]` value.
 routine F128.to_bytes_le() -> ValueList[Byte, 16]
-  var raw = bitcast[F128, U128](me)
-  var lo = trunc[U128, U64](raw)
-  var hi = trunc[U128, U64](lshr[U128](raw, 64_u128))
+  var raw = reinterpret_bits[F128, U128](me)
+  var lo = int_truncate[U128, U64](raw)
+  var hi = int_truncate[U128, U64](lshr[U128](raw, 64_u128))
   var result = ValueList[Byte, 16]()
-  result = set_byte_at(result, 0_u64,  trunc[U64, U8](lo))
-  result = set_byte_at(result, 1_u64,  trunc[U64, U8](lshr[U64](lo, 8_u64)))
-  result = set_byte_at(result, 2_u64,  trunc[U64, U8](lshr[U64](lo, 16_u64)))
-  result = set_byte_at(result, 3_u64,  trunc[U64, U8](lshr[U64](lo, 24_u64)))
-  result = set_byte_at(result, 4_u64,  trunc[U64, U8](lshr[U64](lo, 32_u64)))
-  result = set_byte_at(result, 5_u64,  trunc[U64, U8](lshr[U64](lo, 40_u64)))
-  result = set_byte_at(result, 6_u64,  trunc[U64, U8](lshr[U64](lo, 48_u64)))
-  result = set_byte_at(result, 7_u64,  trunc[U64, U8](lshr[U64](lo, 56_u64)))
-  result = set_byte_at(result, 8_u64,  trunc[U64, U8](hi))
-  result = set_byte_at(result, 9_u64,  trunc[U64, U8](lshr[U64](hi, 8_u64)))
-  result = set_byte_at(result, 10_u64, trunc[U64, U8](lshr[U64](hi, 16_u64)))
-  result = set_byte_at(result, 11_u64, trunc[U64, U8](lshr[U64](hi, 24_u64)))
-  result = set_byte_at(result, 12_u64, trunc[U64, U8](lshr[U64](hi, 32_u64)))
-  result = set_byte_at(result, 13_u64, trunc[U64, U8](lshr[U64](hi, 40_u64)))
-  result = set_byte_at(result, 14_u64, trunc[U64, U8](lshr[U64](hi, 48_u64)))
-  result = set_byte_at(result, 15_u64, trunc[U64, U8](lshr[U64](hi, 56_u64)))
+  result = set_byte_at(result, 0_u64,  int_truncate[U64, U8](lo))
+  result = set_byte_at(result, 1_u64,  int_truncate[U64, U8](lshr[U64](lo, 8_u64)))
+  result = set_byte_at(result, 2_u64,  int_truncate[U64, U8](lshr[U64](lo, 16_u64)))
+  result = set_byte_at(result, 3_u64,  int_truncate[U64, U8](lshr[U64](lo, 24_u64)))
+  result = set_byte_at(result, 4_u64,  int_truncate[U64, U8](lshr[U64](lo, 32_u64)))
+  result = set_byte_at(result, 5_u64,  int_truncate[U64, U8](lshr[U64](lo, 40_u64)))
+  result = set_byte_at(result, 6_u64,  int_truncate[U64, U8](lshr[U64](lo, 48_u64)))
+  result = set_byte_at(result, 7_u64,  int_truncate[U64, U8](lshr[U64](lo, 56_u64)))
+  result = set_byte_at(result, 8_u64,  int_truncate[U64, U8](hi))
+  result = set_byte_at(result, 9_u64,  int_truncate[U64, U8](lshr[U64](hi, 8_u64)))
+  result = set_byte_at(result, 10_u64, int_truncate[U64, U8](lshr[U64](hi, 16_u64)))
+  result = set_byte_at(result, 11_u64, int_truncate[U64, U8](lshr[U64](hi, 24_u64)))
+  result = set_byte_at(result, 12_u64, int_truncate[U64, U8](lshr[U64](hi, 32_u64)))
+  result = set_byte_at(result, 13_u64, int_truncate[U64, U8](lshr[U64](hi, 40_u64)))
+  result = set_byte_at(result, 14_u64, int_truncate[U64, U8](lshr[U64](hi, 48_u64)))
+  result = set_byte_at(result, 15_u64, int_truncate[U64, U8](lshr[U64](hi, 56_u64)))
   return result
 
 ### Returns the raw bytes of this value in big-endian order.
 ### :returns: The resulting `ValueList[Byte, 16]` value.
 routine F128.to_bytes_be() -> ValueList[Byte, 16]
-  var raw = bitcast[F128, U128](me)
-  var lo = trunc[U128, U64](lshr[U128](raw, 64_u128))
-  var hi = trunc[U128, U64](raw)
+  var raw = reinterpret_bits[F128, U128](me)
+  var lo = int_truncate[U128, U64](lshr[U128](raw, 64_u128))
+  var hi = int_truncate[U128, U64](raw)
   lo = bswap[U64](lo)
   hi = bswap[U64](hi)
   var result = ValueList[Byte, 16]()
-  result = set_byte_at(result, 0_u64,  trunc[U64, U8](lo))
-  result = set_byte_at(result, 1_u64,  trunc[U64, U8](lshr[U64](lo, 8_u64)))
-  result = set_byte_at(result, 2_u64,  trunc[U64, U8](lshr[U64](lo, 16_u64)))
-  result = set_byte_at(result, 3_u64,  trunc[U64, U8](lshr[U64](lo, 24_u64)))
-  result = set_byte_at(result, 4_u64,  trunc[U64, U8](lshr[U64](lo, 32_u64)))
-  result = set_byte_at(result, 5_u64,  trunc[U64, U8](lshr[U64](lo, 40_u64)))
-  result = set_byte_at(result, 6_u64,  trunc[U64, U8](lshr[U64](lo, 48_u64)))
-  result = set_byte_at(result, 7_u64,  trunc[U64, U8](lshr[U64](lo, 56_u64)))
-  result = set_byte_at(result, 8_u64,  trunc[U64, U8](hi))
-  result = set_byte_at(result, 9_u64,  trunc[U64, U8](lshr[U64](hi, 8_u64)))
-  result = set_byte_at(result, 10_u64, trunc[U64, U8](lshr[U64](hi, 16_u64)))
-  result = set_byte_at(result, 11_u64, trunc[U64, U8](lshr[U64](hi, 24_u64)))
-  result = set_byte_at(result, 12_u64, trunc[U64, U8](lshr[U64](hi, 32_u64)))
-  result = set_byte_at(result, 13_u64, trunc[U64, U8](lshr[U64](hi, 40_u64)))
-  result = set_byte_at(result, 14_u64, trunc[U64, U8](lshr[U64](hi, 48_u64)))
-  result = set_byte_at(result, 15_u64, trunc[U64, U8](lshr[U64](hi, 56_u64)))
+  result = set_byte_at(result, 0_u64,  int_truncate[U64, U8](lo))
+  result = set_byte_at(result, 1_u64,  int_truncate[U64, U8](lshr[U64](lo, 8_u64)))
+  result = set_byte_at(result, 2_u64,  int_truncate[U64, U8](lshr[U64](lo, 16_u64)))
+  result = set_byte_at(result, 3_u64,  int_truncate[U64, U8](lshr[U64](lo, 24_u64)))
+  result = set_byte_at(result, 4_u64,  int_truncate[U64, U8](lshr[U64](lo, 32_u64)))
+  result = set_byte_at(result, 5_u64,  int_truncate[U64, U8](lshr[U64](lo, 40_u64)))
+  result = set_byte_at(result, 6_u64,  int_truncate[U64, U8](lshr[U64](lo, 48_u64)))
+  result = set_byte_at(result, 7_u64,  int_truncate[U64, U8](lshr[U64](lo, 56_u64)))
+  result = set_byte_at(result, 8_u64,  int_truncate[U64, U8](hi))
+  result = set_byte_at(result, 9_u64,  int_truncate[U64, U8](lshr[U64](hi, 8_u64)))
+  result = set_byte_at(result, 10_u64, int_truncate[U64, U8](lshr[U64](hi, 16_u64)))
+  result = set_byte_at(result, 11_u64, int_truncate[U64, U8](lshr[U64](hi, 24_u64)))
+  result = set_byte_at(result, 12_u64, int_truncate[U64, U8](lshr[U64](hi, 32_u64)))
+  result = set_byte_at(result, 13_u64, int_truncate[U64, U8](lshr[U64](hi, 40_u64)))
+  result = set_byte_at(result, 14_u64, int_truncate[U64, U8](lshr[U64](hi, 48_u64)))
+  result = set_byte_at(result, 15_u64, int_truncate[U64, U8](lshr[U64](hi, 56_u64)))
   return result
 
 ### Returns a keyed hash of this value using SipHash-2-4.
@@ -733,4 +733,4 @@ routine F128.to_bytes_be() -> ValueList[Byte, 16]
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
 routine F128.$secure_hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u128(v: bitcast[F128, U128](me), k0: k0, k1: k1)
+  return __secure_hash_u128(v: reinterpret_bits[F128, U128](me), k0: k0, k1: k1)

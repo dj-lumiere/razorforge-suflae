@@ -29,7 +29,7 @@ routine Byte.$create(from: Byte) -> Byte
 ### :param from: The source value to convert.
 ### :returns: The resulting `Byte` value.
 routine Byte.$create(from: U8) -> Byte
-  return bitcast[Byte](from)
+  return reinterpret_bits[Byte](from)
 
 # Common byte constants
 preset BYTE_NULL: Byte = Byte(0x00u8)
@@ -151,11 +151,11 @@ routine Byte.$diagnose() -> Text
 ### Returns a hash of this value.
 ### :returns: The resulting `U64` value.
 routine Byte.$hash() -> U64
-  return __hash_leaf(v: zext[Byte, U64](me))
+  return __hash_leaf(v: zero_extend[Byte, U64](me))
 
 ### Returns a keyed hash of this value using SipHash-2-4.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
 routine Byte.$secure_hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u64(v: zext[Byte, U64](me), k0: k0, k1: k1)
+  return __secure_hash_u64(v: zero_extend[Byte, U64](me), k0: k0, k1: k1)

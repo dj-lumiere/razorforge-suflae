@@ -67,11 +67,11 @@ routine Claimed[T].$exit()
 @readonly
 routine Claimed[T].$represent() -> Text
   danger!
-    return me.ptr.read().$represent()
+    return me.ptr.extract().$represent()
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Claimed[T].$diagnose() -> Text
   danger!
-    return me.type_name() + "(state: " + WRITING.$represent() + ", " + me.ptr.read().$diagnose() + ")"
+    return me.type_name() + "(state: " + WRITING.$represent() + ", " + me.ptr.extract().$diagnose() + ")"
