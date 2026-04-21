@@ -18,11 +18,11 @@ A precision systems language for absolute control and deterministic performance.
 
 ```razorforge
 entity ConnectionPool
-  connections: List<Connection>
+  connections: Owned[List[Connection]]
   active_count: S64
   max_connections: S64
 
-routine acquire_connection(pool: Shared<ConnectionPool>) -> Connection?
+routine acquire_connection(pool: Retained[ConnectionPool]) -> Maybe[Owned[Connection]]
   # Block access for multiple operations
   using pool.hijack() as p
     # Check capacity with pattern matching
@@ -34,7 +34,7 @@ routine acquire_connection(pool: Shared<ConnectionPool>) -> Connection?
         return conn
       else => return None  # Pool exhausted
 
-routine monitor_pool(weak: Tracked<ConnectionPool>)
+routine monitor_pool(weak: Tracked[ConnectionPool])
   # Try to recover weak reference
   when weak.try_recover()
     is None => show("Pool was deallocated")
@@ -45,7 +45,9 @@ routine monitor_pool(weak: Tracked<ConnectionPool>)
 
 **Use RazorForge for:**
 
+- Systems programming
 - Game engines and real-time applications
+- Embedded systems and firmware
 - Performance-critical hot paths
 - Manual memory control
 
@@ -55,11 +57,11 @@ A productivity-first language for building modern applications quickly and safel
 
 ```suflae
 entity UserCache
-  secret cache: Dict<Integer, User>
+  secret cache: Dict[Integer, User]
   secret hit_count: Integer
   secret miss_count: Integer
 
-routine UserCache.__create__()
+routine UserCache.$create()
   me.cache = Dict()
   me.hit_count = 0
   me.miss_count = 0
@@ -79,11 +81,11 @@ suspended routine UserCache.fetch_user!(id: Integer) -> User
       return cached
 
 routine start()
-  # Create an actor (spawns a green thread)
-  var cache = UserCache().act()  # Type: Actor<UserCache>
+  # Create an actor (spawns a suspended task)
+  var cache = UserCache().act()  # Type: Actor[UserCache]
 
-  # Multiple tasks can safely call cache methods concurrently
-  # Method calls become messages - no locks needed!
+  # Multiple tasks can safely call cache member routines concurrently
+  # Member routine calls become messages - no locks needed!
   var user = waitfor cache.fetch_user(12345)
   show(f"Got user: {user.name}")
 ```
@@ -112,9 +114,11 @@ We believe programming should be **enjoyable, not a battle with the language.**
 
 ### The Smooth Gradient Vision
 
-Our mission is to provide a single, continuous path from your first "Hello World" to building world-class systems software. Each step builds naturally on the last, with no walls to climb.
+Our mission is to provide a single, continuous path from your first "Hello World" to building world-class systems
+software. Each step builds naturally on the last, with no walls to climb.
 
-Read more: [RazorForge Philosophy](https://razorforge.lumi-dev.xyz/Philosophy) | [Suflae Philosophy](https://suflae.lumi-dev.xyz/Philosophy)
+Read
+more: [RazorForge Philosophy](https://razorforge.lumi-dev.xyz/Philosophy) | [Suflae Philosophy](https://suflae.lumi-dev.xyz/Philosophy)
 
 ---
 
@@ -177,13 +181,15 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 
 ### RazorForge
 
-- **Theatrical Memory Model**: Inline tokens (`.view()`, `.hijack()`) + scoped blocks (`using X.view() as y`, `using X.hijack() as y`) + explicit
+- **Theatrical Memory Model**: Inline access (`.view()`, `.hijack()`) + scoped blocks (`using X.view() as y`,
+  `using X.hijack() as y`) + explicit
   ownership (`steal`)
-- **No Lifetime Annotations**: Tokens cannot be returned from routines = safety without complexity
+- **No Lifetime Annotations**: Access cannot be returned from routines = safety without complexity
 - **Pay Only for What You Use**: No hidden costs, explicit tradeoffs
 - **Danger Blocks**: Opt-in unsafe operations (`danger!`) for zero-overhead code
-- **Five Data Types**: `record`, `resident`, `entity`, `choice`, `variant`
-- **Explicit Concurrency**: `Shared<T, Policy>` with `using X.seize!()` / `using X.inspect!()` for thread-safe access
+- **Five Data Types**: `record`, `entity`, `choice`, `variant`, `protocol`
+- **Explicit Concurrency**: `Shared[T, Policy]` with `using X.seize!()` / `using X.inspect!()` for thread-safe access
+- **Freestanding Mode**: Bare metal programming without runtime
 - **C Subsystem**: Full FFI with C libraries
 
 ### Suflae
@@ -191,7 +197,7 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 - **Automatic Memory Management**: RC + GC hybrid (deterministic cleanup for most objects)
 - **Arbitrary Precision by Default**: `Integer` and `Decimal` types (no overflow)
 - **Actor Model Concurrency**: `.act()` transforms entities into actors with message passing
-- **Green Threads**: Lightweight coroutines (millions of actors, no problem)
+- **Suspended Routines**: Lightweight coroutine-based concurrency
 - **Four Data Types**: `record`, `entity`, `choice`, `variant`
 - **Native Performance**: AOT compilation to machine code
 - **RazorForge Interop**: Import RazorForge libraries when you need systems control
@@ -200,9 +206,9 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 
 - **Pattern Matching**: Powerful `when` expressions with structural matching
 - **Rich Collections**: `List`, `Dict`, `Set`, `Deque`, `SortedDict`, `PriorityQueue`, and more
-- **Error Handling**: `Maybe<T>`, `Result<T>`, `Lookup<T>` (no exceptions by default)
+- **Error Handling**: `Maybe[T]`, `Result[T]`, `Lookup[T]` (no exceptions by default)
 - **Generics**: Full generic programming with type parameters and protocols
-- **Extension Methods**: Add methods to any type from anywhere
+- **Extension Routines**: Add member routines to any type from anywhere
 - **Modern Syntax**: Clear keywords (`routine`, `entity`, `when`)
 - **Unified Standard Library**: Same collections and APIs across both languages
 
@@ -218,12 +224,14 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 
 ### RazorForge Documentation
 
-- [Memory Model](https://razorforge.lumi-dev.xyz/Memory-Model) — Theatrical memory management (view, hijack, share, steal)
-- [Concurrency Model](https://razorforge.lumi-dev.xyz/Concurrency-Model) — `Shared<T, Policy>`, threading, message passing
-- [Data Types](https://razorforge.lumi-dev.xyz/Data-Types) — Records, entities, residents, choices, variants, mutants
-- [Residents](https://razorforge.lumi-dev.xyz/Residents) — Fixed-size reference types for embedded systems
+- [Memory Model](https://razorforge.lumi-dev.xyz/Memory-Model) — Theatrical memory management (view, hijack, retain,
+  steal)
+- [Concurrency Model](https://razorforge.lumi-dev.xyz/Concurrency-Model) — `Shared[T, Policy]`, threading, message
+  passing
+- [Data Types](https://razorforge.lumi-dev.xyz/Data-Types) — Records, entities, choices, variants, protocols
 - [Danger Blocks](https://razorforge.lumi-dev.xyz/Danger-Blocks) — Unsafe operations and raw memory access
 - [C Subsystem](https://razorforge.lumi-dev.xyz/C-Subsystem) — FFI and C interop
+- [Freestanding Mode](https://razorforge.lumi-dev.xyz/Freestanding-Mode) — Bare metal programming
 - [Lock Policies](https://razorforge.lumi-dev.xyz/Lock-Policies) — Exclusive, MultiRead, ReadOnly
 - [Code Style](https://razorforge.lumi-dev.xyz/Code-Style) — Coding conventions
 - [Core](https://razorforge.lumi-dev.xyz/Core) — Auto-imported types and primitives
@@ -231,7 +239,8 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 ### Suflae Documentation
 
 - [Data Types](https://suflae.lumi-dev.xyz/Data-Types) — Records, entities, choices, variants
-- [Concurrency Model](https://suflae.lumi-dev.xyz/Concurrency-Model) — Actor model, `.act()`, green threads, async/await
+- [Concurrency Model](https://suflae.lumi-dev.xyz/Concurrency-Model) — Actor model, `.act()`, suspended routines,
+  `waitfor`
 - [Error Handling](https://suflae.lumi-dev.xyz/Error-Handling) — `Maybe`, `Result`, error propagation
 - [Text](https://suflae.lumi-dev.xyz/Text) — String handling and text processing
 - [Code Style](https://suflae.lumi-dev.xyz/Code-Style) — Coding conventions
@@ -247,7 +256,7 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 - [Pattern Matching](https://razorforge.lumi-dev.xyz/Pattern-Matching) — `when` expressions
 - [Generics](https://razorforge.lumi-dev.xyz/Generics) — Generic programming
 - [Protocols](https://razorforge.lumi-dev.xyz/Protocols) — Interface definitions
-- [Attributes](https://razorforge.lumi-dev.xyz/Attributes) — Metadata and annotations
+- [Annotations](https://razorforge.lumi-dev.xyz/Annotations) — Metadata annotations
 - [Modules and Imports](https://razorforge.lumi-dev.xyz/Modules-and-Imports) — Module system
 
 ### System Reference
@@ -256,8 +265,8 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 - [Runtime](https://razorforge.lumi-dev.xyz/Runtime) — Runtime information
 - [Console I/O](https://razorforge.lumi-dev.xyz/Console-IO) — Terminal input/output
 - [File I/O](https://razorforge.lumi-dev.xyz/File-IO) — File system operations
-- [DateTime & Duration](https://razorforge.lumi-dev.xyz/DateTime-Duration) — Time handling
-- [Memory Size Literals](https://razorforge.lumi-dev.xyz/Memory-Size-Literals) — Size units (KiB, MiB)
+- [Temporal Types](https://razorforge.lumi-dev.xyz/Temporal-Types) — Moment and Duration (point + vector time model)
+- [Memory Types](https://razorforge.lumi-dev.xyz/Memory-Types) — Address and ByteSize (point + vector memory model)
 
 ---
 
@@ -269,7 +278,7 @@ See: [RazorForge Hello World](https://razorforge.lumi-dev.xyz/Hello-World) | [Su
 2. [Data Types](https://suflae.lumi-dev.xyz/Data-Types) — Understanding types
 3. [Pattern Matching](https://suflae.lumi-dev.xyz/Pattern-Matching) — Control flow
 4. [Collections](https://suflae.lumi-dev.xyz/Collections) — Data structures
-5. [Concurrency Model](https://suflae.lumi-dev.xyz/Concurrency-Model) — Actor model and green threads
+5. [Concurrency Model](https://suflae.lumi-dev.xyz/Concurrency-Model) — Actor model and suspended routines
 
 ### Path 2: Systems Programmer (RazorForge First)
 
@@ -287,20 +296,21 @@ Start with Suflae for productivity, gradually learn RazorForge for control:
 1. Master Suflae basics (Path 1)
 2. [Choosing Between Languages](https://razorforge.lumi-dev.xyz/Choosing-Language) — When to use each
 3. [RazorForge Memory Model](https://razorforge.lumi-dev.xyz/Memory-Model) — Understanding explicit control
-4. [Residents](https://razorforge.lumi-dev.xyz/Residents) — Fixed-size reference types
+4. [Freestanding Mode](https://razorforge.lumi-dev.xyz/Freestanding-Mode) — Bare metal programming
+
 ---
 
 ## Examples
 
 ### RazorForge: Theatrical Memory Management
 
-RazorForge makes memory operations **visible and explicit** through inline tokens and scoped blocks:
+RazorForge makes memory operations **visible and explicit** through inline access and scoped blocks:
 
 ```razorforge
 entity Node
-  value: S32,
-  next: Shared<Node>?,
-  prev: Tracked<Node>?  # Weak to prevent cycles
+  value: S32
+  next: Maybe[Retained[Node]]
+  prev: Maybe[Tracked[Node]]  # Weak to prevent cycles
 
 routine process_node(node: Node)
   # Inline read-only access
@@ -316,7 +326,7 @@ routine process_node(node: Node)
     show(h.value)
 
   # Ownership transfer
-  var list: List<Node> = List()
+  var list: List[Node] = List()
   list.add_last(steal node)  # node becomes deadref
 ```
 
@@ -332,10 +342,10 @@ routine start()
   var counter = Counter(value: 0)
 
   # Create thread-safe reference with MultiRead policy
-  var shared = counter.share<MultiRead>()
+  var shared = counter.share[MultiRead]()
 
   # Spawn reader threads - can run concurrently!
-  for i in 0 to 5
+  for i in 0 til 5
     var reader = shared  # Clone Arc (atomic increment)
     using reader.inspect!() as r
       show(f"Thread {i} reads: {r.value}")
@@ -354,8 +364,8 @@ For high-performance scenarios, use **lock-free atomics**:
 
 ```razorforge
 entity MetricsCollector
-  request_count: Atomic<S64>
-  error_count: Atomic<S64>
+  request_count: Atomic[S64]
+  error_count: Atomic[S64]
 
 routine track_request(metrics: MetricsCollector, success: Bool)
   # Lock-free increment (~5-10 CPU cycles)
@@ -375,20 +385,20 @@ entity Task
   data: Text
 
 routine start()
-  var (tx, rx) = Channel<Task>()
+  var (tx, rx) = Channel[Task]()
 
   # Spawn worker threads
-  for worker_id in 0 to 4
+  for worker_id in 0 til 4
     var receiver = rx
     loop
       when receiver.try_receive()
         is None => break  # Channel closed
-        else task
+        else task =>
           show(f"Worker {worker_id} processing task {task.id}")
           process_task(task)
 
   # Send tasks (ownership transferred to channel)
-  for i in 0 to 100
+  for i in 0 til 100
     var task = Task(id: i, data: "payload")
     tx.send(steal task)  # Explicit: task becomes deadref
 ```
@@ -399,23 +409,23 @@ Suflae uses the **actor model** for safe, simple concurrency:
 
 ```suflae
 entity Counter
-  value: S32
+  value: S64
 
 routine Counter.increment()
   me.value += 1
 
-routine Counter.get() -> S32
+routine Counter.get() -> S64
   return me.value
 
-var counter = Counter(value: 0).act()  # Type: Actor<Counter>
+var counter = Counter(value: 0).act()  # Type: Actor[Counter]
 
 suspended routine increment_worker()
-  for j in 0 to 100
+  for j in 0 til 100
     counter.increment()  # Sends message to actor
 
 suspended routine start()
   # Start 10 workers (fire-and-forget)
-  for i in 0 to 10
+  for i in 0 til 10
     increment_worker()
 
   # counter.get() will return 1000 (always correct, no races!)
@@ -429,7 +439,7 @@ suspended routine start()
 - No two threads access `value` simultaneously
 - Result is always correct, no locks needed!
 
-### Suflae: Async/Await with Tasks
+### Suflae: Suspended Routines with Tasks
 
 ```suflae
 suspended routine fetch(url: Text) -> Text
@@ -441,8 +451,8 @@ suspended routine start()
   var b = waitfor fetch("url2")
 
   # Parallel execution
-  var t1 = fetch("url1")  # Returns Task<Text>
-  var t2 = fetch("url2")  # Returns Task<Text>
+  var t1 = fetch("url1")  # Returns Task[Text]
+  var t2 = fetch("url2")  # Returns Task[Text]
   var (a, b) = waitfor (t1, t2)  # Wait for both
 ```
 
@@ -450,16 +460,16 @@ suspended routine start()
 
 ## Concurrency Comparison
 
-| Aspect           | Suflae (Actor Model)      | RazorForge (Primitives)                          |
-|------------------|---------------------------|--------------------------------------------------|
-| **Philosophy**   | "Just use actors"         | "Choose your primitive"                          |
-| **Primitives**   | Actors only               | Atomics, Mutex, MultiRead, Channels              |
-| **Syntax**       | `counter.increment()`     | `counter.seize!().increment()`                   |
-| **Field Access** | Forbidden on actors       | Allowed in lock scope                            |
-| **Channels**     | Not exposed (internal)    | Exposed for direct use                           |
-| **Atomics**      | Not exposed               | Exposed for lock-free ops                        |
-| **Control**      | Automatic/implicit        | Explicit/manual                                  |
-| **Use Case**     | Applications, scripts     | Systems programming                              |
+| Aspect                     | Suflae (Actor Model)   | RazorForge (Primitives)             |
+|----------------------------|------------------------|-------------------------------------|
+| **Philosophy**             | "Just use actors"      | "Choose your primitive"             |
+| **Primitives**             | Actors only            | Atomics, Mutex, MultiRead, Channels |
+| **Syntax**                 | `counter.increment()`  | `counter.seize!().increment()`      |
+| **Member Variable Access** | Forbidden on actors    | Allowed in lock scope               |
+| **Channels**               | Not exposed (internal) | Exposed for direct use              |
+| **Atomics**                | Not exposed            | Exposed for lock-free ops           |
+| **Control**                | Automatic/implicit     | Explicit/manual                     |
+| **Use Case**               | Applications, scripts  | Systems programming                 |
 
 ---
 
@@ -488,6 +498,7 @@ RazorForge/
 
 ### Prerequisites
 
+- 64-bit operating system (x86_64 or ARM64)
 - .NET SDK 10.0 or later
 - LLVM 15+ (for code generation)
 - CMake 3.20+ (for native components)
@@ -522,7 +533,7 @@ See [Build System](https://razorforge.lumi-dev.xyz/Build-System) for detailed bu
 ### Version 0.1 (Current)
 
 - Lexer and parser for both languages
-- Memory model implementation (inline tokens, scoped access, RC)
+- Memory model implementation (inline access, scoped access, RC)
 - LLVM code generation
 - Pattern matching (`when` expressions)
 - Collections (List, Dict, Set, etc.)
@@ -535,10 +546,11 @@ See [Build System](https://razorforge.lumi-dev.xyz/Build-System) for detailed bu
 - Full generics implementation
 - Complete C FFI support (C Subsystem)
 - Freestanding mode for bare metal
-- Full async/await for Suflae (`suspended`/`waitfor`)
+- Full suspended-routine support for Suflae (`suspended`/`waitfor`)
 - Package manager (`forge` CLI tool)
 - Language server protocol (LSP)
 - VSCode extensions
+
 ### Future
 
 - Self-hosting compiler (compiler written in RazorForge)
