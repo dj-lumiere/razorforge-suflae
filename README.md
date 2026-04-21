@@ -18,7 +18,7 @@ A precision systems language for absolute control and deterministic performance.
 
 ```razorforge
 entity ConnectionPool
-  connections: List[Connection]
+  connections: Owned[List[Connection]]
   active_count: S64
   max_connections: S64
 
