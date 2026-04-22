@@ -33,7 +33,7 @@ routine ValueList[T, N].$getitem![I](index: I) -> T
 needs I obeys Integral
   var idx = index.U64!()
   if idx >= N
-    throw IndexOutOfBoundsError(index: idx, count: N)
+    throw IndexOutOfBoundsError(index: idx, count: me.count())
   return element_at[ValueList[T, N], T](me, idx)
 
 ### Implements the wired routine behavior for this value.
@@ -44,7 +44,7 @@ routine ValueList[T, N].$setitem![I](index: I, value: T)
 needs I obeys Integral
   var idx = index.U64!()
   if idx >= N
-    throw IndexOutOfBoundsError(index: idx, count: N)
+    throw IndexOutOfBoundsError(index: idx, count: me.count())
   me = set_element_at[ValueList[T, N], T](me, idx, value)
 
 # ============================================================================
@@ -94,7 +94,7 @@ routine ValueList[T, N].last!() -> T
 ### :returns: The resulting `Bool` value.
 @readonly
 routine ValueList[T, N].$contains(value: T) -> Bool
-  for i in 0 til N
+  for i in 0u64 til N
     if me[i] == value
       return true
   return false
@@ -104,7 +104,7 @@ routine ValueList[T, N].$contains(value: T) -> Bool
 ### :returns: The resulting `U64` value.
 ### :absent: Returns absent when the requested value is unavailable.
 routine ValueList[T, N].index_of!(value: T) -> U64
-  for i in 0 til N
+  for i in 0u64 til N
     if me[i] == value
       return i
   absent
@@ -145,7 +145,7 @@ routine ValueListIterator[T, N].$next!() -> T
 ### :returns: The resulting `Text` value.
 routine ValueList[T, N].$represent() -> Text
   var result = "ValueList["
-  for i in 0 til N
+  for i in 0u64 til N
     if i > 0u64
       result = result + ", "
     result = result + me[i].$represent()
@@ -156,7 +156,7 @@ routine ValueList[T, N].$represent() -> Text
 ### :returns: The resulting `Text` value.
 routine ValueList[T, N].$diagnose() -> Text
   var result = me.type_name() + "(count: " + N.$represent() + ", ["
-  for i in 0 til N
+  for i in 0u64 til N
     if i > 0u64
       result = result + ", "
     result = result + me[i].$represent()
@@ -164,7 +164,7 @@ routine ValueList[T, N].$diagnose() -> Text
   return result
 
 routine ValueList[T, N].$eq(you: ValueList[T, N]) -> Bool
-  for i in 0 til N
+  for i in 0u64 til N
     if me[i] != you[i]
       return false
   return true

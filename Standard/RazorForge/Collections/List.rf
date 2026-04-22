@@ -106,7 +106,7 @@ routine List[T].add_at!(index: U64, value: T)
       var elem_size = T.data_size()
       var src_ptr = me.data.offset(elem_size * index)
       var dst_ptr = me.data.offset(elem_size * (index + 1u64))
-      rf_copy_bytes_at(src_ptr.get_address(), dst_ptr.get_address(), elem_size * (me.count - index))
+      rf_copy_bytes_at(dst_ptr.get_address(), src_ptr.get_address(), elem_size * (me.count - index))
 
   me.data.offset(T.data_size() * index).inject(value)
   me.count = me.count + 1u64
@@ -134,7 +134,7 @@ routine List[T].remove_at!(index: U64) -> T
       var elem_size = T.data_size()
       var src_ptr = me.data.offset(elem_size * (index + 1u64))
       var dst_ptr = me.data.offset(elem_size * index)
-      rf_copy_bytes_at(src_ptr.get_address(), dst_ptr.get_address(), elem_size * (me.count - 1u64 - index))
+      rf_copy_bytes_at(dst_ptr.get_address(), src_ptr.get_address(), elem_size * (me.count - 1u64 - index))
 
   me.count = me.count - 1u64
   return value
@@ -369,7 +369,7 @@ routine List[T].add_range!(source: List[T], from: U64, count: U64)
     var elem_size = T.data_size()
     var src_ptr = source.data.offset(elem_size * from)
     var dst_ptr = me.data.offset(elem_size * me.count)
-    rf_copy_bytes_at(src_ptr.get_address(), dst_ptr.get_address(), elem_size * count)
+    rf_copy_bytes_at(dst_ptr.get_address(), src_ptr.get_address(), elem_size * count)
 
   me.count = new_count
   return
