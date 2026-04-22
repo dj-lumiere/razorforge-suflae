@@ -374,9 +374,7 @@ public partial class LlvmCodeGenerator
                 if (resolvedType.IsGenericResolution)
                 {
                     funcName = Q(name: $"{resolvedType.FullName}.$create");
-                    RecordMonomorphization(mangledName: funcName,
-                        genericMethod: creator,
-                        resolvedOwnerType: resolvedType);
+                    // Body pre-built by GMP; declaration emitted below; definition via EmitFromPreMonomorphizedBodies.
                 }
                 else
                 {

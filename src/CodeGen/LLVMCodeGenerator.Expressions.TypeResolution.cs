@@ -9,6 +9,18 @@ using SyntaxTree;
 /// </summary>
 public partial class LlvmCodeGenerator
 {
+    private static bool TryGetTransparentProtocolTarget(TypeInfo? type, out TypeInfo? targetType)
+    {
+        if (type is ProtocolTypeInfo { Methods.Count: 0, TypeArguments: { Count: > 0 } } proto)
+        {
+            targetType = proto.TypeArguments[index: 0];
+            return true;
+        }
+
+        targetType = type;
+        return false;
+    }
+
     private TypeInfo? ResolveIdentifierType(IdentifierExpression id)
     {
         if (_localVariables.TryGetValue(key: id.Name, value: out TypeInfo? varType))
@@ -311,8 +323,11 @@ public partial class LlvmCodeGenerator
                 name: "Bool"), // Comparisons return Bool
             UnaryExpression unary => GetUnaryExpressionType(unary: unary),
             CallExpression call => GetCallReturnType(call: call),
-            GenericMethodCallExpression generic =>
-                GetGenericMethodCallReturnType(generic: generic),
+            GenericMethodCallExpression gmc2 => throw new InvalidOperationException(
+                $"GenericMethodCallExpression must be lowered by GenericCallLoweringPass before codegen. " +
+                $"GMCE: {(gmc2.Object is IdentifierExpression eid ? eid.Name : gmc2.Object.GetType().Name)}.{gmc2.MethodName}" +
+                $"[{string.Join(", ", gmc2.TypeArguments?.Select(t => t.Name) ?? [])}], " +
+                $"in routine: {_currentEmittingRoutine?.Name ?? "<unknown>"} (owner: {_currentEmittingRoutine?.OwnerType?.Name ?? "none"})"),
             IndexExpression index => GetIndexReturnType(index: index),
             NamedArgumentExpression named => GetExpressionType(expr: named.Value),
             DictEntryLiteralExpression dictEntry => dictEntry.ResolvedType,
@@ -482,8 +497,14 @@ public partial class LlvmCodeGenerator
             return null;
         }
 
+        TryGetTransparentProtocolTarget(type: targetType, targetType: out TypeInfo? lookupType);
+        if (lookupType == null)
+        {
+            return null;
+        }
+
         // Look up $getitem on the target type (handles generics and protocols automatically)
-        RoutineInfo? getItem = _registry.LookupMethod(type: targetType, methodName: "$getitem");
+        RoutineInfo? getItem = _registry.LookupMethod(type: lookupType, methodName: "$getitem");
 
         if (getItem?.ReturnType == null)
         {
@@ -495,17 +516,29 @@ public partial class LlvmCodeGenerator
         // (e.g., List[BTreeListNode[S64]].$getitem returns T, but the outer T maps to S64 —
         //  the correct resolution is BTreeListNode[S64] from the list's type args, not S64).
         TypeInfo returnType = getItem.ReturnType;
-        if (targetType.TypeArguments is { Count: > 0 } && getItem.OwnerType?.GenericParameters is
+        if (lookupType.TypeArguments is { Count: > 0 } && getItem.OwnerType?.GenericParameters is
                 { Count: > 0 })
         {
             // Map generic params to concrete args (e.g., T → BTreeListNode[S64] for List[BTreeListNode[S64]].$getitem)
             IReadOnlyList<string>? genParams = getItem.OwnerType.GenericParameters;
-            for (int i = 0; i < genParams.Count && i < targetType.TypeArguments.Count; i++)
+            for (int i = 0; i < genParams.Count && i < lookupType.TypeArguments.Count; i++)
             {
                 if (returnType.Name == genParams[index: i])
                 {
-                    return targetType.TypeArguments[index: i];
+                    return lookupType.TypeArguments[index: i];
                 }
+            }
+
+            var substitutions = new Dictionary<string, TypeInfo>();
+            for (int i = 0; i < genParams.Count && i < lookupType.TypeArguments.Count; i++)
+            {
+                substitutions[key: genParams[index: i]] = lookupType.TypeArguments[index: i];
+            }
+
+            if (substitutions.Count > 0)
+            {
+                returnType = ApplyTypeSubstitutions(type: SubstituteTypeParams(type: returnType,
+                    substitutions: substitutions));
             }
         }
 
@@ -593,14 +626,14 @@ public partial class LlvmCodeGenerator
                         }
 
                         // WrapperTypeInfo receiver with method returning T (generic param): T → InnerType.
-                        // e.g., Hijacked[Byte].read() → T; T becomes Byte.
+                        // e.g., Hijacked[Byte].extract() → T; T becomes Byte.
                         if (receiverType is WrapperTypeInfo wrapperRcvr2 &&
                             method.ReturnType is GenericParameterTypeInfo)
                         {
                             return wrapperRcvr2.InnerType;
                         }
 
-                        // For generic resolution receivers (e.g., Hijacked[U8].read() → T should become U8),
+                        // For generic resolution receivers (e.g., Hijacked[U8].extract() → T should become U8),
                         // substitute using the receiver's type arguments when no _typeSubstitutions available
                         if (receiverType is
                                 { IsGenericResolution: true, TypeArguments: not null } &&
@@ -931,28 +964,26 @@ public partial class LlvmCodeGenerator
             return null;
         }
 
-        // Refresh stale generic entity resolutions for member variable lookup
-        if (targetType is EntityTypeInfo
-            {
-                IsGenericResolution: true, MemberVariables.Count: 0,
-                GenericDefinition: { MemberVariables.Count: > 0 } genDef
-            } staleEntity && staleEntity.TypeArguments != null)
+        TryGetTransparentProtocolTarget(type: targetType, targetType: out TypeInfo? lookupType);
+        if (lookupType == null)
         {
-            var refreshed =
-                genDef.CreateInstance(typeArguments: staleEntity.TypeArguments) as EntityTypeInfo;
-            if (refreshed != null && refreshed.MemberVariables.Count > 0)
-            {
-                targetType = refreshed;
-            }
+            return null;
+        }
+
+        // Refresh stale entity metadata for member variable lookup.
+        if (lookupType is EntityTypeInfo entityType)
+        {
+            lookupType = RefreshEntityMemberVariables(entity: entityType,
+                memberVariableName: member.PropertyName);
         }
 
         // Choice/Flags member access returns the type itself
-        if (targetType is ChoiceTypeInfo or FlagsTypeInfo)
+        if (lookupType is ChoiceTypeInfo or FlagsTypeInfo)
         {
-            return targetType;
+            return lookupType;
         }
 
-        MemberVariableInfo? memberVariable = targetType switch
+        MemberVariableInfo? memberVariable = lookupType switch
         {
             EntityTypeInfo e => e.LookupMemberVariable(memberVariableName: member.PropertyName),
             RecordTypeInfo r => r.LookupMemberVariable(memberVariableName: member.PropertyName),
@@ -961,10 +992,10 @@ public partial class LlvmCodeGenerator
         };
 
         TypeInfo? memberType = memberVariable?.Type;
-        if (memberType != null && targetType is
+        if (memberType != null && lookupType is
                 { IsGenericResolution: true, TypeArguments: not null })
         {
-            memberType = ResolveGenericMemberType(memberType: memberType, ownerType: targetType);
+            memberType = ResolveGenericMemberType(memberType: memberType, ownerType: lookupType);
         }
 
         return memberType;
@@ -1011,5 +1042,127 @@ public partial class LlvmCodeGenerator
         };
     }
 
+    internal TypeInfo ApplyTypeSubstitutions(TypeInfo type)
+    {
+        if (type is WrapperTypeInfo wrapper)
+        {
+            TypeInfo? wrapperRecordDef = _registry.LookupType(name: wrapper.Name);
+            if (wrapperRecordDef is { IsGenericDefinition: true } &&
+                wrapper.TypeArguments is { Count: > 0 })
+            {
+                var resolvedArgs = _typeSubstitutions != null
+                    ? wrapper.TypeArguments
+                               .Select(selector: a => SubstituteTypeParams(type: a,
+                                   substitutions: _typeSubstitutions))
+                               .ToList()
+                    : [.. wrapper.TypeArguments];
+                return _registry.GetOrCreateResolution(genericDef: wrapperRecordDef,
+                    typeArguments: resolvedArgs);
+            }
+        }
+
+        if (_typeSubstitutions == null) return type;
+
+        return SubstituteTypeParams(type: type, substitutions: _typeSubstitutions);
+    }
+
+    internal TypeInfo SubstituteTypeParams(TypeInfo type, Dictionary<string, TypeInfo> substitutions)
+    {
+        if (substitutions.TryGetValue(key: type.Name, value: out TypeInfo? sub))
+            return sub;
+
+        if (type is { IsGenericResolution: true, TypeArguments: not null })
+        {
+            bool needsResolution = false;
+            var resolvedArgs = new List<TypeInfo>();
+            foreach (TypeInfo ta in type.TypeArguments)
+            {
+                if (substitutions.TryGetValue(key: ta.Name, value: out TypeInfo? argSub))
+                {
+                    resolvedArgs.Add(item: argSub);
+                    needsResolution = true;
+                }
+                else if (ta is { IsGenericResolution: true, TypeArguments: not null })
+                {
+                    TypeInfo innerResolved = SubstituteTypeParams(type: ta, substitutions: substitutions);
+                    resolvedArgs.Add(item: innerResolved);
+                    if (innerResolved != ta) needsResolution = true;
+                }
+                else if (ta is { IsGenericDefinition: true, GenericParameters: not null }
+                         and not EntityTypeInfo)
+                {
+                    bool canResolve = true;
+                    var innerArgs = new List<TypeInfo>();
+                    foreach (string param in ta.GenericParameters)
+                    {
+                        if (substitutions.TryGetValue(key: param, value: out TypeInfo? paramSub))
+                            innerArgs.Add(item: paramSub);
+                        else { canResolve = false; break; }
+                    }
+
+                    if (canResolve)
+                    {
+                        resolvedArgs.Add(item: _registry.GetOrCreateResolution(genericDef: ta,
+                            typeArguments: innerArgs));
+                        needsResolution = true;
+                    }
+                    else resolvedArgs.Add(item: ta);
+                }
+                else resolvedArgs.Add(item: ta);
+            }
+
+            if (needsResolution)
+            {
+                TypeInfo? genericBase = GetGenericBase(type: type);
+                if (genericBase != null)
+                    return _registry.GetOrCreateResolution(genericDef: genericBase,
+                        typeArguments: resolvedArgs);
+            }
+        }
+
+        if (type is WrapperTypeInfo wrapperT)
+        {
+            TypeInfo resolvedInner = SubstituteTypeParams(type: wrapperT.InnerType,
+                substitutions: substitutions);
+            TypeInfo? wrapperRecordDef = _registry.LookupType(name: wrapperT.Name);
+            if (wrapperRecordDef is { IsGenericDefinition: true })
+                return _registry.GetOrCreateResolution(genericDef: wrapperRecordDef,
+                    typeArguments: new List<TypeInfo> { resolvedInner });
+            if (!ReferenceEquals(resolvedInner, wrapperT.InnerType))
+                return new WrapperTypeInfo(wrapperName: wrapperT.Name, innerType: resolvedInner,
+                    isReadOnly: wrapperT.IsReadOnly);
+        }
+
+        if (type is { IsGenericDefinition: true, GenericParameters: not null })
+        {
+            bool canResolve = true;
+            var resolvedArgs = new List<TypeInfo>();
+            foreach (string param in type.GenericParameters)
+            {
+                if (substitutions.TryGetValue(key: param, value: out TypeInfo? paramSub))
+                    resolvedArgs.Add(item: paramSub);
+                else { canResolve = false; break; }
+            }
+
+            if (canResolve && resolvedArgs.Count > 0)
+                return _registry.GetOrCreateResolution(genericDef: type, typeArguments: resolvedArgs);
+        }
+
+        if (type is TupleTypeInfo tuple)
+        {
+            bool anyChanged = false;
+            var resolvedElems = new List<TypeInfo>();
+            foreach (TypeInfo elem in tuple.ElementTypes)
+            {
+                TypeInfo resolved = SubstituteTypeParams(type: elem, substitutions: substitutions);
+                if (resolved != elem) anyChanged = true;
+                resolvedElems.Add(item: resolved);
+            }
+
+            if (anyChanged) return new TupleTypeInfo(elementTypes: resolvedElems);
+        }
+
+        return type;
+    }
 
 }

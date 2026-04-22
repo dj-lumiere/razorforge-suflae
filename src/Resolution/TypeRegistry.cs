@@ -257,7 +257,8 @@ public sealed partial class TypeRegistry
     /// Gets user (non-stdlib) programs that have been analyzed.
     /// Used by synthesis passes to search for generic routine bodies in user code.
     /// </summary>
-    public IReadOnlyList<(Program Program, string FilePath, string Module)> UserPrograms => _userPrograms;
+    public IReadOnlyList<(Program Program, string FilePath, string Module)> UserPrograms =>
+        _userPrograms;
 
     /// <summary>Registers a user program so synthesis passes can search it for routine bodies.</summary>
     public void RegisterUserProgram(Program program, string filePath, string module) =>
@@ -369,9 +370,21 @@ public sealed partial class TypeRegistry
         // LoadCoreModule's RegisterProgramRoutines processes Maybe[T].$unwrap etc., it calls
         // LookupType("Maybe") and gets this shell (FullName="Maybe"), causing those methods to
         // be keyed under "Maybe" in _routinesByOwner rather than "Core.Maybe".
-        RegisterType(type: new RecordTypeInfo(name: "Maybe") { GenericParameters = ["T"], Module = "Core" });
-        RegisterType(type: new RecordTypeInfo(name: "Result") { GenericParameters = ["T"], Module = "Core" });
-        RegisterType(type: new RecordTypeInfo(name: "Lookup") { GenericParameters = ["T"], Module = "Core" });
+        RegisterType(
+            type: new RecordTypeInfo(name: "Maybe")
+            {
+                GenericParameters = ["T"], Module = "Core", CarrierKind = CarrierKind.Maybe
+            });
+        RegisterType(
+            type: new RecordTypeInfo(name: "Result")
+            {
+                GenericParameters = ["T"], Module = "Core", CarrierKind = CarrierKind.Result
+            });
+        RegisterType(
+            type: new RecordTypeInfo(name: "Lookup")
+            {
+                GenericParameters = ["T"], Module = "Core", CarrierKind = CarrierKind.Lookup
+            });
     }
 
     #endregion
@@ -718,7 +731,6 @@ public sealed partial class TypeRegistry
     /// <summary>
     /// Updates the declared member set for an already-registered flags type.
     /// </summary>
-
     public void UpdateFlagsMembers(string flagsName, IReadOnlyList<FlagsMemberInfo> members)
     {
         if (!_types.TryGetValue(key: flagsName, value: out TypeInfo? type))
@@ -814,6 +826,17 @@ public sealed partial class TypeRegistry
                     _typesByShortName[key: name] = value; // cache for subsequent lookups
                     return value;
                 }
+                // Generic definition keys end with "[T]" or "[T, U]" — strip params and retry.
+                // e.g., "Core.Hijacked[T]" → strip to "Core.Hijacked" → ends with ".Hijacked" ✓
+                if (key.Contains(value: '['))
+                {
+                    string keyBase = key[..key.IndexOf(value: '[')];
+                    if (keyBase.EndsWith(value: suffix))
+                    {
+                        _typesByShortName[key: name] = value;
+                        return value;
+                    }
+                }
             }
         }
 
@@ -856,16 +879,17 @@ public sealed partial class TypeRegistry
             return existing;
         if (fullKey != shortKey && _resolutions.TryGetValue(key: shortKey, value: out existing))
             return existing;
-        if (moduleFullKey != null && _resolutions.TryGetValue(key: moduleFullKey, value: out existing))
+        if (moduleFullKey != null &&
+            _resolutions.TryGetValue(key: moduleFullKey, value: out existing))
             return existing;
 
         // If an entity-type specialization exists for this generic and the first type argument
         // is an entity type, use that specialization instead of the primary (record-type) definition.
         // This ensures e.g. Maybe[Text] gets { Hijacked[T] } layout instead of { Bool, T }.
         TypeInfo bestDef = genericDef;
-        if (typeArguments.Count > 0 &&
-            typeArguments[index: 0] is EntityTypeInfo &&
-            _entitySpecializations.TryGetValue(key: genericDef.Name, value: out TypeInfo? entitySpec))
+        if (typeArguments.Count > 0 && typeArguments[index: 0] is EntityTypeInfo &&
+            _entitySpecializations.TryGetValue(key: genericDef.Name,
+                value: out TypeInfo? entitySpec))
         {
             bestDef = entitySpec;
         }
@@ -876,7 +900,8 @@ public sealed partial class TypeRegistry
         if (fullKey != shortKey) _resolutions[key: shortKey] = resolved;
         // Module-qualified full key for ResolveTypeExpressionToLLVM (GMP rewrites type args
         // to fully-qualified names like "Collections.BTreeSetNode[Core.S64]")
-        if (moduleFullKey != null && moduleFullKey != fullKey) _resolutions[key: moduleFullKey] = resolved;
+        if (moduleFullKey != null && moduleFullKey != fullKey)
+            _resolutions[key: moduleFullKey] = resolved;
 
         return resolved;
     }
@@ -899,7 +924,8 @@ public sealed partial class TypeRegistry
         // Wrapper types (Hijacked, Retained, etc.) are stored in _wrapperResolutions, not _resolutions.
         if (_wrapperResolutions.TryGetValue(key: fullKey, value: out WrapperTypeInfo? wrapper))
             return wrapper;
-        if (fullKey != shortKey && _wrapperResolutions.TryGetValue(key: shortKey, value: out wrapper))
+        if (fullKey != shortKey &&
+            _wrapperResolutions.TryGetValue(key: shortKey, value: out wrapper))
             return wrapper;
         return null;
     }
@@ -918,7 +944,8 @@ public sealed partial class TypeRegistry
                 entityRes.TypeArguments != null)
             {
                 EntityTypeInfo fresh =
-                    (EntityTypeInfo)genericDef.CreateInstance(typeArguments: entityRes.TypeArguments);
+                    (EntityTypeInfo)genericDef.CreateInstance(
+                        typeArguments: entityRes.TypeArguments);
                 entityRes.MemberVariables = fresh.MemberVariables;
             }
         }
@@ -1203,12 +1230,11 @@ public sealed partial class TypeRegistry
     /// </summary>
     public IEnumerable<TypeInfo> AllConcreteGenericInstances =>
         _resolutions.Values
-            .Where(predicate: t =>
-                t is EntityTypeInfo or RecordTypeInfo &&
-                !t.IsGenericDefinition &&
-                t.TypeArguments is { Count: > 0 } args &&
-                args.All(predicate: a => a is not ErrorTypeInfo and not GenericParameterTypeInfo))
-            .Distinct(); // dual-index stores the same TypeInfo under two keys; deduplicate by reference.
+                    .Where(predicate: t =>
+                         t is EntityTypeInfo or RecordTypeInfo && !t.IsGenericDefinition &&
+                         t.TypeArguments is { Count: > 0 } args && args.All(predicate: a =>
+                             a is not ErrorTypeInfo and not GenericParameterTypeInfo))
+                    .Distinct(); // dual-index stores the same TypeInfo under two keys; deduplicate by reference.
 
     /// <summary>
     /// Returns all concrete WrapperTypeInfo instances (e.g. Hijacked[RetainController])
@@ -1217,10 +1243,10 @@ public sealed partial class TypeRegistry
     /// </summary>
     public IEnumerable<WrapperTypeInfo> AllConcreteWrapperInstances =>
         _wrapperResolutions.Values
-            .Where(predicate: t =>
-                t.TypeArguments is { Count: > 0 } args &&
-                args.All(predicate: a => a is not ErrorTypeInfo and not GenericParameterTypeInfo))
-            .Distinct();
+                           .Where(predicate: t =>
+                                t.TypeArguments is { Count: > 0 } args && args.All(predicate: a =>
+                                    a is not ErrorTypeInfo and not GenericParameterTypeInfo))
+                           .Distinct();
 
     /// <summary>
     /// Gets all types that can have methods (records, entities, choices, flags).

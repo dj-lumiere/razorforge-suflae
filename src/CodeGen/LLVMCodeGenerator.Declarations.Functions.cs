@@ -458,7 +458,6 @@ public partial class LlvmCodeGenerator
             return;
         }
 
-        EmitUsingCleanup(sb: sb);
         EmitRcRecordCleanup(sb: sb);
         EmitEntityCleanup(sb: sb, returnedVarName: null);
         if (_traceCurrentRoutine)
@@ -603,11 +602,12 @@ public partial class LlvmCodeGenerator
         string ownerTypeName = routine.OwnerType.FullName;
         string baseName = $"{ownerTypeName}.{name}";
 
-        // Disambiguate $create overloads by first parameter type (fully qualified)
+        // Disambiguate $create overloads by all parameter types (fully qualified)
         if (name == "$create" && routine.Parameters.Count > 0)
         {
-            string firstParamType = routine.Parameters[index: 0].Type.FullName;
-            baseName = $"{baseName}({firstParamType})";
+            string paramTypes = string.Join(separator: ",",
+                values: routine.Parameters.Select(selector: p => p.Type.FullName));
+            baseName = $"{baseName}({paramTypes})";
         }
 
         return Q(name: DecorateRoutineSymbolName(baseName: baseName,
@@ -632,33 +632,73 @@ public partial class LlvmCodeGenerator
 
 
     /// <summary>
-    /// <summary>
-    /// Emits LLVM IR for all pending monomorphizations.
+    /// Emits pre-built concrete bodies from <see cref="Instantiation.Passes.GenericMonomorphizationPass"/>
+    /// for all generic methods that have been declared in this module.
     /// <para>
-    /// Bodies are pre-rewritten by <see cref="MonomorphizationPlanner.PreRewriteAll"/> before
-    /// this method runs, so the inner loop has no AST search or substitution-map building.
-    /// Any entries added <em>during</em> emission (late-discovered via <see cref="RecordMonomorphization"/>
-    /// calls in expression emitters) fall back to on-demand rewriting via the planner.
+    /// GMP pre-rewrites bodies for every concrete generic instance before codegen runs.
+    /// This method is the primary emission path: it replaces the old
+    /// <c>RecordMonomorphization</c>-driven discovery for all standard generic-type methods
+    /// (List[T], Maybe[T], etc.) that were already processed by GMP.
+    /// </para>
+    /// <para>
+    /// Method-level generics (explicit or inferred type arguments at the call site) are NOT
+    /// covered by GMP and remain in <see cref="MonomorphizationPlanner.PendingMonomorphizations"/>;
+    /// they are handled by <see cref="MonomorphizeGenericMethods"/>.
     /// </para>
     /// </summary>
+    private void EmitFromPreMonomorphizedBodies()
+    {
+        foreach ((string _, MonomorphizedBody body) in _preMonomorphizedBodies)
+        {
+            string mangledName = MangleFunctionName(routine: body.Info);
+            if (!_generatedFunctions.Contains(item: mangledName))
+                continue;
+            if (_generatedFunctionDefs.Contains(item: mangledName))
+                continue;
+            // Synthesized bodies (IsSynthesized:true) use EmitSynthesizedBodyFromAst which does
+            // not check _generatedFunctionDefs, so pre-mark here to prevent duplicate emission.
+            // Non-synthesized bodies go through GenerateFunctionDefinition which has its own
+            // _generatedFunctionDefs guard — pre-marking here would cause GenerateFunctionDefinition
+            // to return early (seeing it as already emitted) with no define in the IR.
+            if (body.IsSynthesized)
+                _generatedFunctionDefs.Add(item: mangledName);
+            EmitMonomorphizedBody(mangledName: mangledName, body: body);
+        }
+    }
+
+    /// <summary>
+    /// Emits LLVM IR for method-level generic specializations and any entries not pre-built
+    /// by <see cref="Instantiation.Passes.GenericMonomorphizationPass"/>.
+    /// <para>
+    /// After GMP covers the common case via <see cref="EmitFromPreMonomorphizedBodies"/>,
+    /// only these late-discovered or call-site-specific entries remain in
+    /// <see cref="MonomorphizationPlanner.PendingMonomorphizations"/>:
+    /// explicit type arguments (<c>f[S64](x)</c>), inferred method-level type args,
+    /// and protocol-owned methods on generic-parameter receivers.
+    /// </para>
+    /// </summary>
+    // TODO: This should be dead because instantiation phase should cover all case
     private void MonomorphizeGenericMethods()
     {
-        // Pre-rewrite any entries that were newly recorded since the last call
+        // Pre-rewrite any entries that were newly recorded since the last call.
         _planner.PreRewriteAll(synthesizedBodies: _synthesizedBodies);
 
-        // Primary path: emit all pre-rewritten bodies
+        // Emit pre-rewritten bodies that are NOT already covered by EmitFromPreMonomorphizedBodies.
         foreach ((string mangledName, MonomorphizedBody body) in _planner.MonomorphizedBodies.ToList())
         {
             if (_generatedFunctionDefs.Contains(item: mangledName))
                 continue;
-
-            EmitMonomorphizedBody(mangledName: mangledName, body: body);
+            try
+            {
+                EmitMonomorphizedBody(mangledName: mangledName, body: body);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(value: $"Warning: Monomorphized codegen failed for '{mangledName}': {ex.Message}");
+            }
         }
 
-        // Fallback path: entries that arrived too late to be pre-rewritten
-        // (e.g., discovered by protocol-dispatch or collection-literal emitters during
-        // the current round). The outer fixed-point loop in GenerateFunctionDefinitions
-        // re-invokes PreRewriteAll → MonomorphizeGenericMethods until convergence.
+        // Fallback: entries still not pre-rewritten (arrived during the current emission round).
         foreach ((string mangledName, MonomorphizationEntry entry) in
                  _planner.PendingMonomorphizations.ToList())
         {
@@ -667,7 +707,6 @@ public partial class LlvmCodeGenerator
             if (_planner.MonomorphizedBodies.ContainsKey(key: mangledName))
                 continue;
 
-            // Entry was not yet pre-rewritten — rewrite on demand and emit
             MonomorphizedBody? onDemandBody = _planner.BuildBodyPublic(
                 mangledName: mangledName,
                 entry: entry,
@@ -675,13 +714,17 @@ public partial class LlvmCodeGenerator
             if (onDemandBody != null)
             {
                 _planner.MonomorphizedBodies[key: mangledName] = onDemandBody;
-                // Fold any residual BS calls (e.g. Byte.data_size()) that GenericAstRewriter
-                // left unfolded in on-demand-built bodies. Re-fold the full map so the new
-                // entry is covered; already-folded entries are no-ops.
                 new BuilderServiceInliningPass(_registry).RunOnMonomorphizedBodies(
                     _planner.MonomorphizedBodies);
-                EmitMonomorphizedBody(mangledName: mangledName,
-                    body: _planner.MonomorphizedBodies[key: mangledName]);
+                try
+                {
+                    EmitMonomorphizedBody(mangledName: mangledName,
+                        body: _planner.MonomorphizedBodies[key: mangledName]);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine(value: $"Warning: Monomorphized codegen failed for '{mangledName}': {ex.Message}");
+                }
             }
         }
     }

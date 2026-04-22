@@ -190,6 +190,14 @@ public sealed class ErrorHandlingGenerator
                 }
 
                 break;
+
+            case DangerStatement dangerStmt:
+                AnalyzeStatementRecursive(statement: dangerStmt.Body, analysis: analysis);
+                break;
+
+            case LoopStatement loopStmt:
+                AnalyzeStatementRecursive(statement: loopStmt.Body, analysis: analysis);
+                break;
         }
     }
 

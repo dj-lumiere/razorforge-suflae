@@ -536,6 +536,12 @@ public sealed partial class SemanticAnalyzer
         return op is BinaryOperator.And or BinaryOperator.Or;
     }
 
+    private static bool IsShiftOperator(BinaryOperator op)
+    {
+        return op is BinaryOperator.ArithmeticLeftShift or BinaryOperator.ArithmeticRightShift
+            or BinaryOperator.LogicalLeftShift or BinaryOperator.LogicalRightShift;
+    }
+
     /// <summary>
     /// Operator wired methods that choices are NOT allowed to define or call.
     /// Choices do not support any operators — use 'is' for case matching.

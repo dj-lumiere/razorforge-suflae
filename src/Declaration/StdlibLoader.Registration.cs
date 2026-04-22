@@ -141,7 +141,8 @@ public sealed partial class StdlibLoader
                     List<MemberVariableInfo> members = ResolveMemberVariables(registry: registry,
                         members: entity.Members,
                         genericParams: entity.GenericParameters,
-                        owner: existing);
+                        owner: existing,
+                        moduleName: existing.Module);
                     if (members.Count > existing.MemberVariables.Count)
                     {
                         existing.MemberVariables = members;
@@ -163,7 +164,8 @@ public sealed partial class StdlibLoader
                     List<MemberVariableInfo> members = ResolveMemberVariables(registry: registry,
                         members: record.Members,
                         genericParams: record.GenericParameters,
-                        owner: existing);
+                        owner: existing,
+                        moduleName: existing.Module);
                     if (members.Count > existing.MemberVariables.Count)
                     {
                         existing.MemberVariables = members;
@@ -185,7 +187,8 @@ public sealed partial class StdlibLoader
                     List<MemberVariableInfo> members = ResolveMemberVariables(registry: registry,
                         members: crashable.Members,
                         genericParams: null,
-                        owner: existing);
+                        owner: existing,
+                        moduleName: existing.Module);
                     if (members.Count > existing.MemberVariables.Count)
                     {
                         registry.UpdateCrashableMemberVariables(typeName: existing.FullName,
@@ -278,7 +281,7 @@ public sealed partial class StdlibLoader
     /// </summary>
     private static List<MemberVariableInfo> ResolveMemberVariables(TypeRegistry registry,
         IReadOnlyList<Declaration> members, IReadOnlyList<string>? genericParams,
-        TypeInfo? owner = null)
+        TypeInfo? owner = null, string? moduleName = null)
     {
         var result = new List<MemberVariableInfo>();
         int index = 0;
@@ -288,7 +291,8 @@ public sealed partial class StdlibLoader
             {
                 TypeInfo? memberVariableType = ResolveSimpleType(registry: registry,
                     typeExpr: memberVariable.Type,
-                    genericParams: genericParams);
+                    genericParams: genericParams,
+                    moduleName: moduleName);
                 if (memberVariableType != null)
                 {
                     result.Add(
@@ -694,13 +698,23 @@ public sealed partial class StdlibLoader
             }
         }
 
+        // Inherit CarrierKind from the pre-registered generic definition shell when building
+        // entity-type specializations (e.g. Maybe[T] needs T is EntityType).
+        CarrierKind inheritedCarrierKind = CarrierKind.None;
+        if (isEntitySpecialization &&
+            registry.LookupType(name: record.Name) is RecordTypeInfo { CarrierKind: var baseKind })
+        {
+            inheritedCarrierKind = baseKind;
+        }
+
         var typeInfo = new RecordTypeInfo(name: record.Name)
         {
             Module = moduleName,
             Visibility = record.Visibility,
             ImplementedProtocols = protocols,
             GenericParameters = record.GenericParameters,
-            BackendType = ExtractLlvmAnnotation(annotations: record.Annotations)
+            BackendType = ExtractLlvmAnnotation(annotations: record.Annotations),
+            CarrierKind = inheritedCarrierKind
         };
 
         // Back-fill Owner + Index now that typeInfo exists (Owner is needed for module access checks)
@@ -1108,6 +1122,133 @@ public sealed partial class StdlibLoader
             // Reset and re-fill with all type shells now registered
             existing.Methods = [];
             FillProtocolMethods(registry: registry, protocol: protocolDecl);
+        }
+    }
+
+    /// <summary>
+    /// Re-resolves routine signatures after all module types are registered.
+    /// This repairs stdlib routines that were registered before a referenced return type or
+    /// parameter type became available and were later finalized to Blank/Error.
+    /// </summary>
+    private static void ResolveRoutineSignatures(TypeRegistry registry, Program program,
+        string moduleName)
+    {
+        foreach (IAstNode node in program.Declarations)
+        {
+            if (node is not RoutineDeclaration routine)
+            {
+                continue;
+            }
+
+            string methodName = routine.Name;
+            TypeInfo? ownerType = null;
+            int dotIndex = routine.Name.IndexOf(value: '.');
+            if (dotIndex > 0)
+            {
+                string ownerName = routine.Name[..dotIndex];
+                methodName = routine.Name[(dotIndex + 1)..];
+                ownerType = registry.LookupType(name: ownerName) ??
+                            registry.LookupType(name: $"{moduleName}.{ownerName}");
+                if (ownerType == null)
+                {
+                    continue;
+                }
+            }
+
+            var genericContext = new List<string>();
+            if (ownerType?.GenericParameters != null)
+            {
+                genericContext.AddRange(collection: ownerType.GenericParameters);
+            }
+
+            if (routine.GenericParameters != null)
+            {
+                genericContext.AddRange(collection: routine.GenericParameters);
+            }
+
+            IReadOnlyList<string>? ctx = genericContext.Count > 0
+                ? genericContext
+                : null;
+
+            var parameters = new List<ParameterInfo>();
+            foreach (Parameter param in routine.Parameters)
+            {
+                TypeInfo? paramType = ResolveSimpleType(registry: registry,
+                    typeExpr: param.Type,
+                    genericParams: ctx,
+                    moduleName: moduleName);
+
+                if (param.IsVariadic && paramType != null)
+                {
+                    TypeInfo? listDef = registry.LookupType(name: "List");
+                    if (listDef != null)
+                    {
+                        paramType = registry.GetOrCreateResolution(genericDef: listDef,
+                            typeArguments: [paramType]);
+                    }
+                }
+
+                parameters.Add(
+                    item: new ParameterInfo(name: param.Name,
+                        type: paramType ?? ErrorTypeInfo.Instance)
+                    {
+                        DefaultValue = param.DefaultValue,
+                        IsVariadicParam = param.IsVariadic
+                    });
+            }
+
+            TypeInfo? resolvedReturnType = routine.ReturnType != null
+                ? ResolveSimpleType(registry: registry,
+                    typeExpr: routine.ReturnType,
+                    genericParams: ctx,
+                    moduleName: moduleName)
+                : null;
+
+            RoutineInfo? existingRoutine;
+            if (ownerType != null)
+            {
+                string baseName = $"{ownerType.Name}.{methodName}";
+                existingRoutine = parameters.Count > 0
+                    ? registry.LookupRoutineOverload(baseName: baseName,
+                        argTypes: parameters.Select(selector: p => p.Type).ToList())
+                    : registry.LookupRoutine(fullName: baseName,
+                        isFailable: routine.IsFailable);
+            }
+            else
+            {
+                string baseName = string.IsNullOrEmpty(value: moduleName)
+                    ? methodName
+                    : $"{moduleName}.{methodName}";
+                existingRoutine = parameters.Count > 0
+                    ? registry.LookupRoutineOverload(baseName: baseName,
+                        argTypes: parameters.Select(selector: p => p.Type).ToList())
+                    : registry.LookupRoutine(fullName: baseName,
+                        isFailable: routine.IsFailable);
+            }
+
+            if (existingRoutine == null)
+            {
+                continue;
+            }
+
+            bool hasErrorParams = existingRoutine.Parameters.Any(
+                predicate: p => p.Type is ErrorTypeInfo);
+            bool hasDeclaredReturn = routine.ReturnType != null;
+            bool missingReturn = hasDeclaredReturn &&
+                                 (existingRoutine.ReturnType == null ||
+                                  existingRoutine.ReturnType is ErrorTypeInfo ||
+                                  existingRoutine.ReturnType.Name == "Blank");
+
+            if (!hasErrorParams && !missingReturn)
+            {
+                continue;
+            }
+
+            registry.UpdateRoutine(routine: existingRoutine,
+                parameters: parameters,
+                returnType: resolvedReturnType,
+                genericParameters: existingRoutine.GenericParameters,
+                genericConstraints: existingRoutine.GenericConstraints);
         }
     }
 

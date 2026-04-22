@@ -1,9 +1,6 @@
-using TypeModel.Symbols;
-
 namespace Compiler.CodeGen;
 
 using System.Text;
-using TypeModel.Types;
 using SyntaxTree;
 
 public partial class LlvmCodeGenerator
@@ -72,14 +69,7 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Stack of loop labels for break/continue.
     /// </summary>
-    private readonly Stack<(string ContinueLabel, string BreakLabel, int UsingDepth)> _loopStack = new();
-
-    /// <summary>
-    /// Stack of active using-scope cleanups. Each entry holds the info needed to call $exit()
-    /// on early exit (return, throw, break, continue, absent).
-    /// </summary>
-    private readonly Stack<(string ResourceValue, TypeInfo ResourceType, RoutineInfo ExitMethod)>
-        _usingCleanupStack = new();
+    private readonly Stack<(string ContinueLabel, string BreakLabel)> _loopStack = new();
 
     /// <summary>
     /// Emits code for a loop statement (infinite loop primitive).
@@ -91,7 +81,7 @@ public partial class LlvmCodeGenerator
         string endLabel = NextLabel(prefix: "loop_end");
 
         // Push loop labels: continue → body header, break → end
-        _loopStack.Push(item: (bodyLabel, endLabel, _usingCleanupStack.Count));
+        _loopStack.Push(item: (bodyLabel, endLabel));
 
         // Jump to body
         EmitLine(sb: sb, line: $"  br label %{bodyLabel}");
@@ -121,9 +111,7 @@ public partial class LlvmCodeGenerator
             throw new InvalidOperationException(message: "Break statement outside of loop");
         }
 
-        (_, string breakLabel, int usingDepth) = _loopStack.Peek();
-        // Clean up using scopes pushed inside this loop only (not outer scopes)
-        EmitUsingCleanup(sb: sb, untilDepth: usingDepth);
+        (_, string breakLabel) = _loopStack.Peek();
         EmitLine(sb: sb, line: $"  br label %{breakLabel}");
     }
 
@@ -137,9 +125,7 @@ public partial class LlvmCodeGenerator
             throw new InvalidOperationException(message: "Continue statement outside of loop");
         }
 
-        (string continueLabel, _, int usingDepth) = _loopStack.Peek();
-        // Clean up using scopes pushed inside this loop only (not outer scopes)
-        EmitUsingCleanup(sb: sb, untilDepth: usingDepth);
+        (string continueLabel, _) = _loopStack.Peek();
         EmitLine(sb: sb, line: $"  br label %{continueLabel}");
     }
 }

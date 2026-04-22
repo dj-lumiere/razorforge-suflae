@@ -1,3 +1,5 @@
+using Compiler.Postprocessing.Passes;
+
 namespace Compiler.CodeGen;
 
 using System.Text;
@@ -391,6 +393,9 @@ public partial class LlvmCodeGenerator
                 message: "Cannot determine type of member variable access target");
         }
 
+        TryGetTransparentProtocolTarget(type: targetType, targetType: out TypeInfo? lookupType);
+        targetType = lookupType ?? targetType;
+
         // Wrapper type forwarding: Viewed[T], Grasped[T], etc.
         // These are records wrapping a Hijacked[T] (ptr) — forward member access to the inner entity type
         if (targetType is RecordTypeInfo wrapperRecord &&
@@ -458,7 +463,7 @@ public partial class LlvmCodeGenerator
             VariantTypeInfo variant when propertyName == "type_id" =>
                 EmitVariantTagAccess(sb: sb, variantValue: target, variant: variant),
             _ => throw new InvalidOperationException(
-                message: $"Cannot access member variable on type: {targetType.Category}")
+                message: $"Cannot access member variable '{propertyName}' on type: {targetType.Name} (category: {targetType.Category}), in routine: {_currentEmittingRoutine?.RegistryKey ?? "<unknown>"}")
         };
     }
 
@@ -864,12 +869,29 @@ public partial class LlvmCodeGenerator
     private EntityTypeInfo RefreshEntityMemberVariables(EntityTypeInfo entity,
         string memberVariableName)
     {
-        if (!entity.IsGenericResolution || entity.TypeArguments == null)
+        if (entity.MemberVariables.Any(predicate: mv => mv.Name == memberVariableName))
         {
             return entity;
         }
 
-        if (entity.MemberVariables.Any(predicate: mv => mv.Name == memberVariableName))
+        if (TryRebuildEntityMembersFromAst(entity: entity) &&
+            entity.MemberVariables.Any(predicate: mv => mv.Name == memberVariableName))
+        {
+            return entity;
+        }
+
+        // Non-generic entities can also be observed before pass 1c repopulates their member list.
+        TypeInfo? directLookup = _registry.LookupType(name: entity.FullName) ??
+                                 LookupTypeInCurrentModule(name: entity.FullName) ??
+                                 _registry.LookupType(name: entity.Name) ??
+                                 LookupTypeInCurrentModule(name: entity.Name);
+        if (directLookup is EntityTypeInfo directEntity &&
+            directEntity.MemberVariables.Any(predicate: mv => mv.Name == memberVariableName))
+        {
+            return directEntity;
+        }
+
+        if (!entity.IsGenericResolution || entity.TypeArguments == null)
         {
             return entity;
         }
@@ -901,5 +923,140 @@ public partial class LlvmCodeGenerator
         }
 
         return entity;
+    }
+
+    private bool TryRebuildEntityMembersFromAst(EntityTypeInfo entity)
+    {
+        foreach ((Program program, _, string module) in _userPrograms.Concat(_stdlibPrograms))
+        {
+            if (!string.IsNullOrEmpty(entity.Module) &&
+                !string.Equals(a: module, b: entity.Module, comparisonType: StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            EntityDeclaration? decl = program.Declarations
+                .OfType<EntityDeclaration>()
+                .FirstOrDefault(predicate: d => d.Name == entity.Name);
+            if (decl == null)
+            {
+                continue;
+            }
+
+            var rebuilt = new List<MemberVariableInfo>();
+            int index = 0;
+            foreach (VariableDeclaration member in decl.Members.OfType<VariableDeclaration>())
+            {
+                if (member.Type == null)
+                {
+                    continue;
+                }
+
+                TypeInfo? memberType = ResolveEntityMemberTypeFromAst(typeExpr: member.Type,
+                    moduleName: module,
+                    genericParams: decl.GenericParameters);
+                if (memberType == null)
+                {
+                    continue;
+                }
+
+                rebuilt.Add(item: new MemberVariableInfo(name: member.Name, type: memberType)
+                {
+                    Visibility = member.Visibility,
+                    Index = index++,
+                    HasDefaultValue = member.Initializer != null,
+                    Location = member.Location,
+                    Owner = entity
+                });
+            }
+
+            if (rebuilt.Count > 0)
+            {
+                entity.MemberVariables = rebuilt;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private TypeInfo? ResolveEntityMemberTypeFromAst(TypeExpression typeExpr, string? moduleName,
+        IReadOnlyList<string>? genericParams)
+    {
+        if (genericParams != null && genericParams.Any(predicate: gp => gp == typeExpr.Name))
+        {
+            return new GenericParameterTypeInfo(name: typeExpr.Name);
+        }
+
+        if (typeExpr.Name is "Tuple" or "ValueTuple" &&
+            typeExpr.GenericArguments is { Count: > 0 } tupleArgs)
+        {
+            var elementTypes = new List<TypeInfo>(capacity: tupleArgs.Count);
+            foreach (TypeExpression tupleArg in tupleArgs)
+            {
+                TypeInfo? elementType = ResolveEntityMemberTypeFromAst(typeExpr: tupleArg,
+                    moduleName: moduleName,
+                    genericParams: genericParams);
+                if (elementType == null)
+                {
+                    return null;
+                }
+
+                elementTypes.Add(item: elementType);
+            }
+
+            return _registry.GetOrCreateTupleType(elementTypes: elementTypes);
+        }
+
+        if (typeExpr.GenericArguments is { Count: > 0 } genericArgs)
+        {
+            if (genericArgs.Count == 1 &&
+                typeExpr.Name is "Hijacked" or "Viewed" or "Grasped" or "Inspected" or
+                    "Claimed" or "Retained" or "Shared" or "Tracked" or "Marked" or "Owned")
+            {
+                TypeInfo? innerType = ResolveEntityMemberTypeFromAst(typeExpr: genericArgs[index: 0],
+                    moduleName: moduleName,
+                    genericParams: genericParams);
+                if (innerType == null)
+                {
+                    return null;
+                }
+
+                bool isReadOnly = typeExpr.Name is "Viewed" or "Inspected";
+                return _registry.GetOrCreateWrapperType(wrapperName: typeExpr.Name,
+                    innerType: innerType,
+                    isReadOnly: isReadOnly);
+            }
+
+            TypeInfo? genericDef = _registry.LookupType(name: typeExpr.Name) ??
+                                   (moduleName != null
+                                       ? _registry.LookupType(name: $"{moduleName}.{typeExpr.Name}")
+                                       : null);
+            if (genericDef is { IsGenericDefinition: true, GenericParameters: { } genParams } &&
+                genParams.Count == genericArgs.Count)
+            {
+                var typeArgs = new List<TypeInfo>(capacity: genericArgs.Count);
+                foreach (TypeExpression genericArg in genericArgs)
+                {
+                    TypeInfo? resolvedArg = ResolveEntityMemberTypeFromAst(typeExpr: genericArg,
+                        moduleName: moduleName,
+                        genericParams: genericParams);
+                    if (resolvedArg == null)
+                    {
+                        return null;
+                    }
+
+                    typeArgs.Add(item: resolvedArg);
+                }
+
+                return _registry.GetOrCreateResolution(genericDef: genericDef,
+                    typeArguments: typeArgs);
+            }
+        }
+
+        return _registry.LookupType(name: typeExpr.Name) ??
+               (moduleName != null
+                   ? _registry.LookupType(name: $"{moduleName}.{typeExpr.Name}")
+                   : null);
     }
 }

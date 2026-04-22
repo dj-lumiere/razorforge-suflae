@@ -54,153 +54,13 @@ public partial class LlvmCodeGenerator
                 EmitLine(sb: _functionDefinitions, line: $"  ret i1 {result}");
                 break;
             }
-            case RecordTypeInfo { IsSingleMemberVariableWrapper: true } record:
+            case EntityTypeInfo entity when entity.MemberVariables.Count == 0:
             {
-                // Single-member-variable wrapper: compare the underlying value
-                string llvmType = GetLlvmType(type: record.UnderlyingIntrinsic!);
+                // Zero-field entity: pointer identity (WiredRoutinePass handles non-empty entities).
                 string result = NextTemp();
                 EmitLine(sb: _functionDefinitions,
-                    line: $"  {result} = icmp eq {llvmType} %me, %{youName}");
+                    line: $"  {result} = icmp eq ptr %me, %{youName}");
                 EmitLine(sb: _functionDefinitions, line: $"  ret i1 {result}");
-                break;
-            }
-            case RecordTypeInfo record:
-            {
-                // Multi-field record: extractvalue each field, compare, AND chain
-                if (record.MemberVariables.Count == 0)
-                {
-                    EmitLine(sb: _functionDefinitions, line: "  ret i1 true");
-                    break;
-                }
-
-                string typeName = GetRecordTypeName(record: record);
-                string accum = "true";
-                for (int i = 0; i < record.MemberVariables.Count; i++)
-                {
-                    MemberVariableInfo mv = record.MemberVariables[index: i];
-                    string fieldType = GetLlvmType(type: mv.Type);
-                    string meField = NextTemp();
-                    string youField = NextTemp();
-                    EmitLine(sb: _functionDefinitions,
-                        line: $"  {meField} = extractvalue {typeName} %me, {i}");
-                    EmitLine(sb: _functionDefinitions,
-                        line: $"  {youField} = extractvalue {typeName} %{youName}, {i}");
-
-                    string cmpResult = EmitFieldEquality(fieldType: mv.Type,
-                        llvmType: fieldType,
-                        meField: meField,
-                        youField: youField);
-
-                    if (accum == "true")
-                    {
-                        accum = cmpResult;
-                    }
-                    else
-                    {
-                        string andResult = NextTemp();
-                        EmitLine(sb: _functionDefinitions,
-                            line: $"  {andResult} = and i1 {accum}, {cmpResult}");
-                        accum = andResult;
-                    }
-                }
-
-                EmitLine(sb: _functionDefinitions, line: $"  ret i1 {accum}");
-                break;
-            }
-            case EntityTypeInfo entity:
-            {
-                // Entity: GEP + load each field from both pointers, compare
-                if (entity.MemberVariables.Count == 0)
-                {
-                    // No fields — pointer equality
-                    string result = NextTemp();
-                    EmitLine(sb: _functionDefinitions,
-                        line: $"  {result} = icmp eq ptr %me, %{youName}");
-                    EmitLine(sb: _functionDefinitions, line: $"  ret i1 {result}");
-                    break;
-                }
-
-                string typeName = GetEntityTypeName(entity: entity);
-                string accum = "true";
-                for (int i = 0; i < entity.MemberVariables.Count; i++)
-                {
-                    MemberVariableInfo mv = entity.MemberVariables[index: i];
-                    string fieldType = GetLlvmType(type: mv.Type);
-                    string meFp = NextTemp();
-                    string youFp = NextTemp();
-                    string meField = NextTemp();
-                    string youField = NextTemp();
-                    EmitLine(sb: _functionDefinitions,
-                        line: $"  {meFp} = getelementptr {typeName}, ptr %me, i32 0, i32 {i}");
-                    EmitLine(sb: _functionDefinitions,
-                        line: $"  {meField} = load {fieldType}, ptr {meFp}");
-                    EmitLine(sb: _functionDefinitions,
-                        line:
-                        $"  {youFp} = getelementptr {typeName}, ptr %{youName}, i32 0, i32 {i}");
-                    EmitLine(sb: _functionDefinitions,
-                        line: $"  {youField} = load {fieldType}, ptr {youFp}");
-
-                    string cmpResult = EmitFieldEquality(fieldType: mv.Type,
-                        llvmType: fieldType,
-                        meField: meField,
-                        youField: youField);
-
-                    if (accum == "true")
-                    {
-                        accum = cmpResult;
-                    }
-                    else
-                    {
-                        string andResult = NextTemp();
-                        EmitLine(sb: _functionDefinitions,
-                            line: $"  {andResult} = and i1 {accum}, {cmpResult}");
-                        accum = andResult;
-                    }
-                }
-
-                EmitLine(sb: _functionDefinitions, line: $"  ret i1 {accum}");
-                break;
-            }
-            case TupleTypeInfo tuple:
-            {
-                if (tuple.ElementTypes.Count == 0)
-                {
-                    EmitLine(sb: _functionDefinitions, line: "  ret i1 true");
-                    break;
-                }
-
-                string tupleStructType = GetTupleTypeName(tuple: tuple);
-                string accum = "true";
-                for (int i = 0; i < tuple.ElementTypes.Count; i++)
-                {
-                    TypeInfo elemType = tuple.ElementTypes[index: i];
-                    string elemLlvmType = GetLlvmType(type: elemType);
-                    string meElem = NextTemp();
-                    string youElem = NextTemp();
-                    EmitLine(sb: _functionDefinitions,
-                        line: $"  {meElem} = extractvalue {tupleStructType} %me, {i}");
-                    EmitLine(sb: _functionDefinitions,
-                        line: $"  {youElem} = extractvalue {tupleStructType} %{youName}, {i}");
-
-                    string cmpResult = EmitFieldEquality(fieldType: elemType,
-                        llvmType: elemLlvmType,
-                        meField: meElem,
-                        youField: youElem);
-
-                    if (accum == "true")
-                    {
-                        accum = cmpResult;
-                    }
-                    else
-                    {
-                        string andResult = NextTemp();
-                        EmitLine(sb: _functionDefinitions,
-                            line: $"  {andResult} = and i1 {accum}, {cmpResult}");
-                        accum = andResult;
-                    }
-                }
-
-                EmitLine(sb: _functionDefinitions, line: $"  ret i1 {accum}");
                 break;
             }
             default:
@@ -210,48 +70,6 @@ public partial class LlvmCodeGenerator
 
         EmitLine(sb: _functionDefinitions, line: "}");
         EmitLine(sb: _functionDefinitions, line: "");
-    }
-
-    /// <summary>
-    /// Emits a field-level equality comparison.
-    /// For primitive/backend types: icmp eq. For complex types: call $eq.
-    /// </summary>
-    private string EmitFieldEquality(TypeInfo fieldType, string llvmType, string meField,
-        string youField)
-    {
-        // Primitive/intrinsic types and backend-annotated records use icmp/fcmp
-        if (fieldType is IntrinsicTypeInfo or RecordTypeInfo { HasDirectBackendType: true } or RecordTypeInfo { IsSingleMemberVariableWrapper: true } or ChoiceTypeInfo)
-        {
-            string cmpResult = NextTemp();
-            if (llvmType is "float" or "double" or "half" or "fp128")
-            {
-                EmitLine(sb: _functionDefinitions,
-                    line: $"  {cmpResult} = fcmp oeq {llvmType} {meField}, {youField}");
-            }
-            else
-            {
-                EmitLine(sb: _functionDefinitions,
-                    line: $"  {cmpResult} = icmp eq {llvmType} {meField}, {youField}");
-            }
-
-            return cmpResult;
-        }
-
-        // Entity types and wrapper types: pointer equality (all stored as ptr in LLVM)
-        if (fieldType is EntityTypeInfo or WrapperTypeInfo)
-        {
-            string cmpResult = NextTemp();
-            EmitLine(sb: _functionDefinitions,
-                line: $"  {cmpResult} = icmp eq ptr {meField}, {youField}");
-            return cmpResult;
-        }
-
-        // Complex types: call their $eq method
-        string eqName = Q(name: $"{fieldType.FullName}.$eq");
-        string result = NextTemp();
-        EmitLine(sb: _functionDefinitions,
-            line: $"  {result} = call i1 @{eqName}({llvmType} {meField}, {llvmType} {youField})");
-        return result;
     }
 
     /// <summary>

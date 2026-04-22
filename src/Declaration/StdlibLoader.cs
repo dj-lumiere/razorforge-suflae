@@ -193,6 +193,13 @@ public sealed partial class StdlibLoader
             RegisterProgramRoutines(registry: registry, program: program, moduleName: ns);
         }
 
+        // Pass 2.1: Refresh any routine signatures that were still partially unresolved during
+        // initial registration and later collapsed to Blank via semantic finalization.
+        foreach ((Program program, string _, string ns) in _corePrograms)
+        {
+            ResolveRoutineSignatures(registry: registry, program: program, moduleName: ns);
+        }
+
         // Pass 3: Register all presets (module-level constants accessible across files)
         foreach ((Program program, string _, string ns) in _corePrograms)
         {
@@ -435,6 +442,11 @@ public sealed partial class StdlibLoader
         foreach ((Program program, string _, string ns) in programs)
         {
             RegisterProgramRoutines(registry: registry, program: program, moduleName: ns);
+        }
+
+        foreach ((Program program, string _, string ns) in programs)
+        {
+            ResolveRoutineSignatures(registry: registry, program: program, moduleName: ns);
         }
 
         // Register presets for the module

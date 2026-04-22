@@ -45,7 +45,6 @@ public sealed partial class SemanticAnalyzer
                 argTypes.Add(item: AnalyzeExpression(expression: arg));
             }
 
-            if (generic.Arguments.Count > 0)
             {
                 RoutineInfo? creator = _registry.LookupRoutineOverload(
                     baseName: $"{resolvedType.Name}.$create",
@@ -74,9 +73,9 @@ public sealed partial class SemanticAnalyzer
                     // return type when that return type is still generic (e.g. Hijacked[T]).
                     // creator.ReturnType for Hijacked[T].$create is "Hijacked[T]" — a resolution
                     // whose TypeArguments contain GenericParameterTypeInfo placeholders.  Returning
-                    // that causes downstream callers (.read(), etc.) to see an unresolved type and
-                    // mangle method names as "Core.Hijacked[T].read" instead of the correct
-                    // "Core.Hijacked[Core.Byte].read".
+                    // that causes downstream callers (.extract(), etc.) to see an unresolved type and
+                    // mangle method names as "Core.Hijacked[T].extract" instead of the correct
+                    // "Core.Hijacked[Core.Byte].extract".
                     bool returnTypeIsGenericOrUnresolved =
                         creator.ReturnType is null or { IsGenericDefinition: true } ||
                         creator.ReturnType.TypeArguments?.Any(

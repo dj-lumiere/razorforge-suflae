@@ -1,6 +1,9 @@
+using Compiler.Desugaring.Passes;
 using SyntaxTree;
 
 using Compiler.Postprocessing;
+using Compiler.Synthesis;
+
 namespace Compiler.Postprocessing.Passes;
 
 /// <summary>

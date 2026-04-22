@@ -641,15 +641,11 @@ public partial class LlvmCodeGenerator
                 line: $"{dataName} = private unnamed_addr constant [0 x i32] zeroinitializer");
         }
 
-        // Layer 2: List[Character] struct { ptr data, i64 count, i64 capacity }
-        string listName = $"@.str.list.{idx}";
+        // Layer 2: Text entity payload { ptr data, i64 count }.
+        // Text used to be emitted through an intermediate list-like wrapper, but the
+        // current runtime/entity layout is the raw pair (data, count).
         EmitLine(sb: _globalDeclarations,
-            line:
-            $"{listName} = private unnamed_addr constant {{ ptr, i64, i64 }} {{ ptr {dataName}, i64 {count}, i64 {count} }}");
-
-        // Layer 3: Text struct { ptr characters }
-        EmitLine(sb: _globalDeclarations,
-            line: $"{constName} = private unnamed_addr constant {{ ptr }} {{ ptr {listName} }}");
+            line: $"{constName} = private unnamed_addr constant {{ ptr, i64 }} {{ ptr {dataName}, i64 {count} }}");
 
         return constName;
     }

@@ -53,7 +53,14 @@ public partial class LlvmCodeGenerator
             // Mark in declarations set to prevent declare/define conflicts
             _generatedFunctions.Add(item: funcName);
 
-            EmitSynthesizedRoutineBody(routine: routine, funcName: funcName);
+            try
+            {
+                EmitSynthesizedRoutineBody(routine: routine, funcName: funcName);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(value: $"Warning: Synthesized codegen failed for '{funcName}': {ex.Message}");
+            }
         }
     }
 
@@ -93,31 +100,18 @@ public partial class LlvmCodeGenerator
                     // U64.$create(from: FlagsType) or S64.$create(from: ChoiceType)
                     EmitSynthesizedNumericCreate(routine: routine, funcName: funcName);
                 }
-                else
-                {
-                    EmitSynthesizedTextCreate(routine: routine, funcName: funcName);
-                }
-
-                break;
-            case "$create!":
-                EmitSynthesizedChoiceCreateFromText(routine: routine, funcName: funcName);
+                // Text.$create(from: T) is now handled by WiredRoutinePass → EmitSynthesizedBodyFromAst
                 break;
             case "$same":
                 EmitSynthesizedSame(routine: routine, funcName: funcName);
                 break;
-            case "$copy":
-                EmitSynthesizedRecordCopy(routine: routine, funcName: funcName);
-                break;
-            case "all_on":
-                EmitSynthesizedAllOn(routine: routine, funcName: funcName);
-                break;
-            case "all_off":
-                EmitSynthesizedAllOff(routine: routine, funcName: funcName);
-                break;
             case "all_cases":
                 EmitSynthesizedAllCases(routine: routine, funcName: funcName);
                 break;
-            // BuilderService complex per-type (list/struct returns — handled in codegen)
+            // all_off / all_on / $create! / $copy are now AST bodies from WiredRoutinePass;
+            // they reach here via _synthesizedBodies and are handled above — no cases needed.
+            // BuilderService complex per-type (list/struct returns — handled in codegen;
+            // Data-boxing of arbitrary value types is an allocation/layout concern, not AST-expressible)
             case "member_variable_info":
                 EmitSynthesizedMemberVariableInfo(routine: routine, funcName: funcName);
                 break;
@@ -127,10 +121,8 @@ public partial class LlvmCodeGenerator
             case "open_member_variables":
                 EmitSynthesizedOpenFields(routine: routine, funcName: funcName);
                 break;
-            // BuilderService per-field lookup (runtime string compare — not expressible in plain RF AST)
-            case "member_type_id":
-                EmitSynthesizedMemberTypeId(routine: routine, funcName: funcName);
-                break;
+            // member_type_id is now generated as an AST body by WiredRoutinePass and
+            // reaches here via _synthesizedBodies — no codegen case needed.
         }
     }
 
@@ -204,31 +196,5 @@ public partial class LlvmCodeGenerator
         EmitLine(sb: _functionDefinitions, line: "}");
         EmitLine(sb: _functionDefinitions, line: "");
     }
-
-    /// <summary>
-    /// Emits a synthesized $copy routine as a trivial value copy (identity function).
-    /// Records are passed/returned by value in LLVM IR, so returning the input struct
-    /// is a correct field-by-field copy for wrapper records whose fields are pointers.
-    /// </summary>
-    private void EmitSynthesizedRecordCopy(RoutineInfo routine, string funcName)
-    {
-        if (routine.OwnerType == null)
-        {
-            return;
-        }
-
-        string meType = GetParameterLlvmType(type: routine.OwnerType);
-        string retType = routine.ReturnType != null
-            ? GetLlvmType(type: routine.ReturnType)
-            : meType;
-
-        EmitLine(sb: _functionDefinitions,
-            line: $"define {retType} @{funcName}({meType} %me) {{");
-        EmitLine(sb: _functionDefinitions, line: "entry:");
-        EmitLine(sb: _functionDefinitions, line: $"  ret {retType} %me");
-        EmitLine(sb: _functionDefinitions, line: "}");
-        EmitLine(sb: _functionDefinitions, line: "");
-    }
-
 
 }

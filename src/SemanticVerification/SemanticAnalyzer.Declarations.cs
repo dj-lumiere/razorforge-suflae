@@ -461,13 +461,12 @@ public sealed partial class SemanticAnalyzer
                 location: routine.Location);
         }
 
-        // @generated and @innate are only valid on protocol routine declarations
-        if (routine.Annotations.Contains(item: "generated") ||
-            routine.Annotations.Contains(item: "innate"))
+        // @generated is only valid on protocol routine declarations
+        if (routine.Annotations.Contains(item: "generated"))
         {
             ReportError(code: SemanticDiagnosticCode.InvalidGeneratedInnatePlacement,
                 message:
-                "'@generated' and '@innate' annotations are only valid on protocol routine declarations.",
+                "'@generated' annotation is only valid on protocol routine declarations.",
                 location: routine.Location);
         }
 

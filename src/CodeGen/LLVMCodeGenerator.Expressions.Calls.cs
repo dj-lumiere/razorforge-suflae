@@ -13,7 +13,7 @@ public partial class LlvmCodeGenerator
 {
     private static string UnquoteLlvmName(string name)
     {
-        return name.Length >= 2 && name[0] == '"' && name[^1] == '"'
+        return name is ['"', _, ..] && name[^1] == '"'
             ? name[1..^1]
             : name;
     }
@@ -316,8 +316,64 @@ public partial class LlvmCodeGenerator
 
     private string EmitFunctionCall(StringBuilder sb, string functionName,
         List<Expression> arguments, RoutineInfo? resolvedRoutine = null,
-        TypeInfo? resolvedReturnType = null)
+        TypeInfo? resolvedReturnType = null,
+        IReadOnlyList<TypeExpression>? typeArguments = null)
     {
+        // Compiler intrinsics for generic-typed free functions (lowered from GMCE by
+        // GenericCallLoweringPass). Handled by name since they have no ResolvedRoutine.
+        if (functionName == "rf_invalidate" && arguments.Count == 1)
+        {
+            string addr = EmitExpression(sb: sb, expr: arguments[0]);
+            TypeInfo? addrType = GetExpressionType(expr: arguments[0]);
+            string addrLlvm = addrType != null ? GetLlvmType(type: addrType) : "ptr";
+            if (addrLlvm == "ptr")
+            {
+                EmitLine(sb: sb, line: $"  call void @rf_invalidate(ptr {addr})");
+            }
+            else
+            {
+                string asPtr = NextTemp();
+                EmitLine(sb: sb, line: $"  {asPtr} = inttoptr {addrLlvm} {addr} to ptr");
+                EmitLine(sb: sb, line: $"  call void @rf_invalidate(ptr {asPtr})");
+            }
+            return "undef";
+        }
+
+        if (functionName == "rf_address_of" && arguments.Count == 1)
+        {
+            string val = EmitExpression(sb: sb, expr: arguments[0]);
+            string result = NextTemp();
+            EmitLine(sb: sb, line: $"  {result} = ptrtoint ptr {val} to i64");
+            return result;
+        }
+
+        if (functionName == "hijacked_none" && arguments.Count == 0)
+            return "null";
+
+        // Generic free-function LLVM intrinsics can survive lowering without a bound
+        // ResolvedRoutine inside monomorphized helper bodies (e.g. element_pointer[T]).
+        // Recover them by name so wrappers like Hijacked[T].stride don't fall through
+        // and return the function's zero value.
+        if (resolvedRoutine == null && typeArguments is { Count: > 0 })
+        {
+            RoutineInfo? intrinsicRoutine =
+                _registry.LookupRoutine(fullName: functionName) ??
+                _registry.LookupRoutineByName(name: functionName);
+            if (intrinsicRoutine?.LlvmIrTemplate != null)
+            {
+                return EmitLlvmIntrinsicCall(sb: sb, routine: intrinsicRoutine,
+                    receiver: null, arguments: arguments, typeArguments: typeArguments);
+            }
+        }
+
+        // LLVM intrinsic template call (lowered from GenericMethodCallExpression for
+        // free-function intrinsics like sign_extend, load, store, bit_and, etc.)
+        if (resolvedRoutine?.LlvmIrTemplate != null)
+        {
+            return EmitLlvmIntrinsicCall(sb: sb, routine: resolvedRoutine,
+                receiver: null, arguments: arguments, typeArguments: typeArguments);
+        }
+
         bool isFailableCallSyntax = functionName.EndsWith(value: '!');
         // Strip failable '!' suffix — registry stores names without it
         if (isFailableCallSyntax)
@@ -725,10 +781,10 @@ public partial class LlvmCodeGenerator
                 string paramSuffix = "";
                 if (routine.Name == "$create" && routine.Parameters.Count > 0)
                 {
-                    TypeInfo resolvedParamType =
-                        _planner.ResolveSubstitutedType(type: routine.Parameters[index: 0].Type,
-                            subs: _typeSubstitutions!);
-                    paramSuffix = $"({resolvedParamType.Name})";
+                    var resolvedParamNames = routine.Parameters.Select(selector: p =>
+                        _planner.ResolveSubstitutedType(type: p.Type,
+                            subs: _typeSubstitutions!).Name);
+                    paramSuffix = $"({string.Join(separator: ",", values: resolvedParamNames)})";
                 }
 
                 mangledName =
@@ -1283,6 +1339,13 @@ public partial class LlvmCodeGenerator
                 InferMethodTypeArgs(genericMethod: method, argTypes: concreteArgTypes);
         }
 
+        // LLVM intrinsic template method call (e.g., buf.read![U8](offset)).
+        if (method?.LlvmIrTemplate != null)
+        {
+            return EmitLlvmIntrinsicCall(sb: sb, routine: method,
+                receiver: receiver, arguments: arguments, typeArguments: typeArguments);
+        }
+
         // Build the call — for resolved generic types (e.g., List[Character].add_last),
         // use the resolved type name even if the method was found via the base type
         string mangledName;
@@ -1559,4 +1622,150 @@ public partial class LlvmCodeGenerator
             values: types.Select(selector: (t, i) => $"{t} {values[index: i]}"));
     }
 
+    private string EmitBinaryOp(StringBuilder sb, BinaryExpression binary)
+    {
+        return binary.Operator switch
+        {
+            BinaryOperator.And => throw new InvalidOperationException(
+                $"BinaryExpression(And) must be lowered to ConditionalExpression by ExpressionLoweringPass before codegen. In routine: {_currentEmittingRoutine?.Name ?? "<unknown>"} (owner: {_currentEmittingRoutine?.OwnerType?.Name ?? "none"})"),
+            BinaryOperator.Or => throw new InvalidOperationException(
+                $"BinaryExpression(Or) must be lowered to ConditionalExpression by ExpressionLoweringPass before codegen. In routine: {_currentEmittingRoutine?.Name ?? "<unknown>"} (owner: {_currentEmittingRoutine?.OwnerType?.Name ?? "none"})"),
+            BinaryOperator.Identical =>
+                EmitIdentityComparison(sb: sb, binary: binary, cmpOp: "eq"),
+            BinaryOperator.NotIdentical => EmitIdentityComparison(sb: sb,
+                binary: binary,
+                cmpOp: "ne"),
+            BinaryOperator.Assign => EmitBinaryAssign(sb: sb, binary: binary),
+            BinaryOperator.In => EmitContainsCall(sb: sb, binary: binary, methodName: "$contains"),
+            BinaryOperator.NotIn => EmitContainsCall(sb: sb,
+                binary: binary,
+                methodName: "$notcontains"),
+            BinaryOperator.Is => EmitChoiceIs(sb: sb, binary: binary, cmpOp: "eq"),
+            BinaryOperator.IsNot => EmitChoiceIs(sb: sb, binary: binary, cmpOp: "ne"),
+            BinaryOperator.Obeys => EmitCompileTimeConstant(value: "true"),
+            BinaryOperator.Disobeys => EmitCompileTimeConstant(value: "false"),
+            _ => throw new InvalidOperationException(
+                $"BinaryExpression({binary.Operator}) must be lowered to a wired call before codegen " +
+                $"(left={binary.Left.GetType().Name}, loc={binary.Location})")
+        };
+    }
+
+    private string EmitIdentityComparison(StringBuilder sb, BinaryExpression binary, string cmpOp)
+    {
+        string left = EmitExpression(sb: sb, expr: binary.Left);
+        string right = EmitExpression(sb: sb, expr: binary.Right);
+        string result = NextTemp();
+        EmitLine(sb: sb, line: $"  {result} = icmp {cmpOp} ptr {left}, {right}");
+        return result;
+    }
+
+    private string EmitBinaryAssign(StringBuilder sb, BinaryExpression binary)
+    {
+        string value = EmitExpression(sb: sb, expr: binary.Right);
+
+        if (binary.Left is IdentifierExpression id)
+        {
+            EmitVariableAssignment(sb: sb, varName: id.Name, value: value);
+        }
+        else if (binary.Left is MemberExpression member)
+        {
+            EmitMemberVariableAssignment(sb: sb,
+                member: member,
+                value: value,
+                valueType: GetExpressionType(expr: binary.Right));
+            if (binary.Right is IdentifierExpression { Name: var srcRcName })
+            {
+                _localRetainedVars.RemoveAll(match: e => e.Name == srcRcName);
+            }
+        }
+        else if (binary.Left is IndexExpression index)
+        {
+            EmitIndexAssignment(sb: sb, index: index, value: value);
+        }
+        else
+        {
+            throw new NotImplementedException(
+                message:
+                $"Assignment target not implemented for expression type: {binary.Left.GetType().Name}");
+        }
+
+        return value;
+    }
+
+    private string EmitContainsCall(StringBuilder sb, BinaryExpression binary, string methodName)
+    {
+        string collection = EmitExpression(sb: sb, expr: binary.Right);
+        string element = EmitExpression(sb: sb, expr: binary.Left);
+
+        TypeInfo? collectionType = GetExpressionType(expr: binary.Right);
+        if (collectionType == null)
+        {
+            throw new InvalidOperationException(
+                message: "Cannot determine collection type for 'in'/'notin' operator");
+        }
+
+        ResolvedMethod? resolved = ResolveMethod(receiverType: collectionType, methodName: methodName);
+        string mangledName = resolved?.MangledName
+            ?? Q(name: $"{collectionType.FullName}.{SanitizeLlvmName(name: methodName)}");
+
+        if (resolved != null)
+        {
+            GenerateFunctionDeclaration(routine: resolved.Routine, nameOverride: resolved.MangledName);
+            // Body pre-built by GMP for generic resolutions; emitted by EmitFromPreMonomorphizedBodies.
+        }
+
+        var argValues = new List<string> { collection, element };
+        var argTypes = new List<string> { GetParameterLlvmType(type: collectionType) };
+
+        TypeInfo? elemType = GetExpressionType(expr: binary.Left);
+        argTypes.Add(item: elemType != null
+            ? GetLlvmType(type: elemType)
+            : "i64");
+
+        string result = NextTemp();
+        string args = BuildCallArgs(types: argTypes, values: argValues);
+        EmitLine(sb: sb, line: $"  {result} = call i1 @{mangledName}({args})");
+        return result;
+    }
+
+    private string EmitChoiceIs(StringBuilder sb, BinaryExpression binary, string cmpOp)
+    {
+        string left = EmitExpression(sb: sb, expr: binary.Left);
+
+        if (binary.Right is IdentifierExpression id)
+        {
+            (ChoiceTypeInfo ChoiceType, ChoiceCaseInfo CaseInfo)? choiceCase =
+                _registry.LookupChoiceCase(caseName: id.Name);
+            if (choiceCase != null)
+            {
+                string result = NextTemp();
+                EmitLine(sb: sb,
+                    line:
+                    $"  {result} = icmp {cmpOp} i32 {left}, {choiceCase.Value.CaseInfo.ComputedValue}");
+                return result;
+            }
+        }
+
+        string right = EmitExpression(sb: sb, expr: binary.Right);
+        string fallbackResult = NextTemp();
+        EmitLine(sb: sb, line: $"  {fallbackResult} = icmp {cmpOp} i32 {left}, {right}");
+        return fallbackResult;
+    }
+
+    private static string EmitCompileTimeConstant(string value)
+    {
+        return value;
+    }
+
+    private string EmitUnaryOp(StringBuilder sb, UnaryExpression unary)
+    {
+        return unary.Operator switch
+        {
+            UnaryOperator.Not => throw new InvalidOperationException(
+                $"UnaryExpression(Not) must be lowered to ConditionalExpression by ExpressionLoweringPass before codegen. Routine: {_currentEmittingRoutine?.Name ?? "<unknown>"} (owner: {_currentEmittingRoutine?.OwnerType?.Name ?? "none"})"),
+            UnaryOperator.Steal => EmitExpression(sb: sb, expr: unary.Operand),
+            _ => throw new InvalidOperationException(
+                $"UnaryExpression({unary.Operator}) must be lowered to a wired call before codegen")
+        };
+    }
 }

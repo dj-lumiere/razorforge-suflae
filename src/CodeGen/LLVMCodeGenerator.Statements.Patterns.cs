@@ -1,3 +1,4 @@
+using Compiler.Postprocessing;
 using TypeModel.Symbols;
 
 namespace Compiler.CodeGen;
@@ -16,12 +17,8 @@ public partial class LlvmCodeGenerator
         string subject = EmitExpression(sb: sb, expr: whenStmt.Expression);
         TypeInfo? subjectType = GetExpressionType(expr: whenStmt.Expression);
 
-        // Carrier and variant types are struct values (returned by value).
-        // EmitWhenSwitch/Chain use GEP which needs a pointer — spill to a temp alloca.
-        // Maybe, Result, and Lookup WhenStatements are fully lowered by PatternLoweringPass
-        // and normally never reach here; this spill guards against any residual cases.
-        if (subjectType != null &&
-            (IsCarrierType(type: subjectType) || subjectType is VariantTypeInfo))
+        // Variant types are struct values; GEP needs a pointer — spill to a temp alloca.
+        if (subjectType != null && subjectType is VariantTypeInfo)
         {
             string llvmType = GetLlvmType(type: subjectType);
             string spillAddr = NextTemp();
@@ -310,7 +307,7 @@ public partial class LlvmCodeGenerator
                 TypeInfo? targetType = tp.Type.ResolvedType
                     ?? _registry.LookupType(name: tp.Type.Name);
                 if (targetType == null) return false;
-                ulong hash = ComputeTypeId(fullName: targetType.FullName);
+                ulong hash = TypeIdHelper.ComputeTypeId(fullName:targetType.FullName);
                 // LLVM switch uses the same bit pattern; sign doesn't matter for equality
                 tagLiteral = unchecked((long)hash).ToString();
                 return true;
@@ -483,14 +480,6 @@ public partial class LlvmCodeGenerator
                     subjectType: subjectType);
                 break;
 
-            case NonePattern:
-                EmitNonePatternMatch(sb: sb,
-                    subject: subject,
-                    matchLabel: matchLabel,
-                    failLabel: failLabel,
-                    subjectType: subjectType);
-                break;
-
             case CrashablePattern crashable:
                 EmitCrashablePatternMatch(sb: sb,
                     subject: subject,
@@ -553,7 +542,7 @@ public partial class LlvmCodeGenerator
 
             default:
                 throw new NotImplementedException(
-                    message: $"Pattern type not implemented in codegen: {pattern.GetType().Name}");
+                    message: $"Pattern type not implemented in codegen: {pattern.GetType().Name}. In routine: {_currentEmittingRoutine?.Name ?? "<unknown>"} (owner: {_currentEmittingRoutine?.OwnerType?.Name ?? "none"})");
         }
     }
 
@@ -658,15 +647,6 @@ public partial class LlvmCodeGenerator
     private void EmitTypePatternMatch(StringBuilder sb, string subject, TypePattern typePattern,
         string matchLabel, string failLabel, TypeInfo? subjectType)
     {
-        // "is None" on Maybe[T] → delegate to EmitNonePatternMatch (tag == 0 check).
-        // The parser may produce TypePattern { "None" } instead of NonePattern.
-        if (typePattern.Type.Name == "None" && subjectType != null && IsMaybeType(type: subjectType))
-        {
-            EmitNonePatternMatch(sb: sb, subject: subject, matchLabel: matchLabel,
-                failLabel: failLabel, subjectType: subjectType);
-            return;
-        }
-
         // Resolve the target type
         TypeInfo? targetType = _registry.LookupType(name: typePattern.Type.Name);
 
@@ -690,69 +670,6 @@ public partial class LlvmCodeGenerator
         string branchTarget = needsBind
             ? NextLabel(prefix: "type_bind")
             : matchLabel;
-
-        // Error-handling carriers: entity Maybe checks ptr null; record Maybe checks i1 tag;
-        // Result/Lookup compare i64 type_id.
-        if (subjectType != null && IsCarrierType(type: subjectType))
-        {
-            string carrierLlvmType = GetCarrierLlvmType(type: subjectType);
-            string field0PtrP = NextTemp();
-            EmitLine(sb: sb,
-                line: $"  {field0PtrP} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 0");
-
-            {
-                string tagTypeP = GetCarrierTagType(kind: GetCarrierKind(type: subjectType));
-                string expectedTagP = IsMaybeType(type: subjectType)
-                    ? "1"
-                    : (targetType != null
-                        ? ComputeTypeId(fullName: targetType.FullName).ToString()
-                        : "0");
-                string tagP = NextTemp();
-                EmitLine(sb: sb, line: $"  {tagP} = load {tagTypeP}, ptr {field0PtrP}");
-                string cmp = NextTemp();
-                EmitLine(sb: sb, line: $"  {cmp} = icmp eq {tagTypeP} {tagP}, {expectedTagP}");
-                EmitLine(sb: sb, line: $"  br i1 {cmp}, label %{branchTarget}, label %{failLabel}");
-
-                if (needsBind && targetType != null)
-                {
-                    EmitLine(sb: sb, line: $"{branchTarget}:");
-                    string varAddr = $"%{typePattern.VariableName}.addr";
-
-                    if (IsMaybeType(type: subjectType))
-                    {
-                        // Record Maybe { i1, T }: value at field 1
-                        string valPtr = NextTemp();
-                        EmitLine(sb: sb,
-                            line:
-                            $"  {valPtr} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 1");
-                        string valLlvm = GetLlvmType(type: targetType);
-                        string val = NextTemp();
-                        EmitLine(sb: sb, line: $"  {val} = load {valLlvm}, ptr {valPtr}");
-                        EmitEntryAlloca(llvmName: varAddr, llvmType: valLlvm);
-                        EmitLine(sb: sb, line: $"  store {valLlvm} {val}, ptr {varAddr}");
-                    }
-                    else
-                    {
-                        // Result/Lookup { i64, i64 }: field 1 is i64 address → inttoptr
-                        string addrPtr = NextTemp();
-                        string addrVal = NextTemp();
-                        string handleVal = NextTemp();
-                        EmitLine(sb: sb,
-                            line:
-                            $"  {addrPtr} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 1");
-                        EmitLine(sb: sb, line: $"  {addrVal} = load i64, ptr {addrPtr}");
-                        EmitLine(sb: sb, line: $"  {handleVal} = inttoptr i64 {addrVal} to ptr");
-                        EmitEntryAlloca(llvmName: varAddr, llvmType: "ptr");
-                        EmitLine(sb: sb, line: $"  store ptr {handleVal}, ptr {varAddr}");
-                    }
-
-                    _localVariables[key: typePattern.VariableName!] = targetType;
-                    EmitLine(sb: sb, line: $"  br label %{matchLabel}");
-                }
-            }
-
-            return;
-        }
 
         if (subjectType is VariantTypeInfo variant && targetType != null)
         {
@@ -848,7 +765,7 @@ public partial class LlvmCodeGenerator
 
             // tag != 0 (not absent) && tag != ComputeTypeId(T) (not valid) → error
             TypeInfo valueType = subjectType.TypeArguments![0];
-            ulong validId = ComputeTypeId(fullName: valueType.FullName);
+            ulong validId = TypeIdHelper.ComputeTypeId(fullName:valueType.FullName);
             string notAbsent = NextTemp();
             string notValid = NextTemp();
             string cmp = NextTemp();
@@ -900,47 +817,6 @@ public partial class LlvmCodeGenerator
         {
             // Not a carrier type — cannot match crashable pattern
             EmitLine(sb: sb, line: $"  br label %{failLabel}");
-        }
-    }
-
-    /// <summary>
-    /// Emits code for None pattern matching.
-    /// For error handling types, checks DataState tag == 0 (ABSENT).
-    /// For other types, falls back to pointer null check.
-    /// </summary>
-    private void EmitNonePatternMatch(StringBuilder sb, string subject, string matchLabel,
-        string failLabel, TypeInfo? subjectType)
-    {
-        if (subjectType != null && IsCarrierType(type: subjectType))
-        {
-            // Result has no None case
-            if (!IsMaybeType(type: subjectType) &&
-                GetGenericBaseName(type: subjectType) == "Result")
-            {
-                EmitLine(sb: sb, line: $"  br label %{failLabel}");
-                return;
-            }
-
-            string carrierLlvmType = GetCarrierLlvmType(type: subjectType);
-            string field0PtrN = NextTemp();
-            EmitLine(sb: sb,
-                line: $"  {field0PtrN} = getelementptr {carrierLlvmType}, ptr {subject}, i32 0, i32 0");
-
-            // Maybe { i1, T } or Lookup: compare tag field (i1/i64) to 0.
-            // Entity Maybe uses same { i1, ptr } layout as record Maybe since C118.
-            string tagTypeN = GetCarrierTagType(kind: GetCarrierKind(type: subjectType));
-            string tagN = NextTemp();
-            EmitLine(sb: sb, line: $"  {tagN} = load {tagTypeN}, ptr {field0PtrN}");
-            string cmp = NextTemp();
-            EmitLine(sb: sb, line: $"  {cmp} = icmp eq {tagTypeN} {tagN}, 0");
-            EmitLine(sb: sb, line: $"  br i1 {cmp}, label %{matchLabel}, label %{failLabel}");
-        }
-        else
-        {
-            // Non-error-handling type: check for null pointer
-            string cmp = NextTemp();
-            EmitLine(sb: sb, line: $"  {cmp} = icmp eq ptr {subject}, null");
-            EmitLine(sb: sb, line: $"  br i1 {cmp}, label %{matchLabel}, label %{failLabel}");
         }
     }
 
@@ -1482,5 +1358,23 @@ public partial class LlvmCodeGenerator
 
         if (matchLabel != null)
             EmitLine(sb: sb, line: $"  br label %{matchLabel}");
+    }
+
+    private static ulong ResolveFlagBit(string flagName, FlagsTypeInfo? flagsType)
+    {
+        if (flagsType == null)
+        {
+            return 0;
+        }
+
+        foreach (FlagsMemberInfo member in flagsType.Members)
+        {
+            if (member.Name == flagName)
+            {
+                return 1UL << member.BitPosition;
+            }
+        }
+
+        return 0;
     }
 }

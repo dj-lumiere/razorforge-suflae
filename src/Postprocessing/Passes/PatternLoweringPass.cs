@@ -1,5 +1,6 @@
 using Compiler.Postprocessing;
 using Compiler.Desugaring;
+using Compiler.Desugaring.Passes;
 using Compiler.Lexer;
 using TypeModel.Symbols;
 using TypeModel.Types;
@@ -56,8 +57,8 @@ namespace Compiler.Postprocessing.Passes;
 /// <list type="bullet">
 ///   <item><see cref="NonePattern"/> on <c>Maybe[T entity]</c> → <c>subject.value.is_none()</c>.</item>
 ///   <item><see cref="TypePattern"/> T on <c>Maybe[T entity]</c> → <c>not subject.value.is_none()</c>,
-///         binding → <c>subject.value.read()</c>.</item>
-///   <item><see cref="ElsePattern"/> with binding on <c>Maybe[T entity]</c> → binding → <c>subject.value.read()</c>.</item>
+///         binding → <c>subject.value.extract()</c>.</item>
+///   <item><see cref="ElsePattern"/> with binding on <c>Maybe[T entity]</c> → binding → <c>subject.value.extract()</c>.</item>
 /// </list>
 ///
 /// <para>Left unchanged for codegen's <c>EmitWhen</c>:</para>
@@ -101,6 +102,17 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
                     LowerMemberList(members: cr.Members);
                     break;
             }
+        }
+    }
+
+    public void RunOnVariantBodies()
+    {
+        foreach (string key in ctx.VariantBodies.Keys.ToList())
+        {
+            Statement body = ctx.VariantBodies[key];
+            Statement lowered = LowerStatement(stmt: body);
+            if (!ReferenceEquals(lowered, body))
+                ctx.VariantBodies[key] = lowered;
         }
     }
 
@@ -390,10 +402,11 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
             ComparisonPattern => true,
             FlagsPattern      => subjectType is FlagsTypeInfo,
 
-            // ElsePattern with binding on Result/Lookup or Maybe[T entity]: lowerable.
+            // ElsePattern with binding on Result/Lookup, Maybe[T entity], or Maybe[T record]: lowerable.
             ElsePattern ep    => !ep.VariableName.HasValue()
                                  || IsResultOrLookup(subjectType)
-                                 || IsMaybeEntity(subjectType),
+                                 || IsMaybeEntity(subjectType)
+                                 || IsMaybeRecord(subjectType),
 
             NonePattern => IsMaybeRecord(subjectType) || IsMaybeEntity(subjectType),
 
@@ -494,7 +507,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
                     }
                     else if (IsMaybeEntity(subjectType) && subjectType!.TypeArguments?.Count > 0)
                     {
-                        // Maybe[T entity]: else arm binds to the inner entity via .value.read()
+                        // Maybe[T entity]: else arm binds to the inner entity via .value.extract()
                         TypeInfo innerType = subjectType.TypeArguments[0];
                         bindValue = MakeEntityMaybeRead(subject: subject, subjectType: subjectType,
                             entityType: innerType, loc: loc);
@@ -550,7 +563,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
 
             case TypePattern tp when IsMaybeEntity(subjectType):
             {
-                // Maybe[T entity]: non-null check via is_none(), binding via .value.read()
+                // Maybe[T entity]: non-null check via is_none(), binding via .value.extract()
                 TypeInfo innerType = subjectType!.TypeArguments![0];
                 Expression isNone = MakeIsNoneCall(subject: subject, subjectType: subjectType, loc: loc);
                 Expression cond = new UnaryExpression(
@@ -737,10 +750,10 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     }
 
     /// <summary>
-    /// Returns the <c>Snatched[T]</c> field type from a <c>Maybe[T entity]</c> record's <c>value</c> field.
+    /// Returns the <c>Hijacked[T]</c> field type from a <c>Maybe[T entity]</c> record's <c>value</c> field.
     /// Returns null if the type is not a recognized entity Maybe.
     /// </summary>
-    private static TypeInfo? GetEntityMaybeSnatchedType(TypeInfo subjectType)
+    private static TypeInfo? GetEntityMaybeHijackedType(TypeInfo subjectType)
     {
         if (subjectType is not RecordTypeInfo rec) return null;
         MemberVariableInfo? valueField = rec.LookupMemberVariable(memberVariableName: "value");
@@ -751,10 +764,10 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     private Expression MakeIsNoneCall(Expression subject, TypeInfo subjectType, SourceLocation loc)
     {
         TypeInfo? boolType = ctx.Registry.LookupType(name: "Bool");
-        TypeInfo? snatchedType = GetEntityMaybeSnatchedType(subjectType: subjectType);
+        TypeInfo? hijackedType = GetEntityMaybeHijackedType(subjectType: subjectType);
         var valueAccess = new MemberExpression(Object: subject, PropertyName: "value", Location: loc)
         {
-            ResolvedType = snatchedType
+            ResolvedType = hijackedType
         };
         var isNoneMember = new MemberExpression(Object: valueAccess, PropertyName: "is_none",
             Location: loc)
@@ -767,16 +780,16 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         };
     }
 
-    /// <summary>Builds <c>subject.value.read()</c> — extracts the entity from <c>Maybe[T entity]</c>.</summary>
+    /// <summary>Builds <c>subject.value.extract()</c> — extracts the entity from <c>Maybe[T entity]</c>.</summary>
     private static Expression MakeEntityMaybeRead(Expression subject, TypeInfo subjectType,
         TypeInfo entityType, SourceLocation loc)
     {
-        TypeInfo? snatchedType = GetEntityMaybeSnatchedType(subjectType: subjectType);
+        TypeInfo? hijackedType = GetEntityMaybeHijackedType(subjectType: subjectType);
         var valueAccess = new MemberExpression(Object: subject, PropertyName: "value", Location: loc)
         {
-            ResolvedType = snatchedType
+            ResolvedType = hijackedType
         };
-        var readMember = new MemberExpression(Object: valueAccess, PropertyName: "read", Location: loc)
+        var readMember = new MemberExpression(Object: valueAccess, PropertyName: "extract", Location: loc)
         {
             ResolvedType = entityType
         };
@@ -837,13 +850,13 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         if (type == null) return false;
         if (GetCarrierBaseName(type: type) != "Maybe") return false;
         if (type.TypeArguments is not { Count: > 0 }) return false;
-        // Entity-T Maybe only has `value: Snatched[T]`, no `present` field.
+        // Entity-T Maybe only has `value: Hijacked[T]`, no `present` field.
         return type.TypeArguments[0] is not EntityTypeInfo;
     }
 
     /// <summary>
     /// Returns true if <paramref name="type"/> is <c>Maybe[T]</c> where T is an entity type
-    /// (the single-field variant with only a <c>Snatched[T]</c> value field — no <c>present</c>).
+    /// (the single-field variant with only a <c>Hijacked[T]</c> value field — no <c>present</c>).
     /// </summary>
     private static bool IsMaybeEntity(TypeInfo? type)
     {

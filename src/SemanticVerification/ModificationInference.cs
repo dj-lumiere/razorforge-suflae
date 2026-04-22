@@ -156,6 +156,10 @@ public sealed class ModificationInference
                 AnalyzeStatementForModification(node: node, statement: whileStmt.Body);
                 break;
 
+            case LoopStatement loopStmt:
+                AnalyzeStatementForModification(node: node, statement: loopStmt.Body);
+                break;
+
             case ForStatement forStmt:
                 AnalyzeStatementForModification(node: node, statement: forStmt.Body);
                 break;

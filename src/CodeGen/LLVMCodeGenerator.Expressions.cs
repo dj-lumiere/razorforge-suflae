@@ -21,35 +21,40 @@ public partial class LlvmCodeGenerator
     {
         return expr switch
         {
+            // TODO: This should be eliminated by lowering pass
             LiteralExpression literal => EmitLiteral(sb: sb, literal: literal),
             IdentifierExpression identifier => EmitIdentifier(sb: sb, identifier: identifier),
+            // TODO: This should be eliminated by lowering pass
             MemberExpression memberAccess => EmitMemberVariableAccess(sb: sb, expr: memberAccess),
             CreatorExpression constructor => EmitConstructorCall(sb: sb, expr: constructor),
             CallExpression call => EmitCall(sb: sb, call: call),
+            // TODO: This should be eliminated by lowering pass
             BinaryExpression binary => EmitBinaryOp(sb: sb, binary: binary),
+            // TODO: This should be eliminated by lowering pass
             UnaryExpression unary => EmitUnaryOp(sb: sb, unary: unary),
+            // TODO: This should be eliminated by lowering pass
             ConditionalExpression cond => EmitConditional(sb: sb, cond: cond),
+            // TODO: This should be eliminated by lowering pass
             RangeExpression range => EmitRange(sb: sb, range: range),
-            GenericMethodCallExpression generic => EmitGenericMethodCall(sb: sb, generic: generic),
-            InsertedTextExpression inserted => EmitInsertedText(sb: sb, inserted: inserted),
+            InsertedTextExpression => throw new InvalidOperationException(
+                "InsertedTextExpression reached codegen — FStringLoweringPass must run before codegen."),
+            GenericMethodCallExpression gmc => EmitGmceFallback(sb: sb, gmc: gmc),
+            StealExpression steal => EmitExpression(sb: sb, expr: steal.Operand),
             ListLiteralExpression list => EmitListLiteral(sb: sb, list: list),
             SetLiteralExpression set => EmitSetLiteral(sb: sb, set: set),
             DictLiteralExpression dict => EmitDictLiteral(sb: sb, dict: dict),
-            FlagsTestExpression flagsTest => EmitFlagsTest(sb: sb, flagsTest: flagsTest),
-            CompoundAssignmentExpression compound => EmitCompoundAssignment(sb: sb,
-                compound: compound),
-            IsPatternExpression isPattern => EmitIsPattern(sb: sb, isPattern: isPattern),
+            // TODO: This should be eliminated by lowering pass
             WaitforExpression waitfor => EmitWaitforExpression(sb: sb, waitfor: waitfor),
             DictEntryLiteralExpression dictEntry => EmitDictEntryLiteral(sb: sb,
                 dictEntry: dictEntry),
+            // TODO: This should be eliminated by lowering pass
             CarrierPayloadExpression payload => EmitCarrierPayloadExpression(sb: sb,
                 payload: payload),
+            // TODO: This should be eliminated by lowering pass
             TupleLiteralExpression tuple => EmitTupleLiteral(sb: sb, tuple: tuple),
             // Named arguments appear inside synthesized AST bodies (e.g., me.$eq(you: you)).
             // The name is irrelevant to codegen — just emit the inner value positionally.
             NamedArgumentExpression named => EmitExpression(sb: sb, expr: named.Value),
-            LambdaExpression => throw new InvalidOperationException(
-                "LambdaExpression reached codegen before Phase 7 lambda lifting."),
             _ => throw new NotImplementedException(
                 message: $"Expression type not implemented: {expr.GetType().Name}")
         };
@@ -217,7 +222,8 @@ public partial class LlvmCodeGenerator
                 functionName: id.Name,
                 arguments: call.Arguments,
                 resolvedRoutine: call.ResolvedRoutine,
-                resolvedReturnType: call.ResolvedType),
+                resolvedReturnType: call.ResolvedType,
+                typeArguments: call.TypeArguments),
             _ => throw new NotImplementedException(
                 message: $"Cannot emit call for callee type: {call.Callee.GetType().Name}")
         };

@@ -1,6 +1,9 @@
+using Compiler.Postprocessing;
+
 namespace Compiler.CodeGen;
 
 using System.Text;
+using Desugaring;
 using TypeModel.Symbols;
 using TypeModel.Types;
 
@@ -86,45 +89,6 @@ public partial class LlvmCodeGenerator
                         string xorResult = NextTemp();
                         EmitLine(sb: _functionDefinitions,
                             line: $"  {xorResult} = xor i64 {accum}, {fieldHash}");
-                        accum = xorResult;
-                    }
-                }
-
-                EmitLine(sb: _functionDefinitions, line: $"  ret i64 {accum}");
-                break;
-            }
-            case TupleTypeInfo tuple:
-            {
-                if (tuple.ElementTypes.Count == 0)
-                {
-                    EmitLine(sb: _functionDefinitions, line: "  ret i64 0");
-                    break;
-                }
-
-                string tupleStructType = GetTupleTypeName(tuple: tuple);
-                string accum = "0";
-                for (int i = 0; i < tuple.ElementTypes.Count; i++)
-                {
-                    TypeInfo elemType = tuple.ElementTypes[index: i];
-                    string elemLlvmType = GetLlvmType(type: elemType);
-                    string elem = NextTemp();
-                    EmitLine(sb: _functionDefinitions,
-                        line: $"  {elem} = extractvalue {tupleStructType} %me, {i}");
-
-                    string elemHashName = Q(name: $"{elemType.Name}.$hash");
-                    string elemHash = NextTemp();
-                    EmitLine(sb: _functionDefinitions,
-                        line: $"  {elemHash} = call i64 @{elemHashName}({elemLlvmType} {elem})");
-
-                    if (accum == "0")
-                    {
-                        accum = elemHash;
-                    }
-                    else
-                    {
-                        string xorResult = NextTemp();
-                        EmitLine(sb: _functionDefinitions,
-                            line: $"  {xorResult} = xor i64 {accum}, {elemHash}");
                         accum = xorResult;
                     }
                 }
@@ -242,45 +206,6 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Emits the body for a synthesized Text.$create(from: T) routine.
-    /// Calls T.Text() on the argument.
-    /// </summary>
-    private void EmitSynthesizedTextCreate(RoutineInfo routine, string funcName)
-    {
-        if (routine.OwnerType == null || routine.Parameters.Count == 0)
-        {
-            return;
-        }
-
-        TypeInfo paramType = routine.Parameters[index: 0].Type;
-        string paramLlvmType = GetParameterLlvmType(type: paramType);
-        string paramName = routine.Parameters[index: 0].Name;
-
-        // Text.$create(from: T) → T.$represent()
-        // Look up and declare the $represent() method so it gets generated
-        RoutineInfo? textMethod =
-            _registry.LookupMethod(type: paramType, methodName: "$represent");
-        if (textMethod != null)
-        {
-            GenerateFunctionDeclaration(routine: textMethod);
-        }
-
-        string textMethodName = textMethod != null
-            ? MangleFunctionName(routine: textMethod)
-            : Q(name: $"{paramType.Name}.$represent");
-
-        EmitLine(sb: _functionDefinitions,
-            line: $"define ptr @{funcName}({paramLlvmType} %{paramName}) {{");
-        EmitLine(sb: _functionDefinitions, line: "entry:");
-        string result = NextTemp();
-        EmitLine(sb: _functionDefinitions,
-            line: $"  {result} = call ptr @{textMethodName}({paramLlvmType} %{paramName})");
-        EmitLine(sb: _functionDefinitions, line: $"  ret ptr {result}");
-        EmitLine(sb: _functionDefinitions, line: "}");
-        EmitLine(sb: _functionDefinitions, line: "");
-    }
-
-    /// <summary>
     /// Emits the body for a synthesized Data.$create(from: T) routine.
     /// Boxes a value into a Data entity (type_id, size, data_ptr).
     /// </summary>
@@ -298,7 +223,7 @@ public partial class LlvmCodeGenerator
         // Data entity layout: { i64 type_id, i64 size, ptr data_ptr } = 24 bytes
         string dataStructType = GetEntityTypeName(entity: (EntityTypeInfo)routine.OwnerType);
 
-        ulong typeId = ComputeTypeId(fullName: paramType.FullName);
+        ulong typeId = TypeIdHelper.ComputeTypeId(fullName: paramType.FullName);
         long dataSize = ComputeDataSize(type: paramType);
 
         EmitLine(sb: _functionDefinitions,
@@ -336,78 +261,6 @@ public partial class LlvmCodeGenerator
         EmitLine(sb: _functionDefinitions, line: $"  store ptr {box}, ptr {dptrPtr}");
 
         EmitLine(sb: _functionDefinitions, line: $"  ret ptr {dataPtr}");
-        EmitLine(sb: _functionDefinitions, line: "}");
-        EmitLine(sb: _functionDefinitions, line: "");
-    }
-
-    /// <summary>
-    /// Emits the body for a synthesized $create!(from: Text) on choice types.
-    /// For now: traps (full text→tag requires runtime string comparison).
-    /// </summary>
-    private void EmitSynthesizedChoiceCreateFromText(RoutineInfo routine, string funcName)
-    {
-        if (routine.OwnerType == null)
-        {
-            return;
-        }
-
-        string meType = GetParameterLlvmType(type: routine.OwnerType);
-
-        EmitLine(sb: _functionDefinitions,
-            line: $"define i64 @{funcName}({meType} %me, ptr %from) {{");
-        EmitLine(sb: _functionDefinitions, line: "entry:");
-
-        // Declare llvm.trap if not already declared
-        if (_declaredNativeFunctions.Add(item: "llvm.trap"))
-        {
-            EmitLine(sb: _functionDeclarations,
-                line: "declare void @llvm.trap() noreturn nounwind");
-        }
-
-        EmitLine(sb: _functionDefinitions, line: "  call void @llvm.trap()");
-        EmitLine(sb: _functionDefinitions, line: "  unreachable");
-        EmitLine(sb: _functionDefinitions, line: "}");
-        EmitLine(sb: _functionDefinitions, line: "");
-    }
-
-    /// <summary>
-    /// Emits the body for a synthesized all_off() routine on flags types.
-    /// Returns 0 (no flags set).
-    /// </summary>
-    private void EmitSynthesizedAllOff(RoutineInfo routine, string funcName)
-    {
-        if (routine.OwnerType == null)
-        {
-            return;
-        }
-
-        EmitLine(sb: _functionDefinitions, line: $"define i64 @{funcName}() {{");
-        EmitLine(sb: _functionDefinitions, line: "entry:");
-        EmitLine(sb: _functionDefinitions, line: "  ret i64 0");
-        EmitLine(sb: _functionDefinitions, line: "}");
-        EmitLine(sb: _functionDefinitions, line: "");
-    }
-
-    /// <summary>
-    /// Emits the body for a synthesized all_on() routine on flags types.
-    /// Returns the OR of all member bit positions.
-    /// </summary>
-    private void EmitSynthesizedAllOn(RoutineInfo routine, string funcName)
-    {
-        if (routine.OwnerType is not FlagsTypeInfo flagsType)
-        {
-            return;
-        }
-
-        ulong mask = 0;
-        foreach (FlagsMemberInfo member in flagsType.Members)
-        {
-            mask |= 1UL << member.BitPosition;
-        }
-
-        EmitLine(sb: _functionDefinitions, line: $"define i64 @{funcName}() {{");
-        EmitLine(sb: _functionDefinitions, line: "entry:");
-        EmitLine(sb: _functionDefinitions, line: $"  ret i64 {mask}");
         EmitLine(sb: _functionDefinitions, line: "}");
         EmitLine(sb: _functionDefinitions, line: "");
     }

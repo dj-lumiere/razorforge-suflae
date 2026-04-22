@@ -17,11 +17,11 @@ namespace Compiler.Synthesis;
 ///
 ///   danger!
 ///     var raw = Hijacked[T](me)
-///     return raw.read().method(arg1: arg1, ...)
+///     return raw.extract().method(arg1: arg1, ...)
 ///
 /// where T is the wrapper's generic parameter.  When monomorphized with T→List[Byte],
 /// the body's Hijacked[T] becomes Hijacked[List[Byte]], and expression types resolve
-/// transitively through raw.read() to the concrete inner type.
+/// transitively through raw.extract() to the concrete inner type.
 ///
 /// Policy:
 ///   - Read-only wrappers (Viewed, Inspected) forward ONLY @readonly methods of T.
@@ -135,6 +135,12 @@ internal sealed class WrapperForwardingPass
             return null;
         }
 
+        // $create and $destroy are type-lifecycle methods, not instance methods.
+        // Forwarding them would generate `Hijacked[T](me)` in the body but `me` is
+        // not set up for $create (constructor) methods — skip unconditionally.
+        if (methodName is "$create" or "$destroy")
+            return null;
+
         TypeSymbol? wrapperDef = wrapperType switch
         {
             RecordTypeInfo { GenericDefinition: { } def } => def,
@@ -237,11 +243,11 @@ internal sealed class WrapperForwardingPass
     ///   Pointer wrappers (dataFieldName == null):
     ///     danger!
     ///       var raw = Hijacked[T](me)
-    ///       [return] raw.read().methodName(param1: param1, ...)
+    ///       [return] raw.extract().methodName(param1: param1, ...)
     ///
     ///   Record-struct wrappers (dataFieldName == "data"):
     ///     danger!
-    ///       [return] me.data.read().methodName(param1: param1, ...)
+    ///       [return] me.data.extract().methodName(param1: param1, ...)
     ///
     /// where T is the wrapper's generic parameter name.
     /// </summary>
@@ -265,7 +271,7 @@ internal sealed class WrapperForwardingPass
 
         if (dataFieldName != null)
         {
-            // Record-struct wrapper: me.data.read().method(...)
+            // Record-struct wrapper: me.data.extract().method(...)
             // Skip the `raw` variable entirely — no type inference needed.
             var dataAccess = new MemberExpression(
                 Object: new IdentifierExpression(Name: "me", Location: _synthLoc),
@@ -274,7 +280,7 @@ internal sealed class WrapperForwardingPass
             var readCall = new CallExpression(
                 Callee: new MemberExpression(
                     Object: dataAccess,
-                    PropertyName: "read",
+                    PropertyName: "extract",
                     Location: _synthLoc),
                 Arguments: [],
                 Location: _synthLoc);
@@ -292,8 +298,8 @@ internal sealed class WrapperForwardingPass
         }
         else
         {
-            // Pointer wrapper: var raw = Hijacked[T](me); raw.unhijack().method(...)
-            // unhijack() reinterprets the ptr directly as T (no dereference) — correct for
+            // Pointer wrapper: var raw = Hijacked[T](me); raw.reveal().method(...)
+            // reveal() reinterprets the ptr directly as T (no dereference) — correct for
             // Owned[T] where me IS the entity ptr, not a slot holding one.
             var hijackedCall = new CreatorExpression(
                 TypeName: "Hijacked",
@@ -316,7 +322,7 @@ internal sealed class WrapperForwardingPass
             var readCall = new CallExpression(
                 Callee: new MemberExpression(
                     Object: new IdentifierExpression(Name: "raw", Location: _synthLoc),
-                    PropertyName: "unhijack",
+                    PropertyName: "reveal",
                     Location: _synthLoc),
                 Arguments: [],
                 Location: _synthLoc);

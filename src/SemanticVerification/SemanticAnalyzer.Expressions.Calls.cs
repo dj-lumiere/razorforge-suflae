@@ -529,17 +529,27 @@ public sealed partial class SemanticAnalyzer
             string callLookupName = isFailableMethodCall
                 ? member.PropertyName[..^1]
                 : member.PropertyName;
+            TypeSymbol dispatchType = objectType;
             RoutineInfo? method =
-                _registry.LookupMethod(type: objectType,
+                _registry.LookupMethod(type: dispatchType,
                     methodName: callLookupName,
                     isFailable: isFailableMethodCall);
 
             // Phase D: Transparent wrapper forwarding — if the method isn't found directly on
             // the wrapper, synthesize a forwarder that delegates to the inner type's method
-            // via `Hijacked[T](me).read().method(...)`.
-            if (method == null && IsWrapperType(type: objectType))
+            // via `Hijacked[T](me).extract().method(...)`.
+            if (method == null && IsWrapperType(type: dispatchType))
             {
-                method = TrySynthesizeWrapperForwarder(wrapperType: objectType,
+                method = TrySynthesizeWrapperForwarder(wrapperType: dispatchType,
+                    methodName: callLookupName,
+                    isFailable: isFailableMethodCall);
+            }
+
+            if (method == null &&
+                TryGetTransparentProtocolTarget(type: objectType, targetType: out TypeSymbol target))
+            {
+                dispatchType = target;
+                method = _registry.LookupMethod(type: dispatchType,
                     methodName: callLookupName,
                     isFailable: isFailableMethodCall);
             }
@@ -585,6 +595,16 @@ public sealed partial class SemanticAnalyzer
                 // Validate method access
                 ValidateRoutineAccess(routine: method, accessLocation: call.Location);
 
+                if (!ReferenceEquals(objA: dispatchType, objB: objectType) &&
+                    IsReadOnlyTransparentProtocol(type: objectType) && !method.IsReadOnly)
+                {
+                    ReportError(code: SemanticDiagnosticCode.WritableMethodThroughReadOnlyWrapper,
+                        message:
+                        $"Cannot call writable method '{method.Name}' through read-only protocol '{objectType.Name}'. " +
+                        "Use Controlling[T] or a writable token instead.",
+                        location: call.Location);
+                }
+
                 // @readonly enforcement: cannot call modifying methods on 'me'
                 if (_currentRoutine is { IsReadOnly: true } &&
                     member.Object is IdentifierExpression { Name: "me" } && !method.IsReadOnly)
@@ -613,7 +633,7 @@ public sealed partial class SemanticAnalyzer
                 AnalyzeCallArguments(routine: method,
                     arguments: call.Arguments,
                     location: call.Location,
-                    callObjectType: objectType);
+                    callObjectType: dispatchType);
 
                 // P1: Store fully resolved RoutineInfo (with owner-level generic substitution)
                 call.ResolvedRoutine = method;
@@ -813,21 +833,21 @@ public sealed partial class SemanticAnalyzer
                     // GenericParameterTypeInfo owner → map param name to receiver type
                     if (method.OwnerType is GenericParameterTypeInfo genParamOwner)
                     {
-                        substitutions[key: genParamOwner.Name] = objectType;
+                        substitutions[key: genParamOwner.Name] = dispatchType;
                     }
 
                     // Protocol owner → map protocol generic params to receiver's type args
                     if (method.OwnerType is ProtocolTypeInfo protoOwner &&
-                        objectType is { IsGenericResolution: true, TypeArguments: not null })
+                        dispatchType is { IsGenericResolution: true, TypeArguments: not null })
                     {
                         ProtocolTypeInfo protoGenDef = protoOwner.GenericDefinition ?? protoOwner;
                         if (protoGenDef.GenericParameters is { Count: > 0 })
                         {
                             for (int i = 0; i < protoGenDef.GenericParameters.Count &&
-                                            i < objectType.TypeArguments.Count; i++)
+                                            i < dispatchType.TypeArguments.Count; i++)
                             {
                                 substitutions[key: protoGenDef.GenericParameters[index: i]] =
-                                    objectType.TypeArguments[index: i];
+                                    dispatchType.TypeArguments[index: i];
                             }
                         }
                     }

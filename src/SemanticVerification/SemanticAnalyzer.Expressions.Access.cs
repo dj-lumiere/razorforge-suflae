@@ -10,12 +10,32 @@ using TypeSymbol = TypeModel.Types.TypeInfo;
 
 public sealed partial class SemanticAnalyzer
 {
+    private bool TryGetTransparentProtocolTarget(TypeSymbol type, out TypeSymbol targetType)
+    {
+        if (type is ProtocolTypeInfo { Methods.Count: 0, TypeArguments: { Count: > 0 } } proto)
+        {
+            targetType = proto.TypeArguments[index: 0];
+            return true;
+        }
+
+        targetType = type;
+        return false;
+    }
+
+    private bool IsReadOnlyTransparentProtocol(TypeSymbol type)
+    {
+        return type is ProtocolTypeInfo proto &&
+               GetBaseTypeName(typeName: proto.GenericDefinition?.Name ?? proto.Name) == "Referring";
+    }
+
     private TypeSymbol AnalyzeMemberExpression(MemberExpression member)
     {
         TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
+        bool hasTransparentTarget = TryGetTransparentProtocolTarget(type: objectType,
+            targetType: out TypeSymbol lookupType);
 
         // Look up the member variable/property on the type
-        if (objectType is RecordTypeInfo record)
+        if (lookupType is RecordTypeInfo record)
         {
             MemberVariableInfo? memberVariable =
                 record.LookupMemberVariable(memberVariableName: member.PropertyName);
@@ -29,10 +49,10 @@ public sealed partial class SemanticAnalyzer
             }
 
             // Wrapper type forwarding for record-based wrappers (Viewed[T], Grasped[T], etc.)
-            if (IsWrapperType(type: objectType))
+            if (IsWrapperType(type: lookupType))
             {
                 MemberVariableInfo? innerMemberVariable =
-                    LookupMemberVariableOnWrapperInnerType(wrapperType: objectType,
+                    LookupMemberVariableOnWrapperInnerType(wrapperType: lookupType,
                         memberVariableName: member.PropertyName);
                 if (innerMemberVariable != null)
                 {
@@ -43,13 +63,13 @@ public sealed partial class SemanticAnalyzer
                 }
 
                 RoutineInfo? innerMethod =
-                    TrySynthesizeWrapperForwarder(wrapperType: objectType,
+                    TrySynthesizeWrapperForwarder(wrapperType: lookupType,
                         methodName: member.PropertyName, isFailable: false)
-                    ?? _registry.LookupMethod(type: objectType,
+                    ?? _registry.LookupMethod(type: lookupType,
                         methodName: member.PropertyName);
                 if (innerMethod != null)
                 {
-                    ValidateReadOnlyWrapperMethodAccess(wrapperType: objectType,
+                    ValidateReadOnlyWrapperMethodAccess(wrapperType: lookupType,
                         method: innerMethod,
                         location: member.Location);
                     ValidateRoutineAccess(routine: innerMethod, accessLocation: member.Location);
@@ -58,7 +78,7 @@ public sealed partial class SemanticAnalyzer
                 }
             }
         }
-        else if (objectType is TupleTypeInfo tupleType)
+        else if (lookupType is TupleTypeInfo tupleType)
         {
             MemberVariableInfo? memberVariable =
                 tupleType.GetField(memberVariableName: member.PropertyName);
@@ -67,7 +87,7 @@ public sealed partial class SemanticAnalyzer
                 return memberVariable.Type;
             }
         }
-        else if (objectType is EntityTypeInfo entity)
+        else if (lookupType is EntityTypeInfo entity)
         {
             MemberVariableInfo? memberVariable =
                 entity.LookupMemberVariable(memberVariableName: member.PropertyName);
@@ -81,11 +101,11 @@ public sealed partial class SemanticAnalyzer
             }
         }
         // Wrapper type forwarding: Viewed<T>, Grasped<T>, Shared<T>, etc.
-        else if (IsWrapperType(type: objectType))
+        else if (IsWrapperType(type: lookupType))
         {
             // Try to forward member variable access to the inner type
             MemberVariableInfo? innerMemberVariable =
-                LookupMemberVariableOnWrapperInnerType(wrapperType: objectType,
+                LookupMemberVariableOnWrapperInnerType(wrapperType: lookupType,
                     memberVariableName: member.PropertyName);
             if (innerMemberVariable != null)
             {
@@ -98,13 +118,13 @@ public sealed partial class SemanticAnalyzer
 
             // Try to forward method access to the inner type via Phase D synthesized forwarders
             RoutineInfo? innerMethod =
-                TrySynthesizeWrapperForwarder(wrapperType: objectType,
+                TrySynthesizeWrapperForwarder(wrapperType: lookupType,
                     methodName: member.PropertyName, isFailable: false)
-                ?? _registry.LookupMethod(type: objectType, methodName: member.PropertyName);
+                ?? _registry.LookupMethod(type: lookupType, methodName: member.PropertyName);
             if (innerMethod != null)
             {
                 // Validate read-only wrapper restrictions
-                ValidateReadOnlyWrapperMethodAccess(wrapperType: objectType,
+                ValidateReadOnlyWrapperMethodAccess(wrapperType: lookupType,
                     method: innerMethod,
                     location: member.Location);
                 // Validate method access
@@ -116,7 +136,7 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Choice case member access: Color.RED → ChoiceTypeInfo
-        if (objectType is ChoiceTypeInfo choice)
+        if (lookupType is ChoiceTypeInfo choice)
         {
             ChoiceCaseInfo? caseInfo =
                 choice.Cases.FirstOrDefault(predicate: c => c.Name == member.PropertyName);
@@ -129,7 +149,7 @@ public sealed partial class SemanticAnalyzer
         }
 
         // Flags member access: Permissions.READ → FlagsTypeInfo
-        if (objectType is FlagsTypeInfo flags)
+        if (lookupType is FlagsTypeInfo flags)
         {
             FlagsMemberInfo? memberInfo =
                 flags.Members.FirstOrDefault(predicate: m => m.Name == member.PropertyName);
@@ -147,9 +167,19 @@ public sealed partial class SemanticAnalyzer
         string lookupName = member.PropertyName.EndsWith(value: '!')
             ? member.PropertyName[..^1]
             : member.PropertyName;
-        RoutineInfo? method = _registry.LookupMethod(type: objectType, methodName: lookupName);
+        RoutineInfo? method = _registry.LookupMethod(type: lookupType, methodName: lookupName);
         if (method != null)
         {
+            if (hasTransparentTarget && IsReadOnlyTransparentProtocol(type: objectType) &&
+                !method.IsReadOnly)
+            {
+                ReportError(code: SemanticDiagnosticCode.WritableMethodThroughReadOnlyWrapper,
+                    message:
+                    $"Cannot call writable member '{method.Name}' through read-only protocol '{objectType.Name}'. " +
+                    "Use Controlling[T] or a writable token instead.",
+                    location: member.Location);
+            }
+
             // Validate method access
             ValidateRoutineAccess(routine: method, accessLocation: member.Location);
 
@@ -163,21 +193,21 @@ public sealed partial class SemanticAnalyzer
                 // GenericParameterTypeInfo owner → map param name to receiver type
                 if (method.OwnerType is GenericParameterTypeInfo genParamOwner)
                 {
-                    substitutions[key: genParamOwner.Name] = objectType;
+                    substitutions[key: genParamOwner.Name] = lookupType;
                 }
 
                 // Protocol owner → map protocol generic params to receiver's type args
                 if (method.OwnerType is ProtocolTypeInfo protoOwner &&
-                    objectType is { IsGenericResolution: true, TypeArguments: not null })
+                    lookupType is { IsGenericResolution: true, TypeArguments: not null })
                 {
                     ProtocolTypeInfo protoGenDef = protoOwner.GenericDefinition ?? protoOwner;
                     if (protoGenDef.GenericParameters is { Count: > 0 })
                     {
                         for (int i = 0; i < protoGenDef.GenericParameters.Count &&
-                                        i < objectType.TypeArguments.Count; i++)
+                                        i < lookupType.TypeArguments.Count; i++)
                         {
                             substitutions[key: protoGenDef.GenericParameters[index: i]] =
-                                objectType.TypeArguments[index: i];
+                                lookupType.TypeArguments[index: i];
                         }
                     }
                 }
@@ -217,32 +247,52 @@ public sealed partial class SemanticAnalyzer
     {
         TypeSymbol objectType = AnalyzeExpression(expression: index.Object);
         AnalyzeExpression(expression: index.Index);
+        TryGetTransparentProtocolTarget(type: objectType, targetType: out TypeSymbol lookupType);
 
         // Look for $getitem method — LookupMethod handles generic resolutions
-        RoutineInfo? getItem = _registry.LookupMethod(type: objectType, methodName: "$getitem");
+        RoutineInfo? getItem = _registry.LookupMethod(type: lookupType, methodName: "$getitem");
         // Try failable variant if non-failable not found
         if (getItem == null)
         {
-            getItem = _registry.LookupMethod(type: objectType, methodName: "$getitem",
+            getItem = _registry.LookupMethod(type: lookupType, methodName: "$getitem",
                 isFailable: true);
         }
         // Phase D: synthesize a wrapper forwarder if still not found
-        if (getItem == null && IsWrapperType(type: objectType))
+        if (getItem == null && IsWrapperType(type: lookupType))
         {
-            getItem = TrySynthesizeWrapperForwarder(wrapperType: objectType,
+            getItem = TrySynthesizeWrapperForwarder(wrapperType: lookupType,
                 methodName: "$getitem", isFailable: false)
-                ?? TrySynthesizeWrapperForwarder(wrapperType: objectType,
+                ?? TrySynthesizeWrapperForwarder(wrapperType: lookupType,
                     methodName: "$getitem", isFailable: true);
         }
         if (getItem?.ReturnType != null)
         {
-            return getItem.ReturnType;
+            TypeSymbol returnType = getItem.ReturnType;
+            if (lookupType.TypeArguments is { Count: > 0 } &&
+                getItem.OwnerType?.GenericParameters is { Count: > 0 })
+            {
+                var substitutions = new Dictionary<string, TypeSymbol>();
+                for (int i = 0; i < getItem.OwnerType.GenericParameters.Count &&
+                                i < lookupType.TypeArguments.Count; i++)
+                {
+                    substitutions[key: getItem.OwnerType.GenericParameters[index: i]] =
+                        lookupType.TypeArguments[index: i];
+                }
+
+                if (substitutions.Count > 0)
+                {
+                    returnType = SubstituteWithMapping(type: returnType,
+                        substitutions: substitutions);
+                }
+            }
+
+            return returnType;
         }
 
         // For generic types like List<T>, return the element type
-        if (objectType.TypeArguments is { Count: > 0 })
+        if (lookupType.TypeArguments is { Count: > 0 })
         {
-            return objectType.TypeArguments[index: 0];
+            return lookupType.TypeArguments[index: 0];
         }
 
         return ErrorTypeInfo.Instance;
@@ -253,18 +303,38 @@ public sealed partial class SemanticAnalyzer
         TypeSymbol objectType = AnalyzeExpression(expression: slice.Object);
         AnalyzeExpression(expression: slice.Start);
         AnalyzeExpression(expression: slice.End);
+        TryGetTransparentProtocolTarget(type: objectType, targetType: out TypeSymbol lookupType);
 
         // Look for $getslice method — LookupMethod handles generic resolutions
-        RoutineInfo? getSlice = _registry.LookupMethod(type: objectType, methodName: "$getslice");
+        RoutineInfo? getSlice = _registry.LookupMethod(type: lookupType, methodName: "$getslice");
         if (getSlice?.ReturnType != null)
         {
-            return getSlice.ReturnType;
+            TypeSymbol returnType = getSlice.ReturnType;
+            if (lookupType.TypeArguments is { Count: > 0 } &&
+                getSlice.OwnerType?.GenericParameters is { Count: > 0 })
+            {
+                var substitutions = new Dictionary<string, TypeSymbol>();
+                for (int i = 0; i < getSlice.OwnerType.GenericParameters.Count &&
+                                i < lookupType.TypeArguments.Count; i++)
+                {
+                    substitutions[key: getSlice.OwnerType.GenericParameters[index: i]] =
+                        lookupType.TypeArguments[index: i];
+                }
+
+                if (substitutions.Count > 0)
+                {
+                    returnType = SubstituteWithMapping(type: returnType,
+                        substitutions: substitutions);
+                }
+            }
+
+            return returnType;
         }
 
         // For generic types like List<T>, return the element type
-        if (objectType.TypeArguments is { Count: > 0 })
+        if (lookupType.TypeArguments is { Count: > 0 })
         {
-            return objectType.TypeArguments[index: 0];
+            return lookupType.TypeArguments[index: 0];
         }
 
         return ErrorTypeInfo.Instance;

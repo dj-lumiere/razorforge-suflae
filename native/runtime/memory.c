@@ -72,7 +72,7 @@ void* rf_reallocate_dynamic(void* ptr, uint64_t bytes)
 /*
  * Generic memory copy operation
  */
-void rf_copy_bytes_at(rf_address src_address, rf_address dst_address, rf_address bytes)
+void rf_copy_bytes_at(rf_address dst_address, rf_address src_address, rf_address bytes)
 {
     if (src_address == 0 || dst_address == 0 || bytes == 0)
     {

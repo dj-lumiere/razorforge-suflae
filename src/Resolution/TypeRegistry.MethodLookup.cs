@@ -785,7 +785,7 @@ public sealed partial class TypeRegistry
         };
     }
 
-    private void CollectMethodCandidates(TypeInfo type, string methodName, List<RoutineInfo> candidates)
+    internal void CollectMethodCandidates(TypeInfo type, string methodName, List<RoutineInfo> candidates)
     {
         if (_routinesByOwner.TryGetValue(key: type.FullName, value: out List<RoutineInfo>? methods))
         {

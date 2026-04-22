@@ -303,6 +303,21 @@ public sealed partial class SemanticAnalyzer
     private void ValidateMemberVariableWriteAccess(TypeSymbol objectType,
         string memberVariableName, SourceLocation location)
     {
+        if (TryGetTransparentProtocolTarget(type: objectType, targetType: out TypeSymbol targetType))
+        {
+            if (IsReadOnlyTransparentProtocol(type: objectType))
+            {
+                ReportError(code: SemanticDiagnosticCode.WriteThroughReadOnlyWrapper,
+                    message:
+                    $"Cannot write to member '{memberVariableName}' through read-only protocol '{objectType.Name}'. " +
+                    "Use Controlling[T] or a writable token instead.",
+                    location: location);
+                return;
+            }
+
+            objectType = targetType;
+        }
+
         MemberVariableInfo? memberVariable = objectType switch
         {
             RecordTypeInfo record => record.LookupMemberVariable(

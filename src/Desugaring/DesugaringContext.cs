@@ -1,5 +1,7 @@
 using Compiler.Instantiation;
+using Compiler.Instantiation.Passes;
 using Compiler.Resolution;
+using Compiler.Synthesis;
 using Compiler.Targeting;
 using SyntaxTree;
 
@@ -15,20 +17,20 @@ public sealed class DesugaringContext
 
     /// <summary>
     /// Routine bodies collected during Phase 5 body analysis, keyed by RoutineInfo.RegistryKey.
-    /// Used by <see cref="Passes.ErrorHandlingVariantPass"/> to generate try_/check_/lookup_ variants.
+    /// Used by <see cref="ErrorHandlingVariantPass"/> to generate try_/check_/lookup_ variants.
     /// </summary>
     public IReadOnlyDictionary<string, Statement> RoutineBodies { get; }
 
     /// <summary>
     /// Pre-transformed bodies for error-handling variant routines, keyed by the variant
-    /// RoutineInfo.RegistryKey. Written by <see cref="Passes.ErrorHandlingVariantPass"/>
+    /// RoutineInfo.RegistryKey. Written by <see cref="ErrorHandlingVariantPass"/>
     /// and consumed by codegen so that variant functions emit carrier construction without
     /// relying on mutable flag fields.
     /// </summary>
     public Dictionary<string, Statement> VariantBodies { get; } = new();
 
     /// <summary>
-    /// Pre-rewritten monomorphized bodies produced by <see cref="Passes.GenericMonomorphizationPass"/>,
+    /// Pre-rewritten monomorphized bodies produced by <see cref="GenericMonomorphizationPass"/>,
     /// keyed by the concrete <see cref="TypeModel.Symbols.RoutineInfo.RegistryKey"/>.
     /// Codegen checks this map before doing its own AST search and rewriting, so most
     /// generic method bodies are ready before the first IR line is emitted.

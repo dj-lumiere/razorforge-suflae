@@ -13,14 +13,6 @@ public partial class LlvmCodeGenerator
     {
         string typeName = GetEntityTypeName(entity: entity);
 
-        // Skip if already generated
-        if (_generatedTypes.Contains(item: typeName))
-        {
-            return;
-        }
-
-        _generatedTypes.Add(item: typeName);
-
         // For generic resolutions with stale empty member variables (created before the generic
         // definition's members were populated), re-create from the now-complete definition.
         if (entity is
@@ -35,6 +27,26 @@ public partial class LlvmCodeGenerator
             {
                 entity = refreshed;
             }
+        }
+
+        if (entity.MemberVariables.Count == 0)
+        {
+            if (!TryRebuildEntityMembersFromAst(entity: entity))
+            {
+                TypeInfo? refreshed = _registry.LookupType(name: entity.FullName) ??
+                                      _registry.LookupType(name: entity.Name);
+                if (refreshed is EntityTypeInfo resolvedEntity &&
+                    resolvedEntity.MemberVariables.Count > 0)
+                {
+                    entity = resolvedEntity;
+                }
+            }
+        }
+
+        // Skip if already generated
+        if (!_generatedTypes.Add(item: typeName))
+        {
+            return;
         }
 
         // Recursively ensure struct types for member variable types are defined

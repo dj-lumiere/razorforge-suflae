@@ -314,10 +314,11 @@ public sealed partial class SemanticAnalyzer
         }
 
         // #117: Fixed-width numeric types must match exactly (S32 + S64 = error)
-        // System types (Address) are exempt
+        // System types (Address) are exempt. Shift operators are also exempt because
+        // they intentionally use U32 for the shift amount regardless of the left-operand type.
         if (leftType.Name != rightType.Name && IsFixedWidthNumericType(type: leftType) &&
             IsFixedWidthNumericType(type: rightType) && !IsLogicalOperator(op: binary.Operator) &&
-            !IsComparisonOperator(op: binary.Operator))
+            !IsComparisonOperator(op: binary.Operator) && !IsShiftOperator(op: binary.Operator))
         {
             ReportError(code: SemanticDiagnosticCode.FixedWidthTypeMismatch,
                 message:
@@ -580,6 +581,16 @@ public sealed partial class SemanticAnalyzer
         // Check modifiability for index assignments
         if (target is IndexExpression index)
         {
+            TypeSymbol indexedObjectType = AnalyzeExpression(expression: index.Object);
+            if (IsReadOnlyTransparentProtocol(type: indexedObjectType))
+            {
+                ReportError(code: SemanticDiagnosticCode.WriteThroughReadOnlyWrapper,
+                    message:
+                    $"Cannot write through index access on read-only protocol '{indexedObjectType.Name}'. " +
+                    "Use Controlling[T] or a writable token instead.",
+                    location: location);
+            }
+
             // The object being indexed must be modifiable
             if (index.Object is IdentifierExpression indexedVar)
             {
@@ -688,6 +699,16 @@ public sealed partial class SemanticAnalyzer
 
         if (compound.Target is IndexExpression index)
         {
+            TypeSymbol indexedObjectType = AnalyzeExpression(expression: index.Object);
+            if (IsReadOnlyTransparentProtocol(type: indexedObjectType))
+            {
+                ReportError(code: SemanticDiagnosticCode.WriteThroughReadOnlyWrapper,
+                    message:
+                    $"Cannot write through index access on read-only protocol '{indexedObjectType.Name}'. " +
+                    "Use Controlling[T] or a writable token instead.",
+                    location: compound.Location);
+            }
+
             if (index.Object is IdentifierExpression indexedVar)
             {
                 VariableInfo? varInfo = _registry.LookupVariable(name: indexedVar.Name);

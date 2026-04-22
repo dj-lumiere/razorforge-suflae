@@ -1,3 +1,4 @@
+using Compiler.Desugaring;
 using TypeModel.Types;
 using SyntaxTree;
 
@@ -72,7 +73,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
         }
     }
 
-    // ?€?€ Statement lowering ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
+    // ?ï¿½?ï¿½ Statement lowering ?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½
 
     private Statement LowerStatement(Statement stmt)
     {
@@ -195,6 +196,12 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 return ReferenceEquals(val, ret.Value) ? stmt : ret with { Value = val };
             }
 
+            case VariantReturnStatement { Value: not null } vrs:
+            {
+                Expression val = LowerExpression(vrs.Value);
+                return ReferenceEquals(val, vrs.Value) ? stmt : vrs with { Value = val };
+            }
+
             case ExpressionStatement es:
             {
                 Expression expr = LowerExpression(es.Expression);
@@ -238,7 +245,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
         return anyChanged ? result : stmts;
     }
 
-    // ?€?€ Expression lowering ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
+    // ?ï¿½?ï¿½ Expression lowering ?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½
 
     /// <summary>
     /// Lowers the INTERIOR of an assignment target while preserving the outermost
@@ -278,7 +285,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
     {
         switch (expr)
         {
-            // ?€?€ IndexExpression ??obj.$getitem!(idx) ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
+            // ?ï¿½?ï¿½ IndexExpression ??obj.$getitem!(idx) ?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½
             case IndexExpression idx:
             {
                 Expression loweredObj = LowerExpression(idx.Object);
@@ -309,7 +316,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 };
             }
 
-            // ?€?€ SliceExpression ??obj.$getslice(from: a, to: b) ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
+            // ?ï¿½?ï¿½ SliceExpression ??obj.$getslice(from: a, to: b) ?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½
             case SliceExpression slice:
             {
                 Expression loweredObj = LowerExpression(slice.Object);
@@ -339,7 +346,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 };
             }
 
-            // ?€?€ GenericMemberExpression ??member + index ??$getitem! ?€?€?€?€?€?€?€?€?€?€?€?€?€?€
+            // ?ï¿½?ï¿½ GenericMemberExpression ??member + index ??$getitem! ?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½
             // Parser quirk: obj.field[i] is parsed as GenericMemberExpression(obj, "field", [i]).
             // TypeArguments are index expressions in disguise; lower to IndexExpression then recurse.
             case GenericMemberExpression gme when gme.TypeArguments.Count > 0:
@@ -388,7 +395,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     };
             }
 
-            // ?€?€ ChainedComparisonExpression ??AND-chain of pairwise comparisons ?€?€
+            // ?ï¿½?ï¿½ ChainedComparisonExpression ??AND-chain of pairwise comparisons ?ï¿½?ï¿½
             // e.g. a < b < c ??(a < b) and (b < c)
             // Middle operands may be evaluated twice; acceptable here since chained
             // comparisons in stdlib bodies use trivially pure expressions (identifiers/literals).
@@ -430,7 +437,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 return LowerExpression(result);
             }
 
-            // ?€?€ BinaryExpression ??receiver.$method(you: arg) ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
+            // ?ï¿½?ï¿½ BinaryExpression ??receiver.$method(you: arg) ?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½
             // Operators with GetMethodName() == null (And, Or, Is, Identical, But, ...)
             // are not overloadable and stay as BinaryExpression for codegen.
 
@@ -497,14 +504,8 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                         : bin with { Left = left, Right = right };
                 }
 
-                // Choice types have no $eq/$ne method bodies either ??same reasoning as flags.
-                if (receiverType is ChoiceTypeInfo
-                    && methodName is "$eq" or "$ne")
-                {
-                    return ReferenceEquals(left, bin.Left) && ReferenceEquals(right, bin.Right)
-                        ? expr
-                        : bin with { Left = left, Right = right };
-                }
+                // Choice $eq/$ne bodies use BinaryOperator.Is (not Equal), so they never reach
+                // this point. No skip needed for choice types.
 
                 // Always lower to a method call ??even when the method isn't in the registry
                 // (e.g., stdlib bodies where ResolvedType is null).  When ResolvedRoutine is null,
@@ -529,7 +530,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 { ResolvedType = bin.ResolvedType, ResolvedRoutine = resolvedMethod };
             }
 
-            // ?€?€ ForceUnwrap (!!) ??operand.$unwrap() ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
+            // ?ï¿½?ï¿½ ForceUnwrap (!!) ??operand.$unwrap() ?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½
             // Always lower to a CallExpression ??never fall back to UnaryExpression.
             // This runs for both user code (where ExpressionLoweringPass has already
             // run but no longer handles ForceUnwrap) and stdlib bodies (which bypass
@@ -553,7 +554,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 { ResolvedType = forceUnwrap.ResolvedType, ResolvedRoutine = unwrapMethod };
             }
 
-            // ?€?€ UnaryExpression ??operand.$method() ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
+            // ?ï¿½?ï¿½ UnaryExpression ??operand.$method() ?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½
             // Not, Steal ??no wired method, stay as UnaryExpression.
 
             case UnaryExpression unary:
@@ -693,12 +694,8 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
             }
 
             case StealExpression steal:
-            {
-                Expression operand = LowerExpression(steal.Operand);
-                return ReferenceEquals(operand, steal.Operand)
-                    ? expr
-                    : steal with { Operand = operand };
-            }
+                // steal is a type-system-only annotation; strip the wrapper.
+                return LowerExpression(steal.Operand);
 
             case InsertedTextExpression ftext:
             {

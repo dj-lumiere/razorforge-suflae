@@ -1,6 +1,7 @@
 using Compiler.Postprocessing;
 using Compiler.Desugaring;
 using Compiler.Lexer;
+using Compiler.Synthesis;
 using TypeModel.Symbols;
 using TypeModel.Types;
 using SyntaxTree;
@@ -292,8 +293,18 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         switch (expr)
         {
             // ── Step 1a: chained comparisons ─────────────────────────────────────
+            // Multi-comparison chains (a <= b <= c) are lowered to pairwise comparisons
+            // joined by And. The And must then be further lowered to ConditionalExpression.
             case ChainedComparisonExpression chain:
-                return LowerChainedComparison(chain);
+            {
+                var (h, lowered) = LowerChainedComparison(chain);
+                if (lowered is BinaryExpression { Operator: BinaryOperator.And } andBin)
+                {
+                    var (andH, andLowered) = LowerBooleanAnd(andBin);
+                    return (Concat(h, andH), andLowered);
+                }
+                return (h, lowered);
+            }
 
             // ── Step 1b: none-coalescing (??) ────────────────────────────────────
             case BinaryExpression { Operator: BinaryOperator.NoneCoalesce } binary:
@@ -316,6 +327,26 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             case IsPatternExpression ipe:
                 return LowerIsPatternExpression(ipe);
 
+            // ── Step 1f-2: variant type test (x is T / x isnot T) → type_id compare ──
+            // Variant subjects: x is S64 → x.type_id == FNV("S64")
+            //                   x isnot S64 → x.type_id != FNV("S64")
+            // Choice subjects fall through — codegen's EmitChoiceIs (icmp eq i32) handles them.
+            case BinaryExpression { Operator: BinaryOperator.Is or BinaryOperator.IsNot } isBin
+                when isBin.Left.ResolvedType is VariantTypeInfo:
+                return LowerVariantIsExpression(isBin);
+
+            // ── Step 1g: boolean short-circuit And → ConditionalExpression ────────
+            // a and b  →  if a { _cif = b } else { _cif = false }
+            // Flags And (union of active bits) is handled by Step 1e above.
+            case BinaryExpression { Operator: BinaryOperator.And } boolAnd
+                when boolAnd.Left.ResolvedType is not FlagsTypeInfo:
+                return LowerBooleanAnd(boolAnd);
+
+            // ── Step 1h: boolean short-circuit Or → ConditionalExpression ─────────
+            // a or b  →  if a { _cif = true } else { _cif = b }
+            case BinaryExpression { Operator: BinaryOperator.Or } boolOr:
+                return LowerBooleanOr(boolOr);
+
             // ── Recursive descent for all other node types ────────────────────────
 
             case BinaryExpression bin:
@@ -329,6 +360,12 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                     return ([], expr);
                 return (hoisted, bin with { Left = loweredLeft, Right = loweredRight });
             }
+
+            // ── Step 1i: logical not → ConditionalExpression ──────────────────────
+            // not x  →  if x { _cif = false } else { _cif = true }
+            // BitwiseNot (~) on FlagsTypeInfo stays as UnaryExpression for OperatorLoweringPass.
+            case UnaryExpression { Operator: UnaryOperator.Not } notExpr:
+                return LowerLogicalNot(notExpr);
 
             case UnaryExpression unary:
             {
@@ -475,9 +512,9 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
 
             case StealExpression steal:
             {
+                // steal is a type-system-only annotation; at IR level it is identical to its operand.
                 var (h, lowered) = LowerExpr(steal.Operand);
-                if (h.Count == 0 && ReferenceEquals(lowered, steal.Operand)) return ([], expr);
-                return (h, steal with { Operand = lowered });
+                return (h, lowered);
             }
 
             case InsertedTextExpression ftext:
@@ -519,17 +556,18 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             case ConditionalExpression cond:
             {
                 // D-AST-6: hoist to var _cif_N: T; if cond { _cif_N = a } else { _cif_N = b }
-                // Skip hoisting if the result type is unknown (e.g., unanalyzed stdlib bodies).
-                // Without a type we cannot emit a VarDeclarationStatement, and the generated
-                // IfStatement assigning to the temp would crash codegen.
-                if (cond.ResolvedType == null)
+                // Fall back to branch ResolvedType when the cond node itself has no type
+                // (e.g., unanalyzed stdlib ternaries, or ConditionalExpressions synthesized by
+                // And/Or/Not lowering above where the node carries the type on the branches).
+                TypeInfo? resultType = cond.ResolvedType
+                    ?? cond.TrueExpression.ResolvedType
+                    ?? cond.FalseExpression.ResolvedType;
+                if (resultType == null)
                     return ([], expr);
 
                 var (condH, loweredCond) = LowerExpr(cond.Condition);
                 var (trueH, loweredTrue) = LowerExpr(cond.TrueExpression);
                 var (falseH, loweredFalse) = LowerExpr(cond.FalseExpression);
-
-                TypeInfo? resultType = cond.ResolvedType;
                 string tempName = NextTempName("cif");
                 SourceLocation loc = cond.Location;
 
@@ -836,6 +874,146 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     // ─── Specific hoisting lowerings ─────────────────────────────────────────────
 
     /// <summary>
+    /// 1f-2. Lowers <c>x is T</c> / <c>x isnot T</c> for variant subjects to a
+    /// <c>type_id</c> field comparison:
+    /// <c>x is S64</c> → <c>x.type_id == FNV("S64")</c>,
+    /// <c>x isnot S64</c> → <c>x.type_id != FNV("S64")</c>.
+    /// Blank maps to tag 0.  Falls through for unresolved right-hand types.
+    /// </summary>
+    private (List<Statement> Hoisted, Expression Expr) LowerVariantIsExpression(BinaryExpression bin)
+    {
+        var (leftH, loweredLeft) = LowerExpr(bin.Left);
+        bool isNot = bin.Operator == BinaryOperator.IsNot;
+        SourceLocation loc = bin.Location;
+
+        TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
+        TypeInfo? boolType = ctx.Registry.LookupType(name: "Bool");
+        if (u64Type == null || boolType == null) return (leftH, bin with { Left = loweredLeft });
+
+        // Resolve the right-hand type name.
+        string? typeName = bin.Right switch
+        {
+            IdentifierExpression id => id.Name,
+            TypeExpression te => te.Name,
+            _ => null
+        };
+        if (typeName == null) return (leftH, bin with { Left = loweredLeft });
+
+        ulong typeId;
+        if (typeName is "Blank" or "None")
+        {
+            typeId = 0;
+        }
+        else
+        {
+            TypeInfo? targetType = ctx.Registry.LookupType(name: typeName)
+                ?? (bin.Right is IdentifierExpression rid ? rid.ResolvedType : null)
+                ?? (bin.Right is TypeExpression rte ? rte.ResolvedType : null);
+            if (targetType == null) return (leftH, bin with { Left = loweredLeft });
+            typeId = TypeIdHelper.ComputeTypeId(fullName: targetType.FullName);
+        }
+
+        var typeIdAccess = new MemberExpression(
+            Object: loweredLeft, PropertyName: "type_id", Location: loc) { ResolvedType = u64Type };
+        var constant = new LiteralExpression(
+            Value: typeId, LiteralType: Compiler.Lexer.TokenType.U64Literal, Location: loc)
+            { ResolvedType = u64Type };
+        var cmp = new BinaryExpression(
+            Left: typeIdAccess,
+            Operator: isNot ? BinaryOperator.NotEqual : BinaryOperator.Equal,
+            Right: constant,
+            Location: loc) { ResolvedType = boolType };
+        return (leftH, cmp);
+    }
+
+    /// <summary>
+    /// 1g. Lowers boolean short-circuit And to <see cref="ConditionalExpression"/>:
+    /// <c>a and b</c> → <c>if a { _cif = b } else { _cif = false }</c>.
+    /// The right operand (<paramref name="bin"/>.Right) is NOT pre-lowered here;
+    /// the ConditionalExpression case hoists its setup into the true branch only,
+    /// preserving short-circuit evaluation.
+    /// </summary>
+    private (List<Statement> Hoisted, Expression Expr) LowerBooleanAnd(BinaryExpression bin)
+    {
+        TypeInfo? boolType = ctx.Registry.LookupType(name: "Bool");
+        if (boolType == null) return ([], bin);
+
+        SourceLocation loc = bin.Location;
+        var (leftH, loweredLeft) = LowerExpr(bin.Left);
+
+        var falseLit = new LiteralExpression(
+            Value: false, LiteralType: Compiler.Lexer.TokenType.False, Location: loc)
+            { ResolvedType = boolType };
+
+        var condExpr = new ConditionalExpression(
+            Condition: loweredLeft,
+            TrueExpression: bin.Right,
+            FalseExpression: falseLit,
+            Location: loc) { ResolvedType = boolType };
+
+        var (condH, condRef) = LowerExpr(condExpr);
+        return (Concat(leftH, condH), condRef);
+    }
+
+    /// <summary>
+    /// 1h. Lowers boolean short-circuit Or to <see cref="ConditionalExpression"/>:
+    /// <c>a or b</c> → <c>if a { _cif = true } else { _cif = b }</c>.
+    /// The right operand is placed in the false branch only, preserving lazy evaluation.
+    /// </summary>
+    private (List<Statement> Hoisted, Expression Expr) LowerBooleanOr(BinaryExpression bin)
+    {
+        TypeInfo? boolType = ctx.Registry.LookupType(name: "Bool");
+        if (boolType == null) return ([], bin);
+
+        SourceLocation loc = bin.Location;
+        var (leftH, loweredLeft) = LowerExpr(bin.Left);
+
+        var trueLit = new LiteralExpression(
+            Value: true, LiteralType: Compiler.Lexer.TokenType.True, Location: loc)
+            { ResolvedType = boolType };
+
+        var condExpr = new ConditionalExpression(
+            Condition: loweredLeft,
+            TrueExpression: trueLit,
+            FalseExpression: bin.Right,
+            Location: loc) { ResolvedType = boolType };
+
+        var (condH, condRef) = LowerExpr(condExpr);
+        return (Concat(leftH, condH), condRef);
+    }
+
+    /// <summary>
+    /// 1i. Lowers logical not to <see cref="ConditionalExpression"/>:
+    /// <c>not x</c> → <c>if x { _cif = false } else { _cif = true }</c>.
+    /// FlagsTypeInfo bitwise-not (<c>~</c>) is lowered to <c>$bitnot()</c> by
+    /// <see cref="OperatorLoweringPass"/> and never reaches this path.
+    /// </summary>
+    private (List<Statement> Hoisted, Expression Expr) LowerLogicalNot(UnaryExpression notExpr)
+    {
+        TypeInfo? boolType = ctx.Registry.LookupType(name: "Bool");
+        if (boolType == null) return ([], notExpr);
+
+        SourceLocation loc = notExpr.Location;
+        var (h, loweredOp) = LowerExpr(notExpr.Operand);
+
+        var trueLit = new LiteralExpression(
+            Value: true, LiteralType: Compiler.Lexer.TokenType.True, Location: loc)
+            { ResolvedType = boolType };
+        var falseLit = new LiteralExpression(
+            Value: false, LiteralType: Compiler.Lexer.TokenType.False, Location: loc)
+            { ResolvedType = boolType };
+
+        var condExpr = new ConditionalExpression(
+            Condition: loweredOp,
+            TrueExpression: falseLit,
+            FalseExpression: trueLit,
+            Location: loc) { ResolvedType = boolType };
+
+        var (condH, condRef) = LowerExpr(condExpr);
+        return (Concat(h, condH), condRef);
+    }
+
+    /// <summary>
     /// 1e. Lowers flags combination operators to plain bitwise operations:
     /// <list type="bullet">
     ///   <item><c>a and b</c> (union of active bits)      → <c>BitwiseOr(a, b)</c></item>
@@ -1014,13 +1192,15 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             {
                 ResolvedType = boolType
             };
-            Expression result = ipe.IsNegated
-                ? presentAccess
-                : new UnaryExpression(
-                    Operator: UnaryOperator.Not,
-                    Operand: presentAccess,
-                    Location: ipe.Location) { ResolvedType = boolType };
-            return (hoisted, result);
+            if (ipe.IsNegated)
+                return (hoisted, presentAccess);
+            var notNode = new UnaryExpression(
+                Operator: UnaryOperator.Not,
+                Operand: presentAccess,
+                Location: ipe.Location) { ResolvedType = boolType };
+            var (notH, loweredNot) = LowerLogicalNot(notNode);
+            hoisted.AddRange(notH);
+            return (hoisted, loweredNot);
         }
 
         // Result/Lookup: x is Blank → x.type_id == 0_u64; x isnot Blank → x.type_id != 0_u64

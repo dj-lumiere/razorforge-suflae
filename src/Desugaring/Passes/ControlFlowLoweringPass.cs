@@ -1,4 +1,7 @@
 using Compiler.Lexer;
+using Compiler.Postprocessing.Passes;
+using TypeModel.Symbols;
+using TypeModel.Types;
 using SyntaxTree;
 
 namespace Compiler.Desugaring.Passes;
@@ -241,6 +244,22 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
                 Location: loc),
             Arguments: [],
             Location: loc);
+
+        // When running after SA (stdlib/variant bodies), annotate ResolvedType so that
+        // PatternLoweringPass can determine the Maybe[T] layout for NonePattern lowering.
+        // Skip ErrorTypeInfo: SA suppresses stdlib errors, so type errors in stdlib for-loop
+        // iterables still produce a non-null but invalid ResolvedType.
+        if (forStmt.Iterable.ResolvedType is { } iterType && iterType is not ErrorTypeInfo)
+        {
+            RoutineInfo? iterMethod = ctx.Registry.LookupMethod(type: iterType, methodName: "$iter");
+            if (iterMethod?.ReturnType is { } iteratorType)
+            {
+                RoutineInfo? tryNextMethod =
+                    ctx.Registry.LookupMethod(type: iteratorType, methodName: "try_next");
+                if (tryNextMethod?.ReturnType is { } maybeT)
+                    tryNextCall = tryNextCall with { ResolvedType = maybeT };
+            }
+        }
 
         // ─── Recursively lower the user body first ───────────────────────────
         Statement loweredBody = LowerStatement(stmt: forStmt.Body);

@@ -199,6 +199,15 @@ public sealed partial class SemanticAnalyzer
             wasDangerImplicit = true;
         }
 
+        // @innate routines have compiler-supplied bodies — skip analysis entirely.
+        if (routine.Annotations.Contains(item: "innate"))
+        {
+            if (wasDangerImplicit) _dangerBlockDepth = 0;
+            _registry.ExitScope();
+            _currentRoutine = previousRoutine;
+            return;
+        }
+
         // Analyze body statement
         AnalyzeStatement(statement: routine.Body);
 
@@ -285,6 +294,12 @@ public sealed partial class SemanticAnalyzer
 
             case WhileStatement whileStmt:
                 AnalyzeWhileStatement(whileStmt: whileStmt);
+                break;
+
+            case LoopStatement loopStmt:
+                _registry.EnterScope(kind: ScopeKind.Loop, name: "loop");
+                AnalyzeStatement(statement: loopStmt.Body);
+                _registry.ExitScope();
                 break;
 
             case ForStatement forStmt:

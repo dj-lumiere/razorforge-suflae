@@ -8,15 +8,11 @@ using TypeModel.Types;
 
 // Remaining codegen-level BuilderService routines:
 // - member_variable_info / all_member_variables / open_member_variables — struct-building IR
-// - member_type_id — runtime string-compare dispatch
-// - Platform/build info — page_size, cache_line, etc. (in BuilderService.Platform.cs)
+//   (Data-boxing of arbitrary value types is an allocation/layout concern, not AST-expressible)
+// - member_type_id has moved to WiredRoutinePass as an if-elseif AST body.
 // Simple scalar/list BS routines have been moved to WiredRoutinePass.TryHandleBuilderServiceConstant.
 public partial class LlvmCodeGenerator
 {
-
-    private static ulong ComputeTypeId(string fullName) =>
-        TypeIdHelper.ComputeTypeId(fullName: fullName);
-
     /// <summary>
     /// Emits the body for a synthesized member_variable_info() routine.
     /// Returns a List[FieldInfo] where FieldInfo = { ptr name, ptr type_name, i64 visibility, i64 offset }.
@@ -265,7 +261,7 @@ public partial class LlvmCodeGenerator
             EmitLine(sb: sb, line: $"  {fieldVal} = load {fieldLlvmType}, ptr {fieldPtr}");
 
             // Inline Data boxing (avoids overload collision on Data_$create)
-            ulong fieldTypeId = ComputeTypeId(fullName: field.Type.FullName);
+            ulong fieldTypeId = TypeIdHelper.ComputeTypeId(fullName: field.Type.FullName);
             long fieldDataSize = ComputeDataSize(type: field.Type);
 
             // Allocate Data entity: { i64 type_id, ptr data_ptr, i64 data_size }
@@ -511,82 +507,6 @@ public partial class LlvmCodeGenerator
         }
 
         return offsets;
-    }
-
-    /// <summary>
-    /// Emits the body for a synthesized member_type_id(member_name: Text) routine.
-    /// Returns the type ID (FNV-1a hash) for a named member variable, or 0 if not found.
-    /// </summary>
-    private void EmitSynthesizedMemberTypeId(RoutineInfo routine, string funcName)
-    {
-        if (routine.OwnerType == null)
-        {
-            return;
-        }
-
-        string meType = GetParameterLlvmType(type: routine.OwnerType);
-
-        IReadOnlyList<MemberVariableInfo>? fields = routine.OwnerType switch
-        {
-            RecordTypeInfo rec => rec.MemberVariables,
-            EntityTypeInfo ent => ent.MemberVariables,
-            _ => null
-        };
-        fields ??= [];
-
-        StringBuilder sb = _functionDefinitions;
-        EmitLine(sb: sb, line: $"define i64 @{funcName}({meType} %me, ptr %member_name) {{");
-        EmitLine(sb: sb, line: "entry:");
-
-        if (fields.Count == 0)
-        {
-            EmitLine(sb: sb, line: "  ret i64 0");
-        }
-        else
-        {
-            // Ensure Text.$eq is available for string comparison
-            TypeInfo? textType = _registry.LookupType(name: "Text");
-            RoutineInfo? textEq = textType != null
-                ? _registry.LookupMethod(type: textType, methodName: "$eq")
-                : null;
-            string eqFuncName = textEq != null
-                ? MangleFunctionName(routine: textEq)
-                : "Text$_eq";
-            // Add to _generatedFunctions so the synthesized pass emits its body
-            _generatedFunctions.Add(item: eqFuncName);
-
-            // For each field, compare the member_name string and return the type ID
-            for (int i = 0; i < fields.Count; i++)
-            {
-                MemberVariableInfo field = fields[index: i];
-                string nameStr = EmitSynthesizedStringLiteral(value: field.Name);
-                ulong typeId = ComputeTypeId(fullName: field.Type.FullName);
-
-                string cmpResult = NextTemp();
-                EmitLine(sb: sb,
-                    line:
-                    $"  {cmpResult} = call i1 @{eqFuncName}(ptr %member_name, ptr {nameStr})");
-                string nextLabel = i < fields.Count - 1
-                    ? $"check_{i + 1}"
-                    : "not_found";
-                EmitLine(sb: sb,
-                    line: $"  br i1 {cmpResult}, label %found_{i}, label %{nextLabel}");
-
-                EmitLine(sb: sb, line: $"found_{i}:");
-                EmitLine(sb: sb, line: $"  ret i64 {unchecked((long)typeId)}");
-
-                if (i < fields.Count - 1)
-                {
-                    EmitLine(sb: sb, line: $"check_{i + 1}:");
-                }
-            }
-
-            EmitLine(sb: sb, line: "not_found:");
-            EmitLine(sb: sb, line: "  ret i64 0");
-        }
-
-        EmitLine(sb: sb, line: "}");
-        EmitLine(sb: sb, line: "");
     }
 
 }

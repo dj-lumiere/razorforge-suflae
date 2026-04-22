@@ -1,7 +1,9 @@
 using Compiler.Resolution;
 using Compiler.Desugaring;
 using Compiler.Instantiation;
+using Compiler.Instantiation.Passes;
 using Compiler.Postprocessing;
+using Compiler.Synthesis;
 using Compiler.Targeting;
 
 namespace SemanticVerification;
@@ -127,14 +129,14 @@ public sealed partial class SemanticAnalyzer
 
     /// <summary>
     /// Pre-transformed bodies for error-handling variant routines (try_/check_/lookup_), produced
-    /// by <see cref="Synthesis.ErrorHandlingVariantPass"/> during Phase 4 global desugaring.
+    /// by <see cref="ErrorHandlingVariantPass"/> during Phase 4 global desugaring.
     /// Merged into <see cref="SynthesizedBodies"/> when building the <see cref="AnalysisResult"/>.
     /// </summary>
     private Dictionary<string, Statement> _variantBodies = new();
 
     /// <summary>
-    /// Pre-rewritten generic method bodies produced by <see cref="Instantiation.Passes.GenericMonomorphizationPass"/>.
-    /// Captured from <see cref="Desugaring.DesugaringContext.PreMonomorphizedBodies"/> in
+    /// Pre-rewritten generic method bodies produced by <see cref="GenericMonomorphizationPass"/>.
+    /// Captured from <see cref="DesugaringContext.PreMonomorphizedBodies"/> in
     /// <see cref="RunPhase4GlobalDesugaring"/> and forwarded to <see cref="AnalysisResult"/>.
     /// </summary>
     private IReadOnlyDictionary<string, MonomorphizedBody> _preMonomorphizedBodies =
@@ -242,6 +244,7 @@ public sealed partial class SemanticAnalyzer
         GenerateDerivedOperators();
         ValidateProtocolImplementations();
         PreRegisterUserVariants(program: program);
+        PreRegisterStdlibVariants();  // TODO: This should go somewhere else
     }
 
     /// <summary>
@@ -511,6 +514,11 @@ public sealed partial class SemanticAnalyzer
 
             PreRegisterUserVariants(program: program);
         }
+
+        // Phase 3 global: pre-register stdlib failable method variants (try_next, try_recover, etc.)
+        // Must run before Phase 5 user body analysis and before Phase 3 per-file desugaring
+        // (ControlFlowLoweringPass generates try_next calls that Phase 5 must resolve).
+        PreRegisterStdlibVariants();
 
         // Phase 3 per-file: syntax-only lowering (no type info needed; runs before SA annotates types)
         foreach ((Program program, string filePath) in files)

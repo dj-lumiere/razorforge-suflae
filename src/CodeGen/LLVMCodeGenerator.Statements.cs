@@ -1,4 +1,5 @@
 using Compiler.Instantiation;
+using Compiler.Postprocessing;
 using Compiler.Synthesis;
 using TypeModel.Symbols;
 
@@ -77,9 +78,9 @@ public partial class LlvmCodeGenerator
                 EmitExpression(sb: sb, expr: discard.Expression);
                 return false;
 
-            case UsingStatement usingStmt:
-                EmitUsing(sb: sb, usingStmt: usingStmt);
-                return false;
+            case UsingStatement:
+                throw new InvalidOperationException(
+                    "UsingStatement reached codegen — UsingLoweringPass must run before codegen.");
 
             case ThrowStatement throwStmt:
                 EmitThrow(sb: sb, throwStmt: throwStmt);
@@ -157,6 +158,29 @@ public partial class LlvmCodeGenerator
         else if (varDecl.Initializer != null)
         {
             varType = GetExpressionType(expr: varDecl.Initializer);
+        }
+
+        // Fallback: constructor-style call (e.g., `var x = TypeName(...)`) — look up
+        // the type by the callee's identifier. Fixes "Cannot determine type" when
+        // type inference doesn't propagate the return type of a constructor call
+        // (common for generic constructors and stdlib intrinsic-wrapped calls).
+        if (varType == null && varDecl.Initializer is CallExpression callInit)
+        {
+            string? typeName = callInit.Callee switch
+            {
+                IdentifierExpression idc => idc.Name,
+                GenericMemberExpression gmc => gmc.MemberName,
+                MemberExpression mc => mc.PropertyName,
+                _ => null
+            };
+            if (typeName != null)
+            {
+                varType = _registry.LookupType(name: typeName)
+                          ?? _registry.LookupType(name: $"Core.{typeName}")
+                          ?? _registry.GetAllTypes().FirstOrDefault(predicate: t =>
+                              t.Name == typeName || t.FullName == typeName
+                              || t.FullName.EndsWith(value: "." + typeName));
+            }
         }
 
         if (varType == null)
@@ -391,6 +415,8 @@ public partial class LlvmCodeGenerator
         // Evaluate the object
         string target = EmitExpression(sb: sb, expr: member.Object);
         TypeInfo? targetType = GetExpressionType(expr: member.Object);
+        TryGetTransparentProtocolTarget(type: targetType, targetType: out TypeInfo? lookupType);
+        targetType = lookupType ?? targetType;
 
         if (targetType is EntityTypeInfo entity)
         {
@@ -496,6 +522,8 @@ public partial class LlvmCodeGenerator
     private void EmitIndexAssignment(StringBuilder sb, IndexExpression index, string value)
     {
         TypeInfo? targetType = GetExpressionType(expr: index.Object);
+        TryGetTransparentProtocolTarget(type: targetType, targetType: out TypeInfo? lookupType);
+        targetType = lookupType ?? targetType;
 
         // Dispatch to $setitem if the type has one
         RoutineInfo? setItem = LookupSetItemMethod(index: index);
@@ -581,9 +609,7 @@ public partial class LlvmCodeGenerator
                     Q(name: DecorateRoutineSymbolName(
                         baseName: $"{targetType.FullName}.{SanitizeLlvmName(name: setItem.Name)}",
                         isFailable: setItem.IsFailable));
-                RecordMonomorphization(mangledName: mangledName,
-                    genericMethod: setItem,
-                    resolvedOwnerType: targetType);
+                // Body pre-built by GMP; emitted by EmitFromPreMonomorphizedBodies.
             }
             else
             {
@@ -649,6 +675,9 @@ public partial class LlvmCodeGenerator
             return null;
         }
 
+        TryGetTransparentProtocolTarget(type: targetType, targetType: out TypeInfo? lookupType);
+        targetType = lookupType ?? targetType;
+
         return _registry.LookupMethod(type: targetType, methodName: "$setitem");
     }
 
@@ -663,7 +692,6 @@ public partial class LlvmCodeGenerator
     {
         if (ret.Value == null)
         {
-            EmitUsingCleanup(sb: sb);
             EmitRcRecordCleanup(sb: sb);
             EmitEntityCleanup(sb: sb, returnedVarName: null);
             if (_traceCurrentRoutine)
@@ -692,7 +720,6 @@ public partial class LlvmCodeGenerator
                 : "void"; // this should throw error
             if (earlyType == "void")
             {
-                EmitUsingCleanup(sb: sb);
                 EmitRcRecordCleanup(sb: sb);
                 EmitEntityCleanup(sb: sb, returnedVarName: null);
                 if (_traceCurrentRoutine)
@@ -741,7 +768,6 @@ public partial class LlvmCodeGenerator
                                       _localEntityVars.Any(predicate: e => e.Name == id.Name)
                 ? id.Name
                 : null;
-            EmitUsingCleanup(sb: sb);
             EmitRcRecordCleanup(sb: sb);
             EmitEntityCleanup(sb: sb, returnedVarName: returnedVarName);
 
@@ -816,41 +842,6 @@ public partial class LlvmCodeGenerator
         }
     }
 
-    /// <summary>
-    /// Emits $exit() calls for all active using scopes (innermost first).
-    /// Called before early exits (return, throw, break, continue, absent).
-    /// </summary>
-    private void EmitUsingCleanup(StringBuilder sb)
-    {
-        foreach ((string resourceValue, TypeInfo resourceType, RoutineInfo exitMethod) in
-                 _usingCleanupStack)
-        {
-            string exitMangled = MangleFunctionName(routine: exitMethod);
-            string receiverType = GetParameterLlvmType(type: resourceType);
-            EmitLine(sb: sb, line: $"  call void @{exitMangled}({receiverType} {resourceValue})");
-        }
-    }
-
-    /// <summary>
-    /// Emits $exit() calls for using scopes pushed after <paramref name="untilDepth"/>.
-    /// Used by break/continue to clean up only scopes inside the current loop,
-    /// leaving outer scopes for their own normal-exit path.
-    /// </summary>
-    private void EmitUsingCleanup(StringBuilder sb, int untilDepth)
-    {
-        int toClean = _usingCleanupStack.Count - untilDepth;
-        int cleaned = 0;
-        foreach ((string resourceValue, TypeInfo resourceType, RoutineInfo exitMethod) in
-                 _usingCleanupStack)
-        {
-            if (cleaned >= toClean) break;
-            string exitMangled = MangleFunctionName(routine: exitMethod);
-            string receiverType = GetParameterLlvmType(type: resourceType);
-            EmitLine(sb: sb, line: $"  call void @{exitMangled}({receiverType} {resourceValue})");
-            cleaned++;
-        }
-    }
-
     #endregion
 
     #region Throw / Absent / Becomes
@@ -890,7 +881,6 @@ public partial class LlvmCodeGenerator
                 }
 
                 string tryCarrier = GetMaybeCarrierLlvmType(valueType: innerType);
-                EmitUsingCleanup(sb: sb);
                 EmitRcRecordCleanup(sb: sb);
                 if (_traceCurrentRoutine)
                     EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
@@ -901,7 +891,6 @@ public partial class LlvmCodeGenerator
             case (ErrorHandlingVariantKind.Try, VariantSiteKind.FromAbsent):
             {
                 string tryCarrier = GetMaybeCarrierLlvmType(valueType: innerType);
-                EmitUsingCleanup(sb: sb);
                 EmitRcRecordCleanup(sb: sb);
                 if (_traceCurrentRoutine)
                     EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
@@ -922,7 +911,6 @@ public partial class LlvmCodeGenerator
                                           _localEntityVars.Any(predicate: e => e.Name == tryId.Name)
                     ? tryId.Name
                     : null;
-                EmitUsingCleanup(sb: sb);
                 EmitRcRecordCleanup(sb: sb);
                 EmitEntityCleanup(sb: sb, returnedVarName: returnedVarName);
                 if (_traceCurrentRoutine)
@@ -980,7 +968,6 @@ public partial class LlvmCodeGenerator
                         EmitExpression(sb: sb, expr: variantRet.Value);
                 }
 
-                EmitUsingCleanup(sb: sb);
                 EmitRcRecordCleanup(sb: sb);
                 if (_traceCurrentRoutine)
                     EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
@@ -990,7 +977,6 @@ public partial class LlvmCodeGenerator
 
             case (ErrorHandlingVariantKind.TryBool, VariantSiteKind.FromAbsent):
             {
-                EmitUsingCleanup(sb: sb);
                 EmitRcRecordCleanup(sb: sb);
                 if (_traceCurrentRoutine)
                     EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
@@ -1000,7 +986,6 @@ public partial class LlvmCodeGenerator
 
             case (ErrorHandlingVariantKind.TryBool, VariantSiteKind.FromReturn):
             {
-                EmitUsingCleanup(sb: sb);
                 EmitRcRecordCleanup(sb: sb);
                 EmitEntityCleanup(sb: sb, returnedVarName: null);
                 if (_traceCurrentRoutine)
@@ -1025,12 +1010,11 @@ public partial class LlvmCodeGenerator
 
                 string lookupCarrier = GetLookupCarrierLlvmType(valueType: innerType);
                 ulong errTypeId = errType != null
-                    ? ComputeTypeId(fullName: errType.FullName)
+                    ? TypeIdHelper.ComputeTypeId(fullName:errType.FullName)
                     : 0;
                 string errDataAddr = EmitErrorDataAddress(sb: sb, errorType: errType ?? innerType,
                     errorVal: errorVal, isEmptyRecord: isEmptyRec);
 
-                EmitUsingCleanup(sb: sb);
                 EmitRcRecordCleanup(sb: sb);
                 if (_traceCurrentRoutine)
                     EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
@@ -1046,7 +1030,6 @@ public partial class LlvmCodeGenerator
             case (ErrorHandlingVariantKind.Lookup, VariantSiteKind.FromAbsent):
             {
                 string lookupCarrier = GetLookupCarrierLlvmType(valueType: innerType);
-                EmitUsingCleanup(sb: sb);
                 EmitRcRecordCleanup(sb: sb);
                 if (_traceCurrentRoutine)
                     EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
@@ -1064,7 +1047,6 @@ public partial class LlvmCodeGenerator
                                           _localEntityVars.Any(predicate: e => e.Name == lookupId.Name)
                     ? lookupId.Name
                     : null;
-                EmitUsingCleanup(sb: sb);
                 EmitRcRecordCleanup(sb: sb);
                 EmitEntityCleanup(sb: sb, returnedVarName: returnedVarName);
                 if (_traceCurrentRoutine)
@@ -1079,7 +1061,7 @@ public partial class LlvmCodeGenerator
                 {
                     // "return ErrorType(...)" ??store error in carrier field 1.
                     string errorVal = EmitExpression(sb: sb, expr: variantRet.Value!);
-                    ulong errTypeId = ComputeTypeId(fullName: lookupRetType!.FullName);
+                    ulong errTypeId = TypeIdHelper.ComputeTypeId(fullName:lookupRetType!.FullName);
                     string errDataAddr = EmitErrorDataAddress(sb: sb, errorType: lookupRetType,
                         errorVal: errorVal, isEmptyRecord: false);
                     string lev0 = NextTemp();
@@ -1096,7 +1078,7 @@ public partial class LlvmCodeGenerator
                 else
                 {
                     string value = EmitExpression(sb: sb, expr: variantRet.Value);
-                    ulong validId = ComputeTypeId(fullName: innerType.FullName);
+                    ulong validId = TypeIdHelper.ComputeTypeId(fullName:innerType.FullName);
                     string lrv0 = NextTemp();
                     EmitLine(sb: sb,
                         line: $"  {lrv0} = insertvalue {lookupCarrier} zeroinitializer, i64 {validId}, 0");
@@ -1124,12 +1106,11 @@ public partial class LlvmCodeGenerator
 
                 string checkCarrier = GetResultCarrierLlvmType(valueType: innerType);
                 ulong errTypeId = errType != null
-                    ? ComputeTypeId(fullName: errType.FullName)
+                    ? TypeIdHelper.ComputeTypeId(fullName:errType.FullName)
                     : 0;
                 string errDataAddr = EmitErrorDataAddress(sb: sb, errorType: errType ?? innerType,
                     errorVal: errorVal, isEmptyRecord: isEmptyRec);
 
-                EmitUsingCleanup(sb: sb);
                 EmitRcRecordCleanup(sb: sb);
                 if (_traceCurrentRoutine)
                     EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
@@ -1145,7 +1126,6 @@ public partial class LlvmCodeGenerator
             case (ErrorHandlingVariantKind.Check, VariantSiteKind.FromAbsent):
             {
                 string checkCarrier = GetResultCarrierLlvmType(valueType: innerType);
-                EmitUsingCleanup(sb: sb);
                 EmitRcRecordCleanup(sb: sb);
                 if (_traceCurrentRoutine)
                     EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
@@ -1163,7 +1143,6 @@ public partial class LlvmCodeGenerator
                                           _localEntityVars.Any(predicate: e => e.Name == checkId.Name)
                     ? checkId.Name
                     : null;
-                EmitUsingCleanup(sb: sb);
                 EmitRcRecordCleanup(sb: sb);
                 EmitEntityCleanup(sb: sb, returnedVarName: returnedVarName);
                 if (_traceCurrentRoutine)
@@ -1178,7 +1157,7 @@ public partial class LlvmCodeGenerator
                 {
                     // "return ErrorType(...)" ??store error in carrier field 1.
                     string errorVal = EmitExpression(sb: sb, expr: variantRet.Value!);
-                    ulong errTypeId = ComputeTypeId(fullName: checkRetType!.FullName);
+                    ulong errTypeId = TypeIdHelper.ComputeTypeId(fullName:checkRetType!.FullName);
                     string errDataAddr = EmitErrorDataAddress(sb: sb, errorType: checkRetType,
                         errorVal: errorVal, isEmptyRecord: false);
                     string cev0 = NextTemp();
@@ -1195,7 +1174,7 @@ public partial class LlvmCodeGenerator
                 else
                 {
                     string value = EmitExpression(sb: sb, expr: variantRet.Value);
-                    ulong validId = ComputeTypeId(fullName: innerType.FullName);
+                    ulong validId = TypeIdHelper.ComputeTypeId(fullName:innerType.FullName);
                     string crv0 = NextTemp();
                     EmitLine(sb: sb,
                         line: $"  {crv0} = insertvalue {checkCarrier} zeroinitializer, i64 {validId}, 0");
@@ -1300,7 +1279,6 @@ public partial class LlvmCodeGenerator
         }
 
         // Clean up active scopes before crashing
-        EmitUsingCleanup(sb: sb);
         EmitRcRecordCleanup(sb: sb);
 
         // Call rf_crash ??never returns
@@ -1420,7 +1398,6 @@ public partial class LlvmCodeGenerator
         // In a failable routine, `absent` is a contract violation ??crash
         if (_currentRoutineIsFailable)
         {
-            EmitUsingCleanup(sb: sb);
             EmitRcRecordCleanup(sb: sb);
             EmitLine(sb: sb,
                 line: "  call void @rf_crash(i64 0, i64 0, i64 0, i64 0, i32 0, i32 0, i64 0, i64 0)");
@@ -1432,8 +1409,6 @@ public partial class LlvmCodeGenerator
         // ReturnType is now the full Maybe[T] carrier (not the inner T), so use GetLLVMType directly.
         TypeInfo absentRetType = _currentEmittingRoutine!.ReturnType!;
         string absentCarrierType = GetLlvmType(type: absentRetType);
-        // Clean up active scopes before returning absent
-        EmitUsingCleanup(sb: sb);
         EmitRcRecordCleanup(sb: sb);
         EmitLine(sb: sb, line: $"  ret {absentCarrierType} zeroinitializer");
     }
@@ -1520,8 +1495,6 @@ public partial class LlvmCodeGenerator
 
             GenerateFunctionDeclaration(routine: releaseMethod);
             string mangled = MangleFunctionName(routine: releaseMethod);
-            RecordMonomorphization(mangledName: mangled, genericMethod: releaseMethod,
-                resolvedOwnerType: w);
             string fieldLlvm = GetParameterLlvmType(type: w);
             EmitLine(sb: sb, line: $"  call void @{mangled}({fieldLlvm} {fieldVal})");
         }
@@ -1529,7 +1502,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// Emits release calls for all tracked RC record variables at scope exit.
-    /// Called at return, throw, absent ??after EmitUsingCleanup, before EmitEntityCleanup.
+    /// Called at return, throw, and absent — before EmitEntityCleanup.
     /// </summary>
     private void EmitRcRecordCleanup(StringBuilder sb)
     {
@@ -1563,10 +1536,8 @@ public partial class LlvmCodeGenerator
 
         GenerateFunctionDeclaration(routine: retainMethod);
         string mangled = MangleFunctionName(routine: retainMethod);
-        RecordMonomorphization(mangledName: mangled, genericMethod: retainMethod,
-            resolvedOwnerType: recordType);
         string rcLlvm = GetParameterLlvmType(type: recordType);
-        // retain() returns Retained[T] (same struct value); discard ??heap mutation already done
+        // retain() returns Retained[T] (same struct value); discard — heap mutation already done
         EmitLine(sb: sb, line: $"  {NextTemp()} = call {rcLlvm} @{mangled}({rcLlvm} {loaded})");
     }
 
@@ -1590,8 +1561,6 @@ public partial class LlvmCodeGenerator
 
         GenerateFunctionDeclaration(routine: releaseMethod);
         string mangled = MangleFunctionName(routine: releaseMethod);
-        RecordMonomorphization(mangledName: mangled, genericMethod: releaseMethod,
-            resolvedOwnerType: recordType);
         string rcLlvm = GetParameterLlvmType(type: recordType);
         EmitLine(sb: sb, line: $"  call void @{mangled}({rcLlvm} {loaded})");
     }

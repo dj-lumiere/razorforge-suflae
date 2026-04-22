@@ -1,4 +1,5 @@
-﻿using TypeModel.Enums;
+﻿using Compiler.Postprocessing;
+using TypeModel.Enums;
 using SemanticVerification.Enums;
 using TypeModel.Symbols;
 
@@ -278,18 +279,14 @@ public partial class LlvmCodeGenerator
         return $"%{Q(name: $"Record.Result[{valueType.Name}]")}";
     }
 
-    /// <summary>Returns the LLVM type of the tag field for a carrier (i1 for Maybe, i64 for Result/Lookup).</summary>
-    private static string GetCarrierTagType(ErrorHandlingKind kind) =>
-        kind == ErrorHandlingKind.Maybe ? "i1" : "i64";
-
     /// <summary>
     /// Returns the discriminant value that represents a valid (present) carrier.
     /// Maybe → "1" (Bool true); Result/Lookup → ComputeTypeId of value type.
     /// </summary>
     private string GetCarrierValidTag(TypeInfo type) =>
-        IsMaybeType(type: type)
+        type is RecordTypeInfo { CarrierKind: CarrierKind.Maybe }
             ? "1"
-            : ComputeTypeId(fullName: type.TypeArguments![index: 0].FullName)
+            : TypeIdHelper.ComputeTypeId(fullName: type.TypeArguments![index: 0].FullName)
                .ToString();
 
     /// <summary>Returns the discriminant value that represents an absent carrier (always 0).</summary>
@@ -297,24 +294,11 @@ public partial class LlvmCodeGenerator
 
     /// <summary>Returns true if <paramref name="type"/> is a Maybe[T], Result[T], or Lookup[T] carrier.</summary>
     private static bool IsCarrierType(TypeInfo type) =>
-        GetGenericBaseName(type: type) is "Maybe" or "Result" or "Lookup";
+        type is RecordTypeInfo { CarrierKind: not CarrierKind.None };
 
     /// <summary>Returns true if <paramref name="type"/> is a Maybe[T] carrier.</summary>
     private static bool IsMaybeType(TypeInfo type) =>
-        GetGenericBaseName(type: type) is "Maybe";
-
-    /// <summary>
-    /// Resolves the carrier kind from a carrier TypeInfo (Maybe, Result, or Lookup record).
-    /// </summary>
-    private static ErrorHandlingKind GetCarrierKind(TypeInfo type) =>
-        GetGenericBaseName(type: type) switch
-        {
-            "Maybe"  => ErrorHandlingKind.Maybe,
-            "Result" => ErrorHandlingKind.Result,
-            "Lookup" => ErrorHandlingKind.Lookup,
-            _ => throw new InvalidOperationException(
-                message: $"Cannot determine carrier kind for type '{type.Name}'")
-        };
+        type is RecordTypeInfo { CarrierKind: CarrierKind.Maybe };
 
     /// <summary>
     /// Gets the LLVM struct type name for a choice.

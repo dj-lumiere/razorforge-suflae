@@ -1,6 +1,9 @@
+using Compiler.Postprocessing;
+
 namespace Compiler.CodeGen;
 
 using System.Text;
+using Desugaring;
 using TypeModel.Enums;
 using TypeModel.Symbols;
 using TypeModel.Types;
@@ -67,7 +70,7 @@ public partial class LlvmCodeGenerator
             switchSb.Append($"  switch i64 %type_id, label %{defaultLabel} [");
             for (int i = 0; i < implementers.Count; i++)
             {
-                ulong typeId = ComputeTypeId(fullName: implementers[i].ConcreteType.FullName);
+                ulong typeId = TypeIdHelper.ComputeTypeId(fullName: implementers[i].ConcreteType.FullName);
                 switchSb.Append($"\n    i64 {typeId}, label %{caseLabels[index: i]}");
             }
 
@@ -377,9 +380,11 @@ public partial class LlvmCodeGenerator
                                 GenerateEntityType(entity: entityType);
                             }
 
-                            RecordMonomorphization(mangledName: candidateName,
-                                genericMethod: genericMethod,
-                                resolvedOwnerType: concreteType);
+                            // Declare the concrete implementer so EmitFromPreMonomorphizedBodies
+                            // can emit its body (GMP pre-builds bodies for all generic resolutions).
+                            if (!_generatedFunctions.Contains(item: candidateName))
+                                GenerateFunctionDeclaration(routine: genericMethod,
+                                    nameOverride: candidateName);
                             triggered = true;
                         }
                     }
@@ -538,9 +543,7 @@ public partial class LlvmCodeGenerator
                 else if (concreteType is CrashableTypeInfo crashableType)
                     GenerateCrashableType(crashable: crashableType);
 
-                RecordMonomorphization(mangledName: candidateName,
-                    genericMethod: genericMethod,
-                    resolvedOwnerType: concreteType);
+                // Declaration already emitted at line 537; body handled by EmitFromPreMonomorphizedBodies.
                 count++;
             }
         }

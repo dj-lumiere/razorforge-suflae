@@ -328,10 +328,17 @@ internal sealed class DerivedOperatorPass
             ],
             Location: _synthLoc);
 
+        // Use ConditionalExpression instead of UnaryExpression(Not) to avoid requiring
+        // ExpressionLoweringPass on synthesized bodies.
+        var falseVal = new LiteralExpression(Value: false, LiteralType: Compiler.Lexer.TokenType.False,
+            Location: _synthLoc);
+        var trueVal = new LiteralExpression(Value: true, LiteralType: Compiler.Lexer.TokenType.True,
+            Location: _synthLoc);
         return new ReturnStatement(
-            Value: new UnaryExpression(
-                Operator: UnaryOperator.Not,
-                Operand: call,
+            Value: new ConditionalExpression(
+                Condition: call,
+                TrueExpression: falseVal,
+                FalseExpression: trueVal,
                 Location: _synthLoc),
             Location: _synthLoc);
     }
@@ -362,11 +369,21 @@ internal sealed class DerivedOperatorPass
             PropertyName: caseName,
             Location: _synthLoc);
 
+        // Use $eq/$ne method call instead of BinaryExpression to avoid requiring OperatorLoweringPass
+        // on synthesized bodies.
         return new ReturnStatement(
-            Value: new BinaryExpression(
-                Left: cmpCall,
-                Operator: useEqual ? BinaryOperator.Equal : BinaryOperator.NotEqual,
-                Right: caseRef,
+            Value: new CallExpression(
+                Callee: new MemberExpression(
+                    Object: cmpCall,
+                    PropertyName: useEqual ? "$eq" : "$ne",
+                    Location: _synthLoc),
+                Arguments:
+                [
+                    new NamedArgumentExpression(
+                        Name: "you",
+                        Value: caseRef,
+                        Location: _synthLoc)
+                ],
                 Location: _synthLoc),
             Location: _synthLoc);
     }

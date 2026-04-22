@@ -45,9 +45,7 @@ routine monitor_pool(weak: Tracked[ConnectionPool])
 
 **Use RazorForge for:**
 
-- Systems programming
 - Game engines and real-time applications
-- Embedded systems and firmware
 - Performance-critical hot paths
 - Manual memory control
 

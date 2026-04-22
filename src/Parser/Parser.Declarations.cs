@@ -360,12 +360,23 @@ public partial class Parser
         // ===============================================================================
         // PHASE 6: BODY (indented block)
         // ===============================================================================
+        // @innate routines are compiler-intrinsic: the body is supplied by the compiler,
+        // not the source. Allow them to have no written body at all.
+
+        bool isInnate = annotations != null && annotations.Contains(item: "innate");
+        // A body exists when the next tokens are Newline+Indent or just Indent.
+        // A bare Newline without a following Indent means no body (next declaration follows).
+        bool hasBody = Check(type: TokenType.Indent) ||
+                       (Check(type: TokenType.Newline) &&
+                        PeekToken(offset: 1).Type == TokenType.Indent);
 
         _inRoutineBody = true;
         Statement body;
         try
         {
-            body = ParseIndentedBlock();
+            body = isInnate && !hasBody
+                ? new BlockStatement(Statements: [], Location: location)
+                : ParseIndentedBlock();
         }
         finally
         {

@@ -44,6 +44,7 @@ public sealed class BuildDriver
     private readonly ModuleDependencyGraph _dependencyGraph = new();
     private readonly ModuleResolver _resolver;
     private readonly Language _language;
+    private readonly string _stdlibRoot;
 
     private readonly List<SemanticError> _errors = [];
     private readonly List<BuildWarning> _warnings = [];
@@ -59,6 +60,7 @@ public sealed class BuildDriver
     public BuildDriver(string projectRoot, string stdlibRoot, Language language)
     {
         _resolver = new ModuleResolver(projectRoot: projectRoot, stdlibRoot: stdlibRoot);
+        _stdlibRoot = stdlibRoot;
         _language = language;
     }
 
@@ -79,6 +81,9 @@ public sealed class BuildDriver
     /// <returns>The build result with all units and errors.</returns>
     public BuildResult CompileFiles(IReadOnlyList<string> sourceFiles)
     {
+        // Pre-register all stdlib files so imports resolve without filesystem probing.
+        PreRegisterStdlib();
+
         // Process each entry file
         foreach (string sourceFile in sourceFiles)
         {
@@ -180,6 +185,9 @@ public sealed class BuildDriver
             // Store the unit
             _compiledUnits[key: filePath] = unit;
             _warnings.AddRange(collection: unit.ParseWarnings);
+
+            // Register into the resolver index so later imports of this file resolve correctly.
+            _resolver.RegisterFile(filePath: filePath, moduleName: modulePath, ast: unit.Ast);
 
             // Process imports recursively
             foreach (ImportDeclaration import in unit.Imports)
@@ -311,4 +319,103 @@ public sealed class BuildDriver
     /// Gets the dependency graph for inspection.
     /// </summary>
     public ModuleDependencyGraph DependencyGraph => _dependencyGraph;
+
+    /// <summary>
+    /// Parses all stdlib files and registers them in the resolver index.
+    /// This replaces the old text-scanning approach with correct AST-based extraction.
+    /// </summary>
+    private void PreRegisterStdlib()
+    {
+        RegisterStdlibDirectory(subdirectory: "RazorForge", extension: "*.rf");
+        RegisterStdlibDirectory(subdirectory: "Suflae", extension: "*.sf");
+    }
+
+    private void RegisterStdlibDirectory(string subdirectory, string extension)
+    {
+        string dirPath = Path.Combine(path1: _stdlibRoot, path2: subdirectory);
+        if (!Directory.Exists(path: dirPath))
+        {
+            return;
+        }
+
+        foreach (string filePath in Directory.GetFiles(path: dirPath,
+                     searchPattern: extension,
+                     searchOption: SearchOption.AllDirectories))
+        {
+            Program? ast = ParseAstOnly(filePath: filePath);
+            if (ast is null)
+            {
+                continue;
+            }
+
+            string? moduleName = null;
+            foreach (IAstNode node in ast.Declarations)
+            {
+                if (node is ModuleDeclaration md)
+                {
+                    moduleName = md.Path;
+                    break;
+                }
+            }
+
+            moduleName ??= DeriveModuleNameFromPath(filePath: filePath, languageSubdir: subdirectory);
+            _resolver.RegisterFile(filePath: filePath, moduleName: moduleName, ast: ast);
+        }
+    }
+
+    /// <summary>
+    /// Parses a file to an AST without language-consistency validation or error accumulation.
+    /// Used only for index pre-registration; actual compilation errors surface via <see cref="ParseFile"/>.
+    /// </summary>
+    private static Program? ParseAstOnly(string filePath)
+    {
+        try
+        {
+            string code = File.ReadAllText(path: filePath);
+            bool isSuflae = filePath.EndsWith(value: ".sf",
+                comparisonType: StringComparison.OrdinalIgnoreCase);
+            Language language = isSuflae ? Language.Suflae : Language.RazorForge;
+            var tokenizer = new Tokenizer(source: code, fileName: filePath, language: language);
+            List<Token> tokens = tokenizer.Tokenize();
+            var parser = new Parser(tokens: tokens, language: language, fileName: filePath);
+            return parser.Parse();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Derives a module name from a file path for stdlib files that lack an explicit module declaration.
+    /// Uses the directory path relative to the language subdirectory, with '/' as hierarchy separator.
+    /// Files directly in the language root use the filename as their module name.
+    /// </summary>
+    private string DeriveModuleNameFromPath(string filePath, string languageSubdir)
+    {
+        try
+        {
+            string languagePath = Path.GetFullPath(path: Path.Combine(path1: _stdlibRoot,
+                path2: languageSubdir));
+            string fileDir = Path.GetFullPath(path: Path.GetDirectoryName(path: filePath) ?? "");
+
+            if (!fileDir.StartsWith(value: languagePath,
+                    comparisonType: StringComparison.OrdinalIgnoreCase))
+            {
+                return Path.GetFileNameWithoutExtension(path: filePath);
+            }
+
+            string relativeDir = fileDir[languagePath.Length..]
+               .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+            return string.IsNullOrEmpty(value: relativeDir)
+                ? Path.GetFileNameWithoutExtension(path: filePath)
+                : relativeDir.Replace(oldChar: Path.DirectorySeparatorChar, newChar: '/')
+                             .Replace(oldChar: Path.AltDirectorySeparatorChar, newChar: '/');
+        }
+        catch
+        {
+            return Path.GetFileNameWithoutExtension(path: filePath);
+        }
+    }
 }

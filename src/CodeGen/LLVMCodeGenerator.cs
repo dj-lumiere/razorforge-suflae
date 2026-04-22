@@ -24,6 +24,15 @@ public partial class LlvmCodeGenerator
     /// <summary>AST bodies for compiler-generated derived operators, keyed by RoutineInfo.RegistryKey.</summary>
     private IReadOnlyDictionary<string, Statement> _synthesizedBodies = new Dictionary<string, Statement>();
 
+    /// <summary>
+    /// Pre-built concrete method bodies from <see cref="Instantiation.Passes.GenericMonomorphizationPass"/>,
+    /// keyed by <see cref="TypeModel.Symbols.RoutineInfo.RegistryKey"/>.
+    /// <see cref="EmitFromPreMonomorphizedBodies"/> iterates this map and emits any body whose
+    /// mangled name has been declared in <see cref="_generatedFunctions"/>.
+    /// </summary>
+    private IReadOnlyDictionary<string, Instantiation.MonomorphizedBody> _preMonomorphizedBodies =
+        new Dictionary<string, Instantiation.MonomorphizedBody>();
+
     /// <summary>Wrapper type base names for member forwarding in codegen.</summary>
     private static readonly HashSet<string> WrapperTypeNames =
     [
@@ -271,6 +280,7 @@ public partial class LlvmCodeGenerator
         _registry = registry;
         _stdlibPrograms = stdlibPrograms ?? [];
         if (synthesizedBodies != null) _synthesizedBodies = synthesizedBodies;
+        if (preMonomorphizedBodies != null) _preMonomorphizedBodies = preMonomorphizedBodies;
         _planner = new MonomorphizationPlanner(
             registry: registry,
             userPrograms: _userPrograms,
@@ -355,10 +365,6 @@ public partial class LlvmCodeGenerator
     /// <summary>Exposed as <c>internal static</c> for <see cref="MonomorphizationPlanner"/>.</summary>
     internal static string? GetGenericBaseNameStatic(TypeInfo type) =>
         GetGenericBaseStatic(type: type)?.Name;
-
-    /// <summary>Exposed as <c>internal static</c> for <see cref="MonomorphizationPlanner"/>.</summary>
-    internal static bool IsMaybeTypeStatic(TypeInfo type) =>
-        GetGenericBaseNameStatic(type: type) is "Maybe";
 
     #endregion
 
@@ -779,6 +785,108 @@ public partial class LlvmCodeGenerator
                                     routineInfo = overload;
                                 }
                             }
+
+                            // Fallback: match AST declaration to the exact registry overload by
+                            // parameter type NAMES. LookupType may fail for generic param types
+                            // like Hijacked[Byte], so astParamTypes can be incomplete and
+                            // LookupRoutineOverload may return the wrong overload (or fail).
+                            // Build the AST param-type name list directly and match against
+                            // candidate parameter type names. Determine the owner type from the
+                            // AST routine name (e.g. "Bytes.$create") rather than the possibly-
+                            // wrong initial routineInfo, since LookupRoutineByName returns an
+                            // arbitrary overload (possibly from a different type).
+                            TypeInfo? resolvedOwner = routineInfo?.OwnerType;
+                            {
+                                int astDotIdx = routine.Name.IndexOf(value: '.');
+                                if (astDotIdx > 0)
+                                {
+                                    string ownerName = routine.Name[..astDotIdx];
+                                    TypeInfo? t = _registry.LookupType(name: ownerName);
+                                    if (t != null) resolvedOwner = t;
+                                }
+                            }
+                            if (routineInfo != null && resolvedOwner != null)
+                            {
+                                var astParamTypeNames = new List<string>();
+                                foreach (Parameter param in routine.Parameters)
+                                {
+                                    if (param.Type == null)
+                                    {
+                                        astParamTypeNames.Clear();
+                                        break;
+                                    }
+                                    string tn = param.Type.Name;
+                                    if (param.Type.GenericArguments is { Count: > 0 })
+                                    {
+                                        tn =
+                                            $"{tn}[{string.Join(separator: ",", values: param.Type.GenericArguments.Select(selector: a => a.Name))}]";
+                                    }
+                                    astParamTypeNames.Add(item: tn);
+                                }
+
+                                if (astParamTypeNames.Count == routine.Parameters.Count)
+                                {
+                                    var candidates = new List<RoutineInfo>();
+                                    _registry.CollectMethodCandidates(
+                                        type: resolvedOwner,
+                                        methodName: routineInfo.Name,
+                                        candidates: candidates);
+                                    static string NormalizeTypeName(string n)
+                                    {
+                                        n = n.Replace(oldValue: " ", newValue: "");
+                                        var sb = new StringBuilder(n.Length);
+                                        var token = new StringBuilder();
+
+                                        static void FlushToken(StringBuilder source, StringBuilder dest)
+                                        {
+                                            if (source.Length == 0)
+                                            {
+                                                return;
+                                            }
+
+                                            string segment = source.ToString();
+                                            int lastDot = segment.LastIndexOf(value: '.');
+                                            dest.Append(lastDot >= 0
+                                                ? segment[(lastDot + 1)..]
+                                                : segment);
+                                            source.Clear();
+                                        }
+
+                                        foreach (char ch in n)
+                                        {
+                                            if (char.IsLetterOrDigit(ch) || ch is '_' or '.' or '/')
+                                            {
+                                                token.Append(value: ch);
+                                                continue;
+                                            }
+
+                                            FlushToken(source: token, dest: sb);
+                                            sb.Append(value: ch);
+                                        }
+
+                                        FlushToken(source: token, dest: sb);
+                                        return sb.ToString();
+                                    }
+
+                                    RoutineInfo? match = candidates.FirstOrDefault(predicate: c =>
+                                    {
+                                        if (c.Parameters.Count != astParamTypeNames.Count) return false;
+                                        if (c.IsFailable != routine.IsFailable) return false;
+                                        for (int i = 0; i < astParamTypeNames.Count; i++)
+                                        {
+                                            string candName = NormalizeTypeName(n: c.Parameters[index: i].Type.Name);
+                                            string astName = NormalizeTypeName(n: astParamTypeNames[index: i]);
+                                            if (candName == astName) continue;
+                                            return false;
+                                        }
+                                        return true;
+                                    });
+                                    if (match != null)
+                                    {
+                                        routineInfo = match;
+                                    }
+                                }
+                            }
                         }
 
                         // Ensure the resolved routine's failable flag matches the AST routine.
@@ -838,13 +946,18 @@ public partial class LlvmCodeGenerator
                     }
             }
 
-            // Phase B: Monomorphize generic methods (compile generic AST bodies with type substitutions)
+            // Phase B: Emit pre-built bodies from GenericMonomorphizationPass for all declared
+            // concrete generic methods (covers the common case without any AST search).
+            EmitFromPreMonomorphizedBodies();
+
+            // Phase C: Monomorphize method-level generics and any entries not covered by GMP
+            // (explicit [T=S64] type arguments, inferred method-level type args, etc.).
             MonomorphizeGenericMethods();
 
-            // Phase C: Generate bodies for synthesized routines ($ne, $lt, $le, $gt, $ge, $represent, $diagnose)
+            // Phase D: Generate bodies for synthesized routines ($ne, $lt, $le, $gt, $ge, $represent, $diagnose)
             GenerateSynthesizedRoutines();
 
-            // Phase D: Generate protocol dispatch stubs (forwarding from protocol method names to concrete implementations)
+            // Phase E: Generate protocol dispatch stubs (forwarding from protocol method names to concrete implementations)
             GenerateProtocolDispatchStubs();
 
             iterations++;

@@ -2,6 +2,7 @@ namespace TypeModel.Types;
 
 using TypeModel.Enums;
 using TypeModel.Symbols;
+using CarrierKind = TypeModel.Enums.CarrierKind;
 
 /// <summary>
 /// Type information for records (value types with copy semantics).
@@ -81,6 +82,13 @@ public sealed class RecordTypeInfo : TypeInfo
         f.Type is WrapperTypeInfo w && RCWrapperBaseNames.Contains(item: w.Name));
 
     /// <summary>
+    /// Whether this is a compiler-known error-handling carrier (Maybe, Result, Lookup).
+    /// Set on the generic definition shells registered by TypeRegistry before stdlib loads.
+    /// Propagated to all resolved instances via <see cref="CreateInstance"/>.
+    /// </summary>
+    public CarrierKind CarrierKind { get; init; } = CarrierKind.None;
+
+    /// <summary>
     /// For generic definitions, the original generic type this was resolved from.
     /// </summary>
     public RecordTypeInfo? GenericDefinition { get; init; }
@@ -151,6 +159,7 @@ public sealed class RecordTypeInfo : TypeInfo
             ImplementedProtocols = substitutedProtocols,
             TypeArguments = typeArguments,
             GenericDefinition = this,
+            CarrierKind = CarrierKind,
             BackendType =
                 ResolveBackendTypeTemplate(template: BackendType,
                     genericParams: GenericParameters,

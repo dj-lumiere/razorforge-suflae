@@ -20,9 +20,9 @@ namespace Compiler.Postprocessing.Passes;
 ///   <item><c>ExpressionPart(e, "=?")</c> ??<c>"name=" + e.$diagnose()</c></item>
 /// </list>
 ///
-/// <para>Scope: per-file user code only. WiredRoutinePass-generated f-string bodies
-/// (stored in <c>ctx.VariantBodies</c>) are not processed here ??codegen's
-/// <c>EmitInsertedText</c> handles those.</para>
+/// <para>Scope: per-file user/stdlib code via <see cref="Run"/>, plus synthesized variant
+/// bodies via <see cref="RunOnVariantBodies"/>. After both run, no
+/// <see cref="InsertedTextExpression"/> reaches codegen.</para>
 /// </summary>
 internal sealed class FStringLoweringPass(PostprocessingContext ctx)
 {
@@ -55,6 +55,17 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
         }
     }
 
+    public void RunOnVariantBodies()
+    {
+        foreach (string key in ctx.VariantBodies.Keys.ToList())
+        {
+            Statement body = ctx.VariantBodies[key];
+            Statement lowered = LowerStatement(body);
+            if (!ReferenceEquals(lowered, body))
+                ctx.VariantBodies[key] = lowered;
+        }
+    }
+
     private void LowerMemberList(List<SyntaxTree.Declaration> members)
     {
         for (int j = 0; j < members.Count; j++)
@@ -66,7 +77,7 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
         }
     }
 
-    // ?€?€ Statement lowering ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
+    // ?ï¿½?ï¿½ Statement lowering ?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½
 
     private Statement LowerStatement(Statement stmt)
     {
@@ -196,6 +207,12 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
                 return ReferenceEquals(err, t.Error) ? stmt : t with { Error = err };
             }
 
+            case VariantReturnStatement { Value: not null } vrs:
+            {
+                Expression val = LowerExpression(vrs.Value);
+                return ReferenceEquals(val, vrs.Value) ? stmt : vrs with { Value = val };
+            }
+
             default:
                 return stmt;
         }
@@ -215,7 +232,7 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
         return anyChanged ? result : stmts;
     }
 
-    // ?€?€ Expression lowering ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
+    // ?ï¿½?ï¿½ Expression lowering ?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½
 
     private Expression LowerExpression(Expression expr)
     {
@@ -416,7 +433,7 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
         }
     }
 
-    // ?€?€ F-string lowering ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
+    // ?ï¿½?ï¿½ F-string lowering ?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½?ï¿½
 
     /// <summary>
     /// Converts an <see cref="InsertedTextExpression"/> to a left-folded chain of

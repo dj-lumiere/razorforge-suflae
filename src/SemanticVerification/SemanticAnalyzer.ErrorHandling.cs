@@ -18,7 +18,7 @@ using TypeSymbol = TypeModel.Types.TypeInfo;
 /// - Only throw: try_ (returns T? ??None on throw) + check_ (returns Result&lt;T&gt;)
 /// - Both throw and absent: try_ + lookup_ (returns Lookup&lt;T&gt;)
 ///
-/// The actual variant generation is delegated to <see cref="Synthesis.ErrorHandlingVariantPass"/>
+/// The actual variant generation is delegated to <see cref="ErrorHandlingVariantPass"/>
 /// which runs in Phase 4 (global desugaring) after body analysis populates <c>_routineBodies</c>.
 /// </summary>
 public sealed partial class SemanticAnalyzer
@@ -92,10 +92,68 @@ public sealed partial class SemanticAnalyzer
     }
 
     /// <summary>
+    /// Phase 3 global: pre-registers try_/check_/lookup_ stub variants for all failable stdlib
+    /// member routines (e.g., Tracked[T].recover!, ListEmitter[T].$next!).
+    /// Must run before Phase 5 user-body analysis so that user code calling these variants
+    /// (e.g., <c>rt.try_recover()</c> or desugared for-loop <c>iter.try_next()</c>) resolves
+    /// without S450. Mirrors <see cref="PreRegisterUserVariants"/> but for stdlib programs.
+    /// </summary>
+    private void PreRegisterStdlibVariants()
+    {
+        var generator = new ErrorHandlingGenerator(registry: _registry);
+
+        foreach ((Program program, _, _) in _registry.StdlibPrograms)
+        {
+            foreach (IAstNode node in program.Declarations)
+            {
+                if (node is not RoutineDeclaration decl || !decl.IsFailable || decl.Body == null)
+                    continue;
+
+                if (!generator.BodyHasThrowOrAbsent(body: decl.Body))
+                    continue;
+
+                RoutineInfo? routineInfo;
+                if (decl.Name.Contains('.'))
+                {
+                    int dotIdx = decl.Name.LastIndexOf('.');
+                    string ownerTypeName = decl.Name[..dotIdx];
+                    string methodName = decl.Name[(dotIdx + 1)..];
+
+                    string lookupName = ownerTypeName.Contains('[')
+                        ? ownerTypeName[..ownerTypeName.IndexOf('[')]
+                        : ownerTypeName;
+
+                    TypeSymbol? ownerType = _registry.LookupType(name: lookupName);
+                    if (ownerType == null) continue;
+
+                    routineInfo = _registry.LookupMethod(
+                        type: ownerType, methodName: methodName, isFailable: true);
+                }
+                else
+                {
+                    routineInfo = _registry.LookupRoutine(fullName: decl.Name);
+                }
+
+                if (routineInfo == null || !routineInfo.IsFailable) continue;
+                if (routineInfo.Annotations.Any(predicate: a => a == "crash_only")) continue;
+
+                ErrorHandlingResult result =
+                    generator.GenerateVariants(routine: routineInfo, body: decl.Body);
+                if (result.Error != null) continue;
+
+                foreach (GeneratedVariant variant in result.Variants)
+                {
+                    _registry.RegisterRoutine(routine: variant.Routine);
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// Collects failable stdlib routine bodies into <c>_routineBodies</c> without running
     /// full semantic analysis. Scans stdlib program ASTs for failable member routine declarations,
     /// looks up their <see cref="RoutineInfo"/> in the registry, and stores the bodies so that
-    /// <see cref="Synthesis.ErrorHandlingVariantPass"/> can generate try_/check_/lookup_
+    /// <see cref="ErrorHandlingVariantPass"/> can generate try_/check_/lookup_
     /// variants for stdlib iterators (e.g., ListEmitter[T].$next!).
     /// Called before RunPhase4GlobalDesugaring() so variants exist when for-loops are lowered.
     /// </summary>

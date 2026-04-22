@@ -878,7 +878,7 @@ public enum VariantSiteKind
 
 /// <summary>
 /// Synthesized return statement inserted into error-handling variant bodies by
-/// <see cref="Synthesis.ErrorHandlingVariantPass"/>.
+/// <see cref="ErrorHandlingVariantPass"/>.
 /// Replaces <see cref="ThrowStatement"/>, <see cref="AbsentStatement"/>, and
 /// <see cref="ReturnStatement"/> so that codegen can emit carrier construction via
 /// <c>EmitVariantReturn</c> without relying on mutable flags.
