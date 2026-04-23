@@ -22,23 +22,21 @@ entity ConnectionPool
   active_count: S64
   max_connections: S64
 
-routine acquire_connection(pool: Retained[ConnectionPool]) -> Maybe[Owned[Connection]]
-  # Block access for multiple operations
-  using pool.hijack() as p
-    # Check capacity with pattern matching
-    when p.active_count < p.max_connections
-      == true
-        var conn = Connection()
-        p.connections.add_last(steal conn)  # Explicit ownership transfer
-        p.active_count += 1
-        return conn
-      else => return None  # Pool exhausted
+routine acquire_connection!(pool: Retained[ConnectionPool]) -> Connection
+  # Check capacity with pattern matching
+  when p.active_count < p.max_connections
+    == true =>
+      var conn = Connection()
+      p.connections.add_last(steal conn)  # Explicit ownership transfer
+      p.active_count += 1
+      return conn
+    else => absent  # Pool exhausted
 
 routine monitor_pool(weak: Tracked[ConnectionPool])
   # Try to recover weak reference
   when weak.try_recover()
     is None => show("Pool was deallocated")
-    else strong
+    else strong =>
       # Inline access for single read
       show(f"Pool stats: {strong.view().active_count}/{strong.view().max_connections}")
 ```
@@ -67,14 +65,14 @@ routine UserCache.$create()
 suspended routine UserCache.fetch_user!(id: Integer) -> User
   # Check cache first
   when me.cache.try_getitem(id)
-    is None
+    is None =>
       me.miss_count += 1
       var user = waitfor http.get(f"/api/users/{id}")
       unless user
         throw NetworkError()
       me.cache.insert(id, user)
       return user
-    else cached
+    else cached =>
       me.hit_count += 1
       return cached
 
