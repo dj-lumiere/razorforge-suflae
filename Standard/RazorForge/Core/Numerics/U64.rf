@@ -402,7 +402,7 @@ routine U64.$ashl(bits: U32) -> U64
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U64` value.
-routine U64.$shift_right_signed(bits: U32) -> U64
+routine U64.$ashr(bits: U32) -> U64
   return shift_right_unsigned[U64](me, U64(bits))
 
 ### Implements the wired routine behavior for this value.
@@ -414,7 +414,7 @@ routine U64.$lshl(bits: U32) -> U64
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U64` value.
-routine U64.$shift_right_unsigned(bits: U32) -> U64
+routine U64.$lshr(bits: U32) -> U64
   return shift_right_unsigned[U64](me, U64(bits))
 
 # ============================================================================

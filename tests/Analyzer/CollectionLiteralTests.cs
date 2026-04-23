@@ -207,11 +207,11 @@ public class CollectionLiteralTests
     }
 
     [Fact]
-    public void ListLiteral_WithValueListAnnotation_RetargetsToValueList()
+    public void ListLiteral_WithArrayAnnotation_RetargetsToArray()
     {
         string source = """
                         routine test()
-                          var items: ValueList[S64, 4] = [1, 2, 3, 4]
+                          var items: Array[S64, 4] = [1, 2, 3, 4]
                           return
                         """;
 
@@ -220,11 +220,11 @@ public class CollectionLiteralTests
     }
 
     [Fact]
-    public void ListLiteral_WithValueBitListAnnotation_RetargetsToValueBitList()
+    public void ListLiteral_WithBitArrayAnnotation_RetargetsToBitArray()
     {
         string source = """
                         routine test()
-                          var items: ValueBitList[8] = [true, false, true, true, false, true, false, true]
+                          var items: BitArray[8] = [true, false, true, true, false, true, false, true]
                           return
                         """;
 
@@ -233,11 +233,11 @@ public class CollectionLiteralTests
     }
 
     [Fact]
-    public void ValueListLiteral_WithWrongArity_ReportsError()
+    public void ArrayLiteral_WithWrongArity_ReportsError()
     {
         string source = """
                         routine test()
-                          var items: ValueList[S64, 4] = [1, 2, 3, 4, 5]
+                          var items: Array[S64, 4] = [1, 2, 3, 4, 5]
                           return
                         """;
 
@@ -247,11 +247,11 @@ public class CollectionLiteralTests
     }
 
     [Fact]
-    public void ValueBitListLiteral_WithWrongArity_ReportsError()
+    public void BitArrayLiteral_WithWrongArity_ReportsError()
     {
         string source = """
                         routine test()
-                          var items: ValueBitList[4] = [true, false, true]
+                          var items: BitArray[4] = [true, false, true]
                           return
                         """;
 

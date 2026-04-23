@@ -648,3 +648,8 @@ external("llvm") routine element_at[Array, T](array: Array, index: U64) -> T
 ### :returns: The resulting `Array` value.
 @llvm_ir("{result} = alloca {Array}\nstore {Array} {array}, ptr {prev}\n{result} = getelementptr {Array}, ptr {prev}, i32 0, i64 {index}\nstore {T} {value}, ptr {prev}\n{result} = load {Array}, ptr {first}")
 external("llvm") routine set_element_at[Array, T](array: Array, index: U64, value: T) -> Array
+
+### Returns a zero-initialized value of type T.
+### :returns: The resulting `T` value.
+@llvm_ir("{result} = alloca {T}\nstore {T} zeroinitializer, ptr {prev}\n{result} = load {T}, ptr {prev}")
+external("llvm") routine zero_value[T]() -> T

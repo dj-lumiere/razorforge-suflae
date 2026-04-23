@@ -2,10 +2,9 @@ module Core
 
 ### Defines the crashable `NegativeExponentError`.
 crashable NegativeExponentError
-  ### Stores the exp member value.
-  secret exp: S128
+  pass
 
 ### Returns the result of `crash message`.
 ### :returns: The resulting `Text` value.
 routine NegativeExponentError.crash_message() -> Text
-  return f"Negative exponent {me.exp} results in a fraction, which is not supported for integer types."
+  return "Negative exponent results in a fraction, which is not supported for integer types."

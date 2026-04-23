@@ -121,13 +121,13 @@ routine Integer.$neg() -> Integer
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine Integer.$eq(you: Integer) -> Bool
-  return rf_bigint_cmp(me.handle, other.handle) == 0
+  return rf_bigint_cmp(me.handle, you.handle) == 0
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `CompareSign` value.
 routine Integer.$cmp(you: Integer) -> CompareSign
-  var comparison_value = rf_bigint_cmp(me.handle, other.handle)
+  var comparison_value = rf_bigint_cmp(me.handle, you.handle)
   if comparison_value < 0
     return LEFT_SMALL
   elseif comparison_value > 0

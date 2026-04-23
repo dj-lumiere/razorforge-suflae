@@ -1,5 +1,5 @@
 # RazorForge SortedList[T] - B-tree based sorted list with duplicates
-# Entity type; keys/children stored inline as ValueList with explicit count.
+# Entity type; keys/children stored inline as Array with explicit count.
 module Collections
 
 import BuilderService
@@ -11,8 +11,8 @@ preset MIN_KEYS_LIST: U64 = 31u64
 ### :typeparam T: The value used for `T`.
 entity BTreeListNode[T]
 needs T obeys Comparable
-  keys: ValueList[T, 63]
-  children: ValueList[Owned[BTreeListNode[T]], 64]
+  keys: Array[T, 63]
+  children: Array[Owned[BTreeListNode[T]], 64]
   key_count: U64
   child_count: U64
   subtree_size: U64
@@ -77,9 +77,9 @@ routine BTreeListNode[T].keys_add_at(i: U64, value: T)
     if i < me.key_count
       var elem_size = T.data_size()
       var shift_count = me.key_count -% i
-      var src = base.stride(count: i.S64())
-      var dst = base.stride(count: (i +% 1u64).S64())
-      rf_copy_bytes_at(dst.get_address(), src.get_address(), elem_size * shift_count)
+      var src_addr = base.stride(count: i.S64()).get_address()
+      var dst_addr = base.stride(count: (i +% 1u64).S64()).get_address()
+      rf_copy_bytes_at(dst_addr, src_addr, elem_size * shift_count)
     base.stride(count: i.S64()).inject(value: value)
   me.key_count = me.key_count +% 1u64
   return
@@ -90,9 +90,9 @@ routine BTreeListNode[T].children_add_at(i: U64, value: BTreeListNode[T])
     if i < me.child_count
       var elem_size = Address.data_size()
       var shift_count = me.child_count -% i
-      var src = base.stride(count: i.S64())
-      var dst = base.stride(count: (i +% 1u64).S64())
-      rf_copy_bytes_at(dst.get_address(), src.get_address(), elem_size * shift_count)
+      var src_addr = base.stride(count: i.S64()).get_address()
+      var dst_addr = base.stride(count: (i +% 1u64).S64()).get_address()
+      rf_copy_bytes_at(dst_addr, src_addr, elem_size * shift_count)
     base.stride(count: i.S64()).inject(value: value)
   me.child_count = me.child_count +% 1u64
   return
@@ -103,9 +103,9 @@ routine BTreeListNode[T].keys_remove_at(i: U64)
       var base = me.keys_base()
       var elem_size = T.data_size()
       var shift_count = me.key_count -% i -% 1u64
-      var src = base.stride(count: (i +% 1u64).S64())
-      var dst = base.stride(count: i.S64())
-      rf_copy_bytes_at(dst.get_address(), src.get_address(), elem_size * shift_count)
+      var src_addr = base.stride(count: (i +% 1u64).S64()).get_address()
+      var dst_addr = base.stride(count: i.S64()).get_address()
+      rf_copy_bytes_at(dst_addr, src_addr, elem_size * shift_count)
   me.key_count = me.key_count -% 1u64
   return
 
@@ -115,9 +115,9 @@ routine BTreeListNode[T].children_remove_at(i: U64)
       var base = me.children_base()
       var elem_size = Address.data_size()
       var shift_count = me.child_count -% i -% 1u64
-      var src = base.stride(count: (i +% 1u64).S64())
-      var dst = base.stride(count: i.S64())
-      rf_copy_bytes_at(dst.get_address(), src.get_address(), elem_size * shift_count)
+      var src_addr = base.stride(count: (i +% 1u64).S64()).get_address()
+      var dst_addr = base.stride(count: i.S64()).get_address()
+      rf_copy_bytes_at(dst_addr, src_addr, elem_size * shift_count)
   me.child_count = me.child_count -% 1u64
   return
 
@@ -141,9 +141,9 @@ routine BTreeListNode[T].keys_add_range_from(other: BTreeListNode[T], start: U64
   if count > 0u64
     danger!
       var elem_size = T.data_size()
-      var src = other.keys_base().stride(count: start.S64())
-      var dst = me.keys_base().stride(count: me.key_count.S64())
-      rf_copy_bytes_at(dst.get_address(), src.get_address(), elem_size * count)
+      var src_addr = other.keys_base().stride(count: start.S64()).get_address()
+      var dst_addr = me.keys_base().stride(count: me.key_count.S64()).get_address()
+      rf_copy_bytes_at(dst_addr, src_addr, elem_size * count)
   me.key_count = me.key_count +% count
   return
 
@@ -151,9 +151,9 @@ routine BTreeListNode[T].children_add_range_from(other: BTreeListNode[T], start:
   if count > 0u64
     danger!
       var elem_size = Address.data_size()
-      var src = other.children_base().stride(count: start.S64())
-      var dst = me.children_base().stride(count: me.child_count.S64())
-      rf_copy_bytes_at(dst.get_address(), src.get_address(), elem_size * count)
+      var src_addr = other.children_base().stride(count: start.S64()).get_address()
+      var dst_addr = me.children_base().stride(count: me.child_count.S64()).get_address()
+      rf_copy_bytes_at(dst_addr, src_addr, elem_size * count)
   me.child_count = me.child_count +% count
   return
 
@@ -163,8 +163,8 @@ routine BTreeListNode[T].children_add_range_from(other: BTreeListNode[T], start:
 
 routine BTreeListNode[T].$create(is_leaf: Bool) -> BTreeListNode[T]
   return BTreeListNode[T](
-    keys: zero_value[ValueList[T, 63]](),
-    children: zero_value[ValueList[BTreeListNode[T], 64]](),
+    keys: zero_value[Array[T, 63]](),
+    children: zero_value[Array[BTreeListNode[T], 64]](),
     key_count: 0u64,
     child_count: 0u64,
     subtree_size: 0u64,

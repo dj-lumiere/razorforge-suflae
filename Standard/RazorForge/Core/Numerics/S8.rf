@@ -341,7 +341,7 @@ routine S8.pow_with_overflow!(exp: S8) -> (S8, Bool)
   if me == 0 and exp == 0
     throw IndeterminateResultError()
   if exp < 0
-    return NegativeExponentError(exp)
+    return NegativeExponentError()
   while e > 0
     if (e & 1) == 1
       var mul_result = result.mul_with_overflow(base)
@@ -375,7 +375,7 @@ routine S8.$pow_wrap!(exp: S8) -> S8
   if me == 0 and exp == 0
     throw IndeterminateResultError()
   if exp < 0_s8
-    return NegativeExponentError(exp)
+    return NegativeExponentError()
   while e > 0
     if (e & 1) == 1
       result = result.$mul_wrap(base)
@@ -395,7 +395,7 @@ routine S8.$pow_clamp!(exp: S8) -> S8
   if me == 0 and exp == 0
     throw IndeterminateResultError()
   if exp < 0
-    return NegativeExponentError(exp)
+    return NegativeExponentError()
   while e > 0
     if (e & 1) == 1
       result = result.$mul_clamp(base)
@@ -444,7 +444,7 @@ routine S8.$ashl(bits: U32) -> S8
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `S8` value.
-routine S8.$shift_right_signed(bits: U32) -> S8
+routine S8.$ashr(bits: U32) -> S8
   return shift_right_signed[S8](me, S8(bits))
 
 ### Implements the wired routine behavior for this value.
@@ -456,7 +456,7 @@ routine S8.$lshl(bits: U32) -> S8
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `S8` value.
-routine S8.$shift_right_unsigned(bits: U32) -> S8
+routine S8.$lshr(bits: U32) -> S8
   return shift_right_unsigned[S8](me, S8(bits))
 
 # ============================================================================

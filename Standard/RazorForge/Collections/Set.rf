@@ -41,7 +41,7 @@ routine Set[T].$create() -> Set[T]
   danger!
     set.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(cap))
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](set.ctrl), value: CTRL_EMPTY, size: cap)
-    set.slots = Hijacked[T](rf_allocate_dynamic_uninit(T.data_size() * cap))
+    set.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * cap))
   return set
 
 ### Creates a new instance pre-sized to hold at least `capacity` elements.
@@ -61,7 +61,7 @@ routine Set[T].$create(capacity: U64) -> Set[T]
   danger!
     set.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(cap))
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](set.ctrl), value: CTRL_EMPTY, size: cap)
-    set.slots = Hijacked[T](rf_allocate_dynamic_uninit(T.data_size() * cap))
+    set.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * cap))
   return set
 
 ### Creates a new instance from varargs values.
@@ -156,7 +156,7 @@ routine Set[T].rehash()
   danger!
     me.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(new_cap))
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: new_cap)
-    me.slots = Hijacked[T](rf_allocate_dynamic_uninit(T.data_size() * new_cap))
+    me.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * new_cap))
   me.capacity = new_cap
   me.count = 0u64
   me.deleted = 0u64

@@ -98,7 +98,9 @@ routine BitList.set_bit_internal(index: U64, value: Bool)
   var bit_off = U8(index & 63u64)
   var word_ptr = Hijacked[U64](me.data.get_address() +% Address(word_idx *% 8u64))
   var mask = 1u64 << bit_off
-  var set_mask = if value then mask else 0u64
+  var set_mask = 0u64
+  if value
+    set_mask = mask
   word_ptr.inject((word_ptr.extract() & ~mask) | set_mask)
   return
 

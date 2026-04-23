@@ -54,8 +54,8 @@ routine SecureDict[K, V].$create(key: SecureHashKey) -> SecureDict[K, V]
   danger!
     dict.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(cap))
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](dict.ctrl), value: CTRL_EMPTY, size: cap)
-    dict.keys = Hijacked[K](rf_allocate_dynamic_uninit(K.data_size() * cap))
-    dict.vals = Hijacked[V](rf_allocate_dynamic_uninit(V.data_size() * cap))
+    dict.keys = hijacked_from[K](rf_allocate_dynamic_uninit(K.data_size() * cap))
+    dict.vals = hijacked_from[V](rf_allocate_dynamic_uninit(V.data_size() * cap))
   return dict
 
 ### Creates a new instance pre-sized for at least `capacity` entries.
@@ -79,8 +79,8 @@ routine SecureDict[K, V].$create(key: SecureHashKey, capacity: U64) -> SecureDic
   danger!
     dict.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(cap))
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](dict.ctrl), value: CTRL_EMPTY, size: cap)
-    dict.keys = Hijacked[K](rf_allocate_dynamic_uninit(K.data_size() * cap))
-    dict.vals = Hijacked[V](rf_allocate_dynamic_uninit(V.data_size() * cap))
+    dict.keys = hijacked_from[K](rf_allocate_dynamic_uninit(K.data_size() * cap))
+    dict.vals = hijacked_from[V](rf_allocate_dynamic_uninit(V.data_size() * cap))
   return dict
 
 ### Releases raw key and value storage.
@@ -191,8 +191,8 @@ routine SecureDict[K, V].rehash()
   danger!
     me.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(new_cap))
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: new_cap)
-    me.keys = Hijacked[K](rf_allocate_dynamic_uninit(K.data_size() * new_cap))
-    me.vals = Hijacked[V](rf_allocate_dynamic_uninit(V.data_size() * new_cap))
+    me.keys = hijacked_from[K](rf_allocate_dynamic_uninit(K.data_size() * new_cap))
+    me.vals = hijacked_from[V](rf_allocate_dynamic_uninit(V.data_size() * new_cap))
   me.capacity = new_cap
   me.count = 0u64
   me.deleted = 0u64

@@ -126,7 +126,7 @@ routine Decimal.$eq(other: Decimal) -> Bool
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine Decimal.$cmp(you: Decimal) -> ComparisonSign
-  var value = rf_bigdec_cmp(me.handle, other.handle)
+  var value = rf_bigdec_cmp(me.handle, you.handle)
   if value < 0
     return ME_SMALL
   elseif value > 0

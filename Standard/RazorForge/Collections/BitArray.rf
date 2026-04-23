@@ -1,9 +1,9 @@
-# RazorForge ValueBitList[N] - Fixed-size inline bit vector with value semantics
+# RazorForge BitArray[N] - Fixed-size inline bit vector with value semantics
 # Record type - N bits stored inline, copied on assignment
 # Uses packed bytes for space efficiency (8 bits per byte)
 #
 # Usage:
-#   var flags: ValueBitList[8] = ValueBitList[8]()
+#   var flags: BitArray[8] = BitArray[8]()
 #   flags = flags.with_set(0, true)
 #   flags = flags.with_set(3, true)
 #   var is_set = flags[0]     # true
@@ -12,10 +12,10 @@ module Collections
 
 import BuilderService
 
-### Defines the record `ValueBitList`.
+### Defines the record `BitArray`.
 ### :typeparam N: The value used for `N`.
 @llvm("[{(N+7)//8} x i8]")
-record ValueBitList[N]
+record BitArray[N]
 needs N is U64
   pass
 
@@ -25,12 +25,12 @@ needs N is U64
 
 ### Returns the number of stored values.
 ### :returns: The resulting `U64` value.
-routine ValueBitList[N].count() -> U64
+routine BitArray[N].count() -> U64
   return N
 
 ### Returns true if this value is empty.
 ### :returns: The resulting `Bool` value.
-routine ValueBitList[N].is_empty() -> Bool
+routine BitArray[N].is_empty() -> Bool
   return N == 0u64
 
 # ============================================================================
@@ -41,7 +41,7 @@ routine ValueBitList[N].is_empty() -> Bool
 ### :param index: The zero-based position to use.
 ### :returns: The resulting `Bool` value.
 ### :throws: May throw {IndexOutOfBoundsError}.
-routine ValueBitList[N].$getitem![I](index: I) -> Bool
+routine BitArray[N].$getitem![I](index: I) -> Bool
 needs I obeys Integral
   var idx = index.U64!()
   if idx >= N
@@ -49,13 +49,13 @@ needs I obeys Integral
   # Access bit at index within packed bytes
   var byte_idx = idx // 8u64
   var bit_off = U8(idx % 8u64)
-  var byte_val = byte_at[ValueBitList[N]](me,byte_idx)
+  var byte_val = byte_at[BitArray[N]](me,byte_idx)
   return (byte_val & (1u8 << bit_off)) != 0u8
 
 ### Implements the wired routine behavior for this value.
 ### :param index: The zero-based position to use.
 ### :returns: The resulting `Bool` value.
-routine ValueBitList[N].$getitem![I](index: BackIndex[I]) -> Bool
+routine BitArray[N].$getitem![I](index: BackIndex[I]) -> Bool
 needs I obeys Integral
   var idx = index.resolve(N)
   return me[idx]
@@ -67,27 +67,27 @@ needs I obeys Integral
 ### Returns the result of `with set`.
 ### :param index: The zero-based position to use.
 ### :param value: The value to use.
-### :returns: The resulting `ValueBitList[N]` value.
-routine ValueBitList[N].with_set(index: U64, value: Bool) -> ValueBitList[N]
-  # Returns a new ValueBitList with the bit at index changed
+### :returns: The resulting `BitArray[N]` value.
+routine BitArray[N].with_set(index: U64, value: Bool) -> BitArray[N]
+  # Returns a new BitArray with the bit at index changed
   if index >= N
     return me
   var result = me
   # Modify the bit in the copy
   var byte_idx = unsigned_div[U64](index, 8u64)
   var bit_off = U8(unsigned_rem[U64](index, 8u64))
-  var byte_val = byte_at[ValueBitList[N]](result,byte_idx)
+  var byte_val = byte_at[BitArray[N]](result,byte_idx)
   if value
-    result = set_byte_at[ValueBitList[N]](result,byte_idx, byte_val | (1u8 << bit_off))
+    result = set_byte_at[BitArray[N]](result,byte_idx, byte_val | (1u8 << bit_off))
   else
-    result = set_byte_at[ValueBitList[N]](result,byte_idx, byte_val & ~(1u8 << bit_off))
+    result = set_byte_at[BitArray[N]](result,byte_idx, byte_val & ~(1u8 << bit_off))
   return result
 
 ### Returns the result of `with flipped`.
 ### :param index: The zero-based position to use.
-### :returns: The resulting `ValueBitList[N]` value.
-routine ValueBitList[N].with_flipped(index: U64) -> ValueBitList[N]
-  # Returns a new ValueBitList with the bit at index toggled
+### :returns: The resulting `BitArray[N]` value.
+routine BitArray[N].with_flipped(index: U64) -> BitArray[N]
+  # Returns a new BitArray with the bit at index toggled
   if index >= N
     return me
   var current = me[index]
@@ -99,7 +99,7 @@ routine ValueBitList[N].with_flipped(index: U64) -> ValueBitList[N]
 
 ### Returns the number of stored values.
 ### :returns: The resulting `U64` value.
-routine ValueBitList[N].count_ones() -> U64
+routine BitArray[N].count_ones() -> U64
   var count = 0u64
   var i = 0u64
   while i < N
@@ -110,12 +110,12 @@ routine ValueBitList[N].count_ones() -> U64
 
 ### Returns the number of stored values.
 ### :returns: The resulting `U64` value.
-routine ValueBitList[N].count_zeros() -> U64
+routine BitArray[N].count_zeros() -> U64
   return N -% me.count_ones()
 
 ### Returns true if `any` applies.
 ### :returns: The resulting `Bool` value.
-routine ValueBitList[N].any() -> Bool
+routine BitArray[N].any() -> Bool
   var i = 0u64
   while i < N
     if me[i]
@@ -125,7 +125,7 @@ routine ValueBitList[N].any() -> Bool
 
 ### Returns true if `all` applies.
 ### :returns: The resulting `Bool` value.
-routine ValueBitList[N].all() -> Bool
+routine BitArray[N].all() -> Bool
   var i = 0u64
   while i < N
     if not me[i]
@@ -135,14 +135,14 @@ routine ValueBitList[N].all() -> Bool
 
 ### Returns true if `none` applies.
 ### :returns: The resulting `Bool` value.
-routine ValueBitList[N].none() -> Bool
+routine BitArray[N].none() -> Bool
   return not me.any()
 
 ### Returns whether this value contains `value`.
 ### :param value: The value to use.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine ValueBitList[N].$contains(value: Bool) -> Bool
+routine BitArray[N].$contains(value: Bool) -> Bool
   if value
     return me.any()
   return not me.all()
@@ -153,8 +153,8 @@ routine ValueBitList[N].$contains(value: Bool) -> Bool
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-routine ValueBitList[N].$represent() -> Text
-  var result = "ValueBitList["
+routine BitArray[N].$represent() -> Text
+  var result = "BitArray["
   var i = 0u64
   while i < N
     if i > 0u64
@@ -166,7 +166,7 @@ routine ValueBitList[N].$represent() -> Text
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-routine ValueBitList[N].$diagnose() -> Text
+routine BitArray[N].$diagnose() -> Text
   var result = me.type_name() + "(count: " + N.$represent() + ", ones: " + me.count_ones().$represent() + ", ["
   var i = 0u64
   while i < N

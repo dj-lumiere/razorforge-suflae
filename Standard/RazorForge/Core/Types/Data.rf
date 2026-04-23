@@ -3,8 +3,8 @@
 # Cannot box: Result, Lookup, variants, access tokens
 module Core
 
-### Defines the entity `Data`.
-entity Data
+### Defines the record `Data`.
+record Data
   ### The type identifier of the boxed value.
   secret type_id: U64
   ### The address of the heap-allocated boxed value.

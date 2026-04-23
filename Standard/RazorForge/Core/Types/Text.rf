@@ -232,16 +232,21 @@ routine Text.$getslice![I obeys Integral](start: BackIndex[I], end: BackIndex[I]
 ### :param other: The other value to compare against.
 ### :returns: The resulting `Text` value.
 routine Text.concat(other: Referring[Text]) -> Text
-  var n = me.count + other.count
+  var n = me.count + other.count()
   if n == 0u64
     return Text()
   danger!
     var buf = Hijacked[Character](rf_allocate_dynamic(size: Character.data_size() * n))
     if me.count > 0u64
       rf_copy_bytes_at(dest: buf.address(), src: me.data.address(), size: Character.data_size() * me.count)
-    if other.count > 0u64
-      var dest = buf.stride(count: S64(me.count))
-      rf_copy_bytes_at(dest: dest.address(), src: other.data.address(), size: Character.data_size() * other.count)
+    var other_count = other.count()
+    if other_count > 0u64
+      var i: U64 = 0u64
+      loop
+        if i >= other_count
+          break
+        buf.stride(count: S64(me.count + i)).inject(value: other[i])
+        i += 1u64
     return Text(data: buf, count: n)
 
 ### Returns the sum of this value and the other value.
@@ -273,7 +278,7 @@ routine Text.$mul[I obeys Integral](count: I) -> Text
 ### :param other: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine Text.$eq(other: Referring[Text]) -> Bool
-  if me.count != other.count
+  if me.count != other.count()
     return false
   var i: U64 = 0u64
   loop
@@ -290,17 +295,18 @@ routine Text.$eq(other: Referring[Text]) -> Bool
 ### :param other: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine Text.$cmp(other: Referring[Text]) -> ComparisonSign
+  var other_count = other.count()
   var min_len = me.count
-  if other.count < min_len
-    min_len = other.count
-  for i in 0 til min_len
+  if other_count < min_len
+    min_len = other_count
+  for i in 0u64 til min_len
     if me[i] < other[i]
       return ComparisonSign.ME_SMALL
     if me[i] > other[i]
       return ComparisonSign.ME_LARGE
-  if me.count < other.count
+  if me.count < other_count
     return ComparisonSign.ME_SMALL
-  if me.count > other.count
+  if me.count > other_count
     return ComparisonSign.ME_LARGE
   return ComparisonSign.SAME
 
@@ -310,7 +316,7 @@ routine Text.$cmp(other: Referring[Text]) -> ComparisonSign
 ### :param character: The character to test.
 ### :returns: The resulting `Bool` value.
 routine Text.contains(character: Character) -> Bool
-  for i in 0 til me.count
+  for i in 0u64 til me.count
     if me[i] == character
       return true
   return false
@@ -321,12 +327,13 @@ routine Text.contains(character: Character) -> Bool
 routine Text.contains(other: Referring[Text]) -> Bool
   if other.is_empty()
     return true
-  if other.count > me.count
+  var other_count = other.count()
+  if other_count > me.count
     return false
-  var limit = me.count - other.count + 1u64
-  for i in 0 til limit
+  var limit = me.count - other_count + 1u64
+  for i in 0u64 til limit
     var found = true
-    for j in 0 til other.count
+    for j in 0u64 til other_count
       if me[i + j] != other[j]
         found = false
         break
@@ -338,9 +345,10 @@ routine Text.contains(other: Referring[Text]) -> Bool
 ### :param prefix: The prefix to test or remove.
 ### :returns: The resulting `Bool` value.
 routine Text.starts_with(prefix: Referring[Text]) -> Bool
-  if prefix.count > me.count
+  var prefix_count = prefix.count()
+  if prefix_count > me.count
     return false
-  for i in 0 til prefix.count
+  for i in 0u64 til prefix_count
     if me[i] != prefix[i]
       return false
   return true
@@ -349,10 +357,11 @@ routine Text.starts_with(prefix: Referring[Text]) -> Bool
 ### :param suffix: The suffix to test or remove.
 ### :returns: The resulting `Bool` value.
 routine Text.ends_with(suffix: Referring[Text]) -> Bool
-  if suffix.count > me.count
+  var suffix_count = suffix.count()
+  if suffix_count > me.count
     return false
-  var offset = me.count - suffix.count
-  for i in 0 til suffix.count
+  var offset = me.count - suffix_count
+  for i in 0u64 til suffix_count
     if me[offset + i] != suffix[i]
       return false
   return true
@@ -362,7 +371,7 @@ routine Text.ends_with(suffix: Referring[Text]) -> Bool
 ### :returns: The resulting `U64` value.
 ### :absent: Returns absent when the requested value is unavailable.
 routine Text.find!(letter: Character) -> U64
-  for i in 0 til me.count
+  for i in 0u64 til me.count
     if me[i] == letter
       return i
   absent
@@ -374,12 +383,12 @@ routine Text.find!(letter: Character) -> U64
 routine Text.find!(other: Referring[Text]) -> U64
   if other.is_empty()
     return 0u64
-  if other.count > me.count
+  if other.count() > me.count
     absent
-  var limit = me.count - other.count + 1u64
-  for i in 0 til limit
+  var limit = me.count - other.count() + 1u64
+  for i in 0u64 til limit
     var found = true
-    for j in 0 til other.count
+    for j in 0u64 til other.count()
       if me[i + j] != other[j]
         found = false
         break
@@ -393,7 +402,7 @@ routine Text.find!(other: Referring[Text]) -> U64
 ### :returns: The resulting `Text` value.
 routine Text.to_uppercase() -> Text
   var result = List[Character]()
-  for i in 0 til me.count
+  for i in 0u64 til me.count
     result.add_last(me[i].to_uppercase())
   return Text(from_list: result)
 
@@ -401,7 +410,7 @@ routine Text.to_uppercase() -> Text
 ### :returns: The resulting `Text` value.
 routine Text.to_lowercase() -> Text
   var result = List[Character]()
-  for i in 0 til me.count
+  for i in 0u64 til me.count
     result.add_last(me[i].to_lowercase())
   return Text(from_list: result)
 
@@ -457,22 +466,24 @@ routine Text.trim_end() -> Text
 routine Text.replace(old: Referring[Text], new: Referring[Text]) -> Text
   if old.is_empty()
     return me
+  var old_count = old.count()
+  var new_count = new.count()
   var result = List[Character]()
   var i: U64 = 0u64
   loop
     if i >= me.count
       break
     var found = false
-    if i + old.count <= me.count
+    if i + old_count <= me.count
       found = true
-      for j in 0 til old.count
+      for j in 0u64 til old_count
         if me[i + j] != old[j]
           found = false
           break
     if found
-      for j in 0 til new.count
+      for j in 0u64 til new_count
         result.add_last(new[j])
-      i += old.count
+      i += old_count
     else
       result.add_last(me[i])
       i += 1u64
@@ -483,7 +494,7 @@ routine Text.replace(old: Referring[Text], new: Referring[Text]) -> Text
 ### :returns: The resulting `Text` value.
 routine Text.remove_prefix(prefix: Referring[Text]) -> Text
   if me.starts_with(prefix)
-    return me[prefix.count til me.count]
+    return me[prefix.count() til me.count]
   return me
 
 ### Returns a copy without the matching suffix.
@@ -491,7 +502,7 @@ routine Text.remove_prefix(prefix: Referring[Text]) -> Text
 ### :returns: The resulting `Text` value.
 routine Text.remove_suffix(suffix: Referring[Text]) -> Text
   if me.ends_with(suffix)
-    return me[0 til me.count - suffix.count]
+    return me[0 til me.count - suffix.count()]
   return me
 
 ### Returns a repeated copy of this value.
@@ -521,9 +532,9 @@ routine Text.pad_start(width: U64, fill: Character) -> Text
     return me
   var result = List[Character]()
   var pad_count = width - me.count
-  for p in 0 til pad_count
+  for p in 0u64 til pad_count
     result.add_last(fill)
-  for i in 0 til me.count
+  for i in 0u64 til me.count
     result.add_last(me[i])
   return Text(from_list: result)
 
@@ -535,10 +546,10 @@ routine Text.pad_end(width: U64, fill: Character) -> Text
   if me.count >= width
     return me
   var result = List[Character]()
-  for i in 0 til me.count
+  for i in 0u64 til me.count
     result.add_last(me[i])
   var pad_count = width - me.count
-  for p in 0 til pad_count
+  for p in 0u64 til pad_count
     result.add_last(fill)
   return Text(from_list: result)
 
@@ -550,7 +561,7 @@ routine Text.pad_end(width: U64, fill: Character) -> Text
 routine Text.split(separator: Character) -> List[Owned[Text]]
   var parts = List[Owned[Text]]()
   var current = List[Character]()
-  for i in 0 til me.count
+  for i in 0u64 til me.count
     if me[i] == separator
       parts.add_last(Text(from_list: current))
       current = List[Character]()
@@ -565,23 +576,24 @@ routine Text.split(separator: Character) -> List[Owned[Text]]
 routine Text.split(separator: Referring[Text]) -> List[Owned[Text]]
   if separator.is_empty()
     var parts = List[Owned[Text]]()
-    for i in 0 til me.count
+    for i in 0u64 til me.count
       parts.add_last(Text(from_character: me[i]))
     return parts
+  var separator_count = separator.count()
   var parts = List[Owned[Text]]()
   var start: U64 = 0u64
   var i: U64 = 0u64
   loop
-    if i + separator.count > me.count
+    if i + separator_count > me.count
       break
     var found = true
-    for j in 0 til separator.count
+    for j in 0u64 til separator_count
       if me[i + j] != separator[j]
         found = false
         break
     if found
       parts.add_last(me[start til i])
-      i += separator.count
+      i += separator_count
       start = i
     else
       i += 1u64
@@ -598,9 +610,9 @@ routine Text.join(parts: List[Owned[Text]]) -> Text
   var first = true
   for part in parts
     if not first
-      for i in 0 til me.count
+      for i in 0u64 til me.count
         result.add_last(me[i])
-    for i in 0 til part.count()
+    for i in 0u64 til part.count()
       result.add_last(part[i])
     first = false
   return Text(from_list: result)
@@ -616,7 +628,7 @@ routine Text.lines() -> List[Owned[Text]]
 routine Text.words() -> List[Owned[Text]]
   var parts = List[Owned[Text]]()
   var current = List[Character]()
-  for i in 0 til me.count
+  for i in 0u64 til me.count
     if me[i].is_whitespace()
       if not current.is_empty()
         parts.add_last(Text(from_list: current))

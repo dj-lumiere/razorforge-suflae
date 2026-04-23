@@ -164,7 +164,7 @@ public class AttributeTests
     {
         string source = """
                         @config(target_arch: "x86_64")
-                        routine simd_add(a: ValueList[F32, 4], b: ValueList[F32, 4]) -> ValueList[F32, 4]
+                        routine simd_add(a: Array[F32, 4], b: Array[F32, 4]) -> Array[F32, 4]
                           pass
                           return
                         """;

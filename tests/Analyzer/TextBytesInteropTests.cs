@@ -56,7 +56,7 @@ public class TextBytesInteropTests
     {
         AnalysisResult result = Analyze("""
                                         routine test()
-                                          var text: Text = "Hello, ?�계"
+                                          var text: Text = "Hello, 계"
                                           var bytes: Bytes = text.encode_as_utf8()
                                           var roundtrip: Text = bytes.decode_as_utf8()
                                           return

@@ -49,7 +49,7 @@ routine Deque[T].$create(capacity: U64) -> Deque[T]
   var byte_size = T.data_size() * actual
   danger!
     return Deque[T](
-      data: Hijacked[T](rf_allocate_dynamic_uninit(byte_size)),
+      data: hijacked_from[T](rf_allocate_dynamic_uninit(byte_size)),
       start: 0u64,
       count: 0u64,
       capacity: actual
@@ -210,7 +210,7 @@ routine Deque[T].reserve(new_capacity: U64)
 
   var new_byte_size = T.data_size() * actual
   danger!
-    var _new_data = Hijacked[T](rf_allocate_dynamic_uninit(new_byte_size))
+    var _new_data = hijacked_from[T](rf_allocate_dynamic_uninit(new_byte_size))
 
     # Copy elements in logical order (unwrap the ring)
     var i = 0u64

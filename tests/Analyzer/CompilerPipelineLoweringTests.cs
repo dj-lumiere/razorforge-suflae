@@ -90,7 +90,7 @@ public class CompilerPipelineLoweringTests
             registry: result.Registry,
             stdlibPrograms: result.Registry.StdlibPrograms,
             synthesizedBodies: result.SynthesizedBodies,
-            preMonomorphizedBodies: result.PreMonomorphizedBodies);
+            instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         string llvmIr = generator.Generate();
         Assert.Contains(expectedSubstring: "insertvalue", actualString: llvmIr);
@@ -116,7 +116,7 @@ public class CompilerPipelineLoweringTests
             registry: result.Registry,
             stdlibPrograms: result.Registry.StdlibPrograms,
             synthesizedBodies: result.SynthesizedBodies,
-            preMonomorphizedBodies: result.PreMonomorphizedBodies);
+            instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         string llvmIr = generator.Generate();
         Assert.Contains(expectedSubstring: "PriorityQueue", actualString: llvmIr);
@@ -145,7 +145,7 @@ public class CompilerPipelineLoweringTests
             registry: result.Registry,
             stdlibPrograms: result.Registry.StdlibPrograms,
             synthesizedBodies: result.SynthesizedBodies,
-            preMonomorphizedBodies: result.PreMonomorphizedBodies);
+            instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         string llvmIr = generator.Generate();
         Assert.Contains(expectedSubstring: "__lambda_", actualString: llvmIr);
@@ -174,7 +174,7 @@ public class CompilerPipelineLoweringTests
             registry: result.Registry,
             stdlibPrograms: result.Registry.StdlibPrograms,
             synthesizedBodies: result.SynthesizedBodies,
-            preMonomorphizedBodies: result.PreMonomorphizedBodies);
+            instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         string llvmIr = generator.Generate();
         Assert.Contains(expectedSubstring: "define void @Collections.BitList.add_last",

@@ -22,28 +22,28 @@ preset D64_ONE: D64 = 1.0_d64
 ### :returns: The resulting `D64` value.
 routine D64.$create(from: S8) -> D64
   var bits = rf_d64_from_s32(S32(from))
-  return bitcast[U64, D64](bits)
+  return reinterpret_bits[U64, D64](bits)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `D64` value.
 routine D64.$create(from: S16) -> D64
   var bits = rf_d64_from_s32(S32(from))
-  return bitcast[U64, D64](bits)
+  return reinterpret_bits[U64, D64](bits)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `D64` value.
 routine D64.$create(from: S32) -> D64
   var bits = rf_d64_from_s32(from)
-  return bitcast[U64, D64](bits)
+  return reinterpret_bits[U64, D64](bits)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `D64` value.
 routine D64.$create(from: S64) -> D64
   var bits = rf_d64_from_s64(from)
-  return bitcast[U64, D64](bits)
+  return reinterpret_bits[U64, D64](bits)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
@@ -57,28 +57,28 @@ routine D64.$create(from: S128) -> D64
 ### :returns: The resulting `D64` value.
 routine D64.$create(from: U8) -> D64
   var bits = rf_d64_from_u32(U32(from))
-  return bitcast[U64, D64](bits)
+  return reinterpret_bits[U64, D64](bits)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `D64` value.
 routine D64.$create(from: U16) -> D64
   var bits = rf_d64_from_u32(U32(from))
-  return bitcast[U64, D64](bits)
+  return reinterpret_bits[U64, D64](bits)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `D64` value.
 routine D64.$create(from: U32) -> D64
   var bits = rf_d64_from_u32(from)
-  return bitcast[U64, D64](bits)
+  return reinterpret_bits[U64, D64](bits)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `D64` value.
 routine D64.$create(from: U64) -> D64
   var bits = rf_d64_from_u64(from)
-  return bitcast[U64, D64](bits)
+  return reinterpret_bits[U64, D64](bits)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
@@ -98,14 +98,14 @@ routine D64.$create(from: F16) -> D64
 ### :returns: The resulting `D64` value.
 routine D64.$create(from: F32) -> D64
   var bits = rf_f32_to_d64(from)
-  return bitcast[U64, D64](bits)
+  return reinterpret_bits[U64, D64](bits)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `D64` value.
 routine D64.$create(from: F64) -> D64
   var bits = rf_f64_to_d64(from)
-  return bitcast[U64, D64](bits)
+  return reinterpret_bits[U64, D64](bits)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
@@ -119,7 +119,7 @@ routine D64.$create(from: F128) -> D64
 routine D64.$create(from: D32) -> D64
   var bits = from.to_bits()
   var result_bits = rf_d32_to_d64(bits)
-  return bitcast[U64, D64](result_bits)
+  return reinterpret_bits[U64, D64](result_bits)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
@@ -132,7 +132,7 @@ routine D64.$create(from: D64) -> D64
 ### :returns: The resulting `D64` value.
 routine D64.$create(from: D128) -> D64
   var result_bits = rf_d128_to_d64(from.low_bits(), from.high_bits())
-  return bitcast[U64, D64](result_bits)
+  return reinterpret_bits[U64, D64](result_bits)
 
 # ============================================================================
 # Arithmetic Operations
@@ -142,45 +142,45 @@ routine D64.$create(from: D128) -> D64
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D64` value.
 routine D64.$add!(you: D64) -> D64
-  var a_bits = bitcast[D64, U64](me)
-  var b_bits = bitcast[D64, U64](you)
+  var a_bits = reinterpret_bits[D64, U64](me)
+  var b_bits = reinterpret_bits[D64, U64](you)
   var result = rf_d64_add(a_bits, b_bits)
   if rf_d64_isfinite(result) == 0_s32
     throw NumericOverflowError(description: f"D64 addition produced non-finite result: {me} + {you}")
-  return bitcast[U64, D64](result)
+  return reinterpret_bits[U64, D64](result)
 
 ### Returns the difference between this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D64` value.
 routine D64.$sub!(you: D64) -> D64
-  var a_bits = bitcast[D64, U64](me)
-  var b_bits = bitcast[D64, U64](you)
+  var a_bits = reinterpret_bits[D64, U64](me)
+  var b_bits = reinterpret_bits[D64, U64](you)
   var result = rf_d64_sub(a_bits, b_bits)
   if rf_d64_isfinite(result) == 0_s32
     throw NumericOverflowError(description: f"D64 subtraction produced non-finite result: {me} - {you}")
-  return bitcast[U64, D64](result)
+  return reinterpret_bits[U64, D64](result)
 
 ### Returns the product of this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D64` value.
 routine D64.$mul!(you: D64) -> D64
-  var a_bits = bitcast[D64, U64](me)
-  var b_bits = bitcast[D64, U64](you)
+  var a_bits = reinterpret_bits[D64, U64](me)
+  var b_bits = reinterpret_bits[D64, U64](you)
   var result = rf_d64_mul(a_bits, b_bits)
   if rf_d64_isfinite(result) == 0_s32
     throw NumericOverflowError(description: f"D64 multiplication produced non-finite result: {me} * {you}")
-  return bitcast[U64, D64](result)
+  return reinterpret_bits[U64, D64](result)
 
 ### Returns the quotient of this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D64` value.
 routine D64.$truediv!(you: D64) -> D64
-  var a_bits = bitcast[D64, U64](me)
-  var b_bits = bitcast[D64, U64](you)
+  var a_bits = reinterpret_bits[D64, U64](me)
+  var b_bits = reinterpret_bits[D64, U64](you)
   var result = rf_d64_div(a_bits, b_bits)
   if rf_d64_isfinite(result) == 0_s32
     throw NumericOverflowError(description: f"D64 division produced non-finite result: {me} / {you}")
-  return bitcast[U64, D64](result)
+  return reinterpret_bits[U64, D64](result)
 
 ### Returns true if this value is finite.
 ### :returns: The resulting `Bool` value.
@@ -190,10 +190,10 @@ routine D64.is_finite() -> Bool
 ### Returns the negated value.
 ### :returns: The resulting `D64` value.
 routine D64.$neg() -> D64
-  var zero_bits = bitcast[D64, U64](D64_ZERO)
-  var me_bits = bitcast[D64, U64](me)
+  var zero_bits = reinterpret_bits[D64, U64](D64_ZERO)
+  var me_bits = reinterpret_bits[D64, U64](me)
   var result = rf_d64_sub(zero_bits, me_bits)
-  return bitcast[U64, D64](result)
+  return reinterpret_bits[U64, D64](result)
 
 # ============================================================================
 # Comparison Operations
@@ -203,16 +203,16 @@ routine D64.$neg() -> D64
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine D64.$eq(you: D64) -> Bool
-  var a_bits = bitcast[D64, U64](me)
-  var b_bits = bitcast[D64, U64](you)
+  var a_bits = reinterpret_bits[D64, U64](me)
+  var b_bits = reinterpret_bits[D64, U64](you)
   return rf_d64_cmp(a_bits, b_bits) == 0
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine D64.$cmp(you: D64) -> ComparisonSign
-  var a_bits = bitcast[D64, U64](me)
-  var b_bits = bitcast[D64, U64](you)
+  var a_bits = reinterpret_bits[D64, U64](me)
+  var b_bits = reinterpret_bits[D64, U64](you)
   var cmp = rf_d64_cmp(a_bits, b_bits)
   if cmp < 0
     return ME_SMALL
@@ -227,44 +227,44 @@ routine D64.$cmp(you: D64) -> ComparisonSign
 ### Returns the result of `sqrt`.
 ### :returns: The resulting `D64` value.
 routine D64.sqrt() -> D64
-  var bits = bitcast[D64, U64](me)
+  var bits = reinterpret_bits[D64, U64](me)
   var result = rf_d64_sqrt(bits)
-  return bitcast[U64, D64](result)
+  return reinterpret_bits[U64, D64](result)
 
 ### Returns the absolute value.
 ### :returns: The resulting `D64` value.
 routine D64.abs() -> D64
-  var bits = bitcast[D64, U64](me)
+  var bits = reinterpret_bits[D64, U64](me)
   var result = rf_d64_abs(bits)
-  return bitcast[U64, D64](result)
+  return reinterpret_bits[U64, D64](result)
 
 ### Returns the result of `ceil`.
 ### :returns: The resulting `D64` value.
 routine D64.ceil() -> D64
-  var bits = bitcast[D64, U64](me)
+  var bits = reinterpret_bits[D64, U64](me)
   var result = rf_d64_ceil(bits)
-  return bitcast[U64, D64](result)
+  return reinterpret_bits[U64, D64](result)
 
 ### Returns the result of `floor`.
 ### :returns: The resulting `D64` value.
 routine D64.floor() -> D64
-  var bits = bitcast[D64, U64](me)
+  var bits = reinterpret_bits[D64, U64](me)
   var result = rf_d64_floor(bits)
-  return bitcast[U64, D64](result)
+  return reinterpret_bits[U64, D64](result)
 
 ### Returns the result of `round`.
 ### :returns: The resulting `D64` value.
 routine D64.round() -> D64
-  var bits = bitcast[D64, U64](me)
+  var bits = reinterpret_bits[D64, U64](me)
   var result = rf_d64_round(bits)
-  return bitcast[U64, D64](result)
+  return reinterpret_bits[U64, D64](result)
 
 ### Returns the result of `trunc`.
 ### :returns: The resulting `D64` value.
 routine D64.trunc() -> D64
-  var bits = bitcast[D64, U64](me)
+  var bits = reinterpret_bits[D64, U64](me)
   var result = rf_d64_trunc(bits)
-  return bitcast[U64, D64](result)
+  return reinterpret_bits[U64, D64](result)
 
 # ============================================================================
 # Utility Methods
@@ -274,16 +274,16 @@ routine D64.trunc() -> D64
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D64` value.
 routine D64.min(you: D64) -> D64
-  var a_bits = bitcast[D64, U64](me)
-  var b_bits = bitcast[D64, U64](you)
+  var a_bits = reinterpret_bits[D64, U64](me)
+  var b_bits = reinterpret_bits[D64, U64](you)
   return (if rf_d64_cmp(a_bits, b_bits) <= 0 then me else you)
 
 ### Returns the result of `max`.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D64` value.
 routine D64.max(you: D64) -> D64
-  var a_bits = bitcast[D64, U64](me)
-  var b_bits = bitcast[D64, U64](you)
+  var a_bits = reinterpret_bits[D64, U64](me)
+  var b_bits = reinterpret_bits[D64, U64](you)
   return (if rf_d64_cmp(a_bits, b_bits) >= 0 then me else you)
 
 ### Returns the result of `clamp`.
@@ -296,29 +296,29 @@ routine D64.clamp(min_val: D64, max_val: D64) -> D64
 ### Returns true if this value is positive.
 ### :returns: The resulting `Bool` value.
 routine D64.is_positive() -> Bool
-  var me_bits = bitcast[D64, U64](me)
-  var zero_bits = bitcast[D64, U64](D64_ZERO)
+  var me_bits = reinterpret_bits[D64, U64](me)
+  var zero_bits = reinterpret_bits[D64, U64](D64_ZERO)
   return rf_d64_cmp(me_bits, zero_bits) > 0
 
 ### Returns true if this value is negative.
 ### :returns: The resulting `Bool` value.
 routine D64.is_negative() -> Bool
-  var me_bits = bitcast[D64, U64](me)
-  var zero_bits = bitcast[D64, U64](D64_ZERO)
+  var me_bits = reinterpret_bits[D64, U64](me)
+  var zero_bits = reinterpret_bits[D64, U64](D64_ZERO)
   return rf_d64_cmp(me_bits, zero_bits) < 0
 
 ### Returns true if this value is zero.
 ### :returns: The resulting `Bool` value.
 routine D64.is_zero() -> Bool
-  var me_bits = bitcast[D64, U64](me)
-  var zero_bits = bitcast[D64, U64](D64_ZERO)
+  var me_bits = reinterpret_bits[D64, U64](me)
+  var zero_bits = reinterpret_bits[D64, U64](D64_ZERO)
   return rf_d64_cmp(me_bits, zero_bits) == 0
 
 ### Returns the result of `signum`.
 ### :returns: The resulting `D64` value.
 routine D64.signum() -> D64
-  var me_bits = bitcast[D64, U64](me)
-  var zero_bits = bitcast[D64, U64](D64_ZERO)
+  var me_bits = reinterpret_bits[D64, U64](me)
+  var zero_bits = reinterpret_bits[D64, U64](D64_ZERO)
   var cmp = rf_d64_cmp(me_bits, zero_bits)
   return when
     cmp > 0 => D64_ONE
@@ -328,13 +328,13 @@ routine D64.signum() -> D64
 ### Converts this value to bits.
 ### :returns: The resulting `U64` value.
 routine D64.to_bits() -> U64
-  return bitcast[D64, U64](me)
+  return reinterpret_bits[D64, U64](me)
 
 ### Creates a value from bits.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `D64` value.
 routine D64.from_bits(bits: U64) -> D64
-  return bitcast[U64, D64](bits)
+  return reinterpret_bits[U64, D64](bits)
 
 # ============================================================================
 # Text Representation and Parsing
@@ -343,7 +343,7 @@ routine D64.from_bits(bits: U64) -> D64
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 routine D64.$represent() -> Text
-  var bits = bitcast[D64, U64](me)
+  var bits = reinterpret_bits[D64, U64](me)
   var cstr_result = rf_d64_to_string(bits)
   return Text(from: CStr(from_ptr: cstr_result))
 
@@ -412,7 +412,7 @@ routine D64.$create!(from_text: Text) -> D64
       throw InvalidValueError(input: from_text, target: "D64")
   var cstr_val = from_text.CStr()
   var bits = rf_d64_from_string(cstr_val)
-  return bitcast[U64, D64](bits)
+  return reinterpret_bits[U64, D64](bits)
 
 # ============================================================================
 # Hashing
@@ -421,40 +421,40 @@ routine D64.$create!(from_text: Text) -> D64
 ### Returns a hash of this value.
 ### :returns: The resulting `U64` value.
 routine D64.$hash() -> U64
-  return __hash_leaf(v: bitcast[D64, U64](me))
+  return __hash_leaf(v: reinterpret_bits[D64, U64](me))
 
 # ============================================================================
 # Byte Representation
 # ============================================================================
 
 ### Returns the raw bytes of this value in little-endian order.
-### :returns: The resulting `ValueList[Byte, 8]` value.
-routine D64.to_bytes_le() -> ValueList[Byte, 8]
-  var raw = bitcast[D64, U64](me)
-  var result = ValueList[Byte, 8]()
+### :returns: The resulting `Array[Byte, 8]` value.
+routine D64.to_bytes_le() -> Array[Byte, 8]
+  var raw = reinterpret_bits[D64, U64](me)
+  var result = Array[Byte, 8]()
   result = set_byte_at(result, 0_u64, trunc[U64, U8](raw))
-  result = set_byte_at(result, 1_u64, trunc[U64, U8](lshr[U64](raw, 8_u64)))
-  result = set_byte_at(result, 2_u64, trunc[U64, U8](lshr[U64](raw, 16_u64)))
-  result = set_byte_at(result, 3_u64, trunc[U64, U8](lshr[U64](raw, 24_u64)))
-  result = set_byte_at(result, 4_u64, trunc[U64, U8](lshr[U64](raw, 32_u64)))
-  result = set_byte_at(result, 5_u64, trunc[U64, U8](lshr[U64](raw, 40_u64)))
-  result = set_byte_at(result, 6_u64, trunc[U64, U8](lshr[U64](raw, 48_u64)))
-  result = set_byte_at(result, 7_u64, trunc[U64, U8](lshr[U64](raw, 56_u64)))
+  result = set_byte_at(result, 1_u64, trunc[U64, U8](shift_right_unsigned[U64](raw, 8_u64)))
+  result = set_byte_at(result, 2_u64, trunc[U64, U8](shift_right_unsigned[U64](raw, 16_u64)))
+  result = set_byte_at(result, 3_u64, trunc[U64, U8](shift_right_unsigned[U64](raw, 24_u64)))
+  result = set_byte_at(result, 4_u64, trunc[U64, U8](shift_right_unsigned[U64](raw, 32_u64)))
+  result = set_byte_at(result, 5_u64, trunc[U64, U8](shift_right_unsigned[U64](raw, 40_u64)))
+  result = set_byte_at(result, 6_u64, trunc[U64, U8](shift_right_unsigned[U64](raw, 48_u64)))
+  result = set_byte_at(result, 7_u64, trunc[U64, U8](shift_right_unsigned[U64](raw, 56_u64)))
   return result
 
 ### Returns the raw bytes of this value in big-endian order.
-### :returns: The resulting `ValueList[Byte, 8]` value.
-routine D64.to_bytes_be() -> ValueList[Byte, 8]
-  var raw = bswap[U64](bitcast[D64, U64](me))
-  var result = ValueList[Byte, 8]()
+### :returns: The resulting `Array[Byte, 8]` value.
+routine D64.to_bytes_be() -> Array[Byte, 8]
+  var raw = bswap[U64](reinterpret_bits[D64, U64](me))
+  var result = Array[Byte, 8]()
   result = set_byte_at(result, 0_u64, trunc[U64, U8](raw))
-  result = set_byte_at(result, 1_u64, trunc[U64, U8](lshr[U64](raw, 8_u64)))
-  result = set_byte_at(result, 2_u64, trunc[U64, U8](lshr[U64](raw, 16_u64)))
-  result = set_byte_at(result, 3_u64, trunc[U64, U8](lshr[U64](raw, 24_u64)))
-  result = set_byte_at(result, 4_u64, trunc[U64, U8](lshr[U64](raw, 32_u64)))
-  result = set_byte_at(result, 5_u64, trunc[U64, U8](lshr[U64](raw, 40_u64)))
-  result = set_byte_at(result, 6_u64, trunc[U64, U8](lshr[U64](raw, 48_u64)))
-  result = set_byte_at(result, 7_u64, trunc[U64, U8](lshr[U64](raw, 56_u64)))
+  result = set_byte_at(result, 1_u64, trunc[U64, U8](shift_right_unsigned[U64](raw, 8_u64)))
+  result = set_byte_at(result, 2_u64, trunc[U64, U8](shift_right_unsigned[U64](raw, 16_u64)))
+  result = set_byte_at(result, 3_u64, trunc[U64, U8](shift_right_unsigned[U64](raw, 24_u64)))
+  result = set_byte_at(result, 4_u64, trunc[U64, U8](shift_right_unsigned[U64](raw, 32_u64)))
+  result = set_byte_at(result, 5_u64, trunc[U64, U8](shift_right_unsigned[U64](raw, 40_u64)))
+  result = set_byte_at(result, 6_u64, trunc[U64, U8](shift_right_unsigned[U64](raw, 48_u64)))
+  result = set_byte_at(result, 7_u64, trunc[U64, U8](shift_right_unsigned[U64](raw, 56_u64)))
   return result
 
 ### Returns a keyed hash of this value using SipHash-2-4.
@@ -462,4 +462,4 @@ routine D64.to_bytes_be() -> ValueList[Byte, 8]
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
 routine D64.$secure_hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u64(v: bitcast[D64, U64](me), k0: k0, k1: k1)
+  return __secure_hash_u64(v: reinterpret_bits[D64, U64](me), k0: k0, k1: k1)

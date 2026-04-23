@@ -30,7 +30,7 @@ routine List[T].$create(capacity: U64) -> List[T]
   var byte_size = T.data_size() * capacity
   var ptr = rf_allocate_dynamic_uninit(byte_size)
   return List[T](
-    data: Hijacked[T](ptr),
+    data: hijacked_from[T](ptr),
     count: 0u64,
     capacity: capacity
   )
@@ -104,8 +104,8 @@ routine List[T].add_at!(index: U64, value: T)
   if index < me.count
     danger!
       var elem_size = T.data_size()
-      var src_ptr = me.data.offset(elem_size * index)
-      var dst_ptr = me.data.offset(elem_size * (index + 1u64))
+      var src_ptr:Hijacked[T] = me.data.offset(elem_size * index)
+      var dst_ptr:Hijacked[T] = me.data.offset(elem_size * (index + 1u64))
       rf_copy_bytes_at(dst_ptr.get_address(), src_ptr.get_address(), elem_size * (me.count - index))
 
   me.data.offset(T.data_size() * index).inject(value)
@@ -269,11 +269,11 @@ routine List[T].reserve(new_capacity: U64)
     if me.data.is_none()
       danger!
         var ptr = rf_allocate_dynamic_uninit(new_byte_size)
-        me.data = Hijacked[T](ptr)
+        me.data = hijacked_from[T](ptr)
     else
       danger!
         var ptr = rf_reallocate_dynamic(pointer_to_int[T, Address](me.data), new_byte_size)
-        me.data = Hijacked[T](ptr)
+        me.data = hijacked_from[T](ptr)
 
     me.capacity = new_capacity
   return

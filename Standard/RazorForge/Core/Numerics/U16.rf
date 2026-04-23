@@ -406,7 +406,7 @@ routine U16.$ashl(bits: U32) -> U16
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U16` value.
-routine U16.$shift_right_signed(bits: U32) -> U16
+routine U16.$ashr(bits: U32) -> U16
   return shift_right_unsigned[U16](me, U16(bits))
 
 ### Implements the wired routine behavior for this value.
@@ -418,7 +418,7 @@ routine U16.$lshl(bits: U32) -> U16
 ### Implements the wired routine behavior for this value.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `U16` value.
-routine U16.$shift_right_unsigned(bits: U32) -> U16
+routine U16.$lshr(bits: U32) -> U16
   return shift_right_unsigned[U16](me, U16(bits))
 
 # ============================================================================

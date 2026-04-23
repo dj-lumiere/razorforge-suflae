@@ -12,5 +12,5 @@ record SecureHashKey
 
 ### Generates a fresh key from OS entropy (BCryptGenRandom / getrandom).
 ### :returns: The resulting `SecureHashKey` value.
-routine SecureHashKey.random() -> SecureHashKey
+common routine SecureHashKey.random() -> SecureHashKey
   return SecureHashKey(k0: rf_random_u64(), k1: rf_random_u64())

@@ -21,28 +21,28 @@ preset D32_ONE: D32 = 1.0_d32
 ### :returns: The resulting `D32` value.
 routine D32.$create(from: S8) -> D32
   var bits = rf_d32_from_s32(S32(from))
-  return bitcast[U32, D32](bits)
+  return reinterpret_bits[U32, D32](bits)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `D32` value.
 routine D32.$create(from: S16) -> D32
   var bits = rf_d32_from_s32(S32(from))
-  return bitcast[U32, D32](bits)
+  return reinterpret_bits[U32, D32](bits)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `D32` value.
 routine D32.$create(from: S32) -> D32
   var bits = rf_d32_from_s32(from)
-  return bitcast[U32, D32](bits)
+  return reinterpret_bits[U32, D32](bits)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `D32` value.
 routine D32.$create(from: S64) -> D32
   var bits = rf_d32_from_s64(from)
-  return bitcast[U32, D32](bits)
+  return reinterpret_bits[U32, D32](bits)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
@@ -56,28 +56,28 @@ routine D32.$create(from: S128) -> D32
 ### :returns: The resulting `D32` value.
 routine D32.$create(from: U8) -> D32
   var bits = rf_d32_from_u32(U32(from))
-  return bitcast[U32, D32](bits)
+  return reinterpret_bits[U32, D32](bits)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `D32` value.
 routine D32.$create(from: U16) -> D32
   var bits = rf_d32_from_u32(U32(from))
-  return bitcast[U32, D32](bits)
+  return reinterpret_bits[U32, D32](bits)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `D32` value.
 routine D32.$create(from: U32) -> D32
   var bits = rf_d32_from_u32(from)
-  return bitcast[U32, D32](bits)
+  return reinterpret_bits[U32, D32](bits)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `D32` value.
 routine D32.$create(from: U64) -> D32
   var bits = rf_d32_from_u64(from)
-  return bitcast[U32, D32](bits)
+  return reinterpret_bits[U32, D32](bits)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
@@ -97,14 +97,14 @@ routine D32.$create(from: F16) -> D32
 ### :returns: The resulting `D32` value.
 routine D32.$create(from: F32) -> D32
   var bits = rf_f32_to_d32(from)
-  return bitcast[U32, D32](bits)
+  return reinterpret_bits[U32, D32](bits)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `D32` value.
 routine D32.$create(from: F64) -> D32
   var bits = rf_f64_to_d32(from)
-  return bitcast[U32, D32](bits)
+  return reinterpret_bits[U32, D32](bits)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
@@ -124,14 +124,14 @@ routine D32.$create(from: D32) -> D32
 routine D32.$create(from: D64) -> D32
   var bits = from.to_bits()
   var result_bits = rf_d64_to_d32(bits)
-  return bitcast[U32, D32](result_bits)
+  return reinterpret_bits[U32, D32](result_bits)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
 ### :returns: The resulting `D32` value.
 routine D32.$create(from: D128) -> D32
   var result_bits = rf_d128_to_d32(from.low_bits(), from.high_bits())
-  return bitcast[U32, D32](result_bits)
+  return reinterpret_bits[U32, D32](result_bits)
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
@@ -147,45 +147,45 @@ routine D32.$create(from: Bool) -> D32
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D32` value.
 routine D32.$add!(you: D32) -> D32
-  var a_bits = bitcast[D32, U32](me)
-  var b_bits = bitcast[D32, U32](you)
+  var a_bits = reinterpret_bits[D32, U32](me)
+  var b_bits = reinterpret_bits[D32, U32](you)
   var result = rf_d32_add(a_bits, b_bits)
   if rf_d32_isfinite(result) == 0_s32
     throw NumericOverflowError(description: f"D32 addition produced non-finite result: {me} + {you}")
-  return bitcast[U32, D32](result)
+  return reinterpret_bits[U32, D32](result)
 
 ### Returns the difference between this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D32` value.
 routine D32.$sub!(you: D32) -> D32
-  var a_bits = bitcast[D32, U32](me)
-  var b_bits = bitcast[D32, U32](you)
+  var a_bits = reinterpret_bits[D32, U32](me)
+  var b_bits = reinterpret_bits[D32, U32](you)
   var result = rf_d32_sub(a_bits, b_bits)
   if rf_d32_isfinite(result) == 0_s32
     throw NumericOverflowError(description: f"D32 subtraction produced non-finite result: {me} - {you}")
-  return bitcast[U32, D32](result)
+  return reinterpret_bits[U32, D32](result)
 
 ### Returns the product of this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D32` value.
 routine D32.$mul!(you: D32) -> D32
-  var a_bits = bitcast[D32, U32](me)
-  var b_bits = bitcast[D32, U32](you)
+  var a_bits = reinterpret_bits[D32, U32](me)
+  var b_bits = reinterpret_bits[D32, U32](you)
   var result = rf_d32_mul(a_bits, b_bits)
   if rf_d32_isfinite(result) == 0_s32
     throw NumericOverflowError(description: f"D32 multiplication produced non-finite result: {me} * {you}")
-  return bitcast[U32, D32](result)
+  return reinterpret_bits[U32, D32](result)
 
 ### Returns the quotient of this value and the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D32` value.
 routine D32.$truediv!(you: D32) -> D32
-  var a_bits = bitcast[D32, U32](me)
-  var b_bits = bitcast[D32, U32](you)
+  var a_bits = reinterpret_bits[D32, U32](me)
+  var b_bits = reinterpret_bits[D32, U32](you)
   var result = rf_d32_div(a_bits, b_bits)
   if rf_d32_isfinite(result) == 0_s32
     throw NumericOverflowError(description: f"D32 division produced non-finite result: {me} / {you}")
-  return bitcast[U32, D32](result)
+  return reinterpret_bits[U32, D32](result)
 
 ### Returns true if this value is finite.
 ### :returns: The resulting `Bool` value.
@@ -195,10 +195,10 @@ routine D32.is_finite() -> Bool
 ### Returns the negated value.
 ### :returns: The resulting `D32` value.
 routine D32.$neg() -> D32
-  var zero_bits = bitcast[D32, U32](D32_ZERO)
-  var me_bits = bitcast[D32, U32](me)
+  var zero_bits = reinterpret_bits[D32, U32](D32_ZERO)
+  var me_bits = reinterpret_bits[D32, U32](me)
   var result = rf_d32_sub(zero_bits, me_bits)
-  return bitcast[U32, D32](result)
+  return reinterpret_bits[U32, D32](result)
 
 # ============================================================================
 # Comparison Operations
@@ -208,16 +208,16 @@ routine D32.$neg() -> D32
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine D32.$eq(you: D32) -> Bool
-  var a_bits = bitcast[D32, U32](me)
-  var b_bits = bitcast[D32, U32](you)
+  var a_bits = reinterpret_bits[D32, U32](me)
+  var b_bits = reinterpret_bits[D32, U32](you)
   return rf_d32_cmp(a_bits, b_bits) == 0
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine D32.$cmp(you: D32) -> ComparisonSign
-  var a_bits = bitcast[D32, U32](me)
-  var b_bits = bitcast[D32, U32](you)
+  var a_bits = reinterpret_bits[D32, U32](me)
+  var b_bits = reinterpret_bits[D32, U32](you)
   var cmp = rf_d32_cmp(a_bits, b_bits)
   if cmp < 0
     return ME_SMALL
@@ -232,44 +232,44 @@ routine D32.$cmp(you: D32) -> ComparisonSign
 ### Returns the result of `sqrt`.
 ### :returns: The resulting `D32` value.
 routine D32.sqrt() -> D32
-  var bits = bitcast[D32, U32](me)
+  var bits = reinterpret_bits[D32, U32](me)
   var result = rf_d32_sqrt(bits)
-  return bitcast[U32, D32](result)
+  return reinterpret_bits[U32, D32](result)
 
 ### Returns the absolute value.
 ### :returns: The resulting `D32` value.
 routine D32.abs() -> D32
-  var bits = bitcast[D32, U32](me)
+  var bits = reinterpret_bits[D32, U32](me)
   var result = rf_d32_abs(bits)
-  return bitcast[U32, D32](result)
+  return reinterpret_bits[U32, D32](result)
 
 ### Returns the result of `ceil`.
 ### :returns: The resulting `D32` value.
 routine D32.ceil() -> D32
-  var bits = bitcast[D32, U32](me)
+  var bits = reinterpret_bits[D32, U32](me)
   var result = rf_d32_ceil(bits)
-  return bitcast[U32, D32](result)
+  return reinterpret_bits[U32, D32](result)
 
 ### Returns the result of `floor`.
 ### :returns: The resulting `D32` value.
 routine D32.floor() -> D32
-  var bits = bitcast[D32, U32](me)
+  var bits = reinterpret_bits[D32, U32](me)
   var result = rf_d32_floor(bits)
-  return bitcast[U32, D32](result)
+  return reinterpret_bits[U32, D32](result)
 
 ### Returns the result of `round`.
 ### :returns: The resulting `D32` value.
 routine D32.round() -> D32
-  var bits = bitcast[D32, U32](me)
+  var bits = reinterpret_bits[D32, U32](me)
   var result = rf_d32_round(bits)
-  return bitcast[U32, D32](result)
+  return reinterpret_bits[U32, D32](result)
 
 ### Returns the result of `trunc`.
 ### :returns: The resulting `D32` value.
 routine D32.trunc() -> D32
-  var bits = bitcast[D32, U32](me)
+  var bits = reinterpret_bits[D32, U32](me)
   var result = rf_d32_trunc(bits)
-  return bitcast[U32, D32](result)
+  return reinterpret_bits[U32, D32](result)
 
 # ============================================================================
 # Utility Methods
@@ -279,16 +279,16 @@ routine D32.trunc() -> D32
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D32` value.
 routine D32.min(you: D32) -> D32
-  var a_bits = bitcast[D32, U32](me)
-  var b_bits = bitcast[D32, U32](you)
+  var a_bits = reinterpret_bits[D32, U32](me)
+  var b_bits = reinterpret_bits[D32, U32](you)
   return (if rf_d32_cmp(a_bits, b_bits) <= 0 then me else you)
 
 ### Returns the result of `max`.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D32` value.
 routine D32.max(you: D32) -> D32
-  var a_bits = bitcast[D32, U32](me)
-  var b_bits = bitcast[D32, U32](you)
+  var a_bits = reinterpret_bits[D32, U32](me)
+  var b_bits = reinterpret_bits[D32, U32](you)
   return (if rf_d32_cmp(a_bits, b_bits) >= 0 then me else you)
 
 ### Returns the result of `clamp`.
@@ -301,29 +301,29 @@ routine D32.clamp(min_val: D32, max_val: D32) -> D32
 ### Returns true if this value is positive.
 ### :returns: The resulting `Bool` value.
 routine D32.is_positive() -> Bool
-  var me_bits = bitcast[D32, U32](me)
-  var zero_bits = bitcast[D32, U32](D32_ZERO)
+  var me_bits = reinterpret_bits[D32, U32](me)
+  var zero_bits = reinterpret_bits[D32, U32](D32_ZERO)
   return rf_d32_cmp(me_bits, zero_bits) > 0
 
 ### Returns true if this value is negative.
 ### :returns: The resulting `Bool` value.
 routine D32.is_negative() -> Bool
-  var me_bits = bitcast[D32, U32](me)
-  var zero_bits = bitcast[D32, U32](D32_ZERO)
+  var me_bits = reinterpret_bits[D32, U32](me)
+  var zero_bits = reinterpret_bits[D32, U32](D32_ZERO)
   return rf_d32_cmp(me_bits, zero_bits) < 0
 
 ### Returns true if this value is zero.
 ### :returns: The resulting `Bool` value.
 routine D32.is_zero() -> Bool
-  var me_bits = bitcast[D32, U32](me)
-  var zero_bits = bitcast[D32, U32](D32_ZERO)
+  var me_bits = reinterpret_bits[D32, U32](me)
+  var zero_bits = reinterpret_bits[D32, U32](D32_ZERO)
   return rf_d32_cmp(me_bits, zero_bits) == 0
 
 ### Returns the result of `signum`.
 ### :returns: The resulting `D32` value.
 routine D32.signum() -> D32
-  var me_bits = bitcast[D32, U32](me)
-  var zero_bits = bitcast[D32, U32](D32_ZERO)
+  var me_bits = reinterpret_bits[D32, U32](me)
+  var zero_bits = reinterpret_bits[D32, U32](D32_ZERO)
   var cmp = rf_d32_cmp(me_bits, zero_bits)
   return when
     cmp > 0 => D32_ONE
@@ -337,13 +337,13 @@ routine D32.signum() -> D32
 ### Converts this value to bits.
 ### :returns: The resulting `U32` value.
 routine D32.to_bits() -> U32
-  return bitcast[D32, U32](me)
+  return reinterpret_bits[D32, U32](me)
 
 ### Creates a value from bits.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `D32` value.
 routine D32.from_bits(bits: U32) -> D32
-  return bitcast[U32, D32](bits)
+  return reinterpret_bits[U32, D32](bits)
 
 # ============================================================================
 # Text Representation and Parsing
@@ -352,7 +352,7 @@ routine D32.from_bits(bits: U32) -> D32
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 routine D32.$represent() -> Text
-  var bits = bitcast[D32, U32](me)
+  var bits = reinterpret_bits[D32, U32](me)
   var cstr_result = rf_d32_to_string(bits)
   return Text(from: CStr(from_ptr: cstr_result))
 
@@ -421,7 +421,7 @@ routine D32.$create!(from_text: Text) -> D32
       throw InvalidValueError(input: from_text, target: "D32")
   var cstr_val = from_text.CStr()
   var bits = rf_d32_from_string(cstr_val)
-  return bitcast[U32, D32](bits)
+  return reinterpret_bits[U32, D32](bits)
 
 # ============================================================================
 # Hashing
@@ -430,32 +430,32 @@ routine D32.$create!(from_text: Text) -> D32
 ### Returns a hash of this value.
 ### :returns: The resulting `U64` value.
 routine D32.$hash() -> U64
-  return __hash_leaf(v: zext[U32, U64](bitcast[D32, U32](me)))
+  return __hash_leaf(v: zext[U32, U64](reinterpret_bits[D32, U32](me)))
 
 # ============================================================================
 # Byte Representation
 # ============================================================================
 
 ### Returns the raw bytes of this value in little-endian order.
-### :returns: The resulting `ValueList[Byte, 4]` value.
-routine D32.to_bytes_le() -> ValueList[Byte, 4]
-  var raw = bitcast[D32, U32](me)
-  var result = ValueList[Byte, 4]()
+### :returns: The resulting `Array[Byte, 4]` value.
+routine D32.to_bytes_le() -> Array[Byte, 4]
+  var raw = reinterpret_bits[D32, U32](me)
+  var result = Array[Byte, 4]()
   result = set_byte_at(result, 0_u64, trunc[U32, U8](raw))
-  result = set_byte_at(result, 1_u64, trunc[U32, U8](lshr[U32](raw, 8_u32)))
-  result = set_byte_at(result, 2_u64, trunc[U32, U8](lshr[U32](raw, 16_u32)))
-  result = set_byte_at(result, 3_u64, trunc[U32, U8](lshr[U32](raw, 24_u32)))
+  result = set_byte_at(result, 1_u64, trunc[U32, U8](shift_right_unsigned[U32](raw, 8_u32)))
+  result = set_byte_at(result, 2_u64, trunc[U32, U8](shift_right_unsigned[U32](raw, 16_u32)))
+  result = set_byte_at(result, 3_u64, trunc[U32, U8](shift_right_unsigned[U32](raw, 24_u32)))
   return result
 
 ### Returns the raw bytes of this value in big-endian order.
-### :returns: The resulting `ValueList[Byte, 4]` value.
-routine D32.to_bytes_be() -> ValueList[Byte, 4]
-  var raw = bswap[U32](bitcast[D32, U32](me))
-  var result = ValueList[Byte, 4]()
+### :returns: The resulting `Array[Byte, 4]` value.
+routine D32.to_bytes_be() -> Array[Byte, 4]
+  var raw = bswap[U32](reinterpret_bits[D32, U32](me))
+  var result = Array[Byte, 4]()
   result = set_byte_at(result, 0_u64, trunc[U32, U8](raw))
-  result = set_byte_at(result, 1_u64, trunc[U32, U8](lshr[U32](raw, 8_u32)))
-  result = set_byte_at(result, 2_u64, trunc[U32, U8](lshr[U32](raw, 16_u32)))
-  result = set_byte_at(result, 3_u64, trunc[U32, U8](lshr[U32](raw, 24_u32)))
+  result = set_byte_at(result, 1_u64, trunc[U32, U8](shift_right_unsigned[U32](raw, 8_u32)))
+  result = set_byte_at(result, 2_u64, trunc[U32, U8](shift_right_unsigned[U32](raw, 16_u32)))
+  result = set_byte_at(result, 3_u64, trunc[U32, U8](shift_right_unsigned[U32](raw, 24_u32)))
   return result
 
 ### Returns a keyed hash of this value using SipHash-2-4.
@@ -463,4 +463,4 @@ routine D32.to_bytes_be() -> ValueList[Byte, 4]
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
 routine D32.$secure_hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u64(v: zext[U32, U64](bitcast[D32, U32](me)), k0: k0, k1: k1)
+  return __secure_hash_u64(v: zext[U32, U64](reinterpret_bits[D32, U32](me)), k0: k0, k1: k1)

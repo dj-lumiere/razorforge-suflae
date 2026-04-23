@@ -31,8 +31,13 @@ record Hijacked[T]
 
 ### Returns the address component.
 ### :returns: The resulting `Address` value.
-dangerous routine T.get_address() -> Address
+dangerous routine Hijacked[T].get_address() -> Address
   return pointer_to_int[T, Address](me)
+
+### Returns the address component for bare T values (used by {T.hijack()}).
+### :returns: The resulting `Address` value.
+dangerous routine T.get_address() -> Address
+  return pointer_to_int[T, Address](reinterpret_bits[T, Hijacked[T]](me))
 
 ### Creates a new instance.
 ### :param from: The source value to convert.
@@ -86,7 +91,7 @@ dangerous routine Hijacked[T].inject_as[U](value: U)
 ### Returns the result of `recast as`.
 ### :returns: The resulting `Hijacked[U]` value.
 dangerous routine Hijacked[T].recast_as[U]() -> Hijacked[U]
-  return Hijacked[U](me)
+  return reinterpret_bits[Hijacked[T], Hijacked[U]](me)
 
 ### Returns the raw address of this pointer.
 ### :returns: The resulting `Address` value.
@@ -127,6 +132,15 @@ dangerous routine Hijacked[T].detonate!()
 ### :returns: The resulting `Hijacked[T]` value.
 routine hijacked_none[T]() -> Hijacked[T]
   return Hijacked[T](0_addr)
+
+### Constructs a {Hijacked[T]} from a raw address. Use this instead of
+### `Hijacked[T](addr)` directly when T is a parent-scope generic param,
+### to work around monomorphization not substituting nested CreatorExpression
+### type refs.
+### :param addr: The raw address to wrap.
+### :returns: The resulting `Hijacked[T]` value.
+dangerous routine hijacked_from[T](addr: Address) -> Hijacked[T]
+  return Hijacked[T](addr)
 
 ### Returns true if this value is none.
 ### :returns: The resulting `Bool` value.

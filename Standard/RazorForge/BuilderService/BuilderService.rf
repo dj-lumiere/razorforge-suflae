@@ -3,6 +3,10 @@
 # Provides compile-time type introspection and build environment info.
 # All routines are zero-overhead (constant-folded at compile time).
 # Requires 'import BuilderService' to use.
+#
+# common routine T.method() — typewise: called on a type reference (S64.data_size())
+# routine T.method()        — member:   called on an instance (x.data_size())
+# Both forms may coexist for routines that are meaningful in either context.
 
 module BuilderService
 
@@ -28,6 +32,8 @@ choice Visibility
 choice BuildMode
   DEBUG
   RELEASE
+  RELEASE_TIME
+  RELEASE_SPACE
   TEST
 
 ### Defines the entity `FieldInfo`.
@@ -66,3 +72,190 @@ entity RoutineInfo
   is_generated: Bool
   ### Stores the visibility member value.
   visibility: Visibility
+
+# ============================================================================
+# Per-type introspection — typewise + member (both forms)
+# ============================================================================
+
+### Returns the unqualified name of this type.
+### :returns: The resulting `Text` value.
+@innate
+common routine T.type_name() -> Text
+@innate
+routine T.type_name() -> Text
+
+### Returns the module this type is declared in.
+### :returns: The resulting `Text` value.
+@innate
+common routine T.module_name() -> Text
+@innate
+routine T.module_name() -> Text
+
+### Returns the fully qualified `Module.TypeName` of this type.
+### :returns: The resulting `Text` value.
+@innate
+common routine T.full_type_name() -> Text
+@innate
+routine T.full_type_name() -> Text
+
+### Returns a stable compile-time hash of the fully qualified type name.
+### :returns: The resulting `U64` value.
+@innate
+common routine T.type_id() -> U64
+@innate
+routine T.type_id() -> U64
+
+### Returns the byte size of this type's in-memory representation.
+### :returns: The resulting `ByteSize` value.
+@innate
+common routine T.data_size() -> ByteSize
+@innate
+routine T.data_size() -> ByteSize
+
+### Returns the number of member variables declared on this type.
+### :returns: The resulting `U64` value.
+@innate
+common routine T.member_variable_count() -> U64
+@innate
+routine T.member_variable_count() -> U64
+
+### Returns the compile-time type id of the field named {member_name}, or 0 if not found.
+### :param member_name: The name of the field to look up.
+### :returns: The resulting `U64` value.
+@innate
+common routine T.member_type_id(member_name: Text) -> U64
+@innate
+routine T.member_type_id(member_name: Text) -> U64
+
+### Returns true if this type is a generic definition (has unbound type parameters).
+### :returns: The resulting `Bool` value.
+@innate
+common routine T.is_generic() -> Bool
+@innate
+routine T.is_generic() -> Bool
+
+### Returns the {TypeKind} category of this type.
+### :returns: The resulting `TypeKind` value.
+@innate
+common routine T.type_kind() -> TypeKind
+@innate
+routine T.type_kind() -> TypeKind
+
+### Returns the names of all protocols this type implements.
+### :returns: The resulting `List[Owned[Text]]` value.
+@innate
+common routine T.protocols() -> List[Owned[Text]]
+@innate
+routine T.protocols() -> List[Owned[Text]]
+
+### Returns the names of all routines declared on this type.
+### :returns: The resulting `List[Owned[Text]]` value.
+@innate
+common routine T.routine_names() -> List[Owned[Text]]
+@innate
+routine T.routine_names() -> List[Owned[Text]]
+
+### Returns the names of all generic type parameters or arguments.
+### :returns: The resulting `List[Owned[Text]]` value.
+@innate
+common routine T.generic_args() -> List[Owned[Text]]
+@innate
+routine T.generic_args() -> List[Owned[Text]]
+
+### Returns the annotation strings attached to this type declaration.
+### :returns: The resulting `List[Owned[Text]]` value.
+@innate
+common routine T.annotations() -> List[Owned[Text]]
+@innate
+routine T.annotations() -> List[Owned[Text]]
+
+### Returns the names of modules this type's module depends on.
+### :returns: The resulting `List[Owned[Text]]` value.
+@innate
+common routine T.dependencies() -> List[Owned[Text]]
+@innate
+routine T.dependencies() -> List[Owned[Text]]
+
+### Returns protocol metadata for each protocol this type implements.
+### :returns: The resulting `List[Owned[ProtocolInfo]]` value.
+@innate
+common routine T.protocol_info() -> List[Owned[ProtocolInfo]]
+@innate
+routine T.protocol_info() -> List[Owned[ProtocolInfo]]
+
+### Returns routine metadata for each routine declared on this type.
+### :returns: The resulting `List[Owned[RoutineInfo]]` value.
+@innate
+common routine T.routine_info() -> List[Owned[RoutineInfo]]
+@innate
+routine T.routine_info() -> List[Owned[RoutineInfo]]
+
+### Returns full field metadata for every member variable on this type.
+### :returns: The resulting `List[Owned[FieldInfo]]` value.
+@innate
+common routine T.member_variable_info() -> List[Owned[FieldInfo]]
+@innate
+routine T.member_variable_info() -> List[Owned[FieldInfo]]
+
+# ============================================================================
+# Per-instance introspection — member only (no typewise form)
+# ============================================================================
+
+### Returns the source variable name at the call site (for diagnostics).
+### :returns: The resulting `Text` value.
+@innate
+routine T.var_name() -> Text
+
+### Returns field metadata for all member variables (open, posted, and secret).
+### :returns: The resulting `Dict[Owned[Text], Data]` value.
+@innate
+routine T.all_member_variables() -> Dict[Owned[Text], Data]
+
+### Returns field metadata for publicly readable member variables only.
+### :returns: The resulting `Dict[Owned[Text], Data]` value.
+@innate
+routine T.open_member_variables() -> Dict[Owned[Text], Data]
+
+# ============================================================================
+# Standalone platform and build constants
+# ============================================================================
+
+### Returns the OS memory page size.
+### :returns: The resulting `ByteSize` value.
+@innate
+routine page_size() -> ByteSize
+
+### Returns the CPU cache line size.
+### :returns: The resulting `ByteSize` value.
+@innate
+routine cache_line() -> ByteSize
+
+### Returns the native pointer/word size.
+### :returns: The resulting `ByteSize` value.
+@innate
+routine word_size() -> ByteSize
+
+### Returns the target operating system name (e.g. `"windows"`, `"linux"`, `"macos"`).
+### :returns: The resulting `Text` value.
+@innate
+routine target_os() -> Text
+
+### Returns the target CPU architecture name (e.g. `"x86_64"`, `"aarch64"`).
+### :returns: The resulting `Text` value.
+@innate
+routine target_arch() -> Text
+
+### Returns the RazorForge compiler version string.
+### :returns: The resulting `Text` value.
+@innate
+routine builder_version() -> Text
+
+### Returns the ISO-8601 UTC timestamp of this build.
+### :returns: The resulting `Text` value.
+@innate
+routine build_timestamp() -> Text
+
+### Returns the current build mode.
+### :returns: The resulting `BuildMode` value.
+@innate
+routine build_mode() -> BuildMode

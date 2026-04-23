@@ -410,21 +410,21 @@ routine F16.$hash() -> U64
 # ============================================================================
 
 ### Returns the raw bytes of this value in little-endian order.
-### :returns: The resulting `ValueList[Byte, 2]` value.
-routine F16.to_bytes_le() -> ValueList[Byte, 2]
+### :returns: The resulting `Array[Byte, 2]` value.
+routine F16.to_bytes_le() -> Array[Byte, 2]
   var raw = reinterpret_bits[F16, U16](me)
-  var result = ValueList[Byte, 2]()
+  var result = Array[Byte, 2]()
   result = set_byte_at(result, 0_u64, int_truncate[U16, U8](raw))
-  result = set_byte_at(result, 1_u64, int_truncate[U16, U8](lshr[U16](raw, 8_u16)))
+  result = set_byte_at(result, 1_u64, int_truncate[U16, U8](shift_right_unsigned[U16](raw, 8_u16)))
   return result
 
 ### Returns the raw bytes of this value in big-endian order.
-### :returns: The resulting `ValueList[Byte, 2]` value.
-routine F16.to_bytes_be() -> ValueList[Byte, 2]
+### :returns: The resulting `Array[Byte, 2]` value.
+routine F16.to_bytes_be() -> Array[Byte, 2]
   var raw = bswap[U16](reinterpret_bits[F16, U16](me))
-  var result = ValueList[Byte, 2]()
+  var result = Array[Byte, 2]()
   result = set_byte_at(result, 0_u64, int_truncate[U16, U8](raw))
-  result = set_byte_at(result, 1_u64, int_truncate[U16, U8](lshr[U16](raw, 8_u16)))
+  result = set_byte_at(result, 1_u64, int_truncate[U16, U8](shift_right_unsigned[U16](raw, 8_u16)))
   return result
 
 ### Returns a keyed hash of this value using SipHash-2-4.

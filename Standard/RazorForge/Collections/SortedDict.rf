@@ -1,5 +1,5 @@
 # RazorForge SortedDict[K, V] - B-tree based sorted dictionary
-# Entity type; key/value/child buffers inline as ValueList with explicit counts.
+# Entity type; key/value/child buffers inline as Array with explicit counts.
 module Collections
 
 import BuilderService
@@ -12,9 +12,9 @@ preset MIN_KEYS_DICT: U64 = 31u64
 ### :typeparam V: The value used for `V`.
 entity BTreeDictNode[K, V]
 needs K obeys Comparable
-  entry_keys: ValueList[K, 63]
-  entry_values: ValueList[V, 63]
-  children: ValueList[Owned[BTreeDictNode[K, V]], 64]
+  entry_keys: Array[K, 63]
+  entry_values: Array[V, 63]
+  children: Array[Owned[BTreeDictNode[K, V]], 64]
   key_count: U64
   child_count: U64
   subtree_size: U64
@@ -95,12 +95,12 @@ routine BTreeDictNode[K, V].entries_add_at(i: U64, k: K, v: V)
       var k_elem_size = K.data_size()
       var v_elem_size = V.data_size()
       var shift_count = me.key_count -% i
-      var ksrc = kbase.stride(count: i.S64())
-      var kdst = kbase.stride(count: (i +% 1u64).S64())
-      var vsrc = vbase.stride(count: i.S64())
-      var vdst = vbase.stride(count: (i +% 1u64).S64())
-      rf_copy_bytes_at(kdst.get_address(), ksrc.get_address(), k_elem_size * shift_count)
-      rf_copy_bytes_at(vdst.get_address(), vsrc.get_address(), v_elem_size * shift_count)
+      var ksrc_addr = kbase.stride(count: i.S64()).get_address()
+      var kdst_addr = kbase.stride(count: (i +% 1u64).S64()).get_address()
+      var vsrc_addr = vbase.stride(count: i.S64()).get_address()
+      var vdst_addr = vbase.stride(count: (i +% 1u64).S64()).get_address()
+      rf_copy_bytes_at(kdst_addr, ksrc_addr, k_elem_size * shift_count)
+      rf_copy_bytes_at(vdst_addr, vsrc_addr, v_elem_size * shift_count)
     kbase.stride(count: i.S64()).inject(value: k)
     vbase.stride(count: i.S64()).inject(value: v)
   me.key_count = me.key_count +% 1u64
@@ -112,9 +112,9 @@ routine BTreeDictNode[K, V].children_add_at(i: U64, value: BTreeDictNode[K, V])
     if i < me.child_count
       var elem_size = Address.data_size()
       var shift_count = me.child_count -% i
-      var src = base.stride(count: i.S64())
-      var dst = base.stride(count: (i +% 1u64).S64())
-      rf_copy_bytes_at(dst.get_address(), src.get_address(), elem_size * shift_count)
+      var src_addr = base.stride(count: i.S64()).get_address()
+      var dst_addr = base.stride(count: (i +% 1u64).S64()).get_address()
+      rf_copy_bytes_at(dst_addr, src_addr, elem_size * shift_count)
     base.stride(count: i.S64()).inject(value: value)
   me.child_count = me.child_count +% 1u64
   return
@@ -127,12 +127,12 @@ routine BTreeDictNode[K, V].entries_remove_at(i: U64)
       var k_elem_size = K.data_size()
       var v_elem_size = V.data_size()
       var shift_count = me.key_count -% i -% 1u64
-      var ksrc = kbase.stride(count: (i +% 1u64).S64())
-      var kdst = kbase.stride(count: i.S64())
-      var vsrc = vbase.stride(count: (i +% 1u64).S64())
-      var vdst = vbase.stride(count: i.S64())
-      rf_copy_bytes_at(kdst.get_address(), ksrc.get_address(), k_elem_size * shift_count)
-      rf_copy_bytes_at(vdst.get_address(), vsrc.get_address(), v_elem_size * shift_count)
+      var ksrc_addr = kbase.stride(count: (i +% 1u64).S64()).get_address()
+      var kdst_addr = kbase.stride(count: i.S64()).get_address()
+      var vsrc_addr = vbase.stride(count: (i +% 1u64).S64()).get_address()
+      var vdst_addr = vbase.stride(count: i.S64()).get_address()
+      rf_copy_bytes_at(kdst_addr, ksrc_addr, k_elem_size * shift_count)
+      rf_copy_bytes_at(vdst_addr, vsrc_addr, v_elem_size * shift_count)
   me.key_count = me.key_count -% 1u64
   return
 
@@ -142,9 +142,9 @@ routine BTreeDictNode[K, V].children_remove_at(i: U64)
       var base = me.children_base()
       var elem_size = Address.data_size()
       var shift_count = me.child_count -% i -% 1u64
-      var src = base.stride(count: (i +% 1u64).S64())
-      var dst = base.stride(count: i.S64())
-      rf_copy_bytes_at(dst.get_address(), src.get_address(), elem_size * shift_count)
+      var src_addr = base.stride(count: (i +% 1u64).S64()).get_address()
+      var dst_addr = base.stride(count: i.S64()).get_address()
+      rf_copy_bytes_at(dst_addr, src_addr, elem_size * shift_count)
   me.child_count = me.child_count -% 1u64
   return
 
@@ -169,12 +169,12 @@ routine BTreeDictNode[K, V].entries_add_range_from(other: BTreeDictNode[K, V], s
     danger!
       var k_elem_size = K.data_size()
       var v_elem_size = V.data_size()
-      var ksrc = other.keys_base().stride(count: start.S64())
-      var kdst = me.keys_base().stride(count: me.key_count.S64())
-      var vsrc = other.values_base().stride(count: start.S64())
-      var vdst = me.values_base().stride(count: me.key_count.S64())
-      rf_copy_bytes_at(kdst.get_address(), ksrc.get_address(), k_elem_size * count)
-      rf_copy_bytes_at(vdst.get_address(), vsrc.get_address(), v_elem_size * count)
+      var ksrc_addr = other.keys_base().stride(count: start.S64()).get_address()
+      var kdst_addr = me.keys_base().stride(count: me.key_count.S64()).get_address()
+      var vsrc_addr = other.values_base().stride(count: start.S64()).get_address()
+      var vdst_addr = me.values_base().stride(count: me.key_count.S64()).get_address()
+      rf_copy_bytes_at(kdst_addr, ksrc_addr, k_elem_size * count)
+      rf_copy_bytes_at(vdst_addr, vsrc_addr, v_elem_size * count)
   me.key_count = me.key_count +% count
   return
 
@@ -182,9 +182,9 @@ routine BTreeDictNode[K, V].children_add_range_from(other: BTreeDictNode[K, V], 
   if count > 0u64
     danger!
       var elem_size = Address.data_size()
-      var src = other.children_base().stride(count: start.S64())
-      var dst = me.children_base().stride(count: me.child_count.S64())
-      rf_copy_bytes_at(dst.get_address(), src.get_address(), elem_size * count)
+      var src_addr = other.children_base().stride(count: start.S64()).get_address()
+      var dst_addr = me.children_base().stride(count: me.child_count.S64()).get_address()
+      rf_copy_bytes_at(dst_addr, src_addr, elem_size * count)
   me.child_count = me.child_count +% count
   return
 
@@ -194,9 +194,9 @@ routine BTreeDictNode[K, V].children_add_range_from(other: BTreeDictNode[K, V], 
 
 routine BTreeDictNode[K, V].$create(is_leaf: Bool) -> BTreeDictNode[K, V]
   return BTreeDictNode[K, V](
-    entry_keys: zero_value[ValueList[K, 63]](),
-    entry_values: zero_value[ValueList[V, 63]](),
-    children: zero_value[ValueList[BTreeDictNode[K, V], 64]](),
+    entry_keys: zero_value[Array[K, 63]](),
+    entry_values: zero_value[Array[V, 63]](),
+    children: zero_value[Array[BTreeDictNode[K, V], 64]](),
     key_count: 0u64,
     child_count: 0u64,
     subtree_size: 0u64,
