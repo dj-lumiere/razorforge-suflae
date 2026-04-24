@@ -1,47 +1,59 @@
-# RazorForge Atomic[T] - Lock-free atomic operations
-# Provides thread-safe atomic operations for simple types
-# Equivalent to std::atomic[T] in C++ or AtomicUsize/AtomicBool in Rust
-
 module Core
 
-### Defines the record `Atomic`.
-### :typeparam T: The value used for `T`.
+### Represents a single atomically accessible storage cell.
+### All routines on `Atomic[T]` use sequentially consistent ordering, so each
+### operation participates in the strongest ordering guarantee RazorForge
+### exposes for lock-free shared state.
+### :typeparam T: The atomic-capable value type stored in the cell.
 record Atomic[T]
-  ### Stores the value member value.
+needs T obeys AtomicType
+  ### Stores the raw value accessed by the atomic intrinsics.
+  ### Callers should treat this slot as implementation detail and use the
+  ### atomic routines on `Atomic[T]` rather than reading or writing it directly.
   secret value: T
 
-### Creates a new instance.
-### :param initial: The initial value to store.
-### :returns: The resulting `Atomic[T]` value.
+### Creates an atomic cell initialized with `initial`.
+### Use this creator when a value must be shared across tasks without wrapping
+### every access in an external lock.
+### :param initial: The value visible to the first `load`.
+### :returns: A new `Atomic[T]` containing `initial`.
 routine Atomic[T].$create(initial: T) -> Atomic[T]
   return Atomic[T](value: initial)
 
-### Returns the result of `load`.
-### :returns: The resulting `T` value.
+### Loads the current value from this cell.
+### The returned value is a sequentially consistent snapshot, so callers can
+### use it as a synchronization point relative to other atomic operations.
+### :returns: The value observed at the instant of the load.
 routine Atomic[T].load() -> T
   # SAFETY: Atomic load with seq_cst ordering
   # Ensures proper synchronization across threads
   return atomic_load[T](me.value.get_address())
 
-### Performs `store` on this value.
-### :param new_value: The value to store.
+### Stores `new_value` into this cell.
+### The write is published with sequentially consistent ordering, so later
+### atomic loads from other tasks observe it in a globally ordered history.
+### :param new_value: The replacement value to publish.
 routine Atomic[T].store(new_value: T)
   # SAFETY: Atomic store with seq_cst ordering
   # Ensures proper synchronization across threads
   atomic_store[T](me.value.get_address(), new_value)
   return
 
-### Returns the result of `swap`.
-### :param new_value: The value to store.
-### :returns: The resulting `T` value.
+### Replaces the stored value and returns the previous one.
+### This is useful when the old state matters, such as taking ownership of a
+### flag or exchanging handles between cooperating tasks.
+### :param new_value: The value to install atomically.
+### :returns: The value that was stored before the swap.
 routine Atomic[T].swap(new_value: T) -> T
   # SAFETY: Atomic swap with seq_cst ordering
   return atomic_xchg[T](me.value.get_address(), new_value)
 
-### Returns the result of `compare exchange`.
-### :param expected: The value expected to be present.
-### :param desired: The value to store on success.
-### :returns: The resulting `Bool` value.
+### Attempts to replace the stored value only when it currently equals `expected`.
+### This is the standard compare-and-swap primitive used to build lock-free
+### state machines and retry loops.
+### :param expected: The value that must already be present for the exchange to succeed.
+### :param desired: The value to store when the comparison succeeds.
+### :returns: `true` when `desired` was written, or `false` when the cell held a different value.
 routine Atomic[T].compare_exchange(expected: T, desired: T) -> Bool
   # SAFETY: Atomic compare-exchange with seq_cst ordering
   # Returns true if successful, false otherwise
@@ -51,56 +63,53 @@ routine Atomic[T].compare_exchange(expected: T, desired: T) -> Bool
     desired
   )
 
-### Returns the result of `fetch add`.
-### :param delta: The amount to add or subtract.
-### :returns: The resulting `T` value.
+### Adds `delta` to the stored integer and returns the previous value.
+### `fetch_add` is typically used for counters, ticket allocation, and other
+### monotonic state that must be updated without races.
+### :param delta: The signed or unsigned increment to apply atomically.
+### :returns: The value that was stored before the addition.
 routine Atomic[T].fetch_add(delta: T) -> T
-needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128]
   # SAFETY: Atomic fetch-add with seq_cst ordering
   # Hardware guarantees atomicity for supported integer types
   return atomic_add[T](me.value.get_address(), delta)
 
-### Returns the result of `fetch sub`.
-### :param delta: The amount to add or subtract.
-### :returns: The resulting `T` value.
+### Subtracts `delta` from the stored integer and returns the previous value.
+### :param delta: The amount to subtract atomically.
+### :returns: The value that was stored before the subtraction.
 routine Atomic[T].fetch_sub(delta: T) -> T
-needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128]
   # SAFETY: Atomic fetch-sub with seq_cst ordering
   # Hardware guarantees atomicity for supported integer types
   return atomic_sub[T](me.value.get_address(), delta)
 
-### Returns the result of `fetch and`.
-### :param mask: The bit mask to apply.
-### :returns: The resulting `T` value.
+### Applies a bitwise AND with `mask` and returns the previous value.
+### This is commonly used to clear feature flags or state bits without losing
+### concurrent updates to unrelated bits.
+### :param mask: The bit mask applied to the stored integer.
+### :returns: The value that was stored before the update.
 routine Atomic[T].fetch_and(mask: T) -> T
-needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128]
   # SAFETY: Atomic fetch-and with seq_cst ordering
   return atomic_and[T](me.value.get_address(), mask)
 
-### Returns the result of `fetch or`.
-### :param mask: The bit mask to apply.
-### :returns: The resulting `T` value.
+### Applies a bitwise OR with `mask` and returns the previous value.
+### :param mask: The bit mask whose set bits are merged into the stored integer.
+### :returns: The value that was stored before the update.
 routine Atomic[T].fetch_or(mask: T) -> T
-needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128]
   # SAFETY: Atomic fetch-or with seq_cst ordering
   return atomic_or[T](me.value.get_address(), mask)
 
-### Returns the result of `fetch xor`.
-### :param mask: The bit mask to apply.
-### :returns: The resulting `T` value.
+### Applies a bitwise XOR with `mask` and returns the previous value.
+### :param mask: The bit mask used to toggle bits atomically.
+### :returns: The value that was stored before the update.
 routine Atomic[T].fetch_xor(mask: T) -> T
-needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128]
   # SAFETY: Atomic fetch-xor with seq_cst ordering
   return atomic_xor[T](me.value.get_address(), mask)
 
-### Returns the result of `fetch inc`.
-### :returns: The resulting `T` value.
+### Increments the stored integer by one and returns the previous value.
+### :returns: The value that was stored before the increment.
 routine Atomic[T].fetch_inc() -> T
-needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128]
   return me.fetch_add(1)
 
-### Returns the result of `fetch dec`.
-### :returns: The resulting `T` value.
+### Decrements the stored integer by one and returns the previous value.
+### :returns: The value that was stored before the decrement.
 routine Atomic[T].fetch_dec() -> T
-needs T in [S8, S16, S32, S64, S128, U8, U16, U32, U64, U128]
   return me.fetch_sub(1)

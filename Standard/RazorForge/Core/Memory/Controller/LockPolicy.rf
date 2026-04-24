@@ -1,13 +1,23 @@
 module Core
 
-### Defines the choice `LockState`.
+### Represents the coarse-grained state exposed by a lock policy.
+### These values describe the externally visible access mode of a controller,
+### not the full internal implementation strategy.
 choice LockState
+  ### No active readers or writers; the lock is available for acquisition.
   IDLE
+  ### One or more readers hold shared access; writers are excluded.
   READING
+  ### A single writer holds exclusive access; all other accessors are excluded.
   WRITING
 
-### Defines the protocol `LockPolicy`.
+### Represents a policy object that can report lock-controller state.
+### Concrete policies define how concurrent readers and writers are coordinated,
+### while this protocol provides a shared observation surface for diagnostics and
+### runtime checks.
 protocol LockPolicy
-  ### Returns the result of `state`.
+  ### Returns the current lock state.
+  ### This is intended for coordination logic and diagnostics rather than for
+  ### enforcing synchronization by itself.
   ### :returns: The resulting `LockState` value.
   routine Me.state() -> LockState

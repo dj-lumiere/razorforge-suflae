@@ -1,9 +1,10 @@
-# Negatable - Protocol for types that support unary negation (-)
 module Core
 
-### Defines the protocol `Negatable`.
+### Represents the protocol for additive inversion.
+### `Negatable` is for values that can produce an equivalent value with the
+### opposite sign or orientation in their algebraic domain.
 protocol Negatable
-  ### Returns the negated value.
-  ### :returns: The resulting `Me` value.
+  ### Returns the additive inverse of this value.
+  ### :returns: The arithmetic negation of this value.
   @readonly
   routine Me.$neg() -> Me

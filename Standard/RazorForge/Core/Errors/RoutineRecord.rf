@@ -1,21 +1,18 @@
 module Core
 
-# RoutineRecord - Runtime routine record for error tracking
-#
-# Each record represents a single routine call in the call history.
-# All member variables are U32 IDs that reference builder-generated lookup tables.
-
-### Defines the record `RoutineRecord`.
+### Represents one frame in a captured runtime routine trace.
+### The stored ids point into builder-generated lookup tables used for stack reporting.
+### This record is intentionally compact because traces are kept inline in runtime error state.
 record RoutineRecord
-  ### Stores the file id member value.
+  ### Stores the source file identifier.
   file_id: U32
-  ### Stores the routine id member value.
+  ### Stores the routine identifier.
   routine_id: U32
-  ### Stores the namespace id member value.
+  ### Stores the namespace identifier.
   namespace_id: U32
-  ### Stores the type id member value.
+  ### Stores the owning type identifier when applicable.
   type_id: U32
-  ### Stores the line no member value.
+  ### Stores the one-based source line number.
   line_no: U32
-  ### Stores the column no member value.
+  ### Stores the one-based source column number.
   column_no: U32

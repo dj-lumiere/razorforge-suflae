@@ -1,10 +1,13 @@
-# ClampingMultiplicable - Protocol for types that support clamping multiplication (*^)
 module Core
 
-### Defines the protocol `ClampingMultiplicable`.
+### Represents the protocol for saturating multiplication.
+### `ClampingMultiplicable` is for bounded types that choose nearest-bound
+### multiplication results over wraparound or overflow failure.
 protocol ClampingMultiplicable
-  ### Implements the wired routine behavior for this value.
-  ### :param you: The other value to compare against.
+  ### Returns the clamping product of this value and `you`.
+  ### If the exact product cannot be represented, implementations should return
+  ### the closest supported bound.
+  ### :param you: The other factor.
   ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$mul_clamp(you: Me) -> Me

@@ -1,13 +1,15 @@
 module Core
 
-### Defines the record `Viewed`.
-### :typeparam T: The value used for `T`.
+### Represents temporary read-only access to an entity.
+### `Viewed[T]` is the non-storable borrow type produced by `.view()` for single-threaded observation.
+### :typeparam T: The entity type being viewed.
+### :see: {Grasped[T]}, {Claimed[T]}, {Inspected[T]}, {Access-Types}
 @llvm("ptr")
 record Viewed[T] obeys Referring[T]
 needs T is EntityType
   pass
 
-### Returns the result of `view`.
+### Produces a temporary read-only view of `me`.
 ### :returns: The resulting `Viewed[T]` value.
 routine T.view() -> Viewed[T]
   return Viewed[T](me.hijack())
@@ -20,11 +22,11 @@ routine T.view() -> Viewed[T]
 # Resource management — enables `using entity.view() as v`
 # ============================================================================
 
-### Implements the wired routine behavior for this value.
+### Called on entry to a `using` block; no-op for a view (access is already established).
 routine Viewed[T].$enter()
   return
 
-### Implements the wired routine behavior for this value.
+### Called on exit from a `using` block; no-op for a view (the compiler handles scope cleanup).
 routine Viewed[T].$exit()
   return
 
@@ -32,7 +34,7 @@ routine Viewed[T].$exit()
 # Display (transparent - delegates to inner value)
 # ============================================================================
 
-### Returns the textual representation of this value.
+### Returns the display form of the viewed entity.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Viewed[T].$represent() -> Text
@@ -40,7 +42,7 @@ routine Viewed[T].$represent() -> Text
     var hijacked = Hijacked[T](me)
     return hijacked.extract().$represent()
 
-### Returns the textual representation of this value.
+### Returns the diagnostic form of the viewed entity.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Viewed[T].$diagnose() -> Text

@@ -1,7 +1,8 @@
-# FixedIntegral - Bundle protocol for fixed-width integer operations
-# Extends Integral with Invertible (bitwise NOT) and overflow handling
 module Core
 
-### Defines the protocol `FixedIntegral`.
+### Represents the aggregate protocol for bounded fixed-width integers.
+### `FixedIntegral` combines exact integer operators with bitwise behavior and
+### the alternate wrapping and clamping arithmetic surfaces expected from
+### machine-sized integer types.
 protocol FixedIntegral obeys Integral, Invertible, WrappingArithmetic, ClampingArithmetic
   pass

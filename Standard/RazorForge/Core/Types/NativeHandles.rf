@@ -1,56 +1,65 @@
 module Core
 
-# Opaque native-library/runtime handles.
-# These are pointer-backed values, but they are not numeric addresses.
-
-### Defines the record `BigIntHandle`.
+### Represents an opaque native handle for the runtime big-integer library.
+### The handle is pointer-backed and is meaningful only to the integer runtime
+### layer.
 @llvm("ptr")
 record BigIntHandle
   pass
 
-### Returns the address component.
+### Returns the raw address stored in this handle.
+### This is a low-level runtime integration surface, not a stable user API.
 ### :returns: The resulting `Address` value.
 dangerous routine BigIntHandle.get_address() -> Address
   return pointer_to_int[BigIntHandle, Address](me)
 
-### Creates a new instance.
-### :param from: The source value to convert.
+### Reinterprets a raw address as `BigIntHandle`.
+### This does not validate ownership or liveness of the pointed runtime object.
+### :param from: The address to wrap.
 ### :returns: The resulting `BigIntHandle` value.
 dangerous routine BigIntHandle.$create(from: Address) -> BigIntHandle
   return int_to_pointer[Address, BigIntHandle](from)
 
-### Returns the result of `bigint handle none`.
+### Returns the null `BigIntHandle` value.
+### This sentinel indicates that no live runtime object is associated with the
+### handle.
 ### :returns: The resulting `BigIntHandle` value.
 routine bigint_handle_none() -> BigIntHandle
   return BigIntHandle(0_addr)
 
-### Returns true if this value is none.
+### Returns `true` when this handle is the null sentinel.
 ### :returns: The resulting `Bool` value.
 routine BigIntHandle.is_none() -> Bool
   return int_eq[BigIntHandle](me, bigint_handle_none())
 
-### Defines the record `BigDecHandle`.
+### Represents an opaque native handle for the runtime decimal library.
+### The handle is pointer-backed and is meaningful only to the decimal runtime
+### layer.
 @llvm("ptr")
 record BigDecHandle
   pass
 
-### Returns the address component.
+### Returns the raw address stored in this handle.
+### This is a low-level runtime integration surface, not a stable user API.
 ### :returns: The resulting `Address` value.
 dangerous routine BigDecHandle.get_address() -> Address
   return pointer_to_int[BigDecHandle, Address](me)
 
-### Creates a new instance.
-### :param from: The source value to convert.
+### Reinterprets a raw address as `BigDecHandle`.
+### This does not validate ownership or liveness of the pointed runtime object.
+### :param from: The address to wrap.
 ### :returns: The resulting `BigDecHandle` value.
 dangerous routine BigDecHandle.$create(from: Address) -> BigDecHandle
   return int_to_pointer[Address, BigDecHandle](from)
 
-### Returns the result of `bigdec handle none`.
+### Returns the null `BigDecHandle` value.
+### This sentinel indicates that no live runtime object is associated with the
+### handle.
 ### :returns: The resulting `BigDecHandle` value.
 routine bigdec_handle_none() -> BigDecHandle
   return BigDecHandle(0_addr)
 
-### Returns true if this value is none.
+### Returns `true` when this handle is the null sentinel.
 ### :returns: The resulting `Bool` value.
 routine BigDecHandle.is_none() -> Bool
   return int_eq[BigDecHandle](me, bigdec_handle_none())

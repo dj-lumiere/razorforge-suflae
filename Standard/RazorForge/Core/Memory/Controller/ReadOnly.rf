@@ -1,15 +1,12 @@
-# RazorForge ReadOnly Lock Policy
-# Unmodifiable policy - no locking needed
-# Data cannot be modified, only read
-# Equivalent to Arc[T] in Rust (without Exclusive/MultiRead)
-
 module Core
 
-### Defines the record `ReadOnly`.
+### Represents the lock policy for shared data that never permits mutation.
+### `ReadOnly` models the trivial concurrency case where no lock state needs to be tracked.
+### :see: {Exclusive}, {MultiRead}, {Lock-Policies}
 record ReadOnly obeys LockPolicy
   pass # Empty - no lock state needed for unmodifiable data
 
-### Creates a new instance.
+### Creates the read-only lock policy value.
 ### :returns: The resulting `ReadOnly` value.
 routine ReadOnly.$create() -> ReadOnly
   return ReadOnly()
@@ -17,7 +14,8 @@ routine ReadOnly.$create() -> ReadOnly
 # No lock/unlock methods needed - data is unmodifiable
 # Direct member variable access is allowed for Shared[T, ReadOnly]
 
-### Returns the result of `state`.
+### Returns the current lock state for this policy.
+### Read-only access never enters reading or writing lock states.
 ### :returns: The resulting `LockState` value.
 routine ReadOnly.state() -> LockState
   return IDLE

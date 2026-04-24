@@ -1,29 +1,3 @@
-# RazorForge SortedSet[T] - B-tree based sorted set (OPTIMIZED)
-# Entity type with heap allocation
-# O(log n) insert, delete, search, and indexing
-# Elements are unique and always in sorted order
-#
-# Performance optimizations over the original:
-#   1. In-place List mutation via add_at!/remove_at!/remove_last! instead of
-#      rebuilding entire Lists on every insert/delete/split/merge/rotate.
-#   2. Single-pass insert: duplicate detection happens during descent, not as
-#      a separate contains() call. Eliminates one full tree walk per insert.
-#   3. Single-pass remove: remove_from_node returns Bool to indicate whether
-#      the value was found. Eliminates the contains() pre-check.
-#   4. Binary search within nodes: O(log B) instead of O(B) per level.
-#   5. Incremental subtree_size maintenance: +1/-1 during descent instead of
-#      recomputing from all children after splits.
-#   6. List.truncate() for efficient split truncation: just sets count, no copy.
-#
-# Usage:
-#   var set = SortedSet[S32]()
-#   set.add(5)
-#   set.add(1)
-#   set.add(3)
-#   var first = set[0]     # 1 (O(log n) access)
-#   var last = set[^1]     # 5
-#   var range = set.range(1, 10)
-
 module Collections
 
 import BuilderService
@@ -33,15 +7,16 @@ import BuilderService
 preset B: U64 = 64u64
 preset MIN_KEYS: U64 = 31u64  # B/2 - 1
 
-### Defines the entity `BTreeSetNode`.
-### :typeparam T: The value used for `T`.
+### Represents one internal node in the `SortedSet[T]` B-tree.
+### Nodes store ordered keys, child pointers, and cached subtree sizes for efficient indexing.
+### :typeparam T: The stored element type.
 entity BTreeSetNode[T]
 needs T obeys Comparable
   keys: Array[T, 63]                           # Keys in this node (fixed capacity)
   children: Array[Owned[BTreeSetNode[T]], 64]  # Child pointers (empty for leaf)
-  key_count: U64                                   # Active key count (0 to 63)
-  child_count: U64                                 # Active child count (0 to 64)
-  subtree_size: U64                                # Total elements in this subtree
+  key_count: U64                               # Active key count (0 to 63)
+  child_count: U64                             # Active child count (0 to 64)
+  subtree_size: U64                            # Total elements in this subtree
   is_leaf: Bool
 
 # ============================================================================
@@ -50,51 +25,76 @@ needs T obeys Comparable
 # the entity field (value semantics, O(N) per update).
 # ============================================================================
 
+### Returns the number of live keys currently stored in this node.
+### :returns: The active key count.
 routine BTreeSetNode[T].keys_count() -> U64
   return me.key_count
 
+### Returns the number of live child pointers currently stored in this node.
+### :returns: The active child count.
 routine BTreeSetNode[T].children_count() -> U64
   return me.child_count
 
 # Field layout (no entity header): keys @ offset 0, children @ offset 63*sizeof(T).
 # keys_base() returns Hijacked[T] at &me.keys[0]; children_base() at &me.children[0].
 
+### Returns a raw pointer to the start of this node's key buffer.
 dangerous routine BTreeSetNode[T].keys_base() -> Hijacked[T]
   return me.hijack().recast_as[T]()
 
+### Returns a raw pointer to the start of this node's child-pointer buffer.
 dangerous routine BTreeSetNode[T].children_base() -> Hijacked[BTreeSetNode[T]]
   return me.hijack().recast_as[T]().stride(count: 63_s64).recast_as[BTreeSetNode[T]]()
 
+### Returns the key at position `i` without bounds checking.
+### :param i: The zero-based position within the key buffer.
+### :returns: The key stored at that position.
 routine BTreeSetNode[T].keys_get(i: U64) -> T
   danger!
     return me.keys_base().stride(count: i.S64()).extract()
 
+### Writes `value` into the key buffer at position `i` without bounds checking.
+### :param i: The zero-based position within the key buffer.
+### :param value: The key to store.
 routine BTreeSetNode[T].keys_set(i: U64, value: T)
   danger!
     me.keys_base().stride(count: i.S64()).inject(value: value)
   return
 
+### Returns the child at position `i` without bounds checking.
+### :param i: The zero-based position within the child buffer.
+### :returns: The child node stored at that position.
 routine BTreeSetNode[T].children_get(i: U64) -> BTreeSetNode[T]
   danger!
     return me.children_base().stride(count: i.S64()).extract()
 
+### Writes `value` into the child buffer at position `i` without bounds checking.
+### :param i: The zero-based position within the child buffer.
+### :param value: The child node to store.
 routine BTreeSetNode[T].children_set(i: U64, value: BTreeSetNode[T])
   danger!
     me.children_base().stride(count: i.S64()).inject(value: value)
   return
 
+### Appends `value` to the end of the key buffer and increments the key count.
+### :param value: The key to append.
 routine BTreeSetNode[T].keys_add_last(value: T)
   danger!
     me.keys_base().stride(count: me.key_count.S64()).inject(value: value)
   me.key_count = me.key_count +% 1u64
   return
 
+### Appends `value` to the end of the child buffer and increments the child count.
+### :param value: The child node to append.
 routine BTreeSetNode[T].children_add_last(value: BTreeSetNode[T])
   danger!
     me.children_base().stride(count: me.child_count.S64()).inject(value: value)
   me.child_count = me.child_count +% 1u64
   return
 
+### Inserts `value` at position `i` in the key buffer, shifting later keys right.
+### :param i: The zero-based insertion index.
+### :param value: The key to insert.
 routine BTreeSetNode[T].keys_add_at(i: U64, value: T)
   danger!
     var base = me.keys_base()
@@ -108,6 +108,9 @@ routine BTreeSetNode[T].keys_add_at(i: U64, value: T)
   me.key_count = me.key_count +% 1u64
   return
 
+### Inserts `value` at position `i` in the child buffer, shifting later children right.
+### :param i: The zero-based insertion index.
+### :param value: The child node to insert.
 routine BTreeSetNode[T].children_add_at(i: U64, value: BTreeSetNode[T])
   danger!
     var base = me.children_base()
@@ -121,6 +124,8 @@ routine BTreeSetNode[T].children_add_at(i: U64, value: BTreeSetNode[T])
   me.child_count = me.child_count +% 1u64
   return
 
+### Removes the key at position `i` from the key buffer, shifting later keys left.
+### :param i: The zero-based position to remove.
 routine BTreeSetNode[T].keys_remove_at(i: U64)
   danger!
     if i +% 1u64 < me.key_count
@@ -133,6 +138,8 @@ routine BTreeSetNode[T].keys_remove_at(i: U64)
   me.key_count = me.key_count -% 1u64
   return
 
+### Removes the child at position `i` from the child buffer, shifting later children left.
+### :param i: The zero-based position to remove.
 routine BTreeSetNode[T].children_remove_at(i: U64)
   danger!
     if i +% 1u64 < me.child_count
@@ -145,18 +152,24 @@ routine BTreeSetNode[T].children_remove_at(i: U64)
   me.child_count = me.child_count -% 1u64
   return
 
+### Removes the last key from the key buffer by decrementing the key count.
 routine BTreeSetNode[T].keys_remove_last()
   me.key_count = me.key_count -% 1u64
   return
 
+### Removes the last child from the child buffer by decrementing the child count.
 routine BTreeSetNode[T].children_remove_last()
   me.child_count = me.child_count -% 1u64
   return
 
+### Sets the key count to `n`, discarding any keys at positions `n` and above.
+### :param n: The new key count.
 routine BTreeSetNode[T].keys_truncate(n: U64)
   me.key_count = n
   return
 
+### Sets the child count to `n`, discarding any children at positions `n` and above.
+### :param n: The new child count.
 routine BTreeSetNode[T].children_truncate(n: U64)
   me.child_count = n
   return
@@ -183,8 +196,36 @@ routine BTreeSetNode[T].children_add_range_from(other: BTreeSetNode[T], start: U
   me.child_count = me.child_count +% count
   return
 
-### Defines the entity `SortedSet`.
-### :typeparam T: The value used for `T`.
+### A sorted, duplicate-free collection backed by a B-tree of order 64.
+###
+### `SortedSet[T]` automatically maintains its elements in ascending order.
+### Inserting a value that already exists is a no-op. Insertion, deletion,
+### membership testing, and rank-based indexed access all run in O(log n) time.
+### Iteration visits elements in ascending sorted order.
+###
+### **When to use**
+### - You need a sorted set with no duplicates.
+### - You need O(log n) insertion, removal, and membership testing.
+### - You need O(log n) indexed access by sorted rank.
+### - You need efficient range queries over a sorted value space.
+### - Use {SortedList[T]} instead when duplicate values must be preserved.
+### - Use {Set[T]} instead when iteration order does not matter and throughput is critical.
+###
+### **Complexity**
+### | Operation | Time |
+### |---|---|
+### | `add` | O(log n) |
+### | `remove` | O(log n) |
+### | `$contains` | O(log n) |
+### | `min!` / `max!` | O(log n) |
+### | `$getitem!` | O(log n) |
+### | `range` | O(log n + k) |
+### | Iteration | O(n) |
+###
+### :typeparam T: The stored element type. Must obey {Comparable}.
+### :see: {SortedList[T]} for a sorted list that allows duplicates.
+### :see: {Set[T]} for an unsorted, hash-table-backed set with O(1) operations.
+### :see: {SortedDict[K, V]} for a sorted mapping from keys to values.
 entity SortedSet[T] obeys Iterable[T]
 needs T obeys Comparable
   secret root: Owned[BTreeSetNode[T]]?
@@ -194,8 +235,9 @@ needs T obeys Comparable
 # Node Creators
 # ============================================================================
 
-### Creates a new instance.
-### :param is_leaf: The `is_leaf` value.
+### Creates a fresh B-tree node configured either as a leaf or an internal node.
+### The node starts empty with zero keys, zero children, and no cached subtree size.
+### :param is_leaf: Whether the new node should be treated as a leaf.
 ### :returns: The resulting `BTreeSetNode[T]` value.
 routine BTreeSetNode[T].$create(is_leaf: Bool) -> BTreeSetNode[T]
   return BTreeSetNode[T](
@@ -211,7 +253,7 @@ routine BTreeSetNode[T].$create(is_leaf: Bool) -> BTreeSetNode[T]
 # SortedSet Creators
 # ============================================================================
 
-### Creates a new instance.
+### Creates an empty sorted set with no root node.
 ### :returns: The resulting `SortedSet[T]` value.
 routine SortedSet[T].$create() -> SortedSet[T]
   return SortedSet[T](
@@ -219,8 +261,9 @@ routine SortedSet[T].$create() -> SortedSet[T]
     count: 0u64
   )
 
-### Creates a new instance.
-### :param values...: The `values...` value.
+### Creates a sorted set from the supplied values.
+### Duplicate values are ignored in the same way as repeated `add` calls.
+### :param values...: The values to insert into the new set.
 ### :returns: The resulting `SortedSet[T]` value.
 routine SortedSet[T].$create(values...: T) -> SortedSet[T]
   var result = SortedSet[T]()
@@ -232,17 +275,17 @@ routine SortedSet[T].$create(values...: T) -> SortedSet[T]
 # Core Operations
 # ============================================================================
 
-### Returns the number of stored values.
-### :returns: The resulting `U64` value.
+### Returns the number of unique values currently stored in the set.
+### :returns: The live element count.
 routine SortedSet[T].count() -> U64
   return me.count
 
-### Returns true if this value is empty.
-### :returns: The resulting `Bool` value.
+### Returns true if the set contains no values.
+### :returns: `true` when `count()` is zero.
 routine SortedSet[T].is_empty() -> Bool
   return me.count == 0u64
 
-### Removes all stored values.
+### Removes every value from the set and discards the existing tree structure.
 routine SortedSet[T].clear()
   me.root = None
   me.count = 0u64
@@ -252,9 +295,10 @@ routine SortedSet[T].clear()
 # Search — binary search within nodes
 # ============================================================================
 
-### Returns whether this value contains `value`.
-### :param value: The value to use.
-### :returns: The resulting `Bool` value.
+### Returns true if `value` is present in the set.
+### Lookup follows the B-tree search path in O(log n) without allocation.
+### :param value: The value to search for.
+### :returns: `true` if `value` exists; `false` if it is absent.
 @readonly
 routine SortedSet[T].$contains(value: T) -> Bool
   if me.root is None
@@ -262,10 +306,11 @@ routine SortedSet[T].$contains(value: T) -> Bool
   return me.search_node(me.root!!, value)
 
 ### Searches for `value` in the subtree rooted at `node`.
-### Uses binary search within each node for O(log B) per level instead of O(B).
-### :param node: The `node` value.
-### :param value: The value to use.
-### :returns: The resulting `Bool` value.
+### Each node is searched by lower-bound lookup before descending, which keeps
+### per-level work logarithmic in the node fanout.
+### :param node: The subtree root to search within.
+### :param value: The value to search for.
+### :returns: `true` if `value` is found anywhere in the subtree; `false` otherwise.
 @inline
 routine SortedSet[T].search_node(node: BTreeSetNode[T], value: T) -> Bool
   # Binary search: find the first index where keys[i] >= value.
@@ -288,11 +333,10 @@ routine SortedSet[T].search_node(node: BTreeSetNode[T], value: T) -> Bool
 # ============================================================================
 
 ### Finds the first index where keys[index] >= value (lower bound).
-### Returns keys.count() if value is greater than all keys.
-### This replaces the linear scan used in the original code, reducing
-### per-level cost from O(B) ~16 comparisons to O(log B) ~5 comparisons.
-### :param keys: The sorted key list to search.
-### :param value: The value to find the lower bound for.
+### Returns `node.keys_count()` when `value` is greater than every key stored in
+### the node.
+### :param node: The node whose sorted keys should be searched.
+### :param value: The value to find the lower-bound position for.
 ### :returns: The first index where keys[index] >= value.
 @inline
 routine SortedSet[T].lower_bound(node: BTreeSetNode[T], value: T) -> U64
@@ -314,13 +358,10 @@ routine SortedSet[T].lower_bound(node: BTreeSetNode[T], value: T) -> U64
 # Insert — single-pass, no pre-check for duplicates
 # ============================================================================
 
-### Adds a value to the set. Returns true if inserted, false if already present.
-### OPTIMIZATION: The old code did `if value in me` (full tree walk) then
-### `insert_non_full` (second tree walk). Now we do a single descent that
-### both checks for duplicates and inserts in one pass. This halves the
-### number of comparisons per insert.
-### :param value: The value to use.
-### :returns: The resulting `Bool` value.
+### Inserts `value` into the set when it is not already present.
+### Combines duplicate detection and structural updates in a single tree descent.
+### :param value: The value to insert.
+### :returns: `true` if the value was inserted; `false` if it was already present.
 routine SortedSet[T].add(value: T) -> Bool
   # Empty tree: create root with single key.
   if me.root is None
@@ -337,7 +378,7 @@ routine SortedSet[T].add(value: T) -> Bool
     var new_root = BTreeSetNode[T](is_leaf: false)
     new_root.children_add_last(old_root)
     me.split_child(new_root, 0u64)
-    me.root = new_root
+    me.root = steal new_root
     # Compute new root's subtree_size from its children.
     # After a split, new_root has 1 key and 2 children.
     new_root.subtree_size = new_root.children_get(0u64).subtree_size +% new_root.children_get(1u64).subtree_size +% 1u64
@@ -349,16 +390,11 @@ routine SortedSet[T].add(value: T) -> Bool
   return inserted
 
 ### Inserts `value` into a non-full node's subtree.
-### Returns true if inserted, false if the value already exists (duplicate).
-### OPTIMIZATION: Duplicate detection is integrated into the descent.
-### When we find keys[i] == value at any level, we return false immediately
-### without modifying the tree — no wasted work.
-### OPTIMIZATION: Uses add_at! for in-place insertion instead of rebuilding
-### the entire keys list. add_at! does a single memmove, which for B=32
-### means shifting ~16 elements via a single memory operation instead of
-### 31 individual add_last calls plus a new allocation.
-### :param node: The `node` value.
-### :param value: The value to use.
+### Returns `true` when the value was inserted and `false` when an equal value
+### already existed somewhere along the descent path.
+### This routine assumes `node` is not full on entry.
+### :param node: The subtree root to insert into.
+### :param value: The value to insert.
 ### :returns: True if the value was inserted, false if it was a duplicate.
 @inline
 routine SortedSet[T].insert_non_full(node: BTreeSetNode[T], value: T) -> Bool
@@ -395,12 +431,11 @@ routine SortedSet[T].insert_non_full(node: BTreeSetNode[T], value: T) -> Bool
 
 ### Splits the child at `child_idx` into two nodes, promoting the median key
 ### into the parent.
-### OPTIMIZATION: Uses add_at! to insert the promoted key and new child pointer
-### into the parent, and List.truncate() to trim the left child — no list rebuilds.
-### OPTIMIZATION: Subtree sizes are computed directly from known key counts
-### instead of calling update_subtree_size() which re-walks all children.
-### :param parent_node: The `parent_node` value.
-### :param child_idx: The `child_idx` value.
+### After the split, the original child keeps the lower half, a new sibling
+### holds the upper half, and the promoted separator key is inserted into the parent.
+### Cached subtree sizes are refreshed so indexed access remains valid.
+### :param parent_node: The parent node that owns the child to split.
+### :param child_idx: The index of the child to split.
 @inline
 routine SortedSet[T].split_child(parent_node: BTreeSetNode[T], child_idx: U64)
   var child = parent_node.children_get(child_idx)
@@ -444,20 +479,17 @@ routine SortedSet[T].split_child(parent_node: BTreeSetNode[T], child_idx: U64)
 
   # Insert promoted key and new child into parent in-place.
   parent_node.keys_add_at(child_idx, mid_key)
-  parent_node.children_add_at(child_idx +% 1u64, new_node)
+  parent_node.children_add_at(child_idx +% 1u64, steal new_node)
   return
 
 # ============================================================================
 # Remove — single-pass, no pre-check with contains()
 # ============================================================================
 
-### Removes a value from the set. Returns true if removed, false if not found.
-### OPTIMIZATION: The old code did `if value notin me` (full tree walk) then
-### `remove_from_node` (second tree walk). Now remove_from_node returns a Bool
-### indicating success, so we only walk the tree once. This halves the
-### comparisons per remove and is the single biggest improvement for deletion.
-### :param value: The value to use.
-### :returns: The resulting `Bool` value.
+### Removes `value` from the set if it is present.
+### Combines lookup and structural repair in a single descent through the tree.
+### :param value: The value to remove.
+### :returns: `true` if the value was found and removed; `false` if it was not present.
 routine SortedSet[T].remove(value: T) -> Bool
   if me.root is None
     return false
@@ -497,11 +529,9 @@ routine SortedSet[T].remove(value: T) -> Bool
 # ============================================================================
 
 ### Removes `value` from the subtree rooted at `node`.
-### Returns true if the value was found and removed, false otherwise.
-### OPTIMIZATION: Returns Bool instead of assuming value is present.
-### This eliminates the separate contains() pre-check entirely.
-### OPTIMIZATION: Uses remove_at! for in-place removal from leaf nodes.
-### OPTIMIZATION: Uses binary search for O(log B) per level.
+### Returns `true` when the value was found and removed, and `false` otherwise.
+### The routine maintains the B-tree occupancy rules before each descent so the
+### subtree remains valid throughout deletion.
 ### :param node: Root of the subtree to search.
 ### :param value: The value to remove.
 ### :returns: True if value was found and removed, false if not found.
@@ -580,10 +610,6 @@ routine SortedSet[T].get_successor(node: BTreeSetNode[T], idx: U64) -> T
 
 ### Merges children[i] and children[i+1] into children[i], using keys[i] as
 ### the separator.
-### OPTIMIZATION: The parent's keys[i] and children[i+1] are removed via
-### remove_at! instead of rebuilding both parent lists from scratch.
-### Old code: created new_keys and new_children lists, copied everything.
-### New code: two remove_at! calls = two memmoves, no allocation.
 ### :param node: The parent node owning the two children to merge.
 ### :param i: Index of the separator key in node.keys.
 @inline
@@ -610,8 +636,8 @@ routine SortedSet[T].merge_children_at(node: BTreeSetNode[T], i: U64)
   return
 
 ### Ensures children[i] has strictly more than MIN_KEYS keys before descent.
-### OPTIMIZATION: rotate_right_at and rotate_left_at now use in-place
-### add_at!/remove_at!/remove_last! instead of rebuilding lists.
+### The child may borrow from a sibling or be merged with one, depending on
+### which neighboring nodes have spare capacity.
 ### :param node: The parent whose child needs to be fixed.
 ### :param i: Index of the child that may need extra keys.
 ### :returns: The (possibly updated) index to descend into.
@@ -639,11 +665,6 @@ routine SortedSet[T].fix_child(node: BTreeSetNode[T], i: U64) -> U64
   return i
 
 ### Rotates one key from the left sibling into children[i] via the parent separator.
-### OPTIMIZATION: Uses add_at!(0, ...) to prepend to child's lists and
-### remove_last!() to pop from left's lists — no list rebuilding.
-### Old code: rebuilt child.keys, child.children, left.keys, left.children
-### (4 full list copies, ~60 element copies total).
-### New code: 2 add_at! + 2 remove_last! + 1 setitem = 5 cheap operations.
 ### :param node: The parent node.
 ### :param i: Index of the child that needs an extra key (must be > 0).
 @inline
@@ -674,8 +695,6 @@ routine SortedSet[T].rotate_right_at(node: BTreeSetNode[T], i: U64)
   return
 
 ### Rotates one key from the right sibling into children[i] via the parent separator.
-### OPTIMIZATION: Uses add_last() to append to child's lists and
-### remove_at!(0) / remove_first! to pop from right's lists — no list rebuilding.
 ### :param node: The parent node.
 ### :param i: Index of the child that needs an extra key.
 @inline
@@ -704,8 +723,8 @@ routine SortedSet[T].rotate_left_at(node: BTreeSetNode[T], i: U64)
 
 ### Recomputes `node.subtree_size` from its keys and children.
 ### Used by rotate operations where a child subtree moves between nodes,
-### making incremental +1/-1 tracking impractical.
-### :param node: The `node` value.
+### so a fresh aggregate count is more reliable than incremental adjustment.
+### :param node: The node whose cached subtree size should be recomputed.
 @inline
 routine SortedSet[T].update_subtree_size(node: BTreeSetNode[T])
   if node.is_leaf
@@ -723,10 +742,11 @@ routine SortedSet[T].update_subtree_size(node: BTreeSetNode[T])
 # Indexing - O(log n) access by position
 # ============================================================================
 
-### Implements the wired routine behavior for this value.
-### :param index: The zero-based position to use.
-### :returns: The resulting `T` value.
-### :throws: May throw {IndexOutOfBoundsError}.
+### Returns the element at the given zero-based sorted position.
+### Rank 0 is the smallest element; rank `count()-1` is the largest.
+### :param index: The zero-based sorted rank to read.
+### :returns: The element at that sorted position.
+### :throws: {IndexOutOfBoundsError} if `index >= count()`.
 routine SortedSet[T].$getitem![I](index: I) -> T
 needs I obeys Integral
   var idx = index.U64()
@@ -734,20 +754,20 @@ needs I obeys Integral
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   return me.get_by_rank(me.root!!, idx)
 
-### Implements the wired routine behavior for this value.
-### :param index: The zero-based position to use.
-### :returns: The resulting `T` value.
+### Returns the element addressed by a back index in sorted order.
+### `^0` is the largest element, `^1` the second-largest, and so on.
+### :param index: The backward position to resolve.
+### :returns: The element at the resolved sorted position.
 routine SortedSet[T].$getitem![I](index: BackIndex[I]) -> T
 needs I obeys Integral
   var idx = index.resolve(me.count)
   return me.get_by_rank(me.root!!, idx)
 
-### Returns the element at the given rank (0-indexed) in the subtree.
-### Uses subtree_size at each child to skip entire subtrees in O(1),
-### giving O(log_B n) total for rank-based access.
-### :param node: The `node` value.
-### :param rank: The `rank` value.
-### :returns: The resulting `T` value.
+### Returns the element at the given in-order rank within the subtree rooted at `node`.
+### Cached subtree sizes allow whole branches to be skipped in O(log n).
+### :param node: The subtree root to search within.
+### :param rank: The zero-based in-order rank to resolve.
+### :returns: The element at that in-order rank within the subtree.
 routine SortedSet[T].get_by_rank(node: BTreeSetNode[T], rank: U64) -> T
   if node.is_leaf
     return node.keys_get(rank)
@@ -777,10 +797,11 @@ routine SortedSet[T].get_by_rank(node: BTreeSetNode[T], rank: U64) -> T
 # Range Queries
 # ============================================================================
 
-### Returns all elements in the range [min_val, max_val].
-### :param min_val: The `min_val` value.
-### :param max_val: The `max_val` value.
-### :returns: The resulting `List[T]` value.
+### Returns every element whose value falls within the inclusive range `[min_val, max_val]`.
+### Results are emitted in ascending order. Runtime is O(log n + k) where k is the output size.
+### :param min_val: The inclusive lower bound.
+### :param max_val: The inclusive upper bound.
+### :returns: A `List[T]` containing all matching elements in ascending order.
 routine SortedSet[T].range(min_val: T, max_val: T) -> List[T]
   var result = List[T]()
   if me.root is None
@@ -788,11 +809,11 @@ routine SortedSet[T].range(min_val: T, max_val: T) -> List[T]
   me.range_collect(me.root!!, min_val, max_val, result)
   return result
 
-### Performs `range collect` on this value.
-### :param node: The `node` value.
-### :param min_val: The `min_val` value.
-### :param max_val: The `max_val` value.
-### :param result: The result storage location.
+### Traverses `node` and appends every value within `[min_val, max_val]` to `result`.
+### :param node: The subtree currently being scanned.
+### :param min_val: The inclusive lower bound.
+### :param max_val: The inclusive upper bound.
+### :param result: The destination list for matching values.
 routine SortedSet[T].range_collect(node: BTreeSetNode[T], min_val: T, max_val: T, result: List[T])
   var i = 0u64
 
@@ -814,9 +835,9 @@ routine SortedSet[T].range_collect(node: BTreeSetNode[T], min_val: T, max_val: T
 # Min/Max
 # ============================================================================
 
-### Returns the minimum (first) element. O(log n).
-### :returns: The resulting `T` value.
-### :absent: Returns absent when the requested value is unavailable.
+### Returns the smallest value currently stored in the set.
+### :returns: The minimum element.
+### :absent: The set is empty.
 routine SortedSet[T].min!() -> T
   if me.is_empty()
     absent
@@ -825,9 +846,9 @@ routine SortedSet[T].min!() -> T
     node = node.children_get(0u64)
   return node.keys_get(0u64)
 
-### Returns the maximum (last) element. O(log n).
-### :returns: The resulting `T` value.
-### :absent: Returns absent when the requested value is unavailable.
+### Returns the largest value currently stored in the set.
+### :returns: The maximum element.
+### :absent: The set is empty.
 routine SortedSet[T].max!() -> T
   if me.is_empty()
     absent
@@ -836,13 +857,15 @@ routine SortedSet[T].max!() -> T
     node = node.children_get(node.children_count() -% 1u64)
   return node.keys_get(node.keys_count() -% 1u64)
 
-### Returns the result of `first`.
-### :returns: The resulting `T` value.
+### Returns the first (smallest) element in the set; equivalent to `min!()`.
+### :returns: The minimum element.
+### :absent: The set is empty.
 routine SortedSet[T].first!() -> T
   return me.min!()
 
-### Returns the result of `last`.
-### :returns: The resulting `T` value.
+### Returns the last (largest) element in the set; equivalent to `max!()`.
+### :returns: The maximum element.
+### :absent: The set is empty.
 routine SortedSet[T].last!() -> T
   return me.max!()
 
@@ -850,14 +873,14 @@ routine SortedSet[T].last!() -> T
 # Iteration (in-order traversal)
 # ============================================================================
 
-### Creates an iterator for this value.
+### Returns an iterator over the set in ascending sorted order.
 ### :returns: The resulting `SortedSetIterator[T]` value.
 @readonly
 routine SortedSet[T].$iter() -> SortedSetIterator[T]
   return SortedSetIterator[T](set: me, index: 0u64)
 
-### Creates a new instance.
-### :param from: The source value to convert.
+### Materializes the set as a list in ascending order.
+### :param from: The set to copy values from.
 ### :returns: The resulting `List[T]` value.
 routine List[T].$create(from: SortedSet[T]) -> List[T]
   var result = List[T](from.count)
@@ -866,9 +889,10 @@ routine List[T].$create(from: SortedSet[T]) -> List[T]
   from.collect_inorder(from.root!!, result)
   return result
 
-### Performs `collect inorder` on this value.
-### :param node: The `node` value.
-### :param result: The result storage location.
+### Appends every value in `node` to `result` using in-order traversal.
+### The resulting list segment preserves the set's global ascending order.
+### :param node: The subtree root to visit.
+### :param result: The destination list for collected values.
 routine SortedSet[T].collect_inorder(node: BTreeSetNode[T], result: List[T])
   var i = 0u64
   while i < node.keys_count()
@@ -880,17 +904,18 @@ routine SortedSet[T].collect_inorder(node: BTreeSetNode[T], result: List[T])
     me.collect_inorder(node.children_get(node.children_count() -% 1u64), result)
   return
 
-### Defines the entity `SortedSetIterator`.
-### :typeparam T: The value used for `T`.
+### Walks the elements of a `SortedSet[T]` in ascending sorted order.
+### Each call to `$next!` resolves the element at the current rank from the source set.
+### :typeparam T: The element type yielded by the iterator.
 entity SortedSetIterator[T] obeys Iterator[T]
-  ### Stores the set member value.
+  ### The source set being iterated.
   set: SortedSet[T]
-  ### Stores the index member value.
+  ### The next sorted rank to yield.
   index: U64
 
-### Returns the next value from this iterator.
-### :returns: The resulting `T` value.
-### :absent: Returns absent when the requested value is unavailable.
+### Returns the next element in ascending set order.
+### :returns: The element at the current sorted rank.
+### :absent: All elements have been yielded.
 @writable
 routine SortedSetIterator[T].$next!() -> T
   if me.index >= me.set.count()
@@ -903,7 +928,7 @@ routine SortedSetIterator[T].$next!() -> T
 # Comparison
 # ============================================================================
 
-### Returns the textual representation of this value.
+### Returns a compact display form of the set contents in ascending order.
 ### :returns: The resulting `Text` value.
 routine SortedSet[T].$represent() -> Text
   var result = "SortedSet{"
@@ -916,7 +941,7 @@ routine SortedSet[T].$represent() -> Text
   result = result + "}"
   return result
 
-### Returns the textual representation of this value.
+### Returns a diagnostic form that includes the runtime type name and element count.
 ### :returns: The resulting `Text` value.
 routine SortedSet[T].$diagnose() -> Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
@@ -929,9 +954,10 @@ routine SortedSet[T].$diagnose() -> Text
   result = result + "})"
   return result
 
-### Returns whether both values are equal.
-### :param other: The other value to compare against.
-### :returns: The resulting `Bool` value.
+### Returns true if both sets contain exactly the same values.
+### Because duplicates are disallowed and elements are ordered, this is element-wise equality.
+### :param other: The other set to compare against.
+### :returns: `true` if both sets have equal count and all corresponding elements are equal.
 routine SortedSet[T].$eq(other: SortedSet[T]) -> Bool
   if me.count != other.count
     return false

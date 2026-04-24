@@ -1,12 +1,13 @@
-# RazorForge ComparisonSign - Result of three-way comparison
-#
-# Used as the return type for $cmp operator.
-# ME_SMALL means `me < you`, SAME means `me == you`, ME_LARGE means `me > you`.
-
 module Core
 
-### Defines the choice `ComparisonSign`.
+### Represents the canonical result of a three-way comparison.
+### `ComparisonSign` is used by ordered protocols to express whether the left
+### operand is smaller than, equal to, or larger than the right operand in a
+### way that can drive all relational operators.
 choice ComparisonSign
+  ### The receiver is strictly less than the other operand. Numeric value: `-1`.
   ME_SMALL: -1
+  ### The receiver and the other operand are equal. Numeric value: `0`.
   SAME: 0
+  ### The receiver is strictly greater than the other operand. Numeric value: `1`.
   ME_LARGE: 1

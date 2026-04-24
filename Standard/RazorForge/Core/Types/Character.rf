@@ -1,31 +1,23 @@
-# RazorForge Character - Unicode codepoint (UTF-32 code unit)
-#
-# Represents a full Unicode codepoint (U+0000 to U+10FFFF).
-# In UTF-32, every character is exactly 4 bytes, providing O(1) indexing.
-#
-# This is the recommended type for text editing and manipulation
-# because character boundaries are trivial to find.
-#
-# For I/O and storage, convert to Bytes (UTF-8).
-# For Windows API interop, use CWStr with List[U16].
-#
-# For legacy 32-bit encodings, use List[U32] instead.
 module Core
 
-### Defines the record `Character`.
+### Represents one Unicode scalar value.
+### `Character` stores a code point-sized payload and models text characters
+### rather than arbitrary binary bytes.
 @llvm("i32")
 record Character obeys ConstCompatible
   pass
 
 # Creators
 
-### Creates a new instance.
+### Returns the same character value.
+### This overload exists so generic creator-based code can normalize on the
+### standard construction surface.
 ### :param from: The source value to convert.
 ### :returns: The resulting `Character` value.
 routine Character.$create(from: Character) -> Character
   return from
 
-### Creates a new instance.
+### Reinterprets a Unicode code point value as `Character`.
 ### :param from: The source value to convert.
 ### :returns: The resulting `Character` value.
 routine Character.$create(from: U32) -> Character
@@ -47,24 +39,26 @@ preset CHARACTER_SURROGATE_END: U32 = 0xDFFF
 # Character protocol implementation
 # ============================================================================
 
-### Returns the result of `codepoint`.
+### Returns the Unicode scalar value stored by this character.
 ### :returns: The resulting `U32` value.
 routine Character.codepoint() -> U32
   return U32(me)
 
-### Returns true if this value is valid.
+### Returns `true` when this value is a valid Unicode scalar value.
+### Surrogate code points are treated as invalid standalone characters.
 ### :returns: The resulting `Bool` value.
 routine Character.is_valid() -> Bool
   var cp = U32(me)
   # Valid if within Unicode range and not a surrogate
   return cp <= 0x10FFFFu32 and not (CHARACTER_SURROGATE_START <= cp <= CHARACTER_SURROGATE_END)
 
-### Returns true if this value is ascii.
+### Returns `true` when this character is in the ASCII subset.
 ### :returns: The resulting `Bool` value.
 routine Character.is_ascii() -> Bool
   return U32(me) <= 0x007Fu32
 
-### Returns true if this value is alphabetic.
+### Returns `true` when this character falls in the supported alphabetic ranges.
+### This implementation currently focuses on ASCII and common Latin blocks.
 ### :returns: The resulting `Bool` value.
 routine Character.is_alphabetic() -> Bool
   var v = U32(me)
@@ -75,30 +69,31 @@ routine Character.is_alphabetic() -> Bool
   var is_latin_ext_b = 0x0180u32 <= v <= 0x024Fu32
   return is_ascii_upper or is_ascii_lower or is_latin_ext or is_latin_ext_a or is_latin_ext_b
 
-### Returns true if this value is numeric.
+### Returns `true` when this character is an ASCII decimal digit.
 ### :returns: The resulting `Bool` value.
 routine Character.is_numeric() -> Bool
   var v = U32(me)
   return 0x0030u32 <= v <= 0x0039u32  # 0-9
 
-### Returns true if this value is alphanumeric.
+### Returns `true` when this character is alphabetic or numeric.
 ### :returns: The resulting `Bool` value.
 routine Character.is_alphanumeric() -> Bool
   return me.is_alphabetic() or me.is_numeric()
 
-### Returns true if this value is uppercase.
+### Returns `true` when this character is an ASCII uppercase letter.
 ### :returns: The resulting `Bool` value.
 routine Character.is_uppercase() -> Bool
   var v = U32(me)
   return 0x0041u32 <= v <= 0x005Au32  # A-Z (ASCII only)
 
-### Returns true if this value is lowercase.
+### Returns `true` when this character is an ASCII lowercase letter.
 ### :returns: The resulting `Bool` value.
 routine Character.is_lowercase() -> Bool
   var v = U32(me)
   return 0x0061u32 <= v <= 0x007Au32  # a-z (ASCII only)
 
-### Returns true if this value is whitespace.
+### Returns `true` when this character is one of the supported whitespace code
+### points.
 ### :returns: The resulting `Bool` value.
 routine Character.is_whitespace() -> Bool
   var v = U32(me)
@@ -114,20 +109,22 @@ routine Character.is_whitespace() -> Bool
   var is_em_space = v == 0x2003u32
   return is_space or is_tab or is_lf or is_cr or is_ff or is_nbsp or is_en_quad or is_em_quad or is_en_space or is_em_space
 
-### Returns true if this value is control.
+### Returns `true` when this character is an ASCII or Latin-1 control code.
 ### :returns: The resulting `Bool` value.
 routine Character.is_control() -> Bool
   var v = U32(me)
   return (v <= 0x001Fu32) or (0x007Fu32 <= v <= 0x009Fu32)
 
-### Converts this value to uppercase.
+### Converts this value to uppercase when the implementation has a matching
+### uppercase form.
 ### :returns: The resulting `Character` value.
 routine Character.to_uppercase() -> Character
   if me.is_lowercase()
     return Character(U32(me) - 32u32)
   return me
 
-### Converts this value to lowercase.
+### Converts this value to lowercase when the implementation has a matching
+### lowercase form.
 ### :returns: The resulting `Character` value.
 routine Character.to_lowercase() -> Character
   if me.is_uppercase()
@@ -154,12 +151,9 @@ routine Character.$cmp(other: Character) -> ComparisonSign
 # Type conversions
 # ============================================================================
 
-### Returns the result of `codepoint`.
-### :returns: The resulting `U32` value.
-routine Character.codepoint() -> U32
-  return U32(me)
-
 ### Converts this value to byte.
+### This is only meaningful for characters in the ASCII range and currently
+### truncates to the low 7 bits.
 ### :returns: The resulting `Byte` value.
 routine Character.to_byte() -> Byte
   # Only valid for ASCII range - truncates
@@ -169,14 +163,17 @@ routine Character.to_byte() -> Byte
 # Display — shows the character itself
 # ============================================================================
 
-### Returns the textual representation of this value.
+### Returns the display form of this character.
+### The display form emits the character itself rather than its numeric code.
 ### :returns: The resulting `Text` value.
 routine Character.$represent() -> Text
   var list = List[Character]()
   list.add_last(me)
   return Text(from_list: list)
 
-### Returns the textual representation of this value.
+### Returns the diagnostic form of this character.
+### The diagnostic form includes both the printable character and its numeric
+### code point.
 ### :returns: The resulting `Text` value.
 routine Character.$diagnose() -> Text
   return "Character(" + me.$represent() + ", " + U32(me).$represent() + ")"
@@ -185,36 +182,39 @@ routine Character.$diagnose() -> Text
 # Utility methods
 # ============================================================================
 
-### Returns true if this value is digit.
+### Returns `true` when this character is a decimal digit.
+### This is an alias for `is_numeric`.
 ### :returns: The resulting `Bool` value.
 routine Character.is_digit() -> Bool
   return me.is_numeric()
 
-### Returns the result of `digit value`.
+### Returns the numeric value of an ASCII decimal digit.
+### Returns `-1` when the character is not a supported digit.
 ### :returns: The resulting `S32` value.
 routine Character.digit_value() -> S32
   if me.is_numeric()
     return S32(U32(me) - 0x0030u32)
   return -1s32
 
-### Returns true if this value is printable.
+### Returns `true` when this character is valid and not a control code.
 ### :returns: The resulting `Bool` value.
 routine Character.is_printable() -> Bool
   return me.is_valid() and not me.is_control()
 
-### Returns true if this value is bmp.
+### Returns `true` when this character is in the Basic Multilingual Plane.
 ### :returns: The resulting `Bool` value.
 routine Character.is_bmp() -> Bool
   # Basic Multilingual Plane: U+0000 to U+FFFF (excluding surrogates)
   return U32(me) <= 0xFFFFu32 and not (CHARACTER_SURROGATE_START <= U32(me) <= CHARACTER_SURROGATE_END)
 
-### Returns true if this value is supplementary.
+### Returns `true` when this character is in one of the Unicode supplementary
+### planes.
 ### :returns: The resulting `Bool` value.
 routine Character.is_supplementary() -> Bool
   # Supplementary planes: U+10000 to U+10FFFF
   return 0x10000u32 <= U32(me) <= 0x10FFFFu32
 
-### Returns true if this value is cjk.
+### Returns `true` when this character falls in the supported CJK ranges.
 ### :returns: The resulting `Bool` value.
 routine Character.is_cjk() -> Bool
   var v = U32(me)
@@ -224,7 +224,7 @@ routine Character.is_cjk() -> Bool
   var is_ext_c = 0x2A700u32 <= v <= 0x2B73Fu32
   return is_unified or is_ext_a or is_ext_b or is_ext_c
 
-### Returns true if this value is latin.
+### Returns `true` when this character falls in the supported Latin ranges.
 ### :returns: The resulting `Bool` value.
 routine Character.is_latin() -> Bool
   var v = U32(me)
@@ -234,7 +234,8 @@ routine Character.is_latin() -> Bool
   var is_ext_b = 0x0180u32 <= v <= 0x024Fu32
   return is_basic or is_supplement or is_ext_a or is_ext_b
 
-### Returns true if this value is emoji.
+### Returns `true` when this character falls in one of the supported emoji
+### blocks.
 ### :returns: The resulting `Bool` value.
 routine Character.is_emoji() -> Bool
   var v = U32(me)
@@ -248,7 +249,9 @@ routine Character.is_emoji() -> Bool
 # Codepoint offset
 # ============================================================================
 
-### Returns the result of `offset`.
+### Returns a character offset by `delta` code points.
+### This is a low-level helper and does not validate that the resulting value is
+### still a valid Unicode scalar.
 ### :param delta: The amount to add or subtract.
 ### :returns: The resulting `Character` value.
 routine Character.offset![I obeys Integral](delta: I) -> Character

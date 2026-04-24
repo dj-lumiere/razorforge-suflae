@@ -1,11 +1,12 @@
 module Core
 
-### Defines the crashable `NumericOverflowError`.
+### Represents the crashable raised when a numeric operation exceeds the valid
+### range or domain guarantees of the target type.
 crashable NumericOverflowError
-  ### Stores the description member value.
+  ### Stores a preformatted description of the overflow condition.
   description: Text
 
-### Returns the result of `crash message`.
+### Returns the stored numeric overflow message.
 ### :returns: The resulting `Text` value.
 routine NumericOverflowError.crash_message() -> Text
   return me.description

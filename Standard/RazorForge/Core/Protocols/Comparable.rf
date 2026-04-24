@@ -1,33 +1,41 @@
-# Comparable - Protocol for types that support ordering (<, <=, >, >=, <=>)
 module Core
 
-### Defines the protocol `Comparable`.
+### Represents the protocol for total or partial value ordering.
+### Types that obey `Comparable` define a comparison operation that is
+### consistent with equality and can drive the relational operator family.
 protocol Comparable obeys Equatable
   ### Compares this value with the other value.
+  ### Implementations should return a result consistent with `$eq` and stable
+  ### across repeated calls for the same operands.
   ### :param you: The other value to compare against.
   ### :returns: The resulting `ComparisonSign` value.
   @readonly
   routine Me.$cmp(you: Me) -> ComparisonSign
 
-  ### Implements the wired routine behavior for this value.
+  ### Returns whether this value is strictly less than `you`.
+  ### This generated helper is derived from `$cmp` and should not need a custom
+  ### implementation in most conforming types.
   ### :param you: The other value to compare against.
   ### :returns: The resulting `Bool` value.
   @[readonly, generated]
   routine Me.$lt(you: Me) -> Bool
 
-  ### Implements the wired routine behavior for this value.
+  ### Returns whether this value is less than or equal to `you`.
+  ### This generated helper is derived from `$cmp`.
   ### :param you: The other value to compare against.
   ### :returns: The resulting `Bool` value.
   @[readonly, generated]
   routine Me.$le(you: Me) -> Bool
 
-  ### Implements the wired routine behavior for this value.
+  ### Returns whether this value is strictly greater than `you`.
+  ### This generated helper is derived from `$cmp`.
   ### :param you: The other value to compare against.
   ### :returns: The resulting `Bool` value.
   @[readonly, generated]
   routine Me.$gt(you: Me) -> Bool
 
-  ### Implements the wired routine behavior for this value.
+  ### Returns whether this value is greater than or equal to `you`.
+  ### This generated helper is derived from `$cmp`.
   ### :param you: The other value to compare against.
   ### :returns: The resulting `Bool` value.
   @[readonly, generated]

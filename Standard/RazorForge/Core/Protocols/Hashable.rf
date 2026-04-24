@@ -1,10 +1,12 @@
-# Hashable - Protocol for types that can be hashed
-# Required for use as keys in Dict, Set, and other hash-based collections
 module Core
 
-### Defines the protocol `Hashable`.
+### Represents the protocol for stable, non-keyed hashing.
+### `Hashable` is for values that can provide a deterministic hash suitable for
+### ordinary hash tables, deduplication, and lookup structures.
 protocol Hashable
-  ### Returns the result of `hash`.
-  ### :returns: The resulting `U64` value.
+  ### Returns the hash of this value.
+  ### Values considered equal should produce the same hash, though unequal values
+  ### may still collide.
+  ### :returns: A `U64` hash code for this value.
   @readonly
   routine Me.hash() -> U64

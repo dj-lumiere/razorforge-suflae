@@ -1,19 +1,37 @@
-# RazorForge Array[T, N] - Fixed-size inline array with value semantics
-# Record type - N elements of T stored inline, copied on assignment
-#
-# Usage:
-#   var coords: Array[F64, 3] = [1.0, 2.0, 3.0]
-#   var x = coords[0]          # Read element
-#   coords[0] = 5.0            # Modify element in-place
-#   var copy = coords          # Full copy (value semantics)
-
 module Collections
 
 import BuilderService
 
-### Defines the record `Array`.
-### :typeparam T: The value used for `T`.
-### :typeparam N: The value used for `N`.
+### A fixed-size, inline array of `N` elements with value semantics.
+###
+### `Array[T, N]` stores exactly `N` elements packed directly into its own
+### memory footprint — it never heap-allocates. Because it is a record type,
+### copying an `Array` copies all `N` elements, and the size can never change
+### after construction.
+###
+### Use this type when the number of elements is known at compile time and you
+### want stack-allocated, cache-friendly storage without pointer indirection.
+###
+### **When to use**
+### - The element count is a compile-time constant.
+### - You want value semantics (copy = full duplication of contents).
+### - You need a small fixed-size buffer (e.g., a 4×4 matrix, an RGBA colour, a SIMD lane).
+### - Use {List[T]} when the count is only known at runtime or elements are added dynamically.
+### - Use {BitArray[N]} for a compact fixed-size sequence of boolean flags.
+###
+### **Complexity**
+### | Operation | Time |
+### |---|---|
+### | `$getitem!` / `$setitem!` | O(1) |
+### | `first!` / `last!` | O(1) |
+### | `$contains` | O(N) |
+### | `index_of!` | O(N) |
+### | Iteration | O(N) |
+###
+### :typeparam T: The element type stored in the array. Must be a record type.
+### :typeparam N: The compile-time element count, supplied as a `U64` literal.
+### :see: {List[T]} for a heap-backed growable sequence.
+### :see: {BitArray[N]} for a compact fixed-size bit sequence.
 @llvm("[{N} x {T}]")
 record Array[T, N]
 needs T is RecordType
@@ -25,10 +43,10 @@ needs N is U64
 # Indexing with Integral (forward index)
 # ============================================================================
 
-### Implements the wired routine behavior for this value.
-### :param index: The zero-based position to use.
-### :returns: The resulting `T` value.
-### :throws: May throw {IndexOutOfBoundsError}.
+### Returns the element at `index`.
+### :param index: The zero-based position to read.
+### :returns: The element stored at that position.
+### :throws: {IndexOutOfBoundsError} if `index >= N`.
 routine Array[T, N].$getitem![I](index: I) -> T
 needs I obeys Integral
   var idx = index.U64!()
@@ -36,10 +54,10 @@ needs I obeys Integral
     throw IndexOutOfBoundsError(index: idx, count: me.count())
   return element_at[Array[T, N], T](me, idx)
 
-### Implements the wired routine behavior for this value.
-### :param index: The zero-based position to use.
-### :param value: The value to use.
-### :throws: May throw {IndexOutOfBoundsError}.
+### Replaces the element at `index` with `value`.
+### :param index: The zero-based position to update.
+### :param value: The replacement value.
+### :throws: {IndexOutOfBoundsError} if `index >= N`.
 routine Array[T, N].$setitem![I](index: I, value: T)
 needs I obeys Integral
   var idx = index.U64!()
@@ -51,9 +69,10 @@ needs I obeys Integral
 # Indexing with BackIndex (backward index using ^)
 # ============================================================================
 
-### Implements the wired routine behavior for this value.
-### :param index: The zero-based position to use.
-### :returns: The resulting `T` value.
+### Returns the element addressed from the back of the array.
+### `^0` refers to the last element, `^1` to the second-to-last, and so on.
+### :param index: The backward position to resolve.
+### :returns: The element at the resolved position.
 routine Array[T, N].$getitem![I](index: BackIndex[I]) -> T
 needs I obeys Integral
   var idx = index.resolve(N)
@@ -63,35 +82,37 @@ needs I obeys Integral
 # Query Operations
 # ============================================================================
 
-### Returns the number of stored values.
-### :returns: The resulting `U64` value.
+### Returns the fixed number of elements in this array.
+### This is always equal to the compile-time parameter `N`.
+### :returns: The element count `N`.
 routine Array[T, N].count() -> U64
   return N
 
-### Returns true if this value is empty.
-### :returns: The resulting `Bool` value.
+### Returns true when the compile-time size is zero.
+### :returns: `true` if `N == 0`.
 routine Array[T, N].is_empty() -> Bool
   return N == 0u64
 
-### Returns the result of `first`.
-### :returns: The resulting `T` value.
-### :absent: Returns absent when the requested value is unavailable.
+### Returns the first element of the array.
+### :returns: The element at index `0`.
+### :absent: The array has zero elements (`N == 0`).
 routine Array[T, N].first!() -> T
   if N == 0u64
     absent
   return element_at[Array[T, N], T](me, 0u64)
 
-### Returns the result of `last`.
-### :returns: The resulting `T` value.
-### :absent: Returns absent when the requested value is unavailable.
+### Returns the last element of the array.
+### :returns: The element at index `N - 1`.
+### :absent: The array has zero elements (`N == 0`).
 routine Array[T, N].last!() -> T
   if N == 0u64
     absent
   return element_at[Array[T, N], T](me, N - 1u64)
 
-### Returns whether this value contains `value`.
-### :param value: The value to use.
-### :returns: The resulting `Bool` value.
+### Returns true if any element equals `value`.
+### Scans from index 0 to N - 1 using the element type's equality operator.
+### :param value: The value to search for.
+### :returns: `true` if `value` is found; `false` otherwise.
 @readonly
 routine Array[T, N].$contains(value: T) -> Bool
   for i in 0u64 til N
@@ -99,10 +120,10 @@ routine Array[T, N].$contains(value: T) -> Bool
       return true
   return false
 
-### Returns the result of `index of`.
-### :param value: The value to use.
-### :returns: The resulting `U64` value.
-### :absent: Returns absent when the requested value is unavailable.
+### Returns the index of the first element equal to `value`.
+### :param value: The value to search for.
+### :returns: The zero-based index of the first match.
+### :absent: No element equals `value`.
 routine Array[T, N].index_of!(value: T) -> U64
   for i in 0u64 til N
     if me[i] == value
@@ -113,23 +134,22 @@ routine Array[T, N].index_of!(value: T) -> U64
 # Iteration Support
 # ============================================================================
 
-### Returns the result of `iter`.
-### :returns: The resulting `ArrayIterator[T, N]` value.
+### Walks the elements of a fixed-size `Array[T, N]` from index 0 to N - 1.
+### Because `Array` is a record type, the iterator holds its own copy of the array data.
+### :typeparam T: The element type yielded by the iterator.
+### :typeparam N: The compile-time element count.
+record ArrayIterator[T, N]
+  ### Stores the array being iterated.
+  list: Array[T, N]
+  ### Stores the next logical index to read.
+  index: U64
+
 routine Array[T, N].$iter() -> ArrayIterator[T, N]
   return ArrayIterator[T, N](list: me, index: 0u64)
 
-### Defines the record `ArrayIterator`.
-### :typeparam T: The value used for `T`.
-### :typeparam N: The value used for `N`.
-record ArrayIterator[T, N]
-  ### Stores the list member value.
-  list: Array[T, N]
-  ### Stores the index member value.
-  index: U64
-
-### Returns the next value from this iterator.
-### :returns: The resulting `T` value.
-### :absent: Returns absent when the requested value is unavailable.
+### Returns the next element from the iterator in ascending index order.
+### :returns: The element at the current index.
+### :absent: All `N` elements have been yielded.
 routine ArrayIterator[T, N].$next!() -> T
   if me.index >= N
     absent
@@ -141,8 +161,6 @@ routine ArrayIterator[T, N].$next!() -> T
 # Display
 # ============================================================================
 
-### Returns the textual representation of this value.
-### :returns: The resulting `Text` value.
 routine Array[T, N].$represent() -> Text
   var result = "Array["
   for i in 0u64 til N
@@ -152,8 +170,6 @@ routine Array[T, N].$represent() -> Text
   result = result + "]"
   return result
 
-### Returns the textual representation of this value.
-### :returns: The resulting `Text` value.
 routine Array[T, N].$diagnose() -> Text
   var result = me.type_name() + "(count: " + N.$represent() + ", ["
   for i in 0u64 til N
@@ -163,6 +179,9 @@ routine Array[T, N].$diagnose() -> Text
   result = result + "])"
   return result
 
+### Returns true when both arrays contain equal elements in the same order.
+### :param you: The other array to compare against.
+### :returns: `true` if every corresponding pair of elements is equal.
 routine Array[T, N].$eq(you: Array[T, N]) -> Bool
   for i in 0u64 til N
     if me[i] != you[i]

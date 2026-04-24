@@ -22,27 +22,38 @@ import Bytes.Bytes
 
 module Core
 
-### Defines the record `CStr`.
+### Represents a null-terminated narrow C string.
+### `CStr` is the FFI wrapper for `char*` values that follow the C null-termination contract.
+### The wrapper itself is value-typed; ownership depends on how the pointer was obtained.
+### :see: {CWStr}, {Bytes}, {C-Subsystem}
+@llvm("ptr")
 record CStr
-  ### Stores the ptr member value.
-  ptr: Hijacked[Byte]
+  pass
 
-preset CSTR_NULL: CStr = CStr(ptr: hijacked_none[Byte]())
+preset CSTR_NULL: CStr = reinterpret_bits[Hijacked[Byte], CStr](hijacked_none[Byte]())
 
-### Creates a new instance.
-### :param from_ptr: The `from_ptr` value.
+### Returns the raw null-terminated byte pointer backing this C string.
+### :returns: The underlying `Hijacked[Byte]` pointer.
+@readonly
+routine CStr.ptr() -> Hijacked[Byte]
+  return reinterpret_bits[CStr, Hijacked[Byte]](me)
+
+### Wraps an existing null-terminated byte pointer as `CStr`.
+### No copy is performed and ownership is not changed.
+### :param from_ptr: The pointer to wrap.
 ### :returns: The resulting `CStr` value.
 routine CStr.$create(from_ptr: Hijacked[Byte]) -> CStr
-  return CStr(ptr: from_ptr)
+  return reinterpret_bits[Hijacked[Byte], CStr](from_ptr)
 
-### Creates a new instance.
-### :param from_ptr: The `from_ptr` value.
+### Wraps an existing raw address as `CStr`.
+### No copy is performed and ownership is not changed.
+### :param from_ptr: The address to wrap.
 ### :returns: The resulting `CStr` value.
 routine CStr.$create(from_ptr: Address) -> CStr
-  return CStr(ptr: Hijacked[Byte](from_ptr))
+  return reinterpret_bits[Hijacked[Byte], CStr](Hijacked[Byte](from_ptr))
 
-### Creates a new instance.
-### :param from: The source value to convert.
+### Creates a null-terminated C string by copying raw bytes and appending a trailing null byte.
+### :param from: The byte sequence to copy.
 ### :returns: The resulting `CStr` value.
 routine CStr.$create(from: Referring[Bytes]) -> CStr
   var len = from.count()
@@ -56,17 +67,17 @@ routine CStr.$create(from: Referring[Bytes]) -> CStr
     i = i + 1u64
   buffer.offset(len.bytes()).inject(BYTE_NULL)
 
-  return CStr(ptr: buffer)
+  return reinterpret_bits[Hijacked[Byte], CStr](buffer)
 
-### Creates a new instance.
-### :param from: The source value to convert.
+### Creates a UTF-8 encoded null-terminated C string from `Text`.
+### :param from: The text value to encode and copy.
 ### :returns: The resulting `CStr` value.
 routine CStr.$create(from: Referring[Text]) -> CStr
   var len = from.count()
   if len == 0u64
     var empty_buffer = Hijacked[Byte](rf_allocate_dynamic(1u64))
     empty_buffer.inject(BYTE_NULL)
-    return CStr(ptr: empty_buffer)
+    return reinterpret_bits[Hijacked[Byte], CStr](empty_buffer)
 
   var max_bytes = len * 4u64 + 1u64
   var buffer = Hijacked[Byte](rf_allocate_dynamic(max_bytes))
@@ -98,28 +109,29 @@ routine CStr.$create(from: Referring[Text]) -> CStr
     i = i + 1u64
 
   buffer.offset(write_pos.bytes()).inject(BYTE_NULL)
-  return CStr(ptr: buffer)
+  return reinterpret_bits[Hijacked[Byte], CStr](buffer)
 
-### Returns the number of stored values.
-### :returns: The resulting `U64` value.
+### Returns the length of this C string in bytes, excluding the trailing null.
+### :returns: The byte count, not including the null terminator.
 routine CStr.count() -> U64
   return rf_cstr_count(me)
 
-### Returns true if this value is null.
+### Returns `true` when this wrapper does not reference any C string.
 ### :returns: The resulting `Bool` value.
 routine CStr.is_null() -> Bool
-  return me.ptr.is_none()
+  return me.ptr().is_none()
 
-### Returns true if this value is empty.
+### Returns `true` when this C string is null or has zero length.
 ### :returns: The resulting `Bool` value.
 routine CStr.is_empty() -> Bool
   return me.is_null() or me.count() == 0u64
 
-### Implements the wired routine behavior for this value.
+### Returns the byte at `index` in the referenced C string.
+### This does not copy the string and assumes the caller stays within bounds.
 ### :param index: The zero-based position to use.
 ### :returns: The resulting `Byte` value.
 routine CStr.$getitem!(index: U64) -> Byte
-  return me.ptr.offset(index.bytes()).extract()
+  return me.ptr().offset(index.bytes()).extract()
 
 ### Returns whether both values are equal.
 ### :param you: The other value to compare against.
@@ -138,15 +150,16 @@ routine CStr.$cmp(you: CStr) -> ComparisonSign
     return ME_LARGE
   return SAME
 
-### Returns the result of `copy`.
+### Returns an owning copy of this C string.
+### The copied string receives a newly allocated null-terminated buffer.
 ### :returns: The resulting `CStr` value.
 routine CStr.copy() -> CStr
   var len = me.count()
   var buffer = Hijacked[Byte](rf_allocate_dynamic(len + 1u64))
   rf_cstr_copy(CStr(from_ptr: buffer), me)
-  return CStr(ptr: buffer)
+  return reinterpret_bits[Hijacked[Byte], CStr](buffer)
 
-### Creates a new instance.
+### Copies the bytes of a C string into an immutable `Bytes` value.
 ### :param from: The source value to convert.
 ### :returns: The resulting `Bytes` value.
 routine Bytes.$create(from: Cstr) -> Bytes
@@ -156,18 +169,19 @@ routine Bytes.$create(from: Cstr) -> Bytes
   loop
     if i >= len
       break
-    list.add_last(from.ptr.offset(i.bytes()).extract())
+    list.add_last(from.ptr().offset(i.bytes()).extract())
     i = i + 1u64
   return Bytes(from_list: list)
 
-### Returns the result of `offset`.
-### :param n: The `n` value.
+### Returns a new `CStr` view offset by `n` bytes into the same underlying
+### buffer.
+### :param n: The number of bytes to skip.
 ### :returns: The resulting `CStr` value.
 routine CStr.offset(n: U64) -> CStr
-  return CStr(ptr: me.ptr.offset(n.bytes()))
+  return reinterpret_bits[Hijacked[Byte], CStr](me.ptr().offset(n.bytes()))
 
-### Creates a value from index.
+### Returns a `CStr` view starting at `start` bytes from the current pointer.
 ### :param start: The inclusive starting position.
 ### :returns: The resulting `CStr` value.
 routine CStr.from_index(start: U64) -> CStr
-  return CStr(ptr: me.ptr.offset(start.bytes()))
+  return reinterpret_bits[Hijacked[Byte], CStr](me.ptr().offset(start.bytes()))

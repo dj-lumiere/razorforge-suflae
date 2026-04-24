@@ -1,8 +1,11 @@
 module Core
 
-### Defines the crashable `IndeterminateResultError`.
+### Represents the crashable raised when an arithmetic expression has no single
+### mathematically meaningful result in the current domain.
 crashable IndeterminateResultError
   pass
 
+### Returns the default message for indeterminate arithmetic results.
+### :returns: The resulting `Text` value.
 routine IndeterminateResultError.crash_message() -> Text
   return "Indeterminate form encountered: 0 ** 0 is undefined for integer arithmetic."

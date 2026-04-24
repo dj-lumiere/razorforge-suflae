@@ -1,6 +1,3 @@
-# SipHash-2-4 helpers for $secure_hash synthesis.
-# All routines are module-private (secret) — used only by numeric $secure_hash implementations.
-# Algorithm: https://131002.net/siphash/siphash.pdf
 module Core
 
 # SipHash-2-4 initialization constants — "SipHash" magic in ASCII, big-endian.
@@ -10,10 +7,16 @@ preset SIP_C1: U64 = 7237128888997146477_u64
 preset SIP_C2: U64 = 7816392313619706465_u64
 preset SIP_C3: U64 = 8387110413943045723_u64
 
+### Internal state for a SipHash-2-4 computation.
+### Holds four 64-bit words that are updated by each SipRound.
 record SipState
+  ### First 64-bit state word.
   v0: U64
+  ### Second 64-bit state word.
   v1: U64
+  ### Third 64-bit state word.
   v2: U64
+  ### Fourth 64-bit state word.
   v3: U64
 
 ### Applies one SipRound to the state; returns the updated state.

@@ -1,10 +1,13 @@
-# ClampingSubtractable - Protocol for types that support clamping subtraction (-^)
 module Core
 
-### Defines the protocol `ClampingSubtractable`.
+### Represents the protocol for saturating subtraction.
+### `ClampingSubtractable` is for bounded types whose subtraction surface can
+### clamp to the nearest representable bound instead of overflowing.
 protocol ClampingSubtractable
-  ### Implements the wired routine behavior for this value.
-  ### :param you: The other value to compare against.
+  ### Returns the clamping difference between this value and `you`.
+  ### :param you: The value to subtract.
   ### :returns: The resulting `Me` value.
+  ### :note: Implementations should preserve exact subtraction behavior whenever
+  ### the mathematical result is representable.
   @readonly
   routine Me.$sub_clamp(you: Me) -> Me

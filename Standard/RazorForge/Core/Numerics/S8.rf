@@ -1,11 +1,12 @@
-# RazorForge S8 (signed 8-bit integer) native type implementation
-# Maps directly to LLVM i8 type using compiler intrinsics
 module Core
 # Core S8 type definition - maps to LLVM i8
 
-### Defines the record `S8`.
+### An 8-bit signed integer in the range −128 to 127.
+###
+### `S8` is the smallest signed integer type in RazorForge, used for compact
+### signed data such as audio samples (where the range fits) and C interop.
 @llvm("i8")
-record S8 obeys SignedIntegral, Ordered, ConstCompatible
+record S8 obeys SignedIntegral, Ordered, ConstCompatible, AtomicType
   pass
 
 # Constants for S8 limits
@@ -18,132 +19,139 @@ preset S8_ONE: S8 = 1_s8
 # Creators
 # ============================================================================
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `S8` value.
+### Identity conversion — returns `from` unchanged.
+### :param from: The `S8` value to return.
+### :returns: `from` unchanged.
 routine S8.$create(from: S8) -> S8
   return from
 
-### Implements the wired routine behavior for this value.
-### :param from: The source value to convert.
-### :returns: The resulting `S8` value.
-### :throws: May throw {IntegerOverflowError}.
+### Converts an `S16` to `S8`, throwing if the value is outside −128..127.
+### :param from: The `S16` value to convert.
+### :returns: The lower 8 bits of `from` interpreted as signed.
+### :throws: {IntegerOverflowError} if `from` is not in `-128..=127`.
 routine S8.$create!(from: S16) -> S8
   if not (S8_MIN <= from <= S8_MAX)
     throw IntegerOverflowError()
   return int_truncate[S16, S8](from)
 
-### Implements the wired routine behavior for this value.
-### :param from: The source value to convert.
-### :returns: The resulting `S8` value.
-### :throws: May throw {IntegerOverflowError}.
+### Converts an `S32` to `S8`, throwing if the value is outside −128..127.
+### :param from: The `S32` value to convert.
+### :returns: The lower 8 bits of `from` interpreted as signed.
+### :throws: {IntegerOverflowError} if `from` is not in `-128..=127`.
 routine S8.$create!(from: S32) -> S8
   if not (S8_MIN <= from <= S8_MAX)
     throw IntegerOverflowError()
   return int_truncate[S32, S8](from)
 
-### Implements the wired routine behavior for this value.
-### :param from: The source value to convert.
-### :returns: The resulting `S8` value.
-### :throws: May throw {IntegerOverflowError}.
+### Converts an `S64` to `S8`, throwing if the value is outside −128..127.
+### :param from: The `S64` value to convert.
+### :returns: The lower 8 bits of `from` interpreted as signed.
+### :throws: {IntegerOverflowError} if `from` is not in `-128..=127`.
 routine S8.$create!(from: S64) -> S8
   if not (S8_MIN <= from <= S8_MAX)
     throw IntegerOverflowError()
   return int_truncate[S64, S8](from)
 
-### Implements the wired routine behavior for this value.
-### :param from: The source value to convert.
-### :returns: The resulting `S8` value.
-### :throws: May throw {IntegerOverflowError}.
+### Converts an `S128` to `S8`, throwing if the value is outside −128..127.
+### :param from: The `S128` value to convert.
+### :returns: The lower 8 bits of `from` interpreted as signed.
+### :throws: {IntegerOverflowError} if `from` is not in `-128..=127`.
 routine S8.$create!(from: S128) -> S8
   if not (S8_MIN <= from <= S8_MAX)
     throw IntegerOverflowError()
   return int_truncate[S128, S8](from)
 
-### Implements the wired routine behavior for this value.
-### :param from: The source value to convert.
-### :returns: The resulting `S8` value.
-### :throws: May throw {IntegerOverflowError}.
+### Reinterprets a `U8` as `S8` using two's complement, throwing if the value exceeds 127.
+### :param from: The `U8` value to convert.
+### :returns: The same bit pattern interpreted as `S8`.
+### :throws: {IntegerOverflowError} if `from > 127`.
 routine S8.$create!(from: U8) -> S8
   if from > 127_u8
     throw IntegerOverflowError()
   return reinterpret_bits[U8, S8](from)
 
-### Implements the wired routine behavior for this value.
-### :param from: The source value to convert.
-### :returns: The resulting `S8` value.
-### :throws: May throw {IntegerOverflowError}.
+### Converts a `U16` to `S8`, throwing if the value exceeds 127.
+### :param from: The `U16` value to convert.
+### :returns: The lower 8 bits interpreted as a signed `S8`.
+### :throws: {IntegerOverflowError} if `from > 127`.
 routine S8.$create!(from: U16) -> S8
   if from > 127_u16
     throw IntegerOverflowError()
   return int_truncate[U16, S8](from)
 
-### Implements the wired routine behavior for this value.
-### :param from: The source value to convert.
-### :returns: The resulting `S8` value.
-### :throws: May throw {IntegerOverflowError}.
+### Converts a `U32` to `S8`, throwing if the value exceeds 127.
+### :param from: The `U32` value to convert.
+### :returns: The lower 8 bits interpreted as a signed `S8`.
+### :throws: {IntegerOverflowError} if `from > 127`.
 routine S8.$create!(from: U32) -> S8
   if from > 127_u32
     throw IntegerOverflowError()
   return int_truncate[U32, S8](from)
 
-### Implements the wired routine behavior for this value.
-### :param from: The source value to convert.
-### :returns: The resulting `S8` value.
-### :throws: May throw {IntegerOverflowError}.
+### Converts a `U64` to `S8`, throwing if the value exceeds 127.
+### :param from: The `U64` value to convert.
+### :returns: The lower 8 bits interpreted as a signed `S8`.
+### :throws: {IntegerOverflowError} if `from > 127`.
 routine S8.$create!(from: U64) -> S8
   if from > 127_u64
     throw IntegerOverflowError()
   return int_truncate[U64, S8](from)
 
-### Implements the wired routine behavior for this value.
-### :param from: The source value to convert.
-### :returns: The resulting `S8` value.
-### :throws: May throw {IntegerOverflowError}.
+### Converts a `U128` to `S8`, throwing if the value exceeds 127.
+### :param from: The `U128` value to convert.
+### :returns: The lower 8 bits interpreted as a signed `S8`.
+### :throws: {IntegerOverflowError} if `from > 127`.
 routine S8.$create!(from: U128) -> S8
   if from > 127_u128
     throw IntegerOverflowError()
   return int_truncate[U128, S8](from)
 
-### Implements the wired routine behavior for this value.
-### :param from: The source value to convert.
-### :returns: The resulting `S8` value.
+### Converts an `F16` to `S8` by first converting to `S32`, then truncating.
+### :param from: The `F16` value to convert.
+### :returns: The integer part of `from` as an `S8`.
+### :throws: {IntegerOverflowError} if the integer part is outside −128..127.
 routine S8.$create!(from: F16) -> S8
   return from.S32!().S8!()
 
-### Implements the wired routine behavior for this value.
-### :param from: The source value to convert.
-### :returns: The resulting `S8` value.
+### Converts an `F32` to `S8` by first converting to `S32`, then truncating.
+### :param from: The `F32` value to convert.
+### :returns: The integer part of `from` as an `S8`.
+### :throws: {IntegerOverflowError} if the integer part is outside −128..127.
 routine S8.$create!(from: F32) -> S8
   return from.S32!().S8!()
 
-### Implements the wired routine behavior for this value.
-### :param from: The source value to convert.
-### :returns: The resulting `S8` value.
+### Converts an `F64` to `S8` by first converting to `S32`, then truncating.
+### :param from: The `F64` value to convert.
+### :returns: The integer part of `from` as an `S8`.
+### :throws: {IntegerOverflowError} if the integer part is outside −128..127.
 routine S8.$create!(from: F64) -> S8
   return from.S32!().S8!()
 
-### Implements the wired routine behavior for this value.
-### :param from: The source value to convert.
-### :returns: The resulting `S8` value.
+### Converts an `F128` to `S8` by first converting to `S32`, then truncating.
+### :param from: The `F128` value to convert.
+### :returns: The integer part of `from` as an `S8`.
+### :throws: {IntegerOverflowError} if the integer part is outside −128..127.
 routine S8.$create!(from: F128) -> S8
   return from.S32!().S8!()
 
-### Implements the wired routine behavior for this value.
-### :param from: The source value to convert.
-### :returns: The resulting `S8` value.
+### Converts a `D32` to `S8` by first converting to `S32`, then truncating.
+### :param from: The `D32` value to convert.
+### :returns: The integer part of `from` as an `S8`.
+### :throws: {IntegerOverflowError} if the integer part is outside −128..127.
 routine S8.$create!(from: D32) -> S8
   return from.S32!().S8!()
 
-### Implements the wired routine behavior for this value.
-### :param from: The source value to convert.
-### :returns: The resulting `S8` value.
+### Converts a `D64` to `S8` by first converting to `S32`, then truncating.
+### :param from: The `D64` value to convert.
+### :returns: The integer part of `from` as an `S8`.
+### :throws: {IntegerOverflowError} if the integer part is outside −128..127.
 routine S8.$create!(from: D64) -> S8
   return from.S32!().S8!()
 
-### Implements the wired routine behavior for this value.
-### :param from: The source value to convert.
-### :returns: The resulting `S8` value.
+### Converts a `D128` to `S8` by first converting to `S32`, then truncating.
+### :param from: The `D128` value to convert.
+### :returns: The integer part of `from` as an `S8`.
+### :throws: {IntegerOverflowError} if the integer part is outside −128..127.
 routine S8.$create!(from: D128) -> S8
   return from.S32!().S8!()
 
@@ -151,55 +159,61 @@ routine S8.$create!(from: D128) -> S8
 # Arithmetic Operations (trapping on overflow by default)
 # ============================================================================
 
-### Returns the sum and whether it overflowed.
-### :param you: The other value to compare against.
-### :returns: The resulting `(S8, Bool)` value.
+### Returns the sum and a flag indicating whether the result overflowed.
+### :param you: The right operand.
+### :returns: A tuple of `(wrapped_sum, overflowed)`.
 routine S8.add_with_overflow(you: S8) -> (S8, Bool)
   return signed_add_checked[S8](me, you)
 
-### Returns the difference and whether it overflowed.
-### :param you: The other value to compare against.
-### :returns: The resulting `(S8, Bool)` value.
+### Returns the difference and a flag indicating whether the result overflowed.
+### :param you: The value to subtract.
+### :returns: A tuple of `(wrapped_difference, overflowed)`.
 routine S8.sub_with_overflow(you: S8) -> (S8, Bool)
   return signed_sub_checked[S8](me, you)
 
-### Returns the product and whether it overflowed.
-### :param you: The other value to compare against.
-### :returns: The resulting `(S8, Bool)` value.
+### Returns the product and a flag indicating whether the result overflowed.
+### :param you: The right operand.
+### :returns: A tuple of `(wrapped_product, overflowed)`.
 routine S8.mul_with_overflow(you: S8) -> (S8, Bool)
   return signed_mul_checked[S8](me, you)
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
-### :returns: The resulting `S8` value.
+### Returns `me + you`, throwing on overflow.
+### :param you: The right operand.
+### :returns: The sum `me + you`.
+### :throws: {IntegerOverflowError} if the result is outside −128..127.
 routine S8.$add!(you: S8) -> S8
   var result = me.add_with_overflow(you)
   if result.item1
     throw IntegerOverflowError()
   return result.item0
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
-### :returns: The resulting `S8` value.
+### Returns `me - you`, throwing on overflow.
+### :param you: The value to subtract.
+### :returns: The difference `me - you`.
+### :throws: {IntegerOverflowError} if the result is outside −128..127.
 routine S8.$sub!(you: S8) -> S8
   var result = me.sub_with_overflow(you)
   if result.item1
     throw IntegerOverflowError()
   return result.item0
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
-### :returns: The resulting `S8` value.
+### Returns `me * you`, throwing on overflow.
+### :param you: The right operand.
+### :returns: The product `me * you`.
+### :throws: {IntegerOverflowError} if the result is outside −128..127.
 routine S8.$mul!(you: S8) -> S8
   var result = me.mul_with_overflow(you)
   if result.item1
     throw IntegerOverflowError()
   return result.item0
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
-### :returns: The resulting `S8` value.
-### :throws: May throw {DivisionByZeroError}.
+### Returns `me // you` (floor division), throwing on errors.
+### Floor division rounds toward negative infinity (unlike truncating division).
+### The special case `S8_MIN // -1` would overflow (result would be 128) and throws.
+### :param you: The divisor.
+### :returns: The floor quotient `me // you`.
+### :throws: {DivisionByZeroError} if `you == 0`.
+### :throws: {IntegerOverflowError} if `me == S8_MIN` and `you == -1`.
 routine S8.$floordiv!(you: S8) -> S8
   if you == 0
     throw DivisionByZeroError()
@@ -213,9 +227,10 @@ routine S8.$floordiv!(you: S8) -> S8
     return quotient + 1_s8
   return quotient
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
-### :returns: The resulting `S8` value.
+### Returns `me % you` (floor modulo), where the result sign matches `you`.
+### :param you: The divisor.
+### :returns: The floor modulo — result has the same sign as `you`.
+### :throws: {DivisionByZeroError} if `you == 0`.
 routine S8.$mod!(you: S8) -> S8
   if you == 0
     throw DivisionByZeroError()
@@ -226,8 +241,8 @@ routine S8.$mod!(you: S8) -> S8
     return remainder - you
   return remainder
 
-### Implements the wired routine behavior for this value.
-### :returns: The resulting `S8` value.
+### Returns `-me` (arithmetic negation), with wrapping behavior on `S8_MIN`.
+### :returns: The negated value. `-S8_MIN` wraps to `S8_MIN` (−128).
 routine S8.$neg!() -> S8
   return sub[S8](0, me)
 
@@ -235,21 +250,21 @@ routine S8.$neg!() -> S8
 # Wrapping Arithmetic (+%, -%, *%)
 # ============================================================================
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
-### :returns: The resulting `S8` value.
+### Returns `(me + you)` with wrapping arithmetic (mod 256, signed).
+### :param you: The right operand.
+### :returns: The sum, wrapping on overflow.
 routine S8.$add_wrap(you: S8) -> S8
   return add[S8](me, you)
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
-### :returns: The resulting `S8` value.
+### Returns `(me - you)` with wrapping arithmetic (mod 256, signed).
+### :param you: The value to subtract.
+### :returns: The difference, wrapping on underflow.
 routine S8.$sub_wrap(you: S8) -> S8
   return sub[S8](me, you)
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
-### :returns: The resulting `S8` value.
+### Returns `(me * you)` with wrapping arithmetic (mod 256, signed).
+### :param you: The right operand.
+### :returns: The product, wrapping on overflow.
 routine S8.$mul_wrap(you: S8) -> S8
   return mul[S8](me, you)
 
@@ -257,27 +272,27 @@ routine S8.$mul_wrap(you: S8) -> S8
 # Unchecked Arithmetic (+!, -!, *!, //!, %!)
 # ============================================================================
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
-### :returns: The resulting `S8` value.
+### Returns `me + you` with undefined behavior on overflow.
+### :param you: The right operand.
+### :returns: The sum, assuming no overflow.
 routine S8.$add_unchecked(you: S8) -> S8
   return signed_add_exact[S8](me, you)
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
-### :returns: The resulting `S8` value.
+### Returns `me - you` with undefined behavior on overflow.
+### :param you: The value to subtract.
+### :returns: The difference, assuming no overflow.
 routine S8.$sub_unchecked(you: S8) -> S8
   return signed_sub_exact[S8](me, you)
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
-### :returns: The resulting `S8` value.
+### Returns `me * you` with undefined behavior on overflow.
+### :param you: The right operand.
+### :returns: The product, assuming no overflow.
 routine S8.$mul_unchecked(you: S8) -> S8
   return signed_mul_exact[S8](me, you)
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
-### :returns: The resulting `S8` value.
+### Returns `me // you` (floor division) with undefined behavior if `you == 0` or overflow.
+### :param you: The divisor.
+### :returns: The floor quotient, assuming `you != 0` and no overflow.
 routine S8.$floordiv_unchecked(you: S8) -> S8
   var quotient = signed_div[S8](me, you)
   var remainder = signed_rem[S8](me, you)
@@ -287,9 +302,9 @@ routine S8.$floordiv_unchecked(you: S8) -> S8
     return quotient + 1_s8
   return quotient
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
-### :returns: The resulting `S8` value.
+### Returns `me % you` (floor modulo) with undefined behavior if `you == 0`.
+### :param you: The divisor.
+### :returns: The floor modulo, assuming `you != 0`.
 routine S8.$mod_unchecked(you: S8) -> S8
   var remainder = signed_rem[S8](me, you)
   if remainder < 0_s8
@@ -302,21 +317,21 @@ routine S8.$mod_unchecked(you: S8) -> S8
 # Clamping Arithmetic (+^, -^, *^)
 # ============================================================================
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
-### :returns: The resulting `S8` value.
+### Returns `me + you`, clamped to `S8_MAX` or `S8_MIN` on overflow.
+### :param you: The right operand.
+### :returns: The sum, or `127` / `−128` if it would overflow.
 routine S8.$add_clamp(you: S8) -> S8
   return signed_add_sat[S8](me, you)
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
-### :returns: The resulting `S8` value.
+### Returns `me - you`, clamped to `S8_MAX` or `S8_MIN` on overflow.
+### :param you: The value to subtract.
+### :returns: The difference, or `127` / `−128` if it would overflow.
 routine S8.$sub_clamp(you: S8) -> S8
   return signed_sub_sat[S8](me, you)
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
-### :returns: The resulting `S8` value.
+### Returns `me * you`, clamped to `S8_MAX` or `S8_MIN` on overflow.
+### :param you: The right operand.
+### :returns: The product, or `127` / `−128` if it would overflow.
 routine S8.$mul_clamp(you: S8) -> S8
   var wide = mul[S16](sign_extend[S8, S16](me), sign_extend[S8, S16](you))
   if signed_gt[S16](wide, 127_s16)
@@ -329,10 +344,11 @@ routine S8.$mul_clamp(you: S8) -> S8
 # Power Operations (**)
 # ============================================================================
 
-### Returns the power result and whether it overflowed.
-### :param exp: The exponent value.
-### :returns: The resulting `(S8, Bool)` value.
-### :throws: May throw {IndeterminateResultError}.
+### Returns `me ** exp` and a flag indicating whether the result overflowed.
+### :param exp: The exponent (must be non-negative).
+### :returns: A tuple of `(wrapped_result, overflowed)`.
+### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
+### :throws: {NegativeExponentError} if `exp < 0`.
 routine S8.pow_with_overflow!(exp: S8) -> (S8, Bool)
   var result: S8 = 1
   var base: S8 = me
@@ -354,20 +370,23 @@ routine S8.pow_with_overflow!(exp: S8) -> (S8, Bool)
       overflow = overflow or square_result.item1
   return (result, overflow)
 
-### Implements the wired routine behavior for this value.
-### :param exp: The exponent value.
-### :returns: The resulting `S8` value.
-### :throws: May throw {IndeterminateResultError}.
+### Returns `me ** exp`, throwing on overflow.
+### :param exp: The exponent (must be non-negative).
+### :returns: The result of raising `me` to the power `exp`.
+### :throws: {IntegerOverflowError} if the result is outside −128..127.
+### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
+### :throws: {NegativeExponentError} if `exp < 0`.
 routine S8.$pow!(exp: S8) -> S8
   var result = me.pow_with_overflow!(exp)
   if result.item1
     throw IntegerOverflowError()
   return result.item0
 
-### Implements the wired routine behavior for this value.
-### :param exp: The exponent value.
-### :returns: The resulting `S8` value.
-### :throws: May throw {IndeterminateResultError}.
+### Returns `me ** exp` with wrapping arithmetic.
+### :param exp: The exponent (must be non-negative).
+### :returns: The result modulo 256 (signed wrap).
+### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
+### :throws: {NegativeExponentError} if `exp < 0`.
 routine S8.$pow_wrap!(exp: S8) -> S8
   var result: S8 = 1
   var base: S8 = me
@@ -384,10 +403,11 @@ routine S8.$pow_wrap!(exp: S8) -> S8
       base = base.$mul_wrap(base)
   return result
 
-### Implements the wired routine behavior for this value.
-### :param exp: The exponent value.
-### :returns: The resulting `S8` value.
-### :throws: May throw {IndeterminateResultError}.
+### Returns `me ** exp`, clamped to `S8_MAX` or `S8_MIN` on overflow.
+### :param exp: The exponent (must be non-negative).
+### :returns: The result, or `127` / `−128` if it would overflow.
+### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
+### :throws: {NegativeExponentError} if `exp < 0`.
 routine S8.$pow_clamp!(exp: S8) -> S8
   var result: S8 = 1
   var base: S8 = me
@@ -408,26 +428,26 @@ routine S8.$pow_clamp!(exp: S8) -> S8
 # Bitwise Operations
 # ============================================================================
 
-### Returns the result of the requested bitwise operation.
-### :param you: The other value to compare against.
-### :returns: The resulting `S8` value.
+### Returns the bitwise AND of this value and `you`.
+### :param you: The right operand.
+### :returns: `me & you`.
 routine S8.$bitand(you: S8) -> S8
   return bit_and[S8](me, you)
 
-### Returns the result of the requested bitwise operation.
-### :param you: The other value to compare against.
-### :returns: The resulting `S8` value.
+### Returns the bitwise OR of this value and `you`.
+### :param you: The right operand.
+### :returns: `me | you`.
 routine S8.$bitor(you: S8) -> S8
   return bit_or[S8](me, you)
 
-### Returns the result of the requested bitwise operation.
-### :param you: The other value to compare against.
-### :returns: The resulting `S8` value.
+### Returns the bitwise XOR of this value and `you`.
+### :param you: The right operand.
+### :returns: `me ^ you`.
 routine S8.$bitxor(you: S8) -> S8
   return bit_xor[S8](me, you)
 
-### Returns the result of the requested bitwise operation.
-### :returns: The resulting `S8` value.
+### Returns the bitwise complement of this value.
+### :returns: `~me` — each bit flipped.
 routine S8.$bitnot() -> S8
   return bit_xor[S8](me, -1)
 
@@ -435,27 +455,27 @@ routine S8.$bitnot() -> S8
 # Shift Operations (<<, >>, <<<, >>>)
 # ============================================================================
 
-### Implements the wired routine behavior for this value.
-### :param bits: The encoded bit pattern.
-### :returns: The resulting `S8` value.
+### Left-shifts this value by `bits` positions, filling vacated bits with zero.
+### :param bits: The number of bit positions to shift left.
+### :returns: `me << bits`.
 routine S8.$ashl(bits: U32) -> S8
   return shift_left[S8](me, S8(bits))
 
-### Implements the wired routine behavior for this value.
-### :param bits: The encoded bit pattern.
-### :returns: The resulting `S8` value.
+### Right-shifts this value by `bits` positions, sign-filling (arithmetic shift right).
+### :param bits: The number of bit positions to shift right.
+### :returns: `me >> bits`, copying the sign bit into vacated positions.
 routine S8.$ashr(bits: U32) -> S8
   return shift_right_signed[S8](me, S8(bits))
 
-### Implements the wired routine behavior for this value.
-### :param bits: The encoded bit pattern.
-### :returns: The resulting `S8` value.
+### Left-shifts this value by `bits` positions (same as `$ashl` for signed integers).
+### :param bits: The number of bit positions to shift left.
+### :returns: `me << bits`.
 routine S8.$lshl(bits: U32) -> S8
   return shift_left[S8](me, S8(bits))
 
-### Implements the wired routine behavior for this value.
-### :param bits: The encoded bit pattern.
-### :returns: The resulting `S8` value.
+### Right-shifts this value by `bits` positions, zero-filling (logical shift right).
+### :param bits: The number of bit positions to shift right.
+### :returns: `me >>> bits`, filling vacated bits with zero regardless of sign.
 routine S8.$lshr(bits: U32) -> S8
   return shift_right_unsigned[S8](me, S8(bits))
 
@@ -463,15 +483,15 @@ routine S8.$lshr(bits: U32) -> S8
 # Comparison Operations
 # ============================================================================
 
-### Returns whether both values are equal.
-### :param you: The other value to compare against.
-### :returns: The resulting `Bool` value.
+### Returns `true` when both values are equal.
+### :param you: The value to compare against.
+### :returns: `true` if `me == you`; `false` otherwise.
 routine S8.$eq(you: S8) -> Bool
   return int_eq[S8](me, you)
 
-### Compares this value with the other value.
-### :param you: The other value to compare against.
-### :returns: The resulting `ComparisonSign` value.
+### Compares this value with `you`, returning the ordering relationship.
+### :param you: The value to compare against.
+### :returns: `ME_SMALL` if `me < you`, `ME_LARGE` if `me > you`, `SAME` if equal.
 routine S8.$cmp(you: S8) -> ComparisonSign
   if signed_lt[S8](me, you)
     return ME_SMALL
@@ -483,27 +503,27 @@ routine S8.$cmp(you: S8) -> ComparisonSign
 # Math Operations
 # ============================================================================
 
-### Returns the absolute value.
-### :returns: The resulting `S8` value.
+### Returns the absolute value of this integer.
+### :returns: `-me` if `me < 0`; `me` if `me >= 0`. Behavior is undefined for `S8_MIN`.
 routine S8.abs() -> S8
   return int_abs[S8](me)
 
-### Returns the result of `min`.
-### :param you: The other value to compare against.
-### :returns: The resulting `S8` value.
+### Returns the smaller of this value and `you`.
+### :param you: The value to compare against.
+### :returns: `me` if `me <= you`; otherwise `you`.
 routine S8.min(you: S8) -> S8
   return if me <= you then me else you
 
-### Returns the result of `max`.
-### :param you: The other value to compare against.
-### :returns: The resulting `S8` value.
+### Returns the larger of this value and `you`.
+### :param you: The value to compare against.
+### :returns: `me` if `me >= you`; otherwise `you`.
 routine S8.max(you: S8) -> S8
   return if me >= you then me else you
 
-### Returns the result of `clamp`.
-### :param min_val: The `min_val` value.
-### :param max_val: The `max_val` value.
-### :returns: The resulting `S8` value.
+### Returns this value clamped to the range `min_val..=max_val`.
+### :param min_val: The lower bound (inclusive).
+### :param max_val: The upper bound (inclusive).
+### :returns: `min_val` if `me < min_val`; `max_val` if `me > max_val`; otherwise `me`.
 routine S8.clamp(min_val: S8, max_val: S8) -> S8
   return me.min(max_val).max(min_val)
 
@@ -511,38 +531,38 @@ routine S8.clamp(min_val: S8, max_val: S8) -> S8
 # Bit Manipulation
 # ============================================================================
 
-### Returns the number of stored values.
-### :returns: The resulting `S8` value.
+### Returns the count of set bits (popcount) in this value's 8-bit representation.
+### :returns: The number of `1` bits; between 0 and 8.
 routine S8.count_ones() -> S8
   return count_ones[S8](me)
 
-### Returns the number of stored values.
-### :returns: The resulting `S8` value.
+### Returns the count of clear bits in this value's 8-bit representation.
+### :returns: `8` minus the popcount; between 0 and 8.
 routine S8.count_zeros() -> S8
   return 8_s8 -% me.count_ones()
 
-### Returns the result of `leading zeros`.
-### :returns: The resulting `S8` value.
+### Returns the number of leading zero bits, starting from the most-significant bit.
+### :returns: The leading zero count; `8` if the value is zero.
 routine S8.leading_zeros() -> S8
   return leading_zeros[S8](me)
 
-### Returns the result of `trailing zeros`.
-### :returns: The resulting `S8` value.
+### Returns the number of trailing zero bits, starting from the least-significant bit.
+### :returns: The trailing zero count; `8` if the value is zero.
 routine S8.trailing_zeros() -> S8
   return trailing_zeros[S8](me)
 
-### Returns the result of `leading ones`.
-### :returns: The resulting `S8` value.
+### Returns the number of leading one bits, starting from the most-significant bit.
+### :returns: The leading one count; `8` if the value is `−1` (all bits set).
 routine S8.leading_ones() -> S8
   return me.$bitnot().leading_zeros()
 
-### Returns the result of `trailing ones`.
-### :returns: The resulting `S8` value.
+### Returns the number of trailing one bits, starting from the least-significant bit.
+### :returns: The trailing one count; `8` if the value is `−1` (all bits set).
 routine S8.trailing_ones() -> S8
   return me.$bitnot().trailing_zeros()
 
-### Returns the result of `reverse bits`.
-### :returns: The resulting `S8` value.
+### Returns this value with its bits reversed (bit 7 ↔ bit 0, etc.).
+### :returns: The bit-reversed `S8`.
 routine S8.reverse_bits() -> S8
   return reverse_bits[S8](me)
 
@@ -550,34 +570,34 @@ routine S8.reverse_bits() -> S8
 # Utility Methods
 # ============================================================================
 
-### Returns true if this value is positive.
-### :returns: The resulting `Bool` value.
+### Returns `true` if this value is greater than zero.
+### :returns: `true` if `me > 0`.
 routine S8.is_positive() -> Bool
   return me > 0_s8
 
-### Returns true if this value is negative.
-### :returns: The resulting `Bool` value.
+### Returns `true` if this value is less than zero.
+### :returns: `true` if `me < 0`.
 routine S8.is_negative() -> Bool
   return me < 0_s8
 
-### Returns true if this value is zero.
-### :returns: The resulting `Bool` value.
+### Returns `true` if this value is zero.
+### :returns: `true` if `me == 0`.
 routine S8.is_zero() -> Bool
   return me == 0_s8
 
-### Returns true if this value is even.
-### :returns: The resulting `Bool` value.
+### Returns `true` if this value is divisible by 2.
+### :returns: `true` if the least-significant bit is 0.
 routine S8.is_even() -> Bool
   var result = bit_and[S8](me, 1_s8)
   return int_eq[S8](result, 0_s8)
 
-### Returns true if this value is odd.
-### :returns: The resulting `Bool` value.
+### Returns `true` if this value is not divisible by 2.
+### :returns: `true` if the least-significant bit is 1.
 routine S8.is_odd() -> Bool
   return not me.is_even()
 
-### Returns the result of `signum`.
-### :returns: The resulting `S8` value.
+### Returns the sign of this value as −1, 0, or 1.
+### :returns: `1` if `me > 0`, `−1` if `me < 0`, `0` if `me == 0`.
 routine S8.signum() -> S8
   return when
     me > 0_s8 => 1_s8
@@ -588,20 +608,16 @@ routine S8.signum() -> S8
 # Text Representation and Parsing
 # ============================================================================
 
-### Returns the textual representation of this value.
-### :returns: The resulting `Text` value.
 routine S8.$represent() -> Text
   return S32(me).$represent()
 
-### Returns the textual representation of this value.
-### :returns: The resulting `Text` value.
 routine S8.$diagnose() -> Text
   return "S8(" + me.$represent() + ")"
 
-### Implements the wired routine behavior for this value.
-### :param from_text: The `from_text` value.
-### :returns: The resulting `S8` value.
-### :throws: May throw {InvalidValueError}.
+### Parses a decimal string into an `S8`, accepting an optional leading `+` or `−` sign.
+### :param from_text: The decimal string to parse.
+### :returns: The parsed `S8` value.
+### :throws: {InvalidValueError} if `from_text` is empty, sign-only, or contains non-digit characters.
 routine S8.$create!(from_text: Text) -> S8
   if from_text.count() == 0u64
     throw InvalidValueError(input: from_text, target: "S8")
@@ -627,18 +643,19 @@ routine S8.$create!(from_text: Text) -> S8
   if negative
     return S8(0u32 - result)
   return S8(result)
+
 # ============================================================================
 # Hashing
 # ============================================================================
 
-### Returns a hash of this value.
-### :returns: The resulting `U64` value.
+### Returns an xxHash64-based hash of this value.
+### :returns: A `U64` hash of the zero-extended 8-bit representation.
 routine S8.$hash() -> U64
   return __hash_leaf(v: zero_extend[S8, U64](me))
 
-### Returns a keyed hash of this value using SipHash-2-4.
+### Returns a SipHash-2-4 keyed hash of this value.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
-### :returns: The resulting `U64` value.
+### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
 routine S8.$secure_hash(k0: U64, k1: U64) -> U64
   return __secure_hash_u64(v: zero_extend[S8, U64](me), k0: k0, k1: k1)

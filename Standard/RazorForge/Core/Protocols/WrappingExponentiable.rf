@@ -1,10 +1,13 @@
-# WrappingExponentiable - Protocol for types that support wrapping exponentiation (**%)
 module Core
 
-### Defines the protocol `WrappingExponentiable`.
+### Represents the protocol for modulo-width exponentiation.
+### `WrappingExponentiable` is for bounded numeric types whose power operation
+### keeps only the representable low bits of an overflowing result.
 protocol WrappingExponentiable
-  ### Implements the wired routine behavior for this value.
-  ### :param you: The other value to compare against.
+  ### Returns the wrapping power result of this value raised by `you`.
+  ### Overflow is reduced modulo the destination bit width rather than reported
+  ### as failure.
+  ### :param you: The exponent value.
   ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$pow_wrap(you: Me) -> Me

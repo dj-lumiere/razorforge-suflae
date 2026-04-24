@@ -1,44 +1,57 @@
 module Core
 
-### Defines the record `Task`.
-### :typeparam T: The value used for `T`.
+### Represents an opaque runtime task handle.
+### `Task[T]` identifies an asynchronous computation whose eventual result type is `T`.
+### The handle itself is pointer-backed and is meaningful to the task runtime rather than to user code as raw memory.
+### :typeparam T: The result type associated with the task.
+### :see: {Concurrency-Primitives}, {Concurrency-Patterns}
 @llvm("ptr")
 record Task[T]
   pass
 
-### Returns the address component.
+### Returns the raw runtime address stored by this task handle.
+### This is a low-level escape hatch for runtime integration and should not be
+### treated as a user-stable identifier.
 ### :returns: The resulting `Address` value.
 dangerous routine Task[T].get_address() -> Address
   return pointer_to_int[Task[T], Address](me)
 
-### Creates a new instance.
-### :param from: The source value to convert.
+### Reinterprets a raw address as `Task[T]`.
+### This does not validate that the address actually refers to a live task of
+### the requested result type.
+### :param from: The task runtime address to wrap.
 ### :returns: The resulting `Task[T]` value.
 dangerous routine Task[T].$create(from: Address) -> Task[T]
   return int_to_pointer[Address, Task[T]](from)
 
-### Returns the result of `task none`.
+### Returns the null task handle.
+### This is the task-handle equivalent of an absent pointer value.
 ### :returns: The resulting `Task[T]` value.
 routine task_none[T]() -> Task[T]
   return Task[T](0_addr)
 
-### Returns true if this value is none.
+### Returns `true` when this task handle is the null sentinel.
 ### :returns: The resulting `Bool` value.
 routine Task[T].is_none() -> Bool
   return int_eq[Task[T]](me, task_none[T]())
 
-### Returns the result of `id`.
+### Returns the runtime task id associated with this handle.
+### This identifier is suitable for diagnostics and runtime coordination, not
+### for reconstructing a task handle.
 ### :returns: The resulting `U64` value.
 routine Task[T].id() -> U64
   return rf_task_id(me.get_address())
 
-### Returns the textual representation of this value.
+### Returns the display form of this task handle.
+### The display form intentionally keeps output concise and type-oriented.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Task[T].$represent() -> Text
   return me.type_name()
 
-### Returns the textual representation of this value.
+### Returns the diagnostic form of this task handle.
+### This includes the runtime task id so logs can distinguish between handles of
+### the same type.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Task[T].$diagnose() -> Text

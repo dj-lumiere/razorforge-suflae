@@ -1,17 +1,15 @@
-# RazorForge MultiRead (Read-Write Lock) Policy
-# Allows multiple concurrent readers OR one exclusive writer
-# Equivalent to std::shared_mutex or pthread_rwlock
-
 module Core
 
-### Defines the record `MultiRead`.
+### Represents a reader-writer lock policy with shared reads and exclusive writes.
+### `MultiRead` allows multiple concurrent readers or one writer, but never both at the same time.
+### :see: {Exclusive}, {ReadOnly}, {Lock-Policies}
 record MultiRead obeys LockPolicy
-  ### Stores the readers member value.
+  ### Stores the number of active readers.
   secret readers: Atomic[S32]  # Number of active readers
-  ### Stores the writer member value.
+  ### Stores whether a writer currently holds the lock.
   secret writer: Atomic[Bool]  # Is a writer active?
 
-### Creates a new instance.
+### Creates an unlocked reader-writer policy.
 ### :returns: The resulting `MultiRead` value.
 routine MultiRead.$create() -> MultiRead
   return MultiRead(
@@ -19,7 +17,7 @@ routine MultiRead.$create() -> MultiRead
     writer: Atomic(false)
   )
 
-### Executes `acquire read`.
+### Blocks until a shared read lock is acquired.
 routine MultiRead.acquire_read()
   loop
     # Wait for no writer
@@ -37,8 +35,8 @@ routine MultiRead.acquire_read()
       == true => pass  # Writer active, keep waiting
   return
 
-### Returns the result of `acquire read`.
-### :returns: The resulting `Bool` value.
+### Tries to acquire a shared read lock without blocking.
+### :returns: `true` if the read lock was acquired, `false` if a writer is currently active.
 routine MultiRead.acquire_read!() -> Bool
   when me.writer.load()
     == false =>
@@ -50,12 +48,12 @@ routine MultiRead.acquire_read!() -> Bool
           return false
     == true => return false
 
-### Executes `release read`.
+### Releases one held read lock.
 routine MultiRead.release_read()
   me.readers.fetch_sub(1)
   return
 
-### Executes `acquire write`.
+### Blocks until an exclusive write lock is acquired.
 routine MultiRead.acquire_write()
   # First, acquire writer flag
   loop
@@ -70,8 +68,8 @@ routine MultiRead.acquire_write()
       else => pass    # Wait for readers to finish
   return
 
-### Returns the result of `acquire write`.
-### :returns: The resulting `Bool` value.
+### Tries to acquire an exclusive write lock without blocking.
+### :returns: `true` if the write lock was acquired, `false` if a writer is active or readers are present.
 routine MultiRead.acquire_write!() -> Bool
   # Try to acquire writer flag
   when me.writer.compare_exchange(expected: false, desired: true)
@@ -85,22 +83,22 @@ routine MultiRead.acquire_write!() -> Bool
           return false
     == false => return false  # Another writer has it
 
-### Executes `release write`.
+### Releases the held write lock.
 routine MultiRead.release_write()
   me.writer.store(false)
   return
 
-### Returns the result of `reader count`.
-### :returns: The resulting `S32` value.
+### Returns the number of threads currently holding a shared read lock.
+### :returns: The active reader count.
 routine MultiRead.reader_count() -> S32
   return me.readers.load()
 
-### Returns true if this value is write locked.
-### :returns: The resulting `Bool` value.
+### Returns `true` if a writer currently holds the exclusive write lock.
+### :returns: `true` if the write lock is active.
 routine MultiRead.is_write_locked() -> Bool
   return me.writer.load()
 
-### Returns the result of `state`.
+### Returns the current lock state for this policy.
 ### :returns: The resulting `LockState` value.
 routine MultiRead.state() -> LockState
   if me.writer.load()

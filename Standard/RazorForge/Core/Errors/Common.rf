@@ -1,43 +1,52 @@
 module Core
 
-# Common Error Types
-#
-# Built-in error types for common runtime errors.
-# All error types are crashables.
-
-### Defines the record `AbsentValueError`.
+### Represents the crashable raised when code tries to consume an absent optional
+### result as though a value were present.
 crashable AbsentValueError
   pass
 
+### Returns the default message for absent-value failures.
+### :returns: The resulting `Text` value.
 routine AbsentValueError.crash_message() -> Text
   return "Attempted to access a value that is absent."
 
-### Defines the record `UserTerminationError`.
+### Represents the crashable used when program execution is terminated by the
+### user or hosting environment.
 crashable UserTerminationError
   pass
 
+### Returns the default message for user-requested termination.
+### :returns: The resulting `Text` value.
 routine UserTerminationError.crash_message() -> Text
   return "Program was stopped by user."
 
-### Defines the record `VerificationFailedError`.
+### Represents the crashable raised when a runtime verification check fails.
+### This is used by generic verification surfaces that enforce invariants and
+### preconditions explicitly.
 crashable VerificationFailedError
   pass
 
+### Returns the default message for verification failures.
+### :returns: The resulting `Text` value.
 routine VerificationFailedError.crash_message() -> Text
   return "A verification check failed."
 
-### Defines the record `LogicBreachedError`.
+### Represents the crashable raised when code reaches a state that should be
+### impossible if surrounding logic is correct.
 crashable LogicBreachedError
   pass
 
+### Returns the default message for breached logic invariants.
+### :returns: The resulting `Text` value.
 routine LogicBreachedError.crash_message() -> Text
   return "A logic breach was detected."
 
-### Defines the record `KeyNotFoundError`.
+### Represents the crashable raised when a lookup cannot find a requested key.
 crashable KeyNotFoundError
+  ### Stores the key that could not be resolved.
   key: Text
 
-### Returns the result of `crash message`.
+### Returns the default message for failed keyed lookup.
 ### :returns: The resulting `Text` value.
 routine KeyNotFoundError.crash_message() -> Text
   return f"Key not found: {me.key}"

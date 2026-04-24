@@ -1,26 +1,8 @@
-# Referring[T] - Protocol for wrappers that transparently forward T's read API.
-#
-# A routine parameter typed `Referring[T]` accepts any wrapper whose underlying
-# T's `@readonly` member routines can be dispatched directly. This collapses
-# what would otherwise require per-wrapper overloads into a single signature.
-#
-# Members (obey Referring[T]):
-#   - floating T (rvalue)
-#   - Owned[T]
-#   - Viewed[T]
-#   - Grasped[T]
-#   - Retained[T]
-#   - Claimed[T]
-#   - Inspected[T]
-#
-# Non-members:
-#   - Shared[T, P], Tracked[T], Marked[T, P]  -- gateway types (require
-#     .try_recover() / using .claim!() to reach the API).
-#   - Hijacked[T]  -- raw unmanaged pointer; no transparent proxy.
 module Core
 
-### Protocol of wrappers that transparently forward `T`'s read API.
-### Parameter slot for "any reference to a T I only need to read".
+### Represents wrappers that transparently forward the read API of an entity.
+### `Referring[T]` is the borrowed read-only abstraction used when an API needs
+### safe access to an entity without transferring ownership.
 ### :typeparam T: The referenced entity type.
 protocol Referring[T]
 needs T is EntityType

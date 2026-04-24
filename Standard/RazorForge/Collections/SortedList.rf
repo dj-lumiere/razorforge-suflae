@@ -1,5 +1,3 @@
-# RazorForge SortedList[T] - B-tree based sorted list with duplicates
-# Entity type; keys/children stored inline as Array with explicit count.
 module Collections
 
 import BuilderService
@@ -7,8 +5,9 @@ import BuilderService
 preset B_LIST: U64 = 64u64
 preset MIN_KEYS_LIST: U64 = 31u64
 
-### Defines the entity `BTreeListNode`.
-### :typeparam T: The value used for `T`.
+### Internal B-tree node for {SortedList[T]}.
+### Stores up to 63 ordered keys, up to 64 child pointers, and a cached subtree element count.
+### :typeparam T: The stored element type.
 entity BTreeListNode[T]
 needs T obeys Comparable
   keys: Array[T, 63]
@@ -18,8 +17,34 @@ needs T obeys Comparable
   subtree_size: U64
   is_leaf: Bool
 
-### Defines the entity `SortedList`.
-### :typeparam T: The value used for `T`.
+### A sorted list that preserves duplicate elements, backed by a B-tree.
+###
+### `SortedList[T]` automatically maintains elements in ascending order on every insert and
+### remove. Unlike {List[T]}, you cannot append at an arbitrary position — elements always
+### land in their sorted slot. Unlike {SortedSet[T]}, duplicate values are allowed and each
+### copy is stored independently.
+###
+### **When to use**
+### - You need a sorted sequence that allows duplicates.
+### - You need O(log n) rank-based indexed access (`list[3]` gives the 4th smallest element).
+### - You need efficient range queries: all elements between two bounds.
+### - You need `count_of` to count how many times a value appears.
+###
+### **Complexity**
+### | Operation | Time |
+### |---|---|
+### | `add` | O(log n) |
+### | `remove` / `remove_all` | O(log n) per removal |
+### | `$contains` | O(log n) |
+### | `count_of` | O(k + log n), k = occurrences |
+### | `[]` indexed access | O(log n) |
+### | `range` | O(k + log n), k = results |
+### | `min!` / `max!` | O(log n) |
+### | Iteration | O(n) |
+###
+### :typeparam T: The stored element type. Must obey {Comparable}.
+### :see: {SortedSet[T]} for a duplicate-free sorted collection.
+### :see: {SortedDict[K, V]} for sorted key-value storage.
 entity SortedList[T] obeys Iterable[T]
 needs T obeys Comparable
   secret root: Owned[BTreeListNode[T]]?
@@ -29,48 +54,75 @@ needs T obeys Comparable
 # Node buffer helpers
 # ============================================================================
 
+### Returns the number of keys currently stored in this node.
+### :returns: The key count.
 routine BTreeListNode[T].keys_count() -> U64
   return me.key_count
 
+### Returns the number of child pointers currently stored in this node.
+### :returns: The child count.
 routine BTreeListNode[T].children_count() -> U64
   return me.child_count
 
+### Returns a raw pointer to the start of the keys buffer.
+### :returns: A {Hijacked[T]} pointing to the first key slot.
 dangerous routine BTreeListNode[T].keys_base() -> Hijacked[T]
   return me.hijack().recast_as[T]()
 
+### Returns a raw pointer to the start of the children buffer, offset past the keys region.
+### :returns: A {Hijacked[BTreeListNode[T]]} pointing to the first child slot.
 dangerous routine BTreeListNode[T].children_base() -> Hijacked[BTreeListNode[T]]
   return me.hijack().recast_as[T]().stride(count: 63_s64).recast_as[BTreeListNode[T]]()
 
+### Returns the key at slot `i`.
+### :param i: Zero-based key index.
+### :returns: The key value at position `i`.
 routine BTreeListNode[T].keys_get(i: U64) -> T
   danger!
     return me.keys_base().stride(count: i.S64()).extract()
 
+### Writes `value` to the key slot at position `i`.
+### :param i: Zero-based key index.
+### :param value: The key value to store.
 routine BTreeListNode[T].keys_set(i: U64, value: T)
   danger!
     me.keys_base().stride(count: i.S64()).inject(value: value)
   return
 
+### Returns the child node at slot `i`.
+### :param i: Zero-based child index.
+### :returns: The child node at position `i`.
 routine BTreeListNode[T].children_get(i: U64) -> BTreeListNode[T]
   danger!
     return me.children_base().stride(count: i.S64()).extract()
 
+### Writes `value` to the child slot at position `i`.
+### :param i: Zero-based child index.
+### :param value: The child node to store.
 routine BTreeListNode[T].children_set(i: U64, value: BTreeListNode[T])
   danger!
     me.children_base().stride(count: i.S64()).inject(value: value)
   return
 
+### Appends `value` after the last key and increments the key count.
+### :param value: The key to append.
 routine BTreeListNode[T].keys_add_last(value: T)
   danger!
     me.keys_base().stride(count: me.key_count.S64()).inject(value: value)
   me.key_count = me.key_count +% 1u64
   return
 
+### Appends `value` after the last child pointer and increments the child count.
+### :param value: The child node to append.
 routine BTreeListNode[T].children_add_last(value: BTreeListNode[T])
   danger!
     me.children_base().stride(count: me.child_count.S64()).inject(value: value)
   me.child_count = me.child_count +% 1u64
   return
 
+### Inserts `value` at position `i` in the keys buffer, shifting later keys right by one.
+### :param i: Zero-based insertion index.
+### :param value: The key to insert.
 routine BTreeListNode[T].keys_add_at(i: U64, value: T)
   danger!
     var base = me.keys_base()
@@ -84,6 +136,9 @@ routine BTreeListNode[T].keys_add_at(i: U64, value: T)
   me.key_count = me.key_count +% 1u64
   return
 
+### Inserts `value` at position `i` in the children buffer, shifting later pointers right by one.
+### :param i: Zero-based insertion index.
+### :param value: The child node to insert.
 routine BTreeListNode[T].children_add_at(i: U64, value: BTreeListNode[T])
   danger!
     var base = me.children_base()
@@ -97,6 +152,8 @@ routine BTreeListNode[T].children_add_at(i: U64, value: BTreeListNode[T])
   me.child_count = me.child_count +% 1u64
   return
 
+### Removes the key at position `i`, shifting later keys left by one.
+### :param i: Zero-based index of the key to remove.
 routine BTreeListNode[T].keys_remove_at(i: U64)
   danger!
     if i +% 1u64 < me.key_count
@@ -109,6 +166,8 @@ routine BTreeListNode[T].keys_remove_at(i: U64)
   me.key_count = me.key_count -% 1u64
   return
 
+### Removes the child pointer at position `i`, shifting later pointers left by one.
+### :param i: Zero-based index of the child to remove.
 routine BTreeListNode[T].children_remove_at(i: U64)
   danger!
     if i +% 1u64 < me.child_count
@@ -121,22 +180,32 @@ routine BTreeListNode[T].children_remove_at(i: U64)
   me.child_count = me.child_count -% 1u64
   return
 
+### Decrements the key count, logically removing the last key without zeroing memory.
 routine BTreeListNode[T].keys_remove_last()
   me.key_count = me.key_count -% 1u64
   return
 
+### Decrements the child count, logically removing the last child pointer without zeroing memory.
 routine BTreeListNode[T].children_remove_last()
   me.child_count = me.child_count -% 1u64
   return
 
+### Sets the key count to `n`, discarding all keys at or after index `n`.
+### :param n: The new key count.
 routine BTreeListNode[T].keys_truncate(n: U64)
   me.key_count = n
   return
 
+### Sets the child count to `n`, discarding all children at or after index `n`.
+### :param n: The new child count.
 routine BTreeListNode[T].children_truncate(n: U64)
   me.child_count = n
   return
 
+### Bulk-copies `count` keys from `other` starting at `start` into this node's keys buffer.
+### :param other: The source node to copy from.
+### :param start: Zero-based start index in `other`.
+### :param count: Number of keys to copy.
 routine BTreeListNode[T].keys_add_range_from(other: BTreeListNode[T], start: U64, count: U64)
   if count > 0u64
     danger!
@@ -147,6 +216,10 @@ routine BTreeListNode[T].keys_add_range_from(other: BTreeListNode[T], start: U64
   me.key_count = me.key_count +% count
   return
 
+### Bulk-copies `count` child pointers from `other` starting at `start` into this node's children buffer.
+### :param other: The source node to copy from.
+### :param start: Zero-based start index in `other`.
+### :param count: Number of child pointers to copy.
 routine BTreeListNode[T].children_add_range_from(other: BTreeListNode[T], start: U64, count: U64)
   if count > 0u64
     danger!
@@ -187,12 +260,17 @@ routine SortedList[T].$create(values...: T) -> SortedList[T]
 # Core
 # ============================================================================
 
+### Returns the total number of elements in this list, counting duplicates separately.
+### :returns: The element count.
 routine SortedList[T].count() -> U64
   return me.count
 
+### Returns true if this list contains no elements.
+### :returns: `true` when `count()` is zero.
 routine SortedList[T].is_empty() -> Bool
   return me.count == 0u64
 
+### Removes all elements, resetting the list to an empty state.
 routine SortedList[T].clear()
   me.root = None
   me.count = 0u64
@@ -202,12 +280,19 @@ routine SortedList[T].clear()
 # Search
 # ============================================================================
 
+### Returns true if `value` appears at least once in this list.
+### :param value: The value to search for.
+### :returns: `true` if the value is present.
 @readonly
 routine SortedList[T].$contains(value: T) -> Bool
   if me.root is None
     return false
   return me.search_node(me.root!!, value)
 
+### Descends the subtree rooted at `node` to find `value`.
+### :param node: The subtree root to search.
+### :param value: The value to find.
+### :returns: `true` if found anywhere in the subtree.
 @inline
 routine SortedList[T].search_node(node: BTreeListNode[T], value: T) -> Bool
   var i = me.lower_bound(node, value)
@@ -217,11 +302,18 @@ routine SortedList[T].search_node(node: BTreeListNode[T], value: T) -> Bool
     return false
   return me.search_node(node.children_get(i), value)
 
+### Returns the number of times `value` appears in this list.
+### :param value: The value to count.
+### :returns: The occurrence count; zero if the value is not present.
 routine SortedList[T].count_of(value: T) -> U64
   if me.root is None
     return 0u64
   return me.count_in_node(me.root!!, value)
 
+### Counts occurrences of `value` in the subtree rooted at `node`.
+### :param node: The subtree root to search.
+### :param value: The value to count.
+### :returns: Number of occurrences found in the subtree.
 routine SortedList[T].count_in_node(node: BTreeListNode[T], value: T) -> U64
   var count = 0u64
   var i = 0u64
@@ -235,6 +327,10 @@ routine SortedList[T].count_in_node(node: BTreeListNode[T], value: T) -> U64
     count = count +% me.count_in_node(node.children_get(node.children_count() -% 1u64), value)
   return count
 
+### Binary search: returns the leftmost index where `node.keys[i] >= value`.
+### :param node: The node whose keys are searched.
+### :param value: The target value.
+### :returns: Smallest index `i` where `node.keys[i] >= value`, or `keys_count()` if all keys are smaller.
 @inline
 routine SortedList[T].lower_bound(node: BTreeListNode[T], value: T) -> U64
   var lo = 0u64
@@ -247,6 +343,10 @@ routine SortedList[T].lower_bound(node: BTreeListNode[T], value: T) -> U64
       hi = mid
   return lo
 
+### Binary search: returns the leftmost index where `node.keys[i] > value`.
+### :param node: The node whose keys are searched.
+### :param value: The target value.
+### :returns: Smallest index `i` where `node.keys[i] > value`, or `keys_count()` if all keys are `<= value`.
 @inline
 routine SortedList[T].upper_bound(node: BTreeListNode[T], value: T) -> U64
   var lo = 0u64
@@ -263,6 +363,8 @@ routine SortedList[T].upper_bound(node: BTreeListNode[T], value: T) -> U64
 # Insert
 # ============================================================================
 
+### Inserts `value` into the list in sorted order, allowing duplicates.
+### :param value: The element to insert.
 routine SortedList[T].add(value: T)
   if me.root is None
     me.root = BTreeListNode[T](is_leaf: true)
@@ -276,13 +378,16 @@ routine SortedList[T].add(value: T)
     var new_root = BTreeListNode[T](is_leaf: false)
     new_root.children_add_last(old_root)
     me.split_child(new_root, 0u64)
-    me.root = new_root
+    me.root = steal new_root
     new_root.subtree_size = new_root.children_get(0u64).subtree_size +% new_root.children_get(1u64).subtree_size +% 1u64
 
   me.insert_non_full(me.root!!, value)
   me.count = me.count +% 1u64
   return
 
+### Inserts `value` into `node`, which must have at least one free key slot.
+### :param node: A non-full node to insert into.
+### :param value: The element to insert.
 @inline
 routine SortedList[T].insert_non_full(node: BTreeListNode[T], value: T)
   if node.is_leaf
@@ -299,6 +404,9 @@ routine SortedList[T].insert_non_full(node: BTreeListNode[T], value: T)
     node.subtree_size = node.subtree_size +% 1u64
   return
 
+### Splits the full child at index `child_idx`, promoting its median key up to `parent_node`.
+### :param parent_node: The parent node that owns the full child.
+### :param child_idx: Index of the full child within `parent_node`'s children buffer.
 @inline
 routine SortedList[T].split_child(parent_node: BTreeListNode[T], child_idx: U64)
   var child = parent_node.children_get(child_idx)
@@ -333,13 +441,17 @@ routine SortedList[T].split_child(parent_node: BTreeListNode[T], child_idx: U64)
     new_node.subtree_size = right_size
 
   parent_node.keys_add_at(child_idx, mid_key)
-  parent_node.children_add_at(child_idx +% 1u64, new_node)
+  parent_node.children_add_at(child_idx +% 1u64, steal new_node)
   return
 
 # ============================================================================
 # Remove
 # ============================================================================
 
+### Removes one occurrence of `value` from the list.
+### If the value appears multiple times, only one copy is removed.
+### :param value: The value to remove.
+### :returns: `true` if a matching element was found and removed; `false` if not present.
 routine SortedList[T].remove(value: T) -> Bool
   if me.root is None
     return false
@@ -353,6 +465,10 @@ routine SortedList[T].remove(value: T) -> Bool
       me.root = None
   return removed
 
+### Descends `node` to delete one occurrence of `value`, rebalancing on the way back up.
+### :param node: The subtree root to search and remove from.
+### :param value: The value to remove.
+### :returns: `true` if a matching element was found and removed.
 @inline
 routine SortedList[T].remove_from_node(node: BTreeListNode[T], value: T) -> Bool
   var i = me.lower_bound(node, value)
@@ -392,6 +508,10 @@ routine SortedList[T].remove_from_node(node: BTreeListNode[T], value: T) -> Bool
       node.subtree_size = node.subtree_size -% 1u64
     return removed
 
+### Returns the largest key in the left subtree of `node.children[idx]`.
+### :param node: The parent node.
+### :param idx: Index of the separator key whose left child to descend.
+### :returns: The in-order predecessor key.
 @inline
 routine SortedList[T].get_predecessor(node: BTreeListNode[T], idx: U64) -> T
   var current = node.children_get(idx)
@@ -399,6 +519,10 @@ routine SortedList[T].get_predecessor(node: BTreeListNode[T], idx: U64) -> T
     current = current.children_get(current.children_count() -% 1u64)
   return current.keys_get(current.keys_count() -% 1u64)
 
+### Returns the smallest key in the right subtree of `node.children[idx + 1]`.
+### :param node: The parent node.
+### :param idx: Index of the separator key whose right child to descend.
+### :returns: The in-order successor key.
 @inline
 routine SortedList[T].get_successor(node: BTreeListNode[T], idx: U64) -> T
   var current = node.children_get(idx +% 1u64)
@@ -406,6 +530,9 @@ routine SortedList[T].get_successor(node: BTreeListNode[T], idx: U64) -> T
     current = current.children_get(0u64)
   return current.keys_get(0u64)
 
+### Merges `node.children[i + 1]` into `node.children[i]`, pulling down the separator key at `node.keys[i]`.
+### :param node: The parent node whose two adjacent children are merged.
+### :param i: Index of the separator key and the left child that absorbs the right.
 @inline
 routine SortedList[T].merge_children_at(node: BTreeListNode[T], i: U64)
   var left = node.children_get(i)
@@ -421,6 +548,10 @@ routine SortedList[T].merge_children_at(node: BTreeListNode[T], i: U64)
   node.children_remove_at(i +% 1u64)
   return
 
+### Ensures `node.children[i]` has enough keys for safe descent; rotates or merges siblings as needed.
+### :param node: The parent node whose child needs fixing.
+### :param i: The child index that is about to be descended into.
+### :returns: The adjusted child index after any rotation or merge.
 @inline
 routine SortedList[T].fix_child(node: BTreeListNode[T], i: U64) -> U64
   if node.children_get(i).keys_count() > MIN_KEYS_LIST
@@ -437,6 +568,9 @@ routine SortedList[T].fix_child(node: BTreeListNode[T], i: U64) -> U64
   me.merge_children_at(node, i)
   return i
 
+### Borrows the last key from the left sibling of `node.children[i]` through the parent separator.
+### :param node: The parent node.
+### :param i: Index of the child that receives the borrowed key.
 @inline
 routine SortedList[T].rotate_right_at(node: BTreeListNode[T], i: U64)
   var left = node.children_get(i -% 1u64)
@@ -452,6 +586,9 @@ routine SortedList[T].rotate_right_at(node: BTreeListNode[T], i: U64)
   me.update_subtree_size(child)
   return
 
+### Borrows the first key from the right sibling of `node.children[i]` through the parent separator.
+### :param node: The parent node.
+### :param i: Index of the child that receives the borrowed key.
 @inline
 routine SortedList[T].rotate_left_at(node: BTreeListNode[T], i: U64)
   var right = node.children_get(i +% 1u64)
@@ -467,6 +604,8 @@ routine SortedList[T].rotate_left_at(node: BTreeListNode[T], i: U64)
   me.update_subtree_size(child)
   return
 
+### Recomputes `node.subtree_size` from its keys and children.
+### :param node: The node whose subtree size is to be refreshed.
 @inline
 routine SortedList[T].update_subtree_size(node: BTreeListNode[T])
   if node.is_leaf
@@ -480,6 +619,9 @@ routine SortedList[T].update_subtree_size(node: BTreeListNode[T])
     node.subtree_size = size
   return
 
+### Removes every occurrence of `value` from the list.
+### :param value: The value whose every copy is removed.
+### :returns: The number of elements that were removed.
 routine SortedList[T].remove_all(value: T) -> U64
   var removed = 0u64
   while me.remove(value)
@@ -502,6 +644,10 @@ needs I obeys Integral
   var idx = index.resolve(me.count)
   return me.get_by_rank(me.root!!, idx)
 
+### Returns the element at zero-based sorted rank `rank` within `node`'s subtree.
+### :param node: The subtree root to search.
+### :param rank: Zero-based position in the in-order traversal of this subtree.
+### :returns: The element at that rank.
 routine SortedList[T].get_by_rank(node: BTreeListNode[T], rank: U64) -> T
   if node.is_leaf
     return node.keys_get(rank)
@@ -524,6 +670,11 @@ routine SortedList[T].get_by_rank(node: BTreeListNode[T], rank: U64) -> T
 # Range
 # ============================================================================
 
+### Returns all elements in the closed interval `[min_val, max_val]`, in ascending order.
+### Both bounds are inclusive. If no elements fall in the range, an empty list is returned.
+### :param min_val: Inclusive lower bound.
+### :param max_val: Inclusive upper bound.
+### :returns: A {List[T]} of all matching elements in sorted order.
 routine SortedList[T].range(min_val: T, max_val: T) -> List[T]
   var result = List[T]()
   if me.root is None
@@ -531,6 +682,11 @@ routine SortedList[T].range(min_val: T, max_val: T) -> List[T]
   me.range_collect(me.root!!, min_val, max_val, result)
   return result
 
+### Appends elements in `[min_val, max_val]` from `node`'s subtree into `result`.
+### :param node: The subtree root to traverse.
+### :param min_val: Inclusive lower bound.
+### :param max_val: Inclusive upper bound.
+### :param result: The list to append matching elements into.
 routine SortedList[T].range_collect(node: BTreeListNode[T], min_val: T, max_val: T, result: List[T])
   var i = 0u64
   while i < node.keys_count()
@@ -548,6 +704,9 @@ routine SortedList[T].range_collect(node: BTreeListNode[T], min_val: T, max_val:
 # Min/Max
 # ============================================================================
 
+### Returns the smallest element in the list.
+### :returns: The minimum element.
+### :absent: The list is empty.
 routine SortedList[T].min!() -> T
   if me.is_empty()
     absent
@@ -556,6 +715,9 @@ routine SortedList[T].min!() -> T
     node = node.children_get(0u64)
   return node.keys_get(0u64)
 
+### Returns the largest element in the list.
+### :returns: The maximum element.
+### :absent: The list is empty.
 routine SortedList[T].max!() -> T
   if me.is_empty()
     absent
@@ -564,9 +726,15 @@ routine SortedList[T].max!() -> T
     node = node.children_get(node.children_count() -% 1u64)
   return node.keys_get(node.keys_count() -% 1u64)
 
+### Returns the smallest element. Alias for {SortedList[T].min!()}.
+### :returns: The first (minimum) element.
+### :absent: The list is empty.
 routine SortedList[T].first!() -> T
   return me.min!()
 
+### Returns the largest element. Alias for {SortedList[T].max!()}.
+### :returns: The last (maximum) element.
+### :absent: The list is empty.
 routine SortedList[T].last!() -> T
   return me.max!()
 
@@ -578,6 +746,9 @@ routine SortedList[T].last!() -> T
 routine SortedList[T].$iter() -> SortedListIterator[T]
   return SortedListIterator[T](list: me, index: 0u64)
 
+### Creates a {List[T]} from all elements of `from` in ascending sorted order.
+### :param from: The sorted list to convert.
+### :returns: A new {List[T]} containing all elements in ascending order.
 routine List[T].$create(from: SortedList[T]) -> List[T]
   var result = List[T](from.count)
   if from.root is None
@@ -585,6 +756,9 @@ routine List[T].$create(from: SortedList[T]) -> List[T]
   from.collect_inorder(from.root!!, result)
   return result
 
+### Appends all keys from `node`'s subtree into `result` via in-order traversal.
+### :param node: The subtree root to traverse.
+### :param result: The list to append elements into.
 routine SortedList[T].collect_inorder(node: BTreeListNode[T], result: List[T])
   var i = 0u64
   while i < node.keys_count()
@@ -596,6 +770,8 @@ routine SortedList[T].collect_inorder(node: BTreeListNode[T], result: List[T])
     me.collect_inorder(node.children_get(node.children_count() -% 1u64), result)
   return
 
+### Iterator that yields elements of a {SortedList[T]} in ascending order.
+### :typeparam T: The stored element type.
 entity SortedListIterator[T] obeys Iterator[T]
   list: SortedList[T]
   index: U64
@@ -634,6 +810,9 @@ routine SortedList[T].$diagnose() -> Text
   result = result + "])"
   return result
 
+### Returns true if both lists contain exactly the same elements in the same order.
+### :param other: The list to compare against.
+### :returns: `true` if element-wise equal.
 routine SortedList[T].$eq(other: SortedList[T]) -> Bool
   if me.count != other.count
     return false

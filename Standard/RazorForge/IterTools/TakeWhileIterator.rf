@@ -1,34 +1,36 @@
-# RazorForge TakeWhileIterator[T] - Lazy conditional take
-# take_while(predicate) yields elements while predicate is true, then stops
-
 module IterTools
 
-### Defines the entity `TakeWhileIterator`.
-### :typeparam T: The value used for `T`.
+### Represents a lazy adapter that yields values while a predicate remains true.
+### Iteration stops permanently after the first predicate failure.
+### :typeparam T: The element type produced by the source sequence.
 entity TakeWhileIterator[T] obeys Iterable[T]
-  ### Stores the source member value.
+  ### Stores the source iterable.
   secret source: Iterable[T]
-  ### Stores the predicate member value.
+  ### Stores the predicate that determines whether iteration should continue.
   secret predicate: Routine[(T,), Bool]
 
-### Creates an iterator for this value.
+### Returns the stateful iterator that enforces the continuation predicate.
+### The emitted iterator remembers when the predicate has already failed so it
+### never resumes after termination.
 ### :returns: The resulting `TakeWhileEmitter[T]` value.
 routine TakeWhileIterator[T].$iter() -> TakeWhileEmitter[T]
   return TakeWhileEmitter[T](source: me.source.$iter(), predicate: me.predicate, done: false)
 
-### Defines the entity `TakeWhileEmitter`.
-### :typeparam T: The value used for `T`.
+### Iterates over a source sequence until the continuation predicate fails.
+### :typeparam T: The element type produced by the source sequence.
 entity TakeWhileEmitter[T] obeys Iterator[T]
-  ### Stores the source member value.
+  ### Stores the underlying source iterator.
   secret source: Iterator[T]
-  ### Stores the predicate member value.
+  ### Stores the continuation predicate.
   secret predicate: Routine[(T,), Bool]
-  ### Stores the done member value.
+  ### Stores whether iteration has already terminated.
   secret done: Bool
 
-### Returns the next value from this iterator.
+### Returns the next value while the continuation predicate still succeeds.
+### Once `done` becomes true, the iterator remains exhausted for all later
+### calls.
 ### :returns: The resulting `T` value.
-### :absent: Returns absent when the requested value is unavailable.
+### :absent: Returns absent when the predicate has failed or the source ends first.
 routine TakeWhileEmitter[T].$next!() -> T
   if me.done
     absent
@@ -38,8 +40,9 @@ routine TakeWhileEmitter[T].$next!() -> T
     absent
   return item
 
-### Returns the result of `take while`.
-### :param predicate: The `predicate` value.
+### Returns a lazy adapter that yields values while `predicate` returns `true`.
+### The first failing value is consumed but not yielded.
+### :param predicate: The predicate that controls when iteration stops.
 ### :returns: The resulting `TakeWhileIterator[T]` value.
 routine Iterable[T].take_while(predicate: Routine[(T,), Bool]) -> TakeWhileIterator[T]
   return TakeWhileIterator[T](source: me, predicate: predicate)

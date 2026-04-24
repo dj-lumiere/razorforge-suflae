@@ -1,16 +1,17 @@
-# SecureHashKey — a pair of 64-bit words used as the SipHash-2-4 key.
-# Prevents hash-flooding: each SecureSet/SecureDict instance uses its own key.
 module Core
 
-### A 128-bit key for SecureSet and SecureDict.
-### Construct from explicit words or via {SecureHashKey.random}.
+### Represents a 128-bit keyed-hash seed for secure hash tables.
+### `SecureHashKey` is used by `SecureSet` and `SecureDict` to randomize
+### SipHash state per table instance and reduce collision-based attacks.
 record SecureHashKey
-  ### First key word.
+  ### Stores the first 64-bit SipHash key word.
   k0: U64
-  ### Second key word.
+  ### Stores the second 64-bit SipHash key word.
   k1: U64
 
 ### Generates a fresh key from OS entropy (BCryptGenRandom / getrandom).
+### Each generated key is suitable for seeding an independent secure hash table
+### instance.
 ### :returns: The resulting `SecureHashKey` value.
 common routine SecureHashKey.random() -> SecureHashKey
   return SecureHashKey(k0: rf_random_u64(), k1: rf_random_u64())

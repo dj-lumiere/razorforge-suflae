@@ -1,76 +1,89 @@
-# RazorForge BuilderService - Build-time metadata at runtime
-#
-# Provides compile-time type introspection and build environment info.
-# All routines are zero-overhead (constant-folded at compile time).
-# Requires 'import BuilderService' to use.
-#
-# common routine T.method() — typewise: called on a type reference (S64.data_size())
-# routine T.method()        — member:   called on an instance (x.data_size())
-# Both forms may coexist for routines that are meaningful in either context.
-
 module BuilderService
 
-### Defines the choice `TypeKind`.
+### Enumerates the high-level type categories exposed by BuilderService.
+### These values are returned by `type_kind()` and related reflection-style APIs.
 choice TypeKind
+  ### A record type: value semantics, stack-allocated inline struct.
   RECORD
+  ### An entity type: reference semantics, heap-allocated with explicit ownership.
   ENTITY
+  ### A crashable type: entity subclass whose init is always failable.
   CRASHABLE
+  ### An enumeration type with named cases and optional integer values.
   CHOICE
+  ### A type-based tagged union whose members are identified by type.
   VARIANT
+  ### A bitfield enumeration type whose members are powers-of-two flags.
   FLAGS
+  ### A free-standing routine declaration (not attached to any type).
   ROUTINE
+  ### A routine declared as a member of a type.
   MEMBER_ROUTINE
+  ### An abstract protocol declaration that types may implement.
   PROTOCOL
 
-### Defines the choice `Visibility`.
+### Enumerates declaration visibility levels.
+### Visibility metadata is surfaced through BuilderService inspection routines.
 choice Visibility
+  ### Readable and writable from anywhere; no keyword is written in source.
   OPEN
+  ### Readable from anywhere; writable only within the declaring module.
   POSTED
+  ### Readable and writable only within the declaring type or module.
   SECRET
 
-### Defines the choice `BuildMode`.
+### Enumerates supported compiler build modes.
+### The active value is reported by `build_mode()` at compile time.
 choice BuildMode
+  ### Unoptimized build (-O0); includes full debug information.
   DEBUG
+  ### Standard optimized build (-O2); balances speed and binary size.
   RELEASE
+  ### Maximum speed optimization (-O3); may increase binary size.
   RELEASE_TIME
+  ### Minimum binary size optimization (-Os); may reduce peak speed.
   RELEASE_SPACE
+  ### Test build; activates `@test` and `@bench` annotated routines.
   TEST
 
-### Defines the entity `FieldInfo`.
+### Describes a member variable declared on a type.
+### Instances of `FieldInfo` are returned by BuilderService metadata queries.
 entity FieldInfo
-  ### Stores the name member value.
+  ### Stores the declared member variable name.
   name: Owned[Text]
-  ### Stores the type name member value.
+  ### Stores the member variable type name.
   type_name: Owned[Text]
-  ### Stores the visibility member value.
+  ### Stores the member variable visibility.
   visibility: Visibility
-  ### Stores the offset member value.
+  ### Stores the member variable byte offset when available.
   offset: U64
 
-### Defines the entity `ProtocolInfo`.
+### Describes a protocol implemented by a type.
+### This metadata is intended for diagnostics, tooling, and build-time reflection.
 entity ProtocolInfo
-  ### Stores the name member value.
+  ### Stores the protocol name.
   name: Owned[Text]
-  ### Stores the routine names member value.
+  ### Stores the routine names exposed by the protocol.
   routine_names: Owned[List[Owned[Text]]]
-  ### Stores the is generated member value.
+  ### Indicates whether the protocol implementation is compiler-generated.
   is_generated: Bool
 
-### Defines the entity `RoutineInfo`.
+### Describes a routine declared on a type.
+### This metadata captures the declared surface of a routine, not its runtime body.
 entity RoutineInfo
-  ### Stores the name member value.
+  ### Stores the routine name.
   name: Owned[Text]
-  ### Stores the param types member value.
+  ### Stores the parameter type names in declaration order.
   param_types: Owned[List[Owned[Text]]]
-  ### Stores the param names member value.
+  ### Stores the parameter names in declaration order.
   param_names: Owned[List[Owned[Text]]]
-  ### Stores the return type member value.
+  ### Stores the declared return type name.
   return_type: Owned[Text]
-  ### Stores the is crashable member value.
+  ### Indicates whether the routine is crashable.
   is_crashable: Bool
-  ### Stores the is generated member value.
+  ### Indicates whether the routine body is compiler-generated.
   is_generated: Bool
-  ### Stores the visibility member value.
+  ### Stores the routine visibility.
   visibility: Visibility
 
 # ============================================================================
@@ -78,122 +91,191 @@ entity RoutineInfo
 # ============================================================================
 
 ### Returns the unqualified name of this type.
-### :returns: The resulting `Text` value.
+### This excludes the declaring module path.
+### :returns: The unqualified type name, excluding the module path.
 @innate
 common routine T.type_name() -> Text
+### Returns the unqualified name of this value's type.
+### This excludes the declaring module path and mirrors the common-form routine.
+### :returns: The unqualified type name, excluding the module path.
 @innate
 routine T.type_name() -> Text
 
 ### Returns the module this type is declared in.
-### :returns: The resulting `Text` value.
+### Types in the root module return the empty module name.
+### :returns: The module name, or an empty string for types in the root module.
 @innate
 common routine T.module_name() -> Text
+### Returns the module this value's type is declared in.
+### Types in the root module return the empty module name.
+### :returns: The module name, or an empty string for types in the root module.
 @innate
 routine T.module_name() -> Text
 
 ### Returns the fully qualified `Module.TypeName` of this type.
-### :returns: The resulting `Text` value.
+### This is the canonical textual identity used by reflection helpers.
+### :returns: The fully qualified `Module.TypeName` string.
 @innate
 common routine T.full_type_name() -> Text
+### Returns the fully qualified `Module.TypeName` of this value's type.
+### This is the canonical textual identity used by reflection helpers.
+### :returns: The fully qualified `Module.TypeName` string.
 @innate
 routine T.full_type_name() -> Text
 
 ### Returns a stable compile-time hash of the fully qualified type name.
-### :returns: The resulting `U64` value.
+### The value is deterministic for a given type identity within the compiler.
+### :returns: A stable `U64` hash of the fully qualified type name.
 @innate
 common routine T.type_id() -> U64
+### Returns a stable compile-time hash of this value's fully qualified type name.
+### The value is deterministic for a given type identity within the compiler.
+### :returns: A stable `U64` hash of the fully qualified type name.
 @innate
 routine T.type_id() -> U64
 
 ### Returns the byte size of this type's in-memory representation.
-### :returns: The resulting `ByteSize` value.
+### For reference-like types, this reports the storage size of the reference itself.
+### :returns: The in-memory size of this type's representation.
 @innate
 common routine T.data_size() -> ByteSize
+### Returns the byte size of this value's type in memory.
+### For reference-like types, this reports the storage size of the reference itself.
+### :returns: The in-memory size of this type's representation.
 @innate
 routine T.data_size() -> ByteSize
 
 ### Returns the number of member variables declared on this type.
-### :returns: The resulting `U64` value.
+### Secret, posted, and open members all contribute to this count.
+### :returns: The number of declared member variables across all visibility levels.
 @innate
 common routine T.member_variable_count() -> U64
+### Returns the number of member variables declared on this value's type.
+### Secret, posted, and open members all contribute to this count.
+### :returns: The number of declared member variables across all visibility levels.
 @innate
 routine T.member_variable_count() -> U64
 
-### Returns the compile-time type id of the field named {member_name}, or 0 if not found.
+### Returns the compile-time type id of the field named {member_name}, or `0` if not found.
+### This is useful when tooling needs a stable numeric identity for a field type.
 ### :param member_name: The name of the field to look up.
-### :returns: The resulting `U64` value.
+### :returns: The compile-time `U64` type id of the named field, or `0` if not found.
 @innate
 common routine T.member_type_id(member_name: Text) -> U64
+### Returns the compile-time type id of the field named {member_name} on this value's type, or `0` if not found.
+### This is useful when tooling needs a stable numeric identity for a field type.
+### :param member_name: The name of the field to look up.
+### :returns: The compile-time `U64` type id of the named field, or `0` if not found.
 @innate
 routine T.member_type_id(member_name: Text) -> U64
 
-### Returns true if this type is a generic definition (has unbound type parameters).
-### :returns: The resulting `Bool` value.
+### Returns whether this type is a generic definition.
+### Concrete generic instantiations return `false`.
+### :returns: `true` if this type is a generic definition, `false` for concrete instantiations.
 @innate
 common routine T.is_generic() -> Bool
+### Returns whether this value's type is a generic definition.
+### Concrete generic instantiations return `false`.
+### :returns: `true` if this type is a generic definition, `false` for concrete instantiations.
 @innate
 routine T.is_generic() -> Bool
 
-### Returns the {TypeKind} category of this type.
-### :returns: The resulting `TypeKind` value.
+### Returns the `TypeKind` category of this type.
+### This is the broadest built-in classification exposed by BuilderService.
+### :returns: The `TypeKind` classification of this type.
 @innate
 common routine T.type_kind() -> TypeKind
+### Returns the `TypeKind` category of this value's type.
+### This is the broadest built-in classification exposed by BuilderService.
+### :returns: The `TypeKind` classification of this type.
 @innate
 routine T.type_kind() -> TypeKind
 
 ### Returns the names of all protocols this type implements.
-### :returns: The resulting `List[Owned[Text]]` value.
+### The list includes both explicit and compiler-synthesized conformances.
+### :returns: A list of protocol names, including synthesized conformances.
 @innate
 common routine T.protocols() -> List[Owned[Text]]
+### Returns the names of all protocols this value's type implements.
+### The list includes both explicit and compiler-synthesized conformances.
+### :returns: A list of protocol names, including synthesized conformances.
 @innate
 routine T.protocols() -> List[Owned[Text]]
 
 ### Returns the names of all routines declared on this type.
-### :returns: The resulting `List[Owned[Text]]` value.
+### Overloads appear as repeated names when multiple routines share an identifier.
+### :returns: A list of routine names; overloads appear as repeated entries.
 @innate
 common routine T.routine_names() -> List[Owned[Text]]
+### Returns the names of all routines declared on this value's type.
+### Overloads appear as repeated names when multiple routines share an identifier.
+### :returns: A list of routine names; overloads appear as repeated entries.
 @innate
 routine T.routine_names() -> List[Owned[Text]]
 
 ### Returns the names of all generic type parameters or arguments.
-### :returns: The resulting `List[Owned[Text]]` value.
+### Definitions report parameter names; concrete instantiations report bound arguments.
+### :returns: A list of parameter names for generic definitions, or bound argument names for instantiations.
 @innate
 common routine T.generic_args() -> List[Owned[Text]]
+### Returns the names of all generic type parameters or arguments for this value's type.
+### Definitions report parameter names; concrete instantiations report bound arguments.
+### :returns: A list of parameter names for generic definitions, or bound argument names for instantiations.
 @innate
 routine T.generic_args() -> List[Owned[Text]]
 
 ### Returns the annotation strings attached to this type declaration.
-### :returns: The resulting `List[Owned[Text]]` value.
+### The returned values preserve declaration spelling after parsing.
+### :returns: A list of annotation strings as they appear in the source.
 @innate
 common routine T.annotations() -> List[Owned[Text]]
+### Returns the annotation strings attached to this value's type declaration.
+### The returned values preserve declaration spelling after parsing.
+### :returns: A list of annotation strings as they appear in the source.
 @innate
 routine T.annotations() -> List[Owned[Text]]
 
 ### Returns the names of modules this type's module depends on.
-### :returns: The resulting `List[Owned[Text]]` value.
+### This is intended for diagnostics and dependency introspection.
+### :returns: A list of module names that this type's module depends on.
 @innate
 common routine T.dependencies() -> List[Owned[Text]]
+### Returns the names of modules this value's defining module depends on.
+### This is intended for diagnostics and dependency introspection.
+### :returns: A list of module names that this type's module depends on.
 @innate
 routine T.dependencies() -> List[Owned[Text]]
 
 ### Returns protocol metadata for each protocol this type implements.
-### :returns: The resulting `List[Owned[ProtocolInfo]]` value.
+### This is the structured form of `protocols()`.
+### :returns: A list of `ProtocolInfo` records, one per implemented protocol.
 @innate
 common routine T.protocol_info() -> List[Owned[ProtocolInfo]]
+### Returns protocol metadata for each protocol this value's type implements.
+### This is the structured form of `protocols()`.
+### :returns: A list of `ProtocolInfo` records, one per implemented protocol.
 @innate
 routine T.protocol_info() -> List[Owned[ProtocolInfo]]
 
 ### Returns routine metadata for each routine declared on this type.
-### :returns: The resulting `List[Owned[RoutineInfo]]` value.
+### This is the structured form of `routine_names()`.
+### :returns: A list of `RoutineInfo` records, one per declared routine overload.
 @innate
 common routine T.routine_info() -> List[Owned[RoutineInfo]]
+### Returns routine metadata for each routine declared on this value's type.
+### This is the structured form of `routine_names()`.
+### :returns: A list of `RoutineInfo` records, one per declared routine overload.
 @innate
 routine T.routine_info() -> List[Owned[RoutineInfo]]
 
 ### Returns full field metadata for every member variable on this type.
-### :returns: The resulting `List[Owned[FieldInfo]]` value.
+### This is the structured form of the member-variable inspection APIs.
+### :returns: A list of `FieldInfo` records, one per declared member variable.
 @innate
 common routine T.member_variable_info() -> List[Owned[FieldInfo]]
+### Returns full field metadata for every member variable on this value's type.
+### This is the structured form of the member-variable inspection APIs.
+### :returns: A list of `FieldInfo` records, one per declared member variable.
 @innate
 routine T.member_variable_info() -> List[Owned[FieldInfo]]
 
@@ -201,18 +283,21 @@ routine T.member_variable_info() -> List[Owned[FieldInfo]]
 # Per-instance introspection — member only (no typewise form)
 # ============================================================================
 
-### Returns the source variable name at the call site (for diagnostics).
-### :returns: The resulting `Text` value.
+### Returns the source variable name at the call site.
+### This is primarily intended for diagnostics and generated error messages.
+### :returns: The variable name as written at the call site.
 @innate
 routine T.var_name() -> Text
 
-### Returns field metadata for all member variables (open, posted, and secret).
-### :returns: The resulting `Dict[Owned[Text], Data]` value.
+### Returns field metadata for all member variables.
+### Open, posted, and secret members are all included in the result.
+### :returns: A dict mapping field names to their values, including all visibility levels.
 @innate
 routine T.all_member_variables() -> Dict[Owned[Text], Data]
 
 ### Returns field metadata for publicly readable member variables only.
-### :returns: The resulting `Dict[Owned[Text], Data]` value.
+### Secret members are excluded from this result.
+### :returns: A dict mapping field names to their values, excluding secret members.
 @innate
 routine T.open_member_variables() -> Dict[Owned[Text], Data]
 
@@ -221,41 +306,47 @@ routine T.open_member_variables() -> Dict[Owned[Text], Data]
 # ============================================================================
 
 ### Returns the OS memory page size.
-### :returns: The resulting `ByteSize` value.
+### This value is fixed at build time for the selected target.
+### :returns: The OS memory page size for the selected target.
 @innate
 routine page_size() -> ByteSize
 
 ### Returns the CPU cache line size.
-### :returns: The resulting `ByteSize` value.
+### This value is fixed at build time for the selected target.
+### :returns: The CPU cache line size for the selected target.
 @innate
 routine cache_line() -> ByteSize
 
-### Returns the native pointer/word size.
-### :returns: The resulting `ByteSize` value.
+### Returns the native pointer or word size for the selected target.
+### This matches the pointer width assumed by generated code.
+### :returns: The native pointer size for the selected target.
 @innate
 routine word_size() -> ByteSize
 
 ### Returns the target operating system name (e.g. `"windows"`, `"linux"`, `"macos"`).
-### :returns: The resulting `Text` value.
+### :returns: The OS name string, such as `"windows"`, `"linux"`, or `"macos"`.
 @innate
 routine target_os() -> Text
 
 ### Returns the target CPU architecture name (e.g. `"x86_64"`, `"aarch64"`).
-### :returns: The resulting `Text` value.
+### :returns: The architecture name string, such as `"x86_64"` or `"aarch64"`.
 @innate
 routine target_arch() -> Text
 
 ### Returns the RazorForge compiler version string.
-### :returns: The resulting `Text` value.
+### This is derived from the compiler build, not from project metadata.
+### :returns: The compiler version string.
 @innate
 routine builder_version() -> Text
 
 ### Returns the ISO-8601 UTC timestamp of this build.
-### :returns: The resulting `Text` value.
+### This is the compiler-side build timestamp captured during generation.
+### :returns: The ISO-8601 UTC build timestamp string.
 @innate
 routine build_timestamp() -> Text
 
 ### Returns the current build mode.
-### :returns: The resulting `BuildMode` value.
+### This reflects the mode selected for the current compilation.
+### :returns: The active `BuildMode` for this compilation.
 @innate
 routine build_mode() -> BuildMode

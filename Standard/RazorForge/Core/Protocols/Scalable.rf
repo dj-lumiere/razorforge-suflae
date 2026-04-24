@@ -1,10 +1,13 @@
-# Scalable - Protocol for unit-like types that can be scaled by an integer
 module Core
 
-### Defines the protocol `Scalable`.
+### Represents the protocol for integral scaling.
+### `Scalable` is for values that can be enlarged, repeated, or otherwise scaled
+### by a whole-number factor.
 protocol Scalable
-  ### Returns the product of this value and the other value.
-  ### :param you: The other value to compare against.
+  ### Returns this value scaled by `you`.
+  ### The meaning of scaling depends on the conforming type but should preserve
+  ### the same logical unit or shape.
+  ### :param you: The scalar multiplier.
   ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$mul(you: Integral) -> Me

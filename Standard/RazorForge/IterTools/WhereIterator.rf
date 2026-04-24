@@ -1,34 +1,34 @@
-# RazorForge WhereIterator[T] - Lazy filtering
-# where(predicate) keeps matching items, where_not(predicate) keeps non-matching
-
 module IterTools
 
-### Defines the entity `WhereIterator`.
-### :typeparam T: The value used for `T`.
+### Represents a lazy filtering adapter over a source iterable.
+### The adapter can keep either matching or non-matching items depending on `inverted`.
+### :typeparam T: The element type produced by the source sequence.
 entity WhereIterator[T] obeys Iterable[T]
-  ### Stores the source member value.
+  ### Stores the source iterable.
   secret source: Iterable[T]
-  ### Stores the predicate member value.
+  ### Stores the predicate used to test each source value.
   secret predicate: Routine[(T,), Bool]
-  ### Stores the inverted member value.
+  ### Stores whether the predicate result should be inverted.
   secret inverted: Bool
 
-### Creates an iterator for this value.
+### Returns the stateful iterator that applies the filter lazily.
+### Source values are examined only as the caller requests more output values.
 ### :returns: The resulting `WhereEmitter[T]` value.
 routine WhereIterator[T].$iter() -> WhereEmitter[T]
   return WhereEmitter[T](source: me.source.$iter(), predicate: me.predicate, inverted: me.inverted)
 
-### Defines the entity `WhereEmitter`.
-### :typeparam T: The value used for `T`.
+### Iterates over a source sequence while yielding only values that satisfy the effective filter.
+### :typeparam T: The element type produced by the source sequence.
 entity WhereEmitter[T] obeys Iterator[T]
-  ### Stores the source member value.
+  ### Stores the underlying source iterator.
   secret source: Iterator[T]
-  ### Stores the predicate member value.
+  ### Stores the predicate used for filtering.
   secret predicate: Routine[(T,), Bool]
-  ### Stores the inverted member value.
+  ### Stores whether matches should be inverted.
   secret inverted: Bool
 
-### Returns the next value from this iterator.
+### Returns the next value that satisfies the effective filter condition.
+### Source values are consumed and discarded until one passes the filter.
 ### :returns: The resulting `T` value.
 routine WhereEmitter[T].$next!() -> T
   loop
@@ -39,14 +39,16 @@ routine WhereEmitter[T].$next!() -> T
     if matches
       return item
 
-### Returns the result of `where`.
-### :param predicate: The `predicate` value.
+### Returns a lazy adapter that keeps only values for which `predicate` returns
+### `true`.
+### :param predicate: The filter predicate.
 ### :returns: The resulting `WhereIterator[T]` value.
 routine Iterable[T].where(predicate: Routine[(T,), Bool]) -> WhereIterator[T]
   return WhereIterator[T](source: me, predicate: predicate, inverted: false)
 
-### Returns the result of `where not`.
-### :param predicate: The `predicate` value.
+### Returns a lazy adapter that keeps only values for which `predicate` returns
+### `false`.
+### :param predicate: The filter predicate.
 ### :returns: The resulting `WhereIterator[T]` value.
 routine Iterable[T].where_not(predicate: Routine[(T,), Bool]) -> WhereIterator[T]
   return WhereIterator[T](source: me, predicate: predicate, inverted: true)

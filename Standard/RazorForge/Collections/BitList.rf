@@ -1,33 +1,49 @@
-# RazorForge BitList - Dynamic growable bit vector
-# Entity type with heap allocation
-# Stores individual bits packed into 64-bit words for efficient word-level operations
-# Grows by doubling capacity for O(1) amortized push
-#
-# Usage:
-#   var bits = BitList()
-#   bits.add_last(true)
-#   bits.add_last(false)
-#   bits.add_last(true)
-#   var first = bits[0]  # true
-#   var last = bits[^1]  # true
-
 module Collections
 
-### Defines the entity `BitList`.
+### A growable, densely packed sequence of boolean values stored in machine words.
+###
+### `BitList` packs up to 64 bits per `U64` word, making it significantly more
+### compact than a `List[Bool]` when large sets of flags need to grow dynamically.
+### Indexed reads and writes are O(1) via bitwise operations on the containing word.
+###
+### **When to use**
+### - You need a dynamic set of boolean flags whose count is not known at compile time.
+### - Memory compactness matters (e.g., processing large data sets or bitmap masks).
+### - You need bitwise bulk operations (`$bitand`, `$bitor`, `$bitxor`, `$bitnot`).
+### - Use {BitArray[N]} instead when the bit count is a compile-time constant.
+### - Use {List[Bool]} instead when you need reference semantics or very fast single-bit mutation
+###   without the read-modify-write overhead.
+###
+### **Complexity**
+### | Operation | Time |
+### |---|---|
+### | `add_last` | O(1) amortized |
+### | `remove_last!` | O(1) |
+### | `$getitem!` / `$setitem!` | O(1) |
+### | `flip!` | O(1) |
+### | `set_all` / `flip_all` | O(capacity / 64) |
+### | `count_ones` / `count_zeros` | O(N) |
+### | `any` / `all` / `none` | O(N) best/worst |
+### | `$bitand` / `$bitor` / `$bitxor` / `$bitnot` | O(N) |
+### | Iteration | O(N) |
+###
+### :see: {BitArray[N]} for a compile-time-sized, value-semantic alternative.
 entity BitList obeys Iterable[Bool]
-  ### Stores the data member value.
+  ### Stores the heap-allocated word buffer that packs the bits.
   secret data: Hijacked[U64]      # Heap-allocated word array (64 bits per U64)
-  ### Stores the count member value.
+  ### Stores the number of logical bits currently present in the list.
   secret count: U64              # Current number of bits
-  ### Stores the capacity member value.
+  ### Stores the number of bits that can be appended before growth is required.
+  ### Capacity is tracked in bits rather than words.
   secret capacity: U64           # Total bit capacity (in bits, not words)
 
 # ============================================================================
 # Creators
 # ============================================================================
 
-### Creates a new instance.
-### :returns: The resulting `BitList` value.
+### Creates an empty bit list with no allocated storage.
+### The first append allocates the initial packed word buffer.
+### :returns: An empty `BitList`.
 routine BitList.$create() -> BitList
   # Create empty bit list with default capacity
   return BitList(
@@ -36,9 +52,11 @@ routine BitList.$create() -> BitList
     capacity: 0u64
   )
 
-### Creates a new instance.
-### :param capacity: The capacity value to use.
-### :returns: The resulting `BitList` value.
+### Creates an empty bit list with storage reserved for at least `capacity` bits.
+### Reserving ahead of time avoids repeated reallocations when building large
+### bit sets incrementally.
+### :param capacity: The minimum number of bits to reserve.
+### :returns: An empty `BitList` with preallocated storage.
 routine BitList.$create(capacity: U64) -> BitList
   # Create bit list with pre-allocated capacity (in bits)
   var word_size = (capacity +% 63u64) >> 6u32
@@ -51,9 +69,10 @@ routine BitList.$create(capacity: U64) -> BitList
     capacity: capacity
   )
 
-### Creates a new instance.
-### :param values...: The `values...` value.
-### :returns: The resulting `BitList` value.
+### Creates a bit list from the supplied boolean values.
+### The first argument becomes bit `0`, the second becomes bit `1`, and so on.
+### :param values...: The initial bit sequence to append.
+### :returns: A `BitList` containing `values...`.
 routine BitList.$create(values...: Bool) -> BitList
   var result = BitList()
   for v in values
@@ -64,23 +83,25 @@ routine BitList.$create(values...: Bool) -> BitList
 # Internal Helpers
 # ============================================================================
 
-### Returns the result of `word index`.
-### :param bit_index: The `bit_index` value.
-### :returns: The resulting `U64` value.
+### Resolves a logical bit index to the containing machine word.
+### :param bit_index: The zero-based bit position.
+### :returns: The zero-based `U64` word index containing that bit.
 routine BitList.word_index(bit_index: U64) -> U64
   # Get the word index for a given bit index
   return bit_index >> 6u32
 
-### Returns the result of `bit offset`.
-### :param bit_index: The `bit_index` value.
-### :returns: The resulting `U8` value.
+### Resolves a logical bit index to its offset inside a machine word.
+### :param bit_index: The zero-based bit position.
+### :returns: A value in the range `0..63` describing the bit offset inside the word.
 routine BitList.bit_offset(bit_index: U64) -> U8
   # Get the bit position within the word (0-63)
   return U8(bit_index & 63u64)
 
-### Returns the bit internal component.
-### :param index: The zero-based position to use.
-### :returns: The resulting `Bool` value.
+### Reads a stored bit without performing bounds checks.
+### This helper is intended for internal use after the caller has validated the
+### index against `count`.
+### :param index: The zero-based bit position to read.
+### :returns: The bit value stored at `index`.
 routine BitList.get_bit_internal(index: U64) -> Bool
   # Internal: get bit without bounds checking
   var word_idx = index >> 6u32
@@ -89,9 +110,9 @@ routine BitList.get_bit_internal(index: U64) -> Bool
   var word_val = ptr.extract()
   return (word_val & (1u64 << bit_off)) != 0u64
 
-### Sets the bit internal component.
-### :param index: The zero-based position to use.
-### :param value: The value to use.
+### Writes a stored bit without performing bounds checks.
+### :param index: The zero-based bit position to write.
+### :param value: The bit value to store at `index`.
 routine BitList.set_bit_internal(index: U64, value: Bool)
   # Internal: set bit without bounds checking — branchless RMW
   var word_idx = index >> 6u32
@@ -108,25 +129,26 @@ routine BitList.set_bit_internal(index: U64, value: Bool)
 # Core Operations
 # ============================================================================
 
-### Returns the number of stored values.
-### :returns: The resulting `U64` value.
+### Returns the number of logical bits currently stored in the list.
+### :returns: The live bit count.
 routine BitList.count() -> U64
   # Get current number of bits
   return me.count
 
-### Returns the current storage capacity.
-### :returns: The resulting `U64` value.
+### Returns the number of bits that can be stored before the next growth step.
+### :returns: The current bit capacity (in bits, not words).
 routine BitList.capacity() -> U64
   # Get current capacity in bits
   return me.capacity
 
-### Returns true if this value is empty.
-### :returns: The resulting `Bool` value.
+### Returns true if the list currently stores no logical bits.
+### :returns: `true` when `count()` is zero.
 routine BitList.is_empty() -> Bool
   return me.count == 0u64
 
-### Adds a value using `add_last`.
-### :param value: The value to use.
+### Appends `value` to the logical end of the bit sequence.
+### Storage grows automatically when the packed buffer runs out of capacity.
+### :param value: The bit value to append.
 routine BitList.add_last(value: Bool)
   # Append bit to end - O(1) amortized
   if me.count >= me.capacity
@@ -152,9 +174,9 @@ routine BitList.add_last(value: Bool)
   me.count = me.count +% 1u64
   return
 
-### Removes a value using `remove_last`.
+### Removes and returns the final bit in the sequence.
 ### :returns: The resulting `Bool` value.
-### :absent: Returns absent when the requested value is unavailable.
+### :absent: Returns absent when the bit list is empty.
 routine BitList.remove_last!() -> Bool
   # Remove and return last bit - O(1)
   # Uses absent because empty list means "no bit to remove"
@@ -164,7 +186,7 @@ routine BitList.remove_last!() -> Bool
   me.count = me.count - 1u64
   return me.get_bit_internal(me.count)
 
-### Ensures the storage capacity is at least `new_capacity`.
+### Ensures that the packed storage can hold at least `new_capacity` logical bits.
 ### :param new_capacity: The minimum capacity to reserve.
 routine BitList.reserve(new_capacity: U64)
   # Ensure capacity is at least new_capacity (in bits)
@@ -182,7 +204,7 @@ routine BitList.reserve(new_capacity: U64)
     me.capacity = new_capacity
   return
 
-### Removes all stored values.
+### Removes every logical bit while preserving the allocated packed storage.
 routine BitList.clear()
   # Remove all bits
   me.count = 0u64
@@ -192,8 +214,8 @@ routine BitList.clear()
 # Indexing with Integral (forward index)
 # ============================================================================
 
-### Implements the wired routine behavior for this value.
-### :param index: The zero-based position to use.
+### Returns the bit stored at the given zero-based position.
+### :param index: The zero-based logical position to read.
 ### :returns: The resulting `Bool` value.
 ### :throws: May throw {IndexOutOfBoundsError}.
 routine BitList.$getitem![I](index: I) -> Bool
@@ -204,9 +226,9 @@ needs I obeys Integral
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   return me.get_bit_internal(U64(idx))
 
-### Implements the wired routine behavior for this value.
-### :param index: The zero-based position to use.
-### :param value: The value to use.
+### Replaces the bit stored at the given zero-based position.
+### :param index: The zero-based logical position to update.
+### :param value: The replacement bit value.
 ### :throws: May throw {IndexOutOfBoundsError}.
 routine BitList.$setitem![I](index: I, value: Bool)
 needs I obeys Integral
@@ -221,8 +243,9 @@ needs I obeys Integral
 # Indexing with BackIndex (backward index using ^)
 # ============================================================================
 
-### Implements the wired routine behavior for this value.
-### :param index: The zero-based position to use.
+### Returns the bit addressed by a back index.
+### Back indices count from the end of the sequence using the `^` syntax.
+### :param index: The backward position to resolve.
 ### :returns: The resulting `Bool` value.
 routine BitList.$getitem![I](index: BackIndex[I]) -> Bool
 needs I obeys Integral
@@ -230,9 +253,9 @@ needs I obeys Integral
   var idx = index.resolve(me.count)
   return me.get_bit_internal(U64(idx))
 
-### Implements the wired routine behavior for this value.
-### :param index: The zero-based position to use.
-### :param value: The value to use.
+### Replaces the bit addressed by a back index.
+### :param index: The backward position to resolve.
+### :param value: The replacement bit value.
 routine BitList.$setitem![I](index: BackIndex[I], value: Bool)
 needs I obeys Integral
   # Set bit from end - ^1 is last, ^2 is second-to-last
@@ -244,8 +267,10 @@ needs I obeys Integral
 # Bit Operations
 # ============================================================================
 
-### Sets the all component.
-### :param value: The value to use.
+### Sets every stored bit to the same boolean value.
+### Only the logical contents of the list are part of the observable contract;
+### packed padding bits in the tail storage remain an implementation detail.
+### :param value: The value to write into every logical bit.
 routine BitList.set_all(value: Bool)
   # Set all bits to the same value
   var byte_count = (me.count +% 7u64) >> 3u32
@@ -253,8 +278,8 @@ routine BitList.set_all(value: Bool)
   rf_set_bytes_at(me.data.get_address(), fill_byte, byte_count)
   return
 
-### Performs `flip` on this value.
-### :param index: The zero-based position to use.
+### Toggles the bit at `index`.
+### :param index: The zero-based bit position to flip.
 ### :throws: May throw {IndexOutOfBoundsError}.
 routine BitList.flip![I](index: I)
 needs I obeys Integral
@@ -266,7 +291,9 @@ needs I obeys Integral
   me.set_bit_internal(U64(idx), not current)
   return
 
-### Executes `flip all`.
+### Inverts every stored bit in place.
+### This routine flips the packed storage a word at a time for the current
+### logical range.
 routine BitList.flip_all()
   # Toggle all bits word-at-a-time
   var word_count = (me.count +% 63u64) >> 6u32
@@ -278,8 +305,8 @@ routine BitList.flip_all()
     i = i +% 1u64
   return
 
-### Returns the number of stored values.
-### :returns: The resulting `U64` value.
+### Counts how many stored bits are set to `true`.
+### :returns: The number of one-bits in the logical sequence.
 routine BitList.count_ones() -> U64
   # Count number of bits set to 1 (popcount)
   var count = 0u64
@@ -290,14 +317,14 @@ routine BitList.count_ones() -> U64
     i = i +% 1u64
   return count
 
-### Returns the number of stored values.
-### :returns: The resulting `U64` value.
+### Counts how many stored bits are set to `false`.
+### :returns: `count()` minus the number of one-bits.
 routine BitList.count_zeros() -> U64
   # Count number of bits set to 0
   return me.count -% me.count_ones()
 
-### Returns true if `any` applies.
-### :returns: The resulting `Bool` value.
+### Returns `true` when at least one stored bit is set.
+### :returns: `true` if any bit is `true`; `false` if all bits are clear.
 routine BitList.any() -> Bool
   # Check if any bit is set to 1
   var i = 0u64
@@ -307,8 +334,9 @@ routine BitList.any() -> Bool
     i = i +% 1u64
   return false
 
-### Returns true if `all` applies.
-### :returns: The resulting `Bool` value.
+### Returns `true` when every stored bit is set.
+### An empty list vacuously returns `true`.
+### :returns: `true` if all bits are set; `false` if any bit is clear.
 routine BitList.all() -> Bool
   # Check if all bits are set to 1
   var i = 0u64
@@ -318,8 +346,8 @@ routine BitList.all() -> Bool
     i = i +% 1u64
   return true
 
-### Returns true if `none` applies.
-### :returns: The resulting `Bool` value.
+### Returns `true` when no stored bit is set.
+### :returns: `true` if all bits are clear; `false` if any bit is set.
 routine BitList.none() -> Bool
   # Check if no bits are set to 1
   return not me.any()
@@ -328,9 +356,11 @@ routine BitList.none() -> Bool
 # Bitwise Operations (returns new BitList)
 # ============================================================================
 
-### Returns the result of the requested bitwise operation.
-### :param other: The other value to compare against.
-### :returns: The resulting `BitList` value.
+### Returns the bitwise intersection of two bit lists.
+### The result length matches the shorter input because bits beyond that range
+### have no counterpart to intersect with.
+### :param other: The bit list to combine with this one.
+### :returns: A new `BitList` whose bits are `me[i] and other[i]`.
 routine BitList.$bitand(other: BitList) -> BitList
   # Bitwise AND - returns new BitList with shorter length
   var min_count = if me.count < other.count then me.count else other.count
@@ -343,9 +373,10 @@ routine BitList.$bitand(other: BitList) -> BitList
     i = i +% 1u64
   return result
 
-### Returns the result of the requested bitwise operation.
-### :param other: The other value to compare against.
-### :returns: The resulting `BitList` value.
+### Returns the bitwise union of two bit lists.
+### Missing bits past the end of the shorter input are treated as `false`.
+### :param other: The bit list to combine with this one.
+### :returns: A new `BitList` whose length matches the longer input.
 routine BitList.$bitor(other: BitList) -> BitList
   # Bitwise OR - returns new BitList with longer length
   var max_count = if me.count > other.count then me.count else other.count
@@ -359,9 +390,10 @@ routine BitList.$bitor(other: BitList) -> BitList
     i = i +% 1u64
   return result
 
-### Returns the result of the requested bitwise operation.
-### :param other: The other value to compare against.
-### :returns: The resulting `BitList` value.
+### Returns the bitwise exclusive-or of two bit lists.
+### Missing bits past the end of the shorter input are treated as `false`.
+### :param other: The bit list to combine with this one.
+### :returns: A new `BitList` whose bits are set where exactly one input bit is set.
 routine BitList.$bitxor(other: BitList) -> BitList
   # Bitwise XOR - returns new BitList with longer length
   var max_count = if me.count > other.count then me.count else other.count
@@ -375,8 +407,8 @@ routine BitList.$bitxor(other: BitList) -> BitList
     i = i +% 1u64
   return result
 
-### Returns the result of the requested bitwise operation.
-### :returns: The resulting `BitList` value.
+### Returns a new bit list with every stored bit inverted.
+### :returns: A copy of this list with `true` and `false` swapped at each position.
 routine BitList.$bitnot() -> BitList
   # Bitwise NOT - returns new BitList with flipped bits
   var result = BitList(me.count)
@@ -391,12 +423,16 @@ routine BitList.$bitnot() -> BitList
 # Iteration Support
 # ============================================================================
 
+### Returns an iterator over the logical bits stored in the list.
+### Bits are yielded from index `0` to `count - 1`.
+### :returns: The resulting `BitListIterator` value.
 @readonly
 routine BitList.$iter() -> BitListIterator
   danger!
     return BitListIterator(data: me.data, count: me.count(), index: 0u64)
 
-### Defines the entity `BitListIterator`.
+### Represents an iterator over the logical bits stored in a `BitList`.
+### The iterator walks the packed word buffer in ascending logical index order.
 entity BitListIterator obeys Iterator[Bool]
   ### Raw pointer into the source bit list's packed word buffer.
   secret data: Hijacked[U64]
@@ -405,6 +441,9 @@ entity BitListIterator obeys Iterator[Bool]
   ### Current bit position.
   secret index: U64
 
+### Returns the next bit from the iterator.
+### :returns: The resulting `Bool` value.
+### :absent: Returns absent when the iterator reaches the captured bit count.
 @writable
 routine BitListIterator.$next!() -> Bool
   if me.index >= me.count
@@ -422,18 +461,18 @@ routine BitListIterator.$next!() -> Bool
 # Utility Operations
 # ============================================================================
 
-### Returns the result of `first`.
-### :returns: The resulting `Bool` value.
-### :absent: Returns absent when the requested value is unavailable.
+### Returns the first stored bit without removing it.
+### :returns: The bit at index `0`.
+### :absent: Returns absent when the list is empty.
 routine BitList.first!() -> Bool
   # Get first bit (absent if empty)
   if me.is_empty()
     absent
   return me.get_bit_internal(0u64)
 
-### Returns the result of `last`.
-### :returns: The resulting `Bool` value.
-### :absent: Returns absent when the requested value is unavailable.
+### Returns the last stored bit without removing it.
+### :returns: The bit at index `count - 1`.
+### :absent: Returns absent when the list is empty.
 routine BitList.last!() -> Bool
   # Get last bit (absent if empty)
   if me.is_empty()
@@ -455,9 +494,9 @@ routine BitList.reverse() -> BitList
 # Comparison Operations
 # ============================================================================
 
-### Returns whether both values are equal.
-### :param other: The other value to compare against.
-### :returns: The resulting `Bool` value.
+### Returns true if both bit lists have equal length and identical bit contents.
+### :param other: The other bit list to compare against.
+### :returns: `true` if both have the same count and all corresponding bits match.
 routine BitList.$eq(other: BitList) -> Bool
   if me.count != other.count
     return false
@@ -472,53 +511,61 @@ routine BitList.$eq(other: BitList) -> Bool
 # Conversion Operations
 # ============================================================================
 
-### Converts this value to u8.
-### :returns: The resulting `U8` value.
-### :absent: Returns absent when the requested value is unavailable.
+### Packs the first eight bits into a `U8`.
+### Bit `0` becomes the least-significant output bit.
+### :returns: The packed `U8` value.
+### :absent: Returns absent when fewer than eight bits are stored.
 routine BitList.to_u8!() -> U8
   # Convert first 8 bits to U8 (absent if fewer than 8 bits)
   if me.count < 8u64
     absent
   danger!
-    var _result = U8(me.data.extract() & 0xFFu64)
+    var word = Hijacked[U64](me.data.get_address()).extract()
+    var _result = U8(word & 0xFFu64)
   return _result
 
-### Converts this value to u16.
-### :returns: The resulting `U16` value.
-### :absent: Returns absent when the requested value is unavailable.
+### Packs the first sixteen bits into a `U16`.
+### Bit `0` becomes the least-significant output bit.
+### :returns: The packed `U16` value.
+### :absent: Returns absent when fewer than sixteen bits are stored.
 routine BitList.to_u16!() -> U16
   # Convert first 16 bits to U16 (absent if fewer than 16 bits)
   if me.count < 16u64
     absent
   danger!
-    var _result = U16(me.data.extract() & 0xFFFFu64)
+    var word = Hijacked[U64](me.data.get_address()).extract()
+    var _result = U16(word & 0xFFFFu64)
   return _result
 
-### Converts this value to u32.
-### :returns: The resulting `U32` value.
-### :absent: Returns absent when the requested value is unavailable.
+### Packs the first thirty-two bits into a `U32`.
+### Bit `0` becomes the least-significant output bit.
+### :returns: The packed `U32` value.
+### :absent: Returns absent when fewer than thirty-two bits are stored.
 routine BitList.to_u32!() -> U32
   # Convert first 32 bits to U32 (absent if fewer than 32 bits)
   if me.count < 32u64
     absent
   danger!
-    var _result = U32(me.data.extract() & 0xFFFFFFFFu64)
+    var word = Hijacked[U64](me.data.get_address()).extract()
+    var _result = U32(word & 0xFFFFFFFFu64)
   return _result
 
-### Converts this value to u64.
-### :returns: The resulting `U64` value.
-### :absent: Returns absent when the requested value is unavailable.
+### Packs the first sixty-four bits into a `U64`.
+### Bit `0` becomes the least-significant output bit.
+### :returns: The packed `U64` value.
+### :absent: Returns absent when fewer than sixty-four bits are stored.
 routine BitList.to_u64!() -> U64
   # Convert first 64 bits to U64 (absent if fewer than 64 bits)
   if me.count < 64u64
     absent
   danger!
-    var _result = me.data.extract()
+    var _result = Hijacked[U64](me.data.get_address()).extract()
   return _result
 
-### Creates a value from u8.
-### :param value: The value to use.
-### :returns: The resulting `BitList` value.
+### Expands a `U8` into a bit list.
+### The least-significant bit of `value` becomes the first element in the list.
+### :param value: The packed byte to unpack.
+### :returns: An eight-bit `BitList` representing `value`.
 routine BitList.from_u8(value: U8) -> BitList
   # Create BitList from U8 (8 bits)
   var result = BitList(8u64)
@@ -528,9 +575,10 @@ routine BitList.from_u8(value: U8) -> BitList
     i = i + 1u8
   return result
 
-### Creates a value from u16.
-### :param value: The value to use.
-### :returns: The resulting `BitList` value.
+### Expands a `U16` into a sixteen-bit list.
+### The least-significant bit of `value` becomes the first element in the list.
+### :param value: The packed 16-bit value to unpack.
+### :returns: A sixteen-bit `BitList` representing `value`.
 routine BitList.from_u16(value: U16) -> BitList
   # Create BitList from U16 (16 bits)
   var result = BitList(16u64)
@@ -540,9 +588,10 @@ routine BitList.from_u16(value: U16) -> BitList
     i = i + 1u16
   return result
 
-### Creates a value from u32.
-### :param value: The value to use.
-### :returns: The resulting `BitList` value.
+### Expands a `U32` into a thirty-two-bit list.
+### The least-significant bit of `value` becomes the first element in the list.
+### :param value: The packed 32-bit value to unpack.
+### :returns: A thirty-two-bit `BitList` representing `value`.
 routine BitList.from_u32(value: U32) -> BitList
   # Create BitList from U32 (32 bits)
   var result = BitList(32u64)
@@ -552,7 +601,7 @@ routine BitList.from_u32(value: U32) -> BitList
     i = i + 1u32
   return result
 
-### Returns the textual representation of this value.
+### Returns a compact display form of the logical bit sequence.
 ### :returns: The resulting `Text` value.
 routine BitList.$represent() -> Text
   var result = "BitList["
@@ -565,7 +614,7 @@ routine BitList.$represent() -> Text
   result = result + "]"
   return result
 
-### Returns the textual representation of this value.
+### Returns a diagnostic form that includes the bit count, one-bit count, and contents.
 ### :returns: The resulting `Text` value.
 routine BitList.$diagnose() -> Text
   var result = "BitList(count: " + me.count().$represent() + ", ones: " + me.count_ones().$represent() + ", ["
@@ -578,9 +627,10 @@ routine BitList.$diagnose() -> Text
   result = result + "])"
   return result
 
-### Creates a value from u64.
-### :param value: The value to use.
-### :returns: The resulting `BitList` value.
+### Expands a `U64` into a sixty-four-bit list.
+### The least-significant bit of `value` becomes the first element in the list.
+### :param value: The packed 64-bit value to unpack.
+### :returns: A sixty-four-bit `BitList` representing `value`.
 routine BitList.from_u64(value: U64) -> BitList
   # Create BitList from U64 (64 bits)
   var result = BitList(64u64)

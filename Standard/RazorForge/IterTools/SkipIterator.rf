@@ -1,30 +1,29 @@
-# RazorForge SkipIterator[T] - Lazy skip-first-N
-# skip(count) discards count elements then yields the rest
-
 module IterTools
 
-### Defines the entity `SkipIterator`.
-### :typeparam T: The value used for `T`.
+### Represents a lazy adapter that discards the first `count` elements from a sequence.
+### :typeparam T: The element type produced by the source sequence.
 entity SkipIterator[T] obeys Iterable[T]
-  ### Stores the source member value.
+  ### Stores the source iterable.
   secret source: Iterable[T]
-  ### Stores the count member value.
+  ### Stores how many leading values should be skipped.
   secret count: U64
 
-### Creates an iterator for this value.
+### Returns the stateful iterator that discards the configured prefix lazily.
+### The returned emitter defers the actual skipping until iteration begins.
 ### :returns: The resulting `SkipEmitter[T]` value.
 routine SkipIterator[T].$iter() -> SkipEmitter[T]
   return SkipEmitter[T](source: me.source.$iter(), remaining: me.count)
 
-### Defines the entity `SkipEmitter`.
-### :typeparam T: The value used for `T`.
+### Iterates over a source sequence after discarding an initial prefix.
+### :typeparam T: The element type produced by the source sequence.
 entity SkipEmitter[T] obeys Iterator[T]
-  ### Stores the source member value.
+  ### Stores the underlying source iterator.
   secret source: Iterator[T]
-  ### Stores the remaining member value.
+  ### Stores how many items still need to be discarded.
   secret remaining: U64
 
-### Returns the next value from this iterator.
+### Returns the next value after any remaining skipped prefix has been consumed.
+### Values are discarded only until `remaining` reaches zero.
 ### :returns: The resulting `T` value.
 routine SkipEmitter[T].$next!() -> T
   while me.remaining > 0u64
@@ -32,8 +31,8 @@ routine SkipEmitter[T].$next!() -> T
     me.remaining = me.remaining - 1u64
   return me.source.$next!()
 
-### Returns the result of `skip`.
-### :param count: The number of items to use.
+### Returns a lazy adapter that skips the first `count` values.
+### :param count: The number of leading values to discard.
 ### :returns: The resulting `SkipIterator[T]` value.
 routine Iterable[T].skip(count: U64) -> SkipIterator[T]
   return SkipIterator[T](source: me, count: count)

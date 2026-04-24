@@ -1,24 +1,19 @@
-# LLVM IR instruction and intrinsic function declarations.
-# Every routine here maps 1:1 to a real LLVM instruction or @llvm.* intrinsic.
-#
-# @llvm_ir("template") is a mold string with {holes} for substitution:
-#   {result} → next SSA temp    {paramName} → emitted arg by parameter name
-#   {T}      → first type arg   {From}, {To}  → named type args
-#   {prev}   → previous line's {result}   {sizeof T} → byte size
 module Core
 
 # ============================================================================
 # Memory Operations
 # ============================================================================
 
-### Returns the result of `load`.
-### :param address: The `address` value.
+### Loads a value of type `T` from `address`.
+### This is the direct wrapper for the LLVM `load` instruction.
+### :param address: The source address to load from.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = load {T}, ptr {address}")
 external("llvm") routine load[T](address: Hijacked[T]) -> T
-### Performs `store` on this value.
-### :param address: The `address` value.
-### :param value: The value to use.
+### Stores `value` to `address`.
+### This is the direct wrapper for the LLVM `store` instruction.
+### :param address: The destination address.
+### :param value: The value to write.
 @llvm_ir("store {T} {value}, ptr {address}")
 dangerous external("llvm") routine store[T](address: Hijacked[T], value: T)
 
@@ -26,33 +21,33 @@ dangerous external("llvm") routine store[T](address: Hijacked[T], value: T)
 # Type Conversions
 # ============================================================================
 
-### Returns the result of `sign_extend`.
-### :param value: The value to use.
+### Sign-extends `value` from `From` to `To`.
+### :param value: The source integer value.
 ### :returns: The resulting `To` value.
 @llvm_ir("{result} = sext {From} {value} to {To}")
 external("llvm") routine sign_extend[From, To](value: From) -> To
-### Returns the result of `zero_extend`.
-### :param value: The value to use.
+### Zero-extends `value` from `From` to `To`.
+### :param value: The source integer value.
 ### :returns: The resulting `To` value.
 @llvm_ir("{result} = zext {From} {value} to {To}")
 external("llvm") routine zero_extend[From, To](value: From) -> To
-### Returns the result of `int_truncate`.
-### :param value: The value to use.
+### Truncates an integer value from `From` to `To`.
+### :param value: The source integer value.
 ### :returns: The resulting `To` value.
 @llvm_ir("{result} = trunc {From} {value} to {To}")
 external("llvm") routine int_truncate[From, To](value: From) -> To
-### Returns the result of `reinterpret_bits`.
-### :param value: The value to use.
+### Reinterprets the bit pattern of `value` as `To` without changing the underlying bits.
+### :param value: The source value to reinterpret.
 ### :returns: The resulting `To` value.
 @llvm_ir("{result} = bitcast {From} {value} to {To}")
 external("llvm") routine reinterpret_bits[From, To](value: From) -> To
-### Returns the result of `pointer_to_int`.
-### :param value: The value to use.
+### Converts a pointer value to an integer value.
+### :param value: The pointer to convert.
 ### :returns: The resulting `To` value.
 @llvm_ir("{result} = ptrtoint ptr {value} to {To}")
 external("llvm") routine pointer_to_int[From, To](value: Hijacked[From]) -> To
-### Returns the result of `int_to_pointer`.
-### :param value: The value to use.
+### Converts an integer value to a typed pointer.
+### :param value: The integer address value to reinterpret.
 ### :returns: The resulting `Hijacked[To]` value.
 @llvm_ir("{result} = inttoptr {From} {value} to ptr")
 external("llvm") routine int_to_pointer[From, To](value: From) -> Hijacked[To]
@@ -68,33 +63,33 @@ dangerous external("llvm") routine entity_from_hijacked[T](value: Hijacked[T]) -
 ### :returns: The resulting `Hijacked[T]` value.
 @llvm_ir("{result} = getelementptr {T}, ptr {ptr}, i64 {count}")
 dangerous external("llvm") routine element_pointer[T](ptr: Hijacked[T], count: S64) -> Hijacked[T]
-### Returns the result of `signed_to_float`.
-### :param value: The value to use.
+### Converts a signed integer value to floating point.
+### :param value: The source integer value.
 ### :returns: The resulting `To` value.
 @llvm_ir("{result} = sitofp {From} {value} to {To}")
 external("llvm") routine signed_to_float[From, To](value: From) -> To
-### Returns the result of `unsigned_to_float`.
-### :param value: The value to use.
+### Converts an unsigned integer value to floating point.
+### :param value: The source integer value.
 ### :returns: The resulting `To` value.
 @llvm_ir("{result} = uitofp {From} {value} to {To}")
 external("llvm") routine unsigned_to_float[From, To](value: From) -> To
-### Returns the result of `float_to_signed`.
-### :param value: The value to use.
+### Converts a floating-point value to a signed integer.
+### :param value: The source floating-point value.
 ### :returns: The resulting `To` value.
 @llvm_ir("{result} = fptosi {From} {value} to {To}")
 external("llvm") routine float_to_signed[From, To](value: From) -> To
-### Returns the result of `float_to_unsigned`.
-### :param value: The value to use.
+### Converts a floating-point value to an unsigned integer.
+### :param value: The source floating-point value.
 ### :returns: The resulting `To` value.
 @llvm_ir("{result} = fptoui {From} {value} to {To}")
 external("llvm") routine float_to_unsigned[From, To](value: From) -> To
-### Returns the result of `float_extend`.
-### :param value: The value to use.
+### Widens a floating-point value to a larger floating-point type.
+### :param value: The source floating-point value.
 ### :returns: The resulting `To` value.
 @llvm_ir("{result} = fpext {From} {value} to {To}")
 external("llvm") routine float_extend[From, To](value: From) -> To
-### Returns the result of `float_narrow`.
-### :param value: The value to use.
+### Narrows a floating-point value to a smaller floating-point type.
+### :param value: The source floating-point value.
 ### :returns: The resulting `To` value.
 @llvm_ir("{result} = fptrunc {From} {value} to {To}")
 external("llvm") routine float_narrow[From, To](value: From) -> To
@@ -103,7 +98,7 @@ external("llvm") routine float_narrow[From, To](value: From) -> To
 # Integer Arithmetic Instructions
 # ============================================================================
 
-### Returns the result of `add`.
+### Adds `a` and `b` using LLVM integer addition.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
 ### :returns: The resulting `T` value.
@@ -121,10 +116,10 @@ dangerous external("llvm") routine signed_add_exact[T](a: T, b: T) -> T
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = add nuw {T} {a}, {b}")
 dangerous external("llvm") routine unsigned_add_exact[T](a: T, b: T) -> T
-### Returns the result of `sub`.
+### Subtracts `b` from `a` using LLVM integer subtraction.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `T` value.
+### :returns: The arithmetic difference.
 @llvm_ir("{result} = sub {T} {a}, {b}")
 external("llvm") routine sub[T](a: T, b: T) -> T
 ### Returns the result of `signed_sub_exact` (no signed wrap — UB on signed overflow).
@@ -139,10 +134,10 @@ dangerous external("llvm") routine signed_sub_exact[T](a: T, b: T) -> T
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = sub nuw {T} {a}, {b}")
 dangerous external("llvm") routine unsigned_sub_exact[T](a: T, b: T) -> T
-### Returns the result of `mul`.
+### Multiplies `a` and `b` using LLVM integer multiplication.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `T` value.
+### :returns: The arithmetic product.
 @llvm_ir("{result} = mul {T} {a}, {b}")
 external("llvm") routine mul[T](a: T, b: T) -> T
 ### Returns the result of `signed_mul_exact` (no signed wrap — UB on signed overflow).
@@ -157,28 +152,28 @@ dangerous external("llvm") routine signed_mul_exact[T](a: T, b: T) -> T
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = mul nuw {T} {a}, {b}")
 dangerous external("llvm") routine unsigned_mul_exact[T](a: T, b: T) -> T
-### Returns the result of `signed_div`.
-### :param a: The left-hand value.
-### :param b: The right-hand value.
-### :returns: The resulting `T` value.
+### Divides `a` by `b` using signed integer division.
+### :param a: The dividend.
+### :param b: The divisor.
+### :returns: The signed quotient.
 @llvm_ir("{result} = sdiv {T} {a}, {b}")
 external("llvm") routine signed_div[T](a: T, b: T) -> T
-### Returns the result of `unsigned_div`.
-### :param a: The left-hand value.
-### :param b: The right-hand value.
-### :returns: The resulting `T` value.
+### Divides `a` by `b` using unsigned integer division.
+### :param a: The dividend.
+### :param b: The divisor.
+### :returns: The unsigned quotient.
 @llvm_ir("{result} = udiv {T} {a}, {b}")
 external("llvm") routine unsigned_div[T](a: T, b: T) -> T
-### Returns the result of `signed_rem`.
-### :param a: The left-hand value.
-### :param b: The right-hand value.
-### :returns: The resulting `T` value.
+### Returns the signed remainder of dividing `a` by `b`.
+### :param a: The dividend.
+### :param b: The divisor.
+### :returns: The signed remainder.
 @llvm_ir("{result} = srem {T} {a}, {b}")
 external("llvm") routine signed_rem[T](a: T, b: T) -> T
-### Returns the result of `unsigned_rem`.
-### :param a: The left-hand value.
-### :param b: The right-hand value.
-### :returns: The resulting `T` value.
+### Returns the unsigned remainder of dividing `a` by `b`.
+### :param a: The dividend.
+### :param b: The divisor.
+### :returns: The unsigned remainder.
 @llvm_ir("{result} = urem {T} {a}, {b}")
 external("llvm") routine unsigned_rem[T](a: T, b: T) -> T
 
@@ -186,28 +181,28 @@ external("llvm") routine unsigned_rem[T](a: T, b: T) -> T
 # Float Arithmetic Instructions
 # ============================================================================
 
-### Returns the result of `float_add`.
+### Adds two floating-point values using LLVM `fadd`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `T` value.
+### :returns: The floating-point sum.
 @llvm_ir("{result} = fadd {T} {a}, {b}")
 external("llvm") routine float_add[T](a: T, b: T) -> T
-### Returns the result of `float_sub`.
+### Subtracts one floating-point value from another using LLVM `fsub`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `T` value.
+### :returns: The floating-point difference.
 @llvm_ir("{result} = fsub {T} {a}, {b}")
 external("llvm") routine float_sub[T](a: T, b: T) -> T
-### Returns the result of `float_mul`.
+### Multiplies two floating-point values using LLVM `fmul`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `T` value.
+### :returns: The floating-point product.
 @llvm_ir("{result} = fmul {T} {a}, {b}")
 external("llvm") routine float_mul[T](a: T, b: T) -> T
-### Returns the result of `float_div`.
-### :param a: The left-hand value.
-### :param b: The right-hand value.
-### :returns: The resulting `T` value.
+### Divides one floating-point value by another using LLVM `fdiv`.
+### :param a: The dividend.
+### :param b: The divisor.
+### :returns: The floating-point quotient.
 @llvm_ir("{result} = fdiv {T} {a}, {b}")
 external("llvm") routine float_div[T](a: T, b: T) -> T
 ### Returns the result of `float_div_fast` (no NaN/inf checks — UB if result is non-finite).
@@ -216,15 +211,15 @@ external("llvm") routine float_div[T](a: T, b: T) -> T
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = fdiv fast {T} {a}, {b}")
 dangerous external("llvm") routine float_div_fast[T](a: T, b: T) -> T
-### Returns the result of `float_rem`.
-### :param a: The left-hand value.
-### :param b: The right-hand value.
-### :returns: The resulting `T` value.
+### Returns the floating-point remainder of dividing `a` by `b`.
+### :param a: The dividend.
+### :param b: The divisor.
+### :returns: The floating-point remainder.
 @llvm_ir("{result} = frem {T} {a}, {b}")
 external("llvm") routine float_rem[T](a: T, b: T) -> T
-### Returns the result of `float_neg`.
-### :param value: The value to use.
-### :returns: The resulting `T` value.
+### Negates a floating-point value with LLVM `fneg`.
+### :param value: The value to negate.
+### :returns: The additive inverse of `value`.
 @llvm_ir("{result} = fneg {T} {value}")
 external("llvm") routine float_neg[T](value: T) -> T
 
@@ -232,22 +227,22 @@ external("llvm") routine float_neg[T](value: T) -> T
 # Bitwise Instructions (and/or are RF keywords, prefixed with bit_)
 # ============================================================================
 
-### Returns the result of `bit and`.
+### Applies a bitwise AND to `a` and `b`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `T` value.
+### :returns: The bitwise intersection.
 @llvm_ir("{result} = and {T} {a}, {b}")
 external("llvm") routine bit_and[T](a: T, b: T) -> T
-### Returns the result of `bit or`.
+### Applies a bitwise OR to `a` and `b`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `T` value.
+### :returns: The bitwise union.
 @llvm_ir("{result} = or {T} {a}, {b}")
 external("llvm") routine bit_or[T](a: T, b: T) -> T
-### Returns the result of `bit_xor`.
+### Applies a bitwise XOR to `a` and `b`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `T` value.
+### :returns: The bitwise exclusive-or result.
 @llvm_ir("{result} = xor {T} {a}, {b}")
 external("llvm") routine bit_xor[T](a: T, b: T) -> T
 
@@ -255,22 +250,22 @@ external("llvm") routine bit_xor[T](a: T, b: T) -> T
 # Shift Instructions
 # ============================================================================
 
-### Returns the result of `shift_left`.
-### :param value: The value to use.
-### :param bits: The encoded bit pattern.
-### :returns: The resulting `T` value.
+### Shifts `value` left by `bits`.
+### :param value: The value to shift.
+### :param bits: The shift amount.
+### :returns: The shifted result.
 @llvm_ir("{result} = shl {T} {value}, {bits}")
 external("llvm") routine shift_left[T](value: T, bits: T) -> T
-### Returns the result of `shift_right_signed`.
-### :param value: The value to use.
-### :param bits: The encoded bit pattern.
-### :returns: The resulting `T` value.
+### Shifts `value` right with sign extension.
+### :param value: The value to shift.
+### :param bits: The shift amount.
+### :returns: The arithmetic right-shift result.
 @llvm_ir("{result} = ashr {T} {value}, {bits}")
 external("llvm") routine shift_right_signed[T](value: T, bits: T) -> T
-### Returns the result of `shift_right_unsigned`.
-### :param value: The value to use.
-### :param bits: The encoded bit pattern.
-### :returns: The resulting `T` value.
+### Shifts `value` right with zero fill.
+### :param value: The value to shift.
+### :param bits: The shift amount.
+### :returns: The logical right-shift result.
 @llvm_ir("{result} = lshr {T} {value}, {bits}")
 external("llvm") routine shift_right_unsigned[T](value: T, bits: T) -> T
 
@@ -278,64 +273,64 @@ external("llvm") routine shift_right_unsigned[T](value: T, bits: T) -> T
 # Integer Comparison Instructions
 # ============================================================================
 
-### Returns the result of `int_eq`.
+### Returns whether two integer-like values are bitwise equal.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `Bool` value.
+### :returns: `true` when `a` and `b` are equal.
 @llvm_ir("{result} = icmp eq {T} {a}, {b}")
 external("llvm") routine int_eq[T](a: T, b: T) -> Bool
-### Returns the result of `int_ne`.
+### Returns whether two integer-like values differ.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `Bool` value.
+### :returns: `true` when `a` and `b` are not equal.
 @llvm_ir("{result} = icmp ne {T} {a}, {b}")
 external("llvm") routine int_ne[T](a: T, b: T) -> Bool
-### Returns the result of `signed_lt`.
+### Returns whether `a` is less than `b` under signed integer ordering.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `Bool` value.
+### :returns: `true` when `a < b`.
 @llvm_ir("{result} = icmp slt {T} {a}, {b}")
 external("llvm") routine signed_lt[T](a: T, b: T) -> Bool
-### Returns the result of `signed_le`.
+### Returns whether `a` is less than or equal to `b` under signed integer ordering.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `Bool` value.
+### :returns: `true` when `a <= b`.
 @llvm_ir("{result} = icmp sle {T} {a}, {b}")
 external("llvm") routine signed_le[T](a: T, b: T) -> Bool
-### Returns the result of `signed_gt`.
+### Returns whether `a` is greater than `b` under signed integer ordering.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `Bool` value.
+### :returns: `true` when `a > b`.
 @llvm_ir("{result} = icmp sgt {T} {a}, {b}")
 external("llvm") routine signed_gt[T](a: T, b: T) -> Bool
-### Returns the result of `signed_ge`.
+### Returns whether `a` is greater than or equal to `b` under signed integer ordering.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `Bool` value.
+### :returns: `true` when `a >= b`.
 @llvm_ir("{result} = icmp sge {T} {a}, {b}")
 external("llvm") routine signed_ge[T](a: T, b: T) -> Bool
-### Returns the result of `unsigned_lt`.
+### Returns whether `a` is less than `b` under unsigned integer ordering.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `Bool` value.
+### :returns: `true` when `a < b`.
 @llvm_ir("{result} = icmp ult {T} {a}, {b}")
 external("llvm") routine unsigned_lt[T](a: T, b: T) -> Bool
-### Returns the result of `unsigned_le`.
+### Returns whether `a` is less than or equal to `b` under unsigned integer ordering.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `Bool` value.
+### :returns: `true` when `a <= b`.
 @llvm_ir("{result} = icmp ule {T} {a}, {b}")
 external("llvm") routine unsigned_le[T](a: T, b: T) -> Bool
-### Returns the result of `unsigned_gt`.
+### Returns whether `a` is greater than `b` under unsigned integer ordering.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `Bool` value.
+### :returns: `true` when `a > b`.
 @llvm_ir("{result} = icmp ugt {T} {a}, {b}")
 external("llvm") routine unsigned_gt[T](a: T, b: T) -> Bool
-### Returns the result of `unsigned_ge`.
+### Returns whether `a` is greater than or equal to `b` under unsigned integer ordering.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `Bool` value.
+### :returns: `true` when `a >= b`.
 @llvm_ir("{result} = icmp uge {T} {a}, {b}")
 external("llvm") routine unsigned_ge[T](a: T, b: T) -> Bool
 
@@ -343,40 +338,46 @@ external("llvm") routine unsigned_ge[T](a: T, b: T) -> Bool
 # Float Comparison Instructions
 # ============================================================================
 
-### Returns the result of `float_eq`.
+### Returns whether two floating-point values are ordered and equal.
+### Comparisons against NaN return `false`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `Bool` value.
+### :returns: `true` when both operands are ordered and equal.
 @llvm_ir("{result} = fcmp oeq {T} {a}, {b}")
 external("llvm") routine float_eq[T](a: T, b: T) -> Bool
-### Returns the result of `float_ne`.
+### Returns whether two floating-point values are ordered and not equal.
+### Comparisons against NaN return `false`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `Bool` value.
+### :returns: `true` when both operands are ordered and differ.
 @llvm_ir("{result} = fcmp one {T} {a}, {b}")
 external("llvm") routine float_ne[T](a: T, b: T) -> Bool
-### Returns the result of `float_lt`.
+### Returns whether `a` is ordered and strictly less than `b`.
+### Comparisons against NaN return `false`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `Bool` value.
+### :returns: `true` when both operands are ordered and `a < b`.
 @llvm_ir("{result} = fcmp olt {T} {a}, {b}")
 external("llvm") routine float_lt[T](a: T, b: T) -> Bool
-### Returns the result of `float_le`.
+### Returns whether `a` is ordered and less than or equal to `b`.
+### Comparisons against NaN return `false`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `Bool` value.
+### :returns: `true` when both operands are ordered and `a <= b`.
 @llvm_ir("{result} = fcmp ole {T} {a}, {b}")
 external("llvm") routine float_le[T](a: T, b: T) -> Bool
-### Returns the result of `float_gt`.
+### Returns whether `a` is ordered and strictly greater than `b`.
+### Comparisons against NaN return `false`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `Bool` value.
+### :returns: `true` when both operands are ordered and `a > b`.
 @llvm_ir("{result} = fcmp ogt {T} {a}, {b}")
 external("llvm") routine float_gt[T](a: T, b: T) -> Bool
-### Returns the result of `float_ge`.
+### Returns whether `a` is ordered and greater than or equal to `b`.
+### Comparisons against NaN return `false`.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `Bool` value.
+### :returns: `true` when both operands are ordered and `a >= b`.
 @llvm_ir("{result} = fcmp oge {T} {a}, {b}")
 external("llvm") routine float_ge[T](a: T, b: T) -> Bool
 
@@ -384,28 +385,28 @@ external("llvm") routine float_ge[T](a: T, b: T) -> Bool
 # Saturating Arithmetic (@llvm.s/u{add,sub}.sat)
 # ============================================================================
 
-### Returns the result of `signed_add_sat`.
+### Adds two signed integers with saturation instead of wraparound.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `T` value.
+### :returns: The saturated signed sum.
 @llvm_ir("{result} = call {T} @llvm.sadd.sat.{T}({T} {a}, {T} {b})")
 external("llvm") routine signed_add_sat[T](a: T, b: T) -> T
-### Returns the result of `unsigned_add_sat`.
+### Adds two unsigned integers with saturation instead of wraparound.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `T` value.
+### :returns: The saturated unsigned sum.
 @llvm_ir("{result} = call {T} @llvm.uadd.sat.{T}({T} {a}, {T} {b})")
 external("llvm") routine unsigned_add_sat[T](a: T, b: T) -> T
-### Returns the result of `signed_sub_sat`.
+### Subtracts two signed integers with saturation instead of wraparound.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `T` value.
+### :returns: The saturated signed difference.
 @llvm_ir("{result} = call {T} @llvm.ssub.sat.{T}({T} {a}, {T} {b})")
 external("llvm") routine signed_sub_sat[T](a: T, b: T) -> T
-### Returns the result of `unsigned_sub_sat`.
+### Subtracts two unsigned integers with saturation at zero.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `T` value.
+### :returns: The saturated unsigned difference.
 @llvm_ir("{result} = call {T} @llvm.usub.sat.{T}({T} {a}, {T} {b})")
 external("llvm") routine unsigned_sub_sat[T](a: T, b: T) -> T
 
@@ -413,40 +414,40 @@ external("llvm") routine unsigned_sub_sat[T](a: T, b: T) -> T
 # Overflow Detection (@llvm.s/u{add,sub,mul}.with.overflow)
 # ============================================================================
 
-### Returns the result of `signed_add_checked`.
+### Adds two signed integers and reports whether overflow occurred.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `(T, Bool)` value.
+### :returns: A tuple of the wrapped result and an overflow flag.
 @llvm_ir("{result} = call { {T}, i1 } @llvm.sadd.with.overflow.{T}({T} {a}, {T} {b})")
 external("llvm") routine signed_add_checked[T](a: T, b: T) -> (T, Bool)
-### Returns the result of `unsigned_add_checked`.
+### Adds two unsigned integers and reports whether overflow occurred.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `(T, Bool)` value.
+### :returns: A tuple of the wrapped result and an overflow flag.
 @llvm_ir("{result} = call { {T}, i1 } @llvm.uadd.with.overflow.{T}({T} {a}, {T} {b})")
 external("llvm") routine unsigned_add_checked[T](a: T, b: T) -> (T, Bool)
-### Returns the result of `signed_sub_checked`.
+### Subtracts two signed integers and reports whether overflow occurred.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `(T, Bool)` value.
+### :returns: A tuple of the wrapped result and an overflow flag.
 @llvm_ir("{result} = call { {T}, i1 } @llvm.ssub.with.overflow.{T}({T} {a}, {T} {b})")
 external("llvm") routine signed_sub_checked[T](a: T, b: T) -> (T, Bool)
-### Returns the result of `unsigned_sub_checked`.
+### Subtracts two unsigned integers and reports whether underflow occurred.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `(T, Bool)` value.
+### :returns: A tuple of the wrapped result and an overflow flag.
 @llvm_ir("{result} = call { {T}, i1 } @llvm.usub.with.overflow.{T}({T} {a}, {T} {b})")
 external("llvm") routine unsigned_sub_checked[T](a: T, b: T) -> (T, Bool)
-### Returns the result of `signed_mul_checked`.
+### Multiplies two signed integers and reports whether overflow occurred.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `(T, Bool)` value.
+### :returns: A tuple of the wrapped result and an overflow flag.
 @llvm_ir("{result} = call { {T}, i1 } @llvm.smul.with.overflow.{T}({T} {a}, {T} {b})")
 external("llvm") routine signed_mul_checked[T](a: T, b: T) -> (T, Bool)
-### Returns the result of `unsigned_mul_checked`.
+### Multiplies two unsigned integers and reports whether overflow occurred.
 ### :param a: The left-hand value.
 ### :param b: The right-hand value.
-### :returns: The resulting `(T, Bool)` value.
+### :returns: A tuple of the wrapped result and an overflow flag.
 @llvm_ir("{result} = call { {T}, i1 } @llvm.umul.with.overflow.{T}({T} {a}, {T} {b})")
 external("llvm") routine unsigned_mul_checked[T](a: T, b: T) -> (T, Bool)
 
@@ -454,29 +455,29 @@ external("llvm") routine unsigned_mul_checked[T](a: T, b: T) -> (T, Bool)
 # Integer Bit Manipulation (@llvm.ctpop, @llvm.ctlz, etc.)
 # ============================================================================
 
-### Returns the result of `count_ones`.
-### :param value: The value to use.
-### :returns: The resulting `T` value.
+### Counts the number of one bits in `value`.
+### :param value: The integer input.
+### :returns: The population count.
 @llvm_ir("{result} = call {T} @llvm.ctpop.{T}({T} {value})")
 external("llvm") routine count_ones[T](value: T) -> T
-### Returns the result of `leading_zeros`.
-### :param value: The value to use.
-### :returns: The resulting `T` value.
+### Counts the number of leading zero bits in `value`.
+### :param value: The integer input.
+### :returns: The count of zero bits before the first one bit.
 @llvm_ir("{result} = call {T} @llvm.ctlz.{T}({T} {value}, i1 false)")
 external("llvm") routine leading_zeros[T](value: T) -> T
-### Returns the result of `trailing_zeros`.
-### :param value: The value to use.
-### :returns: The resulting `T` value.
+### Counts the number of trailing zero bits in `value`.
+### :param value: The integer input.
+### :returns: The count of zero bits after the least-significant one bit.
 @llvm_ir("{result} = call {T} @llvm.cttz.{T}({T} {value}, i1 false)")
 external("llvm") routine trailing_zeros[T](value: T) -> T
-### Returns the result of `reverse_bits`.
-### :param value: The value to use.
-### :returns: The resulting `T` value.
+### Reverses the bit order of `value`.
+### :param value: The integer input.
+### :returns: The bit-reversed result.
 @llvm_ir("{result} = call {T} @llvm.bitreverse.{T}({T} {value})")
 external("llvm") routine reverse_bits[T](value: T) -> T
-### Returns the result of `byte_swap`.
-### :param value: The value to use.
-### :returns: The resulting `T` value.
+### Reverses the byte order of `value`.
+### :param value: The integer input.
+### :returns: The byte-swapped result.
 @llvm_ir("{result} = call {T} @llvm.bswap.{T}({T} {value})")
 external("llvm") routine byte_swap[T](value: T) -> T
 ### Returns the absolute value.
@@ -489,71 +490,71 @@ external("llvm") routine int_abs[T](value: T) -> T
 # Float Math (@llvm.sqrt, @llvm.fabs, etc.)
 # ============================================================================
 
-### Returns the result of `sqrt`.
-### :param value: The value to use.
-### :returns: The resulting `T` value.
+### Returns the square root of `value`.
+### :param value: The floating-point input.
+### :returns: The intrinsic square-root result.
 @llvm_ir("{result} = call {T} @llvm.sqrt.{T}({T} {value})")
 external("llvm") routine sqrt[T](value: T) -> T
-### Returns the result of `float_abs`.
-### :param value: The value to use.
-### :returns: The resulting `T` value.
+### Returns the absolute value of a floating-point input.
+### :param value: The floating-point input.
+### :returns: The input magnitude with a non-negative sign.
 @llvm_ir("{result} = call {T} @llvm.fabs.{T}({T} {value})")
 external("llvm") routine float_abs[T](value: T) -> T
-### Returns the result of `floor`.
-### :param value: The value to use.
-### :returns: The resulting `T` value.
+### Rounds a floating-point input toward negative infinity.
+### :param value: The floating-point input.
+### :returns: The floor result.
 @llvm_ir("{result} = call {T} @llvm.floor.{T}({T} {value})")
 external("llvm") routine floor[T](value: T) -> T
-### Returns the result of `ceil`.
-### :param value: The value to use.
-### :returns: The resulting `T` value.
+### Rounds a floating-point input toward positive infinity.
+### :param value: The floating-point input.
+### :returns: The ceiling result.
 @llvm_ir("{result} = call {T} @llvm.ceil.{T}({T} {value})")
 external("llvm") routine ceil[T](value: T) -> T
-### Returns the result of `round`.
-### :param value: The value to use.
-### :returns: The resulting `T` value.
+### Rounds a floating-point input to the nearest integral value.
+### :param value: The floating-point input.
+### :returns: The rounded result.
 @llvm_ir("{result} = call {T} @llvm.round.{T}({T} {value})")
 external("llvm") routine round[T](value: T) -> T
-### Returns the result of `float_truncate`.
-### :param value: The value to use.
-### :returns: The resulting `T` value.
+### Truncates a floating-point input toward zero.
+### :param value: The floating-point input.
+### :returns: The truncated result.
 @llvm_ir("{result} = call {T} @llvm.trunc.{T}({T} {value})")
 external("llvm") routine float_truncate[T](value: T) -> T
-### Returns the result of `sin`.
-### :param value: The value to use.
-### :returns: The resulting `T` value.
+### Returns the sine of `value`, interpreting it as radians.
+### :param value: The floating-point input.
+### :returns: The intrinsic sine result.
 @llvm_ir("{result} = call {T} @llvm.sin.{T}({T} {value})")
 external("llvm") routine sin[T](value: T) -> T
-### Returns the result of `cos`.
-### :param value: The value to use.
-### :returns: The resulting `T` value.
+### Returns the cosine of `value`, interpreting it as radians.
+### :param value: The floating-point input.
+### :returns: The intrinsic cosine result.
 @llvm_ir("{result} = call {T} @llvm.cos.{T}({T} {value})")
 external("llvm") routine cos[T](value: T) -> T
-### Returns the result of `exp`.
-### :param value: The value to use.
-### :returns: The resulting `T` value.
+### Returns `e` raised to `value`.
+### :param value: The floating-point input.
+### :returns: The intrinsic exponential result.
 @llvm_ir("{result} = call {T} @llvm.exp.{T}({T} {value})")
 external("llvm") routine exp[T](value: T) -> T
-### Returns the result of `log`.
-### :param value: The value to use.
-### :returns: The resulting `T` value.
+### Returns the natural logarithm of `value`.
+### :param value: The floating-point input.
+### :returns: The intrinsic natural-log result.
 @llvm_ir("{result} = call {T} @llvm.log.{T}({T} {value})")
 external("llvm") routine log[T](value: T) -> T
-### Returns the result of `log10`.
-### :param value: The value to use.
-### :returns: The resulting `T` value.
+### Returns the base-10 logarithm of `value`.
+### :param value: The floating-point input.
+### :returns: The intrinsic common-log result.
 @llvm_ir("{result} = call {T} @llvm.log10.{T}({T} {value})")
 external("llvm") routine log10[T](value: T) -> T
-### Returns the result of `pow`.
+### Raises `base` to the floating-point power `exp`.
 ### :param base: The base value.
 ### :param exp: The exponent value.
-### :returns: The resulting `T` value.
+### :returns: The intrinsic power result.
 @llvm_ir("{result} = call {T} @llvm.pow.{T}({T} {base}, {T} {exp})")
 external("llvm") routine pow[T](base: T, exp: T) -> T
-### Returns the result of `copysign`.
-### :param value: The value to use.
-### :param sign: The `sign` value.
-### :returns: The resulting `T` value.
+### Returns `value` with its sign bit replaced by the sign of `sign`.
+### :param value: The magnitude source.
+### :param sign: The sign source.
+### :returns: A value combining the magnitude of `value` and the sign of `sign`.
 @llvm_ir("{result} = call {T} @llvm.copysign.{T}({T} {value}, {T} {sign})")
 external("llvm") routine copysign[T](value: T, sign: T) -> T
 
@@ -561,57 +562,57 @@ external("llvm") routine copysign[T](value: T, sign: T) -> T
 # Atomic Operations
 # ============================================================================
 
-### Returns the result of `atomic load`.
-### :param ptr: The pointer value to use.
-### :returns: The resulting `T` value.
+### Loads a value atomically with sequentially consistent ordering.
+### :param ptr: The address of the atomic storage.
+### :returns: The value observed at `ptr`.
 @llvm_ir("{result} = load atomic {T}, ptr {ptr} seq_cst, align {sizeof T}")
 external("llvm") routine atomic_load[T](ptr: Hijacked[T]) -> T
-### Performs `atomic store` on this value.
-### :param ptr: The pointer value to use.
-### :param value: The value to use.
+### Stores a value atomically with sequentially consistent ordering.
+### :param ptr: The address of the atomic storage.
+### :param value: The replacement value to write.
 @llvm_ir("store atomic {T} {value}, ptr {ptr} seq_cst, align {sizeof T}")
 external("llvm") routine atomic_store[T](ptr: Hijacked[T], value: T)
-### Returns the result of `atomic add`.
-### :param ptr: The pointer value to use.
-### :param value: The value to use.
-### :returns: The resulting `T` value.
+### Adds `value` atomically and returns the previous contents.
+### :param ptr: The address of the atomic storage.
+### :param value: The increment to apply.
+### :returns: The value stored before the addition.
 @llvm_ir("{result} = atomicrmw add ptr {ptr}, {T} {value} seq_cst")
 external("llvm") routine atomic_add[T](ptr: Hijacked[T], value: T) -> T
-### Returns the result of `atomic sub`.
-### :param ptr: The pointer value to use.
-### :param value: The value to use.
-### :returns: The resulting `T` value.
+### Subtracts `value` atomically and returns the previous contents.
+### :param ptr: The address of the atomic storage.
+### :param value: The decrement to apply.
+### :returns: The value stored before the subtraction.
 @llvm_ir("{result} = atomicrmw sub ptr {ptr}, {T} {value} seq_cst")
 external("llvm") routine atomic_sub[T](ptr: Hijacked[T], value: T) -> T
-### Returns the result of `atomic and`.
-### :param ptr: The pointer value to use.
-### :param value: The value to use.
-### :returns: The resulting `T` value.
+### Applies a bitwise AND atomically and returns the previous contents.
+### :param ptr: The address of the atomic storage.
+### :param value: The bit mask to apply.
+### :returns: The value stored before the update.
 @llvm_ir("{result} = atomicrmw and ptr {ptr}, {T} {value} seq_cst")
 external("llvm") routine atomic_and[T](ptr: Hijacked[T], value: T) -> T
-### Returns the result of `atomic or`.
-### :param ptr: The pointer value to use.
-### :param value: The value to use.
-### :returns: The resulting `T` value.
+### Applies a bitwise OR atomically and returns the previous contents.
+### :param ptr: The address of the atomic storage.
+### :param value: The bit mask to apply.
+### :returns: The value stored before the update.
 @llvm_ir("{result} = atomicrmw or ptr {ptr}, {T} {value} seq_cst")
 external("llvm") routine atomic_or[T](ptr: Hijacked[T], value: T) -> T
-### Returns the result of `atomic xor`.
-### :param ptr: The pointer value to use.
-### :param value: The value to use.
-### :returns: The resulting `T` value.
+### Applies a bitwise XOR atomically and returns the previous contents.
+### :param ptr: The address of the atomic storage.
+### :param value: The bit mask to apply.
+### :returns: The value stored before the update.
 @llvm_ir("{result} = atomicrmw xor ptr {ptr}, {T} {value} seq_cst")
 external("llvm") routine atomic_xor[T](ptr: Hijacked[T], value: T) -> T
-### Returns the result of `atomic exchange`.
-### :param ptr: The pointer value to use.
-### :param value: The value to use.
-### :returns: The resulting `T` value.
+### Replaces the atomic value and returns the previous contents.
+### :param ptr: The address of the atomic storage.
+### :param value: The new value to install.
+### :returns: The value stored before the exchange.
 @llvm_ir("{result} = atomicrmw xchg ptr {ptr}, {T} {value} seq_cst")
 external("llvm") routine atomic_exchange[T](ptr: Hijacked[T], value: T) -> T
-### Returns the result of `atomic compare and exchange`.
-### :param ptr: The pointer value to use.
-### :param expected: The value expected to be present.
-### :param desired: The value to store on success.
-### :returns: The resulting `(T, Bool)` value.
+### Performs an atomic compare-and-exchange with sequentially consistent ordering.
+### :param ptr: The address of the atomic storage.
+### :param expected: The value that must already be present.
+### :param desired: The replacement value written on success.
+### :returns: A tuple of the observed old value and a success flag.
 @llvm_ir("{result} = cmpxchg ptr {ptr}, {T} {expected}, {T} {desired} seq_cst seq_cst")
 external("llvm") routine atomic_compare_and_exchange[T](ptr: Hijacked[T], expected: T, desired: T) -> (T, Bool)
 
@@ -619,10 +620,12 @@ external("llvm") routine atomic_compare_and_exchange[T](ptr: Hijacked[T], expect
 # Array element access (alloca + GEP pattern for [N x T] record types)
 # ============================================================================
 
-### Returns the result of `byte at`.
-### :param array: The `array` value.
-### :param index: The zero-based position to use.
-### :returns: The resulting `U8` value.
+### Returns the raw byte at `index` from an aggregate value.
+### This helper materializes the aggregate in stack storage, then indexes into
+### the underlying byte representation.
+### :param array: The aggregate value to inspect.
+### :param index: The zero-based byte offset.
+### :returns: The byte stored at `index`.
 @llvm_ir("{result} = alloca {Array}\nstore {Array} {array}, ptr {prev}\n{result} = getelementptr {Array}, ptr {prev}, i32 0, i64 {index}\n{result} = load i8, ptr {prev}")
 external("llvm") routine byte_at[Array](array: Array, index: U64) -> U8
 
@@ -634,7 +637,9 @@ external("llvm") routine byte_at[Array](array: Array, index: U64) -> U8
 @llvm_ir("{result} = alloca {Array}\nstore {Array} {array}, ptr {prev}\n{result} = getelementptr {Array}, ptr {prev}, i32 0, i64 {index}\nstore i8 {value}, ptr {prev}\n{result} = load {Array}, ptr {first}")
 external("llvm") routine set_byte_at[Array](array: Array, index: U64, value: U8) -> Array
 
-### Returns the result of `element at`.
+### Returns the element at `index` from an aggregate value.
+### Like `byte_at`, this helper materializes the aggregate in temporary storage
+### and then indexes to the requested typed element.
 ### :param array: The `array` value.
 ### :param index: The zero-based position to use.
 ### :returns: The resulting `T` value.

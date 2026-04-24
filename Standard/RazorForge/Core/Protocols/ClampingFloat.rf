@@ -1,6 +1,8 @@
-# ClampingFloat - Bundle protocol for clamping arithmetic + clamping division
 module Core
 
-### Defines the protocol `ClampingFloat`.
+### Represents the saturating arithmetic surface for floating-style numeric types.
+### `ClampingFloat` extends the clamping arithmetic family with division, making
+### it the aggregate protocol for fixed-width float types that expose clamped
+### operator variants.
 protocol ClampingFloat obeys ClampingArithmetic, ClampingDivisible
   pass

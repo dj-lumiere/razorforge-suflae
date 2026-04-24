@@ -1,14 +1,12 @@
 module Core
 
-# NotImplementedError - Error for unimplemented functionality
-# Used as a placeholder for methods/routines that are not yet implemented
-
-### Defines the crashable `NotImplementedError`.
+### Represents the crashable raised for functionality that has been declared but
+### not implemented yet.
 crashable NotImplementedError
-  ### Stores the feature member value.
+  ### Stores the name or description of the missing feature.
   feature: Text
 
-### Returns the result of `crash message`.
+### Returns the default message for unimplemented functionality.
 ### :returns: The resulting `Text` value.
 routine NotImplementedError.crash_message() -> Text
   return f"Not implemented: {me.feature}"

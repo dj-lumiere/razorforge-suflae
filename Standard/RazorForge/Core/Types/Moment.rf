@@ -1,35 +1,25 @@
 module Core
 
-# Moment - Point in time with nanosecond precision
-#
-# Internal representation: seconds since Unix epoch (1970-01-01) + nanoseconds
-# within second. Nanoseconds always normalized to [0, 1_000_000_000).
-#
-# Uses the proleptic Gregorian calendar for date calculations.
-# Civil date conversion algorithm based on Howard Hinnant's chrono approach.
-#
-# Usage:
-#   var now = Moment.now()
-#   var deadline = now + 5m
-#   var elapsed = deadline - now   # Duration
-#   var meeting = Moment(year: 2026, month: 2, day: 15, hour: 14, minute: 0, second: 0)
-
 # ============================================================================
 # Record definition
 # ============================================================================
 
-### Defines the record `Moment`.
+### Represents an absolute point in time with nanosecond precision.
+### `Moment` is stored as Unix-epoch seconds plus a normalized nanosecond component and uses the proleptic Gregorian calendar.
+### It is the canonical UTC time-point type for timestamps, deadlines, and duration arithmetic.
+### :see: {Duration}, {LocalMoment}, {Temporal-Types}
 record Moment obeys Ordered, DurationAddable, DurationSubtractable
-  ### Stores the seconds member value.
+  ### Stores the whole seconds since the Unix epoch.
   secret seconds: S64      # Seconds since Unix epoch (1970-01-01), negative for dates before
-  ### Stores the nanoseconds member value.
+  ### Stores the normalized nanoseconds within the current second.
   secret nanoseconds: U32  # Nanoseconds within second [0, 1_000_000_000)
 
 # ============================================================================
 # Normalization helper
 # ============================================================================
 
-### Returns the result of `normalize moment`.
+### Normalizes raw second and nanosecond parts into canonical `Moment` storage.
+### The result always has nanoseconds in the range `[0, 1_000_000_000)`.
 ### :param seconds: The whole-second component.
 ### :param nanoseconds: The nanosecond component within the current second.
 ### :returns: The resulting `Moment` value.
@@ -51,7 +41,7 @@ routine normalize_moment(seconds: S64, nanoseconds: S64) -> Moment
 # Civil calendar helpers (proleptic Gregorian)
 # ============================================================================
 
-### Returns the result of `ymd to days`.
+### Converts a civil year-month-day triple to days since the Unix epoch.
 ### :param year: The `year` value.
 ### :param month: The `month` value.
 ### :param day: The `day` value.
@@ -80,8 +70,8 @@ routine ymd_to_days(year: S64, month: S64, day: S64) -> S64
   # Days since epoch (epoch = 1970-01-01 = era 4, doe 719468 from era 0)
   return era *% 146097_s64 +% doe -% 719468_s64
 
-### Returns the result of `days to year`.
-### :param days_since_epoch: The `days_since_epoch` value.
+### Converts an epoch-day count to its calendar year component.
+### :param days_since_epoch: The day count relative to the Unix epoch.
 ### :returns: The resulting `S64` value.
 routine days_to_year(days_since_epoch: S64) -> S64
   var z = days_since_epoch +% 719468_s64
@@ -96,8 +86,8 @@ routine days_to_year(days_since_epoch: S64) -> S64
     return y +% 1_s64
   return y
 
-### Returns the result of `days to month`.
-### :param days_since_epoch: The `days_since_epoch` value.
+### Converts an epoch-day count to its calendar month component.
+### :param days_since_epoch: The day count relative to the Unix epoch.
 ### :returns: The resulting `S64` value.
 routine days_to_month(days_since_epoch: S64) -> S64
   var z = days_since_epoch +% 719468_s64
@@ -108,8 +98,8 @@ routine days_to_month(days_since_epoch: S64) -> S64
   var mp = signed_div[S64](5_s64 *% doy +% 2_s64, 153_s64)
   return mp +% (if mp < 10_s64 then 3_s64 else 0_s64 -% 9_s64)
 
-### Returns the result of `days to day`.
-### :param days_since_epoch: The `days_since_epoch` value.
+### Converts an epoch-day count to its day-of-month component.
+### :param days_since_epoch: The day count relative to the Unix epoch.
 ### :returns: The resulting `S64` value.
 routine days_to_day(days_since_epoch: S64) -> S64
   var z = days_since_epoch +% 719468_s64
@@ -124,20 +114,22 @@ routine days_to_day(days_since_epoch: S64) -> S64
 # Creators
 # ============================================================================
 
-### Creates a new instance.
-### :param year: The `year` value.
-### :param month: The `month` value.
-### :param day: The `day` value.
-### :param hour: The `hour` value.
-### :param minute: The `minute` value.
-### :param second: The `second` value.
+### Creates a UTC moment from civil date-time components.
+### The supplied components are interpreted in the proleptic Gregorian calendar.
+### :param year: The calendar year.
+### :param month: The month number in the range `1..12`.
+### :param day: The day of month.
+### :param hour: The hour component.
+### :param minute: The minute component.
+### :param second: The second component.
 ### :returns: The resulting `Moment` value.
 routine Moment.$create(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64) -> Moment
   var d = ymd_to_days(year, month, day)
   var s = d *% SECONDS_PER_DAY +% hour *% SECONDS_PER_HOUR +% minute *% SECONDS_PER_MINUTE +% second
   return Moment(seconds: s, nanoseconds: 0_u32)
 
-### Returns the result of `epoch`.
+### Returns the Unix epoch.
+### This is `1970-01-01 00:00:00 UTC`.
 ### :returns: The resulting `Moment` value.
 routine Moment.epoch() -> Moment
   return Moment(seconds: 0_s64, nanoseconds: 0_u32)
@@ -148,7 +140,7 @@ routine Moment.epoch() -> Moment
 routine Moment.from_timestamp(seconds: S64) -> Moment
   return Moment(seconds: seconds, nanoseconds: 0_u32)
 
-### Returns the result of `now`.
+### Returns the current UTC instant from the runtime clock.
 ### :returns: The resulting `Moment` value.
 routine Moment.now() -> Moment
   # Implemented by compiler intrinsic / native runtime
@@ -158,25 +150,26 @@ routine Moment.now() -> Moment
 # Date accessors (derived from seconds member variable)
 # ============================================================================
 
-### Returns the result of `year`.
+### Returns the UTC calendar year of this moment.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.year() -> S64
   return days_to_year(signed_div[S64](me.seconds, SECONDS_PER_DAY))
 
-### Returns the result of `month`.
+### Returns the UTC calendar month of this moment.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.month() -> S64
   return days_to_month(signed_div[S64](me.seconds, SECONDS_PER_DAY))
 
-### Returns the result of `day`.
+### Returns the UTC day of month of this moment.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.day() -> S64
   return days_to_day(signed_div[S64](me.seconds, SECONDS_PER_DAY))
 
-### Returns the result of `day of week`.
+### Returns the UTC day of week for this moment.
+### The result uses `0 = Monday` through `6 = Sunday`.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.day_of_week() -> S64
@@ -191,37 +184,37 @@ routine Moment.day_of_week() -> S64
 # Time accessors (derived from seconds and nanoseconds member variables)
 # ============================================================================
 
-### Returns the result of `hour`.
+### Returns the UTC hour component of this moment.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.hour() -> S64
   return signed_div[S64](signed_rem[S64](me.seconds, SECONDS_PER_DAY), SECONDS_PER_HOUR)
 
-### Returns the result of `minute`.
+### Returns the UTC minute component of this moment.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.minute() -> S64
   return signed_div[S64](signed_rem[S64](me.seconds, SECONDS_PER_HOUR), SECONDS_PER_MINUTE)
 
-### Returns the result of `second`.
+### Returns the UTC second component of this moment.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.second() -> S64
   return signed_rem[S64](me.seconds, SECONDS_PER_MINUTE)
 
-### Returns the result of `millisecond`.
+### Returns the millisecond component within the current second.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.millisecond() -> S64
   return signed_div[S64](S64(me.nanoseconds), NS_PER_MILLISECOND)
 
-### Returns the result of `microsecond`.
+### Returns the microsecond component within the current millisecond.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.microsecond() -> S64
   return signed_div[S64](signed_rem[S64](S64(me.nanoseconds), NS_PER_MILLISECOND), NS_PER_MICROSECOND)
 
-### Returns the result of `nanosecond`.
+### Returns the nanosecond component within the current microsecond.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.nanosecond() -> S64
@@ -231,13 +224,13 @@ routine Moment.nanosecond() -> S64
 # Conversion
 # ============================================================================
 
-### Returns the result of `timestamp`.
+### Returns the whole-second Unix timestamp of this moment.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.timestamp() -> S64
   return me.seconds
 
-### Returns the result of `timestamp ms`.
+### Returns the Unix timestamp of this moment in milliseconds.
 ### :returns: The resulting `S64` value.
 @readonly
 routine Moment.timestamp_ms() -> S64
@@ -254,37 +247,38 @@ routine Moment.timestamp_ms() -> S64
 routine Moment.add_duration(duration: Duration) -> Moment
   return normalize_moment(me.seconds +% duration.total_seconds(), S64(me.nanoseconds) +% S64(duration.subsec_nanoseconds()))
 
-### Returns the result of `subtract duration`.
-### :param duration: The `duration` value.
+### Returns this moment shifted backward by `duration`.
+### :param duration: The time span to subtract.
 ### :returns: The resulting `Moment` value.
 @readonly
 routine Moment.subtract_duration(duration: Duration) -> Moment
   return me.add_duration(duration.$neg())
 
-### Returns the result of `elapsed since`.
-### :param earlier: The `earlier` value.
+### Returns the elapsed duration from `earlier` to this moment.
+### Positive results mean this moment occurs after `earlier`.
+### :param earlier: The earlier comparison instant.
 ### :returns: The resulting `Duration` value.
 @readonly
 routine Moment.elapsed_since(earlier: Moment) -> Duration
   return normalize_duration(me.seconds -% earlier.seconds, S64(me.nanoseconds) -% S64(earlier.nanoseconds))
 
-### Returns the sum of this value and the other value.
-### :param you: The other value to compare against.
-### :returns: The resulting `Moment` value.
+### Returns the moment reached by advancing this one by `you`.
+### :param you: The duration to advance by.
+### :returns: The resulting `Moment`.
 @readonly
 routine Moment.$add(you: Duration) -> Moment
   return me.add_duration(you)
 
-### Returns the difference between this value and the other value.
-### :param you: The other value to compare against.
-### :returns: The resulting `Moment` value.
+### Returns the moment reached by retreating this one by `you`.
+### :param you: The duration to subtract.
+### :returns: The resulting `Moment`.
 @readonly
 routine Moment.$sub(you: Duration) -> Moment
   return me.subtract_duration(you)
 
-### Returns the difference between this value and the other value.
-### :param you: The other value to compare against.
-### :returns: The resulting `Duration` value.
+### Returns the elapsed time from `you` to this moment.
+### :param you: The earlier moment to measure from.
+### :returns: The `Duration` between the two moments.
 @readonly
 routine Moment.$sub(you: Moment) -> Duration
   return me.elapsed_since(you)
@@ -319,7 +313,7 @@ routine Moment.$cmp(you: Moment) -> ComparisonSign
 # Text representation
 # ============================================================================
 
-### Returns the textual representation of this value.
+### Returns the display form of this moment in a compact UTC civil-time style.
 ### :returns: The resulting `Text` value.
 routine Moment.$represent() -> Text
   var y = me.year()
@@ -330,7 +324,8 @@ routine Moment.$represent() -> Text
   var s = me.second()
   return f"{y}-{mo}-{d} {h}:{mi}:{s}"
 
-### Returns the textual representation of this value.
+### Returns the diagnostic form of this moment using its normalized internal
+### representation.
 ### :returns: The resulting `Text` value.
 routine Moment.$diagnose() -> Text
   return "Moment(seconds: " + me.seconds.$represent() + ", nanoseconds: " + me.nanoseconds.$represent() + ")"

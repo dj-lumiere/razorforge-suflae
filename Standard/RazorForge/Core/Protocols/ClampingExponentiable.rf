@@ -1,10 +1,14 @@
-# ClampingExponentiable - Protocol for types that support clamping exponentiation (**^)
 module Core
 
-### Defines the protocol `ClampingExponentiable`.
+### Represents the protocol for saturating exponentiation.
+### `ClampingExponentiable` is intended for bounded numeric types that expose a
+### power operation and define a nearest-bound fallback when the exact result
+### exceeds the destination range.
 protocol ClampingExponentiable
-  ### Implements the wired routine behavior for this value.
-  ### :param you: The other value to compare against.
+  ### Returns the clamping power result of this value raised by `you`.
+  ### :param you: The exponent value.
   ### :returns: The resulting `Me` value.
+  ### :note: Clamp semantics apply only when the conforming type cannot
+  ### represent the mathematical result exactly.
   @readonly
   routine Me.$pow_clamp(you: Me) -> Me

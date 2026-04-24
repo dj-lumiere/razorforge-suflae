@@ -1,41 +1,42 @@
 module Core
 
-# MemoryError - Error types for memory operations
-
-### Defines the crashable `MemoryAllocationError`.
+### Represents the crashable raised when the runtime cannot satisfy an
+### allocation request.
 crashable MemoryAllocationError
-  ### Stores the requested bytes member value.
+  ### Stores the number of bytes requested by the failed allocation.
   requested_bytes: U64
 
-### Returns the result of `crash message`.
+### Returns the default message for allocation failure.
 ### :returns: The resulting `Text` value.
 routine MemoryAllocationError.crash_message() -> Text
   return f"Failed to allocate {me.requested_bytes} bytes"
 
-### Defines the crashable `MemoryBoundsError`.
+### Represents the crashable raised when a raw memory access extends beyond the
+### allocated region.
 crashable MemoryBoundsError
-  ### Stores the offset member value.
+  ### Stores the starting offset of the attempted access.
   offset: U64
-  ### Stores the size member value.
+  ### Stores the size in bytes of the attempted access.
   size: U64
-  ### Stores the allocated member value.
+  ### Stores the number of bytes that were actually allocated.
   allocated: U64
 
-### Returns the result of `crash message`.
+### Returns the default message for out-of-bounds memory access.
 ### :returns: The resulting `Text` value.
 routine MemoryBoundsError.crash_message() -> Text
   return f"Memory access at offset {me.offset} with size {me.size} exceeds allocated {me.allocated} bytes"
 
-### Defines the crashable `SliceBoundsError`.
+### Represents the crashable raised when a requested slice would extend beyond
+### the underlying storage.
 crashable SliceBoundsError
-  ### Stores the offset member value.
+  ### Stores the starting offset of the requested slice.
   offset: U64
-  ### Stores the length member value.
+  ### Stores the requested slice length in bytes.
   length: U64
-  ### Stores the allocated member value.
+  ### Stores the number of bytes that are actually available.
   allocated: U64
 
-### Returns the result of `crash message`.
+### Returns the default message for invalid slice creation.
 ### :returns: The resulting `Text` value.
 routine SliceBoundsError.crash_message() -> Text
   return f"Slice from {me.offset} with length {me.length} exceeds allocated {me.allocated} bytes"

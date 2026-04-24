@@ -5,10 +5,11 @@ module Core
 ### :typeparam T: The exclusively owned entity type.
 entity RetainController[T]
 needs T is EntityType
-  ### Stores the strong count member value.
+  ### Stores the strong count.
   secret strong_count: S32
-  ### Stores the weak count member value.
+  ### Stores the weak count.
   secret weak_count: S32
+  ### Stores the raw pointer to the managed entity.
   secret data: Hijacked[T]
 
 ### Creates a new controller with one strong reference.
@@ -21,31 +22,43 @@ dangerous routine RetainController[T].$create(data: Hijacked[T]) -> RetainContro
     data: data
   )
 
+### Increments the strong reference count when a new `Retained` handle is cloned.
 routine RetainController[T].increase_strong_count()
   me.strong_count = me.strong_count + 1
   return
 
+### Decrements the strong reference count when a `Retained` handle is dropped.
 routine RetainController[T].decrease_strong_count()
   me.strong_count = me.strong_count - 1
   return
 
+### Increments the weak reference count when a new `Tracked` handle is cloned.
 routine RetainController[T].increase_weak_count()
   me.weak_count = me.weak_count + 1
   return
 
+### Decrements the weak reference count when a `Tracked` handle is dropped.
 routine RetainController[T].decrease_weak_count()
   me.weak_count = me.weak_count - 1
   return
 
+### Returns the current number of live strong (`Retained`) handles.
+### :returns: The strong reference count.
 routine RetainController[T].strong_count() -> S32
   return me.strong_count
 
+### Returns the current number of live weak (`Tracked`) handles.
+### :returns: The weak reference count.
 routine RetainController[T].weak_count() -> S32
   return me.weak_count
 
+### Returns `true` when the strong count has reached zero and the managed entity should be destroyed.
+### :returns: `true` if `strong_count` is zero.
 routine RetainController[T].should_deallocate_data() -> Bool
   return me.strong_count == 0
 
+### Returns `true` when both the strong and weak counts are zero and the controller itself can be freed.
+### :returns: `true` if both `strong_count` and `weak_count` are zero.
 routine RetainController[T].should_deallocate_controller() -> Bool
   return me.strong_count == 0 and me.weak_count == 0
 

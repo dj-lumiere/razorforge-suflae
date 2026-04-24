@@ -1,9 +1,12 @@
-# Invertible - Protocol for types that support bitwise not (~)
 module Core
 
-### Defines the protocol `Invertible`.
+### Represents the protocol for unary bitwise inversion.
+### `Invertible` is for values that can flip every bit in their representation
+### and return the result as another value of the same type.
 protocol Invertible
-  ### Returns the result of the requested bitwise operation.
-  ### :returns: The resulting `Me` value.
+  ### Returns the bitwise NOT of this value.
+  ### Each bit in the resulting value is the complement of the corresponding bit
+  ### in the input.
+  ### :returns: The bitwise inverse of this value.
   @readonly
   routine Me.$bitnot() -> Me

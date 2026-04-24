@@ -1,9 +1,3 @@
-# RazorForge Dict[K, V] — Swiss Table scalar hash map
-# O(1) average insert / delete / lookup
-# Requires K obeys Hashable, Equatable (no ordering needed)
-# 87.5% load factor; capacity always a power of two
-# ctrl byte: 128=empty, 254=deleted (tombstone), 0-127=H2 fingerprint
-
 module Core
 
 import BuilderService
@@ -13,9 +7,33 @@ preset CTRL_EMPTY: U8 = 128_u8
 preset CTRL_DELETED: U8 = 254_u8
 preset CTRL_H2_MASK: U8 = 127_u8
 
-### Hash map from K to V.
-### :typeparam K: The key type.
-### :typeparam V: The value type.
+### An unordered key-value dictionary backed by an open-addressed hash table.
+###
+### `Dict[K, V]` maps each unique key to exactly one value. Inserting a key that
+### already exists replaces its value. Lookup, insertion, and removal all run in O(1)
+### average time. Iteration visits live entries in slot order, which reflects the
+### current table layout and may change after a rehash.
+###
+### **When to use**
+### - You need O(1) average key lookup, insertion, or removal.
+### - You need to associate values with arbitrary keys.
+### - Use {SortedDict[K, V]} instead when you need entries in key order.
+### - Use {SecureDict[K, V]} instead when keys come from untrusted input.
+###
+### **Complexity**
+### | Operation | Average | Worst case |
+### |---|---|---|
+### | `add` | O(1) | O(n) (rehash) |
+### | `remove` | O(1) | O(n) |
+### | `$contains` / `get_or_default` | O(1) | O(n) |
+### | `keys()` / `values()` / `entries()` | O(n) | O(n) |
+### | Iteration | O(capacity) | O(capacity) |
+###
+### :typeparam K: The key type. Must obey {Hashable} and {Equatable}.
+### :typeparam V: The value type associated with each key.
+### :see: {Set[K]} for key-only storage with the same hash table design.
+### :see: {SortedDict[K, V]} for sorted key-value storage.
+### :see: {SecureDict[K, V]} for hash-flooding-resistant key-value storage.
 entity Dict[K, V] obeys Iterable[DictEntry[K, V]]
 needs K obeys Hashable, Equatable
   secret ctrl: Hijacked[U8]     # 1 byte/slot: 128=empty, 254=deleted, 0-127=H2
@@ -29,8 +47,7 @@ needs K obeys Hashable, Equatable
 # Creators
 # ============================================================================
 
-### Creates a new empty instance.
-### :returns: The resulting `Dict[K, V]` value.
+### Creates an empty dictionary using the default initial table size.
 routine Dict[K, V].$create() -> Dict[K, V]
   var cap = DICT_INITIAL_CAPACITY
   var dict = Dict[K, V](
@@ -48,9 +65,9 @@ routine Dict[K, V].$create() -> Dict[K, V]
     dict.vals = hijacked_from[V](rf_allocate_dynamic_uninit(V.data_size() * cap))
   return dict
 
-### Creates a new instance pre-sized to hold at least `capacity` entries.
-### :param capacity: The minimum number of entries before the first rehash.
-### :returns: The resulting `Dict[K, V]` value.
+### Creates an empty dictionary pre-sized to hold at least `capacity` live entries without rehashing.
+### The actual slot count is rounded up to the next power-of-two.
+### :param capacity: Minimum number of live entries to accommodate before the first rehash.
 routine Dict[K, V].$create(capacity: U64) -> Dict[K, V]
   var cap = DICT_INITIAL_CAPACITY
   while cap < capacity
@@ -70,16 +87,16 @@ routine Dict[K, V].$create(capacity: U64) -> Dict[K, V]
     dict.vals = hijacked_from[V](rf_allocate_dynamic_uninit(V.data_size() * cap))
   return dict
 
-### Creates a new instance from varargs entries.
+### Creates a dictionary from the supplied entries.
+### When the same key appears more than once, the later entry overwrites the earlier one.
 ### :param entries...: The initial key-value pairs to insert.
-### :returns: The resulting `Dict[K, V]` value.
 routine Dict[K, V].$create(entries...: DictEntry[K, V]) -> Dict[K, V]
   var result = Dict[K, V]()
   for e in entries
     result.add(key: e.key, value: e.value)
   return result
 
-### Releases raw key and value storage.
+### Releases the raw control, key, and value buffers owned by this dictionary.
 routine Dict[K, V].$destroy()
   danger!
     if not me.ctrl.is_none()
@@ -94,48 +111,48 @@ routine Dict[K, V].$destroy()
 # Internal Helpers
 # ============================================================================
 
-### Returns the H2 fingerprint: 7 low bits of hash, always in range 0-127.
-### :param hash: The raw hash.
-### :returns: The resulting `U8` value.
+### Extracts the 7-bit control-byte fingerprint from a raw hash value.
+### :param hash: The raw hash output from `$hash`.
+### :returns: The low 7 bits of `hash`, used to filter candidate slots before a full key comparison.
 routine Dict[K, V].h2(hash: U64) -> U8
   return U8(hash & U64(CTRL_H2_MASK))
 
-### Returns the H1 slot position: upper bits of hash used for indexing.
-### :param hash: The raw hash.
-### :returns: The resulting `U64` value.
+### Derives the primary probe slot index from a raw hash value.
+### :param hash: The raw hash output from `$hash`.
+### :returns: The upper bits of `hash`, used as the starting slot before masking to the table size.
 routine Dict[K, V].h1(hash: U64) -> U64
   return hash >> 7u32
 
-### Reads the key at `slot`.
-### :param slot: The slot index.
-### :returns: The resulting `K` value.
+### Returns the key stored at `slot` without checking whether the slot is live.
+### :param slot: The slot index to read from.
+### :returns: The key at that slot.
 routine Dict[K, V].read_key(slot: U64) -> K
   return me.keys.offset(K.data_size() * slot).extract()
 
-### Writes `key` to `slot`.
-### :param slot: The slot index.
-### :param key: The key to store.
+### Overwrites the key at `slot` without changing the control byte.
+### :param slot: The slot index to write to.
+### :param key: The new key to store.
 routine Dict[K, V].write_key(slot: U64, key: K)
   me.keys.offset(K.data_size() * slot).inject(key)
   return
 
-### Reads the value at `slot`.
-### :param slot: The slot index.
-### :returns: The resulting `V` value.
+### Returns the value stored at `slot` without checking whether the slot is live.
+### :param slot: The slot index to read from.
+### :returns: The value at that slot.
 routine Dict[K, V].read_val(slot: U64) -> V
   return me.vals.offset(V.data_size() * slot).extract()
 
-### Writes `val` to `slot`.
-### :param slot: The slot index.
-### :param val: The value to store.
+### Overwrites the value at `slot` without changing the control byte.
+### :param slot: The slot index to write to.
+### :param val: The new value to store.
 routine Dict[K, V].write_val(slot: U64, val: V)
   me.vals.offset(V.data_size() * slot).inject(val)
   return
 
-### Linear-probes for `key` using H1 start + H2 fingerprint matching.
-### Returns `capacity` when `key` is absent.
+### Searches for `key` by linear probing from its primary slot.
+### Control-byte fingerprints are checked before full key equality to avoid unnecessary key loads.
 ### :param key: The key to find.
-### :returns: The resulting `U64` value.
+### :returns: The slot index of `key` if found, or `capacity` if the key is absent.
 routine Dict[K, V].find_slot(key: K) -> U64
   var h = key.$hash()
   var target = me.h2(h)
@@ -152,11 +169,11 @@ routine Dict[K, V].find_slot(key: K) -> U64
       i = (i +% 1u64) & mask
   return me.capacity
 
-### Inserts hash + key + value into the first empty or deleted slot from H1.
-### Does not check for duplicates and does not update `count`.
-### :param h: The raw hash.
-### :param key: The key to insert.
-### :param val: The value to insert.
+### Writes `key` and `val` into the first empty or deleted slot reached from the probe position of `h`.
+### Assumes the caller has already checked for duplicates and will update `count` separately.
+### :param h: The raw hash output for `key`.
+### :param key: The key to write.
+### :param val: The value to write.
 routine Dict[K, V].insert_raw(h: U64, key: K, val: V)
   var h2_val = me.h2(h)
   var mask = me.capacity -% 1u64
@@ -178,19 +195,22 @@ routine Dict[K, V].insert_raw(h: U64, key: K, val: V)
       i = (i +% 1u64) & mask
   return
 
-### Writes tombstone to ctrl[slot]. Caller must decrement count and increment deleted.
+### Marks `slot` as a tombstone in the control array.
+### The stored key and value bytes are left in place; callers must update live and deleted counts separately.
 ### :param slot: The occupied slot to vacate.
 routine Dict[K, V].delete_at(slot: U64)
   danger!
     me.ctrl.offset(U8.data_size() * slot).inject(CTRL_DELETED)
   return
 
-### Returns true if the next insert would exceed 87.5% load (live + tombstones).
-### :returns: The resulting `Bool` value.
+### Returns true when the combined live and tombstone load exceeds 87.5% of capacity.
+### Both live entries and tombstones occupy probe space, so both count toward the load threshold.
+### :returns: `true` if a rehash should happen before the next insertion.
 routine Dict[K, V].should_rehash() -> Bool
   return (me.count +% me.deleted) *% 8u64 >= me.capacity *% 7u64
 
-### Doubles capacity and reinserts all live entries.
+### Doubles the table capacity and reinserts all live entries into the new table.
+### Tombstones are discarded during the rebuild.
 routine Dict[K, V].rehash()
   var old_cap = me.capacity
   var old_ctrl = me.ctrl
@@ -231,17 +251,18 @@ routine Dict[K, V].rehash()
 # Core Operations
 # ============================================================================
 
-### Returns the number of stored entries.
-### :returns: The resulting `U64` value.
+### Returns the number of live key-value entries currently stored.
+### :returns: The live entry count.
 routine Dict[K, V].count() -> U64
   return me.count
 
-### Returns true if this dict contains no entries.
-### :returns: The resulting `Bool` value.
+### Returns true if this dictionary contains no live entries.
+### :returns: `true` when `count()` is zero.
 routine Dict[K, V].is_empty() -> Bool
   return me.count == 0u64
 
-### Removes all entries, keeping current capacity.
+### Removes every entry while preserving the current slot capacity.
+### Resets the control array to all-empty in one pass, discarding all tombstones.
 routine Dict[K, V].clear()
   danger!
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: me.capacity)
@@ -249,17 +270,17 @@ routine Dict[K, V].clear()
   me.deleted = 0u64
   return
 
-### Returns whether this dict contains `key`.
+### Returns true if `key` is present in the dictionary.
 ### :param key: The key to look up.
-### :returns: The resulting `Bool` value.
+### :returns: `true` if the key exists.
 @readonly
 routine Dict[K, V].$contains(key: K) -> Bool
   return me.find_slot(key) < me.capacity
 
-### Inserts or updates a key-value entry.
+### Inserts `key` with `value`, or updates the existing entry when `key` is already present.
 ### :param key: The key to insert or update.
-### :param value: The value to associate.
-### :returns: `true` if a new entry was inserted, `false` if an existing entry was updated.
+### :param value: The value to associate with `key`.
+### :returns: `true` if a new entry was inserted; `false` if an existing entry was updated.
 routine Dict[K, V].add(key: K, value: V) -> Bool
   if me.should_rehash()
     me.rehash()
@@ -271,9 +292,9 @@ routine Dict[K, V].add(key: K, value: V) -> Bool
   me.count = me.count +% 1u64
   return true
 
-### Removes the entry with `key`.
+### Removes the entry associated with `key`, if present.
 ### :param key: The key to remove.
-### :returns: `true` if removed, `false` if not found.
+### :returns: `true` if the key was found and removed; `false` if not present.
 routine Dict[K, V].remove(key: K) -> Bool
   var slot = me.find_slot(key)
   if slot >= me.capacity
@@ -283,10 +304,10 @@ routine Dict[K, V].remove(key: K) -> Bool
   me.deleted = me.deleted +% 1u64
   return true
 
-### Returns the value for `key`, or `default_value` if not found.
+### Returns the value associated with `key`, or `default_value` when the key is absent.
 ### :param key: The key to look up.
-### :param default_value: The fallback value.
-### :returns: The resulting `V` value.
+### :param default_value: The fallback value returned when `key` is not present.
+### :returns: The mapped value if found, otherwise `default_value`.
 routine Dict[K, V].get_or_default(key: K, default_value: V) -> V
   var slot = me.find_slot(key)
   if slot >= me.capacity
@@ -297,19 +318,19 @@ routine Dict[K, V].get_or_default(key: K, default_value: V) -> V
 # Indexing
 # ============================================================================
 
-### Returns the value for `key`.
+### Returns the value associated with `key`.
 ### :param key: The key to look up.
-### :returns: The resulting `V` value.
-### :absent: Returns absent when the key is not found.
+### :returns: The value mapped to `key`.
+### :absent: The key is not present in the dictionary.
 routine Dict[K, V].$getitem!(key: K) -> V
   var slot = me.find_slot(key)
   if slot >= me.capacity
     absent
   return me.read_val(slot)
 
-### Sets the value for `key`, inserting a new entry if needed.
+### Sets the value for `key`, inserting a new entry when the key is not already present.
 ### :param key: The key to set.
-### :param value: The value to associate.
+### :param value: The value to associate with `key`.
 routine Dict[K, V].$setitem!(key: K, value: V)
   if me.should_rehash()
     me.rehash()
@@ -325,8 +346,8 @@ routine Dict[K, V].$setitem!(key: K, value: V)
 # Keys / Values / Entries
 # ============================================================================
 
-### Returns all keys as a list.
-### :returns: The resulting `List[K]` value.
+### Returns all live keys in slot iteration order.
+### :returns: A {List[K]} of every key; order reflects the current table layout.
 routine Dict[K, V].keys() -> List[K]
   var result = List[K](me.count)
   var i = 0u64
@@ -338,8 +359,8 @@ routine Dict[K, V].keys() -> List[K]
     i = i +% 1u64
   return result
 
-### Returns all values as a list.
-### :returns: The resulting `List[V]` value.
+### Returns all live values in slot iteration order.
+### :returns: A {List[V]} of every value; order matches the corresponding `keys()` call only within a single unmodified table.
 routine Dict[K, V].values() -> List[V]
   var result = List[V](me.count)
   var i = 0u64
@@ -351,8 +372,8 @@ routine Dict[K, V].values() -> List[V]
     i = i +% 1u64
   return result
 
-### Returns all key-value entries as a list.
-### :returns: The resulting `List[DictEntry[K, V]]` value.
+### Returns all live entries in slot iteration order.
+### :returns: A {List[DictEntry[K, V]]} of every key-value pair; order reflects the current table layout.
 routine Dict[K, V].entries() -> List[DictEntry[K, V]]
   var result = List[DictEntry[K, V]](me.count)
   var i = 0u64
@@ -368,8 +389,8 @@ routine Dict[K, V].entries() -> List[DictEntry[K, V]]
 # Iteration
 # ============================================================================
 
-### Creates an iterator over this dict's entries.
-### :returns: The resulting `DictIterator[K, V]` value.
+### Returns an iterator over all live entries in slot order.
+### Iteration order is not sorted and is not stable across rehashes.
 @readonly
 routine Dict[K, V].$iter() -> DictIterator[K, V]
   danger!
@@ -381,11 +402,12 @@ routine Dict[K, V].$iter() -> DictIterator[K, V]
       slot: 0u64
     )
 
-### Defines the entity `DictIterator`.
-### :typeparam K: The key type.
-### :typeparam V: The value type.
+### Iterator that walks the raw slot array of a {Dict[K, V]} and yields only live entries.
+### Empty and deleted (tombstone) slots are silently skipped.
+### :typeparam K: The key type yielded by each entry.
+### :typeparam V: The value type yielded by each entry.
 entity DictIterator[K, V] obeys Iterator[DictEntry[K, V]]
-  ### Raw pointer into the source dict's ctrl array.
+  ### Raw pointer into the source dict's control byte array.
   secret ctrl: Hijacked[U8]
   ### Raw pointer into the source dict's key storage.
   secret keys: Hijacked[K]
@@ -393,9 +415,12 @@ entity DictIterator[K, V] obeys Iterator[DictEntry[K, V]]
   secret vals: Hijacked[V]
   ### Slot capacity captured at iterator creation.
   secret capacity: U64
-  ### Current slot index.
+  ### Current slot index; advances on each call to `$next!`.
   secret slot: U64
 
+### Advances to the next live slot and returns its entry.
+### :returns: The next live {DictEntry[K, V]}.
+### :absent: No live slots remain.
 @writable
 routine DictIterator[K, V].$next!() -> DictEntry[K, V]
   danger!
@@ -413,8 +438,8 @@ routine DictIterator[K, V].$next!() -> DictEntry[K, V]
 # Display
 # ============================================================================
 
-### Returns the textual representation of this value.
-### :returns: The resulting `Text` value.
+### Returns a compact text representation of the dictionary contents.
+### Entries are rendered as `key: value` pairs in iteration (slot) order.
 routine Dict[K, V].$represent() -> Text
   if me.is_empty()
     return "{:}"
@@ -428,8 +453,7 @@ routine Dict[K, V].$represent() -> Text
   result = result + "}"
   return result
 
-### Returns the diagnostic representation of this value.
-### :returns: The resulting `Text` value.
+### Returns a diagnostic form that includes the runtime type name and live entry count.
 routine Dict[K, V].$diagnose() -> Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
   var first = true
@@ -445,9 +469,9 @@ routine Dict[K, V].$diagnose() -> Text
 # Comparison
 # ============================================================================
 
-### Returns whether both dicts contain the same key-value entries.
-### :param other: The other dict to compare against.
-### :returns: The resulting `Bool` value.
+### Returns true if both dictionaries contain exactly the same keys with the same associated values.
+### :param other: The other dictionary to compare against.
+### :returns: `true` if both have the same count and every key-value pair is equal.
 routine Dict[K, V].$eq(other: Dict[K, V]) -> Bool
   if me.count != other.count
     return false

@@ -1,10 +1,12 @@
-# Iterator - Protocol for types that produce elements one at a time
 module Core
 
-### Defines the protocol `Iterator`.
-### :typeparam T: The value used for `T`.
+### Represents the `Iterator` protocol.
+### Iterators expose sequential access to values and advance their internal
+### position each time `$next!` succeeds.
+### :typeparam T: The element type yielded by the iterator.
 protocol Iterator[T]
   ### Returns the next value from this iterator.
-  ### :returns: The resulting `T` value.
+  ### Implementations should return `absent` once the iterator is exhausted.
+  ### :returns: The next element in the iteration sequence.
   @writable
   routine Me.$next!() -> T

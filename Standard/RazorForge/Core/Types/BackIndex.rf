@@ -1,28 +1,24 @@
-# RazorForge BackIndex - Backward indexing from end
-#
-# Created by the ^ prefix operator on any Integral type.
-# ^1 means last element, ^2 means second-to-last, etc.
-#
-# Usage:
-#   list[^1]     # last element
-#   list[^2]     # second-to-last
-#   text[^1]     # last character
 module Core
 
 
-### Defines the record `BackIndex`.
+### Represents an index measured from the end of a collection.
+### `BackIndex[I]` is the type behind `^` syntax such as `list[^1]` and `text[^2]`.
+### :typeparam I: The integral type used to store the offset.
+### :see: {Range[T]}, {Containers-And-Iterators}
 record BackIndex[I obeys Integral]
-  ### Stores the offset member value.
+  ### Stores the end-relative offset where `1` means the last element.
   offset: I
 
-### Returns the result of `BackIndex`.
-### :param offset: The `offset` value.
+### Creates a back index from an end-relative offset.
+### :param offset: The end-relative offset where `1` means the last element.
 ### :returns: The resulting `BackIndex[I]` value.
 routine BackIndex[I obeys Integral](offset: I) -> BackIndex[I]
   return BackIndex[I](offset: offset)
 
-### Returns the result of `resolve`.
-### :param length: The `length` value.
+### Resolves this back index against a collection length.
+### For example, `^1` resolves to the last valid position and `^length`
+### resolves to the first element.
+### :param length: The collection length used as the reference point.
 ### :returns: The resulting `U64` value.
 routine BackIndex[I obeys Integral].resolve(length: U64) -> U64
   var offset_u64 = me.offset.U64()
@@ -30,23 +26,27 @@ routine BackIndex[I obeys Integral].resolve(length: U64) -> U64
     stop!("BackIndex out of bounds")
   return length -% offset_u64
 
-### Returns the offset component.
+### Returns the stored end-relative offset in its original integral type.
 ### :returns: The resulting `I` value.
 routine BackIndex[I obeys Integral].get_offset() -> I
   return me.offset
 
-### Returns the result of `offset u64`.
+### Returns the stored offset converted to `U64`.
+### This is useful when generic collection code needs a normalized unsigned
+### value.
 ### :returns: The resulting `U64` value.
 routine BackIndex[I obeys Integral].offset_u64() -> U64
   return me.offset.U64()
 
-### Returns whether both values are equal.
+### Returns `true` when both back indices represent the same end-relative
+### offset.
 ### :param other: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine BackIndex[I obeys Integral].$eq(other: BackIndex[I]) -> Bool
   return me.offset.U64() == other.offset.U64()
 
-### Compares this value with the other value.
+### Compares this back index with another by effective position from the end.
+### A smaller offset means a position closer to the end of the collection.
 ### :param other: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine BackIndex[I obeys Integral].$cmp(other: BackIndex[I]) -> ComparisonSign

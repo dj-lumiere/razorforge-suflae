@@ -1,12 +1,13 @@
-# RazorForge C32 (single precision complex number) type implementation
-# Record of two F32 values (real and imaginary parts)
 module Core
 
-### Defines the record `C32`.
+### A complex number with single-precision real and imaginary components.
+### `C32` stores two `F32` values and provides standard complex arithmetic,
+### including the Gaussian identity for multiplication and polar-form construction.
+### Use `C64` or `C128` when higher precision is needed.
 record C32 obeys Numeric, Equatable
-  ### Stores the real member value.
+  ### The real part.
   real: F32
-  ### Stores the imag member value.
+  ### The imaginary part.
   imag: F32
 
 # Complex constants
@@ -18,28 +19,28 @@ preset C32_I: C32 = C32(real: 0.0_f32, imag: 1.0_f32)
 # Creators
 # ============================================================================
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `C32` value.
+### Constructs a `C32` with the given real component and zero imaginary part.
+### :param from: The real-axis value.
+### :returns: The corresponding `C32` value.
 routine C32.$create(from: F32) -> C32
   return C32(real: from, imag: 0.0_f32)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `C32` value.
+### Narrows a `C64` to `C32` by truncating each component to `F32`.
+### :param from: The double-precision complex value to narrow.
+### :returns: The nearest representable `C32`.
 routine C32.$create(from: C64) -> C32
   return C32(real: F32(from.real), imag: F32(from.imag))
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `C32` value.
+### Narrows a `C128` to `C32` by truncating each component to `F32`.
+### :param from: The quadruple-precision complex value to narrow.
+### :returns: The nearest representable `C32`.
 routine C32.$create(from: C128) -> C32
   return C32(real: F32(from.real), imag: F32(from.imag))
 
-### Creates a value from polar.
-### :param r: The radius value.
-### :param theta: The angle in radians.
-### :returns: The resulting `C32` value.
+### Constructs a `C32` from polar coordinates: `r·cos(θ) + r·sin(θ)·i`.
+### :param r: The modulus (distance from origin).
+### :param theta: The argument (angle in radians).
+### :returns: The complex value at that polar position.
 routine C32.from_polar(r: F32, theta: F32) -> C32
   return C32(real: r * theta.cos(), imag: r * theta.sin())
 
@@ -47,33 +48,34 @@ routine C32.from_polar(r: F32, theta: F32) -> C32
 # Arithmetic Operations
 # ============================================================================
 
-### Returns the sum of this value and the other value.
-### :param you: The other value to compare against.
-### :returns: The resulting `C32` value.
+### Returns the complex sum `me + you` (component-wise addition).
+### :param you: The addend.
+### :returns: A `C32` whose components are the sums of the corresponding components.
 routine C32.$add(you: C32) -> C32
   return C32(real: me.real + you.real, imag: me.imag + you.imag)
 
-### Returns the difference between this value and the other value.
-### :param you: The other value to compare against.
-### :returns: The resulting `C32` value.
+### Returns the complex difference `me - you` (component-wise subtraction).
+### :param you: The value to subtract.
+### :returns: A `C32` whose components are the differences of the corresponding components.
 routine C32.$sub(you: C32) -> C32
   return C32(real: me.real - you.real, imag: me.imag - you.imag)
 
-### Returns the product of this value and the other value.
-### :param you: The other value to compare against.
-### :returns: The resulting `C32` value.
+### Returns the complex product `me * you` using the formula `(ac−bd) + (ad+bc)i`.
+### :param you: The right operand.
+### :returns: The Gaussian product.
 routine C32.$mul(you: C32) -> C32
   return C32(real: me.real * you.real - me.imag * you.imag, imag: me.real * you.imag + me.imag * you.real)
 
-### Returns the quotient of this value and the other value.
-### :param you: The other value to compare against.
-### :returns: The resulting `C32` value.
+### Returns the complex quotient `me / you`.
+### Divides by the squared modulus of `you`.
+### :param you: The divisor.
+### :returns: The complex quotient.
 routine C32.$truediv(you: C32) -> C32
   var d = you.real * you.real + you.imag * you.imag
   return C32(real: (me.real * you.real + me.imag * you.imag) / d, imag: (me.imag * you.real - me.real * you.imag) / d)
 
-### Returns the negated value.
-### :returns: The resulting `C32` value.
+### Returns the arithmetic negation of this value.
+### :returns: A `C32` with both components negated.
 routine C32.$neg() -> C32
   return C32(real: -me.real, imag: -me.imag)
 
@@ -81,9 +83,9 @@ routine C32.$neg() -> C32
 # Comparison
 # ============================================================================
 
-### Returns whether both values are equal.
-### :param you: The other value to compare against.
-### :returns: The resulting `Bool` value.
+### Returns `true` if both components compare equal.
+### :param you: The value to compare against.
+### :returns: `true` if `me.real == you.real` and `me.imag == you.imag`.
 routine C32.$eq(you: C32) -> Bool
   return me.real == you.real and me.imag == you.imag
 
@@ -91,18 +93,18 @@ routine C32.$eq(you: C32) -> Bool
 # Components and Properties
 # ============================================================================
 
-### Returns the absolute value.
-### :returns: The resulting `F32` value.
+### Returns the modulus (absolute value) of this complex number.
+### :returns: `√(real² + imag²)`.
 routine C32.abs() -> F32
   return (me.real * me.real + me.imag * me.imag).sqrt()
 
-### Returns the complex conjugate.
-### :returns: The resulting `C32` value.
+### Returns the complex conjugate (negates the imaginary part).
+### :returns: `real - imag·i`.
 routine C32.conjugate() -> C32
   return C32(real: me.real, imag: -me.imag)
 
-### Returns the squared magnitude.
-### :returns: The resulting `F32` value.
+### Returns the squared modulus (avoids the square root of `abs`).
+### :returns: `real² + imag²`.
 routine C32.norm() -> F32
   return me.real * me.real + me.imag * me.imag
 
@@ -110,8 +112,8 @@ routine C32.norm() -> F32
 # Trigonometric (sinh/cosh computed from exp since F32 lacks native versions)
 # ============================================================================
 
-### Returns the result of `sin`.
-### :returns: The resulting `C32` value.
+### Returns the complex sine using the identity `sin(a+bi) = sin(a)cosh(b) + i·cos(a)sinh(b)`.
+### :returns: The complex sine of this value.
 routine C32.sin() -> C32
   var ep = me.imag.exp()
   var em = (-me.imag).exp()
@@ -119,8 +121,8 @@ routine C32.sin() -> C32
   var sh = (ep - em) / 2.0_f32
   return C32(real: me.real.sin() * ch, imag: me.real.cos() * sh)
 
-### Returns the result of `cos`.
-### :returns: The resulting `C32` value.
+### Returns the complex cosine using the identity `cos(a+bi) = cos(a)cosh(b) − i·sin(a)sinh(b)`.
+### :returns: The complex cosine of this value.
 routine C32.cos() -> C32
   var ep = me.imag.exp()
   var em = (-me.imag).exp()
@@ -128,8 +130,8 @@ routine C32.cos() -> C32
   var sh = (ep - em) / 2.0_f32
   return C32(real: me.real.cos() * ch, imag: -(me.real.sin() * sh))
 
-### Returns the result of `tan`.
-### :returns: The resulting `C32` value.
+### Returns the complex tangent of this value.
+### :returns: The complex tangent.
 routine C32.tan() -> C32
   var a2 = me.real + me.real
   var b2 = me.imag + me.imag
@@ -142,8 +144,8 @@ routine C32.tan() -> C32
 # Hyperbolic (sinh/cosh computed from exp since F32 lacks native versions)
 # ============================================================================
 
-### Returns the result of `sinh`.
-### :returns: The resulting `C32` value.
+### Returns the complex hyperbolic sine of this value.
+### :returns: The complex hyperbolic sine.
 routine C32.sinh() -> C32
   var ep = me.real.exp()
   var em = (-me.real).exp()
@@ -151,8 +153,8 @@ routine C32.sinh() -> C32
   var ch = (ep + em) / 2.0_f32
   return C32(real: sh * me.imag.cos(), imag: ch * me.imag.sin())
 
-### Returns the result of `cosh`.
-### :returns: The resulting `C32` value.
+### Returns the complex hyperbolic cosine of this value.
+### :returns: The complex hyperbolic cosine.
 routine C32.cosh() -> C32
   var ep = me.real.exp()
   var em = (-me.real).exp()
@@ -160,8 +162,8 @@ routine C32.cosh() -> C32
   var ch = (ep + em) / 2.0_f32
   return C32(real: ch * me.imag.cos(), imag: sh * me.imag.sin())
 
-### Returns the result of `tanh`.
-### :returns: The resulting `C32` value.
+### Returns the complex hyperbolic tangent of this value.
+### :returns: The complex hyperbolic tangent.
 routine C32.tanh() -> C32
   var a2 = me.real + me.real
   var b2 = me.imag + me.imag
@@ -174,14 +176,14 @@ routine C32.tanh() -> C32
 # Exponential and Square Root
 # ============================================================================
 
-### Returns the result of `exp`.
-### :returns: The resulting `C32` value.
+### Returns `e` raised to this complex value using `exp(a+bi) = eᵃ(cos(b) + i·sin(b))`.
+### :returns: The complex exponential.
 routine C32.exp() -> C32
   var ea = me.real.exp()
   return C32(real: ea * me.imag.cos(), imag: ea * me.imag.sin())
 
-### Returns the result of `sqrt`.
-### :returns: The resulting `C32` value.
+### Returns the complex square root, choosing the root with non-negative real part.
+### :returns: The principal square root of this value.
 routine C32.sqrt() -> C32
   var r = me.abs()
   if r == 0.0_f32
@@ -196,17 +198,17 @@ routine C32.sqrt() -> C32
 # Query Routines
 # ============================================================================
 
-### Returns true if this value is zero.
-### :returns: The resulting `Bool` value.
+### Returns `true` if both the real and imaginary parts are exactly zero.
+### :returns: `true` if `me == C32_ZERO`.
 routine C32.is_zero() -> Bool
   return me.real == 0.0_f32 and me.imag == 0.0_f32
 
-### Returns true if this value is real.
-### :returns: The resulting `Bool` value.
+### Returns `true` if the imaginary part is exactly zero (the value lies on the real axis).
+### :returns: `true` if `me.imag == 0.0`.
 routine C32.is_real() -> Bool
   return me.imag == 0.0_f32
 
-### Returns true if this value is imaginary.
-### :returns: The resulting `Bool` value.
+### Returns `true` if the real part is exactly zero (the value lies on the imaginary axis).
+### :returns: `true` if `me.real == 0.0`.
 routine C32.is_imaginary() -> Bool
   return me.real == 0.0_f32

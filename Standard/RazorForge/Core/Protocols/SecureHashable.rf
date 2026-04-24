@@ -1,10 +1,13 @@
-# SecureHashable - Protocol for types that support keyed (DoS-resistant) hashing.
-# Used by SecureSet and SecureDict to prevent hash-flooding attacks.
 module Core
 
-### Defines the protocol `SecureHashable`.
+### Represents the protocol for keyed, attack-resistant hashing.
+### `SecureHashable` is intended for values that can contribute to hash tables or
+### authentication-sensitive lookups without exposing the collision behavior of
+### a stable non-keyed hash.
 protocol SecureHashable
-  ### Returns a keyed hash of this value using the SipHash-2-4 algorithm.
+  ### Returns a keyed hash of this value using SipHash-2-4 semantics.
+  ### Implementations should incorporate the full logical value and produce the
+  ### same result for equal values when called with the same key pair.
   ### :param k0: The first 64-bit key word.
   ### :param k1: The second 64-bit key word.
   ### :returns: The resulting `U64` value.

@@ -1,13 +1,13 @@
-# Data - Universal type-erased box
-# Holds any storable value with runtime type information
-# Cannot box: Result, Lookup, variants, access tokens
 module Core
 
-### Defines the record `Data`.
+### Represents a type-erased boxed value with runtime type metadata.
+### `Data` is the standard escape hatch for APIs that need to transport
+### arbitrary values when the static type is not known or cannot be expressed in
+### the public surface.
 record Data
-  ### The type identifier of the boxed value.
+  ### Stores the runtime type identifier of the boxed payload.
   secret type_id: U64
-  ### The address of the heap-allocated boxed value.
+  ### Stores the heap address of the boxed payload.
   secret data_address: Address
-  ### The size in bytes of the boxed value.
+  ### Stores the size in bytes of the boxed payload.
   secret data_size: ByteSize

@@ -1,16 +1,20 @@
-# Identifiable - Protocol for types that support identity comparison (===, !==)
 module Core
 
-### Defines the protocol `Identifiable`.
+### Represents the protocol for identity-based comparison.
+### `Identifiable` is for values whose notion of sameness depends on shared
+### underlying identity rather than only structural equality.
 protocol Identifiable
-  ### Implements the wired routine behavior for this value.
+  ### Returns whether `me` and `you` refer to the same underlying entity.
+  ### This comparison is typically used for entity references, handles, or
+  ### wrapper types with stable identity.
   ### :param you: The other value to compare against.
-  ### :returns: The resulting `Bool` value.
+  ### :returns: `true` if both references point to the same object in memory.
   @[readonly, innate]
   routine Me.$same(you: Me) -> Bool
 
-  ### Implements the wired routine behavior for this value.
+  ### Returns whether `me` and `you` do not refer to the same underlying entity.
+  ### This is the identity-space inverse of `$same`.
   ### :param you: The other value to compare against.
-  ### :returns: The resulting `Bool` value.
+  ### :returns: `true` if the references point to different objects.
   @[readonly, innate]
   routine Me.$notsame(you: Me) -> Bool

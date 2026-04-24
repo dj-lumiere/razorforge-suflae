@@ -1,36 +1,54 @@
-# RazorForge Deque[T] - Double-ended queue (growable ring buffer)
-# Entity type with heap allocation
-# O(1) add/remove at both ends, O(1) random access
-#
-# Usage:
-#   var queue = Deque[Task]()
-#   queue.add_last(task1)
-#   queue.add_first(task2)
-#   var front = queue.remove_first!()
-#   var back = queue.remove_last!()
-
 module Collections
 
 import BuilderService
 
-### Defines the entity `Deque`.
-### :typeparam T: The value used for `T`.
+### A growable double-ended queue backed by a power-of-two circular buffer.
+###
+### `Deque[T]` supports O(1) amortized insertion and removal at both the front
+### and the back. A bitmask wraps the buffer indices instead of a modulo, so
+### the capacity is always kept at a power of two. Random access by index is O(1)
+### after resolving the physical slot from the logical position.
+###
+### **When to use**
+### - You need fast insertion and removal at both ends.
+### - You need a queue (FIFO) or a stack (LIFO) — or both at once.
+### - You need O(1) rotation without copying elements.
+### - Use {List[T]} instead when you only ever add or remove at the back.
+### - Use {PriorityQueue[TPriority, TElement]} instead when removal order depends on priority.
+###
+### **Complexity**
+### | Operation | Time |
+### |---|---|
+### | `add_last` / `add_first` | O(1) amortized |
+### | `remove_last!` / `remove_first!` | O(1) |
+### | `first!` / `last!` | O(1) |
+### | `$getitem!` / `$setitem!` | O(1) |
+### | `rotate_left` / `rotate_right` | O(1) |
+### | `$contains` | O(n) |
+### | Iteration | O(n) |
+###
+### :typeparam T: The element type stored in the deque.
+### :see: {List[T]} for a simpler growable sequence optimized for back-only append.
+### :see: {PriorityQueue[TPriority, TElement]} for priority-ordered removal.
 entity Deque[T] obeys Iterable[T]
-  ### Stores the data member value.
-  secret data: Hijacked[T]    # Circular buffer (raw storage for T elements)
-  ### Stores the start member value.
-  secret start: U64          # Index of first element
-  ### Stores the count member value.
-  secret count: U64          # Number of elements
-  ### Stores the capacity member value.
-  secret capacity: U64       # Total allocated slots
+  ### Stores the circular buffer backing the deque.
+  ### Elements are laid out in allocation order and interpreted through
+  ### `start` and `count` rather than by physical position alone.
+  secret data: Hijacked[T]
+  ### Stores the physical index of the logical front element.
+  secret start: U64
+  ### Stores the number of live elements currently in the deque.
+  secret count: U64
+  ### Stores the number of element slots allocated in the circular buffer.
+  ### Capacity is always kept as a power of two so index wrapping can use a mask.
+  secret capacity: U64
 
 # ============================================================================
 # Creators
 # ============================================================================
 
-### Creates a new instance.
-### :returns: The resulting `Deque[T]` value.
+### Creates an empty deque with no allocated storage.
+### The backing buffer is acquired lazily on first insertion.
 routine Deque[T].$create() -> Deque[T]
   return Deque[T](
     data: hijacked_none[U8](),
@@ -39,9 +57,10 @@ routine Deque[T].$create() -> Deque[T]
     capacity: 0u64
   )
 
-### Creates a new instance.
-### :param capacity: The capacity value to use.
-### :returns: The resulting `Deque[T]` value.
+### Creates an empty deque with storage pre-allocated for at least `capacity` elements.
+### The requested capacity is rounded up to the next power of two so index wrapping
+### can use a bitmask.
+### :param capacity: The minimum number of elements to reserve space for.
 routine Deque[T].$create(capacity: U64) -> Deque[T]
   var actual = 1u64
   while actual < capacity
@@ -55,9 +74,9 @@ routine Deque[T].$create(capacity: U64) -> Deque[T]
       capacity: actual
     )
 
-### Creates a new instance.
-### :param values...: The `values...` value.
-### :returns: The resulting `Deque[T]` value.
+### Creates a deque populated with the supplied elements in left-to-right order.
+### The first argument becomes the front element; the last becomes the back element.
+### :param values...: The initial elements to enqueue from front to back.
 routine Deque[T].$create(values...: T) -> Deque[T]
   var result = Deque[T]()
   for v in values
@@ -68,31 +87,31 @@ routine Deque[T].$create(values...: T) -> Deque[T]
 # Internal Helpers
 # ============================================================================
 
-### Returns the result of `wrap index`.
-### :param index: The zero-based position to use.
-### :returns: The resulting `U64` value.
+### Maps a physical index into the range [0, capacity) using a power-of-two bitmask.
+### :param index: The raw physical index to normalize.
+### :returns: The equivalent in-range slot index for the current buffer.
 routine Deque[T].wrap_index(index: U64) -> U64
   # Capacity is always a power of 2 — use bitmask instead of modulo.
   return index & (me.capacity -% 1u64)
 
-### Returns the result of `physical index`.
-### :param logical_index: The `logical_index` value.
-### :returns: The resulting `U64` value.
+### Converts a logical position (0 = front) to the physical slot in the ring buffer.
+### :param logical_index: The zero-based distance from the logical front.
+### :returns: The physical slot index that currently holds that element.
 routine Deque[T].physical_index(logical_index: U64) -> U64
   # Convert logical index (0 = front) to physical index in buffer
   return me.wrap_index(me.start +% logical_index)
 
-### Returns the result of `read at`.
-### :param physical_idx: The `physical_idx` value.
-### :returns: The resulting `T` value.
+### Reads the element from physical slot `physical_idx` without bounds checking.
+### :param physical_idx: The slot index inside the backing buffer.
+### :returns: The element stored in that slot.
 routine Deque[T].read_at(physical_idx: U64) -> T
   var byte_offset = T.data_size() * physical_idx
   danger!
     return me.data.offset(byte_offset).extract()
 
-### Performs `write at` on this value.
-### :param physical_idx: The `physical_idx` value.
-### :param value: The value to use.
+### Writes `value` into physical slot `physical_idx` without bounds checking.
+### :param physical_idx: The slot index inside the backing buffer.
+### :param value: The element to store.
 routine Deque[T].write_at(physical_idx: U64, value: T)
   var byte_offset = T.data_size() * physical_idx
   danger!
@@ -103,23 +122,24 @@ routine Deque[T].write_at(physical_idx: U64, value: T)
 # Core Operations
 # ============================================================================
 
-### Returns the number of stored values.
-### :returns: The resulting `U64` value.
+### Returns the number of live elements currently stored in the deque.
+### :returns: The live element count.
 routine Deque[T].count() -> U64
   return me.count
 
-### Returns the current storage capacity.
-### :returns: The resulting `U64` value.
+### Returns the number of element slots available before the next growth step.
+### :returns: The current backing-buffer slot count.
 routine Deque[T].capacity() -> U64
   return me.capacity
 
-### Returns true if this value is empty.
-### :returns: The resulting `Bool` value.
+### Returns true if the deque currently contains no elements.
+### :returns: `true` when `count()` is zero.
 routine Deque[T].is_empty() -> Bool
   return me.count == 0u64
 
-### Adds a value using `add_last`.
-### :param value: The value to use.
+### Appends `value` at the logical back of the deque.
+### The buffer is doubled automatically when the current capacity is exhausted.
+### :param value: The element to add at the back.
 routine Deque[T].add_last(value: T)
   # Add element to back - O(1) amortized
   if me.count >= me.capacity
@@ -129,8 +149,10 @@ routine Deque[T].add_last(value: T)
   me.count = me.count +% 1u64
   return
 
-### Adds a value using `add_first`.
-### :param value: The value to use.
+### Prepends `value` at the logical front of the deque.
+### The front index is decremented with wraparound using the ring-buffer mask.
+### The buffer is doubled automatically when the current capacity is exhausted.
+### :param value: The element to add at the front.
 routine Deque[T].add_first(value: T)
   # Add element to front - O(1) amortized
   if me.count >= me.capacity
@@ -141,9 +163,9 @@ routine Deque[T].add_first(value: T)
   me.count = me.count +% 1u64
   return
 
-### Removes a value using `remove_last`.
-### :returns: The resulting `T` value.
-### :absent: Returns absent when the requested value is unavailable.
+### Removes and returns the element at the logical back of the deque.
+### :returns: The element that was at the back.
+### :absent: The deque is empty.
 routine Deque[T].remove_last!() -> T
   # Remove and return back element - O(1)
   if me.is_empty()
@@ -152,9 +174,9 @@ routine Deque[T].remove_last!() -> T
   var idx = me.physical_index(me.count)
   return me.read_at(idx)
 
-### Removes a value using `remove_first`.
-### :returns: The resulting `T` value.
-### :absent: Returns absent when the requested value is unavailable.
+### Removes and returns the element at the logical front of the deque.
+### :returns: The element that was at the front.
+### :absent: The deque is empty.
 routine Deque[T].remove_first!() -> T
   # Remove and return front element - O(1)
   if me.is_empty()
@@ -164,18 +186,18 @@ routine Deque[T].remove_first!() -> T
   me.count = me.count - 1u64
   return value
 
-### Returns the result of `first`.
-### :returns: The resulting `T` value.
-### :absent: Returns absent when the requested value is unavailable.
+### Returns the front element without removing it.
+### :returns: The current front element.
+### :absent: The deque is empty.
 routine Deque[T].first!() -> T
   # Peek at front element without removing
   if me.is_empty()
     absent
   return me.read_at(me.start)
 
-### Returns the result of `last`.
-### :returns: The resulting `T` value.
-### :absent: Returns absent when the requested value is unavailable.
+### Returns the back element without removing it.
+### :returns: The current back element.
+### :absent: The deque is empty.
 routine Deque[T].last!() -> T
   # Peek at back element without removing
   if me.is_empty()
@@ -183,7 +205,7 @@ routine Deque[T].last!() -> T
   var idx = me.physical_index(me.count - 1u64)
   return me.read_at(idx)
 
-### Removes all stored values.
+### Removes every element while preserving the current circular-buffer allocation.
 routine Deque[T].clear()
   me.start = 0u64
   me.count = 0u64
@@ -193,14 +215,18 @@ routine Deque[T].clear()
 # Growth
 # ============================================================================
 
-### Executes `grow`.
+### Grows the backing storage using the deque's standard doubling policy.
+### Empty deques start at four slots; subsequent growth always doubles.
 routine Deque[T].grow()
   var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity *% 2u64
   me.reserve(new_capacity)
   return
 
-### Ensures the storage capacity is at least `new_capacity`.
-### :param new_capacity: The minimum capacity to reserve.
+### Ensures the deque can hold at least `new_capacity` elements without another growth step.
+### The requested capacity is rounded up to the next power of two. Elements are copied into
+### the new buffer in logical order so the front moves to physical slot 0.
+### Requests no larger than the current capacity are ignored.
+### :param new_capacity: The minimum element count to accommodate.
 routine Deque[T].reserve(new_capacity: U64)
   var actual = 1u64
   while actual < new_capacity
@@ -230,10 +256,11 @@ routine Deque[T].reserve(new_capacity: U64)
 # Indexing with Integral (forward index)
 # ============================================================================
 
-### Implements the wired routine behavior for this value.
-### :param index: The zero-based position to use.
-### :returns: The resulting `T` value.
-### :throws: May throw {IndexOutOfBoundsError}.
+### Returns the element at the given zero-based logical position.
+### Logical index 0 refers to the front element regardless of its physical slot.
+### :param index: The zero-based logical position to read.
+### :returns: The element at that logical position.
+### :throws: {IndexOutOfBoundsError} if `index >= count()`.
 routine Deque[T].$getitem![I](index: I) -> T
 needs I obeys Integral
   var idx = index.U64()
@@ -242,10 +269,10 @@ needs I obeys Integral
   var physical_idx = me.physical_index(idx)
   return me.read_at(physical_idx)
 
-### Implements the wired routine behavior for this value.
-### :param index: The zero-based position to use.
-### :param value: The value to use.
-### :throws: May throw {IndexOutOfBoundsError}.
+### Replaces the element at the given zero-based logical position.
+### :param index: The zero-based logical position to update.
+### :param value: The replacement element.
+### :throws: {IndexOutOfBoundsError} if `index >= count()`.
 routine Deque[T].$setitem![I](index: I, value: T)
 needs I obeys Integral
   var idx = index.U64()
@@ -259,18 +286,19 @@ needs I obeys Integral
 # Indexing with BackIndex (backward index using ^)
 # ============================================================================
 
-### Implements the wired routine behavior for this value.
-### :param index: The zero-based position to use.
-### :returns: The resulting `T` value.
+### Returns the element addressed by a back index, counting from the logical back.
+### `^0` refers to the last element, `^1` to the second-to-last, and so on.
+### :param index: The backward position to resolve.
+### :returns: The element at the resolved position.
 routine Deque[T].$getitem![I](index: BackIndex[I]) -> T
 needs I obeys Integral
   var idx = index.resolve(me.count)
   var physical_idx = me.physical_index(idx)
   return me.read_at(physical_idx)
 
-### Implements the wired routine behavior for this value.
-### :param index: The zero-based position to use.
-### :param value: The value to use.
+### Replaces the element addressed by a back index.
+### :param index: The backward position to resolve.
+### :param value: The replacement element.
 routine Deque[T].$setitem![I](index: BackIndex[I], value: T)
 needs I obeys Integral
   var idx = index.resolve(me.count)
@@ -282,8 +310,10 @@ needs I obeys Integral
 # Rotation
 # ============================================================================
 
-### Performs `rotate left` on this value.
-### :param n: The `n` value.
+### Shifts the logical front toward the back by `n` positions.
+### Elements that fall off the front reappear at the back. Only the front index
+### changes; no elements are copied.
+### :param n: The number of positions to rotate left.
 routine Deque[T].rotate_left(n: U64)
   # Rotate elements left by n positions
   # Front elements move to back
@@ -293,8 +323,10 @@ routine Deque[T].rotate_left(n: U64)
   me.start = me.wrap_index(me.start +% shift)
   return
 
-### Performs `rotate right` on this value.
-### :param n: The `n` value.
+### Shifts the logical back toward the front by `n` positions.
+### Elements that fall off the back reappear at the front. Only the front index
+### changes; no elements are copied.
+### :param n: The number of positions to rotate right.
 routine Deque[T].rotate_right(n: U64)
   # Rotate elements right by n positions
   # Back elements move to front
@@ -311,19 +343,10 @@ routine Deque[T].rotate_right(n: U64)
 # Iteration Support
 # ============================================================================
 
-@readonly
-routine Deque[T].$iter() -> DequeEmitter[T]
-  danger!
-    return DequeEmitter[T](
-      data: me.data,
-      start: me.start,
-      count: me.count,
-      capacity: me.capacity,
-      index: 0u64
-    )
-
-### Defines the entity `DequeEmitter`.
-### :typeparam T: The value used for `T`.
+### Walks the elements of a `Deque[T]` from logical front to back.
+### The iterator captures a raw pointer, the start index, element count, and capacity
+### at creation time so the source deque does not need to remain alive during iteration.
+### :typeparam T: The element type yielded by the iterator.
 entity DequeEmitter[T] obeys Iterator[T]
   ### Raw pointer into the source deque's circular buffer.
   secret data: Hijacked[T]
@@ -336,6 +359,20 @@ entity DequeEmitter[T] obeys Iterator[T]
   ### Current logical position.
   secret index: U64
 
+@readonly
+routine Deque[T].$iter() -> DequeEmitter[T]
+  danger!
+    return DequeEmitter[T](
+      data: me.data,
+      start: me.start,
+      count: me.count,
+      capacity: me.capacity,
+      index: 0u64
+    )
+
+### Returns the next element from the iterator in front-to-back order.
+### :returns: The next logical element.
+### :absent: All elements captured at iterator creation have been yielded.
 @writable
 routine DequeEmitter[T].$next!() -> T
   if me.index >= me.count
@@ -350,25 +387,26 @@ routine DequeEmitter[T].$next!() -> T
 # Utility Operations
 # ============================================================================
 
-### Returns the result of `first or default`.
-### :param default_value: The `default_value` value.
-### :returns: The resulting `T` value.
+### Returns the front element or `default_value` if the deque is empty.
+### :param default_value: The fallback to return when no element is stored.
+### :returns: The front element if present; `default_value` otherwise.
 routine Deque[T].first_or_default(default_value: T) -> T
   if me.is_empty()
     return default_value
   return me.first!()
 
-### Returns the result of `last or default`.
-### :param default_value: The `default_value` value.
-### :returns: The resulting `T` value.
+### Returns the back element or `default_value` if the deque is empty.
+### :param default_value: The fallback to return when no element is stored.
+### :returns: The back element if present; `default_value` otherwise.
 routine Deque[T].last_or_default(default_value: T) -> T
   if me.is_empty()
     return default_value
   return me.last!()
 
-### Returns whether this value contains `value`.
-### :param value: The value to use.
-### :returns: The resulting `Bool` value.
+### Returns true if any element in the deque equals `value`.
+### Scans in logical front-to-back order using the element type's equality operator.
+### :param value: The value to search for.
+### :returns: `true` if `value` is found; `false` if no element matches.
 @readonly
 routine Deque[T].$contains(value: T) -> Bool
   var i = 0u64
@@ -382,8 +420,6 @@ routine Deque[T].$contains(value: T) -> Bool
 # Comparison Operations
 # ============================================================================
 
-### Returns the textual representation of this value.
-### :returns: The resulting `Text` value.
 routine Deque[T].$represent() -> Text
   var result = "Deque["
   var i = 0u64
@@ -395,8 +431,6 @@ routine Deque[T].$represent() -> Text
   result = result + "]"
   return result
 
-### Returns the textual representation of this value.
-### :returns: The resulting `Text` value.
 routine Deque[T].$diagnose() -> Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", ["
   var i = 0u64
@@ -408,9 +442,9 @@ routine Deque[T].$diagnose() -> Text
   result = result + "])"
   return result
 
-### Returns whether both values are equal.
-### :param other: The other value to compare against.
-### :returns: The resulting `Bool` value.
+### Returns true if both deques contain the same elements in the same logical order.
+### :param other: The other deque to compare against.
+### :returns: `true` if both have equal count and all corresponding elements are equal.
 routine Deque[T].$eq(other: Deque[T]) -> Bool
   if me.count != other.count
     return false

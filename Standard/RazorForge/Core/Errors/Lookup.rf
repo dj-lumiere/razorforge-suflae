@@ -1,9 +1,11 @@
 module Core
 
-### Defines the record `Lookup`.
-### :typeparam T: The success value type.
+### Represents the success-or-crash-or-absent carrier used by `lookup_` routines.
+### `Lookup[T]` extends the `Result[T]` carrier shape with an explicit absent
+### state for APIs where "not found" is not itself an error.
+### :typeparam T: The successful return value type.
 record Lookup[T]
-  ### The type identifier of the stored value; matches the success type, a crashable type, or 0 (Blank) for absent.
+  ### Identifies the stored payload type, or `0` for the absent state.
   secret type_id: U64
-  ### The address of the heap-allocated value or crashable.
+  ### Stores the heap address of the success value or crashable payload.
   secret data_address: Address

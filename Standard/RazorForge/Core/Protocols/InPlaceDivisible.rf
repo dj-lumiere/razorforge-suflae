@@ -1,9 +1,11 @@
-# InPlaceDivisible - Protocol for types that support in-place true division (/=)
 module Core
 
-### Defines the protocol `InPlaceDivisible`.
+### Represents the protocol for in-place true division.
+### `InPlaceDivisible` is for mutable numeric values whose division surface
+### updates the current value with the computed quotient.
 protocol InPlaceDivisible
-  ### Implements the wired routine behavior for this value.
-  ### :param you: The other value to compare against.
+  ### Divides this value by `you` in place.
+  ### :param you: The divisor.
+  ### :note: The right-hand operand should remain unchanged.
   @writable
   routine Me.$itruediv(you: Me)

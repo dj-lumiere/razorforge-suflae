@@ -1,9 +1,10 @@
-# RazorForge F128 (quadruple precision floating point) native type implementation
-# Maps directly to LLVM fp128 type using compiler intrinsics
 module Core
 # Core F128 type definition - maps to LLVM fp128
 
-### Defines the record `F128`.
+### Represents a 128-bit IEEE 754 binary floating-point value.
+### `F128` provides quadruple precision for workloads that need far more range
+### and significand precision than `F64`, such as numerical analysis, symbolic
+### support code, and high-accuracy scientific routines.
 @llvm("fp128")
 record F128 obeys Numeric, Ordered
   pass
@@ -23,105 +24,105 @@ preset F128_SQRT_2: F128 = 1.414213562373095048801688724209698079_f128
 preset F128_LN_2: F128 = 0.693147180559945309417232121458176568_f128
 preset F128_LN_10: F128 = 2.302585092994045684017991454684364208_f128
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F128` value.
+### Converts an `S8` into quadruple-precision floating-point form.
+### :param from: The signed 8-bit integer to convert.
+### :returns: The corresponding `F128` value.
 routine F128.$create(from: S8) -> F128
   return signed_to_float[S8, F128](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F128` value.
+### Converts an `S16` into quadruple-precision floating-point form.
+### :param from: The signed 16-bit integer to convert.
+### :returns: The corresponding `F128` value.
 routine F128.$create(from: S16) -> F128
   return signed_to_float[S16, F128](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F128` value.
+### Converts an `S32` into quadruple-precision floating-point form.
+### :param from: The signed 32-bit integer to convert.
+### :returns: The corresponding `F128` value.
 routine F128.$create(from: S32) -> F128
   return signed_to_float[S32, F128](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F128` value.
+### Converts an `S64` into quadruple-precision floating-point form.
+### :param from: The signed 64-bit integer to convert.
+### :returns: The closest representable `F128` value.
 routine F128.$create(from: S64) -> F128
   return signed_to_float[S64, F128](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F128` value.
+### Converts an `S128` into quadruple-precision floating-point form.
+### :param from: The signed 128-bit integer to convert.
+### :returns: The closest representable `F128` value.
 routine F128.$create(from: S128) -> F128
   return signed_to_float[S128, F128](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F128` value.
+### Converts a `U8` into quadruple-precision floating-point form.
+### :param from: The unsigned 8-bit integer to convert.
+### :returns: The corresponding `F128` value.
 routine F128.$create(from: U8) -> F128
   return unsigned_to_float[U8, F128](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F128` value.
+### Converts a `U16` into quadruple-precision floating-point form.
+### :param from: The unsigned 16-bit integer to convert.
+### :returns: The corresponding `F128` value.
 routine F128.$create(from: U16) -> F128
   return unsigned_to_float[U16, F128](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F128` value.
+### Converts a `U32` into quadruple-precision floating-point form.
+### :param from: The unsigned 32-bit integer to convert.
+### :returns: The corresponding `F128` value.
 routine F128.$create(from: U32) -> F128
   return unsigned_to_float[U32, F128](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F128` value.
+### Converts a `U64` into quadruple-precision floating-point form.
+### :param from: The unsigned 64-bit integer to convert.
+### :returns: The closest representable `F128` value.
 routine F128.$create(from: U64) -> F128
   return unsigned_to_float[U64, F128](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F128` value.
+### Converts a `U128` into quadruple-precision floating-point form.
+### :param from: The unsigned 128-bit integer to convert.
+### :returns: The closest representable `F128` value.
 routine F128.$create(from: U128) -> F128
   return unsigned_to_float[U128, F128](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F128` value.
+### Widens a half-precision float to quadruple precision.
+### :param from: The `F16` value to widen.
+### :returns: An `F128` carrying the same numeric value when representable.
 routine F128.$create(from: F16) -> F128
   return float_extend[F16, F128](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F128` value.
+### Widens a single-precision float to quadruple precision.
+### :param from: The `F32` value to widen.
+### :returns: An `F128` carrying the same numeric value when representable.
 routine F128.$create(from: F32) -> F128
   return float_extend[F32, F128](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F128` value.
+### Widens a double-precision float to quadruple precision.
+### :param from: The `F64` value to widen.
+### :returns: An `F128` carrying the same numeric value when representable.
 routine F128.$create(from: F64) -> F128
   return float_extend[F64, F128](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F128` value.
+### Returns an existing `F128` unchanged.
+### :param from: The quadruple-precision value to forward.
+### :returns: `from`.
 routine F128.$create(from: F128) -> F128
   return from
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F128` value.
+### Converts a decimal32 value to quadruple-precision binary floating point.
+### :param from: The decimal floating-point input value.
+### :returns: The closest representable `F128` value.
 routine F128.$create(from: D32) -> F128
   return rf_d32_to_f128(from.to_bits())
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F128` value.
+### Converts a decimal64 value to quadruple-precision binary floating point.
+### :param from: The decimal floating-point input value.
+### :returns: The closest representable `F128` value.
 routine F128.$create(from: D64) -> F128
   return rf_d64_to_f128(from.to_bits())
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F128` value.
+### Converts a decimal128 value to quadruple-precision binary floating point.
+### :param from: The decimal floating-point input value.
+### :returns: The closest representable `F128` value.
 routine F128.$create(from: D128) -> F128
   return rf_d128_to_f128(from.low_bits(), from.high_bits())
 
@@ -170,9 +171,10 @@ routine F128.$truediv!(you: F128) -> F128
 routine F128.$neg() -> F128
   return float_neg[F128](me)
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
-### :returns: The resulting `F128` value.
+### Divides `me` by `you` without overflow checking.
+### Returns infinity or NaN on overflow or zero divisor, following raw IEEE 754 semantics.
+### :param you: The divisor.
+### :returns: The quadruple-precision quotient, possibly infinity or NaN.
 routine F128.$truediv_unchecked(you: F128) -> F128
   return float_div_fast[F128](me, you)
 
@@ -200,8 +202,8 @@ routine F128.$cmp(you: F128) -> ComparisonSign
 # Math Operations using intrinsics
 # ============================================================================
 
-### Returns the result of `sqrt`.
-### :returns: The resulting `F128` value.
+### Returns the square root of this value in quadruple precision.
+### :returns: The intrinsic square-root result for `me`.
 routine F128.sqrt() -> F128
   return sqrt[F128](me)
 
@@ -210,23 +212,23 @@ routine F128.sqrt() -> F128
 routine F128.abs() -> F128
   return float_abs[F128](me)
 
-### Returns the result of `floor`.
-### :returns: The resulting `F128` value.
+### Rounds this value toward negative infinity.
+### :returns: The greatest integral-valued `F128` not larger than `me`.
 routine F128.floor() -> F128
   return floor[F128](me)
 
-### Returns the result of `ceil`.
-### :returns: The resulting `F128` value.
+### Rounds this value toward positive infinity.
+### :returns: The smallest integral-valued `F128` not smaller than `me`.
 routine F128.ceil() -> F128
   return ceil[F128](me)
 
-### Returns the result of `round`.
-### :returns: The resulting `F128` value.
+### Rounds this value to the nearest integral-valued `F128`.
+### :returns: The rounded result in quadruple precision.
 routine F128.round() -> F128
   return round[F128](me)
 
-### Returns the result of `int_truncate`.
-### :returns: The resulting `F128` value.
+### Discards the fractional part of this value toward zero.
+### :returns: The truncated result in quadruple precision.
 routine F128.int_truncate() -> F128
   return float_truncate[F128](me)
 
@@ -234,39 +236,39 @@ routine F128.int_truncate() -> F128
 # Trigonometric Functions (via LibBF native runtime)
 # ============================================================================
 
-### Returns the result of `sin`.
-### :returns: The resulting `F128` value.
+### Returns the sine of this value, interpreting it as radians.
+### :returns: The quadruple-precision sine result.
 routine F128.sin() -> F128
   return rf_f128_sin(me)
 
-### Returns the result of `cos`.
-### :returns: The resulting `F128` value.
+### Returns the cosine of this value, interpreting it as radians.
+### :returns: The quadruple-precision cosine result.
 routine F128.cos() -> F128
   return rf_f128_cos(me)
 
-### Returns the result of `tan`.
-### :returns: The resulting `F128` value.
+### Returns the tangent of this value, interpreting it as radians.
+### :returns: The quadruple-precision tangent result.
 routine F128.tan() -> F128
   return rf_f128_tan(me)
 
-### Returns the result of `asin`.
-### :returns: The resulting `F128` value.
+### Returns the inverse sine of this value.
+### :returns: The quadruple-precision arcsine result.
 routine F128.asin() -> F128
   return rf_f128_asin(me)
 
-### Returns the result of `acos`.
-### :returns: The resulting `F128` value.
+### Returns the inverse cosine of this value.
+### :returns: The quadruple-precision arccosine result.
 routine F128.acos() -> F128
   return rf_f128_acos(me)
 
-### Returns the result of `atan`.
-### :returns: The resulting `F128` value.
+### Returns the inverse tangent of this value.
+### :returns: The quadruple-precision arctangent result.
 routine F128.atan() -> F128
   return rf_f128_atan(me)
 
-### Returns the result of `atan2`.
-### :param x: The x value.
-### :returns: The resulting `F128` value.
+### Returns the polar angle of the point `(x, me)`.
+### :param x: The x-coordinate paired with this y-coordinate.
+### :returns: The quadrant-aware arctangent result.
 routine F128.atan2(x: F128) -> F128
   return rf_f128_atan2(me, x)
 
@@ -274,33 +276,33 @@ routine F128.atan2(x: F128) -> F128
 # Hyperbolic Functions (via LibBF native runtime)
 # ============================================================================
 
-### Returns the result of `sinh`.
-### :returns: The resulting `F128` value.
+### Returns the hyperbolic sine of this value.
+### :returns: The quadruple-precision hyperbolic-sine result.
 routine F128.sinh() -> F128
   return rf_f128_sinh(me)
 
-### Returns the result of `cosh`.
-### :returns: The resulting `F128` value.
+### Returns the hyperbolic cosine of this value.
+### :returns: The quadruple-precision hyperbolic-cosine result.
 routine F128.cosh() -> F128
   return rf_f128_cosh(me)
 
-### Returns the result of `tanh`.
-### :returns: The resulting `F128` value.
+### Returns the hyperbolic tangent of this value.
+### :returns: The quadruple-precision hyperbolic-tangent result.
 routine F128.tanh() -> F128
   return rf_f128_tanh(me)
 
-### Returns the result of `asinh`.
-### :returns: The resulting `F128` value.
+### Returns the inverse hyperbolic sine of this value.
+### :returns: The quadruple-precision inverse-hyperbolic-sine result.
 routine F128.asinh() -> F128
   return rf_f128_asinh(me)
 
-### Returns the result of `acosh`.
-### :returns: The resulting `F128` value.
+### Returns the inverse hyperbolic cosine of this value.
+### :returns: The quadruple-precision inverse-hyperbolic-cosine result.
 routine F128.acosh() -> F128
   return rf_f128_acosh(me)
 
-### Returns the result of `atanh`.
-### :returns: The resulting `F128` value.
+### Returns the inverse hyperbolic tangent of this value.
+### :returns: The quadruple-precision inverse-hyperbolic-tangent result.
 routine F128.atanh() -> F128
   return rf_f128_atanh(me)
 
@@ -308,38 +310,38 @@ routine F128.atanh() -> F128
 # Exponential and Logarithmic Functions (via LibBF native runtime)
 # ============================================================================
 
-### Returns the result of `exp`.
-### :returns: The resulting `F128` value.
+### Returns `e` raised to this value.
+### :returns: The quadruple-precision exponential result.
 routine F128.exp() -> F128
   return rf_f128_exp(me)
 
-### Returns the result of `exp2`.
-### :returns: The resulting `F128` value.
+### Returns `2` raised to this value.
+### :returns: The quadruple-precision base-2 exponential result.
 routine F128.exp2() -> F128
   return rf_f128_exp2(me)
 
-### Returns the result of `expm1`.
-### :returns: The resulting `F128` value.
+### Returns `exp(me) - 1` with precision suitable for very small inputs.
+### :returns: The quadruple-precision exponential-minus-one result.
 routine F128.expm1() -> F128
   return rf_f128_expm1(me)
 
-### Returns the result of `log`.
-### :returns: The resulting `F128` value.
+### Returns the natural logarithm of this value.
+### :returns: The quadruple-precision natural-log result.
 routine F128.log() -> F128
   return rf_f128_log(me)
 
-### Returns the result of `log2`.
-### :returns: The resulting `F128` value.
+### Returns the base-2 logarithm of this value.
+### :returns: The quadruple-precision binary-log result.
 routine F128.log2() -> F128
   return rf_f128_log2(me)
 
-### Returns the result of `log10`.
-### :returns: The resulting `F128` value.
+### Returns the base-10 logarithm of this value.
+### :returns: The quadruple-precision common-log result.
 routine F128.log10() -> F128
   return rf_f128_log10(me)
 
-### Returns the result of `log1p`.
-### :returns: The resulting `F128` value.
+### Returns `log(1 + me)` with precision suitable for very small inputs.
+### :returns: The quadruple-precision log-one-plus result.
 routine F128.log1p() -> F128
   return rf_f128_log1p(me)
 
@@ -347,35 +349,35 @@ routine F128.log1p() -> F128
 # Power Functions (via LibBF native runtime)
 # ============================================================================
 
-### Returns the result of `pow`.
-### :param exp: The exponent value.
-### :returns: The resulting `F128` value.
+### Raises this value to the floating-point power `exp`.
+### :param exp: The exponent applied to `me`.
+### :returns: `me` raised to `exp` in quadruple precision.
 routine F128.pow(exp: F128) -> F128
   return rf_f128_pow(me, exp)
 
-### Returns the result of `pow`.
-### :param exp: The exponent value.
-### :returns: The resulting `F128` value.
+### Raises this value to `exp` and rejects non-finite results.
+### :param exp: The exponent applied to `me`.
+### :returns: `me` raised to `exp` in quadruple precision.
 routine F128.$pow!(exp: F128) -> F128
   var result = me.pow(exp)
   if not result.is_finite()
     throw NumericOverflowError(description: f"F128 power produced non-finite result: {me} ** {exp}")
   return result
 
-### Returns the result of `cbrt`.
-### :returns: The resulting `F128` value.
+### Returns the real cube root of this value.
+### :returns: The quadruple-precision cube-root result.
 routine F128.cbrt() -> F128
   return rf_f128_cbrt(me)
 
-### Returns the result of `hypot`.
-### :param y: The y value.
-### :returns: The resulting `F128` value.
+### Returns the Euclidean length of the vector `(me, y)`.
+### :param y: The second coordinate.
+### :returns: `sqrt(me * me + y * y)` computed by the runtime helper.
 routine F128.hypot(y: F128) -> F128
   return rf_f128_hypot(me, y)
 
-### Returns the result of `copysign`.
-### :param sign: The `sign` value.
-### :returns: The resulting `F128` value.
+### Returns this value with its sign bit replaced by the sign of `sign`.
+### :param sign: The value supplying the sign bit.
+### :returns: A value with the magnitude of `me` and the sign of `sign`.
 routine F128.copysign(sign: F128) -> F128
   return rf_f128_copysign(me, sign)
 
@@ -383,66 +385,66 @@ routine F128.copysign(sign: F128) -> F128
 # Utility Methods
 # ============================================================================
 
-### Returns the result of `min`.
-### :param you: The other value to compare against.
-### :returns: The resulting `F128` value.
+### Returns the smaller of this value and `you`.
+### :param you: The value to compare against.
+### :returns: The lower of the two values under the ordered comparison rules.
 routine F128.min(you: F128) -> F128
   return if me <= you then me else you
 
-### Returns the result of `max`.
-### :param you: The other value to compare against.
-### :returns: The resulting `F128` value.
+### Returns the larger of this value and `you`.
+### :param you: The value to compare against.
+### :returns: The greater of the two values under the ordered comparison rules.
 routine F128.max(you: F128) -> F128
   return if me >= you then me else you
 
-### Returns the result of `clamp`.
-### :param min_val: The `min_val` value.
-### :param max_val: The `max_val` value.
-### :returns: The resulting `F128` value.
+### Restricts this value to the closed interval `[min_val, max_val]`.
+### :param min_val: The lower bound to enforce.
+### :param max_val: The upper bound to enforce.
+### :returns: `me` if already in range, otherwise the nearest bound.
 routine F128.clamp(min_val: F128, max_val: F128) -> F128
   return me.min(max_val).max(min_val)
 
-### Returns true if this value is positive.
-### :returns: The resulting `Bool` value.
+### Returns `true` if this value is strictly positive (greater than zero).
+### :returns: `true` if `me > 0.0`.
 routine F128.is_positive() -> Bool
   return me > 0.0_f128
 
-### Returns true if this value is negative.
-### :returns: The resulting `Bool` value.
+### Returns `true` if this value is strictly negative (less than zero).
+### :returns: `true` if `me < 0.0`.
 routine F128.is_negative() -> Bool
   return me < 0.0_f128
 
-### Returns true if this value is zero.
-### :returns: The resulting `Bool` value.
+### Returns `true` if this value compares equal to zero.
+### :returns: `true` if `me == 0.0`.
 routine F128.is_zero() -> Bool
   return me == 0.0_f128
 
-### Returns the result of `signum`.
-### :returns: The resulting `F128` value.
+### Returns the sign of this value as `-1.0`, `0.0`, or `1.0`.
+### :returns: A unit-sign value describing the sign of `me`.
 routine F128.signum() -> F128
   return when
     me > 0.0_f128 => 1.0_f128
     me < 0.0_f128 => -1.0_f128
     else => 0.0_f128
 
-### Converts this value to bits.
-### :returns: The resulting `U128` value.
+### Reinterprets this float as its raw IEEE 754 bit pattern.
+### :returns: The underlying `U128` encoding of this value.
 routine F128.to_bits() -> U128
   return reinterpret_bits[F128, U128](me)
 
-### Returns the result of `low bits`.
-### :returns: The resulting `U64` value.
+### Returns the low 64 bits of the raw `F128` encoding.
+### :returns: The least-significant half of the bit pattern.
 routine F128.low_bits() -> U64
   return int_truncate[U128, U64](me.to_bits())
 
-### Returns the result of `high bits`.
-### :returns: The resulting `U64` value.
+### Returns the high 64 bits of the raw `F128` encoding.
+### :returns: The most-significant half of the bit pattern.
 routine F128.high_bits() -> U64
   return int_truncate[U128, U64](me.to_bits() >>> 64u32)
 
-### Creates a value from bits.
-### :param bits: The encoded bit pattern.
-### :returns: The resulting `F128` value.
+### Reinterprets a raw IEEE 754 bit pattern as an `F128`.
+### :param bits: The exact quadruple-precision encoding to decode.
+### :returns: The `F128` value with that bit pattern.
 routine F128.from_bits(bits: U128) -> F128
   return reinterpret_bits[U128, F128](bits)
 
@@ -450,8 +452,8 @@ routine F128.from_bits(bits: U128) -> F128
 # Classification
 # ============================================================================
 
-### Returns true if this value is nan.
-### :returns: The resulting `Bool` value.
+### Returns `true` when this value encodes an IEEE 754 NaN.
+### :returns: Whether the bit pattern represents a not-a-number payload.
 routine F128.is_nan() -> Bool
   # F128: bit 127=sign, bits 126-112=exponent (15 bits), bits 111-0=mantissa (112 bits)
   # NaN = exponent all-ones (0x7FFF) AND mantissa != 0
@@ -462,8 +464,8 @@ routine F128.is_nan() -> Bool
   var hi_mantissa = bit_and[U64](hi, 0x0000_FFFF_FFFF_FFFF_u64)
   return exponent == 0x7FFF_u64 and (hi_mantissa != 0_u64 or lo != 0_u64)
 
-### Returns true if this value is infinite.
-### :returns: The resulting `Bool` value.
+### Returns `true` when this value encodes positive or negative infinity.
+### :returns: Whether the bit pattern represents an infinity.
 routine F128.is_infinite() -> Bool
   # F128: bit 127=sign, bits 126-112=exponent (15 bits), bits 111-0=mantissa (112 bits)
   # Infinity = exponent all-ones (0x7FFF) AND mantissa == 0
@@ -474,18 +476,18 @@ routine F128.is_infinite() -> Bool
   var hi_mantissa = bit_and[U64](hi, 0x0000_FFFF_FFFF_FFFF_u64)
   return exponent == 0x7FFF_u64 and hi_mantissa == 0_u64 and lo == 0_u64
 
-### Returns true if this value is finite.
-### :returns: The resulting `Bool` value.
+### Returns `true` when this value is neither NaN nor infinity.
+### :returns: Whether the value is finite.
 routine F128.is_finite() -> Bool
   return not me.is_nan() and not me.is_infinite()
 
-### Returns true if this value is normal.
-### :returns: The resulting `Bool` value.
+### Returns `true` when this is a finite, non-zero, non-subnormal value.
+### :returns: Whether the value is a normal IEEE 754 number.
 routine F128.is_normal() -> Bool
   return me.is_finite() and not me.is_zero() and not me.is_subnormal()
 
-### Returns true if this value is subnormal.
-### :returns: The resulting `Bool` value.
+### Returns `true` when this value is finite, non-zero, and encoded with an exponent of zero.
+### :returns: Whether the value is subnormal.
 routine F128.is_subnormal() -> Bool
   var bits = me.to_bits()
   var hi = int_truncate[U128, U64](bits >>> 64u32)
@@ -496,45 +498,45 @@ routine F128.is_subnormal() -> Bool
 # Clamping Arithmetic
 # ============================================================================
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
-### :returns: The resulting `F128` value.
+### Returns `me + you`, clamped to `±F128_MAX` if the result overflows to infinity.
+### :param you: The addend.
+### :returns: The sum, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
 routine F128.$add_clamp(you: F128) -> F128
   var result = float_add[F128](me, you)
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else float_neg[F128](F128_MAX)
   return result
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
-### :returns: The resulting `F128` value.
+### Returns `me - you`, clamped to `±F128_MAX` if the result overflows to infinity.
+### :param you: The value to subtract.
+### :returns: The difference, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
 routine F128.$sub_clamp(you: F128) -> F128
   var result = float_sub[F128](me, you)
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else float_neg[F128](F128_MAX)
   return result
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
-### :returns: The resulting `F128` value.
+### Returns `me * you`, clamped to `±F128_MAX` if the result overflows to infinity.
+### :param you: The multiplier.
+### :returns: The product, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
 routine F128.$mul_clamp(you: F128) -> F128
   var result = float_mul[F128](me, you)
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else float_neg[F128](F128_MAX)
   return result
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
-### :returns: The resulting `F128` value.
+### Returns `me / you`, clamped to `±F128_MAX` if the result overflows to infinity.
+### :param you: The divisor.
+### :returns: The quotient, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
 routine F128.$truediv_clamp(you: F128) -> F128
   var result = float_div[F128](me, you)
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else float_neg[F128](F128_MAX)
   return result
 
-### Implements the wired routine behavior for this value.
-### :param exp: The exponent value.
-### :returns: The resulting `F128` value.
+### Returns `me ** exp`, clamped to `±F128_MAX` if the result overflows to infinity.
+### :param exp: The exponent applied to `me`.
+### :returns: The power, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
 routine F128.$pow_clamp(exp: F128) -> F128
   var result = rf_f128_pow(me, exp)
   if result.is_infinite()
@@ -545,13 +547,15 @@ routine F128.$pow_clamp(exp: F128) -> F128
 # Integer Conversions
 # ============================================================================
 
-### Returns the result of `S64`.
-### :returns: The resulting `S64` value.
+### Converts this value to `S64` by first narrowing to `F64`, then truncating toward zero.
+### Values outside the `S64` range or non-finite inputs produce unspecified results.
+### :returns: The truncated `S64` value.
 routine F128.S64!() -> S64
   return me.F64!().S64!()
 
-### Returns the result of `S128`.
-### :returns: The resulting `S128` value.
+### Converts this value to `S128` by first narrowing to `F64`, then truncating toward zero.
+### Values outside the `S128` range or non-finite inputs produce unspecified results.
+### :returns: The truncated `S128` value.
 routine F128.S128!() -> S128
   return me.F64!().S128!()
 
@@ -559,13 +563,13 @@ routine F128.S128!() -> S128
 # Float Precision Conversions
 # ============================================================================
 
-### Returns the result of `F32`.
-### :returns: The resulting `F32` value.
+### Narrows this quadruple-precision value to single precision.
+### :returns: The nearest representable `F32` value.
 routine F128.F32() -> F32
   return float_narrow[F128, F32](me)
 
-### Returns the result of `F64`.
-### :returns: The resulting `F64` value.
+### Narrows this quadruple-precision value to double precision.
+### :returns: The nearest representable `F64` value.
 routine F128.F64() -> F64
   return float_narrow[F128, F64](me)
 
@@ -578,8 +582,10 @@ routine F128.F64() -> F64
 routine F128.$diagnose() -> Text
   return Text(from: me)
 
-### Returns the result of `hash`.
-### :returns: The resulting `U64` value.
+### Returns a stable hash derived from the raw floating-point encoding.
+### NaN payloads and negative zero are normalized so equal numeric values hash
+### identically under RazorForge's equality rules.
+### :returns: The hash code for this value.
 routine F128.hash() -> U64
   var bits = me.to_bits()
   var lo = int_truncate[U128, U64](bits)

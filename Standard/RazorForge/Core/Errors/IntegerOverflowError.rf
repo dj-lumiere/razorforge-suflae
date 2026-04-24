@@ -1,11 +1,11 @@
 module Core
 
-# IntegerOverflowError - Error for integer conversion overflow
-# Used when converting between integer types and the value doesn't fit
-
-### Defines the crashable `IntegerOverflowError`.
+### Represents the crashable raised when an integer value cannot be represented
+### in the requested destination type.
 crashable IntegerOverflowError
   pass
 
+### Returns the default message for integer conversion overflow.
+### :returns: The resulting `Text` value.
 routine IntegerOverflowError.crash_message() -> Text
   return "Integer overflow: value does not fit in the target type."

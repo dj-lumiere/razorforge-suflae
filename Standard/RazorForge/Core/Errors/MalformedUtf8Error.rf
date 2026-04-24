@@ -1,13 +1,14 @@
 module Core
 
-### Defines the crashable `MalformedUtf8Error`.
+### Represents the crashable raised when a byte sequence cannot be decoded as
+### well-formed UTF-8.
 crashable MalformedUtf8Error
-  ### Stores the index member value.
+  ### Stores the byte index where decoding failed.
   index: U64
-  ### Stores the reason member value.
+  ### Stores a short description of the decoding failure.
   reason: Text
 
-### Returns the result of `crash message`.
+### Returns the default message for malformed UTF-8 input.
 ### :returns: The resulting `Text` value.
 routine MalformedUtf8Error.crash_message() -> Text
   return f"Malformed UTF-8 at byte {me.index}: {me.reason}."

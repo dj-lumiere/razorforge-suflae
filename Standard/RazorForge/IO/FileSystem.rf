@@ -1,5 +1,3 @@
-# FileSystem - existence checks, directory ops, copy/move/remove, path utilities, permissions
-
 module IO/FileSystem
 import IO/Errors
 
@@ -7,22 +5,25 @@ import IO/Errors
 # Existence checks (pure, no crash)
 # ============================================================================
 
-### Returns the result of `exists`.
-### :param path: The `path` value.
+### Returns whether a path exists.
+### This performs a non-throwing existence check suitable for preflight logic.
+### :param path: The path to test.
 ### :returns: The resulting `Bool` value.
 routine exists(path: Referring[Text]) -> Bool
   var cstr = CStr(from: path)
   return rf_fs_exists(cstr, cstr.count().S32())
 
-### Returns true if this value is file.
-### :param path: The `path` value.
+### Returns whether a path refers to a regular file.
+### Missing paths return `false`.
+### :param path: The path to test.
 ### :returns: The resulting `Bool` value.
 routine is_file(path: Referring[Text]) -> Bool
   var cstr = CStr(from: path)
   return rf_fs_is_file(cstr, cstr.count().S32())
 
-### Returns true if this value is directory.
-### :param path: The `path` value.
+### Returns whether a path refers to a directory.
+### Missing paths return `false`.
+### :param path: The path to test.
 ### :returns: The resulting `Bool` value.
 routine is_directory(path: Referring[Text]) -> Bool
   var cstr = CStr(from: path)
@@ -32,8 +33,9 @@ routine is_directory(path: Referring[Text]) -> Bool
 # Directory operations (failable)
 # ============================================================================
 
-### Performs `create dir` on this value.
-### :param path: The `path` value.
+### Creates a single directory.
+### Parent directories must already exist.
+### :param path: The directory path to create.
 ### :throws: May throw {IOError}.
 routine create_dir!(path: Referring[Text])
   var cstr = CStr(from: path)
@@ -42,8 +44,9 @@ routine create_dir!(path: Referring[Text])
     throw IOError(description: f"Cannot create directory: {path}")
   return
 
-### Performs `create dir all` on this value.
-### :param path: The `path` value.
+### Creates a directory and any missing parents.
+### This is the recursive directory-creation helper.
+### :param path: The directory path to create.
 ### :throws: May throw {IOError}.
 routine create_dir_all!(path: Referring[Text])
   var cstr = CStr(from: path)
@@ -56,9 +59,10 @@ routine create_dir_all!(path: Referring[Text])
 # File operations (failable)
 # ============================================================================
 
-### Performs `copy` on this value.
-### :param source: The `source` value.
-### :param destination: The `destination` value.
+### Copies a filesystem entry to a new location.
+### Existing destination handling follows the runtime's native copy semantics.
+### :param source: The source path.
+### :param destination: The destination path.
 ### :throws: May throw {IOError}.
 routine copy!(source: Referring[Text], destination: Referring[Text])
   var src_cstr = CStr(from: source)
@@ -68,9 +72,10 @@ routine copy!(source: Referring[Text], destination: Referring[Text])
     throw IOError(description: f"Cannot copy '{source}' to '{destination}'")
   return
 
-### Performs `move` on this value.
-### :param source: The `source` value.
-### :param destination: The `destination` value.
+### Moves or renames a filesystem entry.
+### This may behave as a rename within one filesystem or as a move across locations.
+### :param source: The source path.
+### :param destination: The destination path.
 ### :throws: May throw {IOError}.
 routine move!(source: Referring[Text], destination: Referring[Text])
   var src_cstr = CStr(from: source)
@@ -80,8 +85,9 @@ routine move!(source: Referring[Text], destination: Referring[Text])
     throw IOError(description: f"Cannot move '{source}' to '{destination}'")
   return
 
-### Performs `delete path` on this value.
-### :param path: The `path` value.
+### Removes a file or empty directory.
+### Use `delete_path_all!` when recursive removal is required.
+### :param path: The path to remove.
 ### :throws: May throw {IOError}.
 routine delete_path!(path: Referring[Text])
   var cstr = CStr(from: path)
@@ -90,8 +96,9 @@ routine delete_path!(path: Referring[Text])
     throw IOError(description: "Cannot remove path")
   return
 
-### Performs `delete path all` on this value.
-### :param path: The `path` value.
+### Removes a directory tree recursively.
+### This is the destructive removal helper for non-empty paths.
+### :param path: The path to remove.
 ### :throws: May throw {IOError}.
 routine delete_path_all!(path: Referring[Text])
   var cstr = CStr(from: path)
@@ -104,9 +111,10 @@ routine delete_path_all!(path: Referring[Text])
 # Path utilities (pure, no OS calls)
 # ============================================================================
 
-### Returns the result of `join path`.
-### :param a: The left-hand value.
-### :param b: The right-hand value.
+### Joins two path segments.
+### This uses the platform path separator rules implemented by the runtime.
+### :param a: The left-hand path segment.
+### :param b: The right-hand path segment.
 ### :returns: The resulting `Text` value.
 routine join_path(a: Text, b: Text) -> Text
   var a_cstr = CStr(from: a)
@@ -116,8 +124,9 @@ routine join_path(a: Text, b: Text) -> Text
   var bytes = Bytes(ptr: ptr, count: len)
   return bytes.decode_as_utf8_lossy()
 
-### Returns the result of `parent path`.
-### :param path: The `path` value.
+### Returns the parent directory path.
+### Paths without a parent return the runtime's normalized empty-parent representation.
+### :param path: The path to inspect.
 ### :returns: The resulting `Text` value.
 routine parent_path(path: Referring[Text]) -> Text
   var cstr = CStr(from: path)
@@ -126,8 +135,9 @@ routine parent_path(path: Referring[Text]) -> Text
   var bytes = Bytes(ptr: ptr, count: len)
   return bytes.decode_as_utf8_lossy()
 
-### Returns the result of `file name`.
-### :param path: The `path` value.
+### Returns the final path component.
+### Directory separators are removed from the returned value.
+### :param path: The path to inspect.
 ### :returns: The resulting `Text` value.
 routine file_name(path: Referring[Text]) -> Text
   var cstr = CStr(from: path)
@@ -136,8 +146,9 @@ routine file_name(path: Referring[Text]) -> Text
   var bytes = Bytes(ptr: ptr, count: len)
   return bytes.decode_as_utf8_lossy()
 
-### Returns the result of `file stem`.
-### :param path: The `path` value.
+### Returns the final path component without its extension.
+### Hidden-file semantics follow the runtime path parser.
+### :param path: The path to inspect.
 ### :returns: The resulting `Text` value.
 routine file_stem(path: Referring[Text]) -> Text
   var cstr = CStr(from: path)
@@ -146,8 +157,9 @@ routine file_stem(path: Referring[Text]) -> Text
   var bytes = Bytes(ptr: ptr, count: len)
   return bytes.decode_as_utf8_lossy()
 
-### Returns the result of `extension`.
-### :param path: The `path` value.
+### Returns the file extension.
+### The returned value omits the leading dot when an extension is present.
+### :param path: The path to inspect.
 ### :returns: The resulting `Text` value.
 routine extension(path: Referring[Text]) -> Text
   var cstr = CStr(from: path)
@@ -160,8 +172,9 @@ routine extension(path: Referring[Text]) -> Text
 # Path resolution (OS calls, failable)
 # ============================================================================
 
-### Returns the result of `absolute path`.
-### :param path: The `path` value.
+### Resolves a path to an absolute path.
+### This preserves symbolic links and other non-canonical path components.
+### :param path: The path to resolve.
 ### :returns: The resulting `Text` value.
 ### :throws: May throw {IOError}.
 routine absolute_path!(path: Referring[Text]) -> Text
@@ -173,8 +186,10 @@ routine absolute_path!(path: Referring[Text]) -> Text
   var bytes = Bytes(ptr: ptr, count: len)
   return bytes.decode_as_utf8_lossy()
 
-### Returns the result of `canonical path`.
-### :param path: The `path` value.
+### Resolves a path to its canonical filesystem location.
+### The returned path reflects the filesystem's normalized casing and link resolution rules.
+### This follows the runtime's normalization rules for links and relative segments.
+### :param path: The path to resolve.
 ### :returns: The resulting `Text` value.
 ### :throws: May throw {IOError}.
 routine canonical_path!(path: Referring[Text]) -> Text
@@ -190,30 +205,34 @@ routine canonical_path!(path: Referring[Text]) -> Text
 # Permissions
 # ============================================================================
 
-### Returns the result of `can read`.
-### :param path: The `path` value.
+### Returns whether the current process can read a path.
+### This check is non-throwing and is intended for capability probes.
+### :param path: The path to test.
 ### :returns: The resulting `Bool` value.
 routine can_read(path: Referring[Text]) -> Bool
   var cstr = CStr(from: path)
   return rf_fs_can_read(cstr, cstr.count().S32())
 
-### Returns the result of `can write`.
-### :param path: The `path` value.
+### Returns whether the current process can write to a path.
+### This check is non-throwing and is intended for capability probes.
+### :param path: The path to test.
 ### :returns: The resulting `Bool` value.
 routine can_write(path: Referring[Text]) -> Bool
   var cstr = CStr(from: path)
   return rf_fs_can_write(cstr, cstr.count().S32())
 
-### Returns the result of `can execute`.
-### :param path: The `path` value.
+### Returns whether the current process can execute a path.
+### This check is non-throwing and is intended for capability probes.
+### :param path: The path to test.
 ### :returns: The resulting `Bool` value.
 routine can_execute(path: Referring[Text]) -> Bool
   var cstr = CStr(from: path)
   return rf_fs_can_execute(cstr, cstr.count().S32())
 
-### Sets the readonly component.
-### :param path: The `path` value.
-### :param readonly: The `readonly` value.
+### Enables or disables the readonly attribute for a path.
+### This adjusts filesystem metadata rather than keeping an in-memory flag.
+### :param path: The path to modify.
+### :param readonly: `true` to enable readonly mode; `false` to disable it.
 ### :throws: May throw {IOError}.
 routine set_readonly!(path: Referring[Text], readonly: Bool = true)
   var cstr = CStr(from: path)

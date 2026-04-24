@@ -1,18 +1,20 @@
-# Indexable - Protocol for types that support indexing ([])
 module Core
 
-### Defines the protocol `Indexable`.
-### :typeparam K: The value used for `K`.
-### :typeparam V: The value used for `V`.
+### Represents the `Indexable` protocol.
+### Indexable values expose keyed read and write access through bracket syntax.
+### :typeparam K: The key type accepted by the indexer.
+### :typeparam V: The value type returned or assigned by the indexer.
 protocol Indexable[K, V]
-  ### Implements the wired routine behavior for this value.
-  ### :param key: The `key` value.
-  ### :returns: The resulting `V` value.
+  ### Returns the value addressed by `key`.
+  ### Implementations define whether missing keys throw, return absent, or use another contract.
+  ### :param key: The key to resolve.
+  ### :returns: The element at the given index.
   @readonly
   routine Me.$getitem!(key: K) -> V
 
-  ### Implements the wired routine behavior for this value.
-  ### :param key: The `key` value.
+  ### Stores `value` at `key`.
+  ### The write semantics are defined by the conforming type.
+  ### :param key: The key to resolve.
   ### :param value: The value to use.
   @writable
   routine Me.$setitem!(key: K, value: V)

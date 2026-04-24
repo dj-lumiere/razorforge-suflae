@@ -1,8 +1,3 @@
-# RazorForge SecureDict[K, V] — Swiss Table hash map with SipHash-2-4 keyed hashing.
-# Identical structure to Dict[K, V] but uses $secure_hash(k0, k1) instead of $hash().
-# Prevents hash-flooding attacks; each instance holds its own random key.
-# ctrl byte: 128=empty, 254=deleted (tombstone), 0-127=H2 fingerprint
-
 module Collections
 
 import BuilderService
@@ -13,9 +8,34 @@ preset CTRL_EMPTY: U8 = 128_u8
 preset CTRL_DELETED: U8 = 254_u8
 preset CTRL_H2_MASK: U8 = 127_u8
 
-### Hash map from K to V, protected against hash-flooding attacks.
-### :typeparam K: The key type.
-### :typeparam V: The value type.
+### A key-value dictionary backed by an open-addressed hash table hardened against hash-flooding attacks.
+###
+### `SecureDict[K, V]` works like {Dict[K, V]} but uses SipHash-2-4 keyed with a per-instance
+### secret to make the probe sequence unpredictable to external attackers. This prevents
+### worst-case O(n) behaviour that arises when an adversary can craft inputs that all collide
+### in an ordinary dictionary.
+###
+### Each `SecureDict` instance carries its own randomly generated (or caller-supplied)
+### hash key, so two tables holding the same elements will generally have different probe
+### structures. This means you cannot assume any iteration order is stable across instances.
+###
+### **When to use**
+### - You are storing data derived from untrusted input (e.g. HTTP headers, user IDs, file names).
+### - You need the same insert/lookup/remove interface as {Dict[K, V]} with a security guarantee.
+### - Use plain {Dict[K, V]} instead when the key space is fully trusted and throughput matters more.
+###
+### **Complexity**
+### | Operation | Average | Worst case |
+### |---|---|---|
+### | `add` | O(1) | O(n) (rehash) |
+### | `remove` | O(1) | O(n) |
+### | `$contains` / `get_or_default` | O(1) | O(n) |
+### | Iteration | O(capacity) | O(capacity) |
+###
+### :typeparam K: The key type. Must obey {SecureHashable} and {Equatable}.
+### :typeparam V: The value type associated with each key.
+### :see: {Dict[K, V]} for an unsecured but faster general-purpose dictionary.
+### :see: {SecureSet[T]} for the set counterpart.
 entity SecureDict[K, V] obeys Iterable[DictEntry[K, V]]
 needs K obeys SecureHashable, Equatable
   secret ctrl: Hijacked[U8]
@@ -31,14 +51,12 @@ needs K obeys SecureHashable, Equatable
 # Creators
 # ============================================================================
 
-### Creates a new empty instance with a fresh OS-entropy key.
-### :returns: The resulting `SecureDict[K, V]` value.
+### Creates an empty secure dictionary with a freshly generated secure-hash key.
 routine SecureDict[K, V].$create() -> SecureDict[K, V]
   return SecureDict[K, V](key: SecureHashKey.random())
 
-### Creates a new empty instance with the given hash key.
-### :param key: The SipHash-2-4 key for this instance.
-### :returns: The resulting `SecureDict[K, V]` value.
+### Creates an empty secure dictionary with the supplied secure-hash key.
+### :param key: The SipHash-2-4 key used for all hash computations in this instance.
 routine SecureDict[K, V].$create(key: SecureHashKey) -> SecureDict[K, V]
   var cap = SECURE_DICT_INITIAL_CAPACITY
   var dict = SecureDict[K, V](
@@ -58,10 +76,10 @@ routine SecureDict[K, V].$create(key: SecureHashKey) -> SecureDict[K, V]
     dict.vals = hijacked_from[V](rf_allocate_dynamic_uninit(V.data_size() * cap))
   return dict
 
-### Creates a new instance pre-sized for at least `capacity` entries.
-### :param key: The SipHash-2-4 key for this instance.
-### :param capacity: The minimum number of entries before the first rehash.
-### :returns: The resulting `SecureDict[K, V]` value.
+### Creates an empty secure dictionary pre-sized to hold at least `capacity` live entries without rehashing.
+### The actual slot count is rounded up to the next power-of-two.
+### :param key: The SipHash-2-4 key used for all hash computations in this instance.
+### :param capacity: Minimum number of live entries to accommodate before the first rehash.
 routine SecureDict[K, V].$create(key: SecureHashKey, capacity: U64) -> SecureDict[K, V]
   var cap = SECURE_DICT_INITIAL_CAPACITY
   while cap < capacity
@@ -83,7 +101,7 @@ routine SecureDict[K, V].$create(key: SecureHashKey, capacity: U64) -> SecureDic
     dict.vals = hijacked_from[V](rf_allocate_dynamic_uninit(V.data_size() * cap))
   return dict
 
-### Releases raw key and value storage.
+### Releases the raw control, key, and value buffers owned by this dictionary.
 routine SecureDict[K, V].$destroy()
   danger!
     if not me.ctrl.is_none()
@@ -98,41 +116,41 @@ routine SecureDict[K, V].$destroy()
 # Internal Helpers
 # ============================================================================
 
-### Returns the H2 fingerprint: 7 low bits of hash, always in range 0-127.
-### :param hash: The raw hash.
-### :returns: The resulting `U8` value.
+### Extracts the 7-bit control-byte fingerprint from a raw hash value.
+### :param hash: The raw SipHash output.
+### :returns: The low 7 bits of `hash`, used to filter candidate slots before a full key comparison.
 routine SecureDict[K, V].h2(hash: U64) -> U8
   return U8(hash & U64(CTRL_H2_MASK))
 
-### Returns the H1 slot position: upper bits of hash used for indexing.
-### :param hash: The raw hash.
-### :returns: The resulting `U64` value.
+### Derives the primary probe slot index from a raw hash value.
+### :param hash: The raw SipHash output.
+### :returns: The upper bits of `hash`, used as the starting slot before masking to the table size.
 routine SecureDict[K, V].h1(hash: U64) -> U64
   return hash >> 7u32
 
-### Reads the key at `slot`.
-### :param slot: The slot index.
-### :returns: The resulting `K` value.
+### Returns the key stored at `slot` without checking whether the slot is live.
+### :param slot: The slot index to read from.
+### :returns: The key value at that slot.
 routine SecureDict[K, V].read_key(slot: U64) -> K
   return me.keys.offset(K.data_size() * slot).extract()
 
-### Reads the value at `slot`.
-### :param slot: The slot index.
-### :returns: The resulting `V` value.
+### Returns the value stored at `slot` without checking whether the slot is live.
+### :param slot: The slot index to read from.
+### :returns: The value at that slot.
 routine SecureDict[K, V].read_val(slot: U64) -> V
   return me.vals.offset(V.data_size() * slot).extract()
 
-### Writes `val` to `slot`.
-### :param slot: The slot index.
-### :param val: The value to store.
+### Overwrites the value at `slot` without changing the control byte.
+### :param slot: The slot index to write to.
+### :param val: The new value to store.
 routine SecureDict[K, V].write_val(slot: U64, val: V)
   me.vals.offset(V.data_size() * slot).inject(val)
   return
 
-### Linear-probes for `key` using H1 start + H2 fingerprint matching.
-### Returns `capacity` when `key` is absent.
+### Searches for `key` by linear probing from its primary secure-hash slot.
+### Control-byte fingerprints are checked before full key equality to reduce key loads.
 ### :param key: The key to find.
-### :returns: The resulting `U64` value.
+### :returns: The slot index of `key` if found, or `capacity` if the key is absent.
 routine SecureDict[K, V].find_slot(key: K) -> U64
   var h = key.$secure_hash(k0: me.k0, k1: me.k1)
   var target = me.h2(h)
@@ -149,11 +167,11 @@ routine SecureDict[K, V].find_slot(key: K) -> U64
       i = (i +% 1u64) & mask
   return me.capacity
 
-### Inserts hash + key + value into the first empty or deleted slot from H1.
-### Does not check for duplicates and does not update `count`.
-### :param h: The raw hash.
-### :param key: The key to insert.
-### :param val: The value to insert.
+### Writes `key` and `val` into the first empty or deleted slot reached from the probe position of `h`.
+### Assumes the caller has already checked for duplicates and will update `count` separately.
+### :param h: The raw SipHash output for `key`.
+### :param key: The key to write.
+### :param val: The value to write.
 routine SecureDict[K, V].insert_raw(h: U64, key: K, val: V)
   var h2_val = me.h2(h)
   var mask = me.capacity -% 1u64
@@ -175,12 +193,14 @@ routine SecureDict[K, V].insert_raw(h: U64, key: K, val: V)
       i = (i +% 1u64) & mask
   return
 
-### Returns true if the next insert would exceed 87.5% load (live + tombstones).
-### :returns: The resulting `Bool` value.
+### Returns true when the combined live and tombstone load exceeds 87.5% of capacity.
+### Both live entries and tombstones occupy probe space, so both count toward the load threshold.
+### :returns: `true` if a rehash should happen before the next insertion.
 routine SecureDict[K, V].should_rehash() -> Bool
   return (me.count +% me.deleted) *% 8u64 >= me.capacity *% 7u64
 
-### Doubles capacity and reinserts all live entries.
+### Doubles the table capacity and reinserts all live entries into the new table.
+### Tombstones are discarded during the rebuild; secure hashes are recomputed from the same instance key.
 routine SecureDict[K, V].rehash()
   var old_cap = me.capacity
   var old_ctrl = me.ctrl
@@ -221,17 +241,17 @@ routine SecureDict[K, V].rehash()
 # Core Operations
 # ============================================================================
 
-### Returns the number of stored entries.
-### :returns: The resulting `U64` value.
+### Returns the number of live key-value entries currently stored.
+### :returns: The live entry count.
 routine SecureDict[K, V].count() -> U64
   return me.count
 
-### Returns true if this dict contains no entries.
-### :returns: The resulting `Bool` value.
+### Returns true if this dictionary contains no live entries.
+### :returns: `true` when `count()` is zero.
 routine SecureDict[K, V].is_empty() -> Bool
   return me.count == 0u64
 
-### Removes all entries, keeping current capacity.
+### Removes every entry while preserving the current slot capacity and hash key.
 routine SecureDict[K, V].clear()
   danger!
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: me.capacity)
@@ -239,17 +259,17 @@ routine SecureDict[K, V].clear()
   me.deleted = 0u64
   return
 
-### Returns whether this dict contains `key`.
+### Returns true if `key` is present in the dictionary.
 ### :param key: The key to look up.
-### :returns: The resulting `Bool` value.
+### :returns: `true` if the key exists.
 @readonly
 routine SecureDict[K, V].$contains(key: K) -> Bool
   return me.find_slot(key) < me.capacity
 
-### Inserts or updates a key-value entry.
+### Inserts `key` with `value`, or updates the existing entry when `key` is already present.
 ### :param key: The key to insert or update.
-### :param value: The value to associate.
-### :returns: `true` if a new entry was inserted, `false` if an existing entry was updated.
+### :param value: The value to associate with `key`.
+### :returns: `true` if a new entry was inserted; `false` if an existing entry was updated.
 routine SecureDict[K, V].add(key: K, value: V) -> Bool
   if me.should_rehash()
     me.rehash()
@@ -261,9 +281,9 @@ routine SecureDict[K, V].add(key: K, value: V) -> Bool
   me.count = me.count +% 1u64
   return true
 
-### Removes the entry with `key`.
+### Removes the entry associated with `key`, if present.
 ### :param key: The key to remove.
-### :returns: `true` if removed, `false` if not found.
+### :returns: `true` if the key was found and removed; `false` if not present.
 routine SecureDict[K, V].remove(key: K) -> Bool
   var slot = me.find_slot(key)
   if slot >= me.capacity
@@ -274,10 +294,10 @@ routine SecureDict[K, V].remove(key: K) -> Bool
   me.deleted = me.deleted +% 1u64
   return true
 
-### Returns the value for `key`, or `default_value` if not found.
+### Returns the value associated with `key`, or `default_value` when the key is absent.
 ### :param key: The key to look up.
-### :param default_value: The fallback value.
-### :returns: The resulting `V` value.
+### :param default_value: The fallback value returned when `key` is not present.
+### :returns: The mapped value if found, otherwise `default_value`.
 routine SecureDict[K, V].get_or_default(key: K, default_value: V) -> V
   var slot = me.find_slot(key)
   if slot >= me.capacity
@@ -288,19 +308,19 @@ routine SecureDict[K, V].get_or_default(key: K, default_value: V) -> V
 # Indexing
 # ============================================================================
 
-### Returns the value for `key`.
+### Returns the value associated with `key`.
 ### :param key: The key to look up.
-### :returns: The resulting `V` value.
-### :absent: Returns absent when the key is not found.
+### :returns: The value mapped to `key`.
+### :absent: The key is not present in the dictionary.
 routine SecureDict[K, V].$getitem!(key: K) -> V
   var slot = me.find_slot(key)
   if slot >= me.capacity
     absent
   return me.read_val(slot)
 
-### Sets the value for `key`, inserting a new entry if needed.
+### Sets the value for `key`, inserting a new entry when the key is not already present.
 ### :param key: The key to set.
-### :param value: The value to associate.
+### :param value: The value to associate with `key`.
 routine SecureDict[K, V].$setitem!(key: K, value: V)
   if me.should_rehash()
     me.rehash()
@@ -316,8 +336,8 @@ routine SecureDict[K, V].$setitem!(key: K, value: V)
 # Iteration
 # ============================================================================
 
-### Creates an iterator over this dict's entries.
-### :returns: The resulting `SecureDictIterator[K, V]` value.
+### Returns an iterator over all live entries in slot order.
+### Iteration order is not sorted and is not stable across rehashes or across different instances.
 @readonly
 routine SecureDict[K, V].$iter() -> SecureDictIterator[K, V]
   danger!
@@ -329,9 +349,10 @@ routine SecureDict[K, V].$iter() -> SecureDictIterator[K, V]
       slot: 0u64
     )
 
-### Defines the entity `SecureDictIterator`.
-### :typeparam K: The key type.
-### :typeparam V: The value type.
+### Iterator that walks the raw slot array of a {SecureDict[K, V]} and yields only live entries.
+### Empty and deleted (tombstone) slots are silently skipped.
+### :typeparam K: The key type yielded by each entry.
+### :typeparam V: The value type yielded by each entry.
 entity SecureDictIterator[K, V] obeys Iterator[DictEntry[K, V]]
   secret ctrl: Hijacked[U8]
   secret keys: Hijacked[K]
@@ -339,6 +360,9 @@ entity SecureDictIterator[K, V] obeys Iterator[DictEntry[K, V]]
   secret capacity: U64
   secret slot: U64
 
+### Advances to the next live slot and returns its entry.
+### :returns: The next live {DictEntry[K, V]}.
+### :absent: No live slots remain.
 @writable
 routine SecureDictIterator[K, V].$next!() -> DictEntry[K, V]
   danger!
@@ -356,8 +380,8 @@ routine SecureDictIterator[K, V].$next!() -> DictEntry[K, V]
 # Display
 # ============================================================================
 
-### Returns the textual representation of this value.
-### :returns: The resulting `Text` value.
+### Returns a compact text representation of the dictionary contents.
+### Entries are rendered as `key: value` pairs in iteration (slot) order.
 routine SecureDict[K, V].$represent() -> Text
   if me.is_empty()
     return "{:}"
@@ -371,8 +395,7 @@ routine SecureDict[K, V].$represent() -> Text
   result = result + "}"
   return result
 
-### Returns the diagnostic representation of this value.
-### :returns: The resulting `Text` value.
+### Returns a diagnostic form that includes the runtime type name and live entry count.
 routine SecureDict[K, V].$diagnose() -> Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
   var first = true
@@ -388,9 +411,9 @@ routine SecureDict[K, V].$diagnose() -> Text
 # Comparison
 # ============================================================================
 
-### Returns whether both dicts contain the same key-value entries.
-### :param other: The other dict to compare against.
-### :returns: The resulting `Bool` value.
+### Returns true if both dictionaries contain exactly the same keys with the same associated values.
+### :param other: The other dictionary to compare against.
+### :returns: `true` if both have the same count and every key-value pair is equal.
 routine SecureDict[K, V].$eq(other: SecureDict[K, V]) -> Bool
   if me.count != other.count
     return false

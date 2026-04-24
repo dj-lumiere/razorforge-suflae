@@ -1,10 +1,7 @@
 module Core
 
-# ============================================================================
-# Bytes - UTF-8 unmodifiable text
-# ============================================================================
-
-### Defines the entity `Bytes`.
+### Represents the `Bytes` entity.
+### `Bytes` is an immutable owning byte sequence intended for binary data rather than text.
 entity Bytes
   ### Raw buffer of byte values.
   secret data: Hijacked[Byte]
@@ -12,20 +9,19 @@ entity Bytes
   secret count: U64
 
 ### Frees the byte buffer.
+### This runs as part of destruction and releases the owned allocation.
 routine Bytes.$destroy()
   danger!
     me.data.invalidate!()
   return
 
-# Creators
-
-### Creates a new instance.
+### Creates an empty byte sequence.
 ### :returns: The resulting `Bytes` value.
 routine Bytes.$create() -> Bytes
   return Bytes(data: hijacked_none[Byte](), count: 0u64)
 
-### Creates a new instance.
-### :param from_list: The list value to convert.
+### Creates a byte sequence by copying the contents of `from_list`.
+### :param from_list: The source list of bytes to copy.
 ### :returns: The resulting `Bytes` value.
 routine Bytes.$create(from_list: List[Byte]) -> Bytes
   var n = from_list.count()
@@ -41,8 +37,8 @@ routine Bytes.$create(from_list: List[Byte]) -> Bytes
       i += 1u64
     return Bytes(data: buf, count: n)
 
-### Creates a new instance.
-### :param from_byte: The `from_byte` value.
+### Creates a one-byte sequence from `from_byte`.
+### :param from_byte: The single byte to store.
 ### :returns: The resulting `Bytes` value.
 routine Bytes.$create(from_byte: Byte) -> Bytes
   danger!
@@ -50,8 +46,9 @@ routine Bytes.$create(from_byte: Byte) -> Bytes
     buf.inject(value: from_byte)
     return Bytes(data: buf, count: 1u64)
 
-### Creates a new instance.
-### :param ptr: The pointer value to use.
+### Creates a byte sequence by copying a null-terminated byte buffer.
+### Copying stops at the first null byte.
+### :param ptr: The source pointer to read from.
 ### :returns: The resulting `Bytes` value.
 routine Bytes.$create(ptr: Hijacked[Byte]) -> Bytes
   danger!
@@ -66,8 +63,9 @@ routine Bytes.$create(ptr: Hijacked[Byte]) -> Bytes
     rf_copy_bytes_at(dest: buf.address(), src: ptr.address(), size: Byte.data_size() * len)
     return Bytes(data: buf, count: len)
 
-### Creates a new instance.
-### :param ptr: The pointer value to use.
+### Creates a byte sequence by copying a null-terminated C string as raw bytes.
+### No text decoding is performed.
+### :param ptr: The source C string.
 ### :returns: The resulting `Bytes` value.
 routine Bytes.$create(ptr: CStr) -> Bytes
   var len = rf_cstr_count(ptr)
@@ -78,9 +76,9 @@ routine Bytes.$create(ptr: CStr) -> Bytes
     rf_copy_bytes_at(dest: buf.address(), src: ptr.ptr.address(), size: Byte.data_size() * len)
     return Bytes(data: buf, count: len)
 
-### Creates a new instance.
-### :param ptr: The pointer value to use.
-### :param count: The number of items to use.
+### Creates a byte sequence by copying `count` bytes from an address.
+### :param ptr: The source address.
+### :param count: The number of bytes to copy.
 ### :returns: The resulting `Bytes` value.
 routine Bytes.$create(ptr: Address, count: U64) -> Bytes
   if count == 0u64
@@ -90,9 +88,9 @@ routine Bytes.$create(ptr: Address, count: U64) -> Bytes
     rf_copy_bytes_at(dest: buf.address(), src: ptr, size: Byte.data_size() * count)
     return Bytes(data: buf, count: count)
 
-### Creates a new instance.
-### :param ptr: The pointer value to use.
-### :param count: The number of items to use.
+### Creates a byte sequence by copying `count` bytes from a hijacked pointer.
+### :param ptr: The source pointer.
+### :param count: The number of bytes to copy.
 ### :returns: The resulting `Bytes` value.
 routine Bytes.$create(ptr: Hijacked[Byte], count: U64) -> Bytes
   if count == 0u64
@@ -104,12 +102,13 @@ routine Bytes.$create(ptr: Hijacked[Byte], count: U64) -> Bytes
 
 # Core operations
 
-### Returns the number of stored values.
+### Returns the number of stored bytes in this sequence.
 ### :returns: The resulting `U64` value.
 routine Bytes.count() -> U64
   return me.count
 
 ### Returns the number of occurrences of a byte.
+### Matching is exact on raw byte values.
 ### :param byte: The byte to search for.
 ### :returns: The resulting `U64` value.
 routine Bytes.count_of(byte: Byte) -> U64
@@ -119,14 +118,15 @@ routine Bytes.count_of(byte: Byte) -> U64
       result += 1u64
   return result
 
-### Returns true if this value is empty.
+### Returns `true` when this byte sequence has no stored bytes.
+### This is equivalent to checking whether `count()` is `0`.
 ### :returns: The resulting `Bool` value.
 routine Bytes.is_empty() -> Bool
   return me.count == 0u64
 
 # Indexing
 
-### Returns the element at the requested position.
+### Returns the byte at `index`.
 ### :param index: The zero-based position to use.
 ### :returns: The resulting `Byte` value.
 routine Bytes.$getitem![I obeys Integral](index: I) -> Byte
@@ -136,15 +136,17 @@ routine Bytes.$getitem![I obeys Integral](index: I) -> Byte
   danger!
     return me.data.stride(count: S64(i)).extract()
 
-### Returns the element at the requested position.
-### :param index: The zero-based position to use.
+### Returns the byte addressed by a back index.
+### Back indices count from the end of the sequence using the `^` syntax.
+### :param index: The backward position to resolve.
 ### :returns: The resulting `Byte` value.
 routine Bytes.$getitem![I obeys Integral](index: BackIndex[I]) -> Byte
   var i = index.resolve(length: me.count)
   danger!
     return me.data.stride(count: S64(i)).extract()
 
-### Returns the slice between the requested bounds.
+### Returns the slice between `start` and `end`.
+### The slice uses an inclusive start and exclusive end.
 ### :param start: The inclusive starting position.
 ### :param end: The exclusive ending position.
 ### :returns: The resulting `Bytes` value.
@@ -160,7 +162,8 @@ routine Bytes.$getslice[I obeys Integral](start: I, end: I) -> Bytes
     rf_copy_bytes_at(dest: buf.address(), src: src_ptr.address(), size: Byte.data_size() * n)
     return Bytes(data: buf, count: n)
 
-### Returns the slice between the requested bounds.
+### Returns the slice between two back indices.
+### Both bounds are resolved against the current sequence length before slicing.
 ### :param start: The inclusive starting position.
 ### :param end: The exclusive ending position.
 ### :returns: The resulting `Bytes` value.
@@ -179,7 +182,8 @@ routine Bytes.$getslice[I obeys Integral](start: BackIndex[I], end: BackIndex[I]
 # String operations
 
 ### Returns a new value with `other` appended.
-### :param other: The other value to compare against.
+### Both input byte sequences remain unchanged.
+### :param other: The byte sequence to append.
 ### :returns: The resulting `Bytes` value.
 routine Bytes.concat(other: Referring[Bytes]) -> Bytes
   var n = me.count + other.count
@@ -195,13 +199,15 @@ routine Bytes.concat(other: Referring[Bytes]) -> Bytes
     return Bytes(data: buf, count: n)
 
 ### Returns the sum of this value and the other value.
-### :param other: The other value to compare against.
+### This is the operator form of `concat`.
+### :param other: The byte sequence to append.
 ### :returns: The resulting `Bytes` value.
 routine Bytes.$add(other: Referring[Bytes]) -> Bytes
   return me.concat(other)
 
 ### Returns whether both values are equal.
-### :param other: The other value to compare against.
+### Equality requires the same length and the same byte at each position.
+### :param other: The other byte sequence to compare against.
 ### :returns: The resulting `Bool` value.
 routine Bytes.$eq(other: Referring[Bytes]) -> Bool
   if me.count != other.count
@@ -214,8 +220,8 @@ routine Bytes.$eq(other: Referring[Bytes]) -> Bool
 
 # Search
 
-### Returns true if this value contains the requested value.
-### :param byte: The `byte` value.
+### Returns `true` when this byte sequence contains `byte`.
+### :param byte: The byte to search for.
 ### :returns: The resulting `Bool` value.
 routine Bytes.contains(byte: Byte) -> Bool
   for i in 0 til me.count
@@ -223,8 +229,8 @@ routine Bytes.contains(byte: Byte) -> Bool
       return true
   return false
 
-### Returns true if this value starts with the requested value.
-### :param prefix: The prefix to test or remove.
+### Returns `true` when this byte sequence begins with `prefix`.
+### :param prefix: The prefix to test.
 ### :returns: The resulting `Bool` value.
 routine Bytes.starts_with(prefix: Referring[Bytes]) -> Bool
   if prefix.count > me.count
@@ -234,8 +240,8 @@ routine Bytes.starts_with(prefix: Referring[Bytes]) -> Bool
       return false
   return true
 
-### Returns true if this value ends with the requested value.
-### :param suffix: The suffix to test or remove.
+### Returns `true` when this byte sequence ends with `suffix`.
+### :param suffix: The suffix to test.
 ### :returns: The resulting `Bool` value.
 routine Bytes.ends_with(suffix: Referring[Bytes]) -> Bool
   if suffix.count > me.count
@@ -246,8 +252,8 @@ routine Bytes.ends_with(suffix: Referring[Bytes]) -> Bool
       return false
   return true
 
-### Returns the position of the requested value.
-### :param byte: The `byte` value.
+### Returns the position of the first occurrence of `byte`.
+### :param byte: The byte to search for.
 ### :returns: The resulting `U64` value.
 ### :absent: Returns absent when the requested value is unavailable.
 routine Bytes.find!(byte: Byte) -> U64
@@ -259,6 +265,7 @@ routine Bytes.find!(byte: Byte) -> U64
 # Split
 
 ### Splits this value into parts.
+### Separator bytes are not included in the returned segments.
 ### :param separator: The separator to use.
 ### :returns: The resulting `List[Owned[Bytes]]` value.
 routine Bytes.split(separator: Byte) -> List[Owned[Bytes]]
@@ -276,6 +283,7 @@ routine Bytes.split(separator: Byte) -> List[Owned[Bytes]]
 # Transform
 
 ### Returns a copy with the value order reversed.
+### Bytes are reversed by position with no interpretation as text.
 ### :returns: The resulting `Bytes` value.
 routine Bytes.reverse() -> Bytes
   var result = List[Byte]()
@@ -288,6 +296,7 @@ routine Bytes.reverse() -> Bytes
   return Bytes(from_list: result)
 
 ### Returns a repeated copy of this value.
+### This is the binary-sequence equivalent of text repetition.
 ### :param times: The number of repetitions to produce.
 ### :returns: The resulting `Bytes` value.
 routine Bytes.repeat(times: U64) -> Bytes
@@ -307,8 +316,8 @@ routine Bytes.repeat(times: U64) -> Bytes
 
 # Conversion to modifiable list
 
-### Creates a new instance.
-### :param from: The source value to convert.
+### Creates a mutable byte list by copying the contents of `Bytes`.
+### :param from: The byte sequence to convert.
 ### :returns: The resulting `List[Byte]` value.
 routine List[Byte].$create(from: Bytes) -> List[Byte]
   var result = List[Byte](from.count)
@@ -323,19 +332,21 @@ routine List[Byte].$create(from: Bytes) -> List[Byte]
 
 # Iteration
 
-### Defines the entity `BytesIterator`.
+### Represents the iterator used to traverse a `Bytes` value.
 entity BytesIterator
-  ### Stores the bytes member value.
+  ### Stores the source byte sequence.
   bytes: Bytes
-  ### Stores the index member value.
+  ### Stores the next byte index to yield.
   index: U64
 
-### Creates an iterator for this value.
+### Returns an iterator over this byte sequence.
+### The iterator starts at byte index `0`.
 ### :returns: The resulting `BytesIterator` value.
 routine Bytes.$iter() -> BytesIterator
   return BytesIterator(bytes: me, index: 0u64)
 
-### Returns the next value from this iterator.
+### Returns the next byte from this iterator.
+### Each successful call yields one byte and advances the internal index.
 ### :returns: The resulting `Byte` value.
 ### :absent: Returns absent when the requested value is unavailable.
 routine BytesIterator.$next!() -> Byte
@@ -349,7 +360,8 @@ routine BytesIterator.$next!() -> Byte
 # Display — hex format \xHH for each byte
 # ============================================================================
 
-### Returns the textual representation of this value.
+### Returns the display form of this byte sequence.
+### Each byte is rendered using its escaped `\\xHH` representation.
 ### :returns: The resulting `Text` value.
 routine Bytes.$represent() -> Text
   var result = List[Character]()
@@ -367,7 +379,8 @@ routine Bytes.$represent() -> Text
     i += 1u64
   return Text(from_list: result)
 
-### Returns the textual representation of this value.
+### Returns the diagnostic form of this byte sequence.
+### The diagnostic form includes both the byte count and the escaped payload.
 ### :returns: The resulting `Text` value.
 routine Bytes.$diagnose() -> Text
   return "Bytes(count: " + me.count.$represent() + ", " + me.$represent() + ")"
@@ -376,7 +389,7 @@ routine Bytes.$diagnose() -> Text
 # Encoding Conversions
 # ============================================================================
 
-### Returns the result of `encode as utf8`.
+### Encodes this text value as UTF-8 bytes.
 ### :returns: The resulting `Bytes` value.
 routine Text.encode_as_utf8() -> Bytes
   var result = List[Byte]()
@@ -401,7 +414,8 @@ routine Text.encode_as_utf8() -> Bytes
         result.add_last(Byte(U8!(0x80u32 | (codepoint & 0x3Fu32))))
   return Bytes(from_list: result)
 
-### Returns the result of `decode as utf8 lossy`.
+### Decodes this byte sequence as UTF-8, replacing malformed subsequences with
+### the Unicode replacement character.
 ### :returns: The resulting `Text` value.
 routine Bytes.decode_as_utf8_lossy() -> Text
   var result = List[Character]()
@@ -473,7 +487,8 @@ routine Bytes.decode_as_utf8_lossy() -> Text
     result.add_last(Character(codepoint))
   return Text(from_list: result)
 
-### Returns the result of `decode as utf8`.
+### Decodes this byte sequence as UTF-8.
+### Malformed input causes a `MalformedUtf8Error` instead of lossy replacement.
 ### :returns: The resulting `Text` value.
 ### :throws: May throw {MalformedUtf8Error}.
 routine Bytes.decode_as_utf8!() -> Text
@@ -531,42 +546,46 @@ routine Bytes.decode_as_utf8!() -> Text
     result.add_last(Character(codepoint))
   return Text(from_list: result)
 
-### Defines the record `BytesUtf8View`.
+### Represents the `BytesUtf8View` record.
 record BytesUtf8View obeys Iterable[Character]
   ### Raw pointer to the underlying `Bytes` entity. Caller guarantees lifetime.
   secret bytes: Hijacked[Bytes]
 
-### Defines the record `BytesUtf8Iterator`.
+### Represents the `BytesUtf8Iterator` record.
 record BytesUtf8Iterator
   ### Raw pointer to the underlying `Bytes` entity. Caller guarantees lifetime.
   secret bytes: Hijacked[Bytes]
-  ### Stores the index member value.
+  ### Stores the index.
   index: U64
 
-### Returns the result of `interpret as utf8`.
+### Returns a lazy UTF-8 view over this byte sequence.
+### Malformed subsequences are handled lossily during iteration.
 ### :returns: The resulting `BytesUtf8View` value.
 routine Bytes.interpret_as_utf8() -> BytesUtf8View
   danger!
     return BytesUtf8View(bytes: me.hijack())
 
-### Returns the result of `interpret as utf8`.
+### Returns a validated UTF-8 view over this byte sequence.
+### The byte sequence is checked eagerly before the lazy view is returned.
 ### :returns: The resulting `BytesUtf8View` value.
 routine Bytes.interpret_as_utf8!() -> BytesUtf8View
   discard me.decode_as_utf8!()
   danger!
     return BytesUtf8View(bytes: me.hijack())
 
-### Returns the result of `interpret as utf8 lossy`.
+### Returns a lazy lossy UTF-8 view over this byte sequence.
+### This is the explicit named form of `interpret_as_utf8`.
 ### :returns: The resulting `BytesUtf8View` value.
 routine Bytes.interpret_as_utf8_lossy() -> BytesUtf8View
   return me.interpret_as_utf8()
 
-### Creates an iterator for this value.
+### Returns an iterator over the UTF-8 view.
 ### :returns: The resulting `BytesUtf8Iterator` value.
 routine BytesUtf8View.$iter() -> BytesUtf8Iterator
   return BytesUtf8Iterator(bytes: me.bytes, index: 0u64)
 
-### Returns the next value from this iterator.
+### Returns the next decoded character from this UTF-8 iterator.
+### Malformed subsequences are surfaced as the replacement character.
 ### :returns: The resulting `Character` value.
 ### :absent: Returns absent when the requested value is unavailable.
 routine BytesUtf8Iterator.$next!() -> Character
@@ -643,7 +662,7 @@ routine BytesUtf8Iterator.$next!() -> Character
 # C-String Interop
 # ============================================================================
 
-### Converts this value to cstr.
+### Copies this byte sequence into a newly allocated null-terminated C buffer.
 ### :returns: The resulting `Address` value.
 routine Bytes.to_cstr() -> Address
   var len = me.count
@@ -654,7 +673,8 @@ routine Bytes.to_cstr() -> Address
     buffer.stride(count: S64(len)).inject(value: BYTE_NULL)
     return buffer.address()
 
-### Converts this value to cstr.
+### Encodes this text as UTF-8 and returns a newly allocated null-terminated C
+### buffer.
 ### :returns: The resulting `Address` value.
 routine Text.to_cstr() -> Address
   var bytes = me.encode_as_utf8()
@@ -664,7 +684,7 @@ routine Text.to_cstr() -> Address
 # UTF-16 Conversion (for Windows interop)
 # ============================================================================
 
-### Returns the result of `encode as utf16`.
+### Encodes this text value as UTF-16 code units.
 ### :returns: The resulting `List[U16]` value.
 routine Text.encode_as_utf16() -> List[U16]
   var result = List[U16]()
@@ -683,7 +703,9 @@ routine Text.encode_as_utf16() -> List[U16]
     i += 1u64
   return result
 
-### Returns the result of `decode as utf16`.
+### Decodes a list of UTF-16 code units into `Text`.
+### Invalid surrogate structure is replaced with the Unicode replacement
+### character.
 ### :returns: The resulting `Text` value.
 routine List[U16].decode_as_utf16() -> Text
   var result = List[Character]()

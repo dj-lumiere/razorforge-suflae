@@ -1,10 +1,11 @@
-# DurationSubtractable - Protocol for types that support subtracting a Duration (- Duration)
 module Core
 
-### Defines the protocol `DurationSubtractable`.
+### Represents the protocol for shifting a value backward by a duration.
+### `DurationSubtractable` is used by temporal values that can move earlier by a
+### concrete `Duration`.
 protocol DurationSubtractable
-  ### Returns the difference between this value and the other value.
-  ### :param you: The other value to compare against.
+  ### Returns this value shifted backward by `you`.
+  ### :param you: The duration to subtract.
   ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$sub(you: Duration) -> Me

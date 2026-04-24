@@ -1,9 +1,10 @@
-# RazorForge F16 (half precision floating point) native type implementation
-# Maps directly to LLVM half type using compiler intrinsics
 module Core
 # Core F16 type definition - maps to LLVM half
 
-### Defines the record `F16`.
+### Represents a 16-bit IEEE 754 binary floating-point value.
+### `F16` trades away precision and range for compact storage, which makes it a
+### good fit for packed numeric data, graphics formats, and bandwidth-sensitive
+### workloads.
 @llvm("half")
 record F16 obeys Numeric, Ordered
   pass
@@ -22,107 +23,107 @@ preset F16_PI: F16 = 3.140625_f16
 preset F16_E: F16 = 2.71875_f16
 preset F16_SQRT_2: F16 = 1.414063_f16
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F16` value.
+### Converts an `S8` into half-precision floating-point form.
+### :param from: The signed 8-bit integer to convert.
+### :returns: The corresponding `F16` value.
 routine F16.$create(from: S8) -> F16
   return signed_to_float[S8, F16](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F16` value.
+### Converts an `S16` into half-precision floating-point form.
+### :param from: The signed 16-bit integer to convert.
+### :returns: The closest representable `F16` value.
 routine F16.$create(from: S16) -> F16
   return signed_to_float[S16, F16](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F16` value.
+### Converts an `S32` into half-precision floating-point form.
+### :param from: The signed 32-bit integer to convert.
+### :returns: The closest representable `F16` value.
 routine F16.$create(from: S32) -> F16
   return signed_to_float[S32, F16](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F16` value.
+### Converts an `S64` into half-precision floating-point form.
+### :param from: The signed 64-bit integer to convert.
+### :returns: The closest representable `F16` value.
 routine F16.$create(from: S64) -> F16
   return signed_to_float[S64, F16](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F16` value.
+### Converts an `S128` into half-precision floating-point form.
+### :param from: The signed 128-bit integer to convert.
+### :returns: The closest representable `F16` value.
 routine F16.$create(from: S128) -> F16
   return signed_to_float[S128, F16](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F16` value.
+### Converts a `U8` into half-precision floating-point form.
+### :param from: The unsigned 8-bit integer to convert.
+### :returns: The corresponding `F16` value.
 routine F16.$create(from: U8) -> F16
   return unsigned_to_float[U8, F16](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F16` value.
+### Converts a `U16` into half-precision floating-point form.
+### :param from: The unsigned 16-bit integer to convert.
+### :returns: The closest representable `F16` value.
 routine F16.$create(from: U16) -> F16
   return unsigned_to_float[U16, F16](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F16` value.
+### Converts a `U32` into half-precision floating-point form.
+### :param from: The unsigned 32-bit integer to convert.
+### :returns: The closest representable `F16` value.
 routine F16.$create(from: U32) -> F16
   return unsigned_to_float[U32, F16](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F16` value.
+### Converts a `U64` into half-precision floating-point form.
+### :param from: The unsigned 64-bit integer to convert.
+### :returns: The closest representable `F16` value.
 routine F16.$create(from: U64) -> F16
   return unsigned_to_float[U64, F16](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F16` value.
+### Converts a `U128` into half-precision floating-point form.
+### :param from: The unsigned 128-bit integer to convert.
+### :returns: The closest representable `F16` value.
 routine F16.$create(from: U128) -> F16
   return unsigned_to_float[U128, F16](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F16` value.
+### Returns an existing `F16` unchanged.
+### :param from: The half-precision value to forward.
+### :returns: `from`.
 routine F16.$create(from: F16) -> F16
   return from
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F16` value.
+### Narrows a single-precision float to half precision.
+### :param from: The `F32` value to convert.
+### :returns: The nearest representable `F16` value.
 routine F16.$create(from: F32) -> F16
   return float_narrow[F32, F16](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F16` value.
+### Narrows a double-precision float to half precision.
+### :param from: The `F64` value to convert.
+### :returns: The nearest representable `F16` value.
 routine F16.$create(from: F64) -> F16
   return float_narrow[F64, F16](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F16` value.
+### Narrows a quadruple-precision float to half precision.
+### :param from: The `F128` value to convert.
+### :returns: The nearest representable `F16` value.
 routine F16.$create(from: F128) -> F16
   return float_narrow[F128, F16](from)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F16` value.
+### Converts a decimal32 value to half-precision binary floating point.
+### :param from: The decimal floating-point input value.
+### :returns: The closest representable `F16` value.
 routine F16.$create(from: D32) -> F16
   var f32_val = rf_d32_to_f32(from.to_bits())
   return float_narrow[F32, F16](f32_val)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F16` value.
+### Converts a decimal64 value to half-precision binary floating point.
+### :param from: The decimal floating-point input value.
+### :returns: The closest representable `F16` value.
 routine F16.$create(from: D64) -> F16
   var f32_val = rf_d64_to_f32(from.to_bits())
   return float_narrow[F32, F16](f32_val)
 
-### Creates a new instance.
-### :param from: The source value to convert.
-### :returns: The resulting `F16` value.
+### Converts a decimal128 value to half-precision binary floating point.
+### :param from: The decimal floating-point input value.
+### :returns: The closest representable `F16` value.
 routine F16.$create(from: D128) -> F16
   var f32_val = rf_d128_to_f32(from.low_bits(), from.high_bits())
   return float_narrow[F32, F16](f32_val)
@@ -131,36 +132,40 @@ routine F16.$create(from: D128) -> F16
 # Arithmetic Operations (IEEE 754 semantics)
 # ============================================================================
 
-### Returns the sum of this value and the other value.
-### :param you: The other value to compare against.
-### :returns: The resulting `F16` value.
+### Returns `me + you`, throwing if the result is non-finite.
+### :param you: The addend.
+### :returns: The half-precision sum.
+### :throws: {NumericOverflowError} if the result is infinity or NaN.
 routine F16.$add!(you: F16) -> F16
   var result = float_add[F16](me, you)
   if not result.is_finite()
     throw NumericOverflowError(description: f"F16 addition produced non-finite result: {me} + {you}")
   return result
 
-### Returns the difference between this value and the other value.
-### :param you: The other value to compare against.
-### :returns: The resulting `F16` value.
+### Returns `me - you`, throwing if the result is non-finite.
+### :param you: The value to subtract.
+### :returns: The half-precision difference.
+### :throws: {NumericOverflowError} if the result is infinity or NaN.
 routine F16.$sub!(you: F16) -> F16
   var result = float_sub[F16](me, you)
   if not result.is_finite()
     throw NumericOverflowError(description: f"F16 subtraction produced non-finite result: {me} - {you}")
   return result
 
-### Returns the product of this value and the other value.
-### :param you: The other value to compare against.
-### :returns: The resulting `F16` value.
+### Returns `me * you`, throwing if the result is non-finite.
+### :param you: The multiplier.
+### :returns: The half-precision product.
+### :throws: {NumericOverflowError} if the result is infinity or NaN.
 routine F16.$mul!(you: F16) -> F16
   var result = float_mul[F16](me, you)
   if not result.is_finite()
     throw NumericOverflowError(description: f"F16 multiplication produced non-finite result: {me} * {you}")
   return result
 
-### Returns the quotient of this value and the other value.
-### :param you: The other value to compare against.
-### :returns: The resulting `F16` value.
+### Returns `me / you`, throwing if the result is non-finite.
+### :param you: The divisor.
+### :returns: The half-precision quotient.
+### :throws: {NumericOverflowError} if the result is infinity or NaN (including division by zero).
 routine F16.$truediv!(you: F16) -> F16
   var result = float_div[F16](me, you)
   if not result.is_finite()
@@ -172,9 +177,10 @@ routine F16.$truediv!(you: F16) -> F16
 routine F16.$neg() -> F16
   return float_neg[F16](me)
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
-### :returns: The resulting `F16` value.
+### Divides `me` by `you` without overflow checking.
+### Returns infinity or NaN on overflow or zero divisor, following raw IEEE 754 semantics.
+### :param you: The divisor.
+### :returns: The half-precision quotient, possibly infinity or NaN.
 routine F16.$truediv_unchecked(you: F16) -> F16
   return float_div_fast[F16](me, you)
 
@@ -202,8 +208,8 @@ routine F16.$cmp(you: F16) -> ComparisonSign
 # Math Operations using intrinsics
 # ============================================================================
 
-### Returns the result of `sqrt`.
-### :returns: The resulting `F16` value.
+### Returns the square root of this value in half precision.
+### :returns: The intrinsic square-root result for `me`.
 routine F16.sqrt() -> F16
   return sqrt[F16](me)
 
@@ -212,29 +218,29 @@ routine F16.sqrt() -> F16
 routine F16.abs() -> F16
   return float_abs[F16](me)
 
-### Returns the result of `floor`.
-### :returns: The resulting `F16` value.
+### Rounds this value toward negative infinity.
+### :returns: The greatest integral-valued `F16` not larger than `me`.
 routine F16.floor() -> F16
   return floor[F16](me)
 
-### Returns the result of `ceil`.
-### :returns: The resulting `F16` value.
+### Rounds this value toward positive infinity.
+### :returns: The smallest integral-valued `F16` not smaller than `me`.
 routine F16.ceil() -> F16
   return ceil[F16](me)
 
-### Returns the result of `round`.
-### :returns: The resulting `F16` value.
+### Rounds this value to the nearest integral-valued `F16`.
+### :returns: The rounded result in half precision.
 routine F16.round() -> F16
   return round[F16](me)
 
-### Returns the result of `int_truncate`.
-### :returns: The resulting `F16` value.
+### Discards the fractional part of this value toward zero.
+### :returns: The truncated result in half precision.
 routine F16.int_truncate() -> F16
   return float_truncate[F16](me)
 
-### Returns the result of `copysign`.
-### :param sign: The `sign` value.
-### :returns: The resulting `F16` value.
+### Returns this value with its sign bit replaced by the sign of `sign`.
+### :param sign: The value supplying the sign bit.
+### :returns: A value with the magnitude of `me` and the sign of `sign`.
 routine F16.copysign(sign: F16) -> F16
   return copysign[F16](me, sign)
 
@@ -242,63 +248,63 @@ routine F16.copysign(sign: F16) -> F16
 # Utility Methods
 # ============================================================================
 
-### Returns the result of `min`.
-### :param you: The other value to compare against.
-### :returns: The resulting `F16` value.
+### Returns the smaller of this value and `you`.
+### :param you: The value to compare against.
+### :returns: The lower of the two values under the ordered comparison rules.
 routine F16.min(you: F16) -> F16
   return if me <= you then me else you
 
-### Returns the result of `max`.
-### :param you: The other value to compare against.
-### :returns: The resulting `F16` value.
+### Returns the larger of this value and `you`.
+### :param you: The value to compare against.
+### :returns: The greater of the two values under the ordered comparison rules.
 routine F16.max(you: F16) -> F16
   return if me >= you then me else you
 
-### Returns the result of `clamp`.
-### :param min_val: The `min_val` value.
-### :param max_val: The `max_val` value.
-### :returns: The resulting `F16` value.
+### Restricts this value to the closed interval `[min_val, max_val]`.
+### :param min_val: The lower bound to enforce.
+### :param max_val: The upper bound to enforce.
+### :returns: `me` if already in range, otherwise the nearest bound.
 routine F16.clamp(min_val: F16, max_val: F16) -> F16
   return me.min(max_val).max(min_val)
 
-### Returns true if this value is positive.
-### :returns: The resulting `Bool` value.
+### Returns `true` if this value is strictly positive (greater than zero).
+### :returns: `true` if `me > 0.0`.
 routine F16.is_positive() -> Bool
   return me > 0.0_f16
 
-### Returns true if this value is negative.
-### :returns: The resulting `Bool` value.
+### Returns `true` if this value is strictly negative (less than zero).
+### :returns: `true` if `me < 0.0`.
 routine F16.is_negative() -> Bool
   return me < 0.0_f16
 
-### Returns true if this value is zero.
-### :returns: The resulting `Bool` value.
+### Returns `true` if this value compares equal to zero.
+### :returns: `true` if `me == 0.0`.
 routine F16.is_zero() -> Bool
   return me == 0.0_f16
 
-### Returns true if this value is nan.
-### :returns: The resulting `Bool` value.
+### Returns `true` when this value encodes an IEEE 754 NaN.
+### :returns: Whether the bit pattern represents a not-a-number payload.
 routine F16.is_nan() -> Bool
   var bits = me.to_bits()
   var exponent = bit_and[U16](bits, 0x7C00_u16)
   var mantissa = bit_and[U16](bits, 0x03FF_u16)
   return exponent == 0x7C00_u16 and mantissa != 0_u16
 
-### Returns true if this value is infinite.
-### :returns: The resulting `Bool` value.
+### Returns `true` when this value encodes positive or negative infinity.
+### :returns: Whether the bit pattern represents an infinity.
 routine F16.is_infinite() -> Bool
   var bits = me.to_bits()
   var exponent = bit_and[U16](bits, 0x7C00_u16)
   var mantissa = bit_and[U16](bits, 0x03FF_u16)
   return exponent == 0x7C00_u16 and mantissa == 0_u16
 
-### Returns true if this value is finite.
-### :returns: The resulting `Bool` value.
+### Returns `true` when this value is neither NaN nor infinity.
+### :returns: Whether the value is finite.
 routine F16.is_finite() -> Bool
   return not me.is_nan() and not me.is_infinite()
 
-### Returns the result of `signum`.
-### :returns: The resulting `F16` value.
+### Returns the sign of this value as `-1.0`, `0.0`, or `1.0`.
+### :returns: A unit-sign value describing the sign of `me`.
 routine F16.signum() -> F16
   return when
     me > 0.0_f16 => 1.0_f16
@@ -309,14 +315,14 @@ routine F16.signum() -> F16
 # Type Conversions
 # ============================================================================
 
-### Converts this value to bits.
-### :returns: The resulting `U16` value.
+### Reinterprets this float as its raw IEEE 754 bit pattern.
+### :returns: The underlying `U16` encoding of this value.
 routine F16.to_bits() -> U16
   return reinterpret_bits[F16, U16](me)
 
-### Creates a value from bits.
-### :param bits: The encoded bit pattern.
-### :returns: The resulting `F16` value.
+### Reinterprets a raw IEEE 754 bit pattern as an `F16`.
+### :param bits: The exact half-precision encoding to decode.
+### :returns: The `F16` value with that bit pattern.
 routine F16.from_bits(bits: U16) -> F16
   return reinterpret_bits[U16, F16](bits)
 
@@ -400,8 +406,8 @@ routine F16.$create!(from_text: Text) -> F16
 # Hashing
 # ============================================================================
 
-### Returns a hash of this value.
-### :returns: The resulting `U64` value.
+### Returns an xxHash64-based hash of this value, derived from its raw bit pattern.
+### :returns: A `U64` hash of the 16-bit float encoding.
 routine F16.$hash() -> U64
   return __hash_leaf(v: zero_extend[U16, U64](reinterpret_bits[F16, U16](me)))
 

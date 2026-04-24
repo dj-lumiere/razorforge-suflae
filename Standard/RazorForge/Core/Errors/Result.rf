@@ -1,9 +1,12 @@
 module Core
 
-### Defines the record `Result`.
-### :typeparam T: The success value type.
+### Represents the success-or-crash carrier used by `check_` routines.
+### A `Result[T]` stores either a successful `T` payload or a crashable error
+### payload encoded through the shared carrier layout.
+### :typeparam T: The successful return value type.
 record Result[T]
-  ### The type identifier of the stored value; matches the success type or a crashable type.
+  ### Identifies the stored payload type.
+  ### The runtime uses this to distinguish successful payloads from crashables.
   secret type_id: U64
-  ### The address of the heap-allocated value or crashable.
+  ### Stores the heap address of the success value or crashable payload.
   secret data_address: Address

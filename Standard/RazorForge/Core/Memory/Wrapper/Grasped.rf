@@ -1,13 +1,15 @@
 module Core
 
-### Defines the record `Grasped`.
-### :typeparam T: The value used for `T`.
+### Represents temporary unmanaged mutable access to an entity.
+### `Grasped[T]` is the non-storable access type used for explicit low-level manipulation outside the borrow-safe wrappers.
+### :typeparam T: The entity type being accessed.
+### :see: {Viewed[T]}, {Hijacked[T]}, {Access-Types}
 @llvm("ptr")
 record Grasped[T] obeys Controlling[T]
 needs T is EntityType
   pass
 
-### Returns the result of `grasp`.
+### Produces a temporary unmanaged mutable view of `me`.
 ### :returns: The resulting `Grasped[T]` value.
 routine T.grasp() -> Grasped[T]
   return Grasped[T](me.hijack())
@@ -20,11 +22,11 @@ routine T.grasp() -> Grasped[T]
 # Resource management — enables `using entity.grasp() as h`
 # ============================================================================
 
-### Implements the wired routine behavior for this value.
+### Called on entry to a `using` block; no-op for a grasp (access is already established).
 routine Grasped[T].$enter()
   return
 
-### Implements the wired routine behavior for this value.
+### Called on exit from a `using` block; no-op for a grasp (the compiler handles scope cleanup).
 routine Grasped[T].$exit()
   return
 
@@ -32,7 +34,7 @@ routine Grasped[T].$exit()
 # Display (transparent - delegates to inner value)
 # ============================================================================
 
-### Returns the textual representation of this value.
+### Returns the display form of the grasped entity.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Grasped[T].$represent() -> Text
@@ -40,7 +42,7 @@ routine Grasped[T].$represent() -> Text
     var hijacked = Hijacked[T](me)
     return hijacked.extract().$represent()
 
-### Returns the textual representation of this value.
+### Returns the diagnostic form of the grasped entity.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Grasped[T].$diagnose() -> Text

@@ -1,18 +1,9 @@
-# RazorForge Address (unsigned 64-bit memory address) native type implementation
-# Maps to LLVM i64 — always 64-bit (RazorForge is 64-bit only)
-# Used for raw memory addresses and pointer values
-#
-# RESTRICTED SEMANTICS:
-# - Only wrapping arithmetic: +%, -%, *%, //
-# - No regular +, -, * operators
-# - No implicit conversions — use Hijacked[T] for conversion
-# - No type dominance — does not participate in mixed-type arithmetic
-# - Hex display by default
-# - Literal suffix: _addr (e.g., 0x40020000_addr)
-
 module Core
 
-### Defines the record `Address`.
+### Represents a raw machine address value.
+### `Address` is used for pointer interop, low-level memory helpers, and runtime-facing APIs where a typed reference is not available.
+### Prefer typed wrappers such as {Hijacked[T]} when the pointee type is known.
+### :see: {ByteSize}, {Hijacked[T]}, {Memory-Types}
 @llvm("i64")
 record Address
 obeys UnsignedIntegral, Ordered, ConstCompatible, WrappingAddable, WrappingSubtractable,
@@ -24,8 +15,9 @@ WrappingMultiplicable, FloorDivisible
 # Use Hijacked[T] for converting between Address and other types.
 # ============================================================================
 
-### Creates a new instance.
-### :param from: The source value to convert.
+### Returns `from` unchanged.
+### This creator exists only as the identity conversion for `Address`.
+### :param from: The address value to reuse.
 ### :returns: The resulting `Address` value.
 routine Address.$create(from: Address) -> Address
   return from
@@ -35,20 +27,24 @@ routine Address.$create(from: Address) -> Address
 # These explicitly wrap on overflow - the only arithmetic allowed on Address
 # ============================================================================
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
+### Returns the wrapping sum of two raw addresses.
+### This is intended for low-level pointer arithmetic where wraparound semantics
+### are explicit and acceptable.
+### :param you: The address offset or peer address value to add.
 ### :returns: The resulting `Address` value.
 routine Address.$add_wrap(you: Address) -> Address
   return add[Address](me, you)
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
+### Returns the wrapping difference between two raw addresses.
+### :param you: The address value to subtract.
 ### :returns: The resulting `Address` value.
 routine Address.$sub_wrap(you: Address) -> Address
   return sub[Address](me, you)
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
+### Returns the wrapping product of two raw addresses.
+### This is a specialized low-level operation and is rarely appropriate outside
+### runtime support code.
+### :param you: The address value to multiply by.
 ### :returns: The resulting `Address` value.
 routine Address.$mul_wrap(you: Address) -> Address
   return mul[Address](me, you)
@@ -58,8 +54,8 @@ routine Address.$mul_wrap(you: Address) -> Address
 # Address supports // (Euclidean quotient) but NOT %
 # ============================================================================
 
-### Returns the quotient of this value and the other value.
-### :param you: The other value to compare against.
+### Returns the Euclidean quotient of this address divided by `you`.
+### :param you: The non-zero divisor address value.
 ### :returns: The resulting `Address` value.
 routine Address.$floordiv(you: Address) -> Address
   return unsigned_div[Address](me, you)
@@ -88,23 +84,24 @@ routine Address.$cmp(you: Address) -> ComparisonSign
 # Utility Methods
 # ============================================================================
 
-### Returns the result of `min`.
-### :param you: The other value to compare against.
+### Returns the smaller of two addresses in unsigned address order.
+### :param you: The other address to compare against.
 ### :returns: The resulting `Address` value.
 routine Address.min(you: Address) -> Address
   if me <= you
     return me
   return you
 
-### Returns the result of `max`.
-### :param you: The other value to compare against.
+### Returns the larger of two addresses in unsigned address order.
+### :param you: The other address to compare against.
 ### :returns: The resulting `Address` value.
 routine Address.max(you: Address) -> Address
   if me >= you
     return me
   return you
 
-### Returns true if this value is power of two.
+### Returns `true` when this address value is a power of two.
+### This is mainly useful for alignment checks and low-level mask logic.
 ### :returns: The resulting `Bool` value.
 routine Address.is_power_of_two() -> Bool
   return me != 0_addr and (me & (me -% 1_addr)) == 0_addr
@@ -138,7 +135,9 @@ routine Address.$sub(offset: ByteSize) -> Address
 # Text Representation and Parsing
 # ============================================================================
 
-### Returns the textual representation of this value.
+### Returns the display form of this address.
+### Addresses are rendered in grouped hexadecimal form to make pointer values
+### easier to scan in diagnostics.
 ### :returns: The resulting `Text` value.
 routine Address.$represent() -> Text
   # Format as 0xXXXX_XXXX_XXXX_XXXX (64-bit hex with underscore groups)
@@ -158,13 +157,15 @@ routine Address.$represent() -> Text
     i = i + 1u32
   return Text(from_list: digits)
 
-### Returns the textual representation of this value.
+### Returns the diagnostic form of this address.
 ### :returns: The resulting `Text` value.
 routine Address.$diagnose() -> Text
   return "Address(" + me.$represent() + ")"
 
-### Implements the wired routine behavior for this value.
-### :param from_text: The `from_text` value.
+### Parses an address from hexadecimal text.
+### The accepted format is hex digits with an optional `0x`/`0X` prefix and
+### optional underscore separators.
+### :param from_text: The text to parse.
 ### :returns: The resulting `Address` value.
 ### :throws: May throw {InvalidValueError}.
 routine Address.$create!(from_text: Text) -> Address

@@ -1,9 +1,11 @@
-# InPlaceExponentiable - Protocol for types that support in-place exponentiation (**=)
 module Core
 
-### Defines the protocol `InPlaceExponentiable`.
+### Represents the protocol for in-place exponentiation.
+### `InPlaceExponentiable` is for mutable numeric values that update themselves
+### with a power result instead of returning a separate value.
 protocol InPlaceExponentiable
-  ### Implements the wired routine behavior for this value.
-  ### :param you: The other value to compare against.
+  ### Raises this value by `you` in place.
+  ### :param you: The exponent value.
+  ### :note: The right-hand operand should remain unchanged.
   @writable
   routine Me.$ipow(you: Me)

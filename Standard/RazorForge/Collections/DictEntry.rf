@@ -1,14 +1,11 @@
-# DictEntry[K, V] - Key-value pair record for dict-like constructors
-# Used by Dict(1:2, 3:4) and SortedDict(1:2, 3:4) literal syntax
-# Also used as the element type for Dict/SortedDict iteration
-
 module Core
 
-### Defines the record `DictEntry`.
-### :typeparam K: The value used for `K`.
-### :typeparam V: The value used for `V`.
+### Represents one key-value pair used by dictionary-style APIs.
+### `DictEntry[K, V]` appears in dictionary literals, iteration, and constructor helpers.
+### :typeparam K: The key type.
+### :typeparam V: The value type.
 record DictEntry[K, V]
-  ### Stores the key member value.
+  ### Stores the entry key.
   key: K
-  ### Stores the value member value.
+  ### Stores the value associated with `key`.
   value: V

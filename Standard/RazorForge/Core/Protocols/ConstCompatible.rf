@@ -1,7 +1,8 @@
-# ConstCompatible - Marker protocol for types allowed as const generic parameters
-# Types that can be used as compile-time constant values in generic parameters
 module Core
 
-### Defines the protocol `ConstCompatible`.
+### Represents types that are valid in compile-time constant evaluation.
+### `ConstCompatible` marks values whose construction and observable behavior
+### are safe for the compiler to materialize during constant folding and related
+### compile-time execution.
 protocol ConstCompatible
   pass

@@ -1,10 +1,12 @@
-# Copyable - Protocol for types that support explicit deep copying
-# Primarily for entity types (records are value types with implicit copy)
 module Core
 
-### Defines the protocol `Copyable`.
+### Represents the protocol for explicit deep or logical copying.
+### `Copyable` is used for values that can produce an independent duplicate of
+### themselves without sharing externally visible mutable state.
 protocol Copyable
-  ### Returns the result of `copy`.
-  ### :returns: The resulting `Me` value.
+  ### Returns a copy of this value.
+  ### Implementations should preserve the observable contents of the original
+  ### value while giving the result its own valid lifetime and invariants.
+  ### :returns: A copy of this value.
   @readonly
   routine Me.copy() -> Me

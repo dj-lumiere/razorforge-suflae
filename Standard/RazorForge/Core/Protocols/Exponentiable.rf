@@ -1,10 +1,13 @@
-# Exponentiable - Protocol for types that support exponentiation (**)
 module Core
 
-### Defines the protocol `Exponentiable`.
+### Represents the protocol for exponentiation.
+### `Exponentiable` is for types that define a power operation within their own
+### numeric domain.
 protocol Exponentiable
-  ### Returns the product of this value and the other value.
-  ### :param you: The other value to compare against.
+  ### Returns this value raised to the power `you`.
+  ### Implementations define how exponent values are interpreted for the
+  ### conforming type.
+  ### :param you: The exponent value.
   ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$pow(you: Me) -> Me

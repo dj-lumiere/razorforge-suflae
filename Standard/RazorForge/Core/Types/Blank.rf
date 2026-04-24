@@ -1,8 +1,8 @@
-# Blank - Unit type representing "completed with no value"
-# Cannot be used as a generic type argument, except Result[Blank] and Lookup[Blank] for failable void routines
 module Core
 
-### Defines the record `Blank`.
+### Represents the zero-sized placeholder value.
+### `Blank` is used where an explicit unit-like value is needed to signal
+### "there is no meaningful payload here" while still remaining type-safe.
 @llvm("void")
 record Blank
   pass
@@ -11,12 +11,13 @@ record Blank
 # Text Representation
 # ============================================================================
 
-### Returns the textual representation of this value.
+### Returns the display form of `Blank`.
 ### :returns: The resulting `Text` value.
 routine Blank.$represent() -> Text
   return "Blank"
 
-### Returns the textual representation of this value.
+### Returns the diagnostic form of `Blank`.
+### For this type, the display and diagnostic forms are identical.
 ### :returns: The resulting `Text` value.
 routine Blank.$diagnose() -> Text
   return "Blank"

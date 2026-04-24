@@ -1,14 +1,16 @@
-# InPlaceFloorDivisible - Protocol for types that support in-place floor division and modulo
 module Core
 
-### Defines the protocol `InPlaceFloorDivisible`.
+### Represents the protocol for in-place Euclidean division operators.
+### `InPlaceFloorDivisible` groups quotient and remainder mutations for
+### integer-like values that support direct update of the left-hand operand.
 protocol InPlaceFloorDivisible
-  ### Implements the wired routine behavior for this value.
-  ### :param you: The other value to compare against.
+  ### Applies floor division by `you` in place.
+  ### :param you: The divisor.
   @writable
   routine Me.$ifloordiv(you: Me)
 
-  ### Implements the wired routine behavior for this value.
-  ### :param you: The other value to compare against.
+  ### Applies modulo by `you` in place.
+  ### This replaces the current value with the remainder associated with `you`.
+  ### :param you: The divisor.
   @writable
   routine Me.$imod(you: Me)

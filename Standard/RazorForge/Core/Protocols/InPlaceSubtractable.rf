@@ -1,9 +1,11 @@
-# InPlaceSubtractable - Protocol for types that support in-place subtraction (-=)
 module Core
 
-### Defines the protocol `InPlaceSubtractable`.
+### Represents the protocol for in-place subtraction.
+### `InPlaceSubtractable` is for mutable values whose subtraction operator
+### updates the left-hand operand rather than allocating a new result.
 protocol InPlaceSubtractable
-  ### Implements the wired routine behavior for this value.
-  ### :param you: The other value to compare against.
+  ### Subtracts `you` from this value in place.
+  ### The right-hand operand should remain unchanged.
+  ### :param you: The value to subtract.
   @writable
   routine Me.$isub(you: Me)

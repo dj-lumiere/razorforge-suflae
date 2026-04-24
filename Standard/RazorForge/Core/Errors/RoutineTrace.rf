@@ -1,15 +1,15 @@
 module Core
 
-# RoutineTrace - Collection of routine records captured at error time
-#
-# Contains up to 10 routine records, stored inline as a Array.
-# The depth member variable indicates how many records are actually valid.
-
-### Defines the record `RoutineTrace`.
+### Represents the call-trace payload captured for runtime failures.
+### `RoutineTrace` is a compact inline record used by diagnostics and crash
+### reporting to preserve the most recent routine frames without heap
+### allocation during failure handling.
 record RoutineTrace
-  ### Stores the frames member value.
+  ### Stores the recorded routine frames in caller-to-callee order.
+  ### Only the prefix indicated by `depth` is considered valid.
   frames: Array[RoutineRecord, 10]
-  ### Stores the depth member value.
+  ### Stores the number of valid entries currently present in `frames`.
   depth: U32
-  ### Stores the truncated member value.
+  ### Stores whether additional frames were dropped because the trace buffer was
+  ### exhausted.
   truncated: Bool

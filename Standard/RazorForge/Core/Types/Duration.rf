@@ -32,18 +32,22 @@ preset SECONDS_PER_WEEK: S64 = 604_800_s64
 # Record definition
 # ============================================================================
 
-### Defines the record `Duration`.
+### Represents a span of time with nanosecond precision.
+### `Duration` is the standard temporal offset type used for time arithmetic, scheduling, and rate control.
+### Internally it stores whole seconds plus a normalized sub-second nanosecond component.
+### :see: {Moment}, {LocalMoment}, {Temporal-Types}
 record Duration obeys Ordered, Addable, Subtractable, FloorDivisible, Negatable, Scalable, ScalarFloorDivisible
-  ### Stores the seconds member value.
+  ### Stores the whole-second component.
   secret seconds: S64      # Whole seconds (negative for negative durations)
-  ### Stores the nanoseconds member value.
+  ### Stores the normalized sub-second nanosecond component.
   secret nanoseconds: U32  # Nanoseconds within second [0, 1_000_000_000)
 
 # ============================================================================
 # Normalization helper
 # ============================================================================
 
-### Returns the result of `normalize duration`.
+### Normalizes raw second and nanosecond parts into canonical `Duration` storage.
+### The result always has nanoseconds in the range `[0, 1_000_000_000)`.
 ### :param seconds: The whole-second component.
 ### :param nanoseconds: The nanosecond component within the current second.
 ### :returns: The resulting `Duration` value.
@@ -66,14 +70,15 @@ routine normalize_duration(seconds: S64, nanoseconds: S64) -> Duration
 # Creators
 # ============================================================================
 
-### Creates a new instance.
+### Creates a duration from explicit second and nanosecond parts.
+### The components are normalized before storage.
 ### :param seconds: The whole-second component.
 ### :param nanoseconds: The nanosecond component within the current second.
 ### :returns: The resulting `Duration` value.
 routine Duration.$create(seconds: S64, nanoseconds: U32) -> Duration
   return normalize_duration(seconds, S64(nanoseconds))
 
-### Returns the zero value.
+### Returns the zero duration.
 ### :returns: The resulting `Duration` value.
 routine Duration.zero() -> Duration
   return Duration(seconds: 0_s64, nanoseconds: 0_u32)
@@ -256,23 +261,23 @@ routine Duration.int_abs() -> Duration
 # Arithmetic operators
 # ============================================================================
 
-### Returns the sum of this value and the other value.
-### :param you: The other value to compare against.
-### :returns: The resulting `Duration` value.
+### Returns `me + you`, adding the two durations and normalizing nanoseconds.
+### :param you: The addend.
+### :returns: The combined `Duration`.
 @readonly
 routine Duration.$add(you: Duration) -> Duration
   return normalize_duration(me.seconds +% you.seconds, S64(me.nanoseconds) +% S64(you.nanoseconds))
 
-### Implements the wired routine behavior for this value.
-### :param you: The other value to compare against.
-### :returns: The resulting `Duration` value.
+### Failable variant of `$add`; delegates to `$add` and never throws.
+### :param you: The addend.
+### :returns: The combined `Duration`.
 @readonly
 routine Duration.$add!(you: Duration) -> Duration
   return me.$add(you)
 
-### Returns the difference between this value and the other value.
-### :param you: The other value to compare against.
-### :returns: The resulting `Duration` value.
+### Returns `me - you`, subtracting `you` from this duration and normalizing.
+### :param you: The duration to subtract.
+### :returns: The resulting `Duration`.
 @readonly
 routine Duration.$sub(you: Duration) -> Duration
   return normalize_duration(me.seconds -% you.seconds, S64(me.nanoseconds) -% S64(you.nanoseconds))
@@ -302,18 +307,18 @@ routine Duration.scale(factor: S64) -> Duration
 routine Duration.$mul(factor: S64) -> Duration
   return me.scale(factor)
 
-### Returns the quotient of this value and the other value.
-### :param you: The other value to compare against.
-### :returns: The resulting `S64` value.
+### Returns how many times `you` fits into this duration (floor division).
+### :param you: The divisor duration.
+### :returns: The integer quotient as `S64`.
 @readonly
 routine Duration.$floordiv(you: Duration) -> S64
   var me_ns = me.total_nanoseconds()
   var you_ns = you.total_nanoseconds()
   return signed_div[S64](me_ns, you_ns)
 
-### Returns the remainder after division.
-### :param you: The other value to compare against.
-### :returns: The resulting `Duration` value.
+### Returns the duration remainder after floor-dividing by `you`.
+### :param you: The divisor duration.
+### :returns: The remaining `Duration`.
 @readonly
 routine Duration.$mod(you: Duration) -> Duration
   var me_ns = me.total_nanoseconds()

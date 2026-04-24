@@ -1,23 +1,19 @@
-# Console I/O - Generic show/alert/get functions
-# According to Console-IO.md:
-# - show() for stdout (with sep/end parameters)
-# - alert() for stderr (with sep/end parameters)
-# - get_*() for stdin (Text by default, Bytes opt-in)
-
 module IO/Console
 
 # ============================================================================
 # Output: show() - Standard Output (stdout)
 # ============================================================================
-### Performs `show` on this value.
-### :param value...: The `value...` value.
-### :param sep: The `sep` value.
-### :param end: The exclusive ending position.
+### Writes one or more values to standard output.
+### The variadic overload inserts `sep` between values and appends `end` after the last value.
+### :param value...: The values to write.
+### :param sep: The separator written between successive values.
+### :param end: The trailing text written after the last value.
 #   routine show(value...: Representable, sep: Text = " ", end: Text = "\n")           # Automatic dispatch
 
-### Performs `show` on this value.
-### :param value: The value to use.
-### :param end: The exclusive ending position.
+### Writes text to standard output.
+### `end` is appended after `value`.
+### :param value: The text to write.
+### :param end: The trailing text to append.
 routine show(value: Referring[Text], end: Referring[Text] = "\n")
   var value_cstr = CStr(from: value)
   rf_console_show(value_cstr.ptr, value_cstr.count())
@@ -25,9 +21,10 @@ routine show(value: Referring[Text], end: Referring[Text] = "\n")
   rf_console_show(end_cstr.ptr, end_cstr.count())
   return
 
-### Performs `show` on this value.
-### :param value: The value to use.
-### :param end: The exclusive ending position.
+### Writes raw bytes to standard output.
+### `end` is appended after `value`.
+### :param value: The bytes to write.
+### :param end: The trailing text to append.
 routine show(value: Referring[Bytes], end: Referring[Text] = "\n")
   var value_cstr = CStr(from: value)
   rf_console_show(value_cstr.ptr, value_cstr.count())
@@ -35,9 +32,9 @@ routine show(value: Referring[Bytes], end: Referring[Text] = "\n")
   rf_console_show(end_cstr.ptr, end_cstr.count())
   return
 
-### Performs `show` on this value.
-### :param value: The value to use.
-### :param end: The exclusive ending position.
+### Writes a single value to standard output using its representable form.
+### :param value: The value to render and write.
+### :param end: The trailing text to append.
 routine show[T](value: T, end: Text = "\n")
   var text = value.$represent()
   var value_cstr = CStr(from: text)
@@ -46,10 +43,11 @@ routine show[T](value: T, end: Text = "\n")
   rf_console_show(end_cstr.ptr, end_cstr.count())
   return
 
-### Performs `show` on this value.
-### :param values...: The `values...` value.
-### :param sep: The `sep` value.
-### :param end: The exclusive ending position.
+### Writes multiple values to standard output.
+### Values are rendered one by one with `sep` inserted between them.
+### :param values...: The values to render and write.
+### :param sep: The separator written between values.
+### :param end: The trailing text written after the final value.
 routine show[T](values...: T, sep: Text = " ", end: Text = "\n")
   var first = true
   for v in values
@@ -64,9 +62,9 @@ routine show[T](values...: T, sep: Text = " ", end: Text = "\n")
 # Output: alert() - Standard Error (stderr)
 # ============================================================================
 
-### Performs `alert` on this value.
-### :param value: The value to use.
-### :param end: The exclusive ending position.
+### Writes text to standard error.
+### :param value: The text to write.
+### :param end: The trailing text to append.
 routine alert(value: Referring[Text], end: Referring[Text] = "\n")
   var value_cstr = CStr(from: value)
   rf_console_alert(value_cstr.ptr, value_cstr.count())
@@ -74,9 +72,9 @@ routine alert(value: Referring[Text], end: Referring[Text] = "\n")
   rf_console_alert(end_cstr.ptr, end_cstr.count())
   return
 
-### Performs `alert` on this value.
-### :param value: The value to use.
-### :param end: The exclusive ending position.
+### Writes raw bytes to standard error.
+### :param value: The bytes to write.
+### :param end: The trailing text to append.
 routine alert(value: Referring[Bytes], end: Referring[Text] = "\n")
   var value_cstr = CStr(from: value)
   rf_console_alert(value_cstr.ptr, value_cstr.count())
@@ -84,9 +82,9 @@ routine alert(value: Referring[Bytes], end: Referring[Text] = "\n")
   rf_console_alert(end_cstr.ptr, end_cstr.count())
   return
 
-### Performs `alert` on this value.
-### :param value: The value to use.
-### :param end: The exclusive ending position.
+### Writes a single value to standard error using its diagnostic form.
+### :param value: The value to render and write.
+### :param end: The trailing text to append.
 routine alert[T](value: T, end: Text = "\n")
   var text = value.$diagnose()
   var value_cstr = CStr(from: text)
@@ -95,10 +93,11 @@ routine alert[T](value: T, end: Text = "\n")
   rf_console_alert(end_cstr.ptr, end_cstr.count())
   return
 
-### Performs `alert` on this value.
-### :param values...: The `values...` value.
-### :param sep: The `sep` value.
-### :param end: The exclusive ending position.
+### Writes multiple values to standard error.
+### Values are rendered one by one with `sep` inserted between them.
+### :param values...: The values to render and write.
+### :param sep: The separator written between values.
+### :param end: The trailing text written after the final value.
 routine alert[T](values...: T, sep: Text = " ", end: Text = "\n")
   var first = true
   for v in values
@@ -113,7 +112,8 @@ routine alert[T](values...: T, sep: Text = " ", end: Text = "\n")
 # Input: Text functions (default)
 # ============================================================================
 
-### Returns the result of `ask line`.
+### Reads one line of text from standard input.
+### Line termination is not included in the returned text.
 ### :returns: The resulting `Text` value.
 routine ask_line() -> Text
   var ptr = rf_console_ask_line()
@@ -122,7 +122,7 @@ routine ask_line() -> Text
   var bytes = Bytes(ptr: ptr)
   return bytes.decode_as_utf8_lossy()
 
-### Returns the result of `ask word`.
+### Reads one whitespace-delimited word from standard input.
 ### :returns: The resulting `Text` value.
 routine ask_word() -> Text
   var ptr = rf_console_ask_word()
@@ -131,7 +131,7 @@ routine ask_word() -> Text
   var bytes = Bytes(ptr: ptr)
   return bytes.decode_as_utf8_lossy()
 
-### Returns the result of `ask all`.
+### Reads all remaining text from standard input.
 ### :returns: The resulting `Text` value.
 routine ask_all() -> Text
   var ptr = rf_console_ask_all()
@@ -140,14 +140,15 @@ routine ask_all() -> Text
   var bytes = Bytes(ptr: ptr)
   return bytes.decode_as_utf8_lossy()
 
-### Returns the result of `ask lines`.
+### Reads all remaining input and splits it into lines.
+### Windows line endings are normalized before splitting.
 ### :returns: The resulting `List[Owned[Text]]` value.
 routine ask_lines() -> List[Owned[Text]]
   var all = ask_all()
   var normalized = all.replace("\r\n", "\n")
   return normalized.split(CHARACTER_NEWLINE)
 
-### Returns the result of `ask words`.
+### Reads all remaining input and splits it into whitespace-delimited words.
 ### :returns: The resulting `List[Owned[Text]]` value.
 routine ask_words() -> List[Owned[Text]]
   var all = ask_all()
@@ -157,7 +158,7 @@ routine ask_words() -> List[Owned[Text]]
 # Input: Bytes functions (opt-in)
 # ============================================================================
 
-### Returns the result of `ask raw`.
+### Reads all remaining standard input as raw bytes.
 ### :returns: The resulting `Bytes` value.
 routine ask_raw() -> Bytes
   var ptr = rf_console_ask_all()
@@ -165,8 +166,8 @@ routine ask_raw() -> Bytes
     return Bytes()
   return Bytes(ptr: ptr)
 
-### Returns the result of `ask bytes`.
-### :param count: The number of items to use.
+### Reads up to `count` bytes from standard input.
+### :param count: The maximum number of bytes to read.
 ### :returns: The resulting `Bytes` value.
 routine ask_bytes(count: U64) -> Bytes
   var ptr = rf_console_ask_bytes(count)

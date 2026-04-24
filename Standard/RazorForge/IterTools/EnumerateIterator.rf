@@ -1,18 +1,16 @@
-# RazorForge EnumerateIterator[T] - Lazy index pairing
-# enumerate() pairs each element with its zero-based index
-# enumerate(start:) pairs each element with an index starting from start
-
 module Core
 
-### Defines the entity `EnumerateIterator`.
-### :typeparam T: The value used for `T`.
+### Represents a lazy adapter that pairs each produced element with an index.
+### The emitted index starts at `0` by default or at the caller-supplied offset.
+### :typeparam T: The element type produced by the source sequence.
 entity EnumerateIterator[T] obeys Iterable[Tuple[S64, T]]
-  ### Stores the source member value.
+  ### Stores the source.
   secret source: Iterable[T]
-  ### Stores the start member value.
-  secret start: S64
+  ### Stores the first index value to assign.
+  secret index: S64
 
 ### Returns the next value from this iterator.
+### The returned tuple contains the current index followed by the source item.
 ### :returns: The resulting `Tuple[S64, T]` value.
 routine EnumerateIterator[T].$next!() -> Tuple[S64, T]
   var item = me.source.$next!()
@@ -20,13 +18,15 @@ routine EnumerateIterator[T].$next!() -> Tuple[S64, T]
   me.index = me.index + 1s64
   return _result
 
-### Returns the result of `enumerate`.
+### Returns a lazy enumerating adapter over this iterable.
+### The first yielded index is `0`.
 ### :returns: The resulting `EnumerateIterator[T]` value.
 routine Iterable[T].enumerate() -> EnumerateIterator[T]
-  return EnumerateIterator[T](source: me, start: 0s64)
+  return EnumerateIterator[T](source: me, index: 0s64)
 
-### Returns the result of `enumerate`.
+### Returns a lazy enumerating adapter over this iterable.
+### The first yielded index is `start`.
 ### :param start: The inclusive starting position.
 ### :returns: The resulting `EnumerateIterator[T]` value.
 routine Iterable[T].enumerate(start: S64) -> EnumerateIterator[T]
-  return EnumerateIterator[T](source: me, start: start)
+  return EnumerateIterator[T](source: me, index: start)

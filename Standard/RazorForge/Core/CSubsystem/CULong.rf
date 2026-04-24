@@ -1,76 +1,66 @@
 module Core
 
 # ============================================================================
-# CWChar Record Definition (Platform-Dependent)
+# CULong — unsigned long (platform-dependent)
 # ============================================================================
 
-### Represents one platform `wchar_t` code unit on Windows.
-### On Windows, `CWChar` stores a 16-bit unit matching UTF-16-style wide strings.
+### Represents C `unsigned long` on Windows targets.
+### The underlying layout matches the platform ABI rather than a fixed language-level width.
 @config(target: "windows")
-@llvm("i16")
-record CWChar
-  pass
-
-### Represents one platform `wchar_t` code unit on Unix-like targets.
-### On Unix, `CWChar` stores a 32-bit unit matching UTF-32-style wide strings.
-@config(target: "unix")
 @llvm("i32")
-record CWChar
+record CULong
+  pass
+
+### Represents C `unsigned long` on Unix-like targets.
+### The underlying layout matches the platform ABI rather than a fixed language-level width.
+@config(target: "unix")
+@llvm("i64")
+record CULong
   pass
 
 # ============================================================================
-# Creators (Windows - U16)
+# Creators (Windows — i32 = U32)
 # ============================================================================
 
-### Creates a Windows `CWChar` from one 16-bit code unit.
-### :param value: The underlying UTF-16 code unit.
-### :returns: The resulting `CWChar` value.
+### Wraps a Windows `U32` value as `CULong`.
+### :param value: The unsigned value to wrap.
+### :returns: The resulting `CULong` value.
 @config(target: "windows")
-routine CWChar.$create(value: U16) -> CWChar
-  return reinterpret_bits[U16, CWChar](value)
-
-### Creates a Windows `CWChar` from a Unicode code point that fits in one 16-bit unit.
-### :param codepoint: The Unicode code point to encode.
-### :returns: The resulting `CWChar` value.
-### :throws: {IntegerOverflowError} if `codepoint` does not fit in one UTF-16 code unit.
-@config(target: "windows")
-routine CWChar.$create!(codepoint: U32) -> CWChar
-  if codepoint > 0xFFFFu32
-    throw IntegerOverflowError()
-  return reinterpret_bits[U16, CWChar](U16!(codepoint))
+routine CULong.$create(value: U32) -> CULong
+  return reinterpret_bits[U32, CULong](value)
 
 # ============================================================================
-# Creators (Unix - U32)
+# Creators (Unix — i64 = U64)
 # ============================================================================
 
-### Creates a Unix `CWChar` from one 32-bit code unit.
-### :param value: The underlying UTF-32 code unit.
-### :returns: The resulting `CWChar` value.
+### Wraps a Unix `U64` value as `CULong`.
+### :param value: The unsigned value to wrap.
+### :returns: The resulting `CULong` value.
 @config(target: "unix")
-routine CWChar.$create(value: U32) -> CWChar
-  return reinterpret_bits[U32, CWChar](value)
+routine CULong.$create(value: U64) -> CULong
+  return reinterpret_bits[U64, CULong](value)
 
 # ============================================================================
 # Accessors (Windows)
 # ============================================================================
 
-### Returns the underlying UTF-16 code unit value.
-### :returns: The resulting `U16` value.
+### Returns the underlying unsigned value.
+### :returns: The resulting `U32` value.
 @config(target: "windows")
 @readonly
-routine CWChar.value() -> U16
-  return reinterpret_bits[CWChar, U16](me)
+routine CULong.value() -> U32
+  return reinterpret_bits[CULong, U32](me)
 
 # ============================================================================
 # Accessors (Unix)
 # ============================================================================
 
-### Returns the underlying UTF-32 codepoint value.
-### :returns: The resulting `U32` value.
+### Returns the underlying unsigned value.
+### :returns: The resulting `U64` value.
 @config(target: "unix")
 @readonly
-routine CWChar.value() -> U32
-  return reinterpret_bits[CWChar, U32](me)
+routine CULong.value() -> U64
+  return reinterpret_bits[CULong, U64](me)
 
 # ============================================================================
 # Comparison (Windows)
@@ -81,7 +71,7 @@ routine CWChar.value() -> U32
 ### :returns: The resulting `Bool` value.
 @config(target: "windows")
 @readonly
-routine CWChar.$eq(you: CWChar) -> Bool
+routine CULong.$eq(you: CULong) -> Bool
   return me.value() == you.value()
 
 ### Compares this value with the other value.
@@ -89,7 +79,7 @@ routine CWChar.$eq(you: CWChar) -> Bool
 ### :returns: The resulting `ComparisonSign` value.
 @config(target: "windows")
 @readonly
-routine CWChar.$cmp(you: CWChar) -> ComparisonSign
+routine CULong.$cmp(you: CULong) -> ComparisonSign
   return me.value().$cmp(you.value())
 
 # ============================================================================
@@ -101,7 +91,7 @@ routine CWChar.$cmp(you: CWChar) -> ComparisonSign
 ### :returns: The resulting `Bool` value.
 @config(target: "unix")
 @readonly
-routine CWChar.$eq(you: CWChar) -> Bool
+routine CULong.$eq(you: CULong) -> Bool
   return me.value() == you.value()
 
 ### Compares this value with the other value.
@@ -109,7 +99,7 @@ routine CWChar.$eq(you: CWChar) -> Bool
 ### :returns: The resulting `ComparisonSign` value.
 @config(target: "unix")
 @readonly
-routine CWChar.$cmp(you: CWChar) -> ComparisonSign
+routine CULong.$cmp(you: CULong) -> ComparisonSign
   return me.value().$cmp(you.value())
 
 # ============================================================================
@@ -119,14 +109,14 @@ routine CWChar.$cmp(you: CWChar) -> ComparisonSign
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @config(target: "windows")
-routine CWChar.$represent() -> Text
+routine CULong.$represent() -> Text
   return f"{me.value()}"
 
 ### Returns the diagnostic representation of this value.
 ### :returns: The resulting `Text` value.
 @config(target: "windows")
-routine CWChar.$diagnose() -> Text
-  return f"Core.CWChar({me.value()})"
+routine CULong.$diagnose() -> Text
+  return f"Core.CULong({me.value()})"
 
 # ============================================================================
 # Display (Unix)
@@ -135,11 +125,11 @@ routine CWChar.$diagnose() -> Text
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @config(target: "unix")
-routine CWChar.$represent() -> Text
+routine CULong.$represent() -> Text
   return f"{me.value()}"
 
 ### Returns the diagnostic representation of this value.
 ### :returns: The resulting `Text` value.
 @config(target: "unix")
-routine CWChar.$diagnose() -> Text
-  return f"Core.CWChar({me.value()})"
+routine CULong.$diagnose() -> Text
+  return f"Core.CULong({me.value()})"

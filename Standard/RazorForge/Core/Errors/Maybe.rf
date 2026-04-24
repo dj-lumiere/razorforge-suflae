@@ -1,41 +1,53 @@
 module Core
 
-### Defines the record `Maybe` for record types.
-### :typeparam T: The optional value type.
+### Represents an optional record value.
+### `Maybe[T]` stores either a present `T` or the absence of a value without
+### carrying crash information.
+### :typeparam T: The wrapped value type.
 record Maybe[T] needs T is RecordType
-  ### True if a value is present.
+  ### Indicates whether the optional currently holds a value.
   secret present: Bool
-  ### The stored value, valid only when present.
+  ### Stores the wrapped value when `present` is true.
   secret value: T
 
+### Returns the display form of this optional value.
+### Present values are rendered using the wrapped value's text form.
+### :returns: The resulting `Text` value.
 routine Maybe[T].$represent() -> Text needs T is RecordType
   if not me.present
     return "None"
   return f"{me.value}"
 
+### Returns the diagnostic form of this optional value.
+### This form keeps the `Maybe` wrapper visible for debugging and logs.
+### :returns: The resulting `Text` value.
 routine Maybe[T].$diagnose() -> Text needs T is RecordType
   if not me.present
     return "Core.Maybe(None)"
   return f"Core.Maybe({me.value})"
 
 
-### Returns the stored value, crashing if absent.
-### :returns: The resulting `T` value.
+### Returns the wrapped value.
+### Use this when absence is a logic error rather than an expected branch.
+### :returns: The contained `T` value.
+### :throws: {AbsentValueError} if this `Maybe` is absent.
 routine Maybe[T].$unwrap() -> T needs T is RecordType
   if not me.present
     throw AbsentValueError()
   return me.value
 
-### Returns the stored value or a fallback.
-### :param default: The fallback value to return.
-### :returns: The resulting `T` value.
+### Returns the wrapped value or `default` when absent.
+### This avoids branching at the call site when a fixed fallback is acceptable.
+### :param default: The fallback value to return when absent.
+### :returns: The contained `T` value, or `default` if this `Maybe` is absent.
 routine Maybe[T].$unwrap_or(default: T) -> T needs T is RecordType
   if not me.present
     return default
   return me.value
 
-### Returns the stored value or a fallback.
-### :param or_else: The fallback routine to call.
+### Returns the wrapped value or computes a fallback when absent.
+### The fallback routine is only invoked when the optional is empty.
+### :param or_else: The fallback routine to invoke when no value is present.
 ### :returns: The resulting `T` value.
 routine Maybe[T].$unwrap_or(or_else: Routine[Me, T]) -> T needs T is RecordType
   if not me.present

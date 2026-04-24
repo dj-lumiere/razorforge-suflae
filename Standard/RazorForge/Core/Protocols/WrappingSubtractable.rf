@@ -1,10 +1,12 @@
-# WrappingSubtractable - Protocol for types that support wrapping subtraction (-%)
 module Core
 
-### Defines the protocol `WrappingSubtractable`.
+### Represents the protocol for modulo-width subtraction.
+### `WrappingSubtractable` is for bounded types whose subtraction result wraps
+### through the type's bit width instead of trapping or clamping.
 protocol WrappingSubtractable
-  ### Implements the wired routine behavior for this value.
-  ### :param you: The other value to compare against.
+  ### Returns the wrapping difference between this value and `you`.
+  ### Underflow and overflow are reduced to the conforming type's fixed width.
+  ### :param you: The value to subtract.
   ### :returns: The resulting `Me` value.
   @readonly
   routine Me.$sub_wrap(you: Me) -> Me

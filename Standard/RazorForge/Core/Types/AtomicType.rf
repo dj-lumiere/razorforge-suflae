@@ -1,0 +1,8 @@
+module Core
+
+### Marks a type as eligible for use in `Atomic[T]`.
+### Implementors: `Bool`, `S8`, `S16`, `S32`, `S64`, `U8`, `U16`, `U32`, `U64`.
+### This restriction ensures the runtime only exposes atomic operations for
+### primitive representations with direct backend support.
+protocol AtomicType
+  pass

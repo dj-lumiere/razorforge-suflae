@@ -1,43 +1,17 @@
-# RazorForge Inspected[T] - Thread-safe read lock token
-#
-# Inspected[T] is created ONLY by the `inspecting` syntax on Shared[T, MultiRead].
-# It provides thread-safe read-only access with automatic lock acquisition/release.
-#
-# Syntax:
-#   var shared = data.share[MultiRead]()
-#   using shared.inspect!() as obs
-#     show(obs.value)  # Read-only access, lock held
-#     var copy = obs   # OK - Inspected is copyable
-#   Lock automatically released at block exit
-#
-# Properties:
-# - Created by compiler via `.inspect!()` on Shared[T, MultiRead]
-# - Scope-bound: cannot be stored, returned, or escape
-# - Copyable: multiple Inspected[T] handles can coexist within scope
-# - Read-only: cannot modify through this handle
-# - Thread-safe: holds MultiRead read lock
-# - Multiple threads can hold read locks simultaneously
-# - Blocks write locks (seizing) while held
-# - Temporary: shared handle remains usable after access ends
-#
-# Downgrading:
-# - Can create Inspected[T] from within seizing block (downgrade write to read)
-#
-# This type is a marker for the type system - the compiler handles lock operations.
 module Core
 
-### Defines the record `Inspected`.
+### Represents temporary read access acquired under a shared lock policy.
+### `Inspected[T]` is the non-storable access token produced by `.inspect!()` when a read lock has been granted.
 ### :typeparam T: The exclusively owned entity type.
+### :see: {Claimed[T]}, {Viewed[T]}, {Access-Types}
+@llvm("ptr")
 record Inspected[T] obeys Referring[T]
 needs T is EntityType
-  ### Stores the ptr member value.
-  secret ptr: Hijacked[T]    # Generic type - use Hijacked[T]
-  ### Stores the lock guard member value.
-  secret lock_guard: Address  # Fixed type - opaque lock handle
+  pass
 
 # NOTE: No creators, no manual methods - all operations handled by compiler
 # The `.inspect!()` syntax acquires the MultiRead read lock and creates this token
-# The lock is automatically released when the scope exits
+# The lock is automatically released when the scope exits via compiler-managed hidden guard state
 # Multiple threads can hold read locks simultaneously (MultiRead semantics)
 #
 # Lock acquisition can fail (e.g., poisoned lock) - use `try_inspect()` / `check_inspect()` for fallible acquisition
@@ -46,29 +20,30 @@ needs T is EntityType
 # Resource management — enables `using shared.inspect!() as obs`
 # ============================================================================
 
-### Implements the wired routine behavior for this value.
+### Called on entry to a `using` block; no-op here because lock acquisition happens before this token is produced.
 routine Inspected[T].$enter()
   return
 
-### Implements the wired routine behavior for this value.
+### Called on exit from a `using` block; the compiler emits the actual unlock via its hidden guard state.
 routine Inspected[T].$exit()
-  # TODO: release lock_guard when lock runtime is implemented
+  # Lock release is driven by compiler-owned hidden guard state, not a field on this value.
+  # When the lock runtime is implemented, the compiler will emit unlock via the hidden guard.
   return
 
 # ============================================================================
 # Display (transparent - delegates to inner value, lock already held)
 # ============================================================================
 
-### Returns the textual representation of this value.
+### Returns the display form of the inspected entity.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Inspected[T].$represent() -> Text
   danger!
-    return me.ptr.extract().$represent()
+    return reinterpret_bits[Inspected[T], Hijacked[T]](me).extract().$represent()
 
-### Returns the textual representation of this value.
+### Returns the diagnostic form of the inspected entity, including its read-lock state.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Inspected[T].$diagnose() -> Text
   danger!
-    return me.type_name() + "(state: " + READING.$represent() + ", " + me.ptr.extract().$diagnose() + ")"
+    return me.type_name() + "(state: " + READING.$represent() + ", " + reinterpret_bits[Inspected[T], Hijacked[T]](me).extract().$diagnose() + ")"

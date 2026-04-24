@@ -1,31 +1,23 @@
-# RazorForge Byte - Raw 8-bit value
-#
-# Represents a single raw byte with no encoding assumption.
-# This is NOT a UTF-8 code unit or a character - it's just 8 bits of data.
-#
-# Use cases:
-# - Binary file I/O
-# - Network protocols
-# - Interfacing with C libraries
-# - Any raw byte data
-#
-# For text processing, use Character (Unicode codepoint) and Text types.
 module Core
 
-### Defines the record `Byte`.
+### Represents one raw 8-bit byte.
+### `Byte` is a binary payload type, not a text character, so its display form
+### always uses an escaped hexadecimal representation.
 @llvm("i8")
 record Byte obeys ConstCompatible
   pass
 
 # Creators
 
-### Creates a new instance.
+### Returns the same byte value.
+### This overload exists so generic creator-based code can normalize on the
+### standard construction surface.
 ### :param from: The source value to convert.
 ### :returns: The resulting `Byte` value.
 routine Byte.$create(from: Byte) -> Byte
   return from
 
-### Creates a new instance.
+### Reinterprets an unsigned 8-bit integer as `Byte`.
 ### :param from: The source value to convert.
 ### :returns: The resulting `Byte` value.
 routine Byte.$create(from: U8) -> Byte
@@ -41,12 +33,14 @@ preset BYTE_TAB: Byte = Byte(0x09u8)
 # Comparison operations
 # ============================================================================
 
-### Returns the result of `byte value`.
+### Returns this character's value as a raw byte.
+### This helper is available only for values that are already representable in
+### one byte.
 ### :returns: The resulting `U8` value.
 routine Character.byte_value() -> U8
   return U8(U32(me))
 
-### Returns the result of `codepoint`.
+### Returns this byte as an unsigned numeric code value.
 ### :returns: The resulting `U32` value.
 routine Byte.codepoint() -> U32
   return U32(U8(me))
@@ -67,9 +61,10 @@ routine Byte.$cmp(other: Byte) -> ComparisonSign
 # Range check
 # ============================================================================
 
-### Returns the result of `in range`.
-### :param low: The `low` value.
-### :param high: The `high` value.
+### Returns `true` when this byte falls within the inclusive range
+### `[low, high]`.
+### :param low: The lower inclusive bound.
+### :param high: The upper inclusive bound.
 ### :returns: The resulting `Bool` value.
 routine Byte.in_range(low: U8, high: U8) -> Bool
   return low <= U8(me) <= high
@@ -78,17 +73,17 @@ routine Byte.in_range(low: U8, high: U8) -> Bool
 # Parsing helpers (useful for binary protocols)
 # ============================================================================
 
-### Returns true if this value is ascii.
+### Returns `true` when this byte is in the 7-bit ASCII range.
 ### :returns: The resulting `Bool` value.
 routine Byte.is_ascii() -> Bool
   return U8(me) <= 0x7F
 
-### Returns true if this value is digit.
+### Returns `true` when this byte is the ASCII encoding of `0` through `9`.
 ### :returns: The resulting `Bool` value.
 routine Byte.is_digit() -> Bool
   return 0x30u8 <= U8(me) <= 0x39u8  # ASCII 0-9
 
-### Returns the result of `digit value`.
+### Returns the numeric value of an ASCII digit byte.
 ### :returns: The resulting `U8` value.
 ### :throws: May throw {InvalidDigitError}.
 routine Byte.digit_value!() -> U8
@@ -96,7 +91,8 @@ routine Byte.digit_value!() -> U8
     throw InvalidDigitError()
   return U8(me) - 0x30u8
 
-### Returns true if this value is hex digit.
+### Returns `true` when this byte is an ASCII hexadecimal digit.
+### Accepted digits are `0-9`, `A-F`, and `a-f`.
 ### :returns: The resulting `Bool` value.
 routine Byte.is_hex_digit() -> Bool
   var v = U8(me)
@@ -105,7 +101,7 @@ routine Byte.is_hex_digit() -> Bool
   var is_lower_hex = 0x61u8 <= v <= 0x66u8
   return is_digit or is_upper_hex or is_lower_hex
 
-### Returns the result of `hex value`.
+### Returns the numeric value of an ASCII hexadecimal digit.
 ### :returns: The resulting `U8` value.
 ### :throws: May throw {InvalidHexDigitError}.
 routine Byte.hex_value!() -> U8
@@ -120,7 +116,9 @@ routine Byte.hex_value!() -> U8
 # Display — always \xHH format (raw bytes have no encoding)
 # ============================================================================
 
-### Returns the textual representation of this value.
+### Returns the display form of this byte.
+### Raw bytes are rendered as `\\xHH` so output remains unambiguous regardless of
+### encoding context.
 ### :returns: The resulting `Text` value.
 routine Byte.$represent() -> Text
   var digits = List[Character]()
@@ -139,7 +137,9 @@ routine Byte.$represent() -> Text
     digits.add_last(Character(0x0041u32 + low - 10u32))
   return Text(from_list: digits)
 
-### Returns the textual representation of this value.
+### Returns the diagnostic form of this byte.
+### The diagnostic form includes both the unsigned numeric value and the escaped
+### byte representation.
 ### :returns: The resulting `Text` value.
 routine Byte.$diagnose() -> Text
   return "Byte(" + U8(me).$represent() + ", " + me.$represent() + ")"

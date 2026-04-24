@@ -1,15 +1,13 @@
-# RazorForge Exclusive Lock Policy
-# Exclusive locking - only one thread can access at a time
-# Equivalent to std::mutex or pthread_mutex
-
 module Core
 
-### Defines the record `Exclusive`.
+### Represents an exclusive-write lock policy.
+### `Exclusive` allows exactly one mutable accessor at a time and does not permit concurrent readers.
+### :see: {ReadOnly}, {MultiRead}, {Lock-Policies}
 record Exclusive obeys LockPolicy
-  ### Stores the locked member value.
+  ### Stores whether the lock is currently held.
   secret locked: Atomic[Bool]
 
-### Executes `acquire`.
+### Blocks until the exclusive lock is acquired.
 routine Exclusive.acquire()
   # Spin until we can acquire the lock
   loop
@@ -18,22 +16,22 @@ routine Exclusive.acquire()
       == false => pass  # Someone else has it, keep trying
   return
 
-### Returns the result of `acquire`.
-### :returns: The resulting `Bool` value.
+### Tries to acquire the exclusive lock without blocking.
+### :returns: `true` if the lock was acquired, `false` if it is already held by another caller.
 routine Exclusive.acquire!() -> Bool
   return me.locked.compare_exchange(expected: false, desired: true)
 
-### Executes `release`.
+### Releases the exclusive lock.
 routine Exclusive.release()
   me.locked.store(false)
   return
 
-### Returns true if this value is locked.
-### :returns: The resulting `Bool` value.
+### Returns `true` if the lock is currently held by a writer.
+### :returns: `true` if the lock is currently held.
 routine Exclusive.is_locked() -> Bool
   return me.locked.load()
 
-### Returns the result of `state`.
+### Returns the current lock state for this policy.
 ### :returns: The resulting `LockState` value.
 routine Exclusive.state() -> LockState
   if me.locked.load()

@@ -1,9 +1,11 @@
-# InPlaceAddable - Protocol for types that support in-place addition (+=)
 module Core
 
-### Defines the protocol `InPlaceAddable`.
+### Represents the protocol for in-place addition.
+### `InPlaceAddable` is for mutable values whose addition operator updates the
+### left-hand operand instead of producing a separate result value.
 protocol InPlaceAddable
-  ### Implements the wired routine behavior for this value.
-  ### :param you: The other value to compare against.
+  ### Adds `you` into this value in place.
+  ### Implementations should leave `you` unchanged while updating `me`.
+  ### :param you: The other value to add.
   @writable
   routine Me.$iadd(you: Me)
