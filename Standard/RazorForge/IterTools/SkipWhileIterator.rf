@@ -12,6 +12,7 @@ entity SkipWhileIterator[T] obeys Iterable[T]
 ### Returns the stateful iterator that skips leading values while the predicate succeeds.
 ### The returned emitter tracks whether it is still in the skipping phase.
 ### :returns: The resulting `SkipWhileEmitter[T]` value.
+@readonly
 routine SkipWhileIterator[T].$iter() -> SkipWhileEmitter[T]
   return SkipWhileEmitter[T](source: me.source.$iter(), predicate: me.predicate, skipping: true)
 
@@ -40,5 +41,6 @@ routine SkipWhileEmitter[T].$next!() -> T
 ### Returns a lazy adapter that skips values while `predicate` returns `true`.
 ### :param predicate: The predicate that controls the initial skipping phase.
 ### :returns: The resulting `SkipWhileIterator[T]` value.
+@readonly
 routine Iterable[T].skip_while(predicate: Routine[(T,), Bool]) -> SkipWhileIterator[T]
   return SkipWhileIterator[T](source: me, predicate: predicate)

@@ -18,25 +18,3 @@ routine verify!(expr: Bool)
 @crash_only
 routine breach!()
   throw LogicBreachedError()
-
-### Performs the `max` operation on this value.
-### :param values...: The `values...` value.
-### :throws: May throw {NoSuchValueError}.
-routine max!(values...: T) needs T obeys Comparable
-  if values.is_empty()
-    throw NoSuchValueError()
-  var result = values[0]
-  for value in values
-    result = result.max(value)
-  return result
-
-### Performs the `min` operation on this value.
-### :param values...: The `values...` value.
-### :throws: May throw {NoSuchValueError}.
-routine min!(values...: T) needs T obeys Comparable
-  if values.is_empty()
-    throw NoSuchValueError()
-  var result = values[0]
-  for value in values
-    result = result.min(value)
-  return result

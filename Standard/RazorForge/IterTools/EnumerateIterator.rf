@@ -21,6 +21,7 @@ routine EnumerateIterator[T].$next!() -> Tuple[S64, T]
 ### Returns a lazy enumerating adapter over this iterable.
 ### The first yielded index is `0`.
 ### :returns: The resulting `EnumerateIterator[T]` value.
+@readonly
 routine Iterable[T].enumerate() -> EnumerateIterator[T]
   return EnumerateIterator[T](source: me, index: 0s64)
 
@@ -28,5 +29,6 @@ routine Iterable[T].enumerate() -> EnumerateIterator[T]
 ### The first yielded index is `start`.
 ### :param start: The inclusive starting position.
 ### :returns: The resulting `EnumerateIterator[T]` value.
+@readonly
 routine Iterable[T].enumerate(start: S64) -> EnumerateIterator[T]
   return EnumerateIterator[T](source: me, index: start)

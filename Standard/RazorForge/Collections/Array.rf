@@ -47,6 +47,7 @@ needs N is U64
 ### :param index: The zero-based position to read.
 ### :returns: The element stored at that position.
 ### :throws: {IndexOutOfBoundsError} if `index >= N`.
+@readonly
 routine Array[T, N].$getitem![I](index: I) -> T
 needs I obeys Integral
   var idx = index.U64!()
@@ -64,6 +65,7 @@ needs I obeys Integral
   if idx >= N
     throw IndexOutOfBoundsError(index: idx, count: me.count())
   me = set_element_at[Array[T, N], T](me, idx, value)
+  return
 
 # ============================================================================
 # Indexing with BackIndex (backward index using ^)
@@ -73,6 +75,7 @@ needs I obeys Integral
 ### `^0` refers to the last element, `^1` to the second-to-last, and so on.
 ### :param index: The backward position to resolve.
 ### :returns: The element at the resolved position.
+@readonly
 routine Array[T, N].$getitem![I](index: BackIndex[I]) -> T
 needs I obeys Integral
   var idx = index.resolve(N)
@@ -85,17 +88,20 @@ needs I obeys Integral
 ### Returns the fixed number of elements in this array.
 ### This is always equal to the compile-time parameter `N`.
 ### :returns: The element count `N`.
+@readonly
 routine Array[T, N].count() -> U64
   return N
 
 ### Returns true when the compile-time size is zero.
 ### :returns: `true` if `N == 0`.
+@readonly
 routine Array[T, N].is_empty() -> Bool
   return N == 0u64
 
 ### Returns the first element of the array.
 ### :returns: The element at index `0`.
 ### :absent: The array has zero elements (`N == 0`).
+@readonly
 routine Array[T, N].first!() -> T
   if N == 0u64
     absent
@@ -104,6 +110,7 @@ routine Array[T, N].first!() -> T
 ### Returns the last element of the array.
 ### :returns: The element at index `N - 1`.
 ### :absent: The array has zero elements (`N == 0`).
+@readonly
 routine Array[T, N].last!() -> T
   if N == 0u64
     absent
@@ -124,6 +131,7 @@ routine Array[T, N].$contains(value: T) -> Bool
 ### :param value: The value to search for.
 ### :returns: The zero-based index of the first match.
 ### :absent: No element equals `value`.
+@readonly
 routine Array[T, N].index_of!(value: T) -> U64
   for i in 0u64 til N
     if me[i] == value
@@ -144,6 +152,7 @@ record ArrayIterator[T, N]
   ### Stores the next logical index to read.
   index: U64
 
+@readonly
 routine Array[T, N].$iter() -> ArrayIterator[T, N]
   return ArrayIterator[T, N](list: me, index: 0u64)
 
@@ -182,6 +191,7 @@ routine Array[T, N].$diagnose() -> Text
 ### Returns true when both arrays contain equal elements in the same order.
 ### :param you: The other array to compare against.
 ### :returns: `true` if every corresponding pair of elements is equal.
+@readonly
 routine Array[T, N].$eq(you: Array[T, N]) -> Bool
   for i in 0u64 til N
     if me[i] != you[i]

@@ -3,13 +3,6 @@ module IO/Console
 # ============================================================================
 # Output: show() - Standard Output (stdout)
 # ============================================================================
-### Writes one or more values to standard output.
-### The variadic overload inserts `sep` between values and appends `end` after the last value.
-### :param value...: The values to write.
-### :param sep: The separator written between successive values.
-### :param end: The trailing text written after the last value.
-#   routine show(value...: Representable, sep: Text = " ", end: Text = "\n")           # Automatic dispatch
-
 ### Writes text to standard output.
 ### `end` is appended after `value`.
 ### :param value: The text to write.
@@ -41,21 +34,6 @@ routine show[T](value: T, end: Text = "\n")
   rf_console_show(value_cstr.ptr, value_cstr.count())
   var end_cstr = CStr(from: end)
   rf_console_show(end_cstr.ptr, end_cstr.count())
-  return
-
-### Writes multiple values to standard output.
-### Values are rendered one by one with `sep` inserted between them.
-### :param values...: The values to render and write.
-### :param sep: The separator written between values.
-### :param end: The trailing text written after the final value.
-routine show[T](values...: T, sep: Text = " ", end: Text = "\n")
-  var first = true
-  for v in values
-    if not first
-      show(sep, end: "")
-    show(v, end: "")
-    first = false
-  show("", end: end)
   return
 
 # ============================================================================
@@ -91,21 +69,6 @@ routine alert[T](value: T, end: Text = "\n")
   rf_console_alert(value_cstr.ptr, value_cstr.count())
   var end_cstr = CStr(from: end)
   rf_console_alert(end_cstr.ptr, end_cstr.count())
-  return
-
-### Writes multiple values to standard error.
-### Values are rendered one by one with `sep` inserted between them.
-### :param values...: The values to render and write.
-### :param sep: The separator written between values.
-### :param end: The trailing text written after the final value.
-routine alert[T](values...: T, sep: Text = " ", end: Text = "\n")
-  var first = true
-  for v in values
-    if not first
-      alert(sep, end: "")
-    alert(v, end: "")
-    first = false
-  alert("", end: end)
   return
 
 # ============================================================================

@@ -29,6 +29,7 @@ routine bigint_handle_none() -> BigIntHandle
 
 ### Returns `true` when this handle is the null sentinel.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine BigIntHandle.is_none() -> Bool
   return int_eq[BigIntHandle](me, bigint_handle_none())
 
@@ -61,5 +62,6 @@ routine bigdec_handle_none() -> BigDecHandle
 
 ### Returns `true` when this handle is the null sentinel.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine BigDecHandle.is_none() -> Bool
   return int_eq[BigDecHandle](me, bigdec_handle_none())

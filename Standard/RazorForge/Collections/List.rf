@@ -72,22 +72,26 @@ routine List[T].$destroy()
 
 ### Returns the number of elements currently stored in the list.
 ### :returns: The live element count.
+@readonly
 routine List[T].count() -> U64
   return me.count
 
 ### Returns the number of elements that fit in the current allocation without reallocating.
 ### :returns: The current backing-buffer slot count.
+@readonly
 routine List[T].capacity() -> U64
   return me.capacity
 
 ### Returns true if the list contains no elements.
 ### :returns: `true` when `count()` is zero.
+@readonly
 routine List[T].is_empty() -> Bool
   return me.count == 0u64
 
 ### Appends `value` at the back of the list.
 ### The buffer is doubled automatically when the current capacity is exhausted.
 ### :param value: The value to append.
+@migratable
 routine List[T].add_last(value: T)
   if me.count >= me.capacity
     var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity *% 2u64
@@ -102,6 +106,7 @@ routine List[T].add_last(value: T)
 ### Capacity is not reduced.
 ### :returns: The element that was at the back.
 ### :absent: The list is empty.
+@migratable
 routine List[T].remove_last!() -> T
   if me.is_empty()
     absent
@@ -113,6 +118,7 @@ routine List[T].remove_last!() -> T
 ### Inserts `value` at the front of the list.
 ### All existing elements are shifted one position toward the back. This is O(n).
 ### :param value: The value to insert.
+@migratable
 routine List[T].add_first(value: T)
   me.add_at!(0u64, value)
   return
@@ -122,6 +128,7 @@ routine List[T].add_first(value: T)
 ### :param index: The zero-based insertion position.
 ### :param value: The value to insert.
 ### :throws: {IndexOutOfBoundsError} if `index` is greater than `count()`.
+@migratable
 routine List[T].add_at!(index: U64, value: T)
   if index > me.count
     throw IndexOutOfBoundsError(index: index.U64(), count: me.count.U64())
@@ -145,6 +152,7 @@ routine List[T].add_at!(index: U64, value: T)
 ### Removes and returns the first element, shifting the remaining elements left by one position.
 ### :returns: The element that was at the front.
 ### :throws: {IndexOutOfBoundsError} if the list is empty.
+@migratable
 routine List[T].remove_first!() -> T
   return me.remove_at!(0u64)
 
@@ -152,6 +160,7 @@ routine List[T].remove_first!() -> T
 ### :param index: The zero-based position to remove.
 ### :returns: The element that was at `index`.
 ### :throws: {IndexOutOfBoundsError} if `index` is out of range.
+@migratable
 routine List[T].remove_at!(index: U64) -> T
   if index >= me.count
     throw IndexOutOfBoundsError(index: index.U64(), count: me.count.U64())
@@ -178,6 +187,7 @@ routine List[T].remove_at!(index: U64) -> T
 ### :param index: The zero-based position to read.
 ### :returns: The element at that position.
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
+@readonly
 routine List[T].$getitem![I](index: I) -> T
 needs I obeys Integral
   var idx = index.U64()
@@ -206,6 +216,7 @@ needs I obeys Integral
 ### Returns the element addressed by a back index, which counts from the end with the `^` syntax.
 ### :param index: The backward position to resolve (`^0` is the last element).
 ### :returns: The element at the resolved position.
+@readonly
 routine List[T].$getitem![I](index: BackIndex[I]) -> T
 needs I obeys Integral
   var idx = index.resolve(me.count)
@@ -228,6 +239,7 @@ needs I obeys Integral
 
 ### Returns the element at `index` without bounds checking.
 ### Only call this when the index is already proven to be in range.
+@readonly
 @inline
 routine List[T].get_raw(index: U64) -> T
   return me.data.offset(T.data_size() * index).extract()
@@ -248,6 +260,7 @@ routine List[T].set_raw(index: U64, value: T)
 ### :param end: The exclusive ending position.
 ### :returns: A new `List[T]` holding the selected elements.
 ### :throws: {IndexOutOfBoundsError} if either bound exceeds `count()`.
+@readonly
 routine List[T].$getslice![I](start: I, end: I) -> List[T]
 needs I obeys Integral
   var s = start.U64()
@@ -276,6 +289,7 @@ needs I obeys Integral
 ### :param start: The inclusive starting back index.
 ### :param end: The exclusive ending back index.
 ### :returns: A new `List[T]` holding the selected elements.
+@readonly
 routine List[T].$getslice![I](start: BackIndex[I], end: BackIndex[I]) -> List[T]
 needs I obeys Integral
   var s = start.resolve(me.count)
@@ -295,6 +309,7 @@ needs I obeys Integral
 ### Ensures the backing allocation holds at least `new_capacity` elements.
 ### Does nothing if the current capacity already meets or exceeds `new_capacity`.
 ### :param new_capacity: The minimum slot count to guarantee.
+@migratable
 routine List[T].reserve(new_capacity: U64)
   if new_capacity > me.capacity
     var new_byte_size = T.data_size() * new_capacity
@@ -313,6 +328,7 @@ routine List[T].reserve(new_capacity: U64)
 
 ### Discards all elements while preserving the current allocation.
 ### Use this to reuse a list without paying reallocation costs.
+@migratable
 routine List[T].clear()
   me.count = 0u64
   return
@@ -338,7 +354,6 @@ routine List[T].$iter() -> ListEmitter[T]
   danger!
     return ListEmitter[T](data: me.data, count: me.count(), index: 0u64)
 
-@writable
 routine ListEmitter[T].$next!() -> T
   if me.index >= me.count
     absent
@@ -360,6 +375,7 @@ routine List[T].$contains(value: T) -> Bool
     i = i +% 1u64
   return false
 
+@readonly
 routine List[T].$represent() -> Text
   var result = "["
   var i = 0u64
@@ -371,6 +387,7 @@ routine List[T].$represent() -> Text
   result = result + "]"
   return result
 
+@readonly
 routine List[T].$diagnose() -> Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", ["
   var i = 0u64
@@ -388,6 +405,7 @@ routine List[T].$diagnose() -> Text
 ### :param from: The zero-based start index within `source`.
 ### :param count: The number of elements to copy.
 ### :throws: {IndexOutOfBoundsError} if `from + count` exceeds `source.count()`.
+@migratable
 routine List[T].add_range!(source: List[T], from: U64, count: U64)
   if count == 0u64
     return
@@ -411,6 +429,7 @@ routine List[T].add_range!(source: List[T], from: U64, count: U64)
 ### The backing allocation is not changed.
 ### :param new_count: The new element count; must be no greater than `count()`.
 ### :throws: {IndexOutOfBoundsError} if `new_count > count()`.
+@migratable
 routine List[T].truncate(new_count: U64)
   if new_count > me.count
     throw IndexOutOfBoundsError(index: new_count, count: me.count)
@@ -530,6 +549,7 @@ routine List[T].sort_by(compare: Routine[(T, T), Bool])
 ### Returns a new list with the same elements sorted in ascending order.
 ### The original list is left unchanged.
 ### :returns: A new `List[T]` whose elements are in ascending order.
+@readonly
 routine List[T].sorted() -> List[T]
 needs T obeys Comparable
   var copy = List[T](capacity: me.count)
@@ -541,6 +561,7 @@ needs T obeys Comparable
 ### The original list is left unchanged.
 ### :param compare: A two-argument routine that returns `true` when its first argument precedes its second.
 ### :returns: A new `List[T]` whose elements are ordered according to `compare`.
+@readonly
 routine List[T].sorted_by(compare: Routine[(T, T), Bool]) -> List[T]
   var copy = List[T](capacity: me.count)
   copy.add_range!(me, 0u64, me.count)

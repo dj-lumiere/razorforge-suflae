@@ -14,6 +14,7 @@ entity WhereIterator[T] obeys Iterable[T]
 ### Returns the stateful iterator that applies the filter lazily.
 ### Source values are examined only as the caller requests more output values.
 ### :returns: The resulting `WhereEmitter[T]` value.
+@readonly
 routine WhereIterator[T].$iter() -> WhereEmitter[T]
   return WhereEmitter[T](source: me.source.$iter(), predicate: me.predicate, inverted: me.inverted)
 
@@ -43,6 +44,7 @@ routine WhereEmitter[T].$next!() -> T
 ### `true`.
 ### :param predicate: The filter predicate.
 ### :returns: The resulting `WhereIterator[T]` value.
+@readonly
 routine Iterable[T].where(predicate: Routine[(T,), Bool]) -> WhereIterator[T]
   return WhereIterator[T](source: me, predicate: predicate, inverted: false)
 
@@ -50,5 +52,6 @@ routine Iterable[T].where(predicate: Routine[(T,), Bool]) -> WhereIterator[T]
 ### `false`.
 ### :param predicate: The filter predicate.
 ### :returns: The resulting `WhereIterator[T]` value.
+@readonly
 routine Iterable[T].where_not(predicate: Routine[(T,), Bool]) -> WhereIterator[T]
   return WhereIterator[T](source: me, predicate: predicate, inverted: true)

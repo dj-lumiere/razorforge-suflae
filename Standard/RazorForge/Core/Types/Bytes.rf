@@ -104,6 +104,7 @@ routine Bytes.$create(ptr: Hijacked[Byte], count: U64) -> Bytes
 
 ### Returns the number of stored bytes in this sequence.
 ### :returns: The resulting `U64` value.
+@readonly
 routine Bytes.count() -> U64
   return me.count
 
@@ -111,6 +112,7 @@ routine Bytes.count() -> U64
 ### Matching is exact on raw byte values.
 ### :param byte: The byte to search for.
 ### :returns: The resulting `U64` value.
+@readonly
 routine Bytes.count_of(byte: Byte) -> U64
   var result: U64 = 0u64
   for b in me
@@ -121,6 +123,7 @@ routine Bytes.count_of(byte: Byte) -> U64
 ### Returns `true` when this byte sequence has no stored bytes.
 ### This is equivalent to checking whether `count()` is `0`.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine Bytes.is_empty() -> Bool
   return me.count == 0u64
 
@@ -129,6 +132,7 @@ routine Bytes.is_empty() -> Bool
 ### Returns the byte at `index`.
 ### :param index: The zero-based position to use.
 ### :returns: The resulting `Byte` value.
+@readonly
 routine Bytes.$getitem![I obeys Integral](index: I) -> Byte
   var i = U64(index)
   if i >= me.count
@@ -140,6 +144,7 @@ routine Bytes.$getitem![I obeys Integral](index: I) -> Byte
 ### Back indices count from the end of the sequence using the `^` syntax.
 ### :param index: The backward position to resolve.
 ### :returns: The resulting `Byte` value.
+@readonly
 routine Bytes.$getitem![I obeys Integral](index: BackIndex[I]) -> Byte
   var i = index.resolve(length: me.count)
   danger!
@@ -150,6 +155,7 @@ routine Bytes.$getitem![I obeys Integral](index: BackIndex[I]) -> Byte
 ### :param start: The inclusive starting position.
 ### :param end: The exclusive ending position.
 ### :returns: The resulting `Bytes` value.
+@readonly
 routine Bytes.$getslice[I obeys Integral](start: I, end: I) -> Bytes
   var s = U64(start)
   var e = U64(end)
@@ -167,6 +173,7 @@ routine Bytes.$getslice[I obeys Integral](start: I, end: I) -> Bytes
 ### :param start: The inclusive starting position.
 ### :param end: The exclusive ending position.
 ### :returns: The resulting `Bytes` value.
+@readonly
 routine Bytes.$getslice[I obeys Integral](start: BackIndex[I], end: BackIndex[I]) -> Bytes
   var s = start.resolve(length: me.count)
   var e = end.resolve(length: me.count)
@@ -185,6 +192,7 @@ routine Bytes.$getslice[I obeys Integral](start: BackIndex[I], end: BackIndex[I]
 ### Both input byte sequences remain unchanged.
 ### :param other: The byte sequence to append.
 ### :returns: The resulting `Bytes` value.
+@readonly
 routine Bytes.concat(other: Referring[Bytes]) -> Bytes
   var n = me.count + other.count
   if n == 0u64
@@ -202,6 +210,7 @@ routine Bytes.concat(other: Referring[Bytes]) -> Bytes
 ### This is the operator form of `concat`.
 ### :param other: The byte sequence to append.
 ### :returns: The resulting `Bytes` value.
+@readonly
 routine Bytes.$add(other: Referring[Bytes]) -> Bytes
   return me.concat(other)
 
@@ -209,6 +218,7 @@ routine Bytes.$add(other: Referring[Bytes]) -> Bytes
 ### Equality requires the same length and the same byte at each position.
 ### :param other: The other byte sequence to compare against.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine Bytes.$eq(other: Referring[Bytes]) -> Bool
   if me.count != other.count
     return false
@@ -223,6 +233,7 @@ routine Bytes.$eq(other: Referring[Bytes]) -> Bool
 ### Returns `true` when this byte sequence contains `byte`.
 ### :param byte: The byte to search for.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine Bytes.contains(byte: Byte) -> Bool
   for i in 0 til me.count
     if me[i] == byte
@@ -232,6 +243,7 @@ routine Bytes.contains(byte: Byte) -> Bool
 ### Returns `true` when this byte sequence begins with `prefix`.
 ### :param prefix: The prefix to test.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine Bytes.starts_with(prefix: Referring[Bytes]) -> Bool
   if prefix.count > me.count
     return false
@@ -243,6 +255,7 @@ routine Bytes.starts_with(prefix: Referring[Bytes]) -> Bool
 ### Returns `true` when this byte sequence ends with `suffix`.
 ### :param suffix: The suffix to test.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine Bytes.ends_with(suffix: Referring[Bytes]) -> Bool
   if suffix.count > me.count
     return false
@@ -256,6 +269,7 @@ routine Bytes.ends_with(suffix: Referring[Bytes]) -> Bool
 ### :param byte: The byte to search for.
 ### :returns: The resulting `U64` value.
 ### :absent: Returns absent when the requested value is unavailable.
+@readonly
 routine Bytes.find!(byte: Byte) -> U64
   for i in 0 til me.count
     if me[i] == byte
@@ -268,6 +282,7 @@ routine Bytes.find!(byte: Byte) -> U64
 ### Separator bytes are not included in the returned segments.
 ### :param separator: The separator to use.
 ### :returns: The resulting `List[Owned[Bytes]]` value.
+@readonly
 routine Bytes.split(separator: Byte) -> List[Owned[Bytes]]
   var parts = List[Owned[Bytes]]()
   var current = List[Byte]()
@@ -285,6 +300,7 @@ routine Bytes.split(separator: Byte) -> List[Owned[Bytes]]
 ### Returns a copy with the value order reversed.
 ### Bytes are reversed by position with no interpretation as text.
 ### :returns: The resulting `Bytes` value.
+@readonly
 routine Bytes.reverse() -> Bytes
   var result = List[Byte]()
   var i = me.count
@@ -299,6 +315,7 @@ routine Bytes.reverse() -> Bytes
 ### This is the binary-sequence equivalent of text repetition.
 ### :param times: The number of repetitions to produce.
 ### :returns: The resulting `Bytes` value.
+@readonly
 routine Bytes.repeat(times: U64) -> Bytes
   if times == 0u64 or me.count == 0u64
     return Bytes()
@@ -342,6 +359,7 @@ entity BytesIterator
 ### Returns an iterator over this byte sequence.
 ### The iterator starts at byte index `0`.
 ### :returns: The resulting `BytesIterator` value.
+@readonly
 routine Bytes.$iter() -> BytesIterator
   return BytesIterator(bytes: me, index: 0u64)
 
@@ -363,6 +381,7 @@ routine BytesIterator.$next!() -> Byte
 ### Returns the display form of this byte sequence.
 ### Each byte is rendered using its escaped `\\xHH` representation.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Bytes.$represent() -> Text
   var result = List[Character]()
   var i: U64 = 0u64
@@ -382,6 +401,7 @@ routine Bytes.$represent() -> Text
 ### Returns the diagnostic form of this byte sequence.
 ### The diagnostic form includes both the byte count and the escaped payload.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Bytes.$diagnose() -> Text
   return "Bytes(count: " + me.count.$represent() + ", " + me.$represent() + ")"
 
@@ -391,6 +411,7 @@ routine Bytes.$diagnose() -> Text
 
 ### Encodes this text value as UTF-8 bytes.
 ### :returns: The resulting `Bytes` value.
+@readonly
 routine Text.encode_as_utf8() -> Bytes
   var result = List[Byte]()
   var len = me.count()
@@ -417,6 +438,7 @@ routine Text.encode_as_utf8() -> Bytes
 ### Decodes this byte sequence as UTF-8, replacing malformed subsequences with
 ### the Unicode replacement character.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Bytes.decode_as_utf8_lossy() -> Text
   var result = List[Character]()
   var len = me.count
@@ -491,6 +513,7 @@ routine Bytes.decode_as_utf8_lossy() -> Text
 ### Malformed input causes a `MalformedUtf8Error` instead of lossy replacement.
 ### :returns: The resulting `Text` value.
 ### :throws: May throw {MalformedUtf8Error}.
+@readonly
 routine Bytes.decode_as_utf8!() -> Text
   var result = List[Character]()
   var len = me.count
@@ -561,6 +584,7 @@ record BytesUtf8Iterator
 ### Returns a lazy UTF-8 view over this byte sequence.
 ### Malformed subsequences are handled lossily during iteration.
 ### :returns: The resulting `BytesUtf8View` value.
+@readonly
 routine Bytes.interpret_as_utf8() -> BytesUtf8View
   danger!
     return BytesUtf8View(bytes: me.hijack())
@@ -568,6 +592,7 @@ routine Bytes.interpret_as_utf8() -> BytesUtf8View
 ### Returns a validated UTF-8 view over this byte sequence.
 ### The byte sequence is checked eagerly before the lazy view is returned.
 ### :returns: The resulting `BytesUtf8View` value.
+@readonly
 routine Bytes.interpret_as_utf8!() -> BytesUtf8View
   discard me.decode_as_utf8!()
   danger!
@@ -576,11 +601,13 @@ routine Bytes.interpret_as_utf8!() -> BytesUtf8View
 ### Returns a lazy lossy UTF-8 view over this byte sequence.
 ### This is the explicit named form of `interpret_as_utf8`.
 ### :returns: The resulting `BytesUtf8View` value.
+@readonly
 routine Bytes.interpret_as_utf8_lossy() -> BytesUtf8View
   return me.interpret_as_utf8()
 
 ### Returns an iterator over the UTF-8 view.
 ### :returns: The resulting `BytesUtf8Iterator` value.
+@readonly
 routine BytesUtf8View.$iter() -> BytesUtf8Iterator
   return BytesUtf8Iterator(bytes: me.bytes, index: 0u64)
 
@@ -664,6 +691,7 @@ routine BytesUtf8Iterator.$next!() -> Character
 
 ### Copies this byte sequence into a newly allocated null-terminated C buffer.
 ### :returns: The resulting `Address` value.
+@readonly
 routine Bytes.to_cstr() -> Address
   var len = me.count
   danger!
@@ -676,6 +704,7 @@ routine Bytes.to_cstr() -> Address
 ### Encodes this text as UTF-8 and returns a newly allocated null-terminated C
 ### buffer.
 ### :returns: The resulting `Address` value.
+@readonly
 routine Text.to_cstr() -> Address
   var bytes = me.encode_as_utf8()
   return bytes.to_cstr()
@@ -686,6 +715,7 @@ routine Text.to_cstr() -> Address
 
 ### Encodes this text value as UTF-16 code units.
 ### :returns: The resulting `List[U16]` value.
+@readonly
 routine Text.encode_as_utf16() -> List[U16]
   var result = List[U16]()
   var len = me.count()

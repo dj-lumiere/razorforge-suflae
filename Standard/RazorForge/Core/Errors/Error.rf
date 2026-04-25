@@ -10,5 +10,6 @@ crashable RuntimeError
 ### This message is intentionally generic and should be overridden by more
 ### specific crashables whenever possible.
 ### :returns: The resulting `Text` value.
+@readonly
 routine RuntimeError.crash_message() -> Text
   return "A runtime error occurred."

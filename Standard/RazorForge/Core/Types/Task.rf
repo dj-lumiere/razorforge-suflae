@@ -32,6 +32,7 @@ routine task_none[T]() -> Task[T]
 
 ### Returns `true` when this task handle is the null sentinel.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine Task[T].is_none() -> Bool
   return int_eq[Task[T]](me, task_none[T]())
 
@@ -39,6 +40,7 @@ routine Task[T].is_none() -> Bool
 ### This identifier is suitable for diagnostics and runtime coordination, not
 ### for reconstructing a task handle.
 ### :returns: The resulting `U64` value.
+@readonly
 routine Task[T].id() -> U64
   return rf_task_id(me.get_address())
 

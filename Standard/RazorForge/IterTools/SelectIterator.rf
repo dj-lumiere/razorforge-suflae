@@ -14,6 +14,7 @@ entity SelectIterator[T, U] obeys Iterable[U]
 ### The emitted iterator reuses the same transform routine for every yielded
 ### source value.
 ### :returns: The resulting `SelectEmitter[T, U]` value.
+@readonly
 routine SelectIterator[T, U].$iter() -> SelectEmitter[T, U]
   return SelectEmitter[T, U](source: me.source.$iter(), transform: me.transform)
 
@@ -38,5 +39,6 @@ routine SelectEmitter[T, U].$next!() -> U
 ### consumed.
 ### :param transform: The routine used to map each source value to a result value.
 ### :returns: The resulting `SelectIterator[T, U]` value.
+@readonly
 routine Iterable[T].select[U](transform: Routine[(T,), U]) -> SelectIterator[T, U]
   return SelectIterator[T, U](source: me, transform: transform)

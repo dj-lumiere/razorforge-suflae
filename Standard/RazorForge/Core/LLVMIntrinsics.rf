@@ -658,3 +658,11 @@ external("llvm") routine set_element_at[Array, T](array: Array, index: U64, valu
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = alloca {T}\nstore {T} zeroinitializer, ptr {prev}\n{result} = load {T}, ptr {prev}")
 external("llvm") routine zero_value[T]() -> T
+
+### Returns whether two pointer-backed values refer to the same address.
+### Intended for entity and crashable identity comparison (`===`).
+### :param a: The left-hand reference.
+### :param b: The right-hand reference.
+### :returns: `true` when both point to the same memory location.
+@llvm_ir("{result} = icmp eq ptr {a}, {b}")
+external("llvm") routine ptr_same[T](a: T, b: T) -> Bool

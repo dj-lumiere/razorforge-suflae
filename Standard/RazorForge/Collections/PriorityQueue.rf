@@ -421,7 +421,6 @@ routine PriorityQueue[TPriority, TElement].$iter() -> PriorityQueueIterator[TPri
 ### Returns the next heap entry in storage order.
 ### :returns: The next priority–element pair from the heap array.
 ### :absent: All entries captured at iterator creation have been yielded.
-@writable
 routine PriorityQueueIterator[TPriority, TElement].$next!() -> PQEntry[TPriority, TElement]
   if me.index >= me.count
     absent

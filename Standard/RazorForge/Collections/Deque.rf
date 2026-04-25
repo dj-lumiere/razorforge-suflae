@@ -74,15 +74,6 @@ routine Deque[T].$create(capacity: U64) -> Deque[T]
       capacity: actual
     )
 
-### Creates a deque populated with the supplied elements in left-to-right order.
-### The first argument becomes the front element; the last becomes the back element.
-### :param values...: The initial elements to enqueue from front to back.
-routine Deque[T].$create(values...: T) -> Deque[T]
-  var result = Deque[T]()
-  for v in values
-    result.add_last(v)
-  return result
-
 # ============================================================================
 # Internal Helpers
 # ============================================================================
@@ -90,6 +81,7 @@ routine Deque[T].$create(values...: T) -> Deque[T]
 ### Maps a physical index into the range [0, capacity) using a power-of-two bitmask.
 ### :param index: The raw physical index to normalize.
 ### :returns: The equivalent in-range slot index for the current buffer.
+@readonly
 routine Deque[T].wrap_index(index: U64) -> U64
   # Capacity is always a power of 2 — use bitmask instead of modulo.
   return index & (me.capacity -% 1u64)
@@ -97,6 +89,7 @@ routine Deque[T].wrap_index(index: U64) -> U64
 ### Converts a logical position (0 = front) to the physical slot in the ring buffer.
 ### :param logical_index: The zero-based distance from the logical front.
 ### :returns: The physical slot index that currently holds that element.
+@readonly
 routine Deque[T].physical_index(logical_index: U64) -> U64
   # Convert logical index (0 = front) to physical index in buffer
   return me.wrap_index(me.start +% logical_index)
@@ -104,6 +97,7 @@ routine Deque[T].physical_index(logical_index: U64) -> U64
 ### Reads the element from physical slot `physical_idx` without bounds checking.
 ### :param physical_idx: The slot index inside the backing buffer.
 ### :returns: The element stored in that slot.
+@readonly
 routine Deque[T].read_at(physical_idx: U64) -> T
   var byte_offset = T.data_size() * physical_idx
   danger!
@@ -124,16 +118,19 @@ routine Deque[T].write_at(physical_idx: U64, value: T)
 
 ### Returns the number of live elements currently stored in the deque.
 ### :returns: The live element count.
+@readonly
 routine Deque[T].count() -> U64
   return me.count
 
 ### Returns the number of element slots available before the next growth step.
 ### :returns: The current backing-buffer slot count.
+@readonly
 routine Deque[T].capacity() -> U64
   return me.capacity
 
 ### Returns true if the deque currently contains no elements.
 ### :returns: `true` when `count()` is zero.
+@readonly
 routine Deque[T].is_empty() -> Bool
   return me.count == 0u64
 
@@ -189,6 +186,7 @@ routine Deque[T].remove_first!() -> T
 ### Returns the front element without removing it.
 ### :returns: The current front element.
 ### :absent: The deque is empty.
+@readonly
 routine Deque[T].first!() -> T
   # Peek at front element without removing
   if me.is_empty()
@@ -198,6 +196,7 @@ routine Deque[T].first!() -> T
 ### Returns the back element without removing it.
 ### :returns: The current back element.
 ### :absent: The deque is empty.
+@readonly
 routine Deque[T].last!() -> T
   # Peek at back element without removing
   if me.is_empty()
@@ -217,6 +216,7 @@ routine Deque[T].clear()
 
 ### Grows the backing storage using the deque's standard doubling policy.
 ### Empty deques start at four slots; subsequent growth always doubles.
+@migratable
 routine Deque[T].grow()
   var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity *% 2u64
   me.reserve(new_capacity)
@@ -227,6 +227,7 @@ routine Deque[T].grow()
 ### the new buffer in logical order so the front moves to physical slot 0.
 ### Requests no larger than the current capacity are ignored.
 ### :param new_capacity: The minimum element count to accommodate.
+@migratable
 routine Deque[T].reserve(new_capacity: U64)
   var actual = 1u64
   while actual < new_capacity
@@ -261,6 +262,7 @@ routine Deque[T].reserve(new_capacity: U64)
 ### :param index: The zero-based logical position to read.
 ### :returns: The element at that logical position.
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
+@readonly
 routine Deque[T].$getitem![I](index: I) -> T
 needs I obeys Integral
   var idx = index.U64()
@@ -290,6 +292,7 @@ needs I obeys Integral
 ### `^0` refers to the last element, `^1` to the second-to-last, and so on.
 ### :param index: The backward position to resolve.
 ### :returns: The element at the resolved position.
+@readonly
 routine Deque[T].$getitem![I](index: BackIndex[I]) -> T
 needs I obeys Integral
   var idx = index.resolve(me.count)
@@ -373,7 +376,6 @@ routine Deque[T].$iter() -> DequeEmitter[T]
 ### Returns the next element from the iterator in front-to-back order.
 ### :returns: The next logical element.
 ### :absent: All elements captured at iterator creation have been yielded.
-@writable
 routine DequeEmitter[T].$next!() -> T
   if me.index >= me.count
     absent
@@ -390,6 +392,7 @@ routine DequeEmitter[T].$next!() -> T
 ### Returns the front element or `default_value` if the deque is empty.
 ### :param default_value: The fallback to return when no element is stored.
 ### :returns: The front element if present; `default_value` otherwise.
+@readonly
 routine Deque[T].first_or_default(default_value: T) -> T
   if me.is_empty()
     return default_value
@@ -398,6 +401,7 @@ routine Deque[T].first_or_default(default_value: T) -> T
 ### Returns the back element or `default_value` if the deque is empty.
 ### :param default_value: The fallback to return when no element is stored.
 ### :returns: The back element if present; `default_value` otherwise.
+@readonly
 routine Deque[T].last_or_default(default_value: T) -> T
   if me.is_empty()
     return default_value
@@ -420,6 +424,7 @@ routine Deque[T].$contains(value: T) -> Bool
 # Comparison Operations
 # ============================================================================
 
+@readonly
 routine Deque[T].$represent() -> Text
   var result = "Deque["
   var i = 0u64
@@ -431,6 +436,7 @@ routine Deque[T].$represent() -> Text
   result = result + "]"
   return result
 
+@readonly
 routine Deque[T].$diagnose() -> Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", ["
   var i = 0u64
@@ -445,6 +451,7 @@ routine Deque[T].$diagnose() -> Text
 ### Returns true if both deques contain the same elements in the same logical order.
 ### :param other: The other deque to compare against.
 ### :returns: `true` if both have equal count and all corresponding elements are equal.
+@readonly
 routine Deque[T].$eq(other: Deque[T]) -> Bool
   if me.count != other.count
     return false

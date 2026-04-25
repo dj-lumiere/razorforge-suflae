@@ -82,15 +82,6 @@ routine Set[T].$create(capacity: U64) -> Set[T]
     set.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * cap))
   return set
 
-### Creates a set from the supplied values.
-### Duplicate values are silently ignored, just as repeated `add` calls would be.
-### :param values...: The initial elements to insert.
-routine Set[T].$create(values...: T) -> Set[T]
-  var result = Set[T]()
-  for v in values
-    discard result.add(v)
-  return result
-
 ### Releases the raw control and element buffers owned by this set.
 routine Set[T].$destroy()
   danger!
@@ -107,12 +98,14 @@ routine Set[T].$destroy()
 ### Extracts the 7-bit control-byte fingerprint from a raw hash value.
 ### :param hash: The raw hash output from `$hash`.
 ### :returns: The low 7 bits of `hash`, used to filter candidate slots before a full equality check.
+@readonly
 routine Set[T].h2(hash: U64) -> U8
   return U8(hash & U64(CTRL_H2_MASK))
 
 ### Derives the primary probe slot index from a raw hash value.
 ### :param hash: The raw hash output from `$hash`.
 ### :returns: The upper bits of `hash`, used as the starting slot before masking to the table size.
+@readonly
 routine Set[T].h1(hash: U64) -> U64
   return hash >> 7u32
 
@@ -120,6 +113,7 @@ routine Set[T].h1(hash: U64) -> U64
 ### Control-byte fingerprints are checked before full element equality to reduce element loads.
 ### :param value: The element to find.
 ### :returns: The slot index of `value` if found, or `capacity` if the element is absent.
+@readonly
 routine Set[T].find_slot(value: T) -> U64
   var h = value.$hash()
   var target = me.h2(h)
@@ -162,11 +156,13 @@ routine Set[T].insert_raw(h: U64, val: T)
 ### Returns true when the combined live and tombstone load exceeds 87.5% of capacity.
 ### Both live elements and tombstones occupy probe space, so both count toward the load threshold.
 ### :returns: `true` if a rehash should happen before the next insertion.
+@readonly
 routine Set[T].should_rehash() -> Bool
   return (me.count +% me.deleted) *% 8u64 >= me.capacity *% 7u64
 
 ### Doubles the table capacity and reinserts all live elements into the new table.
 ### Tombstones are discarded during the rebuild.
+@migratable
 routine Set[T].rehash()
   var old_cap = me.capacity
   var old_ctrl = me.ctrl
@@ -204,16 +200,19 @@ routine Set[T].rehash()
 
 ### Returns the number of live elements currently stored.
 ### :returns: The live element count.
+@readonly
 routine Set[T].count() -> U64
   return me.count
 
 ### Returns true if this set contains no live elements.
 ### :returns: `true` when `count()` is zero.
+@readonly
 routine Set[T].is_empty() -> Bool
   return me.count == 0u64
 
 ### Removes every element while preserving the current slot capacity.
 ### Resets the control array to all-empty in one pass, discarding all tombstones.
+@migratable
 routine Set[T].clear()
   danger!
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: me.capacity)
@@ -231,6 +230,7 @@ routine Set[T].$contains(value: T) -> Bool
 ### Inserts `value` if it is not already present.
 ### :param value: The element to insert.
 ### :returns: `true` if the element was inserted; `false` if it was already present.
+@migratable
 routine Set[T].add(value: T) -> Bool
   if me.should_rehash()
     me.rehash()
@@ -243,6 +243,7 @@ routine Set[T].add(value: T) -> Bool
 ### Removes `value` if it is present in the set.
 ### :param value: The element to remove.
 ### :returns: `true` if the element was found and removed; `false` if not present.
+@migratable
 routine Set[T].remove(value: T) -> Bool
   var slot = me.find_slot(value)
   if slot >= me.capacity
@@ -260,6 +261,7 @@ routine Set[T].remove(value: T) -> Bool
 ### Returns a new set containing every element that appears in either this set or `other`.
 ### :param other: The other set to combine with.
 ### :returns: A new {Set[T]} with the union of both sets' elements.
+@readonly
 routine Set[T].union(other: Set[T]) -> Set[T]
   var result = Set[T](me.count +% other.count)
   for val in me
@@ -271,6 +273,7 @@ routine Set[T].union(other: Set[T]) -> Set[T]
 ### Returns a new set containing only elements shared by both this set and `other`.
 ### :param other: The other set to intersect with.
 ### :returns: A new {Set[T]} containing only elements present in both sets.
+@readonly
 routine Set[T].intersection(other: Set[T]) -> Set[T]
   var result = Set[T]()
   for val in me
@@ -281,6 +284,7 @@ routine Set[T].intersection(other: Set[T]) -> Set[T]
 ### Returns a new set containing elements of this set that are absent from `other`.
 ### :param other: The set of elements to exclude.
 ### :returns: A new {Set[T]} with elements of this set that do not appear in `other`.
+@readonly
 routine Set[T].difference(other: Set[T]) -> Set[T]
   var result = Set[T]()
   for val in me
@@ -291,6 +295,7 @@ routine Set[T].difference(other: Set[T]) -> Set[T]
 ### Returns a new set containing elements that appear in exactly one of the two sets.
 ### :param other: The other set to compare against.
 ### :returns: A new {Set[T]} with elements exclusive to each set.
+@readonly
 routine Set[T].symmetric_difference(other: Set[T]) -> Set[T]
   var result = Set[T]()
   for val in me
@@ -304,6 +309,7 @@ routine Set[T].symmetric_difference(other: Set[T]) -> Set[T]
 ### Returns true if every element of this set is also present in `other`.
 ### :param other: The set to check containment against.
 ### :returns: `true` if this set is a subset of `other`.
+@readonly
 routine Set[T].is_subset(other: Set[T]) -> Bool
   if me.count > other.count
     return false
@@ -315,12 +321,14 @@ routine Set[T].is_subset(other: Set[T]) -> Bool
 ### Returns true if this set contains every element of `other`.
 ### :param other: The set to check containment of.
 ### :returns: `true` if this set is a superset of `other`.
+@readonly
 routine Set[T].is_superset(other: Set[T]) -> Bool
   return other.is_subset(me)
 
 ### Returns true if this set and `other` share no elements.
 ### :param other: The set to check for overlap with.
 ### :returns: `true` if the two sets have no elements in common.
+@readonly
 routine Set[T].is_disjoint(other: Set[T]) -> Bool
   for val in me
     if val in other
@@ -373,7 +381,6 @@ entity SetIterator[T] obeys Iterator[T]
 ### Advances to the next live slot and returns its element.
 ### :returns: The next live element.
 ### :absent: No live slots remain.
-@writable
 routine SetIterator[T].$next!() -> T
   danger!
     while me.slot < me.capacity
@@ -390,6 +397,7 @@ routine SetIterator[T].$next!() -> T
 
 ### Returns a compact text representation of the set contents.
 ### Elements are rendered in iteration (slot) order, enclosed in braces.
+@readonly
 routine Set[T].$represent() -> Text
   if me.is_empty()
     return "{}"
@@ -404,6 +412,7 @@ routine Set[T].$represent() -> Text
   return result
 
 ### Returns a diagnostic form that includes the runtime type name and live element count.
+@readonly
 routine Set[T].$diagnose() -> Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
   var first = true
@@ -422,6 +431,7 @@ routine Set[T].$diagnose() -> Text
 ### Returns true if both sets contain exactly the same elements.
 ### :param other: The other set to compare against.
 ### :returns: `true` if both sets have equal count and this set is a subset of `other`.
+@readonly
 routine Set[T].$eq(other: Set[T]) -> Bool
   if me.count != other.count
     return false

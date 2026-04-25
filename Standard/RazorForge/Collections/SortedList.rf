@@ -56,27 +56,32 @@ needs T obeys Comparable
 
 ### Returns the number of keys currently stored in this node.
 ### :returns: The key count.
+@readonly
 routine BTreeListNode[T].keys_count() -> U64
   return me.key_count
 
 ### Returns the number of child pointers currently stored in this node.
 ### :returns: The child count.
+@readonly
 routine BTreeListNode[T].children_count() -> U64
   return me.child_count
 
 ### Returns a raw pointer to the start of the keys buffer.
 ### :returns: A {Hijacked[T]} pointing to the first key slot.
+@readonly
 dangerous routine BTreeListNode[T].keys_base() -> Hijacked[T]
   return me.hijack().recast_as[T]()
 
 ### Returns a raw pointer to the start of the children buffer, offset past the keys region.
 ### :returns: A {Hijacked[BTreeListNode[T]]} pointing to the first child slot.
+@readonly
 dangerous routine BTreeListNode[T].children_base() -> Hijacked[BTreeListNode[T]]
   return me.hijack().recast_as[T]().stride(count: 63_s64).recast_as[BTreeListNode[T]]()
 
 ### Returns the key at slot `i`.
 ### :param i: Zero-based key index.
 ### :returns: The key value at position `i`.
+@readonly
 routine BTreeListNode[T].keys_get(i: U64) -> T
   danger!
     return me.keys_base().stride(count: i.S64()).extract()
@@ -92,6 +97,7 @@ routine BTreeListNode[T].keys_set(i: U64, value: T)
 ### Returns the child node at slot `i`.
 ### :param i: Zero-based child index.
 ### :returns: The child node at position `i`.
+@readonly
 routine BTreeListNode[T].children_get(i: U64) -> BTreeListNode[T]
   danger!
     return me.children_base().stride(count: i.S64()).extract()
@@ -250,11 +256,6 @@ routine SortedList[T].$create() -> SortedList[T]
     count: 0u64
   )
 
-routine SortedList[T].$create(values...: T) -> SortedList[T]
-  var result = SortedList[T]()
-  for v in values
-    result.add(v)
-  return result
 
 # ============================================================================
 # Core
@@ -262,11 +263,13 @@ routine SortedList[T].$create(values...: T) -> SortedList[T]
 
 ### Returns the total number of elements in this list, counting duplicates separately.
 ### :returns: The element count.
+@readonly
 routine SortedList[T].count() -> U64
   return me.count
 
 ### Returns true if this list contains no elements.
 ### :returns: `true` when `count()` is zero.
+@readonly
 routine SortedList[T].is_empty() -> Bool
   return me.count == 0u64
 
@@ -293,6 +296,7 @@ routine SortedList[T].$contains(value: T) -> Bool
 ### :param node: The subtree root to search.
 ### :param value: The value to find.
 ### :returns: `true` if found anywhere in the subtree.
+@readonly
 @inline
 routine SortedList[T].search_node(node: BTreeListNode[T], value: T) -> Bool
   var i = me.lower_bound(node, value)
@@ -305,6 +309,7 @@ routine SortedList[T].search_node(node: BTreeListNode[T], value: T) -> Bool
 ### Returns the number of times `value` appears in this list.
 ### :param value: The value to count.
 ### :returns: The occurrence count; zero if the value is not present.
+@readonly
 routine SortedList[T].count_of(value: T) -> U64
   if me.root is None
     return 0u64
@@ -314,6 +319,7 @@ routine SortedList[T].count_of(value: T) -> U64
 ### :param node: The subtree root to search.
 ### :param value: The value to count.
 ### :returns: Number of occurrences found in the subtree.
+@readonly
 routine SortedList[T].count_in_node(node: BTreeListNode[T], value: T) -> U64
   var count = 0u64
   var i = 0u64
@@ -331,6 +337,7 @@ routine SortedList[T].count_in_node(node: BTreeListNode[T], value: T) -> U64
 ### :param node: The node whose keys are searched.
 ### :param value: The target value.
 ### :returns: Smallest index `i` where `node.keys[i] >= value`, or `keys_count()` if all keys are smaller.
+@readonly
 @inline
 routine SortedList[T].lower_bound(node: BTreeListNode[T], value: T) -> U64
   var lo = 0u64
@@ -347,6 +354,7 @@ routine SortedList[T].lower_bound(node: BTreeListNode[T], value: T) -> U64
 ### :param node: The node whose keys are searched.
 ### :param value: The target value.
 ### :returns: Smallest index `i` where `node.keys[i] > value`, or `keys_count()` if all keys are `<= value`.
+@readonly
 @inline
 routine SortedList[T].upper_bound(node: BTreeListNode[T], value: T) -> U64
   var lo = 0u64
@@ -632,6 +640,7 @@ routine SortedList[T].remove_all(value: T) -> U64
 # Indexing
 # ============================================================================
 
+@readonly
 routine SortedList[T].$getitem![I](index: I) -> T
 needs I obeys Integral
   var idx = index.U64()
@@ -639,6 +648,7 @@ needs I obeys Integral
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   return me.get_by_rank(me.root!!, idx)
 
+@readonly
 routine SortedList[T].$getitem![I](index: BackIndex[I]) -> T
 needs I obeys Integral
   var idx = index.resolve(me.count)
@@ -648,6 +658,7 @@ needs I obeys Integral
 ### :param node: The subtree root to search.
 ### :param rank: Zero-based position in the in-order traversal of this subtree.
 ### :returns: The element at that rank.
+@readonly
 routine SortedList[T].get_by_rank(node: BTreeListNode[T], rank: U64) -> T
   if node.is_leaf
     return node.keys_get(rank)
@@ -675,6 +686,7 @@ routine SortedList[T].get_by_rank(node: BTreeListNode[T], rank: U64) -> T
 ### :param min_val: Inclusive lower bound.
 ### :param max_val: Inclusive upper bound.
 ### :returns: A {List[T]} of all matching elements in sorted order.
+@readonly
 routine SortedList[T].range(min_val: T, max_val: T) -> List[T]
   var result = List[T]()
   if me.root is None
@@ -687,6 +699,7 @@ routine SortedList[T].range(min_val: T, max_val: T) -> List[T]
 ### :param min_val: Inclusive lower bound.
 ### :param max_val: Inclusive upper bound.
 ### :param result: The list to append matching elements into.
+@readonly
 routine SortedList[T].range_collect(node: BTreeListNode[T], min_val: T, max_val: T, result: List[T])
   var i = 0u64
   while i < node.keys_count()
@@ -707,6 +720,7 @@ routine SortedList[T].range_collect(node: BTreeListNode[T], min_val: T, max_val:
 ### Returns the smallest element in the list.
 ### :returns: The minimum element.
 ### :absent: The list is empty.
+@readonly
 routine SortedList[T].min!() -> T
   if me.is_empty()
     absent
@@ -718,6 +732,7 @@ routine SortedList[T].min!() -> T
 ### Returns the largest element in the list.
 ### :returns: The maximum element.
 ### :absent: The list is empty.
+@readonly
 routine SortedList[T].max!() -> T
   if me.is_empty()
     absent
@@ -729,12 +744,14 @@ routine SortedList[T].max!() -> T
 ### Returns the smallest element. Alias for {SortedList[T].min!()}.
 ### :returns: The first (minimum) element.
 ### :absent: The list is empty.
+@readonly
 routine SortedList[T].first!() -> T
   return me.min!()
 
 ### Returns the largest element. Alias for {SortedList[T].max!()}.
 ### :returns: The last (maximum) element.
 ### :absent: The list is empty.
+@readonly
 routine SortedList[T].last!() -> T
   return me.max!()
 
@@ -759,6 +776,7 @@ routine List[T].$create(from: SortedList[T]) -> List[T]
 ### Appends all keys from `node`'s subtree into `result` via in-order traversal.
 ### :param node: The subtree root to traverse.
 ### :param result: The list to append elements into.
+@readonly
 routine SortedList[T].collect_inorder(node: BTreeListNode[T], result: List[T])
   var i = 0u64
   while i < node.keys_count()
@@ -776,7 +794,6 @@ entity SortedListIterator[T] obeys Iterator[T]
   list: SortedList[T]
   index: U64
 
-@writable
 routine SortedListIterator[T].$next!() -> T
   if me.index >= me.list.count()
     absent
@@ -788,6 +805,7 @@ routine SortedListIterator[T].$next!() -> T
 # Display / Equality
 # ============================================================================
 
+@readonly
 routine SortedList[T].$represent() -> Text
   var result = "SortedList["
   var i = 0u64
@@ -799,6 +817,7 @@ routine SortedList[T].$represent() -> Text
   result = result + "]"
   return result
 
+@readonly
 routine SortedList[T].$diagnose() -> Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", ["
   var i = 0u64
@@ -813,6 +832,7 @@ routine SortedList[T].$diagnose() -> Text
 ### Returns true if both lists contain exactly the same elements in the same order.
 ### :param other: The list to compare against.
 ### :returns: `true` if element-wise equal.
+@readonly
 routine SortedList[T].$eq(other: SortedList[T]) -> Bool
   if me.count != other.count
     return false

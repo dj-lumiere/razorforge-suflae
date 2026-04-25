@@ -12,6 +12,7 @@ entity TakeIterator[T] obeys Iterable[T]
 ### The emitted iterator decrements its remaining budget on each successful
 ### yield.
 ### :returns: The resulting `TakeEmitter[T]` value.
+@readonly
 routine TakeIterator[T].$iter() -> TakeEmitter[T]
   return TakeEmitter[T](source: me.source.$iter(), remaining: me.limit)
 
@@ -39,5 +40,6 @@ routine TakeEmitter[T].$next!() -> T
 ### This is useful for truncating potentially long or infinite iterables.
 ### :param count: The maximum number of values to take.
 ### :returns: The resulting `TakeIterator[T]` value.
+@readonly
 routine Iterable[T].take(count: U64) -> TakeIterator[T]
   return TakeIterator[T](source: me, limit: count)

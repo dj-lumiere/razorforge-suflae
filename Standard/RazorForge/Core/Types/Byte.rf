@@ -37,23 +37,27 @@ preset BYTE_TAB: Byte = Byte(0x09u8)
 ### This helper is available only for values that are already representable in
 ### one byte.
 ### :returns: The resulting `U8` value.
+@readonly
 routine Character.byte_value() -> U8
   return U8(U32(me))
 
 ### Returns this byte as an unsigned numeric code value.
 ### :returns: The resulting `U32` value.
+@readonly
 routine Byte.codepoint() -> U32
   return U32(U8(me))
 
 ### Returns whether both values are equal.
 ### :param other: The other value to compare against.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine Byte.$eq(other: Byte) -> Bool
   return U8(me) == U8(other)
 
 ### Compares this value with the other value.
 ### :param other: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
+@readonly
 routine Byte.$cmp(other: Byte) -> ComparisonSign
   return U8(me) <=> U8(other)
 
@@ -66,6 +70,7 @@ routine Byte.$cmp(other: Byte) -> ComparisonSign
 ### :param low: The lower inclusive bound.
 ### :param high: The upper inclusive bound.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine Byte.in_range(low: U8, high: U8) -> Bool
   return low <= U8(me) <= high
 
@@ -75,17 +80,20 @@ routine Byte.in_range(low: U8, high: U8) -> Bool
 
 ### Returns `true` when this byte is in the 7-bit ASCII range.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine Byte.is_ascii() -> Bool
   return U8(me) <= 0x7F
 
 ### Returns `true` when this byte is the ASCII encoding of `0` through `9`.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine Byte.is_digit() -> Bool
   return 0x30u8 <= U8(me) <= 0x39u8  # ASCII 0-9
 
 ### Returns the numeric value of an ASCII digit byte.
 ### :returns: The resulting `U8` value.
 ### :throws: May throw {InvalidDigitError}.
+@readonly
 routine Byte.digit_value!() -> U8
   if not me.is_digit()
     throw InvalidDigitError()
@@ -94,6 +102,7 @@ routine Byte.digit_value!() -> U8
 ### Returns `true` when this byte is an ASCII hexadecimal digit.
 ### Accepted digits are `0-9`, `A-F`, and `a-f`.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine Byte.is_hex_digit() -> Bool
   var v = U8(me)
   var is_digit = 0x30u8 <= v <= 0x39u8
@@ -104,6 +113,7 @@ routine Byte.is_hex_digit() -> Bool
 ### Returns the numeric value of an ASCII hexadecimal digit.
 ### :returns: The resulting `U8` value.
 ### :throws: May throw {InvalidHexDigitError}.
+@readonly
 routine Byte.hex_value!() -> U8
   var v = U8(me)
   when true
@@ -120,6 +130,7 @@ routine Byte.hex_value!() -> U8
 ### Raw bytes are rendered as `\\xHH` so output remains unambiguous regardless of
 ### encoding context.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Byte.$represent() -> Text
   var digits = List[Character]()
   digits.add_last(Character(0x005Cu32))  # \
@@ -141,6 +152,7 @@ routine Byte.$represent() -> Text
 ### The diagnostic form includes both the unsigned numeric value and the escaped
 ### byte representation.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Byte.$diagnose() -> Text
   return "Byte(" + U8(me).$represent() + ", " + me.$represent() + ")"
 
@@ -150,6 +162,7 @@ routine Byte.$diagnose() -> Text
 
 ### Returns a hash of this value.
 ### :returns: The resulting `U64` value.
+@readonly
 routine Byte.$hash() -> U64
   return __hash_leaf(v: zero_extend[Byte, U64](me))
 
@@ -157,5 +170,6 @@ routine Byte.$hash() -> U64
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
+@readonly
 routine Byte.$secure_hash(k0: U64, k1: U64) -> U64
   return __secure_hash_u64(v: zero_extend[Byte, U64](me), k0: k0, k1: k1)

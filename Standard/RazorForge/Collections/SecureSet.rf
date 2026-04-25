@@ -111,12 +111,14 @@ routine SecureSet[T].$destroy()
 ### Extracts the 7-bit control-byte fingerprint from a raw hash value.
 ### :param hash: The raw SipHash output.
 ### :returns: The low 7 bits of `hash`, used to filter candidate slots before a full equality check.
+@readonly
 routine SecureSet[T].h2(hash: U64) -> U8
   return U8(hash & U64(CTRL_H2_MASK))
 
 ### Derives the primary probe slot index from a raw hash value.
 ### :param hash: The raw SipHash output.
 ### :returns: The upper bits of `hash`, used as the starting slot before masking to the table size.
+@readonly
 routine SecureSet[T].h1(hash: U64) -> U64
   return hash >> 7u32
 
@@ -124,6 +126,7 @@ routine SecureSet[T].h1(hash: U64) -> U64
 ### Control-byte fingerprints are checked before full element equality to reduce element loads.
 ### :param value: The element to find.
 ### :returns: The slot index of `value` if found, or `capacity` if the element is absent.
+@readonly
 routine SecureSet[T].find_slot(value: T) -> U64
   var h = value.$secure_hash(k0: me.k0, k1: me.k1)
   var target = me.h2(h)
@@ -166,11 +169,13 @@ routine SecureSet[T].insert_raw(h: U64, val: T)
 ### Returns true when the combined live and tombstone load exceeds 87.5% of capacity.
 ### Both live elements and tombstones occupy probe space, so both count toward the load threshold.
 ### :returns: `true` if a rehash should happen before the next insertion.
+@readonly
 routine SecureSet[T].should_rehash() -> Bool
   return (me.count +% me.deleted) *% 8u64 >= me.capacity *% 7u64
 
 ### Doubles the table capacity and reinserts all live elements into the new table.
 ### Tombstones are discarded during the rebuild; secure hashes are recomputed from the same instance key.
+@migratable
 routine SecureSet[T].rehash()
   var old_cap = me.capacity
   var old_ctrl = me.ctrl
@@ -208,11 +213,13 @@ routine SecureSet[T].rehash()
 
 ### Returns the number of live elements currently stored.
 ### :returns: The live element count.
+@readonly
 routine SecureSet[T].count() -> U64
   return me.count
 
 ### Returns true if this set contains no live elements.
 ### :returns: `true` when `count()` is zero.
+@readonly
 routine SecureSet[T].is_empty() -> Bool
   return me.count == 0u64
 
@@ -284,7 +291,6 @@ entity SecureSetIterator[T] obeys Iterator[T]
 ### Advances to the next live slot and returns its element.
 ### :returns: The next live element.
 ### :absent: No live slots remain.
-@writable
 routine SecureSetIterator[T].$next!() -> T
   danger!
     while me.slot < me.capacity
@@ -301,6 +307,7 @@ routine SecureSetIterator[T].$next!() -> T
 
 ### Returns a compact text representation of the set contents.
 ### Elements are rendered in iteration (slot) order, enclosed in braces.
+@readonly
 routine SecureSet[T].$represent() -> Text
   if me.is_empty()
     return "{}"
@@ -315,6 +322,7 @@ routine SecureSet[T].$represent() -> Text
   return result
 
 ### Returns a diagnostic form that includes the runtime type name and live element count.
+@readonly
 routine SecureSet[T].$diagnose() -> Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
   var first = true
@@ -333,6 +341,7 @@ routine SecureSet[T].$diagnose() -> Text
 ### Returns true if both sets contain exactly the same elements.
 ### :param other: The other set to compare against.
 ### :returns: `true` if both have the same count and every element in this set is also in `other`.
+@readonly
 routine SecureSet[T].$eq(other: SecureSet[T]) -> Bool
   if me.count != other.count
     return false

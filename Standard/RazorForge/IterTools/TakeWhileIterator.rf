@@ -13,6 +13,7 @@ entity TakeWhileIterator[T] obeys Iterable[T]
 ### The emitted iterator remembers when the predicate has already failed so it
 ### never resumes after termination.
 ### :returns: The resulting `TakeWhileEmitter[T]` value.
+@readonly
 routine TakeWhileIterator[T].$iter() -> TakeWhileEmitter[T]
   return TakeWhileEmitter[T](source: me.source.$iter(), predicate: me.predicate, done: false)
 
@@ -44,5 +45,6 @@ routine TakeWhileEmitter[T].$next!() -> T
 ### The first failing value is consumed but not yielded.
 ### :param predicate: The predicate that controls when iteration stops.
 ### :returns: The resulting `TakeWhileIterator[T]` value.
+@readonly
 routine Iterable[T].take_while(predicate: Routine[(T,), Bool]) -> TakeWhileIterator[T]
   return TakeWhileIterator[T](source: me, predicate: predicate)

@@ -27,11 +27,13 @@ needs T obeys Comparable
 
 ### Returns the number of live keys currently stored in this node.
 ### :returns: The active key count.
+@readonly
 routine BTreeSetNode[T].keys_count() -> U64
   return me.key_count
 
 ### Returns the number of live child pointers currently stored in this node.
 ### :returns: The active child count.
+@readonly
 routine BTreeSetNode[T].children_count() -> U64
   return me.child_count
 
@@ -39,16 +41,19 @@ routine BTreeSetNode[T].children_count() -> U64
 # keys_base() returns Hijacked[T] at &me.keys[0]; children_base() at &me.children[0].
 
 ### Returns a raw pointer to the start of this node's key buffer.
+@readonly
 dangerous routine BTreeSetNode[T].keys_base() -> Hijacked[T]
   return me.hijack().recast_as[T]()
 
 ### Returns a raw pointer to the start of this node's child-pointer buffer.
+@readonly
 dangerous routine BTreeSetNode[T].children_base() -> Hijacked[BTreeSetNode[T]]
   return me.hijack().recast_as[T]().stride(count: 63_s64).recast_as[BTreeSetNode[T]]()
 
 ### Returns the key at position `i` without bounds checking.
 ### :param i: The zero-based position within the key buffer.
 ### :returns: The key stored at that position.
+@readonly
 routine BTreeSetNode[T].keys_get(i: U64) -> T
   danger!
     return me.keys_base().stride(count: i.S64()).extract()
@@ -64,6 +69,7 @@ routine BTreeSetNode[T].keys_set(i: U64, value: T)
 ### Returns the child at position `i` without bounds checking.
 ### :param i: The zero-based position within the child buffer.
 ### :returns: The child node stored at that position.
+@readonly
 routine BTreeSetNode[T].children_get(i: U64) -> BTreeSetNode[T]
   danger!
     return me.children_base().stride(count: i.S64()).extract()
@@ -261,27 +267,19 @@ routine SortedSet[T].$create() -> SortedSet[T]
     count: 0u64
   )
 
-### Creates a sorted set from the supplied values.
-### Duplicate values are ignored in the same way as repeated `add` calls.
-### :param values...: The values to insert into the new set.
-### :returns: The resulting `SortedSet[T]` value.
-routine SortedSet[T].$create(values...: T) -> SortedSet[T]
-  var result = SortedSet[T]()
-  for v in values
-    result.add(v)
-  return result
-
 # ============================================================================
 # Core Operations
 # ============================================================================
 
 ### Returns the number of unique values currently stored in the set.
 ### :returns: The live element count.
+@readonly
 routine SortedSet[T].count() -> U64
   return me.count
 
 ### Returns true if the set contains no values.
 ### :returns: `true` when `count()` is zero.
+@readonly
 routine SortedSet[T].is_empty() -> Bool
   return me.count == 0u64
 
@@ -311,6 +309,7 @@ routine SortedSet[T].$contains(value: T) -> Bool
 ### :param node: The subtree root to search within.
 ### :param value: The value to search for.
 ### :returns: `true` if `value` is found anywhere in the subtree; `false` otherwise.
+@readonly
 @inline
 routine SortedSet[T].search_node(node: BTreeSetNode[T], value: T) -> Bool
   # Binary search: find the first index where keys[i] >= value.
@@ -338,6 +337,7 @@ routine SortedSet[T].search_node(node: BTreeSetNode[T], value: T) -> Bool
 ### :param node: The node whose sorted keys should be searched.
 ### :param value: The value to find the lower-bound position for.
 ### :returns: The first index where keys[index] >= value.
+@readonly
 @inline
 routine SortedSet[T].lower_bound(node: BTreeSetNode[T], value: T) -> U64
   var lo = 0u64
@@ -747,6 +747,7 @@ routine SortedSet[T].update_subtree_size(node: BTreeSetNode[T])
 ### :param index: The zero-based sorted rank to read.
 ### :returns: The element at that sorted position.
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
+@readonly
 routine SortedSet[T].$getitem![I](index: I) -> T
 needs I obeys Integral
   var idx = index.U64()
@@ -758,6 +759,7 @@ needs I obeys Integral
 ### `^0` is the largest element, `^1` the second-largest, and so on.
 ### :param index: The backward position to resolve.
 ### :returns: The element at the resolved sorted position.
+@readonly
 routine SortedSet[T].$getitem![I](index: BackIndex[I]) -> T
 needs I obeys Integral
   var idx = index.resolve(me.count)
@@ -768,6 +770,7 @@ needs I obeys Integral
 ### :param node: The subtree root to search within.
 ### :param rank: The zero-based in-order rank to resolve.
 ### :returns: The element at that in-order rank within the subtree.
+@readonly
 routine SortedSet[T].get_by_rank(node: BTreeSetNode[T], rank: U64) -> T
   if node.is_leaf
     return node.keys_get(rank)
@@ -802,6 +805,7 @@ routine SortedSet[T].get_by_rank(node: BTreeSetNode[T], rank: U64) -> T
 ### :param min_val: The inclusive lower bound.
 ### :param max_val: The inclusive upper bound.
 ### :returns: A `List[T]` containing all matching elements in ascending order.
+@readonly
 routine SortedSet[T].range(min_val: T, max_val: T) -> List[T]
   var result = List[T]()
   if me.root is None
@@ -814,6 +818,7 @@ routine SortedSet[T].range(min_val: T, max_val: T) -> List[T]
 ### :param min_val: The inclusive lower bound.
 ### :param max_val: The inclusive upper bound.
 ### :param result: The destination list for matching values.
+@readonly
 routine SortedSet[T].range_collect(node: BTreeSetNode[T], min_val: T, max_val: T, result: List[T])
   var i = 0u64
 
@@ -838,6 +843,7 @@ routine SortedSet[T].range_collect(node: BTreeSetNode[T], min_val: T, max_val: T
 ### Returns the smallest value currently stored in the set.
 ### :returns: The minimum element.
 ### :absent: The set is empty.
+@readonly
 routine SortedSet[T].min!() -> T
   if me.is_empty()
     absent
@@ -849,6 +855,7 @@ routine SortedSet[T].min!() -> T
 ### Returns the largest value currently stored in the set.
 ### :returns: The maximum element.
 ### :absent: The set is empty.
+@readonly
 routine SortedSet[T].max!() -> T
   if me.is_empty()
     absent
@@ -860,12 +867,14 @@ routine SortedSet[T].max!() -> T
 ### Returns the first (smallest) element in the set; equivalent to `min!()`.
 ### :returns: The minimum element.
 ### :absent: The set is empty.
+@readonly
 routine SortedSet[T].first!() -> T
   return me.min!()
 
 ### Returns the last (largest) element in the set; equivalent to `max!()`.
 ### :returns: The maximum element.
 ### :absent: The set is empty.
+@readonly
 routine SortedSet[T].last!() -> T
   return me.max!()
 
@@ -893,6 +902,7 @@ routine List[T].$create(from: SortedSet[T]) -> List[T]
 ### The resulting list segment preserves the set's global ascending order.
 ### :param node: The subtree root to visit.
 ### :param result: The destination list for collected values.
+@readonly
 routine SortedSet[T].collect_inorder(node: BTreeSetNode[T], result: List[T])
   var i = 0u64
   while i < node.keys_count()
@@ -916,7 +926,6 @@ entity SortedSetIterator[T] obeys Iterator[T]
 ### Returns the next element in ascending set order.
 ### :returns: The element at the current sorted rank.
 ### :absent: All elements have been yielded.
-@writable
 routine SortedSetIterator[T].$next!() -> T
   if me.index >= me.set.count()
     absent
@@ -930,6 +939,7 @@ routine SortedSetIterator[T].$next!() -> T
 
 ### Returns a compact display form of the set contents in ascending order.
 ### :returns: The resulting `Text` value.
+@readonly
 routine SortedSet[T].$represent() -> Text
   var result = "SortedSet{"
   var i = 0u64
@@ -943,6 +953,7 @@ routine SortedSet[T].$represent() -> Text
 
 ### Returns a diagnostic form that includes the runtime type name and element count.
 ### :returns: The resulting `Text` value.
+@readonly
 routine SortedSet[T].$diagnose() -> Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
   var i = 0u64
@@ -958,6 +969,7 @@ routine SortedSet[T].$diagnose() -> Text
 ### Because duplicates are disallowed and elements are ordered, this is element-wise equality.
 ### :param other: The other set to compare against.
 ### :returns: `true` if both sets have equal count and all corresponding elements are equal.
+@readonly
 routine SortedSet[T].$eq(other: SortedSet[T]) -> Bool
   if me.count != other.count
     return false

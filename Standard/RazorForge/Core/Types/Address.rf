@@ -32,12 +32,14 @@ routine Address.$create(from: Address) -> Address
 ### are explicit and acceptable.
 ### :param you: The address offset or peer address value to add.
 ### :returns: The resulting `Address` value.
+@readonly
 routine Address.$add_wrap(you: Address) -> Address
   return add[Address](me, you)
 
 ### Returns the wrapping difference between two raw addresses.
 ### :param you: The address value to subtract.
 ### :returns: The resulting `Address` value.
+@readonly
 routine Address.$sub_wrap(you: Address) -> Address
   return sub[Address](me, you)
 
@@ -46,6 +48,7 @@ routine Address.$sub_wrap(you: Address) -> Address
 ### runtime support code.
 ### :param you: The address value to multiply by.
 ### :returns: The resulting `Address` value.
+@readonly
 routine Address.$mul_wrap(you: Address) -> Address
   return mul[Address](me, you)
 
@@ -57,6 +60,7 @@ routine Address.$mul_wrap(you: Address) -> Address
 ### Returns the Euclidean quotient of this address divided by `you`.
 ### :param you: The non-zero divisor address value.
 ### :returns: The resulting `Address` value.
+@readonly
 routine Address.$floordiv(you: Address) -> Address
   return unsigned_div[Address](me, you)
 
@@ -67,12 +71,14 @@ routine Address.$floordiv(you: Address) -> Address
 ### Returns whether both values are equal.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine Address.$eq(you: Address) -> Bool
   return int_eq[Address](me, you)
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
+@readonly
 routine Address.$cmp(you: Address) -> ComparisonSign
   if unsigned_lt[Address](me, you)
     return ME_SMALL
@@ -87,6 +93,7 @@ routine Address.$cmp(you: Address) -> ComparisonSign
 ### Returns the smaller of two addresses in unsigned address order.
 ### :param you: The other address to compare against.
 ### :returns: The resulting `Address` value.
+@readonly
 routine Address.min(you: Address) -> Address
   if me <= you
     return me
@@ -95,6 +102,7 @@ routine Address.min(you: Address) -> Address
 ### Returns the larger of two addresses in unsigned address order.
 ### :param you: The other address to compare against.
 ### :returns: The resulting `Address` value.
+@readonly
 routine Address.max(you: Address) -> Address
   if me >= you
     return me
@@ -103,6 +111,7 @@ routine Address.max(you: Address) -> Address
 ### Returns `true` when this address value is a power of two.
 ### This is mainly useful for alignment checks and low-level mask logic.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine Address.is_power_of_two() -> Bool
   return me != 0_addr and (me & (me -% 1_addr)) == 0_addr
 
@@ -139,6 +148,7 @@ routine Address.$sub(offset: ByteSize) -> Address
 ### Addresses are rendered in grouped hexadecimal form to make pointer values
 ### easier to scan in diagnostics.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Address.$represent() -> Text
   # Format as 0xXXXX_XXXX_XXXX_XXXX (64-bit hex with underscore groups)
   var digits = List[Character]()
@@ -159,6 +169,7 @@ routine Address.$represent() -> Text
 
 ### Returns the diagnostic form of this address.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Address.$diagnose() -> Text
   return "Address(" + me.$represent() + ")"
 

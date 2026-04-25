@@ -119,24 +119,28 @@ routine SecureDict[K, V].$destroy()
 ### Extracts the 7-bit control-byte fingerprint from a raw hash value.
 ### :param hash: The raw SipHash output.
 ### :returns: The low 7 bits of `hash`, used to filter candidate slots before a full key comparison.
+@readonly
 routine SecureDict[K, V].h2(hash: U64) -> U8
   return U8(hash & U64(CTRL_H2_MASK))
 
 ### Derives the primary probe slot index from a raw hash value.
 ### :param hash: The raw SipHash output.
 ### :returns: The upper bits of `hash`, used as the starting slot before masking to the table size.
+@readonly
 routine SecureDict[K, V].h1(hash: U64) -> U64
   return hash >> 7u32
 
 ### Returns the key stored at `slot` without checking whether the slot is live.
 ### :param slot: The slot index to read from.
 ### :returns: The key value at that slot.
+@readonly
 routine SecureDict[K, V].read_key(slot: U64) -> K
   return me.keys.offset(K.data_size() * slot).extract()
 
 ### Returns the value stored at `slot` without checking whether the slot is live.
 ### :param slot: The slot index to read from.
 ### :returns: The value at that slot.
+@readonly
 routine SecureDict[K, V].read_val(slot: U64) -> V
   return me.vals.offset(V.data_size() * slot).extract()
 
@@ -151,6 +155,7 @@ routine SecureDict[K, V].write_val(slot: U64, val: V)
 ### Control-byte fingerprints are checked before full key equality to reduce key loads.
 ### :param key: The key to find.
 ### :returns: The slot index of `key` if found, or `capacity` if the key is absent.
+@readonly
 routine SecureDict[K, V].find_slot(key: K) -> U64
   var h = key.$secure_hash(k0: me.k0, k1: me.k1)
   var target = me.h2(h)
@@ -196,11 +201,13 @@ routine SecureDict[K, V].insert_raw(h: U64, key: K, val: V)
 ### Returns true when the combined live and tombstone load exceeds 87.5% of capacity.
 ### Both live entries and tombstones occupy probe space, so both count toward the load threshold.
 ### :returns: `true` if a rehash should happen before the next insertion.
+@readonly
 routine SecureDict[K, V].should_rehash() -> Bool
   return (me.count +% me.deleted) *% 8u64 >= me.capacity *% 7u64
 
 ### Doubles the table capacity and reinserts all live entries into the new table.
 ### Tombstones are discarded during the rebuild; secure hashes are recomputed from the same instance key.
+@migratable
 routine SecureDict[K, V].rehash()
   var old_cap = me.capacity
   var old_ctrl = me.ctrl
@@ -243,11 +250,13 @@ routine SecureDict[K, V].rehash()
 
 ### Returns the number of live key-value entries currently stored.
 ### :returns: The live entry count.
+@readonly
 routine SecureDict[K, V].count() -> U64
   return me.count
 
 ### Returns true if this dictionary contains no live entries.
 ### :returns: `true` when `count()` is zero.
+@readonly
 routine SecureDict[K, V].is_empty() -> Bool
   return me.count == 0u64
 
@@ -298,6 +307,7 @@ routine SecureDict[K, V].remove(key: K) -> Bool
 ### :param key: The key to look up.
 ### :param default_value: The fallback value returned when `key` is not present.
 ### :returns: The mapped value if found, otherwise `default_value`.
+@readonly
 routine SecureDict[K, V].get_or_default(key: K, default_value: V) -> V
   var slot = me.find_slot(key)
   if slot >= me.capacity
@@ -312,24 +322,22 @@ routine SecureDict[K, V].get_or_default(key: K, default_value: V) -> V
 ### :param key: The key to look up.
 ### :returns: The value mapped to `key`.
 ### :absent: The key is not present in the dictionary.
+@readonly
 routine SecureDict[K, V].$getitem!(key: K) -> V
   var slot = me.find_slot(key)
   if slot >= me.capacity
     absent
   return me.read_val(slot)
 
-### Sets the value for `key`, inserting a new entry when the key is not already present.
-### :param key: The key to set.
-### :param value: The value to associate with `key`.
+### Updates the value associated with `key`.
+### :param key: The key to update.
+### :param value: The replacement value.
+### :absent: The key is not present in the dictionary.
 routine SecureDict[K, V].$setitem!(key: K, value: V)
-  if me.should_rehash()
-    me.rehash()
+  if key notin me
+    absent
   var slot = me.find_slot(key)
-  if slot < me.capacity
-    me.write_val(slot: slot, val: value)
-    return
-  me.insert_raw(h: key.$secure_hash(k0: me.k0, k1: me.k1), key: key, val: value)
-  me.count = me.count + 1u64
+  me.write_val(slot: slot, val: value)
   return
 
 # ============================================================================
@@ -363,7 +371,6 @@ entity SecureDictIterator[K, V] obeys Iterator[DictEntry[K, V]]
 ### Advances to the next live slot and returns its entry.
 ### :returns: The next live {DictEntry[K, V]}.
 ### :absent: No live slots remain.
-@writable
 routine SecureDictIterator[K, V].$next!() -> DictEntry[K, V]
   danger!
     while me.slot < me.capacity
@@ -382,6 +389,7 @@ routine SecureDictIterator[K, V].$next!() -> DictEntry[K, V]
 
 ### Returns a compact text representation of the dictionary contents.
 ### Entries are rendered as `key: value` pairs in iteration (slot) order.
+@readonly
 routine SecureDict[K, V].$represent() -> Text
   if me.is_empty()
     return "{:}"
@@ -396,6 +404,7 @@ routine SecureDict[K, V].$represent() -> Text
   return result
 
 ### Returns a diagnostic form that includes the runtime type name and live entry count.
+@readonly
 routine SecureDict[K, V].$diagnose() -> Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
   var first = true
@@ -414,6 +423,7 @@ routine SecureDict[K, V].$diagnose() -> Text
 ### Returns true if both dictionaries contain exactly the same keys with the same associated values.
 ### :param other: The other dictionary to compare against.
 ### :returns: `true` if both have the same count and every key-value pair is equal.
+@readonly
 routine SecureDict[K, V].$eq(other: SecureDict[K, V]) -> Bool
   if me.count != other.count
     return false

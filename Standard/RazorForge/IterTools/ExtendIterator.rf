@@ -12,6 +12,7 @@ entity ExtendIterator[T] obeys Iterable[T]
 ### Returns the stateful iterator that concatenates the two source sequences.
 ### The returned emitter walks `first` to completion before switching to `second`.
 ### :returns: The resulting `ExtendEmitter[T]` value.
+@readonly
 routine ExtendIterator[T].$iter() -> ExtendEmitter[T]
   return ExtendEmitter[T](first: me.first.$iter(), second: me.second.$iter(), in_second: false)
 
@@ -40,5 +41,6 @@ routine ExtendEmitter[T].$next!() -> T
 ### Returns a lazy concatenation of this iterable and `other`.
 ### :param other: The iterable to consume after `me`.
 ### :returns: The resulting `ExtendIterator[T]` value.
+@readonly
 routine Iterable[T].extend(other: Iterable[T]) -> ExtendIterator[T]
   return ExtendIterator[T](first: me, second: other)

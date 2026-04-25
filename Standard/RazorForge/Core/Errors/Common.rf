@@ -7,6 +7,7 @@ crashable AbsentValueError
 
 ### Returns the default message for absent-value failures.
 ### :returns: The resulting `Text` value.
+@readonly
 routine AbsentValueError.crash_message() -> Text
   return "Attempted to access a value that is absent."
 
@@ -17,6 +18,7 @@ crashable UserTerminationError
 
 ### Returns the default message for user-requested termination.
 ### :returns: The resulting `Text` value.
+@readonly
 routine UserTerminationError.crash_message() -> Text
   return "Program was stopped by user."
 
@@ -28,6 +30,7 @@ crashable VerificationFailedError
 
 ### Returns the default message for verification failures.
 ### :returns: The resulting `Text` value.
+@readonly
 routine VerificationFailedError.crash_message() -> Text
   return "A verification check failed."
 
@@ -38,6 +41,7 @@ crashable LogicBreachedError
 
 ### Returns the default message for breached logic invariants.
 ### :returns: The resulting `Text` value.
+@readonly
 routine LogicBreachedError.crash_message() -> Text
   return "A logic breach was detected."
 
@@ -48,5 +52,6 @@ crashable KeyNotFoundError
 
 ### Returns the default message for failed keyed lookup.
 ### :returns: The resulting `Text` value.
+@readonly
 routine KeyNotFoundError.crash_message() -> Text
   return f"Key not found: {me.key}"

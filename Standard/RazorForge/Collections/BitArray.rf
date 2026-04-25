@@ -44,11 +44,13 @@ needs N is U64
 ### Returns the fixed number of bits in this array.
 ### This is always equal to the compile-time parameter `N`.
 ### :returns: The bit count `N`.
+@readonly
 routine BitArray[N].count() -> U64
   return N
 
 ### Returns true when the compile-time bit count is zero.
 ### :returns: `true` if `N == 0`.
+@readonly
 routine BitArray[N].is_empty() -> Bool
   return N == 0u64
 
@@ -60,6 +62,7 @@ routine BitArray[N].is_empty() -> Bool
 ### :param index: The zero-based bit position to read.
 ### :returns: `true` if the bit at `index` is set; `false` if it is clear.
 ### :throws: {IndexOutOfBoundsError} if `index >= N`.
+@readonly
 routine BitArray[N].$getitem![I](index: I) -> Bool
 needs I obeys Integral
   var idx = index.U64!()
@@ -75,6 +78,7 @@ needs I obeys Integral
 ### `^0` refers to the last bit, `^1` to the second-to-last, and so on.
 ### :param index: The backward position to resolve.
 ### :returns: `true` if the bit at the resolved position is set; `false` if it is clear.
+@readonly
 routine BitArray[N].$getitem![I](index: BackIndex[I]) -> Bool
 needs I obeys Integral
   var idx = index.resolve(N)
@@ -90,6 +94,7 @@ needs I obeys Integral
 ### :param index: The zero-based bit position to change.
 ### :param value: The new bit value.
 ### :returns: A copy of this array with the specified bit updated.
+@readonly
 routine BitArray[N].with_set(index: U64, value: Bool) -> BitArray[N]
   # Returns a new BitArray with the bit at index changed
   if index >= N
@@ -109,6 +114,7 @@ routine BitArray[N].with_set(index: U64, value: Bool) -> BitArray[N]
 ### If `index >= N`, the original array is returned unmodified.
 ### :param index: The zero-based bit position to flip.
 ### :returns: A copy of this array with the specified bit inverted.
+@readonly
 routine BitArray[N].with_flipped(index: U64) -> BitArray[N]
   # Returns a new BitArray with the bit at index toggled
   if index >= N
@@ -122,6 +128,7 @@ routine BitArray[N].with_flipped(index: U64) -> BitArray[N]
 
 ### Returns the number of bits currently set to `true`.
 ### :returns: The count of one-bits in this array.
+@readonly
 routine BitArray[N].count_ones() -> U64
   var count = 0u64
   var i = 0u64
@@ -133,11 +140,13 @@ routine BitArray[N].count_ones() -> U64
 
 ### Returns the number of bits currently set to `false`.
 ### :returns: `N` minus the number of one-bits.
+@readonly
 routine BitArray[N].count_zeros() -> U64
   return N -% me.count_ones()
 
 ### Returns true when at least one stored bit is `true`.
 ### :returns: `true` if any bit is set; `false` if all bits are clear.
+@readonly
 routine BitArray[N].any() -> Bool
   var i = 0u64
   while i < N
@@ -149,6 +158,7 @@ routine BitArray[N].any() -> Bool
 ### Returns true when every stored bit is `true`.
 ### Empty arrays (`N == 0`) vacuously return `true`.
 ### :returns: `true` if all bits are set; `false` if any bit is clear.
+@readonly
 routine BitArray[N].all() -> Bool
   var i = 0u64
   while i < N
@@ -159,6 +169,7 @@ routine BitArray[N].all() -> Bool
 
 ### Returns true when no stored bit is `true`.
 ### :returns: `true` if all bits are clear; `false` if any bit is set.
+@readonly
 routine BitArray[N].none() -> Bool
   return not me.any()
 
@@ -176,6 +187,7 @@ routine BitArray[N].$contains(value: Bool) -> Bool
 # Display
 # ============================================================================
 
+@readonly
 routine BitArray[N].$represent() -> Text
   var result = "BitArray["
   var i = 0u64
@@ -187,6 +199,7 @@ routine BitArray[N].$represent() -> Text
   result = result + "]"
   return result
 
+@readonly
 routine BitArray[N].$diagnose() -> Text
   var result = me.type_name() + "(count: " + N.$represent() + ", ones: " + me.count_ones().$represent() + ", ["
   var i = 0u64

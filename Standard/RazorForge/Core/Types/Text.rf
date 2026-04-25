@@ -148,6 +148,7 @@ routine Text.$create(from: CWStr) -> Text
 ### Returns the number of characters in this text value.
 ### Because `Text` is UTF-32 based, this is also the number of stored code points.
 ### :returns: The resulting `U64` value.
+@readonly
 routine Text.count() -> U64
   return me.count
 
@@ -155,6 +156,7 @@ routine Text.count() -> U64
 ### Matching is exact and does not perform any case folding or normalization.
 ### :param character: The character to search for.
 ### :returns: The resulting `U64` value.
+@readonly
 routine Text.count_of(character: Character) -> U64
   var result: U64 = 0u64
   for ch in me
@@ -165,6 +167,7 @@ routine Text.count_of(character: Character) -> U64
 ### Returns `true` when this text contains no characters.
 ### This is equivalent to checking whether `count()` is `0`.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine Text.is_empty() -> Bool
   return me.count == 0u64
 
@@ -174,6 +177,7 @@ routine Text.is_empty() -> Bool
 ### The index is zero-based and must refer to an existing character.
 ### :param index: The zero-based position to use.
 ### :returns: The resulting `Character` value.
+@readonly
 routine Text.$getitem![I obeys Integral](index: I) -> Character
   var i = U64(index)
   if i >= me.count
@@ -185,6 +189,7 @@ routine Text.$getitem![I obeys Integral](index: I) -> Character
 ### Back indices count from the end of the text using the `^` syntax.
 ### :param index: The backward position to resolve.
 ### :returns: The resulting `Character` value.
+@readonly
 routine Text.$getitem![I obeys Integral](index: BackIndex[I]) -> Character
   var i = index.resolve(length: me.count)
   danger!
@@ -195,6 +200,7 @@ routine Text.$getitem![I obeys Integral](index: BackIndex[I]) -> Character
 ### :param start: The inclusive starting position.
 ### :param end: The exclusive ending position.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Text.$getslice![I obeys Integral](start: I, end: I) -> Text
   var s = U64(start)
   var e = U64(end)
@@ -212,6 +218,7 @@ routine Text.$getslice![I obeys Integral](start: I, end: I) -> Text
 ### :param start: The inclusive starting position.
 ### :param end: The exclusive ending position.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Text.$getslice![I obeys Integral](start: BackIndex[I], end: BackIndex[I]) -> Text
   var s = start.resolve(length: me.count)
   var e = end.resolve(length: me.count)
@@ -230,6 +237,7 @@ routine Text.$getslice![I obeys Integral](start: BackIndex[I], end: BackIndex[I]
 ### The original operands are left unchanged because `Text` is immutable.
 ### :param other: The text to append.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Text.concat(other: Referring[Text]) -> Text
   var n = me.count + other.count()
   if n == 0u64
@@ -252,6 +260,7 @@ routine Text.concat(other: Referring[Text]) -> Text
 ### This is the operator form of `concat`.
 ### :param other: The text to append.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Text.$add(other: Referring[Text]) -> Text
   return me.concat(other)
 
@@ -259,6 +268,7 @@ routine Text.$add(other: Referring[Text]) -> Text
 ### Repeating zero times or repeating an empty string returns empty text.
 ### :param count: The number of repetitions to produce.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Text.$mul[I obeys Integral](count: I) -> Text
   var times = U64(count)
   if times == 0u64 or me.count == 0u64
@@ -279,6 +289,7 @@ routine Text.$mul[I obeys Integral](count: I) -> Text
 ### Equality requires the same length and the same character at each position.
 ### :param other: The other text to compare against.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine Text.$eq(other: Referring[Text]) -> Bool
   if me.count != other.count()
     return false
@@ -297,6 +308,7 @@ routine Text.$eq(other: Referring[Text]) -> Bool
 ### Comparison is lexicographic over stored characters.
 ### :param other: The other text to compare against.
 ### :returns: The resulting `ComparisonSign` value.
+@readonly
 routine Text.$cmp(other: Referring[Text]) -> ComparisonSign
   var other_count = other.count()
   var min_len = me.count
@@ -319,6 +331,7 @@ routine Text.$cmp(other: Referring[Text]) -> ComparisonSign
 ### The search succeeds when any stored character matches exactly.
 ### :param character: The character to test.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine Text.contains(character: Character) -> Bool
   for i in 0u64 til me.count
     if me[i] == character
@@ -329,6 +342,7 @@ routine Text.contains(character: Character) -> Bool
 ### An empty `other` value is always considered contained.
 ### :param other: The substring to search for.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine Text.contains(other: Referring[Text]) -> Bool
   if other.is_empty()
     return true
@@ -350,6 +364,7 @@ routine Text.contains(other: Referring[Text]) -> Bool
 ### The entire `prefix` must match from the first character onward.
 ### :param prefix: The prefix to test.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine Text.starts_with(prefix: Referring[Text]) -> Bool
   var prefix_count = prefix.count()
   if prefix_count > me.count
@@ -363,6 +378,7 @@ routine Text.starts_with(prefix: Referring[Text]) -> Bool
 ### The entire `suffix` must match at the end of the text.
 ### :param suffix: The suffix to test.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine Text.ends_with(suffix: Referring[Text]) -> Bool
   var suffix_count = suffix.count()
   if suffix_count > me.count
@@ -377,6 +393,7 @@ routine Text.ends_with(suffix: Referring[Text]) -> Bool
 ### :param letter: The character to search for.
 ### :returns: The resulting `U64` value.
 ### :absent: Returns absent when the requested value is unavailable.
+@readonly
 routine Text.find!(letter: Character) -> U64
   for i in 0u64 til me.count
     if me[i] == letter
@@ -387,6 +404,7 @@ routine Text.find!(letter: Character) -> U64
 ### :param other: The substring to search for.
 ### :returns: The resulting `U64` value.
 ### :absent: Returns absent when the requested value is unavailable.
+@readonly
 routine Text.find!(other: Referring[Text]) -> U64
   if other.is_empty()
     return 0u64
@@ -408,6 +426,7 @@ routine Text.find!(other: Referring[Text]) -> U64
 ### Converts this value to uppercase.
 ### Case conversion follows the behavior defined on `Character`.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Text.to_uppercase() -> Text
   var result = List[Character]()
   for i in 0u64 til me.count
@@ -417,6 +436,7 @@ routine Text.to_uppercase() -> Text
 ### Converts this value to lowercase.
 ### Case conversion follows the behavior defined on `Character`.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Text.to_lowercase() -> Text
   var result = List[Character]()
   for i in 0u64 til me.count
@@ -426,6 +446,7 @@ routine Text.to_lowercase() -> Text
 ### Returns a copy with leading and trailing whitespace removed.
 ### Whitespace is identified using `Character.is_whitespace()`.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Text.trim() -> Text
   var start: U64 = 0u64
   loop
@@ -446,6 +467,7 @@ routine Text.trim() -> Text
 ### Returns a copy with leading whitespace removed.
 ### Trailing content is preserved unchanged.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Text.trim_start() -> Text
   var start: U64 = 0u64
   loop
@@ -459,6 +481,7 @@ routine Text.trim_start() -> Text
 ### Returns a copy with trailing whitespace removed.
 ### Leading content is preserved unchanged.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Text.trim_end() -> Text
   if me.is_empty()
     return me
@@ -476,6 +499,7 @@ routine Text.trim_end() -> Text
 ### :param old: The value to replace.
 ### :param new: The replacement value.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Text.replace(old: Referring[Text], new: Referring[Text]) -> Text
   if old.is_empty()
     return me
@@ -506,6 +530,7 @@ routine Text.replace(old: Referring[Text], new: Referring[Text]) -> Text
 ### When `prefix` is not present, the original text is returned unchanged.
 ### :param prefix: The prefix to remove if present.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Text.remove_prefix(prefix: Referring[Text]) -> Text
   if me.starts_with(prefix)
     return me[prefix.count() til me.count]
@@ -515,6 +540,7 @@ routine Text.remove_prefix(prefix: Referring[Text]) -> Text
 ### When `suffix` is not present, the original text is returned unchanged.
 ### :param suffix: The suffix to remove if present.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Text.remove_suffix(suffix: Referring[Text]) -> Text
   if me.ends_with(suffix)
     return me[0 til me.count - suffix.count()]
@@ -524,12 +550,14 @@ routine Text.remove_suffix(suffix: Referring[Text]) -> Text
 ### This is the named form of the repetition operator.
 ### :param times: The number of repetitions to produce.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Text.repeat(times: U64) -> Text
   return me.$mul(count: times)
 
 ### Returns a copy with the value order reversed.
 ### Characters are reversed by position; no grapheme-aware processing is applied.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Text.reverse() -> Text
   var result = List[Character]()
   var i = me.count
@@ -545,6 +573,7 @@ routine Text.reverse() -> Text
 ### :param width: The total width to target.
 ### :param fill: The fill character to use.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Text.pad_start(width: U64, fill: Character) -> Text
   if me.count >= width
     return me
@@ -561,6 +590,7 @@ routine Text.pad_start(width: U64, fill: Character) -> Text
 ### :param width: The total width to target.
 ### :param fill: The fill character to use.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Text.pad_end(width: U64, fill: Character) -> Text
   if me.count >= width
     return me
@@ -578,6 +608,7 @@ routine Text.pad_end(width: U64, fill: Character) -> Text
 ### Separator characters are not included in the returned segments.
 ### :param separator: The separator to use.
 ### :returns: The resulting `List[Owned[Text]]` value.
+@readonly
 routine Text.split(separator: Character) -> List[Owned[Text]]
   var parts = List[Owned[Text]]()
   var current = List[Character]()
@@ -594,6 +625,7 @@ routine Text.split(separator: Character) -> List[Owned[Text]]
 ### An empty separator splits the text into one-character segments.
 ### :param separator: The separator to use.
 ### :returns: The resulting `List[Owned[Text]]` value.
+@readonly
 routine Text.split(separator: Referring[Text]) -> List[Owned[Text]]
   if separator.is_empty()
     var parts = List[Owned[Text]]()
@@ -625,6 +657,7 @@ routine Text.split(separator: Referring[Text]) -> List[Owned[Text]]
 ### The separator is inserted between parts, not before the first or after the last.
 ### :param parts: The parts to combine.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Text.join(parts: List[Owned[Text]]) -> Text
   if parts.is_empty()
     return Text()
@@ -642,6 +675,7 @@ routine Text.join(parts: List[Owned[Text]]) -> Text
 ### Returns the lines in this text.
 ### Windows line endings are normalized to `\n` before splitting.
 ### :returns: The resulting `List[Owned[Text]]` value.
+@readonly
 routine Text.lines() -> List[Owned[Text]]
   var normalized = me.replace("\r\n", "\n")
   return normalized.split(CHARACTER_NEWLINE)
@@ -649,6 +683,7 @@ routine Text.lines() -> List[Owned[Text]]
 ### Returns the whitespace-delimited words in this text.
 ### Consecutive whitespace is treated as a single separator.
 ### :returns: The resulting `List[Owned[Text]]` value.
+@readonly
 routine Text.words() -> List[Owned[Text]]
   var parts = List[Owned[Text]]()
   var current = List[Character]()
@@ -685,12 +720,14 @@ routine List[Character].$create(from: Text) -> List[Character]
 ### Returns the display form of this text.
 ### For `Text`, the display form is the value itself.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Text.$represent() -> Text
   return me
 
 ### Returns the diagnostic representation of this text.
 ### The result includes the type name and character count for debugging.
 ### :returns: The resulting `Text` value.
+@readonly
 routine Text.$diagnose() -> Text
   return f"Text(count: {me.count}, \"{me}\")"
 
@@ -706,6 +743,7 @@ entity TextIterator
 ### Returns an iterator over this text value.
 ### The iterator starts at index `0`.
 ### :returns: The resulting `TextIterator` value.
+@readonly
 routine Text.$iter() -> TextIterator
   return TextIterator(text: me, index: 0u64)
 

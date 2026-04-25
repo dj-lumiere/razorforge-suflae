@@ -3,6 +3,7 @@ module IterTools
 ### Materializes this iterable into a `List[T]`.
 ### Values are consumed eagerly in iteration order.
 ### :returns: The resulting `List[T]` value.
+@readonly
 routine Iterable[T].List() -> List[T]
   var result = List[T]()
   for item in me
@@ -12,6 +13,7 @@ routine Iterable[T].List() -> List[T]
 ### Materializes this iterable into a `Set[T]`.
 ### Duplicate values collapse according to the set's equality and ordering semantics.
 ### :returns: The resulting `Set[T]` value.
+@readonly
 routine Iterable[T].Set() -> Set[T]
 needs T obeys Hashable, Comparable
   var result = Set[T]()
@@ -22,6 +24,7 @@ needs T obeys Hashable, Comparable
 ### Counts how many values this iterable produces.
 ### This consumes the iterable from start to finish.
 ### :returns: The resulting `U64` value.
+@readonly
 routine Iterable[T].get_count() -> U64
   var n = 0u64
   for _ in me
@@ -31,6 +34,7 @@ routine Iterable[T].get_count() -> U64
 ### Returns the first value produced by this iterable.
 ### This is a convenience terminal operation over the first iterator element.
 ### :returns: The resulting `T` value.
+@readonly
 routine Iterable[T].first!() -> T
   var emitter = me.$iter()
   return emitter.$next!()
@@ -38,6 +42,7 @@ routine Iterable[T].first!() -> T
 ### Returns the last value produced by this iterable.
 ### The iterable is consumed fully in order to find the final element.
 ### :returns: The resulting `T` value.
+@readonly
 routine Iterable[T].last!() -> T
   var emitter = me.$iter()
   var latest = emitter.$next!()
@@ -51,6 +56,7 @@ routine Iterable[T].last!() -> T
 ### Iteration stops as soon as a matching value is found.
 ### :param predicate: The predicate to test against each item.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine Iterable[T].any(predicate: Routine[(T,), Bool]) -> Bool
   for item in me
     if predicate(item)
@@ -61,6 +67,7 @@ routine Iterable[T].any(predicate: Routine[(T,), Bool]) -> Bool
 ### Iteration stops as soon as a failing value is found.
 ### :param predicate: The predicate to test against each item.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine Iterable[T].all(predicate: Routine[(T,), Bool]) -> Bool
   for item in me
     if not predicate(item)
@@ -73,6 +80,7 @@ routine Iterable[T].all(predicate: Routine[(T,), Bool]) -> Bool
 ### :param start: The initial accumulator value.
 ### :param combiner: The routine used to produce the next accumulator value.
 ### :returns: The resulting `U` value.
+@readonly
 routine Iterable[T].accumulate[U](start: U, combiner: Routine[(U, T), U]) -> U
   var result = start
   for item in me

@@ -58,32 +58,38 @@ needs K obeys Comparable
 
 ### Returns the number of entries currently stored in this node.
 ### :returns: The key count.
+@readonly
 routine BTreeDictNode[K, V].keys_count() -> U64
   return me.key_count
 
 ### Returns the number of child pointers currently stored in this node.
 ### :returns: The child count.
+@readonly
 routine BTreeDictNode[K, V].children_count() -> U64
   return me.child_count
 
 ### Returns a raw pointer to the start of the keys buffer.
 ### :returns: A {Hijacked[K]} pointing to the first key slot.
+@readonly
 dangerous routine BTreeDictNode[K, V].keys_base() -> Hijacked[K]
   return me.hijack().recast_as[K]()
 
 ### Returns a raw pointer to the start of the values buffer, offset past the keys region.
 ### :returns: A {Hijacked[V]} pointing to the first value slot.
+@readonly
 dangerous routine BTreeDictNode[K, V].values_base() -> Hijacked[V]
   return me.hijack().recast_as[K]().stride(count: 63_s64).recast_as[V]()
 
 ### Returns a raw pointer to the start of the children buffer, offset past the keys and values regions.
 ### :returns: A {Hijacked[BTreeDictNode[K, V]]} pointing to the first child slot.
+@readonly
 dangerous routine BTreeDictNode[K, V].children_base() -> Hijacked[BTreeDictNode[K, V]]
   return me.hijack().recast_as[K]().stride(count: 63_s64).recast_as[V]().stride(count: 63_s64).recast_as[BTreeDictNode[K, V]]()
 
 ### Returns the key at slot `i`.
 ### :param i: Zero-based entry index.
 ### :returns: The key at position `i`.
+@readonly
 routine BTreeDictNode[K, V].key_get(i: U64) -> K
   danger!
     return me.keys_base().stride(count: i.S64()).extract()
@@ -91,6 +97,7 @@ routine BTreeDictNode[K, V].key_get(i: U64) -> K
 ### Returns the value at slot `i`.
 ### :param i: Zero-based entry index.
 ### :returns: The value at position `i`.
+@readonly
 routine BTreeDictNode[K, V].value_get(i: U64) -> V
   danger!
     return me.values_base().stride(count: i.S64()).extract()
@@ -114,6 +121,7 @@ routine BTreeDictNode[K, V].value_set(i: U64, value: V)
 ### Returns the child node at slot `i`.
 ### :param i: Zero-based child index.
 ### :returns: The child node at position `i`.
+@readonly
 routine BTreeDictNode[K, V].children_get(i: U64) -> BTreeDictNode[K, V]
   danger!
     return me.children_base().stride(count: i.S64()).extract()
@@ -291,11 +299,6 @@ routine SortedDict[K, V].$create() -> SortedDict[K, V]
     count: 0u64
   )
 
-routine SortedDict[K, V].$create(entries...: DictEntry[K, V]) -> SortedDict[K, V]
-  var result = SortedDict[K, V]()
-  for e in entries
-    discard result.add(key: e.key, value: e.value)
-  return result
 
 # ============================================================================
 # Core
@@ -303,11 +306,13 @@ routine SortedDict[K, V].$create(entries...: DictEntry[K, V]) -> SortedDict[K, V
 
 ### Returns the number of key-value pairs in this dictionary.
 ### :returns: The entry count.
+@readonly
 routine SortedDict[K, V].count() -> U64
   return me.count
 
 ### Returns true if this dictionary contains no entries.
 ### :returns: `true` when `count()` is zero.
+@readonly
 routine SortedDict[K, V].is_empty() -> Bool
   return me.count == 0u64
 
@@ -325,6 +330,7 @@ routine SortedDict[K, V].clear()
 ### :param node: The node whose keys are searched.
 ### :param key: The target key.
 ### :returns: Smallest index `i` where `node.keys[i] >= key`, or `keys_count()` if all keys are smaller.
+@readonly
 @inline
 routine SortedDict[K, V].lower_bound(node: BTreeDictNode[K, V], key: K) -> U64
   var lo = 0u64
@@ -354,6 +360,7 @@ routine SortedDict[K, V].$contains(key: K) -> Bool
 ### :param node: The subtree root to search.
 ### :param key: The key to find.
 ### :returns: `true` if found anywhere in the subtree.
+@readonly
 @inline
 routine SortedDict[K, V].search_node(node: BTreeDictNode[K, V], key: K) -> Bool
   var i = me.lower_bound(node, key)
@@ -367,6 +374,7 @@ routine SortedDict[K, V].search_node(node: BTreeDictNode[K, V], key: K) -> Bool
 ### :param key: The key to look up.
 ### :returns: The value mapped to `key`.
 ### :throws: `KeyNotFoundError` if `key` is not present.
+@readonly
 routine SortedDict[K, V].$getitem!(key: K) -> V
   if me.root is None
     throw KeyNotFoundError(key: key.$represent())
@@ -377,6 +385,7 @@ routine SortedDict[K, V].$getitem!(key: K) -> V
 ### :param key: The key to look up.
 ### :returns: The value mapped to `key`.
 ### :throws: `KeyNotFoundError` if `key` is not present.
+@readonly
 routine SortedDict[K, V].get_from_node(node: BTreeDictNode[K, V], key: K) -> V
   var i = me.lower_bound(node, key)
   if i < node.keys_count() and key == node.key_get(i)
@@ -385,7 +394,13 @@ routine SortedDict[K, V].get_from_node(node: BTreeDictNode[K, V], key: K) -> V
     throw KeyNotFoundError(key: key.$represent())
   return me.get_from_node(node.children_get(i), key)
 
+### Updates the value associated with `key`.
+### :param key: The key to update.
+### :param value: The replacement value.
+### :absent: The key is not present in the dictionary.
 routine SortedDict[K, V].$setitem!(key: K, value: V)
+  if key notin me
+    absent
   discard me.add(key: key, value: value)
   return
 
@@ -688,6 +703,7 @@ routine SortedDict[K, V].update_subtree_size(node: BTreeDictNode[K, V])
 ### :param key: The key to look up.
 ### :returns: The associated value.
 ### :throws: `KeyNotFoundError` if `key` is not present.
+@readonly
 routine SortedDict[K, V].get!(key: K) -> V
   return me[key]
 
@@ -695,6 +711,7 @@ routine SortedDict[K, V].get!(key: K) -> V
 ### :param key: The key to look up.
 ### :param default: The fallback value returned when `key` is absent.
 ### :returns: The mapped value if found, otherwise `default`.
+@readonly
 routine SortedDict[K, V].get_or(key: K, default: V) -> V
   if me.root is None
     return default
@@ -705,6 +722,7 @@ routine SortedDict[K, V].get_or(key: K, default: V) -> V
 ### :param key: The key to look up.
 ### :param default: The fallback value returned when `key` is absent.
 ### :returns: The mapped value if found, otherwise `default`.
+@readonly
 routine SortedDict[K, V].get_or_from_node(node: BTreeDictNode[K, V], key: K, default: V) -> V
   var i = me.lower_bound(node, key)
   if i < node.keys_count() and key == node.key_get(i)
@@ -720,6 +738,7 @@ routine SortedDict[K, V].get_or_from_node(node: BTreeDictNode[K, V], key: K, def
 ### Returns the entry with the smallest key.
 ### :returns: A {DictEntry[K, V]} with the minimum key and its associated value.
 ### :absent: The dictionary is empty.
+@readonly
 routine SortedDict[K, V].min!() -> DictEntry[K, V]
   if me.is_empty()
     absent
@@ -731,6 +750,7 @@ routine SortedDict[K, V].min!() -> DictEntry[K, V]
 ### Returns the entry with the largest key.
 ### :returns: A {DictEntry[K, V]} with the maximum key and its associated value.
 ### :absent: The dictionary is empty.
+@readonly
 routine SortedDict[K, V].max!() -> DictEntry[K, V]
   if me.is_empty()
     absent
@@ -743,12 +763,14 @@ routine SortedDict[K, V].max!() -> DictEntry[K, V]
 ### Returns the entry with the smallest key. Alias for {SortedDict[K, V].min!()}.
 ### :returns: The first (minimum-key) entry.
 ### :absent: The dictionary is empty.
+@readonly
 routine SortedDict[K, V].first!() -> DictEntry[K, V]
   return me.min!()
 
 ### Returns the entry with the largest key. Alias for {SortedDict[K, V].max!()}.
 ### :returns: The last (maximum-key) entry.
 ### :absent: The dictionary is empty.
+@readonly
 routine SortedDict[K, V].last!() -> DictEntry[K, V]
   return me.max!()
 
@@ -758,6 +780,7 @@ routine SortedDict[K, V].last!() -> DictEntry[K, V]
 
 ### Returns all keys in ascending order.
 ### :returns: A {List[K]} of every key, sorted from smallest to largest.
+@readonly
 routine SortedDict[K, V].keys() -> List[K]
   var result = List[K](me.count)
   if me.root is None
@@ -768,6 +791,7 @@ routine SortedDict[K, V].keys() -> List[K]
 ### Appends all keys from `node`'s subtree into `result` via in-order traversal.
 ### :param node: The subtree root to traverse.
 ### :param result: The list to append keys into.
+@readonly
 routine SortedDict[K, V].collect_keys(node: BTreeDictNode[K, V], result: List[K])
   var i = 0u64
   while i < node.keys_count()
@@ -781,6 +805,7 @@ routine SortedDict[K, V].collect_keys(node: BTreeDictNode[K, V], result: List[K]
 
 ### Returns all values in key-ascending order.
 ### :returns: A {List[V]} of every value, ordered by their corresponding keys.
+@readonly
 routine SortedDict[K, V].values() -> List[V]
   var result = List[V](me.count)
   if me.root is None
@@ -791,6 +816,7 @@ routine SortedDict[K, V].values() -> List[V]
 ### Appends all values from `node`'s subtree into `result` via in-order traversal.
 ### :param node: The subtree root to traverse.
 ### :param result: The list to append values into.
+@readonly
 routine SortedDict[K, V].collect_values(node: BTreeDictNode[K, V], result: List[V])
   var i = 0u64
   while i < node.keys_count()
@@ -810,6 +836,7 @@ routine SortedDict[K, V].collect_values(node: BTreeDictNode[K, V], result: List[
 ### :param node: The subtree root to search.
 ### :param rank: Zero-based position in the in-order traversal of this subtree.
 ### :returns: The entry at that rank.
+@readonly
 routine SortedDict[K, V].get_by_rank(node: BTreeDictNode[K, V], rank: U64) -> DictEntry[K, V]
   if node.is_leaf
     return DictEntry[K, V](key: node.key_get(rank), value: node.value_get(rank))
@@ -849,6 +876,7 @@ routine List[DictEntry[K, V]].$create(from: SortedDict[K, V]) -> List[DictEntry[
 ### Appends all entries from `node`'s subtree into `result` via in-order traversal.
 ### :param node: The subtree root to traverse.
 ### :param result: The list to append entries into.
+@readonly
 routine SortedDict[K, V].collect_inorder(node: BTreeDictNode[K, V], result: List[DictEntry[K, V]])
   var i = 0u64
   while i < node.keys_count()
@@ -867,7 +895,6 @@ entity SortedDictIterator[K, V] obeys Iterator[DictEntry[K, V]]
   dict: SortedDict[K, V]
   index: U64
 
-@writable
 routine SortedDictIterator[K, V].$next!() -> DictEntry[K, V]
   if me.index >= me.dict.count()
     absent
@@ -879,6 +906,7 @@ routine SortedDictIterator[K, V].$next!() -> DictEntry[K, V]
 # Display
 # ============================================================================
 
+@readonly
 routine SortedDict[K, V].$represent() -> Text
   var result = "SortedDict{"
   var i = 0u64
@@ -890,6 +918,7 @@ routine SortedDict[K, V].$represent() -> Text
   result = result + "}"
   return result
 
+@readonly
 routine SortedDict[K, V].$diagnose() -> Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
   var i = 0u64

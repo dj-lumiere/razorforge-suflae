@@ -42,18 +42,21 @@ routine Range[T](start: T, end: T, step: T, inclusive: Bool) -> Range[T]
 ### Returns true if this value is ascending.
 ### Ascending ranges move from smaller values to larger ones.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine Range[T].is_ascending() -> Bool
   return me.start <= me.end
 
 ### Returns the step component.
 ### This is the increment used for each successive value.
 ### :returns: The resulting `T` value.
+@readonly
 routine Range[T].get_step() -> T
   return me.step
 
 ### Returns true if this value is empty.
 ### Emptiness depends on the bound ordering and whether the end is inclusive.
 ### :returns: The resulting `Bool` value.
+@readonly
 routine Range[T].is_empty() -> Bool
   if me.inclusive and me.is_ascending()
     return me.start > me.end
@@ -100,7 +103,6 @@ routine Range[T].$iter() -> RangeEmitter[T]
 ### Each successful call yields the current value and advances by `step`.
 ### :returns: The resulting `T` value.
 ### :absent: Returns absent when the requested value is unavailable.
-@writable
 routine RangeEmitter[T].$next!() -> T
   if me.done
     absent

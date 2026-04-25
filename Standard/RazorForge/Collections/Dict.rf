@@ -87,15 +87,6 @@ routine Dict[K, V].$create(capacity: U64) -> Dict[K, V]
     dict.vals = hijacked_from[V](rf_allocate_dynamic_uninit(V.data_size() * cap))
   return dict
 
-### Creates a dictionary from the supplied entries.
-### When the same key appears more than once, the later entry overwrites the earlier one.
-### :param entries...: The initial key-value pairs to insert.
-routine Dict[K, V].$create(entries...: DictEntry[K, V]) -> Dict[K, V]
-  var result = Dict[K, V]()
-  for e in entries
-    result.add(key: e.key, value: e.value)
-  return result
-
 ### Releases the raw control, key, and value buffers owned by this dictionary.
 routine Dict[K, V].$destroy()
   danger!
@@ -114,18 +105,21 @@ routine Dict[K, V].$destroy()
 ### Extracts the 7-bit control-byte fingerprint from a raw hash value.
 ### :param hash: The raw hash output from `$hash`.
 ### :returns: The low 7 bits of `hash`, used to filter candidate slots before a full key comparison.
+@readonly
 routine Dict[K, V].h2(hash: U64) -> U8
   return U8(hash & U64(CTRL_H2_MASK))
 
 ### Derives the primary probe slot index from a raw hash value.
 ### :param hash: The raw hash output from `$hash`.
 ### :returns: The upper bits of `hash`, used as the starting slot before masking to the table size.
+@readonly
 routine Dict[K, V].h1(hash: U64) -> U64
   return hash >> 7u32
 
 ### Returns the key stored at `slot` without checking whether the slot is live.
 ### :param slot: The slot index to read from.
 ### :returns: The key at that slot.
+@readonly
 routine Dict[K, V].read_key(slot: U64) -> K
   return me.keys.offset(K.data_size() * slot).extract()
 
@@ -139,6 +133,7 @@ routine Dict[K, V].write_key(slot: U64, key: K)
 ### Returns the value stored at `slot` without checking whether the slot is live.
 ### :param slot: The slot index to read from.
 ### :returns: The value at that slot.
+@readonly
 routine Dict[K, V].read_val(slot: U64) -> V
   return me.vals.offset(V.data_size() * slot).extract()
 
@@ -153,6 +148,7 @@ routine Dict[K, V].write_val(slot: U64, val: V)
 ### Control-byte fingerprints are checked before full key equality to avoid unnecessary key loads.
 ### :param key: The key to find.
 ### :returns: The slot index of `key` if found, or `capacity` if the key is absent.
+@readonly
 routine Dict[K, V].find_slot(key: K) -> U64
   var h = key.$hash()
   var target = me.h2(h)
@@ -206,11 +202,13 @@ routine Dict[K, V].delete_at(slot: U64)
 ### Returns true when the combined live and tombstone load exceeds 87.5% of capacity.
 ### Both live entries and tombstones occupy probe space, so both count toward the load threshold.
 ### :returns: `true` if a rehash should happen before the next insertion.
+@readonly
 routine Dict[K, V].should_rehash() -> Bool
   return (me.count +% me.deleted) *% 8u64 >= me.capacity *% 7u64
 
 ### Doubles the table capacity and reinserts all live entries into the new table.
 ### Tombstones are discarded during the rebuild.
+@migratable
 routine Dict[K, V].rehash()
   var old_cap = me.capacity
   var old_ctrl = me.ctrl
@@ -253,16 +251,19 @@ routine Dict[K, V].rehash()
 
 ### Returns the number of live key-value entries currently stored.
 ### :returns: The live entry count.
+@readonly
 routine Dict[K, V].count() -> U64
   return me.count
 
 ### Returns true if this dictionary contains no live entries.
 ### :returns: `true` when `count()` is zero.
+@readonly
 routine Dict[K, V].is_empty() -> Bool
   return me.count == 0u64
 
 ### Removes every entry while preserving the current slot capacity.
 ### Resets the control array to all-empty in one pass, discarding all tombstones.
+@migratable
 routine Dict[K, V].clear()
   danger!
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: me.capacity)
@@ -281,6 +282,7 @@ routine Dict[K, V].$contains(key: K) -> Bool
 ### :param key: The key to insert or update.
 ### :param value: The value to associate with `key`.
 ### :returns: `true` if a new entry was inserted; `false` if an existing entry was updated.
+@migratable
 routine Dict[K, V].add(key: K, value: V) -> Bool
   if me.should_rehash()
     me.rehash()
@@ -295,6 +297,7 @@ routine Dict[K, V].add(key: K, value: V) -> Bool
 ### Removes the entry associated with `key`, if present.
 ### :param key: The key to remove.
 ### :returns: `true` if the key was found and removed; `false` if not present.
+@migratable
 routine Dict[K, V].remove(key: K) -> Bool
   var slot = me.find_slot(key)
   if slot >= me.capacity
@@ -308,6 +311,7 @@ routine Dict[K, V].remove(key: K) -> Bool
 ### :param key: The key to look up.
 ### :param default_value: The fallback value returned when `key` is not present.
 ### :returns: The mapped value if found, otherwise `default_value`.
+@readonly
 routine Dict[K, V].get_or_default(key: K, default_value: V) -> V
   var slot = me.find_slot(key)
   if slot >= me.capacity
@@ -322,24 +326,22 @@ routine Dict[K, V].get_or_default(key: K, default_value: V) -> V
 ### :param key: The key to look up.
 ### :returns: The value mapped to `key`.
 ### :absent: The key is not present in the dictionary.
+@readonly
 routine Dict[K, V].$getitem!(key: K) -> V
   var slot = me.find_slot(key)
   if slot >= me.capacity
     absent
   return me.read_val(slot)
 
-### Sets the value for `key`, inserting a new entry when the key is not already present.
-### :param key: The key to set.
-### :param value: The value to associate with `key`.
+### Updates the value associated with `key`.
+### :param key: The key to update.
+### :param value: The replacement value.
+### :absent: The key is not present in the dictionary.
 routine Dict[K, V].$setitem!(key: K, value: V)
-  if me.should_rehash()
-    me.rehash()
+  if key notin me
+    absent
   var slot = me.find_slot(key)
-  if slot < me.capacity
-    me.write_val(slot: slot, val: value)
-    return
-  me.insert_raw(h: key.$hash(), key: key, val: value)
-  me.count = me.count + 1u64
+  me.write_val(slot: slot, val: value)
   return
 
 # ============================================================================
@@ -348,6 +350,7 @@ routine Dict[K, V].$setitem!(key: K, value: V)
 
 ### Returns all live keys in slot iteration order.
 ### :returns: A {List[K]} of every key; order reflects the current table layout.
+@readonly
 routine Dict[K, V].keys() -> List[K]
   var result = List[K](me.count)
   var i = 0u64
@@ -361,6 +364,7 @@ routine Dict[K, V].keys() -> List[K]
 
 ### Returns all live values in slot iteration order.
 ### :returns: A {List[V]} of every value; order matches the corresponding `keys()` call only within a single unmodified table.
+@readonly
 routine Dict[K, V].values() -> List[V]
   var result = List[V](me.count)
   var i = 0u64
@@ -374,6 +378,7 @@ routine Dict[K, V].values() -> List[V]
 
 ### Returns all live entries in slot iteration order.
 ### :returns: A {List[DictEntry[K, V]]} of every key-value pair; order reflects the current table layout.
+@readonly
 routine Dict[K, V].entries() -> List[DictEntry[K, V]]
   var result = List[DictEntry[K, V]](me.count)
   var i = 0u64
@@ -421,7 +426,6 @@ entity DictIterator[K, V] obeys Iterator[DictEntry[K, V]]
 ### Advances to the next live slot and returns its entry.
 ### :returns: The next live {DictEntry[K, V]}.
 ### :absent: No live slots remain.
-@writable
 routine DictIterator[K, V].$next!() -> DictEntry[K, V]
   danger!
     while me.slot < me.capacity
@@ -440,6 +444,7 @@ routine DictIterator[K, V].$next!() -> DictEntry[K, V]
 
 ### Returns a compact text representation of the dictionary contents.
 ### Entries are rendered as `key: value` pairs in iteration (slot) order.
+@readonly
 routine Dict[K, V].$represent() -> Text
   if me.is_empty()
     return "{:}"
@@ -454,6 +459,7 @@ routine Dict[K, V].$represent() -> Text
   return result
 
 ### Returns a diagnostic form that includes the runtime type name and live entry count.
+@readonly
 routine Dict[K, V].$diagnose() -> Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
   var first = true
@@ -472,6 +478,7 @@ routine Dict[K, V].$diagnose() -> Text
 ### Returns true if both dictionaries contain exactly the same keys with the same associated values.
 ### :param other: The other dictionary to compare against.
 ### :returns: `true` if both have the same count and every key-value pair is equal.
+@readonly
 routine Dict[K, V].$eq(other: Dict[K, V]) -> Bool
   if me.count != other.count
     return false
