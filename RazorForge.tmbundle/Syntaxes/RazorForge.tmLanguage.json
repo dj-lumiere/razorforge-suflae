@@ -205,11 +205,6 @@
     "operators": {
       "patterns": [
         {
-          "comment": "Intrinsic type attribute",
-          "name": "keyword.other.razorforge",
-          "match": "@intrinsic\\b"
-        },
-        {
           "comment": "Compound annotation",
           "name": "storage.modifier.annotation.razorforge",
           "match": "@\\[[a-zA-Z_][a-zA-Z0-9_, ]*\\]"
