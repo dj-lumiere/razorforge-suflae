@@ -1,22 +1,18 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for named argument validation:
-/// - Unknown named argument (#152 / S505)
-/// - Duplicate named argument (#153 / S506)
-/// - Positional after named argument (#154 / S507)
+/// Contains tests for named argument.
 /// </summary>
 public class NamedArgumentTests
 {
     #region Unknown Named Argument (#152 / S505)
     /// <summary>
-    /// Tests Analyze_UnknownNamedArgument_ReportsError.
+    /// Verifies semantic analysis behavior for unknown named argument and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -35,7 +31,7 @@ public class NamedArgumentTests
             filter: e => e.Code == SemanticDiagnosticCode.UnknownNamedArgument);
     }
     /// <summary>
-    /// Tests Analyze_ValidNamedArgument_NoError.
+    /// Verifies semantic analysis behavior for valid named argument without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -54,7 +50,7 @@ public class NamedArgumentTests
             filter: e => e.Code == SemanticDiagnosticCode.UnknownNamedArgument);
     }
     /// <summary>
-    /// Tests Analyze_UnknownNamedArgument_MultipleParams_ReportsError.
+    /// Verifies semantic analysis behavior for unknown named argument multiple params and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -77,7 +73,7 @@ public class NamedArgumentTests
 
     #region Duplicate Named Argument (#153 / S506)
     /// <summary>
-    /// Tests Analyze_DuplicateNamedArgument_ReportsError.
+    /// Verifies semantic analysis behavior for duplicate named argument and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -96,7 +92,7 @@ public class NamedArgumentTests
             filter: e => e.Code == SemanticDiagnosticCode.DuplicateNamedArgument);
     }
     /// <summary>
-    /// Tests Analyze_PositionalThenSameNamed_ReportsError.
+    /// Verifies semantic analysis behavior for positional then same named and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -115,7 +111,7 @@ public class NamedArgumentTests
             filter: e => e.Code == SemanticDiagnosticCode.DuplicateNamedArgument);
     }
     /// <summary>
-    /// Tests Analyze_DistinctNamedArguments_NoError.
+    /// Verifies semantic analysis behavior for distinct named arguments without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -138,7 +134,7 @@ public class NamedArgumentTests
 
     #region Positional After Named (#154 / S507)
     /// <summary>
-    /// Tests Analyze_PositionalAfterNamed_S510SubsumesS507.
+    /// Verifies semantic analysis behavior for positional after named s510 subsumes s507.
     /// </summary>
 
     [Fact]
@@ -160,7 +156,7 @@ public class NamedArgumentTests
             filter: e => e.Code == SemanticDiagnosticCode.PositionalAfterNamed);
     }
     /// <summary>
-    /// Tests Analyze_AllNamed_NoError.
+    /// Verifies semantic analysis behavior for all named without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -179,7 +175,7 @@ public class NamedArgumentTests
             filter: e => e.Code == SemanticDiagnosticCode.PositionalAfterNamed);
     }
     /// <summary>
-    /// Tests Analyze_NamedOutOfOrder_NoError.
+    /// Verifies semantic analysis behavior for named out of order without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -206,7 +202,7 @@ public class NamedArgumentTests
 
     #region Named Argument Enforcement (S510)
     /// <summary>
-    /// Tests Analyze_TwoParams_AllPositional_ReportsS510.
+    /// Verifies semantic analysis behavior for two params all positional reports s510.
     /// </summary>
 
     [Fact]
@@ -225,7 +221,7 @@ public class NamedArgumentTests
             filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
     }
     /// <summary>
-    /// Tests Analyze_TwoParams_AllNamed_NoS510.
+    /// Verifies semantic analysis behavior for two params all named no s510.
     /// </summary>
 
     [Fact]
@@ -244,7 +240,7 @@ public class NamedArgumentTests
             filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
     }
     /// <summary>
-    /// Tests Analyze_TwoParams_MixedPositionalNamed_ReportsS510.
+    /// Verifies semantic analysis behavior for two params mixed positional named reports s510.
     /// </summary>
 
     [Fact]
@@ -263,7 +259,7 @@ public class NamedArgumentTests
             filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
     }
     /// <summary>
-    /// Tests Analyze_OneParam_Positional_NoS510.
+    /// Verifies semantic analysis behavior for one param positional no s510.
     /// </summary>
 
     [Fact]
@@ -282,7 +278,7 @@ public class NamedArgumentTests
             filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
     }
     /// <summary>
-    /// Tests Analyze_ZeroParams_NoS510.
+    /// Verifies semantic analysis behavior for zero params no s510.
     /// </summary>
 
     [Fact]
@@ -301,7 +297,7 @@ public class NamedArgumentTests
             filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
     }
     /// <summary>
-    /// Tests Analyze_MemberRoutine_OneNonMeParam_Positional_NoS510.
+    /// Verifies semantic analysis behavior for member routine one non me param positional no s510.
     /// </summary>
 
     [Fact]
@@ -329,7 +325,7 @@ public class NamedArgumentTests
             filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
     }
     /// <summary>
-    /// Tests Analyze_MemberRoutine_TwoNonMeParams_Positional_ReportsS510.
+    /// Verifies semantic analysis behavior for member routine two non me params positional reports s510.
     /// </summary>
 
     [Fact]
@@ -354,7 +350,7 @@ public class NamedArgumentTests
             filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
     }
     /// <summary>
-    /// Tests Analyze_TwoParams_NamedOutOfOrder_NoS510.
+    /// Verifies semantic analysis behavior for two params named out of order no s510.
     /// </summary>
 
     [Fact]

@@ -1,6 +1,5 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
@@ -15,7 +14,7 @@ public class EmptyBodyValidationTests
 {
     #region Statement Blocks
     /// <summary>
-    /// Tests Analyze_RoutineBodyWithPass_NoError.
+    /// Verifies semantic analysis behavior for routine body with pass without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -36,7 +35,7 @@ public class EmptyBodyValidationTests
 
     #region Type Bodies
     /// <summary>
-    /// Tests Analyze_EmptyRecordBody_ReportsError.
+    /// Verifies semantic analysis behavior for empty record body and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -50,7 +49,7 @@ public class EmptyBodyValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
     }
     /// <summary>
-    /// Tests Analyze_RecordWithPass_NoError.
+    /// Verifies semantic analysis behavior for record with pass without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -66,7 +65,7 @@ public class EmptyBodyValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
     }
     /// <summary>
-    /// Tests Analyze_EmptyEntityBody_ReportsError.
+    /// Verifies semantic analysis behavior for empty entity body and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -80,7 +79,7 @@ public class EmptyBodyValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
     }
     /// <summary>
-    /// Tests Analyze_EntityWithPass_NoError.
+    /// Verifies semantic analysis behavior for entity with pass without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -100,7 +99,7 @@ public class EmptyBodyValidationTests
 
     #region Enumerations (always error when empty)
     /// <summary>
-    /// Tests Analyze_EmptyChoice_ReportsError.
+    /// Verifies semantic analysis behavior for empty choice and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -114,7 +113,7 @@ public class EmptyBodyValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.EmptyEnumerationBody);
     }
     /// <summary>
-    /// Tests Analyze_EmptyVariant_ReportsError.
+    /// Verifies semantic analysis behavior for empty variant and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -128,7 +127,7 @@ public class EmptyBodyValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.EmptyEnumerationBody);
     }
     /// <summary>
-    /// Tests Analyze_EmptyFlags_ReportsError.
+    /// Verifies semantic analysis behavior for empty flags and reports the expected error.
     /// </summary>
 
     [Fact]

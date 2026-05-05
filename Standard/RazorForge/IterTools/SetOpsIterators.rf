@@ -1,0 +1,96 @@
+module IterTools
+
+### Represents a lazy adapter that yields elements present in both this iterable and another.
+### The second iterable is fully materialized into a set when iteration begins.
+### :typeparam T: The element type of both source sequences.
+entity IntersectIterator[T] obeys Iterable[T]
+  ### Stores the primary source iterable.
+  secret source: Iterable[T]
+  ### Stores the membership-test iterable to materialize at iteration start.
+  secret other: Iterable[T]
+
+### Materializes `other` into a set and returns an iterator that filters `source` against it.
+### :returns: The resulting `IntersectEmitter[T]` value.
+@readonly
+routine IntersectIterator[T].$iter() -> IntersectEmitter[T]
+needs T obeys Hashable, Comparable
+  var other_set = me.other.Set()
+  return IntersectEmitter[T](source: me.source.$iter(), other: steal other_set)
+
+### Iterates over a source sequence and keeps only elements that appear in the membership set.
+### :typeparam T: The element type of the filtered sequence.
+entity IntersectEmitter[T] obeys Iterator[T]
+  ### Stores the underlying source iterator.
+  secret source: Iterator[T]
+  ### Stores the pre-materialized membership set.
+  secret other: Set[T]
+
+### Returns the next source element that is also present in the membership set.
+### Source elements not found in the set are consumed and discarded.
+### :returns: The resulting `T` value.
+routine IntersectEmitter[T].$next!() -> T
+needs T obeys Hashable, Comparable
+  loop
+    var item = me.source.$next!()
+    if me.other.contains(item)
+      return item
+
+### Returns a lazy adapter that keeps only elements also present in `other`.
+### :param other: The iterable that defines the membership set.
+### :returns: The resulting `IntersectIterator[T]` value.
+@readonly
+routine Iterable[T].intersect(other: Iterable[T]) -> IntersectIterator[T]
+needs T obeys Hashable, Comparable
+  return IntersectIterator[T](source: me, other: other)
+
+### Represents a lazy adapter that suppresses elements present in another iterable.
+### The exclusion iterable is fully materialized into a set when iteration begins.
+### :typeparam T: The element type of both source sequences.
+entity ExcludeIterator[T] obeys Iterable[T]
+  ### Stores the primary source iterable.
+  secret source: Iterable[T]
+  ### Stores the exclusion iterable to materialize at iteration start.
+  secret other: Iterable[T]
+
+### Materializes `other` into a set and returns an iterator that removes matching elements.
+### :returns: The resulting `ExcludeEmitter[T]` value.
+@readonly
+routine ExcludeIterator[T].$iter() -> ExcludeEmitter[T]
+needs T obeys Hashable, Comparable
+  var other_set = me.other.Set()
+  return ExcludeEmitter[T](source: me.source.$iter(), other: steal other_set)
+
+### Iterates over a source sequence and suppresses elements found in the exclusion set.
+### :typeparam T: The element type of the filtered sequence.
+entity ExcludeEmitter[T] obeys Iterator[T]
+  ### Stores the underlying source iterator.
+  secret source: Iterator[T]
+  ### Stores the pre-materialized exclusion set.
+  secret other: Set[T]
+
+### Returns the next source element that is not present in the exclusion set.
+### Source elements found in the set are consumed and discarded.
+### :returns: The resulting `T` value.
+routine ExcludeEmitter[T].$next!() -> T
+needs T obeys Hashable, Comparable
+  loop
+    var item = me.source.$next!()
+    if not me.other.contains(item)
+      return item
+
+### Returns a lazy adapter that suppresses all elements also found in `other`.
+### :param other: The iterable that defines the exclusion set.
+### :returns: The resulting `ExcludeIterator[T]` value.
+@readonly
+routine Iterable[T].exclude(other: Iterable[T]) -> ExcludeIterator[T]
+needs T obeys Hashable, Comparable
+  return ExcludeIterator[T](source: me, other: other)
+
+### Returns a lazy adapter that yields all distinct elements from this iterable followed by `other`.
+### Duplicate values across both sources are suppressed.
+### :param other: The iterable to concatenate before deduplication.
+### :returns: The resulting `DistinctIterator[T]` value.
+@readonly
+routine Iterable[T].union(other: Iterable[T]) -> DistinctIterator[T]
+needs T obeys Hashable, Comparable
+  return me.extend(other).distinct()

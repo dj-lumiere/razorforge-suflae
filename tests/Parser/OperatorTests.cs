@@ -1,18 +1,15 @@
-﻿using Xunit;
-
 namespace RazorForge.Tests.Parser;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for parsing operators in RazorForge:
-/// arithmetic, wrapping, clamping, checked, comparison, logical, bitwise, none coalescing.
+/// Contains tests for operator.
 /// </summary>
 public class OperatorTests
 {
     #region Standard Arithmetic Operators
     /// <summary>
-    /// Tests Parse_Addition.
+    /// Verifies that the parser accepts addition.
     /// </summary>
 
     [Fact]
@@ -26,7 +23,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_Subtraction.
+    /// Verifies that the parser accepts subtraction.
     /// </summary>
 
     [Fact]
@@ -40,7 +37,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_Multiplication.
+    /// Verifies that the parser accepts multiplication.
     /// </summary>
 
     [Fact]
@@ -54,7 +51,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_Division.
+    /// Verifies that the parser accepts division.
     /// </summary>
 
     [Fact]
@@ -68,7 +65,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_FloorDivision.
+    /// Verifies that the parser accepts floor division.
     /// </summary>
 
     [Fact]
@@ -82,7 +79,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_Remainder.
+    /// Verifies that the parser accepts remainder.
     /// </summary>
 
     [Fact]
@@ -96,7 +93,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_Power.
+    /// Verifies that the parser accepts power.
     /// </summary>
 
     [Fact]
@@ -110,7 +107,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_Negation.
+    /// Verifies that the parser accepts negation.
     /// </summary>
 
     [Fact]
@@ -124,7 +121,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_ChainedArithmetic.
+    /// Verifies that the parser accepts chained arithmetic.
     /// </summary>
 
     [Fact]
@@ -138,7 +135,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_ParenthesizedArithmetic.
+    /// Verifies that the parser accepts parenthesized arithmetic.
     /// </summary>
 
     [Fact]
@@ -156,7 +153,7 @@ public class OperatorTests
 
     #region Wrapping Arithmetic Operators
     /// <summary>
-    /// Tests Parse_WrappingAdd.
+    /// Verifies that the parser accepts wrapping add.
     /// </summary>
 
     [Fact]
@@ -172,7 +169,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WrappingSubtract.
+    /// Verifies that the parser accepts wrapping subtract.
     /// </summary>
 
     [Fact]
@@ -188,7 +185,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WrappingMultiply.
+    /// Verifies that the parser accepts wrapping multiply.
     /// </summary>
 
     [Fact]
@@ -204,7 +201,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WrappingPower.
+    /// Verifies that the parser accepts wrapping power.
     /// </summary>
 
     [Fact]
@@ -224,7 +221,7 @@ public class OperatorTests
 
     #region Clamping Arithmetic Operators
     /// <summary>
-    /// Tests Parse_ClampingAdd.
+    /// Verifies that the parser accepts clamping add.
     /// </summary>
 
     [Fact]
@@ -240,7 +237,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_ClampingSubtract.
+    /// Verifies that the parser accepts clamping subtract.
     /// </summary>
 
     [Fact]
@@ -256,7 +253,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_ClampingMultiply.
+    /// Verifies that the parser accepts clamping multiply.
     /// </summary>
 
     [Fact]
@@ -272,7 +269,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_ClampingPower.
+    /// Verifies that the parser accepts clamping power.
     /// </summary>
 
     [Fact]
@@ -292,7 +289,7 @@ public class OperatorTests
 
     #region Comparison Operators
     /// <summary>
-    /// Tests Parse_Equal.
+    /// Verifies that the parser accepts equal.
     /// </summary>
 
     [Fact]
@@ -306,7 +303,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_NotEqual.
+    /// Verifies that the parser accepts not equal.
     /// </summary>
 
     [Fact]
@@ -320,7 +317,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_LessThan.
+    /// Verifies that the parser accepts less than.
     /// </summary>
 
     [Fact]
@@ -334,7 +331,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_LessOrEqual.
+    /// Verifies that the parser accepts less or equal.
     /// </summary>
 
     [Fact]
@@ -348,7 +345,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_GreaterThan.
+    /// Verifies that the parser accepts greater than.
     /// </summary>
 
     [Fact]
@@ -362,7 +359,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_GreaterOrEqual.
+    /// Verifies that the parser accepts greater or equal.
     /// </summary>
 
     [Fact]
@@ -376,7 +373,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_ChainedComparison.
+    /// Verifies that the parser accepts chained comparison.
     /// </summary>
 
     [Fact]
@@ -390,7 +387,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_ChainedRangeComparison.
+    /// Verifies that the parser accepts chained range comparison.
     /// </summary>
 
     [Fact]
@@ -406,41 +403,9 @@ public class OperatorTests
 
     #endregion
 
-    #region Identity Operators
-    /// <summary>
-    /// Tests Parse_IdentityEqual.
-    /// </summary>
-
-    [Fact]
-    public void Parse_IdentityEqual()
-    {
-        string source = """
-                        routine test() -> bool
-                          return a === b
-                        """;
-
-        AssertParses(source: source);
-    }
-    /// <summary>
-    /// Tests Parse_IdentityNotEqual.
-    /// </summary>
-
-    [Fact]
-    public void Parse_IdentityNotEqual()
-    {
-        string source = """
-                        routine test() -> bool
-                          return a !== b
-                        """;
-
-        AssertParses(source: source);
-    }
-
-    #endregion
-
     #region Logical Operators
     /// <summary>
-    /// Tests Parse_LogicalAnd.
+    /// Verifies that the parser accepts logical and.
     /// </summary>
 
     [Fact]
@@ -454,7 +419,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_LogicalOr.
+    /// Verifies that the parser accepts logical or.
     /// </summary>
 
     [Fact]
@@ -468,7 +433,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_LogicalNot.
+    /// Verifies that the parser accepts logical not.
     /// </summary>
 
     [Fact]
@@ -482,7 +447,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_ChainedLogical.
+    /// Verifies that the parser accepts chained logical.
     /// </summary>
 
     [Fact]
@@ -496,7 +461,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_LogicalWithComparison.
+    /// Verifies that the parser accepts logical with comparison.
     /// </summary>
 
     [Fact]
@@ -514,7 +479,7 @@ public class OperatorTests
 
     #region Bitwise Operators
     /// <summary>
-    /// Tests Parse_BitwiseAnd.
+    /// Verifies that the parser accepts bitwise and.
     /// </summary>
 
     [Fact]
@@ -528,7 +493,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_BitwiseOr.
+    /// Verifies that the parser accepts bitwise or.
     /// </summary>
 
     [Fact]
@@ -542,7 +507,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_BitwiseXor.
+    /// Verifies that the parser accepts bitwise xor.
     /// </summary>
 
     [Fact]
@@ -556,7 +521,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_BitwiseNot.
+    /// Verifies that the parser accepts bitwise not.
     /// </summary>
 
     [Fact]
@@ -570,7 +535,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_LeftShift.
+    /// Verifies that the parser accepts left shift.
     /// </summary>
 
     [Fact]
@@ -584,7 +549,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_RightShift.
+    /// Verifies that the parser accepts right shift.
     /// </summary>
 
     [Fact]
@@ -598,7 +563,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_LogicalLeftShift.
+    /// Verifies that the parser accepts logical left shift.
     /// </summary>
 
     [Fact]
@@ -612,7 +577,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_LogicalRightShift.
+    /// Verifies that the parser accepts logical right shift.
     /// </summary>
 
     [Fact]
@@ -630,7 +595,7 @@ public class OperatorTests
 
     #region None Coalescing Operator
     /// <summary>
-    /// Tests Parse_NoneCoalescing.
+    /// Verifies that the parser accepts none coalescing.
     /// </summary>
 
     [Fact]
@@ -645,7 +610,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_ChainedNoneCoalescing.
+    /// Verifies that the parser accepts chained none coalescing.
     /// </summary>
 
     [Fact]
@@ -662,7 +627,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_NoneCoalescingWithMethodCall.
+    /// Verifies that the parser accepts none coalescing with method call.
     /// </summary>
 
     [Fact]
@@ -680,7 +645,7 @@ public class OperatorTests
 
     #region Assignment Operators
     /// <summary>
-    /// Tests Parse_SimpleAssignment.
+    /// Verifies that the parser accepts simple assignment.
     /// </summary>
 
     [Fact]
@@ -696,7 +661,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_AddAssignment.
+    /// Verifies that the parser accepts add assignment.
     /// </summary>
 
     [Fact]
@@ -712,7 +677,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_SubtractAssignment.
+    /// Verifies that the parser accepts subtract assignment.
     /// </summary>
 
     [Fact]
@@ -728,7 +693,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_MultiplyAssignment.
+    /// Verifies that the parser accepts multiply assignment.
     /// </summary>
 
     [Fact]
@@ -744,7 +709,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_DivideAssignment.
+    /// Verifies that the parser accepts divide assignment.
     /// </summary>
 
     [Fact]
@@ -760,7 +725,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_FloorDivideAssignment.
+    /// Verifies that the parser accepts floor divide assignment.
     /// </summary>
 
     [Fact]
@@ -776,7 +741,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_RemainderAssignment.
+    /// Verifies that the parser accepts remainder assignment.
     /// </summary>
 
     [Fact]
@@ -792,7 +757,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_BitwiseAndAssignment.
+    /// Verifies that the parser accepts bitwise and assignment.
     /// </summary>
 
     [Fact]
@@ -808,7 +773,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_BitwiseOrAssignment.
+    /// Verifies that the parser accepts bitwise or assignment.
     /// </summary>
 
     [Fact]
@@ -824,7 +789,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_BitwiseXorAssignment.
+    /// Verifies that the parser accepts bitwise xor assignment.
     /// </summary>
 
     [Fact]
@@ -840,7 +805,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_LeftShiftAssignment.
+    /// Verifies that the parser accepts left shift assignment.
     /// </summary>
 
     [Fact]
@@ -856,7 +821,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_RightShiftAssignment.
+    /// Verifies that the parser accepts right shift assignment.
     /// </summary>
 
     [Fact]
@@ -876,7 +841,7 @@ public class OperatorTests
 
     #region Text Operators
     /// <summary>
-    /// Tests Parse_TextConcatenation.
+    /// Verifies that the parser accepts text concatenation.
     /// </summary>
 
     [Fact]
@@ -890,7 +855,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_TextRepetition.
+    /// Verifies that the parser accepts text repetition.
     /// </summary>
 
     [Fact]
@@ -908,7 +873,7 @@ public class OperatorTests
 
     #region Range Operators
     /// <summary>
-    /// Tests Parse_InclusiveRange.
+    /// Verifies that the parser accepts inclusive range.
     /// </summary>
 
     [Fact]
@@ -924,7 +889,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_RangeWithStep.
+    /// Verifies that the parser accepts range with step.
     /// </summary>
 
     [Fact]
@@ -944,7 +909,7 @@ public class OperatorTests
 
     #region Complex Operator Expressions
     /// <summary>
-    /// Tests Parse_ComplexExpression.
+    /// Verifies that the parser accepts complex expression.
     /// </summary>
 
     [Fact]
@@ -958,7 +923,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_MixedOperatorPrecedence.
+    /// Verifies that the parser accepts mixed operator precedence.
     /// </summary>
 
     [Fact]
@@ -972,7 +937,7 @@ public class OperatorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_BitwiseWithComparison.
+    /// Verifies that the parser accepts bitwise with comparison.
     /// </summary>
 
     [Fact]

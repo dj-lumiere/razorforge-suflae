@@ -1,3 +1,4 @@
+using System.Text;
 using Compiler.Diagnostics;
 
 namespace Compiler.Lexer;
@@ -98,7 +99,7 @@ public partial class Tokenizer
 
         int startLine = _line;
         int startColumn = _column;
-        var content = new System.Text.StringBuilder();
+        var content = new StringBuilder();
 
         while (!IsAtEnd() && Peek() != '"')
         {
@@ -172,7 +173,7 @@ public partial class Tokenizer
             : "f\"";
         AddToken(type: TokenType.InsertionStart, text: prefix);
 
-        var textBuffer = new System.Text.StringBuilder();
+        var textBuffer = new StringBuilder();
 
         while (!IsAtEnd())
         {
@@ -483,7 +484,7 @@ public partial class Tokenizer
         _tokenStartColumn = _column;
         _tokenStartLine = _line;
 
-        var spec = new System.Text.StringBuilder();
+        var spec = new StringBuilder();
         int depth = _bracketDepth;
 
         while (!IsAtEnd())
@@ -516,7 +517,7 @@ public partial class Tokenizer
     /// <summary>
     /// Flushes accumulated text in the buffer as a TextSegment token.
     /// </summary>
-    private void FlushTextSegment(System.Text.StringBuilder textBuffer)
+    private void FlushTextSegment(StringBuilder textBuffer)
     {
         if (textBuffer.Length > 0)
         {

@@ -1,8 +1,8 @@
 using Compiler.Lexer;
 using Compiler.Postprocessing.Passes;
+using SyntaxTree;
 using TypeModel.Symbols;
 using TypeModel.Types;
-using SyntaxTree;
 
 namespace Compiler.Desugaring.Passes;
 
@@ -10,47 +10,47 @@ namespace Compiler.Desugaring.Passes;
 /// Lowers all loop constructs to the <see cref="LoopStatement"/> primitive so the code
 /// generator only needs to handle one loop form via <c>EmitLoop</c>.
 ///
-/// <para><b>while</b> → loop+if-break:</para>
+/// <para><b>while</b> -> loop+if-break:</para>
 /// <code>
 /// while cond { body }
-///   ↓
+///  ??
 /// loop { if !cond { break }; body }
 /// </code>
 ///
-/// <para><b>for v in iterable</b> → loop+when:</para>
+/// <para><b>for v in iterable</b> -> loop+when:</para>
 /// <code>
-/// {
-///   var _lf_iter_N = iterable.$iter()
-///   loop { when _lf_iter_N.try_next() { is None → break; else var v → body } }
+///  {
+/// var _lf_iter_N = iterable.$iter()
+/// loop { when _lf_iter_N.try_next() { is None -> break; else var v -> body } }
 /// }
 /// </code>
 ///
-/// <para><b>for (a, b) in pairs</b> (tuple destructuring) → same loop shape, else
+/// <para><b>for (a, b) in pairs</b> (tuple destructuring) -> same loop shape, else
 /// body prepends positional member-access bindings:</para>
 /// <code>
-/// {
-///   var _lf_iter_N = pairs.$iter()
-///   loop {
-///     when _lf_iter_N.try_next() {
-///       is None → break
-///       else var _lf_elem_M → { var a = _lf_elem_M.item0; var b = _lf_elem_M.item1; body }
-///     }
-///   }
+///  {
+/// var _lf_iter_N = pairs.$iter()
+/// loop {
+/// when _lf_iter_N.try_next() {
+/// is None -> break
+/// else var _lf_elem_M -> { var a = _lf_elem_M.item0; var b = _lf_elem_M.item1; body }
+///  }
+///  }
 /// }
 /// </code>
 ///
-/// <para><b>for x in iterable else { alt }</b> (for-else) → exhaustion flag:</para>
+/// <para><b>for x in iterable else { alt }</b> (for-else) -> exhaustion flag:</para>
 /// <code>
-/// {
-///   var _lf_exhausted_N: Bool = false
-///   var _lf_iter_N = iterable.$iter()
-///   loop {
-///     when _lf_iter_N.try_next() {
-///       is None → { _lf_exhausted_N = true; break }
-///       else var x → body
-///     }
-///   }
-///   if _lf_exhausted_N { alt }
+///  {
+/// var _lf_exhausted_N: Bool = false
+/// var _lf_iter_N = iterable.$iter()
+/// loop {
+/// when _lf_iter_N.try_next() {
+/// is None -> { _lf_exhausted_N = true; break }
+/// else var x -> body
+///  }
+///  }
+/// if _lf_exhausted_N { alt }
 /// }
 /// </code>
 ///
@@ -60,8 +60,14 @@ namespace Compiler.Desugaring.Passes;
 /// </summary>
 internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
 {
+    /// <summary>
+    /// Tracks the iter count while this compiler phase runs.
+    /// </summary>
     private int _iterCount;
 
+    /// <summary>
+    /// Runs this compiler phase over its configured input.
+    /// </summary>
     public void Run(Program program)
     {
         for (int i = 0; i < program.Declarations.Count; i++)
@@ -91,6 +97,9 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
         }
     }
 
+    /// <summary>
+    /// Lower member list as part of this compiler phase.
+    /// </summary>
     private void LowerMemberList(List<SyntaxTree.Declaration> members)
     {
         for (int j = 0; j < members.Count; j++)
@@ -102,6 +111,9 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
         }
     }
 
+    /// <summary>
+    /// Lower statement as part of this compiler phase.
+    /// </summary>
     private Statement LowerStatement(Statement stmt)
     {
         switch (stmt)
@@ -186,7 +198,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
 
     /// <summary>
     /// Lowers <c>while cond { body }</c> to <c>loop { if !cond { break } body }</c>.
-    /// The else branch (if present) is dropped — while-else is not yet fully implemented.
+    /// The else branch (if present) is dropped -> while-else is not yet fully implemented.
     /// </summary>
     private Statement LowerWhile(WhileStatement whileStmt)
     {
@@ -214,13 +226,16 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
         return new LoopStatement(Body: loopBody, Location: loc);
     }
 
+    /// <summary>
+    /// Lower for as part of this compiler phase.
+    /// </summary>
     private Statement LowerFor(ForStatement forStmt)
     {
         SourceLocation loc = forStmt.Location;
         int n = _iterCount++;
         string iterName = $"_lf_iter_{n}";
 
-        // ─── Shared: var _lf_iter_N = iterable.$iter() ──────────────────────
+        // -----------------------------------------------------------------------------
         Statement iterVarStmt = new DeclarationStatement(
             Declaration: new VariableDeclaration(
                 Name: iterName,
@@ -236,8 +251,8 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
                 Location: loc),
             Location: loc);
 
-        // ─── Shared: _lf_iter_N.try_next() ──────────────────────────────────
-        Expression tryNextCall = new CallExpression(
+        // -----------------------------------------------------------------------------
+        CallExpression tryNextCallExpr = new CallExpression(
             Callee: new MemberExpression(
                 Object: new IdentifierExpression(Name: iterName, Location: loc),
                 PropertyName: "try_next",
@@ -245,10 +260,10 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
             Arguments: [],
             Location: loc);
 
-        // When running after SA (stdlib/variant bodies), annotate ResolvedType so that
-        // PatternLoweringPass can determine the Maybe[T] layout for NonePattern lowering.
-        // Skip ErrorTypeInfo: SA suppresses stdlib errors, so type errors in stdlib for-loop
-        // iterables still produce a non-null but invalid ResolvedType.
+        // When running after SA (stdlib/variant bodies), annotate ResolvedType, ResolvedRoutine,
+        // and LoweringKind on the try_next call so CallOverloadResolutionPass doesn't need to
+        // re-classify it (which fails for instantiated bodies where the receiver variable has
+        // no SA-annotated type). Skip ErrorTypeInfo: SA suppresses stdlib errors.
         if (forStmt.Iterable.ResolvedType is { } iterType && iterType is not ErrorTypeInfo)
         {
             RoutineInfo? iterMethod = ctx.Registry.LookupMethod(type: iterType, methodName: "$iter");
@@ -256,25 +271,31 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
             {
                 RoutineInfo? tryNextMethod =
                     ctx.Registry.LookupMethod(type: iteratorType, methodName: "try_next");
-                if (tryNextMethod?.ReturnType is { } maybeT)
-                    tryNextCall = tryNextCall with { ResolvedType = maybeT };
+                if (tryNextMethod != null)
+                    tryNextCallExpr = tryNextCallExpr with
+                    {
+                        ResolvedRoutine = tryNextMethod,
+                        LoweringKind = CallLoweringKind.DirectMemberRoutine,
+                        ResolvedType = tryNextMethod.ReturnType ?? tryNextCallExpr.ResolvedType
+                    };
             }
         }
+        Expression tryNextCall = tryNextCallExpr;
 
-        // ─── Recursively lower the user body first ───────────────────────────
+        // -----------------------------------------------------------------------------
         Statement loweredBody = LowerStatement(stmt: forStmt.Body);
 
-        // ─── Build the else-clause body ──────────────────────────────────────
+        // -----------------------------------------------------------------------------
         Statement elseBody;
         string? elseVarName;
 
         if (forStmt.VariablePattern != null)
         {
-            // Tuple destructuring: else var _lf_elem_M → { var a = elem.item0; var b = elem.item1; ... body }
+            // Tuple destructuring: else var _lf_elem_M -> { var a = elem.item0; var b = elem.item1; ... body }
             string elemName = $"_lf_elem_{n}";
             elseVarName = elemName;
 
-            // Prepend: var a = _lf_elem_M.item0, var b = _lf_elem_M.item1, …
+            // Prepend: var a = _lf_elem_M.item0, var b = _lf_elem_M.item1, ??
             var bindStmts = new List<Statement>(capacity: forStmt.VariablePattern.Bindings.Count + 1);
             for (int i = 0; i < forStmt.VariablePattern.Bindings.Count; i++)
             {
@@ -313,7 +334,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
             elseBody    = loweredBody;
         }
 
-        // ─── Build None and else clauses ─────────────────────────────────────
+        // -----------------------------------------------------------------------------
         Statement? elseBranchLowered = forStmt.ElseBranch != null
             ? LowerStatement(stmt: forStmt.ElseBranch)
             : null;

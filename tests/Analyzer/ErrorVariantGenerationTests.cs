@@ -1,21 +1,19 @@
 using Compiler.Diagnostics;
-using SemanticVerification.Results;
+using Verification.Results;
 using TypeModel.Symbols;
-using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for error handling variant generation (try_/check_/lookup_).
-/// The compiler generates safe wrapper functions from failable (!) routines.
+/// Contains tests for error variant generation.
 /// </summary>
 public class ErrorVariantGenerationTests
 {
     #region Maybe Variant (absent only)
     /// <summary>
-    /// Tests Analyze_FailableWithAbsentOnly_GeneratesTryVariant.
+    /// Verifies semantic analysis behavior for failable with absent only generates try variant.
     /// </summary>
 
     [Fact]
@@ -51,7 +49,7 @@ public class ErrorVariantGenerationTests
 
     #region Result Variant (throw only)
     /// <summary>
-    /// Tests Analyze_FailableWithThrowOnly_GeneratesCheckAndTryVariants.
+    /// Verifies semantic analysis behavior for failable with throw only generates check and try variants.
     /// </summary>
 
     [Fact]
@@ -93,7 +91,7 @@ public class ErrorVariantGenerationTests
 
     #region Lookup Variant (throw AND absent)
     /// <summary>
-    /// Tests Analyze_FailableWithBothThrowAndAbsent_GeneratesLookupAndTryVariants.
+    /// Verifies semantic analysis behavior for failable with both throw and absent generates lookup and try variants.
     /// </summary>
 
     [Fact]
@@ -146,7 +144,7 @@ public class ErrorVariantGenerationTests
 
     #region Variant Generation for Methods
     /// <summary>
-    /// Tests Analyze_FailableMethod_GeneratesVariants.
+    /// Verifies semantic analysis behavior for failable method generates variants.
     /// </summary>
 
     [Fact]
@@ -173,7 +171,7 @@ public class ErrorVariantGenerationTests
 
     #region No Variant Generation
     /// <summary>
-    /// Tests Analyze_NonFailableRoutine_NoVariantsGenerated.
+    /// Verifies semantic analysis behavior for non failable routine no variants generated.
     /// </summary>
 
     [Fact]
@@ -192,7 +190,7 @@ public class ErrorVariantGenerationTests
         Assert.Null(@object: result.Registry.GetRoutine(name: "lookup_add"));
     }
     /// <summary>
-    /// Tests Analyze_FailableWithNoThrowOrAbsent_WarnsOrErrors.
+    /// Verifies semantic analysis behavior for failable with no throw or absent warns or errors.
     /// </summary>
 
     [Fact]
@@ -214,7 +212,7 @@ public class ErrorVariantGenerationTests
 
     #region Error Cases
     /// <summary>
-    /// Tests Analyze_ThrowInNonFailableRoutine_ReportsError.
+    /// Verifies semantic analysis behavior for throw in non failable routine and reports the expected warning.
     /// </summary>
 
     [Fact]
@@ -238,11 +236,11 @@ public class ErrorVariantGenerationTests
                         """;
 
         AnalysisResult result = Analyze(source: source);
-        Assert.Contains(collection: result.Warnings,
-            filter: w => w.Code == SemanticWarningCode.ThrowAbsentInNonFailable);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ThrowOutsideFailableFunction);
     }
     /// <summary>
-    /// Tests Analyze_AbsentInNonFailableRoutine_ReportsError.
+    /// Verifies semantic analysis behavior for absent in non failable routine and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -255,11 +253,11 @@ public class ErrorVariantGenerationTests
                         """;
 
         AnalysisResult result = Analyze(source: source);
-        Assert.Contains(collection: result.Warnings,
-            filter: w => w.Code == SemanticWarningCode.ThrowAbsentInNonFailable);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.AbsentOutsideFailableFunction);
     }
     /// <summary>
-    /// Tests Analyze_ThrowNonCrashable_ReportsError.
+    /// Verifies semantic analysis behavior for throw non crashable and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -288,7 +286,7 @@ public class ErrorVariantGenerationTests
 
     #region Variant Naming Convention
     /// <summary>
-    /// Tests Analyze_VariantNames_FollowConvention.
+    /// Verifies semantic analysis behavior for variant names follow convention.
     /// </summary>
 
     [Fact]
@@ -325,7 +323,7 @@ public class ErrorVariantGenerationTests
 
     #region Error Handling Types Not Passable as Parameters
     /// <summary>
-    /// Tests Analyze_ResultAsParameter_ReportsError.
+    /// Verifies semantic analysis behavior for result as parameter and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -352,7 +350,7 @@ public class ErrorVariantGenerationTests
                     comparisonType: StringComparison.OrdinalIgnoreCase));
     }
     /// <summary>
-    /// Tests Analyze_LookupAsParameter_ReportsError.
+    /// Verifies semantic analysis behavior for lookup as parameter and reports the expected error.
     /// </summary>
 
     [Fact]

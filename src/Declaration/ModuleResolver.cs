@@ -1,8 +1,8 @@
-namespace Compiler.Declaration;
-
-using SemanticVerification.Results;
+using Compiler.Diagnostics;
+using Verification.Results;
 using SyntaxTree;
-using Diagnostics;
+
+namespace Compiler.Declaration;
 
 /// <summary>
 /// Resolves import paths to source files using a pre-built index from parsed ASTs.
@@ -45,7 +45,7 @@ public sealed class ModuleResolver
         // Register the module itself for bare imports: `import Module`
         _index.TryAdd(key: moduleName, value: filePath);
 
-        foreach (IAstNode node in ast.Declarations)
+        foreach (ISyntaxTreeNode node in ast.Declarations)
         {
             switch (node)
             {

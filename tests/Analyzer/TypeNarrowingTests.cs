@@ -1,21 +1,18 @@
 using Compiler.Diagnostics;
-using SemanticVerification.Results;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for type narrowing after null/error checks.
-/// After eliminating None or Crashable via pattern checks,
-/// the type should narrow from Maybe/Result/Lookup to the inner value type.
+/// Contains tests for type narrowing.
 /// </summary>
 public class TypeNarrowingTests
 {
     #region Guard Clause Narrowing (unless / if-return)
     /// <summary>
-    /// Tests Analyze_UnlessIsNone_NarrowsMaybeToValue.
+    /// Verifies semantic analysis behavior for unless is none narrows maybe to value.
     /// </summary>
 
     [Fact]
@@ -35,7 +32,7 @@ public class TypeNarrowingTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests Analyze_IfIsNoneReturn_NarrowsMaybeToValue.
+    /// Verifies semantic analysis behavior for if is none return narrows maybe to value.
     /// </summary>
 
     [Fact]
@@ -54,7 +51,7 @@ public class TypeNarrowingTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests Analyze_IfIsNotNone_NarrowsInThenBranch.
+    /// Verifies semantic analysis behavior for if is not none narrows in then branch.
     /// </summary>
 
     [Fact]
@@ -73,7 +70,7 @@ public class TypeNarrowingTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests Analyze_IfIsNoneWithElse_NarrowsInElseBranch.
+    /// Verifies semantic analysis behavior for if is none with else narrows in else branch.
     /// </summary>
 
     [Fact]
@@ -94,7 +91,7 @@ public class TypeNarrowingTests
     }
 
     /// <summary>
-    /// Tests Analyze_IfIsNoneWithoutExit_DoesNotNarrowAfterIf.
+    /// Verifies semantic analysis behavior for if is none without exit does not narrow after if.
     /// </summary>
 
     [Fact]
@@ -117,7 +114,7 @@ public class TypeNarrowingTests
 
     #region When Statement Narrowing
     /// <summary>
-    /// Tests Analyze_WhenMaybe_ElseBindsNarrowedType.
+    /// Verifies semantic analysis behavior for when maybe else binds narrowed type.
     /// </summary>
 
     [Fact]
@@ -141,7 +138,7 @@ public class TypeNarrowingTests
 
     #region No Narrowing for Non-Error Types
     /// <summary>
-    /// Tests Analyze_NonErrorHandlingType_NoNarrowingCrash.
+    /// Verifies semantic analysis behavior for non error handling type no narrowing crash.
     /// </summary>
 
     [Fact]
@@ -157,7 +154,8 @@ public class TypeNarrowingTests
 
         // Should not crash ??the is/isnot check may produce warnings
         // but should not cause an internal error
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
 
     #endregion

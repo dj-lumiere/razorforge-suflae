@@ -1,6 +1,6 @@
-using SyntaxTree;
-using Compiler.Lexer;
 using Compiler.Diagnostics;
+using Compiler.Lexer;
+using SyntaxTree;
 
 namespace Compiler.Parser;
 
@@ -19,7 +19,7 @@ public partial class Parser
     {
         TypeExpression baseType = ParseBaseType();
 
-        // Handle nullable suffix: T? -> Maybe[T]
+        // Handle nullable suffix: T? Maybe[T]
         if (Match(type: TokenType.Question))
         {
             return new TypeExpression(Name: "Maybe",
@@ -35,10 +35,10 @@ public partial class Parser
     /// </summary>
     /// <remarks>
     /// Type forms in priority order:
-    /// 1. Me               - Self type in protocols/member routines
-    /// 2. @intrinsic.xxx   - LLVM IR intrinsic types (RazorForge stdlib)
-    /// 3. Name[T, U]       - Generic named type
-    /// 4. Name             - Simple named type
+    /// 1. Me - Self type in protocols/member routines
+    /// 2. @intrinsic.xxx - LLVM IR intrinsic types (RazorForge stdlib)
+    /// 3. Name[T, U] - Generic named type
+    /// 4. Name - Simple named type
     ///
     /// Named types support qualified paths like razorforge/Collections.Dict
     /// for referencing types from other modules in type annotations.
@@ -122,10 +122,10 @@ public partial class Parser
         // CASE 4/5: Named type - simple or generic
         // ═══════════════════════════════════════════════════════════════════════════
         // Forms:
-        //   User                  -> simple type
-        //   List[T]               -> generic type
-        //   Dict[Text, S32]       -> multi-param generic
-        //   FixedBytes[4]         -> const generic (number as type arg)
+        // User simple type
+        // List[T] generic type
+        // Dict[Text, S32] multi-param generic
+        // FixedBytes[4] const generic (number as type arg)
         if (!Match(type: TokenType.Identifier))
         {
             throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedType,
@@ -195,7 +195,8 @@ public partial class Parser
 
         // Check for integer literal (const generic)
         // Support both typed literals (10u32) and untyped literals (10)
-        if (Match(TokenType.Integer,
+        if (Match(TokenType.UndecidedInteger,
+                TokenType.IntegerLiteral,
                 TokenType.S64Literal,
                 TokenType.U64Literal,
                 TokenType.S32Literal,
@@ -233,24 +234,24 @@ public partial class Parser
     /// Inline constraint forms (inside brackets):
     ///
     /// PROTOCOL CONSTRAINTS (obeys):
-    ///   [T obeys Comparable]           - Single protocol
-    ///   [T obeys Comparable, Hashable]  - Multiple protocols
+    /// [T obeys Comparable] - Single protocol
+    /// [T obeys Comparable, Hashable] - Multiple protocols
     ///
     /// TYPE KIND CONSTRAINTS (is):
-    ///   [T is record]    - Must be a value type (record)
-    ///   [T is entity]    - Must be a reference type (entity)
-    ///   [T is routine]   - Must be a routine type
-    ///   [T is choice]    - Must be a choice type
-    ///   [T is variant]   - Must be a variant type
-    ///   [N is S32]       - Const generic (N is a build-time constant of type S32)
+    /// [T is record] - Must be a value type (record)
+    /// [T is entity] - Must be a reference type (entity)
+    /// [T is routine] - Must be a routine type
+    /// [T is choice] - Must be a choice type
+    /// [T is variant] - Must be a variant type
+    /// [N is S32] - Const generic (N is a build-time constant of type S32)
     ///
     /// TYPE EQUALITY CONSTRAINTS (in):
-    ///   [T in [S32, S64, F64]]  - T must be one of the listed types
+    /// [T in [S32, S64, F64]] - T must be one of the listed types
     ///
     /// DISAMBIGUATION CHALLENGE:
     /// When parsing "T obeys A, B", we need to distinguish between:
-    ///   - Multiple protocols for same param: [T obeys A, B]
-    ///   - Next parameter with constraint: [T obeys A, U obeys B]
+    ///  - Multiple protocols for same param: [T obeys A, B]
+    ///  - Next parameter with constraint: [T obeys A, U obeys B]
     /// We look ahead to check if the next identifier has obeys/is/in after it.
     /// </remarks>
     private (List<string> genericParams, List<GenericConstraintDeclaration>? inlineConstraints)
@@ -272,7 +273,7 @@ public partial class Parser
             // CONSTRAINT TYPE 1: obeys - protocol conformance
             // ─────────────────────────────────────────────────────────────────────
             // Forms: T obeys Protocol
-            //        T obeys Protocol1, Protocol2  (multiple protocols)
+            // T obeys Protocol1, Protocol2 (multiple protocols)
             if (Match(type: TokenType.Obeys))
             {
                 var constraintTypes = new List<TypeExpression>();
@@ -414,9 +415,9 @@ public partial class Parser
     /// This parses the EXTERNAL needs clause form (after brackets):
     ///
     /// Example:
-    ///   record Container[T, U]
-    ///   needs T obeys Comparable, U is entity
-    ///     ...
+    /// record Container[T, U]
+    /// needs T obeys Comparable, U is entity
+    ///  ...
     ///
     /// The same constraint kinds are supported as inline constraints:
     /// - obeys: protocol conformance
@@ -424,8 +425,8 @@ public partial class Parser
     /// - in: type equality (must be one of listed types)
     ///
     /// Multiple needs clauses can be chained, or constraints can be comma-separated:
-    ///   needs T obeys A needs U obeys B    (chained)
-    ///   needs T obeys A, U obeys B            (comma-separated)
+    /// needs T obeys A needs U obeys B (chained)
+    /// needs T obeys A, U obeys B (comma-separated)
     /// </remarks>
     private List<GenericConstraintDeclaration>? ParseGenericConstraints(
         List<string>? genericParams,
@@ -479,12 +480,13 @@ public partial class Parser
                 {
                     // T obeys Protocol1, Protocol2
                     var constraintTypes = new List<TypeExpression>();
-                    do
+                    constraintTypes.Add(item: ParseType());
+                    while (Match(type: TokenType.Comma))
                     {
+                        while (Match(type: TokenType.Newline)) { }
+                        if (IsNewConstraintDeclaration()) break;
                         constraintTypes.Add(item: ParseType());
-                        // Continue if comma followed by type name that's NOT a new constraint declaration
-                        // (i.e., identifier NOT followed by obeys/is/in)
-                    } while (Match(type: TokenType.Comma) && !IsNewConstraintDeclaration());
+                    }
 
                     constraints.Add(item: new GenericConstraintDeclaration(
                         ParameterName: paramName,

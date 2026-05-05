@@ -1,18 +1,17 @@
-﻿using SyntaxTree;
-using Xunit;
+using SyntaxTree;
 
 namespace RazorForge.Tests.Parser;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for parser error handling - invalid syntax that should fail or produce errors.
+/// Contains tests for parser error.
 /// </summary>
 public class ParserErrorTests
 {
     #region Record Errors
     /// <summary>
-    /// Tests Parse_Record_MissingBrace_ThrowsOrRecovers.
+    /// Verifies that the parser accepts record missing brace throws or recovers.
     /// </summary>
 
     [Fact]
@@ -29,7 +28,7 @@ public class ParserErrorTests
         // Parser may recover or throw - either is acceptable for incomplete input
     }
     /// <summary>
-    /// Tests Parse_Record_MissingMemberVariableType_ThrowsOrRecovers.
+    /// Verifies that the parser accepts record missing member variable type throws or recovers.
     /// </summary>
 
     [Fact]
@@ -45,7 +44,7 @@ public class ParserErrorTests
         // Should not parse cleanly - missing type after colon
     }
     /// <summary>
-    /// Tests Parse_Record_VarKeyword_ShouldBeInvalid.
+    /// Verifies that the parser accepts record var keyword as invalid input for later validation.
     /// </summary>
 
     [Fact]
@@ -61,15 +60,33 @@ public class ParserErrorTests
 
         // This tests that var in record member variable is either rejected or ignored
         // Depending on parser behavior, this may parse but semantic analysis should catch it
-        Parse(source: source);
+        Program program = Parse(source: source);
+        Assert.NotNull(@object: program);
         // If it parses, the member variable should still be immutable
+    }
+    /// <summary>
+    /// Verifies that the parser reports in-scope record routines as invalid.
+    /// </summary>
+
+    [Fact]
+    public void Parse_Record_InScopeRoutine_ReportsError()
+    {
+        string source = """
+                        record Point
+                          x: S32
+
+                          routine distance() -> S32
+                            return me.x
+                        """;
+
+        AssertParseError(source: source);
     }
 
     #endregion
 
     #region Entity Errors
     /// <summary>
-    /// Tests Parse_Entity_MemberVariableWithoutVarOrLet_IsValid.
+    /// Verifies that the parser accepts entity member variable without var or let is valid.
     /// </summary>
 
     [Fact]
@@ -84,7 +101,7 @@ public class ParserErrorTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_Entity_VarInBody_Rejected.
+    /// Verifies that the parser accepts entity var in body rejected.
     /// </summary>
 
     [Fact]
@@ -99,7 +116,7 @@ public class ParserErrorTests
         AssertParseError(source: source);
     }
     /// <summary>
-    /// Tests Parse_Entity_MissingTypeName_Throws.
+    /// Verifies that the parser accepts entity missing type name and fails in the expected way.
     /// </summary>
 
     [Fact]
@@ -113,12 +130,29 @@ public class ParserErrorTests
         // Parser uses error recovery, check for errors instead of exception
         AssertParseError(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser reports in-scope entity routines as invalid.
+    /// </summary>
+
+    [Fact]
+    public void Parse_Entity_InScopeRoutine_ReportsError()
+    {
+        string source = """
+                        entity User
+                          name: Text
+
+                          routine display() -> Text
+                            return me.name
+                        """;
+
+        AssertParseError(source: source);
+    }
 
     #endregion
 
     #region Choice Errors
     /// <summary>
-    /// Tests Parse_Choice_MixedValuesAndNoValues_ShouldBeInvalid.
+    /// Verifies that the parser accepts choice mixed values and no values as invalid input for later validation.
     /// </summary>
 
     [Fact]
@@ -133,11 +167,12 @@ public class ParserErrorTests
                         """;
 
         // This should be rejected - can't mix valued and non-valued cases
-        Parse(source: source);
+        Program program = Parse(source: source);
+        Assert.NotNull(@object: program);
         // Parser may accept but semantic analyzer should reject
     }
     /// <summary>
-    /// Tests Parse_Choice_LowercaseCase_ShouldBeValid.
+    /// Verifies that the parser accepts choice lowercase case successfully.
     /// </summary>
 
     [Fact]
@@ -153,12 +188,30 @@ public class ParserErrorTests
         Program program = Parse(source: source);
         Assert.NotNull(@object: program);
     }
+    /// <summary>
+    /// Verifies that the parser reports in-scope choice routines as invalid.
+    /// </summary>
+
+    [Fact]
+    public void Parse_Choice_InScopeRoutine_ReportsError()
+    {
+        string source = """
+                        choice Status
+                          OK
+                          ERROR
+
+                          routine is_ok() -> Bool
+                            return me is OK
+                        """;
+
+        AssertParseError(source: source);
+    }
 
     #endregion
 
     #region Variant Errors
     /// <summary>
-    /// Tests Parse_Variant_EmptyBody_Throws.
+    /// Verifies that the parser accepts variant empty body and fails in the expected way.
     /// </summary>
 
     [Fact]
@@ -172,7 +225,7 @@ public class ParserErrorTests
         Record.Exception(testCode: () => Parse(source: source));
     }
     /// <summary>
-    /// Tests Parse_Variant_FollowsProtocol_Throws.
+    /// Verifies that the parser accepts variant follows protocol and fails in the expected way.
     /// </summary>
 
     [Fact]
@@ -192,7 +245,7 @@ public class ParserErrorTests
 
     #region Protocol Errors
     /// <summary>
-    /// Tests Parse_Protocol_MethodWithBody_ShouldBeInvalid.
+    /// Verifies that the parser accepts protocol method with body as invalid input for later validation.
     /// </summary>
 
     [Fact]
@@ -207,10 +260,10 @@ public class ParserErrorTests
                         """;
 
         // Should reject a member routine with a body in a protocol
-        Record.Exception(testCode: () => Parse(source: source));
+        AssertParseError(source: source);
     }
     /// <summary>
-    /// Tests Parse_Protocol_MissingMe_ShouldBeInvalid.
+    /// Verifies that the parser accepts protocol missing me as invalid input for later validation.
     /// </summary>
 
     [Fact]
@@ -224,15 +277,46 @@ public class ParserErrorTests
                         """;
 
         // Should reject - member routines need Me. prefix
-        Parse(source: source);
+        Program program = Parse(source: source);
+        Assert.NotNull(@object: program);
         // May parse but should be flagged semantically
+    }
+    /// <summary>
+    /// Verifies that the parser reports member variables in protocol bodies.
+    /// </summary>
+
+    [Fact]
+    public void Parse_Protocol_MemberVariable_ReportsError()
+    {
+        string source = """
+                        protocol Displayable
+                          label: Text
+                          routine Me.display() -> Text
+                        """;
+
+        AssertParseError(source: source);
+    }
+    /// <summary>
+    /// Verifies that the parser reports unexpected statements in protocol bodies.
+    /// </summary>
+
+    [Fact]
+    public void Parse_Protocol_StatementInBody_ReportsError()
+    {
+        string source = """
+                        protocol Displayable
+                          return
+                          routine Me.display() -> Text
+                        """;
+
+        AssertParseError(source: source);
     }
 
     #endregion
 
     #region Generic Constraint Errors
     /// <summary>
-    /// Tests Parse_Constraint_UnknownTypeParameter_ShouldBeInvalid.
+    /// Verifies that the parser accepts constraint unknown type parameter as invalid input for later validation.
     /// </summary>
 
     [Fact]
@@ -245,11 +329,12 @@ public class ParserErrorTests
                         """;
 
         // X is not a type parameter - should be rejected
-        Parse(source: source);
+        Program program = Parse(source: source);
+        Assert.NotNull(@object: program);
         // Parser accepts, semantic analyzer should reject
     }
     /// <summary>
-    /// Tests Parse_Constraint_InvalidConstraintKind_Throws.
+    /// Verifies that the parser accepts constraint invalid constraint kind and fails in the expected way.
     /// </summary>
 
     [Fact]
@@ -270,7 +355,7 @@ public class ParserErrorTests
 
     #region Syntax Errors
     /// <summary>
-    /// Tests Parse_UnterminatedString_Throws.
+    /// Verifies that the parser accepts unterminated string and fails in the expected way.
     /// </summary>
 
     [Fact]
@@ -283,7 +368,7 @@ public class ParserErrorTests
         Assert.ThrowsAny<Exception>(testCode: () => Parse(source: source));
     }
     /// <summary>
-    /// Tests Parse_InvalidOperator_Throws.
+    /// Verifies that the parser accepts invalid operator and fails in the expected way.
     /// </summary>
 
     [Fact]
@@ -295,7 +380,7 @@ public class ParserErrorTests
         AssertParseError(source: source);
     }
     /// <summary>
-    /// Tests Parse_MismatchedBraces_Throws.
+    /// Verifies that the parser accepts mismatched braces and fails in the expected way.
     /// </summary>
 
     [Fact]
@@ -311,7 +396,7 @@ public class ParserErrorTests
         // Missing closing brace for if statement
     }
     /// <summary>
-    /// Tests Parse_MismatchedParens_Throws.
+    /// Verifies that the parser accepts mismatched parens and fails in the expected way.
     /// </summary>
 
     [Fact]
@@ -330,7 +415,7 @@ public class ParserErrorTests
 
     #region Nested Routine Errors
     /// <summary>
-    /// Tests Parse_NestedRoutine_ReportsError.
+    /// Verifies that the parser accepts nested routine and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -347,7 +432,7 @@ public class ParserErrorTests
         AssertParseError(source: source);
     }
     /// <summary>
-    /// Tests Parse_NestedRoutineInIf_ReportsError.
+    /// Verifies that the parser accepts nested routine in if and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -369,7 +454,7 @@ public class ParserErrorTests
 
     #region Inline Conditional Errors
     /// <summary>
-    /// Tests Parse_NestedInlineIfThenElse_ReportsError.
+    /// Verifies that the parser accepts nested inline if then else and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -391,7 +476,7 @@ public class ParserErrorTests
 
     #region Reserved Prefix Errors
     /// <summary>
-    /// Tests Parse_ReservedPrefix_Try_ShouldParse.
+    /// Verifies that the parser accepts reserved prefix try so semantic analysis can validate it.
     /// </summary>
 
     [Fact]
@@ -410,7 +495,7 @@ public class ParserErrorTests
         // Semantic analysis will reject this
     }
     /// <summary>
-    /// Tests Parse_ReservedPrefix_Check_ShouldParse.
+    /// Verifies that the parser accepts reserved prefix check so semantic analysis can validate it.
     /// </summary>
 
     [Fact]
@@ -426,7 +511,7 @@ public class ParserErrorTests
         Assert.NotNull(@object: program);
     }
     /// <summary>
-    /// Tests Parse_ReservedPrefix_Find_ShouldParse.
+    /// Verifies that the parser accepts reserved prefix find so semantic analysis can validate it.
     /// </summary>
 
     [Fact]
@@ -446,7 +531,7 @@ public class ParserErrorTests
 
     #region Storage Class On Type Declaration Errors
     /// <summary>
-    /// Tests Parse_CommonVariant_ReportsError.
+    /// Verifies that the parser accepts common variant and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -461,7 +546,7 @@ public class ParserErrorTests
         AssertParseError(source: source);
     }
     /// <summary>
-    /// Tests Parse_GlobalVariant_ReportsError.
+    /// Verifies that the parser accepts global variant and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -476,7 +561,7 @@ public class ParserErrorTests
         AssertParseError(source: source);
     }
     /// <summary>
-    /// Tests Parse_CommonRecord_ReportsError.
+    /// Verifies that the parser accepts common record and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -491,7 +576,7 @@ public class ParserErrorTests
         AssertParseError(source: source);
     }
     /// <summary>
-    /// Tests Parse_GlobalEntity_ReportsError.
+    /// Verifies that the parser accepts global entity and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -505,7 +590,7 @@ public class ParserErrorTests
         AssertParseError(source: source);
     }
     /// <summary>
-    /// Tests Parse_GlobalRoutine_ReportsError.
+    /// Verifies that the parser accepts global routine and reports the expected error.
     /// </summary>
 
     [Fact]

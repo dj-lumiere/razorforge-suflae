@@ -1,6 +1,6 @@
-using SyntaxTree;
-using Compiler.Lexer;
 using Compiler.Diagnostics;
+using Compiler.Lexer;
+using SyntaxTree;
 
 namespace Compiler.Parser;
 

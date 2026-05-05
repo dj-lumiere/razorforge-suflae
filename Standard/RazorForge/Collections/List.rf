@@ -362,6 +362,20 @@ routine ListEmitter[T].$next!() -> T
   me.index = me.index + 1u64
   return _result
 
+### Returns true if both lists contain the same elements in the same order.
+### :param other: The other list to compare against.
+### :returns: `true` if both have equal count and all corresponding elements are equal.
+@readonly
+routine List[T].$eq(other: List[T]) -> Bool
+  if me.count() != other.count()
+    return false
+  var i = 0u64
+  while i < me.count()
+    if me[i] != other[i]
+      return false
+    i = i +% 1u64
+  return true
+
 ### Returns true if any element in the list equals `value`.
 ### Uses the element type's equality operator and scans from front to back.
 ### :param value: The value to search for.

@@ -1,20 +1,18 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for protocol validation rules:
-/// #61: Protocol mutation contract violation
+/// Contains tests for protocol validation.
 /// </summary>
 public class ProtocolValidationTests
 {
     #region #61: Protocol mutation contract violation
     /// <summary>
-    /// Tests Analyze_ProtocolReadonlyImplReadonly_NoError.
+    /// Verifies semantic analysis behavior for protocol readonly impl readonly without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -36,7 +34,7 @@ public class ProtocolValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.ProtocolMutationContractViolation);
     }
     /// <summary>
-    /// Tests Analyze_ProtocolReadonlyImplWritable_ReportsError.
+    /// Verifies semantic analysis behavior for protocol readonly impl writable and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -48,7 +46,6 @@ public class ProtocolValidationTests
                           routine Me.display() -> Text
                         record Bar obeys Displayable
                           value: S32
-                        @writable
                         routine Bar.display() -> Text
                           return "bar"
                         """;
@@ -58,7 +55,7 @@ public class ProtocolValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.ProtocolMutationContractViolation);
     }
     /// <summary>
-    /// Tests Analyze_ProtocolWritableImplReadonly_NoError.
+    /// Verifies semantic analysis behavior for protocol writable impl readonly without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -66,7 +63,6 @@ public class ProtocolValidationTests
     {
         string source = """
                         protocol Mutator
-                          @writable
                           routine Me.mutate()
                         record Baz obeys Mutator
                           value: S32
@@ -80,7 +76,7 @@ public class ProtocolValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.ProtocolMutationContractViolation);
     }
     /// <summary>
-    /// Tests Analyze_ProtocolWritableImplMigratable_ReportsError.
+    /// Verifies semantic analysis behavior for protocol writable impl migratable and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -88,7 +84,6 @@ public class ProtocolValidationTests
     {
         string source = """
                         protocol Mutator
-                          @writable
                           routine Me.mutate()
                         entity Thing obeys Mutator
                           value: S32

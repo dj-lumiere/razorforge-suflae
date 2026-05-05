@@ -1,8 +1,6 @@
 using Compiler.Desugaring.Passes;
-using SyntaxTree;
-
-using Compiler.Postprocessing;
 using Compiler.Synthesis;
+using SyntaxTree;
 
 namespace Compiler.Postprocessing.Passes;
 
@@ -25,15 +23,16 @@ namespace Compiler.Postprocessing.Passes;
 /// (Step 4), which will generate <c>$represent</c>/<c>$diagnose</c> bodies that
 /// reference the lowered backing fields.</para>
 ///
-/// <para>Once <see cref="WiredRoutinePass"/> is implemented, the code generator's
-/// carrier helpers (<c>IsCarrierType</c>, <c>GetCarrierKind</c>, etc.) in
-/// <c>LLVMCodeGenerator.Types.cs</c> can be removed.</para>
+/// <para>Codegen carrier helpers (<c>IsCarrierType</c>, <c>IsMaybeType</c>, etc.) in
+/// <c>LLVMCodeGenerator.Types.cs</c> remain because <c>EmitCrashablePatternMatch</c> writes
+/// to <c>_protocolTypeIdAllocas</c> (LLVM alloca addresses for runtime protocol dispatch on bound
+/// error variables) — IR-specific state with no AST equivalent.</para>
 /// </summary>
 internal sealed class StructuralLoweringPass(PostprocessingContext ctx)
 {
     public void Run(Program program)
     {
-        List<IAstNode> decls = program.Declarations;
+        List<ISyntaxTreeNode> decls = program.Declarations;
         for (int i = 0; i < decls.Count; i++)
         {
             decls[i] = decls[i] switch

@@ -1,19 +1,17 @@
-using SemanticVerification.Results;
+using Verification.Results;
 using TypeModel.Types;
-using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for implicit marker protocol conformance (D3 step 6).
-/// Records implicitly conform to RecordType, entities to EntityType, etc.
+/// Contains tests for marker conformance.
 /// </summary>
 public class MarkerConformanceTests
 {
     /// <summary>
-    /// Tests Analyze_Record_HasRecordTypeConformance.
+    /// Verifies semantic analysis behavior for record has record type conformance.
     /// </summary>
     [Fact]
     public void Analyze_Record_HasRecordTypeConformance()
@@ -36,7 +34,7 @@ public class MarkerConformanceTests
             filter: p => p.Name == "RecordType");
     }
     /// <summary>
-    /// Tests Analyze_Record_HasTransitiveProtocols.
+    /// Verifies semantic analysis behavior for record has transitive protocols.
     /// </summary>
 
     [Fact]
@@ -64,7 +62,7 @@ public class MarkerConformanceTests
             filter: p => p.Name == "Diagnosable");
     }
     /// <summary>
-    /// Tests Analyze_Entity_HasEntityTypeConformance.
+    /// Verifies semantic analysis behavior for entity has entity type conformance.
     /// </summary>
 
     [Fact]
@@ -85,11 +83,9 @@ public class MarkerConformanceTests
         var entity = (EntityTypeInfo)widgetType;
         Assert.Contains(collection: entity.ImplementedProtocols,
             filter: p => p.Name == "EntityType");
-        Assert.Contains(collection: entity.ImplementedProtocols,
-            filter: p => p.Name == "Identifiable");
     }
     /// <summary>
-    /// Tests Analyze_Choice_HasChoiceTypeConformance.
+    /// Verifies semantic analysis behavior for choice has choice type conformance.
     /// </summary>
 
     [Fact]
@@ -116,7 +112,7 @@ public class MarkerConformanceTests
             filter: p => p.Name == "Hashable");
     }
     /// <summary>
-    /// Tests Analyze_Flags_HasFlagsTypeConformance.
+    /// Verifies semantic analysis behavior for flags has flags type conformance.
     /// </summary>
 
     [Fact]
@@ -143,7 +139,7 @@ public class MarkerConformanceTests
             filter: p => p.Name == "Hashable");
     }
     /// <summary>
-    /// Tests Analyze_Record_ImplicitConformanceDoesNotBreakExplicitObeys.
+    /// Verifies semantic analysis behavior for record implicit conformance does not break explicit obeys.
     /// </summary>
 
     [Fact]
@@ -169,7 +165,7 @@ public class MarkerConformanceTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests Analyze_InnateOverride_ReportsError.
+    /// Verifies semantic analysis behavior for innate override and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -177,15 +173,15 @@ public class MarkerConformanceTests
     {
         // @innate methods cannot be overridden by user code
         string source = """
-                        protocol Identifiable
+                        protocol Lockable
                           @[readonly, innate]
-                          routine Me.$same(you: Me) -> Bool
+                          routine Me.$eq(you: Me) -> Bool
 
-                        entity Widget obeys Identifiable
+                        entity Widget obeys Lockable
                           name: Text
 
                         @readonly
-                        routine Widget.$same(you: Widget) -> Bool
+                        routine Widget.$eq(you: Widget) -> Bool
                           return me.name == you.name
                         """;
 

@@ -1,6 +1,8 @@
-namespace Compiler.Lexer;
-
+using Compiler.Diagnostics;
+using System.Globalization;
 using TypeModel.Enums;
+
+namespace Compiler.Lexer;
 
 /// <summary>
 /// Unified tokenizer for both RazorForge and Suflae programming languages.
@@ -27,7 +29,7 @@ public partial class Tokenizer
     private int _tokenStartColumn;
     private int _tokenStartLine;
     private readonly List<Token> _tokens = [];
-    private int _currentIndentLevel;
+    private readonly Stack<int> _indentStack = new([0]);
     private bool _hasTokenOnLine;
     private int _bracketDepth;
     private bool _hasDefinitions;
@@ -119,7 +121,10 @@ public partial class Tokenizer
     public Tokenizer(string source, string fileName, Language language)
     {
         _fileName = fileName;
-        _source = source ?? throw new ArgumentNullException(paramName: nameof(source));
+        _source = NormalizeAndValidateSource(source: source ??
+            throw new ArgumentNullException(paramName: nameof(source)),
+            fileName: fileName,
+            language: language);
         _language = language;
 
         // Shared keywords (both RF and SF)
@@ -204,12 +209,6 @@ public partial class Tokenizer
 
             // Generic constraints
             [key: "needs"] = TokenType.Requires,
-
-            // Async/generator
-            [key: "suspended"] = TokenType.Suspended,
-            [key: "waitfor"] = TokenType.Waitfor,
-            [key: "within"] = TokenType.Within,
-            [key: "after"] = TokenType.After
         };
 
         // RF-only keywords
@@ -219,7 +218,6 @@ public partial class Tokenizer
             _keywords[key: "dangerous"] = TokenType.Dangerous;
             _keywords[key: "external"] = TokenType.External;
             _keywords[key: "steal"] = TokenType.Steal;
-            _keywords[key: "threaded"] = TokenType.Threaded;
         }
 
         // Numeric suffix map - shared between both languages except "j" default
@@ -269,6 +267,97 @@ public partial class Tokenizer
 
     #endregion
 
+    #region Source Validation
+
+    /// <summary>
+    /// Normalizes source text before scanning and rejects invisible or ambiguous input.
+    /// </summary>
+    private static string NormalizeAndValidateSource(string source,
+        string fileName,
+        Language language)
+    {
+        if (source.Length > 0 && source[index: 0] == '\uFEFF')
+        {
+            source = source[1..];
+        }
+
+        source = source.Replace(oldValue: "\r\n", newValue: "\n")
+                       .Replace(oldChar: '\r', newChar: '\n');
+
+        for (int i = 0; i < source.Length; i += 1)
+        {
+            char c = source[index: i];
+            if (c == '\0')
+            {
+                ThrowInvalidSourceCharacter(source: source,
+                    fileName: fileName,
+                    language: language,
+                    position: i,
+                    message: "Source contains a null byte");
+            }
+
+            if (c == '\t')
+            {
+                ThrowInvalidSourceCharacter(source: source,
+                    fileName: fileName,
+                    language: language,
+                    position: i,
+                    message: "Tabs are not allowed; indentation must use spaces");
+            }
+
+            if (char.IsWhiteSpace(c: c) && c is not ' ' and not '\n')
+            {
+                ThrowInvalidSourceCharacter(source: source,
+                    fileName: fileName,
+                    language: language,
+                    position: i,
+                    message: $"Unsupported whitespace character U+{(int)c:X4}");
+            }
+
+            if (CharUnicodeInfo.GetUnicodeCategory(ch: c) == UnicodeCategory.Format)
+            {
+                ThrowInvalidSourceCharacter(source: source,
+                    fileName: fileName,
+                    language: language,
+                    position: i,
+                    message: $"Unsupported format character U+{(int)c:X4}");
+            }
+        }
+
+        return source;
+    }
+
+    private static void ThrowInvalidSourceCharacter(string source,
+        string fileName,
+        Language language,
+        int position,
+        string message)
+    {
+        int line = 1;
+        int column = 1;
+        for (int i = 0; i < position; i += 1)
+        {
+            if (source[index: i] == '\n')
+            {
+                line += 1;
+                column = 1;
+            }
+            else
+            {
+                column += 1;
+            }
+        }
+
+        throw new GrammarException(code: GrammarDiagnosticCode.InvalidCharacter,
+            message: message,
+            fileName: fileName,
+            line: line,
+            column: column,
+            language: language);
+    }
+
+    #endregion
+
     #region Public Methods
 
     /// <summary>
@@ -287,8 +376,9 @@ public partial class Tokenizer
         }
 
         // Emit remaining DEDENT tokens at end of file
-        for (int i = 0; i < _currentIndentLevel; i += 1)
+        while (_indentStack.Count > 1)
         {
+            _indentStack.Pop();
             AddToken(type: TokenType.Dedent, text: "");
         }
 

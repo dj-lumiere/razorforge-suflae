@@ -1,8 +1,9 @@
-namespace Compiler.CodeGen;
-
 using System.Text;
-using TypeModel.Symbols;
 using SyntaxTree;
+using TypeModel.Symbols;
+using TypeModel.Types;
+
+namespace Compiler.CodeGen;
 
 /// <summary>
 /// LLVM intrinsic call emission — template-based IR generation for
@@ -12,12 +13,13 @@ public partial class LlvmCodeGenerator
 {
     /// <summary>
     /// Emits a call to an LLVM intrinsic routine using its <c>@llvm_ir</c> template.
-    /// Called from <see cref="EmitFunctionCall"/> and <see cref="EmitMethodCall"/> when
+    /// Called from <see cref="EmitRoutineCall"/> and <see cref="EmitMemberRoutineCall"/> when
     /// <c>resolvedRoutine.LlvmIrTemplate != null</c>.
     /// </summary>
     private string EmitLlvmIntrinsicCall(StringBuilder sb, RoutineInfo routine,
         string? receiver, List<Expression> arguments,
-        IReadOnlyList<TypeExpression>? typeArguments)
+        IReadOnlyList<TypeExpression>? typeArguments,
+        TypeInfo? resolvedReturnType = null)
     {
         // Emit argument values.
         var argValues = new List<string>();
@@ -27,6 +29,8 @@ public partial class LlvmCodeGenerator
             argValues.Add(EmitExpression(sb: sb, expr: arg));
 
         // Resolve type arguments to LLVM type strings.
+        IReadOnlyList<string>? genericParameters =
+            routine.GenericParameters ?? routine.GenericDefinition?.GenericParameters;
         var llvmTypeArgs = new List<string>();
         if (typeArguments != null)
         {
@@ -34,9 +38,180 @@ public partial class LlvmCodeGenerator
                 llvmTypeArgs.Add(ResolveTypeExpressionToLlvm(typeExpr: ta));
         }
 
+        List<string> inferredTypeArgs = InferLlvmIntrinsicTypeArguments(routine: routine,
+            arguments: arguments,
+            resolvedReturnType: resolvedReturnType);
+
+        if (typeArguments == null)
+        {
+            llvmTypeArgs.AddRange(inferredTypeArgs);
+        }
+        else if (inferredTypeArgs.Count == llvmTypeArgs.Count)
+        {
+            for (int i = 0; i < llvmTypeArgs.Count; i++)
+            {
+                bool unresolvedExplicit = !LooksLikeLlvmType(llvmTypeArgs[i]);
+                bool namedGenericMatch =
+                    genericParameters is { Count: > 0 } &&
+                    i < genericParameters.Count &&
+                    llvmTypeArgs[i] == genericParameters[i];
+                if (unresolvedExplicit || namedGenericMatch)
+                {
+                    llvmTypeArgs[i] = inferredTypeArgs[i];
+                }
+            }
+        }
+
         string mold = routine.LlvmIrTemplate!;
         return EmitFromTemplate(sb: sb, mold: mold, method: routine,
             llvmTypeArgs: llvmTypeArgs, args: argValues);
+    }
+
+    private List<string> InferLlvmIntrinsicTypeArguments(RoutineInfo routine,
+        IReadOnlyList<Expression> arguments, TypeInfo? resolvedReturnType)
+    {
+        if (routine.TypeArguments is { Count: > 0 })
+        {
+            return routine.TypeArguments.Select(selector: GetLlvmType).ToList();
+        }
+
+        IReadOnlyList<string>? genericParameters =
+            routine.GenericParameters ?? routine.GenericDefinition?.GenericParameters;
+        if (genericParameters is not { Count: > 0 })
+        {
+            return [];
+        }
+
+        var inferred = new Dictionary<string, TypeInfo>(StringComparer.Ordinal);
+        var inferredLlvmTypes = new Dictionary<string, string>(StringComparer.Ordinal);
+        for (int i = 0; i < routine.Parameters.Count && i < arguments.Count; i++)
+        {
+            TypeInfo? argType = GetExpressionType(expr: arguments[i]);
+            if (argType != null)
+            {
+                InferGenericBindings(pattern: routine.Parameters[i].Type,
+                    concrete: argType,
+                    inferred: inferred);
+            }
+
+            InferGenericLlvmBindings(pattern: routine.Parameters[i].Type,
+                concreteLlvmType: GetExpressionLlvmType(expr: arguments[i]),
+                inferredLlvmTypes: inferredLlvmTypes);
+        }
+
+        if (resolvedReturnType != null && routine.ReturnType != null
+            && resolvedReturnType is not GenericParameterTypeInfo)
+        {
+            InferGenericBindings(pattern: routine.ReturnType,
+                concrete: resolvedReturnType,
+                inferred: inferred);
+            InferGenericLlvmBindings(pattern: routine.ReturnType,
+                concreteLlvmType: GetLlvmType(type: resolvedReturnType),
+                inferredLlvmTypes: inferredLlvmTypes);
+        }
+
+        var llvmTypeArgs = new List<string>(capacity: genericParameters.Count);
+        foreach (string genericParam in genericParameters)
+        {
+            if (inferred.TryGetValue(key: genericParam, value: out TypeInfo? concreteType))
+            {
+                llvmTypeArgs.Add(GetLlvmType(type: concreteType));
+                continue;
+            }
+
+            if (inferredLlvmTypes.TryGetValue(key: genericParam, value: out string? concreteLlvmType))
+            {
+                llvmTypeArgs.Add(concreteLlvmType);
+                continue;
+            }
+
+            return [];
+        }
+
+        return llvmTypeArgs;
+    }
+
+    private static void InferGenericBindings(TypeInfo pattern, TypeInfo concrete,
+        Dictionary<string, TypeInfo> inferred)
+    {
+        if (pattern is GenericParameterTypeInfo genericParam)
+        {
+            inferred.TryAdd(key: genericParam.Name, value: concrete);
+            return;
+        }
+
+        if (pattern is RoutineTypeInfo patternRoutine && concrete is RoutineTypeInfo concreteRoutine)
+        {
+            for (int i = 0;
+                 i < patternRoutine.ParameterTypes.Count && i < concreteRoutine.ParameterTypes.Count;
+                 i++)
+            {
+                InferGenericBindings(pattern: patternRoutine.ParameterTypes[i],
+                    concrete: concreteRoutine.ParameterTypes[i],
+                    inferred: inferred);
+            }
+
+            if (patternRoutine.ReturnType != null && concreteRoutine.ReturnType != null)
+            {
+                InferGenericBindings(pattern: patternRoutine.ReturnType,
+                    concrete: concreteRoutine.ReturnType,
+                    inferred: inferred);
+            }
+            return;
+        }
+
+        if (pattern is TupleTypeInfo patternTuple && concrete is TupleTypeInfo concreteTuple)
+        {
+            for (int i = 0; i < patternTuple.ElementTypes.Count && i < concreteTuple.ElementTypes.Count; i++)
+            {
+                InferGenericBindings(pattern: patternTuple.ElementTypes[i],
+                    concrete: concreteTuple.ElementTypes[i],
+                    inferred: inferred);
+            }
+            return;
+        }
+
+        if (pattern.TypeArguments is not { Count: > 0 } || concrete.TypeArguments is not { Count: > 0 })
+        {
+            return;
+        }
+
+        for (int i = 0; i < pattern.TypeArguments.Count && i < concrete.TypeArguments.Count; i++)
+        {
+            InferGenericBindings(pattern: pattern.TypeArguments[i],
+                concrete: concrete.TypeArguments[i],
+                inferred: inferred);
+        }
+    }
+
+    private static void InferGenericLlvmBindings(TypeInfo pattern, string concreteLlvmType,
+        Dictionary<string, string> inferredLlvmTypes)
+    {
+        if (pattern is GenericParameterTypeInfo genericParam)
+        {
+            inferredLlvmTypes.TryAdd(key: genericParam.Name, value: concreteLlvmType);
+        }
+    }
+
+    private static bool LooksLikeLlvmType(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        return value == "void" ||
+               value == "ptr" ||
+               value == "half" ||
+               value == "float" ||
+               value == "double" ||
+               value == "fp128" ||
+               value.StartsWith(value: "i", comparisonType: StringComparison.Ordinal) &&
+               value.Length > 1 &&
+               char.IsDigit(value[1]) ||
+               value.StartsWith(value: "%", comparisonType: StringComparison.Ordinal) ||
+               value.StartsWith(value: "{", comparisonType: StringComparison.Ordinal) ||
+               value.StartsWith(value: "[", comparisonType: StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -69,11 +244,13 @@ public partial class LlvmCodeGenerator
                 substituted = substituted.Replace(oldValue: "{first}", newValue: firstResult);
 
             // {T}, {From}, {To}, etc. — named generic parameters → LLVM types
-            if (method.GenericParameters != null)
+            IReadOnlyList<string>? genericParameters =
+                method.GenericParameters ?? method.GenericDefinition?.GenericParameters;
+            if (genericParameters != null)
             {
-                for (int i = 0; i < method.GenericParameters.Count && i < llvmTypeArgs.Count; i++)
+                for (int i = 0; i < genericParameters.Count && i < llvmTypeArgs.Count; i++)
                 {
-                    string paramName = method.GenericParameters[index: i];
+                    string paramName = genericParameters[index: i];
                     substituted = substituted.Replace(oldValue: $"{{{paramName}}}",
                         newValue: llvmTypeArgs[index: i]);
 
@@ -105,6 +282,27 @@ public partial class LlvmCodeGenerator
             }
         }
 
+        // Overflow intrinsics return anonymous struct types like { i128, i1 }.
+        // If the method's return type is a TupleTypeInfo, coerce via extractvalue/insertvalue
+        // so the caller receives the named LLVM type (%"Record.Tuple[...]").
+        if (lastResult != null && method.ReturnType is TupleTypeInfo tupleReturn)
+        {
+            string namedType = GetLlvmType(type: tupleReturn);
+            string anonType =
+                $"{{ {string.Join(separator: ", ", values: tupleReturn.ElementTypes.Select(selector: GetLlvmType))} }}";
+            string tupleVal = "undef";
+            for (int i = 0; i < tupleReturn.ElementTypes.Count; i++)
+            {
+                string elem = NextTemp();
+                EmitLine(sb: sb, line: $"  {elem} = extractvalue {anonType} {lastResult}, {i}");
+                string ins = NextTemp();
+                EmitLine(sb: sb,
+                    line: $"  {ins} = insertvalue {namedType} {tupleVal}, {GetLlvmType(type: tupleReturn.ElementTypes[index: i])} {elem}, {i}");
+                tupleVal = ins;
+            }
+            return tupleVal;
+        }
+
         return lastResult ?? (args.Count > 0 ? args[index: 0] : "undef");
     }
 
@@ -114,9 +312,10 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private string ResolveTypeExpressionToLlvm(TypeExpression typeExpr)
     {
-        if (_typeSubstitutions != null &&
-            _typeSubstitutions.TryGetValue(key: typeExpr.Name, value: out var sub))
-            return GetLlvmType(type: sub);
+        if (typeExpr.ResolvedType is { } resolvedType && resolvedType is not ErrorTypeInfo)
+        {
+            return GetLlvmType(type: ApplyTypeSubstitutions(type: resolvedType));
+        }
 
         var type = _registry.LookupType(name: typeExpr.Name);
         if (type != null)
@@ -128,7 +327,7 @@ public partial class LlvmCodeGenerator
                 var fullType = _registry.LookupType(name: fullName);
                 if (fullType != null) return GetLlvmType(type: fullType);
 
-                var resolvedArgs = new System.Collections.Generic.List<TypeModel.Types.TypeInfo>();
+                var resolvedArgs = new List<TypeInfo>();
                 foreach (TypeExpression ga in typeExpr.GenericArguments)
                 {
                     var r = ResolveTypeArgument(ta: ga);
@@ -143,14 +342,6 @@ public partial class LlvmCodeGenerator
 
         type = LookupTypeInCurrentModule(name: typeExpr.Name);
         if (type != null) return GetLlvmType(type: type);
-
-        if (_typeSubstitutions != null)
-        {
-            foreach (var sub2 in _typeSubstitutions.Values)
-            {
-                if (sub2.Name == typeExpr.Name) return GetLlvmType(type: sub2);
-            }
-        }
 
         return typeExpr.Name;
     }
@@ -173,7 +364,8 @@ public partial class LlvmCodeGenerator
 
         if (routine?.LlvmIrTemplate != null)
             return EmitLlvmIntrinsicCall(sb: sb, routine: routine, receiver: null,
-                arguments: gmc.Arguments, typeArguments: gmc.TypeArguments);
+                arguments: gmc.Arguments, typeArguments: gmc.TypeArguments,
+                resolvedReturnType: gmc.ResolvedType);
 
         string objectDesc = gmc.Object is IdentifierExpression id2 ? id2.Name : gmc.Object.GetType().Name;
         throw new InvalidOperationException(

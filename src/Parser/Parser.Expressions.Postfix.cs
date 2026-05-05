@@ -1,8 +1,8 @@
-namespace Compiler.Parser;
-
-using Lexer;
+using Compiler.Diagnostics;
+using Compiler.Lexer;
 using SyntaxTree;
-using Diagnostics;
+
+namespace Compiler.Parser;
 
 /// <summary>
 /// Partial class containing postfix expression parsing.
@@ -150,8 +150,7 @@ public partial class Parser
                 // Check for generic method call with type parameters
                 // Disambiguate by checking bracket content (must look like type args)
                 // and what follows ] (must be ( or .)
-                if (Check(type: TokenType.LeftBracket) &&
-                    IsLikelyGenericBracket(acceptDotAfterBracket: true))
+                if (Check(type: TokenType.LeftBracket) && (isGenericMemOp || IsLikelyGenericAfterIdentifier()))
                 {
                     Advance(); // consume '['
                     var typeArgs = new List<TypeExpression>();

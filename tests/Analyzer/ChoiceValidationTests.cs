@@ -1,6 +1,5 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
@@ -15,7 +14,7 @@ public class ChoiceValidationTests
 {
     #region Valid Choices (no errors expected)
     /// <summary>
-    /// Tests Analyze_SimpleChoice_NoErrors.
+    /// Verifies semantic analysis behavior for simple choice without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -36,7 +35,7 @@ public class ChoiceValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.ChoiceDuplicateValue);
     }
     /// <summary>
-    /// Tests Analyze_ChoiceWithExplicitValues_NoErrors.
+    /// Verifies semantic analysis behavior for choice with explicit values without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -56,7 +55,7 @@ public class ChoiceValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.ChoiceDuplicateValue);
     }
     /// <summary>
-    /// Tests Analyze_ChoiceWithNegativeValues_NoErrors.
+    /// Verifies semantic analysis behavior for choice with negative values without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -78,7 +77,7 @@ public class ChoiceValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.ChoiceCaseValueOverflow);
     }
     /// <summary>
-    /// Tests Analyze_ChoiceWithLargeValues_OverflowError.
+    /// Verifies semantic analysis behavior for choice with large values overflow error.
     /// </summary>
 
     [Fact]
@@ -101,7 +100,7 @@ public class ChoiceValidationTests
 
     #region Mixed Values (error expected)
     /// <summary>
-    /// Tests Analyze_ChoiceMixedValues_ReportsError.
+    /// Verifies semantic analysis behavior for choice mixed values and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -123,7 +122,7 @@ public class ChoiceValidationTests
 
     #region Duplicate Values (error expected)
     /// <summary>
-    /// Tests Analyze_ChoiceDuplicateExplicitValues_ReportsError.
+    /// Verifies semantic analysis behavior for choice duplicate explicit values and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -145,7 +144,7 @@ public class ChoiceValidationTests
 
     #region Operator Prohibition (choices do not support any operators)
     /// <summary>
-    /// Tests Analyze_ChoiceAddition_ReportsError.
+    /// Verifies semantic analysis behavior for choice addition and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -167,7 +166,7 @@ public class ChoiceValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
     /// <summary>
-    /// Tests Analyze_ChoiceCompoundAssignment_ReportsError.
+    /// Verifies semantic analysis behavior for choice compound assignment and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -189,7 +188,7 @@ public class ChoiceValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
     /// <summary>
-    /// Tests Analyze_ChoiceBitwise_ReportsError.
+    /// Verifies semantic analysis behavior for choice bitwise and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -211,7 +210,7 @@ public class ChoiceValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
     /// <summary>
-    /// Tests Analyze_ChoiceComparison_ReportsError.
+    /// Verifies semantic analysis behavior for choice comparison and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -233,7 +232,7 @@ public class ChoiceValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
     /// <summary>
-    /// Tests Analyze_ChoiceEquality_ReportsError.
+    /// Verifies semantic analysis behavior for choice equality and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -259,7 +258,7 @@ public class ChoiceValidationTests
 
     #region Member Access (C98)
     /// <summary>
-    /// Tests Choice_MemberAccess_AsValue.
+    /// Verifies that the test validates member access as value.
     /// </summary>
 
     [Fact]
@@ -283,7 +282,7 @@ public class ChoiceValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.UnknownIdentifier);
     }
     /// <summary>
-    /// Tests Choice_MemberAccess_InvalidCase.
+    /// Verifies that the test validates member access invalid case.
     /// </summary>
 
     [Fact]
@@ -305,7 +304,7 @@ public class ChoiceValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.MemberNotFound);
     }
     /// <summary>
-    /// Tests Choice_MemberAccess_Assignment_And_Comparison.
+    /// Verifies that the test validates member access assignment and comparison.
     /// </summary>
 
     [Fact]

@@ -1,26 +1,18 @@
-namespace Compiler.CodeGen;
-
+using Compiler.Lexer;
+using SyntaxTree;
 using TypeModel.Symbols;
 using TypeModel.Types;
-using SyntaxTree;
+
+namespace Compiler.CodeGen;
 
 /// <summary>
 /// Expression code generation helpers for result type resolution and conditional lowering.
 /// </summary>
 public partial class LlvmCodeGenerator
 {
-    private static bool TryGetTransparentProtocolTarget(TypeInfo? type, out TypeInfo? targetType)
-    {
-        if (type is ProtocolTypeInfo { Methods.Count: 0, TypeArguments: { Count: > 0 } } proto)
-        {
-            targetType = proto.TypeArguments[index: 0];
-            return true;
-        }
-
-        targetType = type;
-        return false;
-    }
-
+    /// <summary>
+    /// Resolves the identifier type from semantic compiler state.
+    /// </summary>
     private TypeInfo? ResolveIdentifierType(IdentifierExpression id)
     {
         if (_localVariables.TryGetValue(key: id.Name, value: out TypeInfo? varType))
@@ -29,209 +21,9 @@ public partial class LlvmCodeGenerator
         }
 
         VariableInfo? regVar = _registry.LookupVariable(name: id.Name);
-        if (regVar != null)
-        {
-            return ApplyTypeSubstitutions(type: regVar.Type);
-        }
-
-        // Generic type param or const generic — resolve via substitutions
-        if (_typeSubstitutions != null &&
-            _typeSubstitutions.TryGetValue(key: id.Name, value: out TypeInfo? sub))
-        {
-            if (sub is ConstGenericValueTypeInfo constVal)
-            {
-                return ResolveConstGenericUnderlyingType(constVal: constVal);
-            }
-
-            return sub;
-        }
-
-        return null;
-    }
-
-    private TypeInfo? ResolvePresetConstGenericType(string name)
-    {
-        VariableInfo? preset = LookupPresetByName(name: name);
-        if (preset is not { IsPreset: true, PresetValue: not null })
-        {
-            return null;
-        }
-
-        return ResolvePresetConstGenericValue(preset: preset,
-            visited: new HashSet<string>(StringComparer.Ordinal));
-    }
-
-    private VariableInfo? LookupPresetByName(string name)
-    {
-        VariableInfo? preset = _registry.LookupVariable(name: name);
-        if (preset is { IsPreset: true })
-        {
-            return preset;
-        }
-
-        string? moduleName = _currentEmittingRoutine?.OwnerType?.Module ??
-                             _currentEmittingRoutine?.Module;
-        if (moduleName != null && !name.Contains(value: '.'))
-        {
-            preset = _registry.LookupVariable(name: $"{moduleName}.{name}");
-            if (preset is { IsPreset: true })
-            {
-                return preset;
-            }
-        }
-
-        return null;
-    }
-
-    private TypeInfo? ResolvePresetConstGenericValue(VariableInfo preset,
-        HashSet<string> visited)
-    {
-        if (!visited.Add(item: preset.QualifiedName))
-        {
-            return null;
-        }
-
-        switch (preset.PresetValue)
-        {
-            case LiteralExpression literal when
-                TryBuildConstGenericFromLiteral(literal: literal,
-                    declaredType: preset.Type,
-                    value: out ConstGenericValueTypeInfo? constValue):
-                return constValue;
-
-            case IdentifierExpression id:
-            {
-                VariableInfo? nestedPreset = LookupPresetByName(name: id.Name);
-                if (nestedPreset is { IsPreset: true, PresetValue: not null })
-                {
-                    return ResolvePresetConstGenericValue(preset: nestedPreset,
-                        visited: visited);
-                }
-
-                break;
-            }
-        }
-
-        return null;
-    }
-
-    private static bool TryBuildConstGenericFromLiteral(LiteralExpression literal,
-        TypeInfo declaredType, out ConstGenericValueTypeInfo? value)
-    {
-        value = null;
-
-        switch (literal.LiteralType)
-        {
-            case Compiler.Lexer.TokenType.True:
-                value = new ConstGenericValueTypeInfo(literalText: "true",
-                    value: 1,
-                    explicitTypeName: "Bool");
-                return true;
-
-            case Compiler.Lexer.TokenType.False:
-                value = new ConstGenericValueTypeInfo(literalText: "false",
-                    value: 0,
-                    explicitTypeName: "Bool");
-                return true;
-
-            case Compiler.Lexer.TokenType.Integer:
-            case Compiler.Lexer.TokenType.S8Literal:
-            case Compiler.Lexer.TokenType.S16Literal:
-            case Compiler.Lexer.TokenType.S32Literal:
-            case Compiler.Lexer.TokenType.S64Literal:
-            case Compiler.Lexer.TokenType.S128Literal:
-            case Compiler.Lexer.TokenType.U8Literal:
-            case Compiler.Lexer.TokenType.U16Literal:
-            case Compiler.Lexer.TokenType.U32Literal:
-            case Compiler.Lexer.TokenType.U64Literal:
-            case Compiler.Lexer.TokenType.U128Literal:
-            case Compiler.Lexer.TokenType.AddressLiteral:
-                if (literal.Value is string rawNumeric)
-                {
-                    if (TryParseConstGenericLiteral(name: rawNumeric,
-                            value: out long parsed,
-                            explicitType: out string? explicitType))
-                    {
-                        value = new ConstGenericValueTypeInfo(literalText: rawNumeric,
-                            value: parsed,
-                            explicitTypeName: explicitType ?? GetConstGenericExplicitTypeName(
-                                declaredType: declaredType));
-                        return true;
-                    }
-                }
-
-                return false;
-        }
-
-        return false;
-    }
-
-    private static string? GetConstGenericExplicitTypeName(TypeInfo declaredType)
-    {
-        return declaredType.Name switch
-        {
-            "Bool" or "Address" or "U8" or "U16" or "U32" or "U64" or "U128" or
-                "S8" or "S16" or "S32" or "S64" or "S128" => declaredType.Name,
-            _ => null
-        };
-    }
-
-    /// <summary>
-    /// Resolves a <see cref="ConstGenericValueTypeInfo"/> to its underlying primitive type
-    /// for method dispatch. E.g., a const generic value "8" with constraint "N is U64"
-    /// resolves to the U64 type so that method calls like N.$represent() work correctly.
-    /// </summary>
-    private TypeInfo ResolveConstGenericUnderlyingType(ConstGenericValueTypeInfo constVal)
-    {
-        // Use explicit type if available (e.g., "4u64" → U64)
-        string
-            typeName =
-                constVal.ExplicitTypeName ??
-                "U64"; // Default to U64 for untyped integer const generics
-        return _registry.LookupType(name: typeName) ?? constVal;
-    }
-
-    /// <summary>
-    /// Resolves a type name that appears as a method receiver during monomorphization.
-    /// E.g., T.data_size() where T is still "T" — resolved via <see cref="_typeSubstitutions"/> key lookup.
-    /// Falls back to registry lookup for non-monomorphization paths.
-    /// </summary>
-    private TypeInfo? ResolveTypeNameAsReceiver(string name)
-    {
-        // Generic type param used as receiver (e.g., T.data_size() where T is still "T")
-        if (_typeSubstitutions != null &&
-            _typeSubstitutions.TryGetValue(key: name, value: out TypeInfo? sub) &&
-            sub is not ConstGenericValueTypeInfo)
-        {
-            return sub;
-        }
-
-        // Direct registry lookup (handles simple names like S64, Text, Character)
-        TypeInfo? type = LookupTypeInCurrentModule(name: name);
-        if (type != null)
-        {
-            return type;
-        }
-
-        // During monomorphization, check if this name matches any substituted type
-        // (handles generic instances like SortedDict[S64, S64] that may not be in the registry by bare name)
-        if (_typeSubstitutions != null)
-        {
-            foreach (TypeInfo sub2 in _typeSubstitutions.Values)
-            {
-                if (sub2 is ConstGenericValueTypeInfo)
-                {
-                    continue;
-                }
-
-                if (sub2.Name == name)
-                {
-                    return sub2;
-                }
-            }
-        }
-
-        return null;
+        return regVar != null
+            ? ApplyTypeSubstitutions(type: regVar.Type)
+            : null;
     }
 
     /// <summary>
@@ -239,26 +31,13 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private TypeInfo? GetExpressionType(Expression expr)
     {
-        // For index expressions during monomorphization, prefer structure-based inference.
-        // ResolvedType may contain ambiguous generic params (e.g., T) that map to the wrong
-        // substitution when the collection's element type differs from the outer type param.
-        if (expr is IndexExpression indexExpr && _typeSubstitutions != null)
-        {
-            TypeInfo? structureType = GetIndexReturnType(index: indexExpr);
-            if (structureType != null)
-            {
-                return structureType;
-            }
-        }
-
-        // For identifier expressions (and named-argument wrappers around them) during
-        // monomorphization, prefer the concrete type from _localVariables over
-        // ResolvedType+substitution. This fixes the wrapper-forwarder inner-T vs outer-T
-        // collision: SA annotates the generic forwarder body with ResolvedType=T (the inner
-        // method's T), but _typeSubstitutions maps T to the wrapper's inner type
-        // (e.g., ListNode[S64]), not the inner method's element type (S64).
-        if (_typeSubstitutions != null)
-        {
+        // For identifier expressions (and named-argument wrappers around them), prefer the
+        // concrete local-variable type when it is more specific than a stale semantic annotation.
+        // This fixes two cases:
+        // 1. Monomorphization: ResolvedType may still carry unsubstituted generic params.
+        // 2. Synthesized variant bodies: copied AST nodes can retain an overload-context type
+        // that disagrees with the routine's actual parameter table (e.g., "from" marked S8
+        // inside try_create(from: S32)).
             string? innerIdName = expr switch
             {
                 IdentifierExpression idE => idE.Name,
@@ -266,48 +45,75 @@ public partial class LlvmCodeGenerator
                 _ => null
             };
             if (innerIdName != null &&
-                _localVariables.TryGetValue(key: innerIdName, value: out TypeInfo? localVarType) &&
-                localVarType is not GenericParameterTypeInfo &&
-                !localVarType.IsGenericDefinition)
+                _localVariables.TryGetValue(key: innerIdName, value: out TypeInfo? localVarType))
             {
-                return localVarType;
+                TypeInfo concreteLocal = ApplyTypeSubstitutions(type: localVarType);
+                if (concreteLocal is not GenericParameterTypeInfo && !concreteLocal.IsGenericDefinition && (expr.ResolvedType is null or ErrorTypeInfo or GenericParameterTypeInfo ||
+                        ShouldPreferLocalIdentifierType(localType: concreteLocal,
+                            resolvedType: expr.ResolvedType)))
+                {
+                    return concreteLocal;
+                }
+            }
+        // First, check if the semantic analyzer has already resolved the type
+        if (expr.ResolvedType is null or ErrorTypeInfo)
+        {
+            return expr switch
+            {
+                LiteralExpression literal => GetLiteralType(literal: literal),
+                IdentifierExpression id => ResolveIdentifierType(id: id),
+                MemberExpression member => GetMemberType(member: member),
+                CreatorExpression ctor => ResolveCreatorType(creator: ctor),
+                BinaryExpression binary => GetBinaryExpressionType(binary: binary),
+                ChainedComparisonExpression => _registry.LookupType(
+                    name: "Bool"), // Comparisons return Bool
+                UnaryExpression unary => GetUnaryExpressionType(unary: unary),
+                CallExpression call => GetCallReturnType(call: call),
+                GenericMethodCallExpression gmc2 => throw new InvalidOperationException(
+                    $"GenericMethodCallExpression must be lowered by GenericCallLoweringPass before codegen. " +
+                    $"GMCE: {(gmc2.Object is IdentifierExpression eid ? eid.Name : gmc2.Object.GetType().Name)}.{gmc2.MethodName}" +
+                    $"[{string.Join(", ", gmc2.TypeArguments?.Select(t => t.Name) ?? [])}], " +
+                    $"in routine: {_currentEmittingRoutine?.Name ?? "<unknown>"} (owner: {_currentEmittingRoutine?.OwnerType?.Name ?? "none"})"),
+                StealExpression steal => GetExpressionType(expr: steal.Operand),
+                IndexExpression index => GetIndexReturnType(index: index),
+                NamedArgumentExpression named => GetExpressionType(expr: named.Value),
+                DictEntryLiteralExpression dictEntry => dictEntry.ResolvedType,
+                ConditionalExpression cond => GetExpressionType(expr: cond.TrueExpression),
+                GenericMemberExpression gme => GetGenericMemberExpressionType(gme: gme),
+                _ => null
+            };
+        }
+
+        // Skip SA-resolved type for CallExpression through transparent protocols (e.g., Referring[T]).
+        // The SA may resolve "other[j]" on a Referring[Text] parameter to "Text" (the inner type),
+        // but the correct return type is "Character" (from Text.$getitem!). GetCallReturnType
+        // handles this via the transparent-protocol fallback path.
+        bool skipSaResolved = false;
+        if (expr is CallExpression { Callee: MemberExpression calleeMember })
+        {
+            TypeInfo? rcvrType = GetExpressionType(expr: calleeMember.Object);
+            if (rcvrType is ProtocolTypeInfo { Methods.Count: 0 } protoRcvr2 &&
+                protoRcvr2.TypeArguments is { Count: > 0 })
+            {
+                skipSaResolved = true;
             }
         }
 
-        // First, check if the semantic analyzer has already resolved the type
-        if (expr.ResolvedType != null && expr.ResolvedType is not ErrorTypeInfo)
+        if (!skipSaResolved)
         {
-            // Skip SA-resolved type for CallExpression through transparent protocols (e.g., Referring[T]).
-            // The SA may resolve "other[j]" on a Referring[Text] parameter to "Text" (the inner type),
-            // but the correct return type is "Character" (from Text.$getitem!). GetCallReturnType
-            // handles this via the transparent-protocol fallback path.
-            bool skipSaResolved = false;
-            if (expr is CallExpression { Callee: MemberExpression calleeMember })
+            // During monomorphization, resolve unsubstituted generic params (e.g., Hijacked[U] -> Hijacked[S64])
+            TypeInfo resolved = ApplyTypeSubstitutions(type: expr.ResolvedType);
+            // If the type is still an unresolved generic parameter or an error placeholder,
+            // fall through to the expression-specific resolution which can use call-site type arguments
+            if (resolved is not GenericParameterTypeInfo and not ErrorTypeInfo)
             {
-                TypeInfo? rcvrType = GetExpressionType(expr: calleeMember.Object);
-                if (rcvrType is ProtocolTypeInfo { Methods.Count: 0 } protoRcvr2 &&
-                    protoRcvr2.TypeArguments is { Count: > 0 })
+                // Const generic values resolve to their underlying primitive type for method dispatch
+                if (resolved is ConstGenericValueTypeInfo constVal)
                 {
-                    skipSaResolved = true;
+                    return ResolveConstGenericUnderlyingType(constVal: constVal);
                 }
-            }
 
-            if (!skipSaResolved)
-            {
-                // During monomorphization, resolve unsubstituted generic params (e.g., Hijacked[U] → Hijacked[S64])
-                TypeInfo resolved = ApplyTypeSubstitutions(type: expr.ResolvedType);
-                // If the type is still an unresolved generic parameter or an error placeholder,
-                // fall through to the expression-specific resolution which can use call-site type arguments
-                if (resolved is not GenericParameterTypeInfo and not ErrorTypeInfo)
-                {
-                    // Const generic values resolve to their underlying primitive type for method dispatch
-                    if (resolved is ConstGenericValueTypeInfo constVal)
-                    {
-                        return ResolveConstGenericUnderlyingType(constVal: constVal);
-                    }
-
-                    return resolved;
-                }
+                return resolved;
             }
         }
 
@@ -328,18 +134,54 @@ public partial class LlvmCodeGenerator
                 $"GMCE: {(gmc2.Object is IdentifierExpression eid ? eid.Name : gmc2.Object.GetType().Name)}.{gmc2.MethodName}" +
                 $"[{string.Join(", ", gmc2.TypeArguments?.Select(t => t.Name) ?? [])}], " +
                 $"in routine: {_currentEmittingRoutine?.Name ?? "<unknown>"} (owner: {_currentEmittingRoutine?.OwnerType?.Name ?? "none"})"),
+            StealExpression steal => GetExpressionType(expr: steal.Operand),
             IndexExpression index => GetIndexReturnType(index: index),
             NamedArgumentExpression named => GetExpressionType(expr: named.Value),
             DictEntryLiteralExpression dictEntry => dictEntry.ResolvedType,
             ConditionalExpression cond => GetExpressionType(expr: cond.TrueExpression),
             GenericMemberExpression gme => GetGenericMemberExpressionType(gme: gme),
-            RangeExpression range => GetRangeType(range: range),
             _ => null
         };
     }
 
+    /// <summary>
+    /// Returns whether should prefer local identifier type applies in the current compiler context.
+    /// </summary>
+    private static bool ShouldPreferLocalIdentifierType(TypeInfo localType, TypeInfo resolvedType)
+    {
+        if (localType.FullName == resolvedType.FullName)
+        {
+            return false;
+        }
+
+        return IsFixedWidthScalarName(name: localType.Name) &&
+               IsFixedWidthScalarName(name: resolvedType.Name);
+    }
+
+    /// <summary>
+    /// Returns whether is fixed width scalar name applies in the current compiler context.
+    /// </summary>
+    private static bool IsFixedWidthScalarName(string name)
+    {
+        if (string.IsNullOrEmpty(value: name) || name.Length < 2)
+        {
+            return false;
+        }
+
+        return (name[0] == 'S' || name[0] == 'U') &&
+               int.TryParse(s: name[1..], result: out _);
+    }
+
+    /// <summary>
+    /// Resolves the creator type from semantic compiler state.
+    /// </summary>
     private TypeInfo? ResolveCreatorType(CreatorExpression creator)
     {
+        if (creator.ConstructedType is not null and not ErrorTypeInfo)
+        {
+            return ApplyTypeSubstitutions(type: creator.ConstructedType);
+        }
+
         if (creator.ResolvedType is not null and not ErrorTypeInfo)
         {
             return ApplyTypeSubstitutions(type: creator.ResolvedType);
@@ -385,48 +227,28 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Infers the type of a <see cref="RangeExpression"/> as <c>Range[T]</c> where T is the
-    /// element type derived from the start (or end) sub-expression. Used when
-    /// <c>ResolvedType</c> is null (e.g. stdlib bodies that bypass ExpressionLoweringPass).
-    /// </summary>
-    private TypeInfo? GetRangeType(RangeExpression range)
-    {
-        TypeInfo? elemType = GetExpressionType(expr: range.Start)
-                             ?? GetExpressionType(expr: range.End);
-        if (elemType == null) return null;
-
-        TypeInfo? rangeDef = _registry.LookupType(name: "Range");
-        if (rangeDef == null) return null;
-
-        return _registry.GetOrCreateResolution(genericDef: rangeDef,
-            typeArguments: new List<TypeInfo> { elemType });
-    }
-
-    /// <summary>
     /// Gets the return type of an index expression by looking up $getitem on the target type.
     /// </summary>
     private TypeInfo? GetUnaryExpressionType(UnaryExpression unary)
     {
         TypeInfo? operandType = GetExpressionType(expr: unary.Operand);
-        if (unary.Operator == UnaryOperator.ForceUnwrap && operandType != null)
+        if (unary.Operator == UnaryOperator.ForceUnwrap && operandType != null && IsCarrierType(type: operandType) && operandType.TypeArguments is { Count: 1 })
         {
             // Force-unwrap: return the value type inside the Maybe/Result/Lookup wrapper
-            if (IsCarrierType(type: operandType) && operandType.TypeArguments is { Count: 1 })
-            {
-                return operandType.TypeArguments[index: 0];
-            }
+            return operandType.TypeArguments[index: 0];
         }
 
         return operandType;
     }
 
+    /// <summary>
+    /// Gets the binary expression type needed by this compiler phase.
+    /// </summary>
     private TypeInfo? GetBinaryExpressionType(BinaryExpression binary)
     {
         return binary.Operator is BinaryOperator.Equal or BinaryOperator.NotEqual
             or BinaryOperator.Less or BinaryOperator.LessEqual or BinaryOperator.Greater
-            or BinaryOperator.GreaterEqual or BinaryOperator.And or BinaryOperator.Or
-            or BinaryOperator.Identical or BinaryOperator.NotIdentical or BinaryOperator.In
-            or BinaryOperator.NotIn
+            or BinaryOperator.GreaterEqual or BinaryOperator.And or BinaryOperator.Or or BinaryOperator.In or BinaryOperator.NotIn
             ? _registry.LookupType(name: "Bool")
             : GetExpressionType(expr: binary.Left);
     }
@@ -438,25 +260,27 @@ public partial class LlvmCodeGenerator
     {
         // Get the type of the object
         TypeInfo? objType = GetExpressionType(expr: gme.Object);
-        if (objType == null)
+        switch (objType)
         {
-            return null;
-        }
-
-        // Refresh stale generic entity resolutions (same as GetMemberType).
-        // EntityTypeInfo.CreateInstance uses cycle detection that returns a shell with empty
-        // MemberVariables when recursion is detected. The shell has GenericDefinition set,
-        // so we can refresh it from the definition with the same type arguments.
-        if (objType is EntityTypeInfo
+            case null:
+                return null;
+            // Refresh stale generic entity resolutions (same as GetMemberType).
+            // EntityTypeInfo.CreateInstance uses cycle detection that returns a shell with empty
+            // MemberVariables when recursion is detected. The shell has GenericDefinition set,
+            // so we can refresh it from the definition with the same type arguments.
+            case EntityTypeInfo
             {
                 IsGenericResolution: true, MemberVariables.Count: 0,
                 GenericDefinition: { MemberVariables.Count: > 0 } genDef
-            } staleEntity && staleEntity.TypeArguments != null)
-        {
-            var refreshed = genDef.CreateInstance(typeArguments: staleEntity.TypeArguments) as EntityTypeInfo;
-            if (refreshed is { MemberVariables.Count: > 0 })
+            } staleEntity when staleEntity.TypeArguments != null:
             {
-                objType = refreshed;
+                var refreshed = genDef.CreateInstance(typeArguments: staleEntity.TypeArguments) as EntityTypeInfo;
+                if (refreshed is { MemberVariables.Count: > 0 })
+                {
+                    objType = refreshed;
+                }
+
+                break;
             }
         }
 
@@ -474,7 +298,7 @@ public partial class LlvmCodeGenerator
             return null;
         }
 
-        // The member's type has type arguments — the first one is the element type
+        // The member's type has type arguments -> the first one is the element type
         TypeInfo memberType = memberVar.Type;
         if (memberType.TypeArguments is { Count: > 0 })
         {
@@ -487,426 +311,6 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Gets the return type of an index expression by looking up $getitem on the target type.
-    /// </summary>
-    private TypeInfo? GetIndexReturnType(IndexExpression index)
-    {
-        TypeInfo? targetType = GetExpressionType(expr: index.Object);
-        if (targetType == null)
-        {
-            return null;
-        }
-
-        TryGetTransparentProtocolTarget(type: targetType, targetType: out TypeInfo? lookupType);
-        if (lookupType == null)
-        {
-            return null;
-        }
-
-        // Look up $getitem on the target type (handles generics and protocols automatically)
-        RoutineInfo? getItem = _registry.LookupMethod(type: lookupType, methodName: "$getitem");
-
-        if (getItem?.ReturnType == null)
-        {
-            return null;
-        }
-
-        // Substitute generic return type params with concrete types from the target.
-        // Prefer target type arguments over _typeSubstitutions to avoid ambiguous param names
-        // (e.g., List[BTreeListNode[S64]].$getitem returns T, but the outer T maps to S64 —
-        //  the correct resolution is BTreeListNode[S64] from the list's type args, not S64).
-        TypeInfo returnType = getItem.ReturnType;
-        if (lookupType.TypeArguments is { Count: > 0 } && getItem.OwnerType?.GenericParameters is
-                { Count: > 0 })
-        {
-            // Map generic params to concrete args (e.g., T → BTreeListNode[S64] for List[BTreeListNode[S64]].$getitem)
-            IReadOnlyList<string>? genParams = getItem.OwnerType.GenericParameters;
-            for (int i = 0; i < genParams.Count && i < lookupType.TypeArguments.Count; i++)
-            {
-                if (returnType.Name == genParams[index: i])
-                {
-                    return lookupType.TypeArguments[index: i];
-                }
-            }
-
-            var substitutions = new Dictionary<string, TypeInfo>();
-            for (int i = 0; i < genParams.Count && i < lookupType.TypeArguments.Count; i++)
-            {
-                substitutions[key: genParams[index: i]] = lookupType.TypeArguments[index: i];
-            }
-
-            if (substitutions.Count > 0)
-            {
-                returnType = ApplyTypeSubstitutions(type: SubstituteTypeParams(type: returnType,
-                    substitutions: substitutions));
-            }
-        }
-
-        // Fallback: use _typeSubstitutions for simple generic params
-        if (_typeSubstitutions != null &&
-            _typeSubstitutions.TryGetValue(key: returnType.Name, value: out TypeInfo? sub))
-        {
-            return sub;
-        }
-
-        return returnType;
-    }
-
-    /// <summary>
-    /// Gets the return type of a call expression.
-    /// </summary>
-    private TypeInfo? GetCallReturnType(CallExpression call)
-    {
-        switch (call.Callee)
-        {
-            case MemberExpression member:
-            {
-                // Qualified method call: resolve receiver type, look up Type.method
-                TypeInfo? receiverType = GetExpressionType(expr: member.Object);
-
-                // Fallback: if the receiver is a type-name identifier (e.g., Duration.from_nanoseconds),
-                // GetExpressionType returns null because it only checks _localVariables.
-                // Try ResolveTypeNameAsReceiver to handle static/factory method calls.
-                if (receiverType == null && member.Object is IdentifierExpression typeNameId &&
-                    !_localVariables.ContainsKey(key: typeNameId.Name))
-                {
-                    receiverType = ResolveTypeNameAsReceiver(name: typeNameId.Name);
-                }
-
-                if (receiverType != null)
-                {
-                    // Normalize WrapperTypeInfo (e.g., Hijacked[Byte]) to the real RecordTypeInfo
-                    // so LookupMethod can find methods via the generic definition path.
-                    if (receiverType is WrapperTypeInfo wrapperRcvr)
-                    {
-                        TypeInfo? wrapperDef = _registry.LookupType(name: wrapperRcvr.Name);
-                        if (wrapperDef is { IsGenericDefinition: true } &&
-                            wrapperRcvr.InnerType != null)
-                        {
-                            TypeInfo normalized = _registry.GetOrCreateResolution(
-                                genericDef: wrapperDef,
-                                typeArguments: new List<TypeInfo> { wrapperRcvr.InnerType });
-                            receiverType = normalized;
-                        }
-                    }
-
-                    // Strip '!' suffix from failable method names — registry stores without it
-                    string lookupName = member.PropertyName.EndsWith(value: '!')
-                        ? member.PropertyName[..^1]
-                        : member.PropertyName;
-                    RoutineInfo? method = _registry.LookupMethod(type: receiverType,
-                        methodName: lookupName);
-
-                    // Transparent protocol (e.g. Referring[Text] with no declared methods): fall back
-                    // to dispatching through the first concrete type argument T.
-                    if (method == null && receiverType is ProtocolTypeInfo protoRcvr &&
-                        protoRcvr.Methods.Count == 0 && protoRcvr.TypeArguments is { Count: > 0 })
-                    {
-                        receiverType = protoRcvr.TypeArguments[index: 0];
-                        method = _registry.LookupMethod(type: receiverType, methodName: lookupName);
-                    }
-
-                    if (method?.ReturnType != null)
-                    {
-                        // Substitute generic type params in return type (e.g., T → Character)
-                        if (_typeSubstitutions != null &&
-                            _typeSubstitutions.TryGetValue(key: method.ReturnType.Name,
-                                value: out TypeInfo? sub))
-                        {
-                            return sub;
-                        }
-
-                        // WrapperTypeInfo with same name as return type: receiver is Hijacked[Byte],
-                        // method returns Hijacked[T] → return Hijacked[Byte] (same concrete wrapper).
-                        if (receiverType is WrapperTypeInfo rcvrWrapper &&
-                            method.ReturnType is WrapperTypeInfo retWrapper &&
-                            rcvrWrapper.Name == retWrapper.Name)
-                        {
-                            return receiverType;
-                        }
-
-                        // WrapperTypeInfo receiver with method returning T (generic param): T → InnerType.
-                        // e.g., Hijacked[Byte].extract() → T; T becomes Byte.
-                        if (receiverType is WrapperTypeInfo wrapperRcvr2 &&
-                            method.ReturnType is GenericParameterTypeInfo)
-                        {
-                            return wrapperRcvr2.InnerType;
-                        }
-
-                        // For generic resolution receivers (e.g., Hijacked[U8].extract() → T should become U8),
-                        // substitute using the receiver's type arguments when no _typeSubstitutions available
-                        if (receiverType is
-                                { IsGenericResolution: true, TypeArguments: not null } &&
-                            method.ReturnType is GenericParameterTypeInfo)
-                        {
-                            // Find the generic parameter index in the owner type's generic parameters
-                            TypeInfo? ownerGenericDef = receiverType switch
-                            {
-                                RecordTypeInfo r => r.GenericDefinition,
-                                EntityTypeInfo e => e.GenericDefinition,
-
-                                _ => null
-                            };
-                            if (ownerGenericDef?.GenericParameters != null)
-                            {
-                                int paramIndex = ownerGenericDef.GenericParameters
-                                                                .ToList()
-                                                                .IndexOf(item: method.ReturnType
-                                                                    .Name);
-                                if (paramIndex >= 0 &&
-                                    paramIndex < receiverType.TypeArguments.Count)
-                                {
-                                    return receiverType.TypeArguments[index: paramIndex];
-                                }
-                            }
-                        }
-
-                        // For parameterized return types (e.g., Hijacked[T] → Hijacked[Character]),
-                        // resolve through receiver's type arguments even without _typeSubstitutions
-                        if (receiverType is
-                                { IsGenericResolution: true, TypeArguments: not null } &&
-                            method.ReturnType is
-                                { IsGenericResolution: true, TypeArguments: not null })
-                        {
-                            TypeInfo? ownerGenericDef = receiverType switch
-                            {
-                                RecordTypeInfo r => r.GenericDefinition,
-                                EntityTypeInfo e => e.GenericDefinition,
-
-                                _ => null
-                            };
-                            if (ownerGenericDef?.GenericParameters != null)
-                            {
-                                var paramSubs = new Dictionary<string, TypeInfo>();
-                                for (int i = 0;
-                                     i < ownerGenericDef.GenericParameters.Count &&
-                                     i < receiverType.TypeArguments.Count;
-                                     i++)
-                                {
-                                    paramSubs[key: ownerGenericDef.GenericParameters[index: i]] =
-                                        receiverType.TypeArguments[index: i];
-                                }
-
-                                bool anyResolved = false;
-                                var resolvedArgs = new List<TypeInfo>();
-                                foreach (TypeInfo ta in method.ReturnType.TypeArguments)
-                                {
-                                    if (paramSubs.TryGetValue(key: ta.Name,
-                                            value: out TypeInfo? resolved))
-                                    {
-                                        resolvedArgs.Add(item: resolved);
-                                        anyResolved = true;
-                                    }
-                                    else
-                                    {
-                                        resolvedArgs.Add(item: ta);
-                                    }
-                                }
-
-                                if (anyResolved)
-                                {
-                                    string baseName = method.ReturnType.Name;
-                                    int bracketIdx = baseName.IndexOf(value: '[');
-                                    if (bracketIdx > 0)
-                                    {
-                                        baseName = baseName[..bracketIdx];
-                                    }
-
-                                    TypeInfo? genericDef = _registry.LookupType(name: baseName);
-                                    if (genericDef != null)
-                                    {
-                                        return _registry.GetOrCreateResolution(
-                                            genericDef: genericDef,
-                                            typeArguments: resolvedArgs);
-                                    }
-                                }
-                            }
-                        }
-
-                        // Universal method (e.g. T.retain() -> Retained[T]): substitute the
-                        // universal parameter T → receiverType to get the concrete return type.
-                        if (method.OwnerType is GenericParameterTypeInfo universalParam &&
-                            method.ReturnType.IsGenericResolution &&
-                            method.ReturnType.TypeArguments != null)
-                        {
-                            string tName = universalParam.Name;
-                            var substitutedArgs = new List<TypeInfo>();
-                            bool anySubstituted = false;
-                            foreach (TypeInfo typeArg in method.ReturnType.TypeArguments)
-                            {
-                                if (typeArg.Name == tName)
-                                {
-                                    substitutedArgs.Add(item: receiverType);
-                                    anySubstituted = true;
-                                }
-                                else
-                                {
-                                    substitutedArgs.Add(item: typeArg);
-                                }
-                            }
-
-                            if (anySubstituted)
-                            {
-                                string baseName = method.ReturnType.Name;
-                                int bracketIdx = baseName.IndexOf(value: '[');
-                                if (bracketIdx > 0) baseName = baseName[..bracketIdx];
-                                TypeInfo? genericDef = _registry.LookupType(name: baseName);
-                                if (genericDef != null)
-                                {
-                                    return _registry.GetOrCreateResolution(genericDef: genericDef,
-                                        typeArguments: substitutedArgs);
-                                }
-                            }
-                        }
-
-                        // Fallback: substitute type arguments using _typeSubstitutions
-                        if (_typeSubstitutions != null && method.ReturnType.IsGenericResolution &&
-                            method.ReturnType.TypeArguments != null)
-                        {
-                            var substitutedArgs = new List<TypeInfo>();
-                            bool anySubstituted = false;
-                            foreach (TypeInfo typeArg in method.ReturnType.TypeArguments)
-                            {
-                                if (_typeSubstitutions.TryGetValue(key: typeArg.Name,
-                                        value: out TypeInfo? resolvedArg))
-                                {
-                                    substitutedArgs.Add(item: resolvedArg);
-                                    anySubstituted = true;
-                                }
-                                else
-                                {
-                                    substitutedArgs.Add(item: typeArg);
-                                }
-                            }
-
-                            if (anySubstituted)
-                            {
-                                string baseName = method.ReturnType.Name;
-                                int bracketIdx = baseName.IndexOf(value: '[');
-                                if (bracketIdx > 0)
-                                {
-                                    baseName = baseName[..bracketIdx];
-                                }
-
-                                TypeInfo? genericDef = _registry.LookupType(name: baseName);
-                                if (genericDef != null)
-                                {
-                                    return _registry.GetOrCreateResolution(genericDef: genericDef,
-                                        typeArguments: substitutedArgs);
-                                }
-                            }
-                        }
-
-                        // Universal method on a WrapperTypeInfo (e.g. Owned[List[Character]].$getitem! → V).
-                        // Resolve by looking up the same method on the inner entity type and returning
-                        // its concrete return type (e.g., List[Character].$getitem! → Character).
-                        if (method.OwnerType is GenericParameterTypeInfo &&
-                            method.ReturnType is GenericParameterTypeInfo &&
-                            receiverType is WrapperTypeInfo wrapRcvr && wrapRcvr.InnerType != null)
-                        {
-                            string innerLookupName = member.PropertyName.EndsWith(value: '!')
-                                ? member.PropertyName[..^1]
-                                : member.PropertyName;
-                            RoutineInfo? innerMethod =
-                                _registry.LookupMethod(type: wrapRcvr.InnerType,
-                                    methodName: innerLookupName);
-                            if (innerMethod?.ReturnType != null &&
-                                innerMethod.ReturnType is not GenericParameterTypeInfo)
-                            {
-                                return innerMethod.ReturnType;
-                            }
-                            // Inner method also has a generic return type — substitute using inner type's args
-                            if (innerMethod?.ReturnType is GenericParameterTypeInfo &&
-                                wrapRcvr.InnerType is { IsGenericResolution: true, TypeArguments: not null } innerGeneric)
-                            {
-                                TypeInfo? innerGenericDef = innerGeneric switch
-                                {
-                                    RecordTypeInfo r => r.GenericDefinition,
-                                    EntityTypeInfo e => e.GenericDefinition,
-                                    _ => null
-                                };
-                                if (innerGenericDef?.GenericParameters != null)
-                                {
-                                    int idx = innerGenericDef.GenericParameters.ToList()
-                                                              .IndexOf(innerMethod.ReturnType.Name);
-                                    if (idx >= 0 && idx < innerGeneric.TypeArguments.Count)
-                                        return innerGeneric.TypeArguments[index: idx];
-                                }
-                            }
-                        }
-
-                        return method.IsAsync
-                            ? WrapAsyncReturnType(method: method,
-                                returnType: method.ReturnType)
-                            : method.ReturnType;
-                    }
-                }
-
-                // Representable pattern: obj.TypeName() → TypeName.$create(from: obj)
-                // If the method name matches a registered type, the return type is that type.
-                // Strip '!' suffix for failable conversions (e.g., index.U64!() → U64)
-                string conversionLookup = member.PropertyName.EndsWith(value: '!')
-                    ? member.PropertyName[..^1]
-                    : member.PropertyName;
-                TypeInfo? representableType = _registry.LookupType(name: conversionLookup);
-                if (representableType != null)
-                {
-                    return representableType;
-                }
-
-                // Fall back to unqualified lookup
-                RoutineInfo? fallback = _registry.LookupRoutine(fullName: member.PropertyName);
-                return fallback?.ReturnType;
-            }
-            case IdentifierExpression id:
-            {
-                // Strip failable '!' suffix for lookup
-                string callName = id.Name.EndsWith(value: '!')
-                    ? id.Name[..^1]
-                    : id.Name;
-                // Try direct routine lookup first
-                RoutineInfo? routine = _registry.LookupRoutine(fullName: callName) ??
-                                       _registry.LookupRoutineByName(name: callName);
-                if (routine?.ReturnType != null)
-                {
-                    return routine.IsAsync
-                        ? WrapAsyncReturnType(method: routine, returnType: routine.ReturnType)
-                        : routine.ReturnType;
-                }
-
-                // If name matches a type, it's a creator call — returns that type
-                TypeInfo? calledType = LookupTypeInCurrentModule(name: id.Name);
-                if (calledType != null)
-                {
-                    RoutineInfo? creator =
-                        _registry.LookupMethod(type: calledType, methodName: "$create");
-                    return creator?.ReturnType ?? calledType;
-                }
-
-                return null;
-            }
-            default:
-                return null;
-        }
-    }
-
-    private TypeInfo? WrapAsyncReturnType(RoutineInfo method, TypeInfo? returnType)
-    {
-        if (!method.IsAsync || returnType == null)
-        {
-            return returnType;
-        }
-
-        TypeInfo? taskDef = LookupTypeInCurrentModule(name: "Task");
-        if (taskDef is { IsGenericDefinition: true })
-        {
-            return _registry.GetOrCreateResolution(genericDef: taskDef, typeArguments: [returnType]);
-        }
-
-        return returnType;
-    }
-
-    /// <summary>
     /// Gets the type of a literal expression from its token type.
     /// </summary>
     private TypeInfo? GetLiteralType(LiteralExpression literal)
@@ -915,30 +319,30 @@ public partial class LlvmCodeGenerator
         {
             // Bare unsuffixed literals default to S64/F64 in RazorForge (same as SA rule).
             // Stdlib bodies bypass SA so we must handle these token types here.
-            Lexer.TokenType.Integer => "S64",
-            Lexer.TokenType.Decimal => "F64",
-            Lexer.TokenType.S8Literal => "S8",
-            Lexer.TokenType.S16Literal => "S16",
-            Lexer.TokenType.S32Literal => "S32",
-            Lexer.TokenType.S64Literal => "S64",
-            Lexer.TokenType.S128Literal => "S128",
-            Lexer.TokenType.U8Literal => "U8",
-            Lexer.TokenType.U16Literal => "U16",
-            Lexer.TokenType.U32Literal => "U32",
-            Lexer.TokenType.U64Literal => "U64",
-            Lexer.TokenType.U128Literal => "U128",
-            Lexer.TokenType.F16Literal => "F16",
-            Lexer.TokenType.F32Literal => "F32",
-            Lexer.TokenType.F64Literal => "F64",
-            Lexer.TokenType.F128Literal => "F128",
-            Lexer.TokenType.D32Literal => "D32",
-            Lexer.TokenType.D64Literal => "D64",
-            Lexer.TokenType.D128Literal => "D128",
-            Lexer.TokenType.AddressLiteral => "Address",
-            Lexer.TokenType.True or Lexer.TokenType.False => "Bool",
-            Lexer.TokenType.TextLiteral => "Text",
-            Lexer.TokenType.CharacterLiteral => "Character",
-            Lexer.TokenType.ByteLetterLiteral => "Byte",
+            TokenType.IntegerLiteral => "S64",
+            TokenType.DecimalLiteral => "F64",
+            TokenType.S8Literal => "S8",
+            TokenType.S16Literal => "S16",
+            TokenType.S32Literal => "S32",
+            TokenType.S64Literal => "S64",
+            TokenType.S128Literal => "S128",
+            TokenType.U8Literal => "U8",
+            TokenType.U16Literal => "U16",
+            TokenType.U32Literal => "U32",
+            TokenType.U64Literal => "U64",
+            TokenType.U128Literal => "U128",
+            TokenType.F16Literal => "F16",
+            TokenType.F32Literal => "F32",
+            TokenType.F64Literal => "F64",
+            TokenType.F128Literal => "F128",
+            TokenType.D32Literal => "D32",
+            TokenType.D64Literal => "D64",
+            TokenType.D128Literal => "D128",
+            TokenType.AddressLiteral => "Address",
+            TokenType.True or TokenType.False => "Bool",
+            TokenType.TextLiteral => "Text",
+            TokenType.CharacterLiteral => "Character",
+            TokenType.ByteLetterLiteral => "Byte",
             _ => null
         };
 
@@ -953,12 +357,6 @@ public partial class LlvmCodeGenerator
     private TypeInfo? GetMemberType(MemberExpression member)
     {
         TypeInfo? targetType = GetExpressionType(expr: member.Object);
-        // Fallback: if SA didn't set ResolvedType (type-as-identifier), try type lookup by name
-        if (targetType == null && member.Object is IdentifierExpression typeId)
-        {
-            targetType = LookupTypeInCurrentModule(name: typeId.Name);
-        }
-
         if (targetType == null)
         {
             return null;
@@ -975,12 +373,6 @@ public partial class LlvmCodeGenerator
         {
             lookupType = RefreshEntityMemberVariables(entity: entityType,
                 memberVariableName: member.PropertyName);
-        }
-
-        // Choice/Flags member access returns the type itself
-        if (lookupType is ChoiceTypeInfo or FlagsTypeInfo)
-        {
-            return lookupType;
         }
 
         MemberVariableInfo? memberVariable = lookupType switch
@@ -1001,27 +393,9 @@ public partial class LlvmCodeGenerator
         return memberType;
     }
 
-
     /// <summary>
-    /// Gets the bit width of an LLVM type.
+    /// Gets the type bit width needed by this compiler phase.
     /// </summary>
-    /// <summary>
-    /// Gets the element type from a List[T] entity by parsing the type parameter.
-    /// </summary>
-    private TypeInfo? GetListElementType(EntityTypeInfo listEntity)
-    {
-        string name = listEntity.Name;
-        int bracketStart = name.IndexOf(value: '[');
-        int bracketEnd = name.LastIndexOf(value: ']');
-        if (bracketStart < 0 || bracketEnd <= bracketStart)
-        {
-            return null;
-        }
-
-        string elemTypeName = name[(bracketStart + 1)..bracketEnd];
-        return _registry.LookupType(name: elemTypeName);
-    }
-
     private int GetTypeBitWidth(string llvmType)
     {
         return llvmType switch
@@ -1042,6 +416,9 @@ public partial class LlvmCodeGenerator
         };
     }
 
+    /// <summary>
+    /// Performs the apply type substitutions step for this compiler phase.
+    /// </summary>
     internal TypeInfo ApplyTypeSubstitutions(TypeInfo type)
     {
         if (type is WrapperTypeInfo wrapper)
@@ -1066,6 +443,9 @@ public partial class LlvmCodeGenerator
         return SubstituteTypeParams(type: type, substitutions: _typeSubstitutions);
     }
 
+    /// <summary>
+    /// Performs the substitute type params step for this compiler phase.
+    /// </summary>
     internal TypeInfo SubstituteTypeParams(TypeInfo type, Dictionary<string, TypeInfo> substitutions)
     {
         if (substitutions.TryGetValue(key: type.Name, value: out TypeInfo? sub))
@@ -1159,10 +539,267 @@ public partial class LlvmCodeGenerator
                 resolvedElems.Add(item: resolved);
             }
 
-            if (anyChanged) return new TupleTypeInfo(elementTypes: resolvedElems);
+            if (anyChanged) return new TupleTypeInfo(elementTypes: resolvedElems.AsReadOnly());
         }
 
         return type;
+    }
+
+    /// <summary>
+    /// Resolves the type argument from semantic compiler state.
+    /// </summary>
+    private TypeInfo? ResolveTypeArgument(TypeExpression ta)
+    {
+        if (ta.ResolvedType is { } resolvedType && resolvedType is not ErrorTypeInfo)
+        {
+            return ApplyTypeSubstitutions(type: resolvedType);
+        }
+
+        if (TryParseConstGenericLiteral(name: ta.Name,
+                value: out long constValue,
+                explicitType: out string? explicitType))
+        {
+            return new ConstGenericValueTypeInfo(literalText: ta.Name,
+                value: constValue,
+                explicitTypeName: explicitType);
+        }
+
+        TypeInfo? tupleType = ResolveTupleTypeExpression(typeExpr: ta);
+        if (tupleType != null)
+        {
+            return tupleType;
+        }
+
+        if (ta.GenericArguments is { Count: > 0 })
+        {
+            TypeInfo? baseType = _registry.LookupType(name: ta.Name);
+            if (baseType != null)
+            {
+                var innerArgs = new List<TypeInfo>();
+                foreach (TypeExpression innerTa in ta.GenericArguments)
+                {
+                    TypeInfo? innerResolved = ResolveTypeArgument(ta: innerTa);
+                    if (innerResolved != null)
+                    {
+                        innerArgs.Add(item: innerResolved);
+                    }
+                }
+
+                if (innerArgs.Count == (baseType.GenericParameters?.Count ?? 0))
+                {
+                    return _registry.GetOrCreateResolution(genericDef: baseType,
+                        typeArguments: innerArgs);
+                }
+            }
+        }
+
+        TypeInfo? fromModule = LookupTypeInCurrentModule(name: ta.Name);
+        if (fromModule != null)
+        {
+            return fromModule;
+        }
+
+        return _registry.LookupType(name: ta.Name);
+    }
+
+    /// <summary>
+    /// Resolves the tuple type expression from semantic compiler state.
+    /// </summary>
+    private TypeInfo? ResolveTupleTypeExpression(TypeExpression typeExpr)
+    {
+        if (typeExpr.Name is not "Tuple" and not "ValueTuple")
+        {
+            return null;
+        }
+
+        if (typeExpr.GenericArguments is not { Count: > 0 } elementTypeExprs)
+        {
+            return null;
+        }
+
+        var elementTypes = new List<TypeInfo>(capacity: elementTypeExprs.Count);
+        foreach (TypeExpression elementTypeExpr in elementTypeExprs)
+        {
+            TypeInfo? elementType = ResolveTypeArgument(ta: elementTypeExpr);
+            if (elementType == null)
+            {
+                return null;
+            }
+
+            elementTypes.Add(item: elementType);
+        }
+
+        return _registry.GetOrCreateTupleType(elementTypes: elementTypes);
+    }
+
+    /// <summary>
+    /// Attempts to parse const generic literal and reports whether it succeeded.
+    /// </summary>
+    private static bool TryParseConstGenericLiteral(string name, out long value,
+        out string? explicitType)
+    {
+        explicitType = null;
+
+        if (long.TryParse(s: name, result: out value))
+        {
+            return true;
+        }
+
+        (string Suffix, string TypeName)[] integerSuffixes =
+        [
+            ("u8", "U8"), ("u16", "U16"), ("u32", "U32"), ("u64", "U64"), ("u128", "U128"),
+            ("s8", "S8"), ("s16", "S16"), ("s32", "S32"), ("s64", "S64"), ("s128", "S128")
+        ];
+
+        foreach ((string suffix, string typeName) in integerSuffixes)
+        {
+            if (name.EndsWith(value: suffix, comparisonType: StringComparison.OrdinalIgnoreCase) &&
+                long.TryParse(s: name[..^suffix.Length], result: out value))
+            {
+                explicitType = typeName;
+                return true;
+            }
+        }
+
+        value = 0;
+        return false;
+    }
+
+    // -----------------------------------------------------------------------------
+
+    /// <summary>
+    /// Attempts to get transparent protocol target and reports whether it succeeded.
+    /// </summary>
+    private static void TryGetTransparentProtocolTarget(TypeInfo? type, out TypeInfo? targetType)
+    {
+        if (type is ProtocolTypeInfo { Methods.Count: 0, TypeArguments: { Count: > 0 } } proto)
+        {
+            targetType = proto.TypeArguments[index: 0];
+            return;
+        }
+
+        targetType = type;
+    }
+
+    /// <summary>
+    /// Resolves a <see cref="ConstGenericValueTypeInfo"/> to its underlying primitive type
+    /// for method dispatch. E.g., a const generic value "8" with constraint "N is U64"
+    /// resolves to the U64 type so that method calls like N.$represent() work correctly.
+    /// </summary>
+    private TypeInfo ResolveConstGenericUnderlyingType(ConstGenericValueTypeInfo constVal)
+    {
+        string typeName = constVal.ExplicitTypeName ?? "U64";
+        return _registry.LookupType(name: typeName) ?? constVal;
+    }
+
+    /// <summary>
+    /// Gets the return type of an index expression by looking up $getitem on the target type.
+    /// </summary>
+    private TypeInfo? GetIndexReturnType(IndexExpression index)
+    {
+        TypeInfo? targetType = GetExpressionType(expr: index.Object);
+        if (targetType == null)
+        {
+            return null;
+        }
+
+        TryGetTransparentProtocolTarget(type: targetType, targetType: out TypeInfo? lookupType);
+        if (lookupType == null)
+        {
+            return null;
+        }
+
+        RoutineInfo? getItem = _registry.LookupMethod(type: lookupType, methodName: "$getitem");
+        if (getItem?.ReturnType == null)
+        {
+            return null;
+        }
+
+        TypeInfo returnType = getItem.ReturnType;
+        IReadOnlyList<string>? ownerGenericParams = null;
+        if (lookupType.TypeArguments is { Count: > 0 })
+        {
+            TypeInfo? lookupGenericDef = lookupType switch
+            {
+                RecordTypeInfo r when r.IsGenericResolution => r.GenericDefinition,
+                EntityTypeInfo e when e.IsGenericResolution => e.GenericDefinition,
+                ProtocolTypeInfo p when p.IsGenericResolution => p.GenericDefinition,
+                _ => null
+            };
+            ownerGenericParams = lookupGenericDef?.GenericParameters ??
+                                 getItem.OwnerType?.GenericParameters;
+        }
+
+        if (lookupType.TypeArguments is { Count: > 0 } && ownerGenericParams is { Count: > 0 })
+        {
+            for (int i = 0; i < ownerGenericParams.Count && i < lookupType.TypeArguments.Count; i++)
+            {
+                if (returnType.Name == ownerGenericParams[index: i])
+                {
+                    return lookupType.TypeArguments[index: i];
+                }
+            }
+
+            var substitutions = new Dictionary<string, TypeInfo>();
+            for (int i = 0; i < ownerGenericParams.Count && i < lookupType.TypeArguments.Count; i++)
+            {
+                substitutions[key: ownerGenericParams[index: i]] =
+                    lookupType.TypeArguments[index: i];
+            }
+
+            if (substitutions.Count > 0)
+            {
+                returnType = ApplyTypeSubstitutions(type: SubstituteTypeParams(type: returnType,
+                    substitutions: substitutions));
+            }
+        }
+
+        return returnType;
+    }
+
+    /// <summary>
+    /// Gets the return type of a call expression.
+    /// </summary>
+    private TypeInfo? GetCallReturnType(CallExpression call)
+    {
+        if (call.ConstructedType is not null and not ErrorTypeInfo)
+        {
+            TypeInfo constructed = ApplyTypeSubstitutions(type: call.ConstructedType);
+            if (constructed is not GenericParameterTypeInfo and not ErrorTypeInfo)
+            {
+                return constructed;
+            }
+        }
+
+        if (call.ResolvedRoutine?.ReturnType is { } resolvedReturn and not ErrorTypeInfo)
+        {
+            TypeInfo concreteReturn = ApplyTypeSubstitutions(type: resolvedReturn);
+            if (concreteReturn is not GenericParameterTypeInfo and not ErrorTypeInfo)
+            {
+                return concreteReturn;
+            }
+        }
+
+        // Fallback: OperatorLoweringPass sets ResolvedType on $getitem! calls when it can't
+        // find a RoutineInfo via LookupMethod (e.g., when registered name differs from lookup name).
+        // ResolvedType was set from the IndexExpression SA annotated before lowering.
+        if (call.ResolvedType is not null and not ErrorTypeInfo)
+        {
+            TypeInfo fallback = ApplyTypeSubstitutions(type: call.ResolvedType);
+            if (fallback is not GenericParameterTypeInfo and not ErrorTypeInfo)
+                return fallback;
+        }
+
+        // SA must set ResolvedRoutine or ConstructedType on every call before backend entry.
+        string calleeDesc = call.Callee switch
+        {
+            MemberExpression m => $"{m.Object.GetType().Name}.{m.PropertyName}",
+            IdentifierExpression id => id.Name,
+            _ => call.Callee.GetType().Name
+        };
+        throw new InvalidOperationException(
+            $"CallExpression '{calleeDesc}' has no SA-resolved return type (ResolvedRoutine=null, ConstructedType=null). " +
+            $"Semantic analysis must annotate all calls. Routine: {_currentEmittingRoutine?.Name ?? "<unknown>"}.");
     }
 
 }

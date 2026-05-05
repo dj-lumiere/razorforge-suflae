@@ -1,14 +1,12 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for varargs call resolution, $create overload resolution (C95),
-/// and variadic argument validation.
+/// Contains tests for varargs call.
 /// </summary>
 public class VarargsCallTests
 {
@@ -16,7 +14,7 @@ public class VarargsCallTests
     // Varargs dispatch inference (mirrors DispatchInferenceTests patterns)
     // ========================================================================
     /// <summary>
-    /// Tests Varargs_MultipleConcreteArgs_NoDispatchError.
+    /// Verifies varargs validation behavior for multiple concrete args without dispatch errors.
     /// </summary>
 
     [Fact]
@@ -36,7 +34,7 @@ public class VarargsCallTests
             filter: e => e.Code == SemanticDiagnosticCode.TooManyArguments);
     }
     /// <summary>
-    /// Tests Varargs_MethodWithMeParam_NoDispatchError.
+    /// Verifies varargs validation behavior for method with me param without dispatch errors.
     /// </summary>
 
     [Fact]
@@ -60,7 +58,7 @@ public class VarargsCallTests
             filter: e => e.Code == SemanticDiagnosticCode.TooManyArguments);
     }
     /// <summary>
-    /// Tests Varargs_LeadingNonMeParam_ReportsVarargsNotFirst.
+    /// Verifies varargs validation behavior for leading non me param reports varargs not first.
     /// </summary>
 
     [Fact]
@@ -77,7 +75,7 @@ public class VarargsCallTests
             filter: e => e.Code == SemanticDiagnosticCode.VarargsNotFirst);
     }
     /// <summary>
-    /// Tests Varargs_MixedTypes_ReportsRuntimeDispatchError.
+    /// Verifies varargs validation behavior for mixed types reports runtime dispatch error.
     /// </summary>
 
     [Fact]
@@ -107,7 +105,7 @@ public class VarargsCallTests
             filter: e => e.Code == SemanticDiagnosticCode.RuntimeDispatchNotSupported);
     }
     /// <summary>
-    /// Tests Varargs_SameConcreteType_NoDispatchError.
+    /// Verifies varargs validation behavior for same concrete type without dispatch errors.
     /// </summary>
 
     [Fact]
@@ -137,7 +135,7 @@ public class VarargsCallTests
     // C95: $create overload resolution
     // ========================================================================
     /// <summary>
-    /// Tests CreateOverload_SingleNamedArg_ResolvesToCreate.
+    /// Verifies that create-overload resolution handles overload single named arg resolves to create.
     /// </summary>
 
     [Fact]
@@ -159,7 +157,7 @@ public class VarargsCallTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests CreateOverload_SinglePositionalArg_ResolvesToCreate.
+    /// Verifies that create-overload resolution handles overload single positional arg resolves to create.
     /// </summary>
 
     [Fact]
@@ -181,7 +179,7 @@ public class VarargsCallTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests CreateOverload_AllNamedFields_WorksAsFieldConstruction.
+    /// Verifies that create-overload resolution handles overload all named fields works as field construction.
     /// </summary>
 
     [Fact]
@@ -201,7 +199,7 @@ public class VarargsCallTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests CreateOverload_SingleFieldRecord_NoError.
+    /// Verifies that create-overload resolution handles overload single field record without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -220,7 +218,7 @@ public class VarargsCallTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests CreateOverload_NoMatchingCreate_FallsThrough.
+    /// Verifies that create-overload resolution handles overload no matching create falls through.
     /// </summary>
 
     [Fact]
@@ -243,7 +241,7 @@ public class VarargsCallTests
             filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
     }
     /// <summary>
-    /// Tests CreateOverload_ZeroArgEntity_WorksWithoutCreate.
+    /// Verifies that create-overload resolution handles overload zero arg entity works without create.
     /// </summary>
 
     [Fact]
@@ -261,7 +259,7 @@ public class VarargsCallTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests CreateOverload_RecordConversion_ResolvesToCreate.
+    /// Verifies that create-overload resolution handles overload record conversion resolves to create.
     /// </summary>
 
     [Fact]

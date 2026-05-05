@@ -1,8 +1,8 @@
-using Compiler.Synthesis;
-using TypeModel.Symbols;
-using SyntaxTree;
-
 using Compiler.Desugaring;
+using Compiler.Instantiation;
+using SyntaxTree;
+using TypeModel.Symbols;
+
 namespace Compiler.Synthesis;
 
 
@@ -18,7 +18,7 @@ namespace Compiler.Synthesis;
 internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
 {
     /// <summary>Per-file stub ??variant generation is global only.</summary>
-    public void Run(Program program) { }
+    public static void Run(Program program) { }
 
     /// <summary>
     /// Runs variant generation globally.
@@ -75,7 +75,10 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
             // Build a pre-transformed body for this variant so codegen can emit carrier
             // construction without relying on mutable _currentVariantIs* flags.
             ErrorHandlingVariantKind kind = DetermineVariantKind(variant: variant);
-            Statement variantBody = TransformBody(body: body, kind: kind);
+            Statement variantSourceBody = GenericAstRewriter.RewriteStatement(
+                stmt: body,
+                subs: new Dictionary<string, string>());
+            Statement variantBody = TransformBody(body: variantSourceBody, kind: kind);
             ctx.VariantBodies[key: variant.Routine.RegistryKey] = variantBody;
         }
     }
@@ -99,7 +102,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     /// <see cref="VariantReturnStatement"/> nodes appropriate for the given variant kind.
     /// All other statements are passed through unchanged (structurally cloned via record-with).
     /// </summary>
-    private static Statement TransformBody(Statement body, ErrorHandlingVariantKind kind)
+    internal static Statement TransformBody(Statement body, ErrorHandlingVariantKind kind)
     {
         return body switch
         {

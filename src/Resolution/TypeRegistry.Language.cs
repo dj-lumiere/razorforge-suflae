@@ -1,7 +1,9 @@
+using TypeModel.Enums;
+using TypeModel.Types;
+
 namespace Compiler.Resolution;
 
-using TypeModel.Enums;
-using TypeInfo = TypeModel.Types.TypeInfo;
+using TypeInfo = TypeInfo;
 
 public sealed partial class TypeRegistry
 {

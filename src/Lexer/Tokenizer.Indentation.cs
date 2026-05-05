@@ -34,7 +34,7 @@ public partial class Tokenizer
     /// Indentation rules:
     /// <list type="bullet">
     ///   <item><description>Each indentation level is 2 spaces</description></item>
-    ///   <item><description>Tabs are counted as 2 spaces</description></item>
+    ///   <item><description>Tabs are rejected; indentation must use spaces</description></item>
     ///   <item><description>Indentation must be a multiple of 2</description></item>
     ///   <item><description>Indentation increases start a new block</description></item>
     /// </list>
@@ -84,8 +84,6 @@ public partial class Tokenizer
             return;
         }
 
-        int newIndentLevel = spaces / 2;
-
         // Skip lines with only comments (don't change indentation state).
         // Exception: if a doc comment (###) opens a new block (indentation increases), still
         // emit the Indent token so the parser can enter the block. This handles ### doc comments
@@ -94,14 +92,14 @@ public partial class Tokenizer
         if (Peek() == '#')
         {
             bool isDocComment = Peek(offset: 1) == '#' && Peek(offset: 2) == '#';
-            if (isDocComment && newIndentLevel > _currentIndentLevel)
+            if (isDocComment && spaces > _indentStack.Peek())
             {
                 if (_tokens.Count == 0 || _tokens[^1].Type != TokenType.Newline)
                 {
                     AddToken(type: TokenType.Newline, text: "\\n");
                 }
                 AddToken(type: TokenType.Indent, text: "");
-                _currentIndentLevel = newIndentLevel;
+                _indentStack.Push(spaces);
             }
             return;
         }
@@ -123,8 +121,9 @@ public partial class Tokenizer
                 language: _language);
         }
 
-        // Handle indentation increase (new block)
-        if (newIndentLevel > _currentIndentLevel)
+        // Handle indentation increase (new block): ONE Indent per block regardless of space jump.
+        // Using a stack of actual space counts ensures each Indent matches exactly one Dedent.
+        if (spaces > _indentStack.Peek())
         {
             // Ensure a Newline precedes the Indent token
             // (some tokens like > suppress newlines as continuation,
@@ -135,15 +134,15 @@ public partial class Tokenizer
             }
 
             AddToken(type: TokenType.Indent, text: "");
-            _currentIndentLevel = newIndentLevel;
+            _indentStack.Push(spaces);
             return;
         }
 
-        // Handle dedents when indentation decreases
-        while (newIndentLevel < _currentIndentLevel)
+        // Handle dedents when indentation decreases: pop until stack top matches current spaces.
+        while (spaces < _indentStack.Peek())
         {
+            _indentStack.Pop();
             AddToken(type: TokenType.Dedent, text: "");
-            _currentIndentLevel -= 1;
         }
     }
 

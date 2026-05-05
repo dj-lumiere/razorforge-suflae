@@ -1,10 +1,8 @@
-using Compiler.Postprocessing;
-using Compiler.Desugaring;
 using Compiler.Lexer;
 using Compiler.Synthesis;
+using SyntaxTree;
 using TypeModel.Symbols;
 using TypeModel.Types;
-using SyntaxTree;
 
 namespace Compiler.Postprocessing.Passes;
 
@@ -14,11 +12,11 @@ namespace Compiler.Postprocessing.Passes;
 ///
 /// Sub-transformations applied in-order during a single recursive walk:
 /// <list type="bullet">
-///   <item>1a. Chained comparisons: <c>a &lt; b &lt; c</c> → <c>(a &lt; b) and (b &lt; c)</c></item>
-///   <item>1b. None-coalescing: <c>a ?? b</c> → temp vars + WhenStatement (preserves lazy eval)</item>
-///   <item>1c. Force-unwrap: <c>a!!</c> → <c>a.$unwrap()</c> — handled by <see cref="OperatorLoweringPass"/>
+///   <item>1a. Chained comparisons: <c>a &lt; b &lt; c</c> -> <c>(a &lt; b) and (b &lt; c)</c></item>
+///   <item>1b. None-coalescing: <c>a ?? b</c> -> temp vars + WhenStatement (preserves lazy eval)</item>
+///   <item>1c. Force-unwrap: <c>a!!</c> -> <c>a.$unwrap()</c> -- handled by <see cref="OperatorLoweringPass"/>
 ///         so that stdlib bodies (which bypass this pass) are also covered.</item>
-///   <item>1d. Optional member access: <c>a?.prop</c> → temp vars + WhenStatement</item>
+///   <item>1d. Optional member access: <c>a?.prop</c> -> temp vars + WhenStatement</item>
 /// </list>
 ///
 /// Hoisting transforms (1b, 1d) use ANF lifting: they return a list of statements
@@ -70,7 +68,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         }
     }
 
-    // ─── Statement lowering ──────────────────────────────────────────────────────
+    // --- Statement lowering ------------------------------------------------------
 
     /// <summary>
     /// Fully lowers a statement, wrapping in a <see cref="BlockStatement"/> if hoisted
@@ -94,7 +92,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     {
         switch (stmt)
         {
-            // ── Compound: recurse into children ────────────────────────────────
+            // -- Compound: recurse into children --------------------------------
 
             case BlockStatement b:
             {
@@ -180,7 +178,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 return ([], d with { Body = (BlockStatement)lowered });
             }
 
-            // ── Simple: lower the contained expressions ─────────────────────────
+            // -- Simple: lower the contained expressions -------------------------
 
             case AssignmentStatement asgn:
             {
@@ -279,7 +277,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         return anyChanged ? result : stmts;
     }
 
-    // ─── Expression lowering ─────────────────────────────────────────────────────
+    // --- Expression lowering -----------------------------------------------------
 
     /// <summary>
     /// Lowers an expression, returning:
@@ -292,7 +290,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     {
         switch (expr)
         {
-            // ── Step 1a: chained comparisons ─────────────────────────────────────
+            // -- Step 1a: chained comparisons -------------------------------------
             // Multi-comparison chains (a <= b <= c) are lowered to pairwise comparisons
             // joined by And. The And must then be further lowered to ConditionalExpression.
             case ChainedComparisonExpression chain:
@@ -306,48 +304,48 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 return (h, lowered);
             }
 
-            // ── Step 1b: none-coalescing (??) ────────────────────────────────────
+            // -- Step 1b: none-coalescing (??) ------------------------------------
             case BinaryExpression { Operator: BinaryOperator.NoneCoalesce } binary:
                 return LowerNoneCoalesce(binary);
 
-            // ── Step 1c: force-unwrap (!!) — handled by OperatorLoweringPass ────────
+            // -- Step 1c: force-unwrap (!!) -- handled by OperatorLoweringPass --------
             // !! is desugared to operand.$unwrap() in OperatorLoweringPass so that
             // stdlib bodies (which bypass ExpressionLoweringPass) are also covered.
 
-            // ── Step 1d: optional member access (?.) ─────────────────────────────
+            // -- Step 1d: optional member access (?.) -----------------------------
             case OptionalMemberExpression optMember:
                 return LowerOptionalMember(optMember);
 
-            // ── Step 1e: flags combination (and/but on FlagsTypeInfo) ─────────────
+            // -- Step 1e: flags combination (and/but on FlagsTypeInfo) -------------
             case BinaryExpression { Operator: BinaryOperator.And or BinaryOperator.But } flagsBin
                 when flagsBin.Left.ResolvedType is FlagsTypeInfo:
                 return LowerFlagsCombination(flagsBin);
 
-            // ── Step 1f: carrier absence checks (is None / is Blank) ─────────────
+            // -- Step 1f: carrier absence checks (is None / is Blank) -------------
             case IsPatternExpression ipe:
                 return LowerIsPatternExpression(ipe);
 
-            // ── Step 1f-2: variant type test (x is T / x isnot T) → type_id compare ──
-            // Variant subjects: x is S64 → x.type_id == FNV("S64")
-            //                   x isnot S64 → x.type_id != FNV("S64")
-            // Choice subjects fall through — codegen's EmitChoiceIs (icmp eq i32) handles them.
+            // -- Step 1f-2: variant type test (x is T / x isnot T) -> type_id compare --
+            // Variant subjects: x is S64 -> x.type_id == FNV("S64")
+            //                   x isnot S64 -> x.type_id != FNV("S64")
+            // Choice subjects fall through -- codegen's EmitChoiceIs (icmp eq i32) handles them.
             case BinaryExpression { Operator: BinaryOperator.Is or BinaryOperator.IsNot } isBin
                 when isBin.Left.ResolvedType is VariantTypeInfo:
                 return LowerVariantIsExpression(isBin);
 
-            // ── Step 1g: boolean short-circuit And → ConditionalExpression ────────
-            // a and b  →  if a { _cif = b } else { _cif = false }
+            // -- Step 1g: boolean short-circuit And -> ConditionalExpression --------
+            // a and b  ->  if a { _cif = b } else { _cif = false }
             // Flags And (union of active bits) is handled by Step 1e above.
             case BinaryExpression { Operator: BinaryOperator.And } boolAnd
                 when boolAnd.Left.ResolvedType is not FlagsTypeInfo:
                 return LowerBooleanAnd(boolAnd);
 
-            // ── Step 1h: boolean short-circuit Or → ConditionalExpression ─────────
-            // a or b  →  if a { _cif = true } else { _cif = b }
+            // -- Step 1h: boolean short-circuit Or -> ConditionalExpression ---------
+            // a or b  ->  if a { _cif = true } else { _cif = b }
             case BinaryExpression { Operator: BinaryOperator.Or } boolOr:
                 return LowerBooleanOr(boolOr);
 
-            // ── Recursive descent for all other node types ────────────────────────
+            // -- Recursive descent for all other node types ------------------------
 
             case BinaryExpression bin:
             {
@@ -361,8 +359,8 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 return (hoisted, bin with { Left = loweredLeft, Right = loweredRight });
             }
 
-            // ── Step 1i: logical not → ConditionalExpression ──────────────────────
-            // not x  →  if x { _cif = false } else { _cif = true }
+            // -- Step 1i: logical not -> ConditionalExpression ----------------------
+            // not x  ->  if x { _cif = false } else { _cif = true }
             // BitwiseNot (~) on FlagsTypeInfo stays as UnaryExpression for OperatorLoweringPass.
             case UnaryExpression { Operator: UnaryOperator.Not } notExpr:
                 return LowerLogicalNot(notExpr);
@@ -384,7 +382,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 bool argsChanged = false;
                 foreach (Expression arg in call.Arguments)
                 {
-                    // Preserve NamedArgumentExpression wrappers — codegen uses arg names to detect
+                    // Preserve NamedArgumentExpression wrappers -- codegen uses arg names to detect
                     // direct field constructors (e.g., Point(x: 1, y: 2) vs CStr(from: v)).
                     // Only lower the inner value expression, not the wrapper itself.
                     if (arg is NamedArgumentExpression namedArg)
@@ -414,6 +412,32 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
 
             case MemberExpression mem:
             {
+                // Fold choice case member access (e.g. Direction.NORTH, someVar.NORTH) -> int literal
+                if (mem.Object.ResolvedType is ChoiceTypeInfo choiceType)
+                {
+                    ChoiceCaseInfo? caseInfo = choiceType.Cases
+                        .FirstOrDefault(c => c.Name == mem.PropertyName);
+                    if (caseInfo != null)
+                        return ([], new LiteralExpression(
+                            Value: caseInfo.ComputedValue,
+                            LiteralType: TokenType.S32Literal,
+                            Location: mem.Location)
+                            { ResolvedType = mem.ResolvedType ?? choiceType });
+                }
+
+                // Fold flags member access (e.g. Perms.READ) -> bitmask literal
+                if (mem.Object.ResolvedType is FlagsTypeInfo flagsType)
+                {
+                    FlagsMemberInfo? memberInfo = flagsType.Members
+                        .FirstOrDefault(m => m.Name == mem.PropertyName);
+                    if (memberInfo != null)
+                        return ([], new LiteralExpression(
+                            Value: 1UL << memberInfo.BitPosition,
+                            LiteralType: TokenType.U64Literal,
+                            Location: mem.Location)
+                            { ResolvedType = mem.ResolvedType ?? flagsType });
+                }
+
                 var (h, lowered) = LowerExpr(mem.Object);
                 if (h.Count == 0 && ReferenceEquals(lowered, mem.Object)) return ([], expr);
                 return (h, mem with { Object = lowered });
@@ -428,11 +452,14 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                     && ReferenceEquals(loweredObj, idx.Object)
                     && ReferenceEquals(loweredIdx, idx.Index))
                     return ([], expr);
-                return (hoisted, idx with { Object = loweredObj, Index = loweredIdx });
+                var rewritten = idx with { Object = loweredObj, Index = loweredIdx };
+                rewritten.ResolvedType = idx.ResolvedType;
+                rewritten.ResolvedSetItem = idx.ResolvedSetItem;
+                return (hoisted, rewritten);
             }
 
             case NamedArgumentExpression named:
-                // Strip the wrapper — after SA the argument is already in its correct position.
+                // Strip the wrapper -- after SA the argument is already in its correct position.
                 return LowerExpr(named.Value);
 
             case CreatorExpression creator:
@@ -512,7 +539,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
 
             case StealExpression steal:
             {
-                // steal is a type-system-only annotation; at IR level it is identical to its operand.
+                // Strip the wrapper -- ownership transfer semantics are only needed during SA.
                 var (h, lowered) = LowerExpr(steal.Operand);
                 return (h, lowered);
             }
@@ -556,14 +583,15 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             case ConditionalExpression cond:
             {
                 // D-AST-6: hoist to var _cif_N: T; if cond { _cif_N = a } else { _cif_N = b }
-                // Fall back to branch ResolvedType when the cond node itself has no type
-                // (e.g., unanalyzed stdlib ternaries, or ConditionalExpressions synthesized by
-                // And/Or/Not lowering above where the node carries the type on the branches).
+                // ResolvedType must be set -- SA annotates user ternaries, and synthesized
+                // ConditionalExpression nodes (from DerivedOperatorPass) are explicitly typed.
                 TypeInfo? resultType = cond.ResolvedType
                     ?? cond.TrueExpression.ResolvedType
                     ?? cond.FalseExpression.ResolvedType;
                 if (resultType == null)
-                    return ([], expr);
+                    throw new InvalidOperationException(
+                        $"ConditionalExpression reached ExpressionLoweringPass without a resolved type " +
+                        $"at {cond.Location}. SA must annotate all ConditionalExpression nodes.");
 
                 var (condH, loweredCond) = LowerExpr(cond.Condition);
                 var (trueH, loweredTrue) = LowerExpr(cond.TrueExpression);
@@ -613,44 +641,33 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                     elems.Add(lowered);
                 }
 
-                // ValueTuple (all record-like elements): lower to CreatorExpression so it
-                // goes through the normal EmitConstructorCall → EmitTupleConstruction path.
-                if (tuple.ResolvedType is TupleTypeInfo { IsValueTuple: true } tupleType)
-                {
-                    var memberVars = new List<(string Name, Expression Value)>(capacity: elems.Count);
-                    for (int i = 0; i < elems.Count; i++)
-                        memberVars.Add(($"item{i}", elems[i]));
-                    var creator = new CreatorExpression(
-                        TypeName: tupleType.Name,
-                        TypeArguments: null,
-                        MemberVariables: memberVars,
-                        Location: tuple.Location)
-                    { ResolvedType = tupleType };
-                    return (hoisted, creator);
-                }
+                if (tuple.ResolvedType is not TupleTypeInfo tupleType)
+                    throw new InvalidOperationException(
+                        $"TupleLiteralExpression has no resolved TupleTypeInfo at {tuple.Location}.");
 
-                // Tuple containing entity elements — deferred; pass through with lowered elements.
-                bool changed = elems.Zip(tuple.Elements, (a, b) => !ReferenceEquals(a, b)).Any(x => x);
-                if (!changed && hoisted.Count == 0) return ([], expr);
-                return (hoisted, tuple with { Elements = elems });
+                var memberVars = new List<(string Name, Expression Value)>(capacity: elems.Count);
+                for (int i = 0; i < elems.Count; i++)
+                    memberVars.Add(($"item{i}", elems[i]));
+                var creator = new CreatorExpression(
+                    TypeName: tupleType.Name,
+                    TypeArguments: null,
+                    MemberVariables: memberVars,
+                    Location: tuple.Location)
+                { ResolvedType = tupleType };
+                return (hoisted, creator);
             }
 
             case ListLiteralExpression list:
-            {
-                var hoisted = new List<Statement>();
-                var elems = new List<Expression>(capacity: list.Elements.Count);
-                bool changed = false;
-                foreach (Expression el in list.Elements)
-                {
-                    var (h, lowered) = LowerExpr(el);
-                    hoisted.AddRange(h);
-                    elems.Add(lowered);
-                    if (!ReferenceEquals(lowered, el)) changed = true;
-                }
+                return LowerListLiteral(list);
 
-                if (!changed && hoisted.Count == 0) return ([], expr);
-                return (hoisted, list with { Elements = elems });
-            }
+            case SetLiteralExpression set:
+                return LowerSetLiteral(set);
+
+            case DictLiteralExpression dict:
+                return LowerDictLiteral(dict);
+
+            case DictEntryLiteralExpression dictEntry:
+                return LowerDictEntryLiteral(dictEntry);
 
             case FlagsTestExpression flagsTest:
             {
@@ -776,16 +793,10 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                     ? range.ResolvedType.TypeArguments[0]
                     : elemType;
 
-                // If we still have no element type (e.g. stdlib bodies without SA annotation),
-                // leave the RangeExpression as-is so EmitRange in codegen handles it — that path
-                // infers the element type from the LLVM literal type (see GetLiteralType).
                 if (resolvedElem == null)
-                    return (hoisted, range with
-                    {
-                        Start = loweredStart,
-                        End = loweredEnd,
-                        Step = range.Step != null ? stepExpr : null
-                    });
+                    throw new InvalidOperationException(
+                        $"RangeExpression at {range.Location} has no resolvable element type. " +
+                        "SA must annotate the start/end expressions before ExpressionLoweringPass runs.");
 
                 List<TypeExpression> typeArgs = [TypeInfoToExpr(type: resolvedElem, loc: loc)];
 
@@ -831,7 +842,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 var clauses = new List<WhenClause>(capacity: whenExpr.Clauses.Count);
                 foreach (WhenClause c in whenExpr.Clauses)
                 {
-                    // The clause body is an expression — wrap in ExpressionStatement or
+                    // The clause body is an expression -- wrap in ExpressionStatement or
                     // AssignmentStatement. If the body is a BlockExpression, extract its last
                     // expression as the value; otherwise treat the clause body directly.
                     Statement clauseBody;
@@ -862,22 +873,278 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 return (hoisted, tempRef);
             }
 
+            case IdentifierExpression id:
+            {
+                // Fold standalone choice case identifiers (e.g. ME_SMALL) -> int literal
+                var choiceCase = ctx.Registry.LookupChoiceCase(caseName: id.Name);
+                if (choiceCase != null)
+                    return ([], new LiteralExpression(
+                        Value: choiceCase.Value.CaseInfo.ComputedValue,
+                        LiteralType: TokenType.S32Literal,
+                        Location: id.Location)
+                        { ResolvedType = id.ResolvedType ?? choiceCase.Value.ChoiceType });
+                return ([], expr);
+            }
+
+            // Bare unsuffixed literals: rewrite LiteralType to the SA-resolved concrete type
+            // so codegen never receives UndecidedInteger / UndecidedDecimal tokens.
+            case LiteralExpression { LiteralType: TokenType.UndecidedInteger } undecInt:
+            {
+                TokenType resolved = undecInt.ResolvedType?.Name switch
+                {
+                    "S8"      => TokenType.S8Literal,
+                    "S16"     => TokenType.S16Literal,
+                    "S32"     => TokenType.S32Literal,
+                    "S128"    => TokenType.S128Literal,
+                    "U8"      => TokenType.U8Literal,
+                    "U16"     => TokenType.U16Literal,
+                    "U32"     => TokenType.U32Literal,
+                    "U64"     => TokenType.U64Literal,
+                    "U128"    => TokenType.U128Literal,
+                    "Address" => TokenType.AddressLiteral,
+                    "Integer" => TokenType.IntegerLiteral,
+                    _         => TokenType.S64Literal  // This should be language specific: Suflae should use IntegerLiteral
+                };
+                return ([], undecInt with { LiteralType = resolved });
+            }
+
+            case LiteralExpression { LiteralType: TokenType.UndecidedDecimal } undecDec:
+            {
+                TokenType resolved = undecDec.ResolvedType?.Name switch
+                {
+                    "F16"     => TokenType.F16Literal,
+                    "F32"     => TokenType.F32Literal,
+                    "F128"    => TokenType.F128Literal,
+                    "D32"     => TokenType.D32Literal,
+                    "D64"     => TokenType.D64Literal,
+                    "D128"    => TokenType.D128Literal,
+                    "Decimal" => TokenType.DecimalLiteral,
+                    _         => TokenType.F64Literal  // This should be language specific: Suflae should use DecimalLiteral
+                };
+                return ([], undecDec with { LiteralType = resolved });
+            }
+
             default:
-                // LiteralExpression, IdentifierExpression, TypeExpression, LambdaExpression,
-                // DictLiteralExpression, SetLiteralExpression, BlockExpression,
-                // TypeConversionExpression, GenericMemberExpression, DictEntryLiteralExpression:
+                // LiteralExpression, TypeExpression, LambdaExpression,
+                // BlockExpression, TypeConversionExpression, GenericMemberExpression:
                 // no sub-expressions that need lowering.
                 return ([], expr);
         }
     }
 
-    // ─── Specific hoisting lowerings ─────────────────────────────────────────────
+    // --- Collection literal lowerings --------------------------------------------
+
+    /// <summary>
+    /// Lowers a list literal to: var _lit_N = Collection(); _lit_N.add_last(e)...
+    /// Array[T,N] and BitArray[N] are inline IR -- kept as ListLiteralExpression for codegen.
+    /// </summary>
+    private (List<Statement> Hoisted, Expression Expr) LowerListLiteral(ListLiteralExpression list)
+    {
+        TypeInfo? resolvedType = list.ResolvedType;
+        // Unwrap transparent ownership wrappers (Owned[T], Retained[T], Tracked[T]) so that
+        // Owned[List[S64]] uses "List" as baseName, not "Owned".
+        TypeInfo? listType = UnwrapOwnershipWrapper(resolvedType) ?? resolvedType;
+        SourceLocation loc = list.Location;
+
+        string baseName = GetCollectionBaseName(listType) ?? "List";
+
+        // Array/BitArray are pure inline IR (insertvalue) -- pass through with element recursion only.
+        if (baseName is "Array" or "BitArray")
+        {
+            var hoisted = new List<Statement>();
+            var elems = new List<Expression>(capacity: list.Elements.Count);
+            bool changed = false;
+            foreach (Expression el in list.Elements)
+            {
+                var (h, lowered) = LowerExpr(el);
+                hoisted.AddRange(h);
+                elems.Add(lowered);
+                if (!ReferenceEquals(lowered, el)) changed = true;
+            }
+            if (!changed && hoisted.Count == 0) return ([], list);
+            return (hoisted, list with { Elements = elems });
+        }
+
+        if (listType == null) return ([], list);
+
+        string tempName = NextTempName("lit");
+        var hoisted2 = new List<Statement>();
+
+        AddTempVar(hoisted2, tempName, listType, MakeZeroArgCreator(listType, baseName, loc), loc);
+        Expression colRef = MakeRef(tempName, listType, loc);
+
+        // List, Deque, BitList append at the end; everything else uses add().
+        string addMethod = baseName is "List" or "Deque" or "BitList" ? "add_last" : "add";
+
+        foreach (Expression elem in list.Elements)
+        {
+            var (h, lowered) = LowerExpr(elem);
+            hoisted2.AddRange(h);
+            hoisted2.Add(MakeCollectionAddCall(colRef, listType, addMethod, [lowered], loc));
+        }
+
+        // If the original expression was wrapped in Owned/Retained/Tracked, restore that
+        // wrapper type on the returned reference so downstream code sees the correct type.
+        Expression result = resolvedType != null && !ReferenceEquals(resolvedType, listType)
+            ? new IdentifierExpression(Name: tempName, Location: loc) { ResolvedType = resolvedType }
+            : colRef;
+        return (hoisted2, result);
+    }
+
+    /// <summary>
+    /// Lowers a set literal to: var _lit_N = Set(); _lit_N.add(e)...
+    /// </summary>
+    private (List<Statement> Hoisted, Expression Expr) LowerSetLiteral(SetLiteralExpression set)
+    {
+        TypeInfo? setType = set.ResolvedType;
+        SourceLocation loc = set.Location;
+        if (setType == null) return ([], set);
+
+        string baseName = GetCollectionBaseName(setType) ?? "Set";
+        string tempName = NextTempName("lit");
+        var hoisted = new List<Statement>();
+
+        AddTempVar(hoisted, tempName, setType, MakeZeroArgCreator(setType, baseName, loc), loc);
+        Expression colRef = MakeRef(tempName, setType, loc);
+
+        foreach (Expression elem in set.Elements)
+        {
+            var (h, lowered) = LowerExpr(elem);
+            hoisted.AddRange(h);
+            hoisted.Add(MakeCollectionAddCall(colRef, setType, "add", [lowered], loc));
+        }
+
+        return (hoisted, colRef);
+    }
+
+    /// <summary>
+    /// Lowers a dict literal to: var _lit_N = Dict(); _lit_N.add(k, v)...
+    /// PriorityQueue {priority: element} -> add(element, priority) (arguments reversed).
+    /// </summary>
+    private (List<Statement> Hoisted, Expression Expr) LowerDictLiteral(DictLiteralExpression dict)
+    {
+        TypeInfo? dictType = dict.ResolvedType;
+        SourceLocation loc = dict.Location;
+        if (dictType == null) return ([], dict);
+
+        string baseName = GetCollectionBaseName(dictType) ?? "Dict";
+        string tempName = NextTempName("lit");
+        var hoisted = new List<Statement>();
+
+        AddTempVar(hoisted, tempName, dictType, MakeZeroArgCreator(dictType, baseName, loc), loc);
+        Expression colRef = MakeRef(tempName, dictType, loc);
+
+        bool isPriorityQueue = baseName == "PriorityQueue";
+
+        foreach ((Expression key, Expression value) in dict.Pairs)
+        {
+            var (keyH, loweredKey) = LowerExpr(key);
+            var (valH, loweredVal) = LowerExpr(value);
+            hoisted.AddRange(keyH);
+            hoisted.AddRange(valH);
+
+            // PriorityQueue literal: {priority: element} -> add(element, priority)
+            List<Expression> args = isPriorityQueue
+                ? [loweredVal, loweredKey]
+                : [loweredKey, loweredVal];
+            hoisted.Add(MakeCollectionAddCall(colRef, dictType, "add", args, loc));
+        }
+
+        return (hoisted, colRef);
+    }
+
+    /// <summary>
+    /// Lowers a standalone dict-entry literal <c>key:value</c> to a
+    /// <c>CreatorExpression("DictEntry", ...)</c> record constructor.
+    /// </summary>
+    private (List<Statement> Hoisted, Expression Expr) LowerDictEntryLiteral(
+        DictEntryLiteralExpression dictEntry)
+    {
+        var (keyH, loweredKey) = LowerExpr(dictEntry.Key);
+        var (valH, loweredVal) = LowerExpr(dictEntry.Value);
+        var hoisted = Concat(keyH, valH);
+
+        TypeInfo? entryType = dictEntry.ResolvedType;
+        if (entryType == null)
+        {
+            if (ReferenceEquals(loweredKey, dictEntry.Key) && ReferenceEquals(loweredVal, dictEntry.Value)
+                && hoisted.Count == 0)
+                return ([], dictEntry);
+            return (hoisted, dictEntry with { Key = loweredKey, Value = loweredVal });
+        }
+
+        string baseName = GetCollectionBaseName(entryType) ?? "DictEntry";
+        List<TypeExpression>? typeArgs = entryType.TypeArguments?.Count > 0
+            ? entryType.TypeArguments.Select(t => TypeInfoToExpr(t, dictEntry.Location)).ToList()
+            : null;
+
+        return (hoisted, new CreatorExpression(
+            TypeName: baseName,
+            TypeArguments: typeArgs,
+            MemberVariables: [("key", loweredKey), ("value", loweredVal)],
+            Location: dictEntry.Location) { ResolvedType = entryType });
+    }
+
+    // --- Collection lowering helpers ----------------------------------------------
+
+    private static TypeInfo? UnwrapOwnershipWrapper(TypeInfo? type)
+    {
+        if (type is WrapperTypeInfo { Name: "Owned" or "Retained" or "Tracked" } w)
+            return w.InnerType;
+        return null;
+    }
+
+    private static string GetCollectionBaseName(TypeInfo? type)
+    {
+        if (type == null) return "Collection";
+        return type switch
+        {
+            EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition.Name,
+            RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition.Name,
+            _ => type.Name.Contains('[') ? type.Name[..type.Name.IndexOf('[')] : type.Name
+        };
+    }
+
+    private static Expression MakeZeroArgCreator(TypeInfo collectionType, string baseName,
+        SourceLocation loc)
+    {
+        List<TypeExpression>? typeArgs = collectionType.TypeArguments?.Count > 0
+            ? collectionType.TypeArguments.Select(t => TypeInfoToExpr(t, loc)).ToList()
+            : null;
+
+        return new CreatorExpression(
+            TypeName: baseName,
+            TypeArguments: typeArgs,
+            MemberVariables: [],
+            Location: loc) { ResolvedType = collectionType };
+    }
+
+    private Statement MakeCollectionAddCall(Expression receiver, TypeInfo receiverType,
+        string methodName, List<Expression> args, SourceLocation loc)
+    {
+        RoutineInfo? method = ctx.Registry.LookupMethod(type: receiverType, methodName: methodName);
+
+        var callee = new MemberExpression(Object: receiver, PropertyName: methodName,
+            Location: loc);
+        var call = new CallExpression(
+            Callee: callee,
+            Arguments: args,
+            Location: loc)
+        {
+            ResolvedType = method?.ReturnType,
+            ResolvedRoutine = method,
+            LoweringKind = method != null ? CallLoweringKind.DirectMemberRoutine : CallLoweringKind.Unknown
+        };
+        return new DiscardStatement(Expression: call, Location: loc);
+    }
+
+    // --- Specific hoisting lowerings ---------------------------------------------
 
     /// <summary>
     /// 1f-2. Lowers <c>x is T</c> / <c>x isnot T</c> for variant subjects to a
     /// <c>type_id</c> field comparison:
-    /// <c>x is S64</c> → <c>x.type_id == FNV("S64")</c>,
-    /// <c>x isnot S64</c> → <c>x.type_id != FNV("S64")</c>.
+    /// <c>x is S64</c> -> <c>x.type_id == FNV("S64")</c>,
+    /// <c>x isnot S64</c> -> <c>x.type_id != FNV("S64")</c>.
     /// Blank maps to tag 0.  Falls through for unresolved right-hand types.
     /// </summary>
     private (List<Statement> Hoisted, Expression Expr) LowerVariantIsExpression(BinaryExpression bin)
@@ -916,7 +1183,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         var typeIdAccess = new MemberExpression(
             Object: loweredLeft, PropertyName: "type_id", Location: loc) { ResolvedType = u64Type };
         var constant = new LiteralExpression(
-            Value: typeId, LiteralType: Compiler.Lexer.TokenType.U64Literal, Location: loc)
+            Value: typeId, LiteralType: TokenType.U64Literal, Location: loc)
             { ResolvedType = u64Type };
         var cmp = new BinaryExpression(
             Left: typeIdAccess,
@@ -928,7 +1195,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
 
     /// <summary>
     /// 1g. Lowers boolean short-circuit And to <see cref="ConditionalExpression"/>:
-    /// <c>a and b</c> → <c>if a { _cif = b } else { _cif = false }</c>.
+    /// <c>a and b</c> -> <c>if a { _cif = b } else { _cif = false }</c>.
     /// The right operand (<paramref name="bin"/>.Right) is NOT pre-lowered here;
     /// the ConditionalExpression case hoists its setup into the true branch only,
     /// preserving short-circuit evaluation.
@@ -942,7 +1209,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         var (leftH, loweredLeft) = LowerExpr(bin.Left);
 
         var falseLit = new LiteralExpression(
-            Value: false, LiteralType: Compiler.Lexer.TokenType.False, Location: loc)
+            Value: false, LiteralType: TokenType.False, Location: loc)
             { ResolvedType = boolType };
 
         var condExpr = new ConditionalExpression(
@@ -957,7 +1224,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
 
     /// <summary>
     /// 1h. Lowers boolean short-circuit Or to <see cref="ConditionalExpression"/>:
-    /// <c>a or b</c> → <c>if a { _cif = true } else { _cif = b }</c>.
+    /// <c>a or b</c> -> <c>if a { _cif = true } else { _cif = b }</c>.
     /// The right operand is placed in the false branch only, preserving lazy evaluation.
     /// </summary>
     private (List<Statement> Hoisted, Expression Expr) LowerBooleanOr(BinaryExpression bin)
@@ -969,7 +1236,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         var (leftH, loweredLeft) = LowerExpr(bin.Left);
 
         var trueLit = new LiteralExpression(
-            Value: true, LiteralType: Compiler.Lexer.TokenType.True, Location: loc)
+            Value: true, LiteralType: TokenType.True, Location: loc)
             { ResolvedType = boolType };
 
         var condExpr = new ConditionalExpression(
@@ -984,7 +1251,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
 
     /// <summary>
     /// 1i. Lowers logical not to <see cref="ConditionalExpression"/>:
-    /// <c>not x</c> → <c>if x { _cif = false } else { _cif = true }</c>.
+    /// <c>not x</c> -> <c>if x { _cif = false } else { _cif = true }</c>.
     /// FlagsTypeInfo bitwise-not (<c>~</c>) is lowered to <c>$bitnot()</c> by
     /// <see cref="OperatorLoweringPass"/> and never reaches this path.
     /// </summary>
@@ -997,10 +1264,10 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         var (h, loweredOp) = LowerExpr(notExpr.Operand);
 
         var trueLit = new LiteralExpression(
-            Value: true, LiteralType: Compiler.Lexer.TokenType.True, Location: loc)
+            Value: true, LiteralType: TokenType.True, Location: loc)
             { ResolvedType = boolType };
         var falseLit = new LiteralExpression(
-            Value: false, LiteralType: Compiler.Lexer.TokenType.False, Location: loc)
+            Value: false, LiteralType: TokenType.False, Location: loc)
             { ResolvedType = boolType };
 
         var condExpr = new ConditionalExpression(
@@ -1016,10 +1283,10 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     /// <summary>
     /// 1e. Lowers flags combination operators to plain bitwise operations:
     /// <list type="bullet">
-    ///   <item><c>a and b</c> (union of active bits)      → <c>BitwiseOr(a, b)</c></item>
-    ///   <item><c>a but b</c> (bit clear: a &amp; ~b)     → <c>BitwiseAnd(a, BitwiseNot(b))</c></item>
+    ///   <item><c>a and b</c> (union of active bits)      -> <c>BitwiseOr(a, b)</c></item>
+    ///   <item><c>a but b</c> (bit clear: a &amp; ~b)     -> <c>BitwiseAnd(a, BitwiseNot(b))</c></item>
     /// </list>
-    /// Codegen emits <c>or i64</c> / <c>and i64 … xor i64 …, -1</c> for these via
+    /// Codegen emits <c>or i64</c> / <c>and i64 ... xor i64 ..., -1</c> for these via
     /// <c>EmitPrimitiveBinaryOp</c>, making <c>EmitFlagsCombine</c> / <c>EmitBitClear</c> dead.
     /// </summary>
     private (List<Statement> Hoisted, Expression Expr) LowerFlagsCombination(BinaryExpression binary)
@@ -1028,12 +1295,12 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         var (rightH, loweredRight) = LowerExpr(binary.Right);
         var hoisted = Concat(leftH, rightH);
 
-        FlagsTypeInfo flagsType = (FlagsTypeInfo)binary.Left.ResolvedType!;
+        var flagsType = (FlagsTypeInfo)binary.Left.ResolvedType!;
 
         Expression lowered;
         if (binary.Operator == BinaryOperator.And)
         {
-            // flags and flags → bitwise OR (union of active bits)
+            // flags and flags -> bitwise OR (union of active bits)
             lowered = new BinaryExpression(
                 Left: loweredLeft,
                 Operator: BinaryOperator.BitwiseOr,
@@ -1042,7 +1309,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         }
         else
         {
-            // flags but flags → bitwise AND with NOT of right (bit clear)
+            // flags but flags -> bitwise AND with NOT of right (bit clear)
             var notRight = new UnaryExpression(
                 Operator: UnaryOperator.BitwiseNot,
                 Operand: loweredRight,
@@ -1060,10 +1327,10 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     /// <summary>
     /// 1f. Lowers <c>x is None</c> / <c>x is Blank</c> / their negated forms for carriers:
     /// <list type="bullet">
-    ///   <item><c>Maybe[T record] is None</c>  →  <c>not x.present</c></item>
-    ///   <item><c>Maybe[T record] isnot None</c>  →  <c>x.present</c></item>
-    ///   <item><c>Lookup[T] is Blank</c>  →  <c>x.type_id == 0_u64</c></item>
-    ///   <item><c>Lookup[T] isnot Blank</c>  →  <c>x.type_id != 0_u64</c></item>
+    ///   <item><c>Maybe[T record] is None</c>  ->  <c>not x.present</c></item>
+    ///   <item><c>Maybe[T record] isnot None</c>  ->  <c>x.present</c></item>
+    ///   <item><c>Lookup[T] is Blank</c>  ->  <c>x.type_id == 0_u64</c></item>
+    ///   <item><c>Lookup[T] isnot Blank</c>  ->  <c>x.type_id != 0_u64</c></item>
     /// </list>
     /// <c>Maybe[T entity]</c> absence checks are NOT lowered here (require Snatched null compare);
     /// they fall through unchanged for <c>EmitIsPattern</c> in codegen.
@@ -1082,7 +1349,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         TypeInfo? baseType = withExpr.Base.ResolvedType;
         if (baseType is not RecordTypeInfo recordType)
         {
-            // Not a record — pass through unchanged.
+            // Not a record -- pass through unchanged.
             if (ReferenceEquals(loweredBase, withExpr.Base) && baseHoisted.Count == 0)
                 return ([], withExpr);
             return (baseHoisted, withExpr with { Base = loweredBase });
@@ -1120,7 +1387,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
 
         if (!allSimple)
         {
-            // Nested paths or index updates — not yet lowered; pass through.
+            // Nested paths or index updates -- not yet lowered; pass through.
             return (hoisted, withExpr with { Base = baseRef });
         }
 
@@ -1184,7 +1451,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         TypeInfo? boolType = ctx.Registry.LookupType(name: "Bool");
         TypeInfo? u64Type  = ctx.Registry.LookupType(name: "U64");
 
-        // Maybe[T record]: x is None → not x.present; x isnot None → x.present
+        // Maybe[T record]: x is None -> not x.present; x isnot None -> x.present
         if (isNoneCheck && IsMaybeRecord(operandType))
         {
             var presentAccess = new MemberExpression(
@@ -1203,7 +1470,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             return (hoisted, loweredNot);
         }
 
-        // Result/Lookup: x is Blank → x.type_id == 0_u64; x isnot Blank → x.type_id != 0_u64
+        // Result/Lookup: x is Blank -> x.type_id == 0_u64; x isnot Blank -> x.type_id != 0_u64
         if (isBlankCheck && IsResultOrLookup(operandType))
         {
             var typeIdAccess = new MemberExpression(
@@ -1213,7 +1480,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             };
             var zero = new LiteralExpression(
                 Value: 0UL,
-                LiteralType: Compiler.Lexer.TokenType.U64Literal,
+                LiteralType: TokenType.U64Literal,
                 Location: ipe.Location) { ResolvedType = u64Type };
             Expression cmp = new BinaryExpression(
                 Left: typeIdAccess,
@@ -1223,7 +1490,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             return (hoisted, cmp);
         }
 
-        // D-AST-11: user VariantTypeInfo — x is T → x.type_id == FNV-1a(T.FullName)
+        // D-AST-11: user VariantTypeInfo -- x is T -> x.type_id == FNV-1a(T.FullName)
         if (ipe.Pattern is TypePattern { } tp && operandType is VariantTypeInfo)
         {
             TypeInfo? targetType = tp.Type.ResolvedType
@@ -1267,7 +1534,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             }
         }
 
-        // Flags type: `p is FLAG` → `(p & mask) != 0`; `p isnot FLAG` → `(p & mask) == 0`
+        // Flags type: `p is FLAG` -> `(p & mask) != 0`; `p isnot FLAG` -> `(p & mask) == 0`
         if (ipe.Pattern is TypePattern flagsTp && operandType is FlagsTypeInfo flagsType2)
         {
             TypeInfo? u64Type2 = ctx.Registry.LookupType(name: "U64");
@@ -1320,7 +1587,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             operands.Add(lowered);
         }
 
-        // Hoist middle operands (index 1 … n-2) that are not trivially pure,
+        // Hoist middle operands (index 1 ... n-2) that are not trivially pure,
         // to prevent double-evaluation.
         for (int i = 1; i < operands.Count - 1; i++)
         {
@@ -1387,8 +1654,8 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     ///   var _car_N = a
     ///   var _qq_N: T
     ///   when _car_N
-    ///     is None/Blank → _qq_N = b
-    ///     else v        → _qq_N = v
+    ///     is None/Blank -> _qq_N = b
+    ///     else v        -> _qq_N = v
     ///   // replacement: _qq_N
     /// </code>
     /// </summary>
@@ -1453,8 +1720,8 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     ///   var _car_N = a
     ///   var _om_N: Maybe[PropType]
     ///   when _car_N
-    ///     is None/Blank → _om_N = None   (zeroinitializer via IdentifierExpression("None"))
-    ///     else v        → _om_N = v.prop  (auto-wrapped if needed by codegen)
+    ///     is None/Blank -> _om_N = None   (zeroinitializer via IdentifierExpression("None"))
+    ///     else v        -> _om_N = v.prop  (auto-wrapped if needed by codegen)
     ///   // replacement: _om_N
     /// </code>
     /// </summary>
@@ -1498,7 +1765,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             ResolvedType = propType
         };
 
-        // None literal (absent Maybe) — codegen treats "None" identifier as zeroinitializer
+        // None literal (absent Maybe) -- codegen treats "None" identifier as zeroinitializer
         var noneLiteral = new IdentifierExpression(Name: "None", Location: loc)
         {
             ResolvedType = resultType
@@ -1525,7 +1792,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         return (hoisted, MakeRef(omName, resultType, loc));
     }
 
-    // ─── Helpers ─────────────────────────────────────────────────────────────────
+    // --- Helpers -----------------------------------------------------------------
 
     private static List<Statement> Concat(List<Statement> a, List<Statement> b)
     {
@@ -1621,7 +1888,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         if (baseName == "Maybe")
             return new NonePattern(Location: loc);
 
-        // Result, Lookup, or unknown — use Blank type pattern
+        // Result, Lookup, or unknown -- use Blank type pattern
         return new TypePattern(
             Type: new TypeExpression(Name: "Blank", GenericArguments: null, Location: loc),
             VariableName: null,

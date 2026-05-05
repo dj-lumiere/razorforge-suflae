@@ -1,19 +1,17 @@
-﻿using Xunit;
+using SyntaxTree;
 
 namespace RazorForge.Tests.Parser;
 
-using SyntaxTree;
 using static TestHelpers;
 
 /// <summary>
-/// Tests for parsing pattern matching in RazorForge:
-/// when expressions, is keyword, guards, variant destructuring, literal patterns.
+/// Contains tests for pattern matching.
 /// </summary>
 public class PatternMatchingTests
 {
     #region Basic When Statement Tests
     /// <summary>
-    /// Tests Parse_SimpleWhen.
+    /// Verifies that the parser accepts simple when.
     /// </summary>
 
     [Fact]
@@ -38,7 +36,7 @@ public class PatternMatchingTests
         Assert.NotNull(@object: whenStmt);
     }
     /// <summary>
-    /// Tests Parse_WhenWithBlock.
+    /// Verifies that the parser accepts when with block.
     /// </summary>
 
     [Fact]
@@ -57,7 +55,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenAsExpression.
+    /// Verifies that the parser accepts when as expression.
     /// </summary>
 
     [Fact]
@@ -75,7 +73,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenWithAssignment.
+    /// Verifies that the parser accepts when with assignment.
     /// </summary>
 
     [Fact]
@@ -96,7 +94,7 @@ public class PatternMatchingTests
 
     #region Is Type Pattern Tests
     /// <summary>
-    /// Tests Parse_WhenIsType.
+    /// Verifies that the parser accepts when is type.
     /// </summary>
 
     [Fact]
@@ -114,7 +112,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenIsTypeWithoutBinding.
+    /// Verifies that the parser accepts when is type without binding.
     /// </summary>
 
     [Fact]
@@ -132,7 +130,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenIsCustomType.
+    /// Verifies that the parser accepts when is custom type.
     /// </summary>
 
     [Fact]
@@ -154,7 +152,7 @@ public class PatternMatchingTests
 
     #region Choice Pattern Tests
     /// <summary>
-    /// Tests Parse_WhenChoice.
+    /// Verifies that the parser accepts when choice.
     /// </summary>
 
     [Fact]
@@ -173,7 +171,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenChoiceShorthand.
+    /// Verifies that the parser accepts when choice shorthand.
     /// </summary>
 
     [Fact]
@@ -192,7 +190,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenChoiceIsPattern.
+    /// Verifies that the parser accepts when choice is pattern.
     /// </summary>
 
     [Fact]
@@ -211,7 +209,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenChoiceIsPatternQualified.
+    /// Verifies that the parser accepts when choice is pattern qualified.
     /// </summary>
 
     [Fact]
@@ -234,7 +232,7 @@ public class PatternMatchingTests
 
     #region Variant Pattern Tests
     /// <summary>
-    /// Tests Parse_WhenVariant.
+    /// Verifies that the parser accepts when variant.
     /// </summary>
 
     [Fact]
@@ -252,7 +250,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenVariantShorthand.
+    /// Verifies that the parser accepts when variant shorthand.
     /// </summary>
 
     [Fact]
@@ -270,7 +268,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenVariantDestructuring.
+    /// Verifies that the parser accepts when variant destructuring.
     /// </summary>
 
     [Fact]
@@ -289,7 +287,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenVariantDestructuringWithAlias.
+    /// Verifies that the parser accepts when variant destructuring with alias.
     /// </summary>
 
     [Fact]
@@ -307,7 +305,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenNestedDestructuring.
+    /// Verifies that the parser accepts when nested destructuring.
     /// </summary>
 
     [Fact]
@@ -330,7 +328,7 @@ public class PatternMatchingTests
 
     #region Guard Clause Tests
     /// <summary>
-    /// Tests Parse_WhenWithGuard.
+    /// Verifies that the parser accepts when with guard.
     /// </summary>
 
     [Fact]
@@ -349,7 +347,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenLiteralWithGuard.
+    /// Verifies that the parser accepts when literal with guard.
     /// </summary>
 
     [Fact]
@@ -367,7 +365,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenTypeWithComplexGuard.
+    /// Verifies that the parser accepts when type with complex guard.
     /// </summary>
 
     [Fact]
@@ -389,7 +387,7 @@ public class PatternMatchingTests
 
     #region Maybe/Result/Lookup Pattern Tests
     /// <summary>
-    /// Tests Parse_WhenMaybe.
+    /// Verifies that the parser accepts when maybe.
     /// </summary>
 
     [Fact]
@@ -406,7 +404,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenResult.
+    /// Verifies that the parser accepts when result.
     /// </summary>
 
     [Fact]
@@ -423,7 +421,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenResultSpecificError.
+    /// Verifies that the parser accepts when result specific error.
     /// </summary>
 
     [Fact]
@@ -442,7 +440,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenLookup.
+    /// Verifies that the parser accepts when lookup.
     /// </summary>
 
     [Fact]
@@ -460,7 +458,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenLookupSpecificErrors.
+    /// Verifies that the parser accepts when lookup specific errors.
     /// </summary>
 
     [Fact]
@@ -484,7 +482,7 @@ public class PatternMatchingTests
 
     #region Literal Pattern Tests
     /// <summary>
-    /// Tests Parse_WhenLiteralInteger.
+    /// Verifies that the parser accepts when literal integer.
     /// </summary>
 
     [Fact]
@@ -503,7 +501,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenLiteralText.
+    /// Verifies that the parser accepts when literal text.
     /// </summary>
 
     [Fact]
@@ -522,7 +520,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenLiteralBool.
+    /// Verifies that the parser accepts when literal bool.
     /// </summary>
 
     [Fact]
@@ -543,7 +541,7 @@ public class PatternMatchingTests
 
     #region Wildcard Pattern Tests
     /// <summary>
-    /// Tests Parse_WhenWildcard.
+    /// Verifies that the parser accepts when wildcard.
     /// </summary>
 
     [Fact]
@@ -560,7 +558,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenWildcardInDestructuring.
+    /// Verifies that the parser accepts when wildcard in destructuring.
     /// </summary>
 
     [Fact]
@@ -582,7 +580,7 @@ public class PatternMatchingTests
 
     #region Else Binding Tests
     /// <summary>
-    /// Tests Parse_WhenElseWithBinding.
+    /// Verifies that the parser accepts when else with binding.
     /// </summary>
 
     [Fact]
@@ -599,7 +597,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenElseWithBlock.
+    /// Verifies that the parser accepts when else with block.
     /// </summary>
 
     [Fact]
@@ -624,7 +622,7 @@ public class PatternMatchingTests
 
     #region Let Destructuring Tests
     /// <summary>
-    /// Tests Parse_LetDestructuringRecord.
+    /// Verifies that the parser accepts let destructuring record.
     /// </summary>
 
     [Fact]
@@ -639,7 +637,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_LetDestructuringWithAlias.
+    /// Verifies that the parser accepts let destructuring with alias.
     /// </summary>
 
     [Fact]
@@ -654,7 +652,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_LetNestedDestructuring.
+    /// Verifies that the parser accepts let nested destructuring.
     /// </summary>
 
     [Fact]
@@ -673,7 +671,7 @@ public class PatternMatchingTests
 
     #region Complex Pattern Tests
     /// <summary>
-    /// Tests Parse_ComplexNestedPatterns.
+    /// Verifies that the parser accepts complex nested patterns.
     /// </summary>
 
     [Fact]
@@ -703,7 +701,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenWithMultipleStatements.
+    /// Verifies that the parser accepts when with multiple statements.
     /// </summary>
 
     [Fact]
@@ -733,7 +731,7 @@ public class PatternMatchingTests
 
     #region Comparison Pattern Tests
     /// <summary>
-    /// Tests Parse_WhenComparisonNotEqual.
+    /// Verifies that the parser accepts when comparison not equal.
     /// </summary>
 
     [Fact]
@@ -750,7 +748,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenComparisonLessThan.
+    /// Verifies that the parser accepts when comparison less than.
     /// </summary>
 
     [Fact]
@@ -768,7 +766,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenComparisonGreaterThan.
+    /// Verifies that the parser accepts when comparison greater than.
     /// </summary>
 
     [Fact]
@@ -786,7 +784,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenComparisonLessThanOrEqual.
+    /// Verifies that the parser accepts when comparison less than or equal.
     /// </summary>
 
     [Fact]
@@ -805,7 +803,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenComparisonGreaterThanOrEqual.
+    /// Verifies that the parser accepts when comparison greater than or equal.
     /// </summary>
 
     [Fact]
@@ -824,41 +822,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenComparisonStrictEqual.
-    /// </summary>
-
-    [Fact]
-    public void Parse_WhenComparisonStrictEqual()
-    {
-        string source = """
-                        routine test(a: Data, b: Data)
-                          when a
-                            === b => show("same reference")
-                            else => show("different reference")
-                          return
-                        """;
-
-        AssertParses(source: source);
-    }
-    /// <summary>
-    /// Tests Parse_WhenComparisonStrictNotEqual.
-    /// </summary>
-
-    [Fact]
-    public void Parse_WhenComparisonStrictNotEqual()
-    {
-        string source = """
-                        routine test(a: Data, b: Data)
-                          when a
-                            !== b => show("different reference")
-                            else => show("same reference")
-                          return
-                        """;
-
-        AssertParses(source: source);
-    }
-    /// <summary>
-    /// Tests Parse_WhenComparisonWithMemberAccess.
+    /// Verifies that the parser accepts when comparison with member access.
     /// </summary>
 
     [Fact]
@@ -877,7 +841,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenComparisonWithMethodCall.
+    /// Verifies that the parser accepts when comparison with method call.
     /// </summary>
 
     [Fact]
@@ -895,7 +859,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenMixedComparisonPatterns.
+    /// Verifies that the parser accepts when mixed comparison patterns.
     /// </summary>
 
     [Fact]
@@ -919,7 +883,7 @@ public class PatternMatchingTests
 
     #region Becomes Statement Tests
     /// <summary>
-    /// Tests Parse_WhenBlockWithBecomes.
+    /// Verifies that the parser accepts when block with becomes.
     /// </summary>
 
     [Fact]
@@ -938,7 +902,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenMultipleBlocksWithBecomes.
+    /// Verifies that the parser accepts when multiple blocks with becomes.
     /// </summary>
 
     [Fact]
@@ -964,7 +928,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenTypePatternWithBlockAndBecomes.
+    /// Verifies that the parser accepts when type pattern with block and becomes.
     /// </summary>
 
     [Fact]
@@ -989,7 +953,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenBlockWithBecomesExpression.
+    /// Verifies that the parser accepts when block with becomes expression.
     /// </summary>
 
     [Fact]
@@ -1013,7 +977,7 @@ public class PatternMatchingTests
 
     #region Comparison Patterns with Guards Tests
     /// <summary>
-    /// Tests Parse_WhenComparisonWithGuard.
+    /// Verifies that the parser accepts when comparison with guard.
     /// </summary>
 
     [Fact]
@@ -1032,7 +996,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenComparisonWithComplexGuard.
+    /// Verifies that the parser accepts when comparison with complex guard.
     /// </summary>
 
     [Fact]
@@ -1056,7 +1020,7 @@ public class PatternMatchingTests
 
     #region Complex Boolean Guard Tests
     /// <summary>
-    /// Tests Parse_WhenGuardWithAnd.
+    /// Verifies that the parser accepts when guard with and.
     /// </summary>
 
     [Fact]
@@ -1073,7 +1037,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenGuardWithOr.
+    /// Verifies that the parser accepts when guard with or.
     /// </summary>
 
     [Fact]
@@ -1090,7 +1054,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenGuardWithAndOr.
+    /// Verifies that the parser accepts when guard with and or.
     /// </summary>
 
     [Fact]
@@ -1109,7 +1073,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenGuardWithMemberVariableAccess.
+    /// Verifies that the parser accepts when guard with member variable access.
     /// </summary>
 
     [Fact]
@@ -1127,7 +1091,7 @@ public class PatternMatchingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenGuardWithMethodCall.
+    /// Verifies that the parser accepts when guard with method call.
     /// </summary>
 
     [Fact]

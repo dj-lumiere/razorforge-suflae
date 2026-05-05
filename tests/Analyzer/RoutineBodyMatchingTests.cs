@@ -1,21 +1,18 @@
 using Compiler.Diagnostics;
-using SemanticVerification.Results;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for routine body matching against registered declarations (P4).
-/// Verifies that overloaded routines, generic member routines, and
-/// module-qualified routines correctly match bodies to declarations.
+/// Contains tests for routine body matching.
 /// </summary>
 public class RoutineBodyMatchingTests
 {
     #region Overloaded $create Routines
     /// <summary>
-    /// Tests Analyze_OverloadedCreate_BothBodiesMatch.
+    /// Verifies semantic analysis behavior for overloaded create both bodies match.
     /// </summary>
 
     [Fact]
@@ -48,7 +45,7 @@ public class RoutineBodyMatchingTests
 
     #region Generic Member Routines (External Syntax)
     /// <summary>
-    /// Tests Analyze_GenericOwnerExternalRoutine_BodyMatches.
+    /// Verifies semantic analysis behavior for generic owner external routine body matches.
     /// </summary>
 
     [Fact]
@@ -74,7 +71,7 @@ public class RoutineBodyMatchingTests
             filter: e => e.Code == SemanticDiagnosticCode.UnresolvedRoutineBody);
     }
     /// <summary>
-    /// Tests Analyze_GenericMethodLevelParam_BodyMatches.
+    /// Verifies semantic analysis behavior for generic method level param body matches.
     /// </summary>
 
     [Fact]
@@ -103,7 +100,7 @@ public class RoutineBodyMatchingTests
 
     #region Module-Qualified Routines
     /// <summary>
-    /// Tests Analyze_ModuleQualifiedRoutine_BodyMatches.
+    /// Verifies semantic analysis behavior for module qualified routine body matches.
     /// </summary>
 
     [Fact]

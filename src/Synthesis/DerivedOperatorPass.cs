@@ -1,11 +1,11 @@
+using Compiler.Lexer;
 using Compiler.Resolution;
+using Verification.Enums;
+using Verification.Results;
+using SyntaxTree;
 using TypeModel.Enums;
-using SemanticVerification.Enums;
-using SemanticVerification.Results;
 using TypeModel.Symbols;
 using TypeModel.Types;
-using SyntaxTree;
-using Compiler.Diagnostics;
 using TypeSymbol = TypeModel.Types.TypeInfo;
 
 namespace Compiler.Synthesis;
@@ -53,7 +53,7 @@ internal sealed class DerivedOperatorPass
             string title = CrashableTypeInfo.SynthesizeCrashTitle(typeName: type.Name);
             var titleBody = new ReturnStatement(
                 Value: new LiteralExpression(Value: title,
-                    LiteralType: Compiler.Lexer.TokenType.TextLiteral,
+                    LiteralType: TokenType.TextLiteral,
                     Location: _synthLoc),
                 Location: _synthLoc);
 
@@ -95,12 +95,6 @@ internal sealed class DerivedOperatorPass
                 existingMethods: methodList);
         }
 
-        // Look for $same method ($notsame is @innate, always derived from $same)
-        RoutineInfo? sameMethod = methodList.FirstOrDefault(predicate: m => m.Name == "$same");
-        if (sameMethod != null)
-        {
-            GenerateNotSameFromSame(type: type, sameMethod: sameMethod);
-        }
     }
 
     /// <summary>
@@ -148,7 +142,9 @@ internal sealed class DerivedOperatorPass
             ? eqMethod.Parameters[index: 0].Name
             : "you";
         var neBody = BuildNegatedDelegateBody(
-            delegateMethodName: "$eq",
+            ownerType: type,
+            delegateMethod: eqMethod,
+            boolType: boolType,
             paramName: paramName);
         _synthesizedBodies[key: neMethod.RegistryKey] = (neMethod, neBody);
     }
@@ -197,49 +193,11 @@ internal sealed class DerivedOperatorPass
             ? containsMethod.Parameters[index: 0].Name
             : "item";
         var notContainsBody = BuildNegatedDelegateBody(
-            delegateMethodName: "$contains",
+            ownerType: type,
+            delegateMethod: containsMethod,
+            boolType: boolType,
             paramName: paramName);
         _synthesizedBodies[key: notContainsMethod.RegistryKey] = (notContainsMethod, notContainsBody);
-    }
-
-    /// <summary>
-    /// Generates $notsame from $same.
-    /// $notsame(you) = not me.$same(you: you)
-    /// $notsame is @innate — always derived, never user-overridden.
-    /// </summary>
-    private void GenerateNotSameFromSame(TypeSymbol type, RoutineInfo sameMethod)
-    {
-        TypeSymbol? boolType = _registry.LookupType(name: "Bool");
-        if (boolType == null)
-        {
-            return;
-        }
-
-        var notSameMethod = new RoutineInfo(name: "$notsame")
-        {
-            Kind = RoutineKind.MemberRoutine,
-            OwnerType = type,
-            Parameters = sameMethod.Parameters,
-            ReturnType = boolType,
-            IsFailable = false,
-            DeclaredModification = ModificationCategory.Readonly,
-            ModificationCategory = ModificationCategory.Readonly,
-            Visibility = sameMethod.Visibility,
-            Location = sameMethod.Location,
-            Module = sameMethod.Module,
-            Annotations = ["readonly"],
-            IsSynthesized = true
-        };
-
-        _registry.RegisterRoutine(routine: notSameMethod);
-
-        string paramName = sameMethod.Parameters.Count > 0
-            ? sameMethod.Parameters[index: 0].Name
-            : "you";
-        var notSameBody = BuildNegatedDelegateBody(
-            delegateMethodName: "$same",
-            paramName: paramName);
-        _synthesizedBodies[key: notSameMethod.RegistryKey] = (notSameMethod, notSameBody);
     }
 
     /// <summary>
@@ -302,6 +260,9 @@ internal sealed class DerivedOperatorPass
 
             // Build AST body: return me.$cmp(you: you) == ComparisonSign.ME_SMALL  (or != ME_LARGE etc.)
             var cmpBody = BuildCmpDerivedBody(
+                ownerType: type,
+                cmpMethod: cmpMethod,
+                boolType: boolType,
                 cmpParamName: cmpParamName,
                 caseName: caseName,
                 useEqual: useEqual);
@@ -312,12 +273,15 @@ internal sealed class DerivedOperatorPass
     /// <summary>
     /// Builds: return not me.{methodName}({paramName}: {paramName})
     /// </summary>
-    private static Statement BuildNegatedDelegateBody(string delegateMethodName, string paramName)
+    private static Statement BuildNegatedDelegateBody(TypeSymbol ownerType, RoutineInfo delegateMethod,
+        TypeSymbol boolType, string paramName)
     {
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+            { ResolvedType = ownerType };
         var call = new CallExpression(
             Callee: new MemberExpression(
-                Object: new IdentifierExpression(Name: "me", Location: _synthLoc),
-                PropertyName: delegateMethodName,
+                Object: meRef,
+                PropertyName: delegateMethod.Name,
                 Location: _synthLoc),
             Arguments:
             [
@@ -326,20 +290,28 @@ internal sealed class DerivedOperatorPass
                     Value: new IdentifierExpression(Name: paramName, Location: _synthLoc),
                     Location: _synthLoc)
             ],
-            Location: _synthLoc);
+            Location: _synthLoc)
+        {
+            ResolvedRoutine = delegateMethod,
+            ResolvedType = boolType
+        };
 
-        // Use ConditionalExpression instead of UnaryExpression(Not) to avoid requiring
-        // ExpressionLoweringPass on synthesized bodies.
-        var falseVal = new LiteralExpression(Value: false, LiteralType: Compiler.Lexer.TokenType.False,
-            Location: _synthLoc);
-        var trueVal = new LiteralExpression(Value: true, LiteralType: Compiler.Lexer.TokenType.True,
-            Location: _synthLoc);
-        return new ReturnStatement(
-            Value: new ConditionalExpression(
-                Condition: call,
-                TrueExpression: falseVal,
-                FalseExpression: trueVal,
-                Location: _synthLoc),
+        var falseVal = new LiteralExpression(Value: false, LiteralType: TokenType.False,
+            Location: _synthLoc) { ResolvedType = boolType };
+        var trueVal = new LiteralExpression(Value: true, LiteralType: TokenType.True,
+            Location: _synthLoc) { ResolvedType = boolType };
+        // Codegen can't handle ConditionalExpression or UnaryNot on synthesized bodies
+        // (ExpressionLoweringPass only runs on source AST). Use if-return instead.
+        return new BlockStatement(
+            Statements:
+            [
+                new IfStatement(
+                    Condition: call,
+                    ThenStatement: new ReturnStatement(Value: falseVal, Location: _synthLoc),
+                    ElseStatement: null,
+                    Location: _synthLoc),
+                new ReturnStatement(Value: trueVal, Location: _synthLoc)
+            ],
             Location: _synthLoc);
     }
 
@@ -347,12 +319,14 @@ internal sealed class DerivedOperatorPass
     /// Builds: return me.$cmp({paramName}: {paramName}) == ComparisonSign.{caseName}
     /// or:     return me.$cmp({paramName}: {paramName}) != ComparisonSign.{caseName}
     /// </summary>
-    private static Statement BuildCmpDerivedBody(string cmpParamName, string caseName,
-        bool useEqual)
+    private Statement BuildCmpDerivedBody(TypeSymbol ownerType, RoutineInfo cmpMethod,
+        TypeSymbol boolType, string cmpParamName, string caseName, bool useEqual)
     {
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+            { ResolvedType = ownerType };
         var cmpCall = new CallExpression(
             Callee: new MemberExpression(
-                Object: new IdentifierExpression(Name: "me", Location: _synthLoc),
+                Object: meRef,
                 PropertyName: "$cmp",
                 Location: _synthLoc),
             Arguments:
@@ -362,29 +336,58 @@ internal sealed class DerivedOperatorPass
                     Value: new IdentifierExpression(Name: cmpParamName, Location: _synthLoc),
                     Location: _synthLoc)
             ],
-            Location: _synthLoc);
+            Location: _synthLoc)
+        {
+            ResolvedRoutine = cmpMethod,
+            ResolvedType = cmpMethod.ReturnType
+        };
 
-        var caseRef = new MemberExpression(
-            Object: new IdentifierExpression(Name: "ComparisonSign", Location: _synthLoc),
-            PropertyName: caseName,
-            Location: _synthLoc);
+        TypeSymbol cmpResultType = cmpMethod.ReturnType ?? ErrorTypeInfo.Instance;
 
-        // Use $eq/$ne method call instead of BinaryExpression to avoid requiring OperatorLoweringPass
-        // on synthesized bodies.
-        return new ReturnStatement(
-            Value: new CallExpression(
-                Callee: new MemberExpression(
-                    Object: cmpCall,
-                    PropertyName: useEqual ? "$eq" : "$ne",
+        // Use an integer literal for the ComparisonSign case value to avoid requiring
+        // identifier resolution of 'ComparisonSign' in synthesized bodies.
+        // ME_SMALL = -1 (receiver less than other), ME_LARGE = 1 (receiver greater).
+        long caseIntValue = caseName == "ME_SMALL" ? -1L : 1L;
+        var caseLiteral = new LiteralExpression(
+            Value: caseIntValue,
+            LiteralType: TokenType.S32Literal,
+            Location: _synthLoc) { ResolvedType = cmpResultType };
+
+        // Always use $eq (guaranteed registered by AutoWiredRegistrationPass before DerivedOperatorPass).
+        // $ne may not yet be registered when this body is built (ordering not guaranteed).
+        RoutineInfo? eqMethod = _registry.LookupMethod(type: cmpResultType, methodName: "$eq");
+        var eqCall = new CallExpression(
+            Callee: new MemberExpression(Object: cmpCall, PropertyName: "$eq", Location: _synthLoc),
+            Arguments:
+            [
+                new NamedArgumentExpression(Name: "you", Value: caseLiteral, Location: _synthLoc)
+            ],
+            Location: _synthLoc)
+        {
+            ResolvedRoutine = eqMethod,
+            ResolvedType = boolType
+        };
+
+        if (useEqual)
+        {
+            return new ReturnStatement(Value: eqCall, Location: _synthLoc);
+        }
+
+        // "not equal" case ($le, $ge): use if-return to avoid needing $ne on ComparisonSign.
+        var falseVal = new LiteralExpression(Value: false, LiteralType: TokenType.False,
+            Location: _synthLoc) { ResolvedType = boolType };
+        var trueVal = new LiteralExpression(Value: true, LiteralType: TokenType.True,
+            Location: _synthLoc) { ResolvedType = boolType };
+        return new BlockStatement(
+            Statements:
+            [
+                new IfStatement(
+                    Condition: eqCall,
+                    ThenStatement: new ReturnStatement(Value: falseVal, Location: _synthLoc),
+                    ElseStatement: null,
                     Location: _synthLoc),
-                Arguments:
-                [
-                    new NamedArgumentExpression(
-                        Name: "you",
-                        Value: caseRef,
-                        Location: _synthLoc)
-                ],
-                Location: _synthLoc),
+                new ReturnStatement(Value: trueVal, Location: _synthLoc)
+            ],
             Location: _synthLoc);
     }
 }

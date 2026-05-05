@@ -176,7 +176,7 @@ internal sealed class BecomesLoweringPass(PostprocessingContext ctx)
 
     private Statement LowerDanger(DangerStatement danger)
     {
-        BlockStatement body = (BlockStatement)LowerStatement(danger.Body);
+        var body = (BlockStatement)LowerStatement(danger.Body);
         return !ReferenceEquals(body, danger.Body)
             ? danger with { Body = body }
             : danger;

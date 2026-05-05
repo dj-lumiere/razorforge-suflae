@@ -1,8 +1,6 @@
-using Compiler.Postprocessing;
-using Compiler.Lexer;
+using SyntaxTree;
 using TypeModel.Symbols;
 using TypeModel.Types;
-using SyntaxTree;
 
 namespace Compiler.Postprocessing.Passes;
 

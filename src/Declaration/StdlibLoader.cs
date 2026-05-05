@@ -1,12 +1,10 @@
+using Compiler.Lexer;
 using Compiler.Resolution;
+using SyntaxTree;
+using TypeModel.Enums;
 using TypeModel.Types;
 
 namespace Compiler.Declaration;
-
-using TypeModel.Enums;
-using SyntaxTree;
-using Lexer;
-using Parser;
 
 /// <summary>
 /// Loads the standard library based on module declarations.
@@ -96,7 +94,7 @@ public sealed partial class StdlibLoader
         // Pass 1a: Register all protocol type shells first (names + generic params, no methods yet)
         foreach ((Program program, string _, string ns) in _corePrograms)
         {
-            foreach (IAstNode node in program.Declarations)
+            foreach (ISyntaxTreeNode node in program.Declarations)
             {
                 if (node is ProtocolDeclaration protocol)
                 {
@@ -110,7 +108,7 @@ public sealed partial class StdlibLoader
         // Pass 1a.1: Fill in protocol method signatures (all protocols are now registered for cross-refs)
         foreach ((Program program, string _, string _) in _corePrograms)
         {
-            foreach (IAstNode node in program.Declarations)
+            foreach (ISyntaxTreeNode node in program.Declarations)
             {
                 if (node is ProtocolDeclaration protocol)
                 {
@@ -136,7 +134,7 @@ public sealed partial class StdlibLoader
         var importedModules = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase);
         foreach ((Program program, string _, string _) in _corePrograms)
         {
-            foreach (IAstNode decl in program.Declarations)
+            foreach (ISyntaxTreeNode decl in program.Declarations)
             {
                 if (decl is ImportDeclaration import)
                 {
@@ -274,7 +272,7 @@ public sealed partial class StdlibLoader
     {
         var tokenizer = new Tokenizer(source: code, fileName: filePath, language: _language);
         List<Token> tokens = tokenizer.Tokenize();
-        var parser = new Parser(tokens: tokens, language: _language, fileName: filePath);
+        var parser = new Parser.Parser(tokens: tokens, language: _language, fileName: filePath);
         return parser.Parse();
     }
 
@@ -294,7 +292,7 @@ public sealed partial class StdlibLoader
             : Language.RazorForge;
         var tokenizer = new Tokenizer(source: code, fileName: filePath, language: language);
         List<Token> tokens = tokenizer.Tokenize();
-        var parser = new Parser(tokens: tokens, language: language, fileName: filePath);
+        var parser = new Parser.Parser(tokens: tokens, language: language, fileName: filePath);
         return parser.Parse();
     }
 
@@ -303,7 +301,7 @@ public sealed partial class StdlibLoader
     /// </summary>
     private static string? GetDeclaredModule(Program program)
     {
-        foreach (IAstNode node in program.Declarations)
+        foreach (ISyntaxTreeNode node in program.Declarations)
         {
             if (node is ModuleDeclaration ns)
             {
@@ -388,7 +386,7 @@ public sealed partial class StdlibLoader
         // Register protocol shells across all files first, then fill in methods
         foreach ((Program program, string _, string ns) in programs)
         {
-            foreach (IAstNode node in program.Declarations)
+            foreach (ISyntaxTreeNode node in program.Declarations)
             {
                 if (node is ProtocolDeclaration protocol)
                 {
@@ -401,7 +399,7 @@ public sealed partial class StdlibLoader
 
         foreach ((Program program, string _, string _) in programs)
         {
-            foreach (IAstNode node in program.Declarations)
+            foreach (ISyntaxTreeNode node in program.Declarations)
             {
                 if (node is ProtocolDeclaration protocol)
                 {
@@ -495,7 +493,7 @@ public sealed partial class StdlibLoader
             RegisterProgramRoutines(registry: registry, program: ast, moduleName: effectiveModule);
 
             // Handle any imports within this module (recursive loading)
-            foreach (IAstNode node in ast.Declarations)
+            foreach (ISyntaxTreeNode node in ast.Declarations)
             {
                 if (node is ImportDeclaration import)
                 {
@@ -542,10 +540,10 @@ public sealed partial class StdlibLoader
             return new GenericParameterTypeInfo(name: typeName);
         }
 
-        // Const generic literal (e.g., 16, 8u64) used as a type argument (e.g., ValueList[T, 16])
+        // Const generic literal (e.g., 16, 8u64) used as a type argument (e.g., Array[T, 16])
         if (long.TryParse(s: typeName, result: out long constValue))
         {
-            return new TypeModel.Types.ConstGenericValueTypeInfo(
+            return new ConstGenericValueTypeInfo(
                 literalText: typeName, value: constValue, explicitTypeName: null);
         }
         {
@@ -558,7 +556,7 @@ public sealed partial class StdlibLoader
                 if (typeName.EndsWith(value: suffix, comparisonType: StringComparison.OrdinalIgnoreCase) &&
                     long.TryParse(s: typeName[..^suffix.Length], result: out long suffixVal))
                 {
-                    return new TypeModel.Types.ConstGenericValueTypeInfo(
+                    return new ConstGenericValueTypeInfo(
                         literalText: typeName, value: suffixVal, explicitTypeName: suffixType);
                 }
             }
@@ -616,8 +614,8 @@ public sealed partial class StdlibLoader
         {
             // Wrapper types (Hijacked, Viewed, Grasped, etc.) are not in _types — create directly
             if (typeExpr.GenericArguments.Count == 1 &&
-                typeName is "Hijacked" or "Viewed" or "Grasped" or "Inspected" or "Claimed"
-                    or "Retained" or "Shared" or "Tracked" or "Marked" or "Owned")
+                typeName is "Hijacked" or "Viewed" or "Grasped"
+                    or "Retained" or "Tracked" or "Owned")
             {
                 TypeInfo? wrapperInner = ResolveSimpleType(registry: registry,
                     typeExpr: typeExpr.GenericArguments[index: 0],
@@ -625,7 +623,7 @@ public sealed partial class StdlibLoader
                     moduleName: moduleName);
                 if (wrapperInner != null)
                 {
-                    bool isReadOnly = typeName is "Viewed" or "Inspected";
+                    bool isReadOnly = typeName is "Viewed";
                     return registry.GetOrCreateWrapperType(wrapperName: typeName,
                         innerType: wrapperInner,
                         isReadOnly: isReadOnly);
@@ -690,6 +688,11 @@ public sealed partial class StdlibLoader
     /// </summary>
     public static string GetDefaultStdlibPath()
     {
+        // Allow override via environment variable
+        string? envOverride = Environment.GetEnvironmentVariable("FORGE_STDLIB");
+        if (!string.IsNullOrWhiteSpace(value: envOverride) && Directory.Exists(path: envOverride))
+            return envOverride;
+
         // Try to find standard library relative to the executable
         string? exeDir = Path.GetDirectoryName(path: typeof(StdlibLoader).Assembly.Location);
         if (exeDir != null)

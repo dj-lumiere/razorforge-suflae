@@ -1,8 +1,8 @@
-namespace TypeModel.Types;
-
-using TypeModel.Enums;
-using SemanticVerification.Enums;
+using Verification.Enums;
 using SyntaxTree;
+using TypeModel.Enums;
+
+namespace TypeModel.Types;
 
 /// <summary>
 /// Information about a method signature in a protocol.

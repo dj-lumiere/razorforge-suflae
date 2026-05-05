@@ -16,10 +16,15 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
     /// </summary>
     public void Run(Program program)
     {
+        new LiteralLoweringPass(ctx).Run(program);
+        new BuilderServiceInliningPass(ctx.Registry, ctx.VariantBodies).Run(program);
         new GenericCallLoweringPass(ctx.Registry, ctx.VariantBodies).Run(program);
         new StructuralLoweringPass(ctx).Run(program);
         new FStringLoweringPass(ctx).Run(program);
         new CrashableExpansionPass(ctx).Run(program);
+        // CallOverloadResolutionPass runs after FStringLoweringPass so that the $represent/$diagnose
+        // calls it synthesizes are visible and can be classified before reaching codegen.
+        new CallOverloadResolutionPass(ctx).Run(program);
         // PatternLowering before ExpressionLowering: PLP introduces UnaryExpression(Not)
         // when lowering WhenStatement → IfStatement chains; ELP must see those new nodes.
         // OLP runs after ELP so chained comparisons are already split into BinaryExpressions.
@@ -30,7 +35,6 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
         new BecomesLoweringPass(ctx).Run(program);
         new UsingLoweringPass(ctx).Run(program);
         new LambdaLiftingPass(ctx).Run(program);
-        new AsyncLoweringPass(ctx).Run(program);
     }
 
     /// <summary>
@@ -40,6 +44,8 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
     /// </summary>
     public void RunGlobal()
     {
+        new LiteralLoweringPass(ctx).RunOnVariantBodies();
+        new BuilderServiceInliningPass(ctx.Registry, ctx.VariantBodies).RunOnVariantBodies();
         new GenericCallLoweringPass(ctx.Registry, ctx.VariantBodies).RunOnVariantBodies();
         // PatternLowering runs before ExpressionLowering so that when-clauses with
         // ChainedComparison patterns are converted to IfStatement chains first, allowing
@@ -50,6 +56,12 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
         new OperatorLoweringPass(ctx).RunOnVariantBodies();
         new RecordCopyLoweringPass(ctx).RunOnVariantBodies();
         new UsingLoweringPass(ctx).RunOnVariantBodies();
+        // CallOverloadResolutionPass runs last so it sees all CallExpression nodes introduced
+        // by FStringLoweringPass ($represent/$diagnose/$add), OperatorLoweringPass (wired ops),
+        // and RecordCopyLoweringPass ($copy). Also classifies synthesized derived-operator bodies
+        // ($ne/$lt/$le/$gt/$ge/$notcontains) which bypass per-program Run() entirely.
+        new CallOverloadResolutionPass(ctx).RunOnVariantBodies();
+        new CallOverloadResolutionPass(ctx).RunOnSynthesizedBodies();
 
         foreach ((Program program, _, _) in ctx.Registry.StdlibPrograms)
             Run(program);

@@ -1,13 +1,14 @@
-namespace Compiler.Resolution;
-
-using SemanticVerification;
-using SemanticVerification.Enums;
+using Compiler.Diagnostics;
+using Verification;
+using Verification.Enums;
+using SyntaxTree;
 using TypeModel.Enums;
 using TypeModel.Symbols;
 using TypeModel.Types;
-using SyntaxTree;
-using Diagnostics;
-using TypeSymbol = TypeModel.Types.TypeInfo;
+
+namespace Compiler.Resolution;
+
+using TypeSymbol = TypeInfo;
 
 /// <summary>
 /// Handles resolution of type bodies (member variables, protocols, variants, etc.)
@@ -15,10 +16,10 @@ using TypeSymbol = TypeModel.Types.TypeInfo;
 /// </summary>
 internal sealed class TypeBodyResolver
 {
-    private readonly SemanticAnalyzer _sa;
+    private readonly SemanticVerifier _sa;
     private readonly TypeResolver _typeResolver;
 
-    internal TypeBodyResolver(SemanticAnalyzer sa, TypeResolver typeResolver)
+    internal TypeBodyResolver(SemanticVerifier sa, TypeResolver typeResolver)
     {
         _sa = sa;
         _typeResolver = typeResolver;
@@ -53,13 +54,13 @@ internal sealed class TypeBodyResolver
     /// <param name="program">The program to resolve.</param>
     internal void ResolveTypeBodies(Program program)
     {
-        foreach (IAstNode declaration in program.Declarations)
+        foreach (ISyntaxTreeNode declaration in program.Declarations)
         {
             ResolveTypeBody(node: declaration);
         }
     }
 
-    private void ResolveTypeBody(IAstNode node)
+    private void ResolveTypeBody(ISyntaxTreeNode node)
     {
         switch (node)
         {
@@ -142,7 +143,7 @@ internal sealed class TypeBodyResolver
         var memberVariables = new List<MemberVariableInfo>();
         int memberVariableIndex = 0;
 
-        foreach (Declaration member in record.Members)
+        foreach (SyntaxTree.Declaration member in record.Members)
         {
             if (member is VariableDeclaration memberVariable)
             {
@@ -239,7 +240,7 @@ internal sealed class TypeBodyResolver
         var memberVariables = new List<MemberVariableInfo>();
         int memberVariableIndex = 0;
 
-        foreach (Declaration member in entity.Members)
+        foreach (SyntaxTree.Declaration member in entity.Members)
         {
             if (member is VariableDeclaration memberVariable)
             {
@@ -284,7 +285,7 @@ internal sealed class TypeBodyResolver
         var memberVariables = new List<MemberVariableInfo>();
         int memberVariableIndex = 0;
 
-        foreach (Declaration member in crashable.Members)
+        foreach (SyntaxTree.Declaration member in crashable.Members)
         {
             if (member is VariableDeclaration memberVariable)
             {
@@ -386,23 +387,18 @@ internal sealed class TypeBodyResolver
                 : null;
 
             // Extract modification category from attributes
-            // @readonly -> Readonly, @writable -> Writable, default/no annotation -> Migratable
-            ModificationCategory modification = ModificationCategory.Migratable; // Default
+            // @readonly -> Readonly, @migratable -> Migratable, default/no annotation -> Writable
+            ModificationCategory modification = ModificationCategory.Writable; // Default
             if (sig.Annotations != null)
             {
                 if (sig.Annotations.Contains(item: "readonly"))
                 {
                     modification = ModificationCategory.Readonly;
                 }
-                else if (sig.Annotations.Contains(item: "writable"))
-                {
-                    modification = ModificationCategory.Writable;
-                }
-                else if (sig.Annotations.Contains(item: "migrating"))
+                else if (sig.Annotations.Contains(item: "migratable"))
                 {
                     modification = ModificationCategory.Migratable;
                 }
-                // else: no annotation = Migratable (default)
             }
 
             // Extract generation kind from annotations
@@ -809,8 +805,8 @@ internal sealed class TypeBodyResolver
     {
         if (value is string strVal)
         {
-            string cleaned = SemanticAnalyzer.CleanNumericLiteral(value: strVal);
-            if (SemanticAnalyzer.TryParseSignedInteger(value: cleaned, result: out long result))
+            string cleaned = SemanticVerifier.CleanNumericLiteral(value: strVal);
+            if (SemanticVerifier.TryParseSignedInteger(value: cleaned, result: out long result))
             {
                 return result;
             }

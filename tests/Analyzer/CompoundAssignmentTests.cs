@@ -1,6 +1,5 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
@@ -16,7 +15,7 @@ public class CompoundAssignmentTests
 {
     #region In-Place Dispatch (type defines $iadd)
     /// <summary>
-    /// Tests Analyze_RecordWithInPlaceWired_NoError.
+    /// Verifies semantic analysis behavior for record with in place wired without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -42,7 +41,7 @@ public class CompoundAssignmentTests
             filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
     }
     /// <summary>
-    /// Tests Analyze_EntityWithInPlaceWired_NoError.
+    /// Verifies semantic analysis behavior for entity with in place wired without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -72,7 +71,7 @@ public class CompoundAssignmentTests
 
     #region Fallback Dispatch (record with only $add)
     /// <summary>
-    /// Tests Analyze_RecordWithRegularWired_FallsBack.
+    /// Verifies semantic analysis behavior for record with regular wired falls back.
     /// </summary>
 
     [Fact]
@@ -106,7 +105,7 @@ public class CompoundAssignmentTests
 
     #region Entity Without In-Place Wired (no fallback)
     /// <summary>
-    /// Tests Analyze_EntityWithoutInPlaceWired_ReportsError.
+    /// Verifies semantic analysis behavior for entity without in place wired and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -139,7 +138,7 @@ public class CompoundAssignmentTests
 
     #region Neither Wired Exists
     /// <summary>
-    /// Tests Analyze_NoWiredsDefined_ReportsError.
+    /// Verifies semantic analysis behavior for no wireds defined and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -165,7 +164,7 @@ public class CompoundAssignmentTests
 
     #region Mutability Checks
     /// <summary>
-    /// Tests Analyze_VarCompoundAssignment_NoImmutableError.
+    /// Verifies semantic analysis behavior for var compound assignment without immutability errors.
     /// </summary>
 
     [Fact]
@@ -196,7 +195,7 @@ public class CompoundAssignmentTests
 
     #region Choice Type Prohibition
     /// <summary>
-    /// Tests Analyze_ChoiceCompoundAssignment_ReportsArithmeticError.
+    /// Verifies semantic analysis behavior for choice compound assignment reports arithmetic error.
     /// </summary>
 
     [Fact]
@@ -223,7 +222,7 @@ public class CompoundAssignmentTests
 
     #region Multiple Compound Operators
     /// <summary>
-    /// Tests Analyze_SubtractCompoundAssignment_NoError.
+    /// Verifies semantic analysis behavior for subtract compound assignment without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -249,7 +248,7 @@ public class CompoundAssignmentTests
             filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
     }
     /// <summary>
-    /// Tests Analyze_BitwiseAndCompoundAssignment_NoError.
+    /// Verifies semantic analysis behavior for bitwise and compound assignment without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -280,7 +279,7 @@ public class CompoundAssignmentTests
 
     #region Primitive Types (existing behavior preserved)
     /// <summary>
-    /// Tests Analyze_PrimitiveVarCompoundAssignment_NoError.
+    /// Verifies semantic analysis behavior for primitive var compound assignment without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -295,10 +294,11 @@ public class CompoundAssignmentTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
     /// <summary>
-    /// Tests Analyze_PrimitiveVarCompoundAssignment_NoImmutableError.
+    /// Verifies semantic analysis behavior for primitive var compound assignment without immutability errors.
     /// </summary>
 
     [Fact]
@@ -312,7 +312,8 @@ public class CompoundAssignmentTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
         // Should not produce immutable-related errors
     }
 

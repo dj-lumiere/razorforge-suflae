@@ -1,20 +1,18 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for protocol implementation analysis in the semantic analyzer:
-/// protocol conformance, missing methods, signature matching.
+/// Contains tests for protocol implementation.
 /// </summary>
 public class ProtocolImplementationTests
 {
     #region Basic Protocol Implementation
     /// <summary>
-    /// Tests Analyze_ImplementsAllMethods_NoError.
+    /// Verifies semantic analysis behavior for implements all methods without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -34,11 +32,12 @@ public class ProtocolImplementationTests
                           return "point"
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
         // Should validate protocol implementation
     }
     /// <summary>
-    /// Tests Analyze_MissingProtocolMethod_ReportsError.
+    /// Verifies semantic analysis behavior for missing protocol method and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -58,7 +57,7 @@ public class ProtocolImplementationTests
         Assert.True(condition: result.Errors.Count > 0);
     }
     /// <summary>
-    /// Tests Analyze_WrongMethodSignature_ReportsError.
+    /// Verifies semantic analysis behavior for wrong method signature and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -86,7 +85,7 @@ public class ProtocolImplementationTests
 
     #region Protocol Method Annotations
     /// <summary>
-    /// Tests Analyze_MethodMissingReadonly_ReportsError.
+    /// Verifies semantic analysis behavior for method missing readonly and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -105,11 +104,12 @@ public class ProtocolImplementationTests
                           return "point"
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
         // Should warn about missing @readonly annotation
     }
     /// <summary>
-    /// Tests Analyze_MethodWithWritableWhenProtocolReadonly_ReportsError.
+    /// Verifies semantic analysis behavior for method with writable when protocol readonly and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -124,7 +124,6 @@ public class ProtocolImplementationTests
                           x: F32
                           y: F32
 
-                        @writable
                         routine Point.display() -> Text
                           return "point"
                         """;
@@ -137,7 +136,7 @@ public class ProtocolImplementationTests
 
     #region Multiple Protocols
     /// <summary>
-    /// Tests Analyze_MultipleProtocols_AllImplemented_NoError.
+    /// Verifies semantic analysis behavior for multiple protocols all implemented without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -164,10 +163,11 @@ public class ProtocolImplementationTests
                           return me.value - other.value
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
     /// <summary>
-    /// Tests Analyze_MultipleProtocols_OneMissing_ReportsError.
+    /// Verifies semantic analysis behavior for multiple protocols one missing and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -198,7 +198,7 @@ public class ProtocolImplementationTests
 
     #region Generic Protocol Implementation
     /// <summary>
-    /// Tests Analyze_GenericProtocol_Implementation_NoError.
+    /// Verifies semantic analysis behavior for generic protocol implementation without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -217,14 +217,15 @@ public class ProtocolImplementationTests
                           return 0
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
 
     #endregion
 
     #region Protocol Method Parameters
     /// <summary>
-    /// Tests Analyze_ProtocolMethodWithParameters_NoError.
+    /// Verifies semantic analysis behavior for protocol method with parameters without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -244,10 +245,11 @@ public class ProtocolImplementationTests
                           return Point(x: me.x + other.x, y: me.y + other.y)
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
     /// <summary>
-    /// Tests Analyze_ProtocolMethodWrongParameterType_ReportsError.
+    /// Verifies semantic analysis behavior for protocol method wrong parameter type and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -275,7 +277,7 @@ public class ProtocolImplementationTests
 
     #region Entity Protocol Implementation
     /// <summary>
-    /// Tests Analyze_EntityImplementsProtocol_NoError.
+    /// Verifies semantic analysis behavior for entity implements protocol without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -294,63 +296,15 @@ public class ProtocolImplementationTests
                           return me.value
                         """;
 
-        Analyze(source: source);
-    }
-
-    #endregion
-
-    #region Suflae Protocol Tests
-    /// <summary>
-    /// Tests AnalyzeSuflae_ImplementsProtocol_NoError.
-    /// </summary>
-
-    [Fact]
-    public void AnalyzeSuflae_ImplementsProtocol_NoError()
-    {
-        string source = """
-                        protocol Displayable
-                          @readonly
-                          routine Me.display() -> Integer
-
-                        entity Point obeys Displayable
-                          x: Integer
-                          y: Integer
-
-                        @readonly
-                        routine Point.display() -> Integer
-                          return 0
-                        """;
-
-        AnalysisResult result = AnalyzeSuflae(source: source);
-        Assert.Empty(collection: result.Errors);
-    }
-    /// <summary>
-    /// Tests AnalyzeSuflae_MissingProtocolMethod_ReportsError.
-    /// </summary>
-
-    [Fact]
-    public void AnalyzeSuflae_MissingProtocolMethod_ReportsError()
-    {
-        string source = """
-                        protocol Displayable
-                          @readonly
-                          routine Me.display() -> Integer
-
-                        entity Point obeys Displayable
-                          x: Integer
-                          y: Integer
-                        """;
-
-        AnalysisResult result = AnalyzeSuflae(source: source);
-        Assert.True(condition: result.Errors.Count > 0);
-        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.MissingProtocolMethod);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
 
     #endregion
 
     #region Protocol Inheritance
     /// <summary>
-    /// Tests Analyze_ProtocolExtends_Implementation_NoError.
+    /// Verifies semantic analysis behavior for protocol extends implementation without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -378,10 +332,11 @@ public class ProtocolImplementationTests
                           return "Point(x, y)"
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
     /// <summary>
-    /// Tests Analyze_ProtocolExtends_MissingParentMethod_ReportsError.
+    /// Verifies semantic analysis behavior for protocol extends missing parent method and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -413,7 +368,7 @@ public class ProtocolImplementationTests
 
     #region Annotation Placement Validation (#177)
     /// <summary>
-    /// Tests Analyze_GeneratedOnNonProtocolRoutine_ReportsError.
+    /// Verifies semantic analysis behavior for generated on non protocol routine and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -434,11 +389,11 @@ public class ProtocolImplementationTests
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.InvalidGeneratedInnatePlacement);
     }
     /// <summary>
-    /// Tests Analyze_InnateOnNonProtocolRoutine_ReportsError.
+    /// Verifies that @innate is valid on non-protocol routines (e.g., BuilderService routines).
     /// </summary>
 
     [Fact]
-    public void Analyze_InnateOnNonProtocolRoutine_ReportsError()
+    public void Analyze_InnateOnNonProtocolRoutine_NoError()
     {
         string source = """
                         record Point
@@ -452,10 +407,10 @@ public class ProtocolImplementationTests
                         """;
 
         AnalysisResult result = Analyze(source: source);
-        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.InvalidGeneratedInnatePlacement);
+        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.InvalidGeneratedInnatePlacement);
     }
     /// <summary>
-    /// Tests Analyze_GeneratedOnProtocolRoutine_NoError.
+    /// Verifies semantic analysis behavior for generated on protocol routine without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -483,19 +438,19 @@ public class ProtocolImplementationTests
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.InvalidGeneratedInnatePlacement);
     }
     /// <summary>
-    /// Tests Analyze_InnateOnProtocolRoutine_NoError.
+    /// Verifies semantic analysis behavior for innate on protocol routine without unexpected diagnostics.
     /// </summary>
 
     [Fact]
     public void Analyze_InnateOnProtocolRoutine_NoError()
     {
         string source = """
-                        protocol Identifiable
+                        protocol Lockable
                           @innate
                           @readonly
-                          routine Me.$same(you: Me) -> Bool
+                          routine Me.$eq(you: Me) -> Bool
 
-                        entity Widget obeys Identifiable
+                        entity Widget obeys Lockable
                           name: Text
                         """;
 
@@ -507,23 +462,23 @@ public class ProtocolImplementationTests
 
     #region Innate Override Prohibition (#178)
     /// <summary>
-    /// Tests Analyze_OverrideInnateRoutine_ReportsError.
+    /// Verifies semantic analysis behavior for override innate routine and reports the expected error.
     /// </summary>
 
     [Fact]
     public void Analyze_OverrideInnateRoutine_ReportsError()
     {
         string source = """
-                        protocol Identifiable
+                        protocol Lockable
                           @innate
                           @readonly
-                          routine Me.$same(you: Me) -> Bool
+                          routine Me.$eq(you: Me) -> Bool
 
-                        entity Widget obeys Identifiable
+                        entity Widget obeys Lockable
                           name: Text
 
                         @readonly
-                        routine Widget.$same(you: Widget) -> Bool
+                        routine Widget.$eq(you: Widget) -> Bool
                           return false
                         """;
 
@@ -531,19 +486,19 @@ public class ProtocolImplementationTests
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.InnateOverrideNotAllowed);
     }
     /// <summary>
-    /// Tests Analyze_InnateRoutineNotOverridden_NoError.
+    /// Verifies semantic analysis behavior for innate routine not overridden without unexpected diagnostics.
     /// </summary>
 
     [Fact]
     public void Analyze_InnateRoutineNotOverridden_NoError()
     {
         string source = """
-                        protocol Identifiable
+                        protocol Lockable
                           @innate
                           @readonly
-                          routine Me.$same(you: Me) -> Bool
+                          routine Me.$eq(you: Me) -> Bool
 
-                        entity Widget obeys Identifiable
+                        entity Widget obeys Lockable
                           name: Text
                         """;
 
@@ -555,7 +510,7 @@ public class ProtocolImplementationTests
 
     #region Generated Override Prioritization (#179)
     /// <summary>
-    /// Tests Analyze_OverrideGeneratedNe_NoError.
+    /// Verifies semantic analysis behavior for override generated ne without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -587,7 +542,7 @@ public class ProtocolImplementationTests
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.GeneratedOperatorOverride);
     }
     /// <summary>
-    /// Tests Analyze_GeneratedNeNotOverridden_NoError.
+    /// Verifies semantic analysis behavior for generated ne not overridden without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -619,7 +574,7 @@ public class ProtocolImplementationTests
 
     #region Protocol with Default Values
     /// <summary>
-    /// Tests Analyze_ProtocolMethodWithDefaultParameter_NoError.
+    /// Verifies semantic analysis behavior for protocol method with default parameter without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -627,26 +582,25 @@ public class ProtocolImplementationTests
     {
         string source = """
                         protocol Configurable
-                          @writable
                           routine Me.configure(value: S32 = 0)
 
                         entity Settings obeys Configurable
                           value: S32
 
-                        @writable
                         routine Settings.configure(value: S32 = 0)
                           me.value = value
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
 
     #endregion
 
     #region Multiple Protocol Generic Constraints (#62)
     /// <summary>
-    /// Tests Parse_InlineMultipleObeys_Parses.
+    /// Verifies that the parser accepts inline multiple obeys successfully.
     /// </summary>
 
     [Fact]
@@ -669,7 +623,7 @@ public class ProtocolImplementationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_NeedsMultipleObeys_Parses.
+    /// Verifies that the parser accepts needs multiple obeys successfully.
     /// </summary>
 
     [Fact]

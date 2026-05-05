@@ -58,6 +58,13 @@ entity FieldInfo
   ### Stores the member variable byte offset when available.
   offset: U64
 
+### Returns whether this field is equal to another by name.
+### :param you: The other field to compare against.
+### :returns: `true` if both fields have the same name.
+@readonly
+routine FieldInfo.$eq(you: Referring[FieldInfo]) -> Bool
+  return me.name.$eq(other: you.name)
+
 ### Describes a protocol implemented by a type.
 ### This metadata is intended for diagnostics, tooling, and build-time reflection.
 entity ProtocolInfo
@@ -67,6 +74,13 @@ entity ProtocolInfo
   routine_names: Owned[List[Owned[Text]]]
   ### Indicates whether the protocol implementation is compiler-generated.
   is_generated: Bool
+
+### Returns whether this protocol info is equal to another by name.
+### :param you: The other protocol info to compare against.
+### :returns: `true` if both have the same name.
+@readonly
+routine ProtocolInfo.$eq(you: Referring[ProtocolInfo]) -> Bool
+  return me.name.$eq(other: you.name)
 
 ### Describes a routine declared on a type.
 ### This metadata captures the declared surface of a routine, not its runtime body.
@@ -85,6 +99,13 @@ entity RoutineInfo
   is_generated: Bool
   ### Stores the routine visibility.
   visibility: Visibility
+
+### Returns whether this routine info is equal to another by name.
+### :param you: The other routine info to compare against.
+### :returns: `true` if both have the same name.
+@readonly
+routine RoutineInfo.$eq(you: Referring[RoutineInfo]) -> Bool
+  return me.name.$eq(other: you.name)
 
 # ============================================================================
 # Per-type introspection — typewise + member (both forms)

@@ -1,9 +1,11 @@
+using Compiler.Resolution;
+using SyntaxTree;
+using TypeModel.Symbols;
+using TypeModel.Types;
+
 namespace Compiler.Synthesis;
 
-using Resolution;
-using TypeModel.Symbols;
-using SyntaxTree;
-using TypeInfo = TypeModel.Types.TypeInfo;
+using TypeInfo = TypeInfo;
 
 /// <summary>
 /// Generates error handling variants for failable (!) routines.
@@ -144,7 +146,7 @@ public sealed class ErrorHandlingGenerator
     /// </summary>
     /// <param name="statement">The statement to analyze.</param>
     /// <param name="analysis">The analysis result to update.</param>
-    private void AnalyzeStatementRecursive(Statement statement, ErrorHandlingAnalysis analysis)
+    private static void AnalyzeStatementRecursive(Statement statement, ErrorHandlingAnalysis analysis)
     {
         switch (statement)
         {
@@ -228,6 +230,7 @@ public sealed class ErrorHandlingGenerator
                 Parameters = original.Parameters,
                 ReturnType = boolType,
                 IsFailable = false,
+                IsSynthesized = true,
                 DeclaredModification = original.DeclaredModification,
                 ModificationCategory = original.ModificationCategory,
                 GenericParameters = original.GenericParameters,
@@ -235,7 +238,10 @@ public sealed class ErrorHandlingGenerator
                 Visibility = original.Visibility,
                 Location = original.Location,
                 Module = original.Module,
+                ModulePath = original.ModulePath,
                 Annotations = original.Annotations,
+                CallingConvention = original.CallingConvention,
+                Storage = original.Storage,
                 AsyncStatus = AsyncStatus.TryBoolVariant,
                 OriginalName = original.Name
             };
@@ -255,6 +261,7 @@ public sealed class ErrorHandlingGenerator
                 Parameters = original.Parameters,
                 ReturnType = maybeType,
                 IsFailable = false, // try_ variants don't fail
+                IsSynthesized = true,
                 DeclaredModification = original.DeclaredModification,
                 ModificationCategory = original.ModificationCategory,
                 GenericParameters = original.GenericParameters,
@@ -262,7 +269,10 @@ public sealed class ErrorHandlingGenerator
                 Visibility = original.Visibility,
                 Location = original.Location,
                 Module = original.Module,
+                ModulePath = original.ModulePath,
                 Annotations = original.Annotations,
+                CallingConvention = original.CallingConvention,
+                Storage = original.Storage,
                 OriginalName = original.Name
             };
     }
@@ -294,6 +304,7 @@ public sealed class ErrorHandlingGenerator
                 Parameters = original.Parameters,
                 ReturnType = resultType,
                 IsFailable = false, // check_ variants don't fail
+                IsSynthesized = true,
                 DeclaredModification = original.DeclaredModification,
                 ModificationCategory = original.ModificationCategory,
                 GenericParameters = original.GenericParameters,
@@ -301,7 +312,10 @@ public sealed class ErrorHandlingGenerator
                 Visibility = original.Visibility,
                 Location = original.Location,
                 Module = original.Module,
+                ModulePath = original.ModulePath,
                 Annotations = original.Annotations,
+                CallingConvention = original.CallingConvention,
+                Storage = original.Storage,
                 OriginalName = original.Name
             };
     }
@@ -337,6 +351,7 @@ public sealed class ErrorHandlingGenerator
                 Parameters = original.Parameters,
                 ReturnType = resultType,
                 IsFailable = false,
+                IsSynthesized = true,
                 DeclaredModification = original.DeclaredModification,
                 ModificationCategory = original.ModificationCategory,
                 GenericParameters = original.GenericParameters,
@@ -344,7 +359,10 @@ public sealed class ErrorHandlingGenerator
                 Visibility = original.Visibility,
                 Location = original.Location,
                 Module = original.Module,
+                ModulePath = original.ModulePath,
                 Annotations = original.Annotations,
+                CallingConvention = original.CallingConvention,
+                Storage = original.Storage,
                 OriginalName = original.Name
             };
         }
@@ -363,6 +381,7 @@ public sealed class ErrorHandlingGenerator
                 Parameters = original.Parameters,
                 ReturnType = lookupType,
                 IsFailable = false, // lookup_ variants don't fail
+                IsSynthesized = true,
                 DeclaredModification = original.DeclaredModification,
                 ModificationCategory = original.ModificationCategory,
                 GenericParameters = original.GenericParameters,
@@ -370,7 +389,10 @@ public sealed class ErrorHandlingGenerator
                 Visibility = original.Visibility,
                 Location = original.Location,
                 Module = original.Module,
+                ModulePath = original.ModulePath,
                 Annotations = original.Annotations,
+                CallingConvention = original.CallingConvention,
+                Storage = original.Storage,
                 OriginalName = original.Name
             };
     }

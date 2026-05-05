@@ -1,9 +1,9 @@
-namespace TypeModel.Types;
-
 using TypeModel.Enums;
 
+namespace TypeModel.Types;
+
 /// <summary>
-/// Represents a generic type parameter (like T in List&lt;T&gt;).
+/// Represents a generic type parameter (like T in <c>List[T]</c>).
 /// This is an unbound placeholder that gets replaced during generic resolution.
 /// </summary>
 public sealed class GenericParameterTypeInfo : TypeInfo

@@ -1,13 +1,14 @@
-namespace TypeModel.Types;
-
 using TypeModel.Enums;
+using TypeModel.Symbols;
+
+namespace TypeModel.Types;
 
 /// <summary>
 /// Type information for flags (bitmask types with named members).
-/// Backed by U64; max 64 members. Members are auto-assigned power-of-two bit positions.
-/// Only builder-generated operators allowed (and, but, is, isnot, isonly).
+/// Backed by <c>i64</c> at the LLVM level. Max 64 members, auto-assigned power-of-two bit positions.
+/// Only builder-generated operators allowed.
 /// </summary>
-public sealed class FlagsTypeInfo : TypeInfo
+public sealed class FlagsTypeInfo : RecordTypeInfo
 {
     /// <inheritdoc/>
     public override TypeCategory Category => TypeCategory.Flags;
@@ -16,18 +17,22 @@ public sealed class FlagsTypeInfo : TypeInfo
     public IReadOnlyList<FlagsMemberInfo> Members { get; init; } = [];
 
     /// <summary>Protocols this flags type implements (obeys).</summary>
-    public IReadOnlyList<TypeInfo> ImplementedProtocols { get; init; } = [];
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="FlagsTypeInfo"/> class.
-    /// </summary>
-    /// <param name="name">The name of the flags type.</param>
-    public FlagsTypeInfo(string name) : base(name: name)
+    public new IReadOnlyList<TypeInfo> ImplementedProtocols
     {
+        get => base.ImplementedProtocols;
+        init => base.ImplementedProtocols = value;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the F la gs Ty pe In fo class.
+    /// </summary>
+    public FlagsTypeInfo(string name) : base(name: name)
+    {
+        BackendType = "i64";
+    }
+
+ 
     /// <inheritdoc/>
-    /// <exception cref="InvalidOperationException">Always thrown as flags types cannot be generic.</exception>
     public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
     {
         throw new InvalidOperationException(
@@ -35,9 +40,7 @@ public sealed class FlagsTypeInfo : TypeInfo
     }
 }
 
-/// <summary>
-/// Information about a single flags member.
-/// </summary>
-/// <param name="Name">The name of the member (SCREAMING_SNAKE_CASE).</param>
-/// <param name="BitPosition">The bit position (0-63). The bitmask value is 1UL &lt;&lt; BitPosition.</param>
+/// <summary>A single flags member.</summary>
+/// <param name="Name">The name (SCREAMING_SNAKE_CASE).</param>
+/// <param name="BitPosition">The bit position (0-63). Bitmask = 1UL &lt;&lt; BitPosition.</param>
 public sealed record FlagsMemberInfo(string Name, int BitPosition);

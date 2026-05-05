@@ -1,10 +1,8 @@
-using Compiler.Postprocessing;
-using Compiler.Desugaring;
 using Compiler.Desugaring.Passes;
 using Compiler.Lexer;
+using SyntaxTree;
 using TypeModel.Symbols;
 using TypeModel.Types;
-using SyntaxTree;
 
 namespace Compiler.Postprocessing.Passes;
 
@@ -15,67 +13,76 @@ namespace Compiler.Postprocessing.Passes;
 ///
 /// <para>Lowerable patterns (all subject types):</para>
 /// <list type="bullet">
-///   <item><see cref="WildcardPattern"/> — always matches, no binding.</item>
-///   <item><see cref="LiteralPattern"/> — emits <c>subject == value</c>.</item>
-///   <item><see cref="IdentifierPattern"/> — always matches, binds subject to name.</item>
-///   <item><see cref="ExpressionPattern"/> — boolean expression, subject is ignored.</item>
-///   <item><see cref="ComparisonPattern"/> — emits <c>subject op value</c>.</item>
-///   <item><see cref="ElsePattern"/> — always matches, optional binding (see below).</item>
-///   <item><see cref="GuardPattern"/> — inner condition AND guard; inner must be lowerable.</item>
+/// <item><see cref="WildcardPattern"/> -> always matches, no binding.</item>
+/// <item><see cref="LiteralPattern"/> -> emits <c>subject == value</c>.</item>
+/// <item><see cref="IdentifierPattern"/> -> always matches, binds subject to name.</item>
+/// <item><see cref="ExpressionPattern"/> -> boolean expression, subject is ignored.</item>
+/// <item><see cref="ComparisonPattern"/> -> emits <c>subject op value</c>.</item>
+/// <item><see cref="ElsePattern"/> -> always matches, optional binding (see below).</item>
+/// <item><see cref="GuardPattern"/> -> inner condition AND guard; inner must be lowerable.</item>
 /// </list>
 ///
 /// <para>Lowerable patterns (Maybe subjects):</para>
 /// <list type="bullet">
-///   <item><see cref="NonePattern"/> on <c>Maybe[T record]</c> → <c>not subject.present</c>.</item>
-///   <item><see cref="TypePattern"/> T on <c>Maybe[T record]</c> → <c>subject.present</c>,
-///         binding → <c>subject.value</c>.</item>
-///   <item><see cref="ElsePattern"/> on <c>Maybe[T record]</c> → binding → <c>subject.value</c>.</item>
+/// <item><see cref="NonePattern"/> on <c>Maybe[T record]</c> -> <c>not subject.present</c>.</item>
+/// <item><see cref="TypePattern"/> T on <c>Maybe[T record]</c> -> <c>subject.present</c>,
+/// binding -> <c>subject.value</c>.</item>
+/// <item><see cref="ElsePattern"/> on <c>Maybe[T record]</c> -> binding -> <c>subject.value</c>.</item>
 /// </list>
 ///
 /// <para>Lowerable patterns (flags subjects):</para>
 /// <list type="bullet">
-///   <item><see cref="FlagsPattern"/> → <see cref="FlagsTestExpression"/> condition.</item>
+/// <item><see cref="FlagsPattern"/> -> <see cref="FlagsTestExpression"/> condition.</item>
 /// </list>
 ///
-/// <para>Lowerable patterns (record subjects — destructuring):</para>
+/// <para>Lowerable patterns (record subjects -> destructuring):</para>
 /// <list type="bullet">
-///   <item><see cref="DestructuringPattern"/> with all named simple bindings → always matches,
-///         binds <c>var name = subject.field</c> for each binding.</item>
-///   <item><see cref="TypeDestructuringPattern"/> with all named simple bindings → same, plus
-///         type check is always true when SA validated the subject type.</item>
+/// <item><see cref="DestructuringPattern"/> with all named simple bindings -> always matches,
+/// binds <c>var name = subject.field</c> for each binding.</item>
+/// <item><see cref="TypeDestructuringPattern"/> with all named simple bindings -> same, plus
+/// type check is always true when SA validated the subject type.</item>
 /// </list>
 ///
 /// <para>Lowerable patterns (Result/Lookup and user variant subjects):</para>
 /// <list type="bullet">
-///   <item><see cref="TypePattern"/> <c>Blank</c> → <c>subject.type_id == 0</c>.</item>
-///   <item><see cref="TypePattern"/> T → <c>subject.type_id == FNV-1a(T.FullName)</c>,
-///         optional binding → <see cref="CarrierPayloadExpression"/>.</item>
-///   <item><see cref="ElsePattern"/> with binding on Result/Lookup → <see cref="CarrierPayloadExpression"/>.</item>
+/// <item><see cref="TypePattern"/> <c>Blank</c> -> <c>subject.type_id == 0</c>.</item>
+/// <item><see cref="TypePattern"/> T -> <c>subject.type_id == FNV-1a(T.FullName)</c>,
+/// optional binding -> <see cref="CarrierPayloadExpression"/>.</item>
+/// <item><see cref="ElsePattern"/> with binding on Result/Lookup -> <see cref="CarrierPayloadExpression"/>.</item>
 /// </list>
 ///
 /// <para>Lowerable patterns (Maybe[T entity] subjects):</para>
 /// <list type="bullet">
-///   <item><see cref="NonePattern"/> on <c>Maybe[T entity]</c> → <c>subject.value.is_none()</c>.</item>
-///   <item><see cref="TypePattern"/> T on <c>Maybe[T entity]</c> → <c>not subject.value.is_none()</c>,
-///         binding → <c>subject.value.extract()</c>.</item>
-///   <item><see cref="ElsePattern"/> with binding on <c>Maybe[T entity]</c> → binding → <c>subject.value.extract()</c>.</item>
+/// <item><see cref="NonePattern"/> on <c>Maybe[T entity]</c> -> <c>subject.value.is_none()</c>.</item>
+/// <item><see cref="TypePattern"/> T on <c>Maybe[T entity]</c> -> <c>not subject.value.is_none()</c>,
+/// binding -> <c>subject.value.extract()</c>.</item>
+/// <item><see cref="ElsePattern"/> with binding on <c>Maybe[T entity]</c> -> binding -> <c>subject.value.extract()</c>.</item>
 /// </list>
 ///
 /// <para>Left unchanged for codegen's <c>EmitWhen</c>:</para>
 /// <list type="bullet">
-///   <item><see cref="NegatedTypePattern"/> on user variant.</item>
-///   <item><see cref="CrashablePattern"/> — expanded by <see cref="CrashableExpansionPass"/> before this pass;
-///         any remaining instances pass through to codegen.</item>
-///   <item><see cref="VariantPattern"/> (type-based; use <see cref="TypePattern"/> instead).</item>
-///   <item><see cref="DestructuringPattern"/>/<see cref="TypeDestructuringPattern"/> with nested patterns.</item>
+/// <item><see cref="NegatedTypePattern"/> on user variant.</item>
+/// <item><see cref="CrashablePattern"/> -> expanded by <see cref="CrashableExpansionPass"/> before this pass;
+/// any remaining instances pass through to codegen.</item>
+/// <item><see cref="VariantPattern"/> (type-based; use <see cref="TypePattern"/> instead).</item>
+/// <item><see cref="DestructuringPattern"/>/<see cref="TypeDestructuringPattern"/> with nested patterns.</item>
 /// </list>
 /// </summary>
 internal sealed class PatternLoweringPass(PostprocessingContext ctx)
 {
+    /// <summary>
+    /// Tracks the temp count while this compiler phase runs.
+    /// </summary>
     private int _tempCount;
 
+    /// <summary>
+    /// Performs the next temp name step for this compiler phase.
+    /// </summary>
     private string NextTempName(string prefix) => $"_pl_{prefix}_{_tempCount++}";
 
+    /// <summary>
+    /// Runs this compiler phase over its configured input.
+    /// </summary>
     public void Run(Program program)
     {
         for (int i = 0; i < program.Declarations.Count; i++)
@@ -105,6 +112,9 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         }
     }
 
+    /// <summary>
+    /// Runs this compiler phase over its configured input.
+    /// </summary>
     public void RunOnVariantBodies()
     {
         foreach (string key in ctx.VariantBodies.Keys.ToList())
@@ -116,6 +126,9 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         }
     }
 
+    /// <summary>
+    /// Lower member list as part of this compiler phase.
+    /// </summary>
     private void LowerMemberList(List<SyntaxTree.Declaration> members)
     {
         for (int j = 0; j < members.Count; j++)
@@ -127,8 +140,11 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         }
     }
 
-    // ─── Statement walker ─────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------------------
 
+    /// <summary>
+    /// Lower statement as part of this compiler phase.
+    /// </summary>
     private Statement LowerStatement(Statement stmt)
     {
         switch (stmt)
@@ -216,8 +232,11 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         }
     }
 
-    // ─── WhenStatement lowering ───────────────────────────────────────────────────
+    // -----------------------------------------------------------------------------
 
+    /// <summary>
+    /// Lower when as part of this compiler phase.
+    /// </summary>
     private Statement LowerWhen(WhenStatement when)
     {
         // Recurse into clause bodies first (handles nested WhenStatements).
@@ -250,7 +269,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
             return clauseChanged ? when with { Clauses = loweredClauses } : when;
         }
 
-        // ── Lowerable: transform to if/else chain ────────────────────────────────
+        // -----------------------------------------------------------------------------
         SourceLocation loc = when.Location;
         var hoisted = new List<Statement>();
 
@@ -309,7 +328,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
             {
                 // Prepend binding(s) inside the branch body.
                 // GenerateDestructuringBindings returns a BlockStatement when there are multiple
-                // bindings — flatten those into the outer block so they share scope with the body.
+                // bindings -> flatten those into the outer block so they share scope with the body.
                 if (binding is BlockStatement multiBindBlock)
                 {
                     var stmts = new List<Statement>(capacity: multiBindBlock.Statements.Count + 1);
@@ -345,7 +364,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         return new BlockStatement(Statements: hoisted, Location: loc);
     }
 
-    // ─── Lowerable check ─────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------------------
 
     /// <summary>
     /// Lowers a subject-less <c>when</c> (each arm is an <see cref="ExpressionPattern"/> bool guard
@@ -388,10 +407,16 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         return chain ?? new BlockStatement(Statements: [], Location: loc);
     }
 
+    /// <summary>
+    /// Returns whether is lowerable applies in the current compiler context.
+    /// </summary>
     private static bool IsLowerable(WhenStatement when, TypeInfo? subjectType) =>
         when.Clauses.All(predicate: c => IsLowerablePattern(pattern: c.Pattern,
             subjectType: subjectType));
 
+    /// <summary>
+    /// Returns whether is lowerable pattern applies in the current compiler context.
+    /// </summary>
     private static bool IsLowerablePattern(Pattern pattern, TypeInfo? subjectType) =>
         pattern switch
         {
@@ -416,20 +441,28 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
             // Maybe[T entity] TypePattern: lowerable (null-ptr check via is_none())
             TypePattern when IsMaybeEntity(subjectType) => true,
 
-            // "is Crashable" on Result/Lookup: NOT lowerable — needs "tag != 0 && tag != validId"
-            // range check in codegen (EmitCrashablePatternMatch). The naive lowering would emit
-            // type_id == ComputeTypeId("Crashable") which never matches concrete error type_ids.
-            TypePattern tp when IsResultOrLookup(subjectType) && tp.Type.Name == "Crashable" => false,
+            // "is Crashable" (with or without binding): lowerable -> compound tag != 0 &&-> tag != validId.
+            // With-binding emits a sibling "<name>__typeid: U64" local; the runtime-dispatch
+            // call site in codegen reads it instead of the legacy _protocolTypeIdAllocas dict.
+            TypePattern tp when IsResultOrLookup(subjectType) && tp.Type.Name == "Crashable" => true,
 
-            // Result/Lookup and user variant TypePatterns: lowerable — condition is type_id == constant.
+            // Raw CrashablePattern (with or without binding): same as above.
+            CrashablePattern when IsResultOrLookup(subjectType) => true,
+
+            // Result/Lookup and user variant TypePatterns: lowerable -> condition is type_id == constant.
             TypePattern when IsResultOrLookup(subjectType) || subjectType is VariantTypeInfo => true,
 
+            // NegatedTypePattern on user variant: lowerable -> condition is type_id != constant.
+            NegatedTypePattern when subjectType is VariantTypeInfo => true,
+
             DestructuringPattern dp
-                when subjectType is RecordTypeInfo && IsAllNamedSimpleBindings(dp.Bindings)
+                when subjectType is RecordTypeInfo or EntityTypeInfo
+                     && IsAllNamedSimpleBindings(dp.Bindings)
                 => true,
 
             TypeDestructuringPattern tdp
-                when subjectType is RecordTypeInfo && IsAllNamedSimpleBindings(tdp.Bindings)
+                when subjectType is RecordTypeInfo or EntityTypeInfo
+                     && IsAllNamedSimpleBindings(tdp.Bindings)
                 => true,
 
             GuardPattern gp => IsLowerablePattern(pattern: gp.InnerPattern,
@@ -438,7 +471,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
             _ => false
         };
 
-    // ─── Pattern → (condition, binding) ──────────────────────────────────────────
+    // -----------------------------------------------------------------------------
 
     /// <summary>
     /// Returns the if-condition expression and optional binding statement for a lowerable pattern.
@@ -477,7 +510,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
                 return (null, MakeBinding(name: id.Name, value: subject, loc: id.Location));
 
             case ExpressionPattern ep:
-                // Boolean expression — subject is not referenced.
+                // Boolean expression -> subject is not referenced.
                 return (ep.Expression, null);
 
             case ComparisonPattern cmp:
@@ -515,7 +548,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
                     else if (IsResultOrLookup(subjectType) && subjectType!.TypeArguments?.Count > 0
                              && isElseNarrowed)
                     {
-                        // Result/Lookup: truly narrowed-to-T else arm — extract payload.
+                        // Result/Lookup: truly narrowed-to-T else arm -> extract payload.
                         // Only when all non-T arms (Blank + all Crashable types) are handled.
                         TypeInfo innerType = subjectType.TypeArguments[0];
                         bindValue = MakeCarrierPayload(subject: subject, innerType: innerType,
@@ -552,7 +585,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
                 return (guardCond, innerBinding);
             }
 
-            // ── Carrier-type patterns ────────────────────────────────────────────
+            // -----------------------------------------------------------------------------
 
             case NonePattern:
                 // Reached for Maybe[T record] and Maybe[T entity] (gated by IsLowerablePattern).
@@ -598,6 +631,60 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
                 return (cond, binding);
             }
 
+            case NegatedTypePattern negType when subjectType is VariantTypeInfo:
+            {
+                TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
+                TypeInfo? targetType = negType.Type.ResolvedType
+                    ?? ctx.Registry.LookupType(name: negType.Type.Name);
+
+                if (targetType == null)
+                    return (null, null); // Unknown type ??always matches negation (optimistic)
+
+                string fullName = targetType.FullName ?? negType.Type.Name;
+                ulong typeId = TypeIdHelper.ComputeTypeId(fullName: fullName);
+                Expression cond = new BinaryExpression(
+                    Left: MakeMemberAccess(subject: subject, field: "type_id",
+                        fieldType: u64Type, loc: loc),
+                    Operator: BinaryOperator.NotEqual,
+                    Right: new LiteralExpression(Value: typeId, LiteralType: TokenType.U64Literal,
+                        Location: loc) { ResolvedType = u64Type },
+                    Location: loc)
+                {
+                    ResolvedType = boolType
+                };
+                return (cond, null);
+            }
+
+            case VariantPattern:
+                throw new InvalidOperationException(
+                    "VariantPattern reached PatternLoweringPass ??this pattern type is no longer " +
+                    "generated by the parser (use TypePattern / NegatedTypePattern instead).");
+
+            // "is Crashable" without binding: tag != 0 (not absent) &&-> tag != validId (not value)
+            case TypePattern { Type.Name: "Crashable", VariableName: null }
+                when IsResultOrLookup(subjectType):
+            case CrashablePattern { VariableName: null }
+                when IsResultOrLookup(subjectType):
+                return (MakeCrashableCondition(subject: subject, subjectType: subjectType!,
+                    loc: loc, boolType: boolType), null);
+
+            // "is Crashable, var <name>" with binding: same condition, plus dual binding
+            // (<name>: Crashable from carrier payload, <name>__typeid: U64 from carrier tag).
+            // The sibling typeid local is read at runtime-dispatch call sites.
+            case TypePattern { Type.Name: "Crashable", VariableName: { } typeBindName }
+                when IsResultOrLookup(subjectType):
+                return (MakeCrashableCondition(subject: subject, subjectType: subjectType!,
+                    loc: loc, boolType: boolType),
+                    MakeCrashableBindings(subject: subject, subjectType: subjectType!,
+                        bindName: typeBindName, loc: loc));
+
+            case CrashablePattern { VariableName: { } crashBindName }
+                when IsResultOrLookup(subjectType):
+                return (MakeCrashableCondition(subject: subject, subjectType: subjectType!,
+                    loc: loc, boolType: boolType),
+                    MakeCrashableBindings(subject: subject, subjectType: subjectType!,
+                        bindName: crashBindName, loc: loc));
+
             case TypePattern tp when IsResultOrLookup(subjectType) || subjectType is VariantTypeInfo:
             {
                 TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
@@ -611,7 +698,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
 
                 // Specific type: type_id == FNV-1a(type.FullName)
                 string fullName = targetType?.FullName ?? tp.Type.Name;
-                ulong typeId = ComputeTypeId(fullName: fullName);
+                ulong typeId = TypeIdHelper.ComputeTypeId(fullName: fullName);
                 Expression cond = MakeTypeIdEquals(subject: subject, typeId: typeId, loc: loc,
                     boolType: boolType, u64Type: u64Type);
 
@@ -627,7 +714,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
                 return (cond, binding);
             }
 
-            // ── Flags patterns ───────────────────────────────────────────────────
+            // -----------------------------------------------------------------------------
 
             case FlagsPattern fp:
             {
@@ -647,25 +734,32 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
                 return (cond, null);
             }
 
-            // ── Record destructuring patterns ─────────────────────────────────────
+            // -----------------------------------------------------------------------------
 
             case DestructuringPattern dp when subjectType is RecordTypeInfo rec:
                 return (null, GenerateDestructuringBindings(bindings: dp.Bindings,
-                    subject: subject, recordType: rec, loc: loc));
+                    subject: subject, memberVars: rec.MemberVariables, loc: loc));
+
+            case DestructuringPattern dp when subjectType is EntityTypeInfo ent:
+                return (null, GenerateDestructuringBindings(bindings: dp.Bindings,
+                    subject: subject, memberVars: ent.MemberVariables, loc: loc));
 
             case TypeDestructuringPattern tdp when subjectType is RecordTypeInfo rec:
-                // Type check is always true (SA validated the subject type); just bind fields.
                 return (null, GenerateDestructuringBindings(bindings: tdp.Bindings,
-                    subject: subject, recordType: rec, loc: loc));
+                    subject: subject, memberVars: rec.MemberVariables, loc: loc));
+
+            case TypeDestructuringPattern tdp when subjectType is EntityTypeInfo ent:
+                return (null, GenerateDestructuringBindings(bindings: tdp.Bindings,
+                    subject: subject, memberVars: ent.MemberVariables, loc: loc));
 
             default:
                 throw new InvalidOperationException(
-                    $"Non-lowerable pattern type '{pattern.GetType().Name}' reached LowerPattern — " +
+                    $"Non-lowerable pattern type '{pattern.GetType().Name}' reached LowerPattern ??" +
                     "IsLowerable should have rejected this pattern before lowering.");
         }
     }
 
-    // ─── Carrier expression builders ─────────────────────────────────────────────
+    // -----------------------------------------------------------------------------
 
     /// <summary>Builds <c>not subject.present</c> for Maybe absence check.</summary>
     private Expression MakeNotPresent(Expression subject, SourceLocation loc, TypeInfo? boolType)
@@ -700,7 +794,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     }
 
     /// <summary>Builds <c>subject.type_id == 0_u64</c> for a Blank/absent check on Result/Lookup.</summary>
-    private Expression MakeTypeIdIsZero(Expression subject, SourceLocation loc,
+    private static Expression MakeTypeIdIsZero(Expression subject, SourceLocation loc,
         TypeInfo? boolType, TypeInfo? u64Type)
     {
         var typeIdAccess = MakeMemberAccess(subject: subject, field: "type_id",
@@ -717,7 +811,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     }
 
     /// <summary>Builds <c>subject.type_id == typeId_u64</c> for a specific Result/Lookup arm.</summary>
-    private Expression MakeTypeIdEquals(Expression subject, ulong typeId, SourceLocation loc,
+    private static Expression MakeTypeIdEquals(Expression subject, ulong typeId, SourceLocation loc,
         TypeInfo? boolType, TypeInfo? u64Type)
     {
         var typeIdAccess = MakeMemberAccess(subject: subject, field: "type_id",
@@ -731,6 +825,66 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         {
             ResolvedType = boolType
         };
+    }
+
+    /// <summary>
+    /// Builds <c>subject.type_id != 0 &amp;&amp; subject.type_id != ComputeTypeId(valueType)</c>
+    /// for a Crashable/error arm on Result/Lookup -> matches any error, not absent and not valid.
+    /// </summary>
+    /// <summary>
+    /// Builds the bindings emitted for <c>when ... is Crashable, var <c>name</c>:</c>:
+    /// <list type="bullet">
+    ///   <item><c>var name: Crashable = <see cref="CarrierPayloadExpression"/>(subject, Crashable)</c>
+    ///         — the bound error value, typed as the protocol.</item>
+    ///   <item><c>var name__typeid: U64 = subject.type_id</c> — the runtime concrete type id,
+    ///         consumed by codegen's call-site to resolve protocol dispatch on <c>name</c>.</item>
+    /// </list>
+    /// </summary>
+    private Statement MakeCrashableBindings(Expression subject, TypeInfo subjectType,
+        string bindName, SourceLocation loc)
+    {
+        TypeInfo? crashableType = ctx.Registry.LookupType(name: "Crashable");
+        TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
+
+        Expression payload = new CarrierPayloadExpression(
+            Carrier: subject,
+            ConcreteType: TypeInfoToExpr(type: crashableType!, loc: loc),
+            Location: loc) { ResolvedType = crashableType };
+
+        Statement valueBinding = MakeBinding(name: bindName, value: payload, loc: loc);
+        Statement typeIdBinding = MakeBinding(
+            name: bindName + "__typeid",
+            value: MakeMemberAccess(subject: subject, field: "type_id",
+                fieldType: u64Type, loc: loc),
+            loc: loc);
+
+        return new BlockStatement(Statements: [valueBinding, typeIdBinding], Location: loc);
+    }
+
+    private Expression MakeCrashableCondition(Expression subject, TypeInfo subjectType,
+        SourceLocation loc, TypeInfo? boolType)
+    {
+        TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
+        TypeInfo valueType = subjectType.TypeArguments![0];
+        ulong validId = TypeIdHelper.ComputeTypeId(fullName: valueType.FullName);
+
+        Expression typeIdAccess = MakeMemberAccess(subject: subject, field: "type_id",
+            fieldType: u64Type, loc: loc);
+        Expression notAbsent = new BinaryExpression(
+            Left: typeIdAccess,
+            Operator: BinaryOperator.NotEqual,
+            Right: new LiteralExpression(Value: 0UL, LiteralType: TokenType.U64Literal,
+                Location: loc) { ResolvedType = u64Type },
+            Location: loc) { ResolvedType = boolType };
+        Expression notValid = new BinaryExpression(
+            Left: MakeMemberAccess(subject: subject, field: "type_id", fieldType: u64Type,
+                loc: loc),
+            Operator: BinaryOperator.NotEqual,
+            Right: new LiteralExpression(Value: validId, LiteralType: TokenType.U64Literal,
+                Location: loc) { ResolvedType = u64Type },
+            Location: loc) { ResolvedType = boolType };
+        return new BinaryExpression(Left: notAbsent, Operator: BinaryOperator.And,
+            Right: notValid, Location: loc) { ResolvedType = boolType };
     }
 
     /// <summary>
@@ -760,7 +914,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         return valueField?.Type;
     }
 
-    /// <summary>Builds <c>subject.value.is_none()</c> — the absence check for <c>Maybe[T entity]</c>.</summary>
+    /// <summary>Builds <c>subject.value.is_none()</c> -> the absence check for <c>Maybe[T entity]</c>.</summary>
     private Expression MakeIsNoneCall(Expression subject, TypeInfo subjectType, SourceLocation loc)
     {
         TypeInfo? boolType = ctx.Registry.LookupType(name: "Bool");
@@ -780,7 +934,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         };
     }
 
-    /// <summary>Builds <c>subject.value.extract()</c> — extracts the entity from <c>Maybe[T entity]</c>.</summary>
+    /// <summary>Builds <c>subject.value.extract()</c> -> extracts the entity from <c>Maybe[T entity]</c>.</summary>
     private static Expression MakeEntityMaybeRead(Expression subject, TypeInfo subjectType,
         TypeInfo entityType, SourceLocation loc)
     {
@@ -799,23 +953,20 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         };
     }
 
-    private static ulong ComputeTypeId(string fullName) =>
-        TypeIdHelper.ComputeTypeId(fullName: fullName);
-
     /// <summary>
-    /// Generates binding statements for a destructuring pattern applied to a record subject.
+    /// Generates binding statements for a destructuring pattern applied to a record, entity, or tuple subject.
     /// Returns a single <see cref="DeclarationStatement"/> for one binding, or a
     /// <see cref="BlockStatement"/> for multiple (caller must flatten into the outer block).
     /// </summary>
-    private Statement GenerateDestructuringBindings(
-        List<DestructuringBinding> bindings, Expression subject, RecordTypeInfo recordType,
-        SourceLocation loc)
+    private static Statement GenerateDestructuringBindings(
+        List<DestructuringBinding> bindings, Expression subject,
+        IReadOnlyList<MemberVariableInfo> memberVars, SourceLocation loc)
     {
         var stmts = new List<Statement>(capacity: bindings.Count);
         foreach (DestructuringBinding b in bindings)
         {
             if (b.MemberVariableName == null || b.BindingName == null) continue;
-            var member = recordType.LookupMemberVariable(memberVariableName: b.MemberVariableName);
+            MemberVariableInfo? member = memberVars.FirstOrDefault(m => m.Name == b.MemberVariableName);
             if (member == null) continue;
             Expression fieldAccess = MakeMemberAccess(subject: subject,
                 field: b.MemberVariableName, fieldType: member.Type, loc: loc);
@@ -827,7 +978,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
             : new BlockStatement(Statements: stmts, Location: loc);
     }
 
-    // ─── Type classification helpers ─────────────────────────────────────────────
+    // -----------------------------------------------------------------------------
 
     /// <summary>
     /// Returns the generic base name of a type (e.g., "Maybe" for <c>Maybe[S64]</c>).
@@ -856,7 +1007,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
 
     /// <summary>
     /// Returns true if <paramref name="type"/> is <c>Maybe[T]</c> where T is an entity type
-    /// (the single-field variant with only a <c>Hijacked[T]</c> value field — no <c>present</c>).
+    /// (the single-field variant with only a <c>Hijacked[T]</c> value field -> no <c>present</c>).
     /// </summary>
     private static bool IsMaybeEntity(TypeInfo? type)
     {
@@ -874,6 +1025,9 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         return baseName is "Result" or "Lookup";
     }
 
+    /// <summary>
+    /// Returns whether is result type applies in the current compiler context.
+    /// </summary>
     private static bool IsResultType(TypeInfo? type)
     {
         if (type == null) return false;
@@ -882,14 +1036,17 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
 
     /// <summary>
     /// Returns true when every binding in the list has both a member name and a local alias
-    /// and no nested pattern (i.e., it is a plain field → name binding).
+    /// and no nested pattern (i.e., it is a plain field -> name binding).
     /// </summary>
     private static bool IsAllNamedSimpleBindings(List<DestructuringBinding> bindings) =>
         bindings.All(predicate: b =>
             b.MemberVariableName != null && b.BindingName != null && b.NestedPattern == null);
 
-    // ─── Helpers ─────────────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------------------
 
+    /// <summary>
+    /// Builds the make binding used by later compiler work.
+    /// </summary>
     private static Statement MakeBinding(string name, Expression value, SourceLocation loc)
     {
         TypeInfo? type = value.ResolvedType;
@@ -902,6 +1059,9 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         return new DeclarationStatement(Declaration: decl, Location: loc);
     }
 
+    /// <summary>
+    /// Performs the add temp var step for this compiler phase.
+    /// </summary>
     private static void AddTempVar(
         List<Statement> hoisted, string name, TypeInfo? typeHint,
         Expression initializer, SourceLocation loc)
@@ -950,8 +1110,6 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
             TokenType.LessEqual        => BinaryOperator.LessEqual,
             TokenType.Greater          => BinaryOperator.Greater,
             TokenType.GreaterEqual     => BinaryOperator.GreaterEqual,
-            TokenType.ReferenceEqual   => BinaryOperator.Identical,
-            TokenType.ReferenceNotEqual => BinaryOperator.NotIdentical,
             _                          => BinaryOperator.Equal
         };
 
@@ -960,5 +1118,8 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
 /// <summary>Extension to check for a non-null, non-empty string in one expression.</summary>
 file static class StringExt
 {
+    /// <summary>
+    /// Returns whether has value applies in the current compiler context.
+    /// </summary>
     public static bool HasValue(this string? s) => !string.IsNullOrEmpty(s);
 }

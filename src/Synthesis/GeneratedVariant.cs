@@ -1,6 +1,6 @@
-namespace Compiler.Synthesis;
-
 using TypeModel.Symbols;
+
+namespace Compiler.Synthesis;
 
 /// <summary>
 /// A generated error handling variant.

@@ -1,23 +1,22 @@
 using Compiler.Desugaring;
 using Compiler.Instantiation;
-using Compiler.Postprocessing;
-namespace Compiler.Postprocessing.Passes;
-
-using Lexer;
-using Resolution;
+using Compiler.Lexer;
+using Compiler.Resolution;
+using SyntaxTree;
 using TypeModel.Enums;
 using TypeModel.Types;
-using SyntaxTree;
+
+namespace Compiler.Postprocessing.Passes;
 
 /// <summary>
-/// Global pass ??folds compile-time-constant BuilderService per-type calls to literal
+/// Global pass that folds compile-time-constant BuilderService per-type calls to literal
 /// expressions, eliminating runtime function calls to synthesized stubs.
 ///
 /// <para>Runs in three contexts:</para>
 /// <list type="number">
 ///   <item>Per-program pass (<see cref="Run"/>) ??handles non-generic user and stdlib bodies.</item>
 ///   <item>VariantBodies sweep (<see cref="RunOnVariantBodies"/>) ??after <c>WiredRoutinePass</c>.</item>
-///   <item>Pre-monomorphized bodies sweep (<see cref="RunOnPreMonomorphizedBodies"/>) ??after
+///   <item>Instantiated generic bodies sweep (<see cref="RunOnInstantiatedGenericBodies"/>) ??after
 ///         <c>GenericMonomorphizationPass</c>.</item>
 /// </list>
 ///
@@ -27,13 +26,19 @@ using SyntaxTree;
 ///
 /// <para>For bodies with unbound generic type parameters (e.g. <c>T.data_size()</c> before
 /// monomorphization), <see cref="GenericAstRewriter"/> folds these during its substitution
-/// rewrite. This pass handles the concrete-type residue left in pre-built or non-generic bodies.</para>
+/// rewrite. This pass handles the concrete-type residue left in instantiated or non-generic bodies.</para>
 /// </summary>
 internal sealed class BuilderServiceInliningPass
 {
     private readonly TypeRegistry _registry;
 
     private readonly DesugaringContext? _ctx;
+
+    private readonly Dictionary<string, Statement>? _ownedVariantBodies;
+
+    // Tracks the enclosing routine name while walking — used for source_routine() / source_module().
+    private string _currentRoutineName = "<unknown>";
+    private string _currentRoutineModule = "";
 
     /// <summary>Creates a pass instance backed by a full <see cref="DesugaringContext"/>.</summary>
     internal BuilderServiceInliningPass(DesugaringContext ctx)
@@ -43,12 +48,15 @@ internal sealed class BuilderServiceInliningPass
     }
 
     /// <summary>
-    /// Creates a pass instance backed directly by a <see cref="TypeRegistry"/>.
-    /// Used by the CodeGen planner to fold residual BS calls in slow-path monomorphized bodies
-    /// (those bodies live in <c>MonomorphizationPlanner.MonomorphizedBodies</c>, which is outside
-    /// the desugaring context and not seen by <see cref="RunOnPreMonomorphizedBodies"/>).
+    /// Creates a pass instance from a <see cref="TypeRegistry"/> alone (no desugaring context).
+    /// Supports <see cref="Run"/> and <see cref="RunOnVariantBodies"/> only.
     /// </summary>
-    internal BuilderServiceInliningPass(TypeRegistry registry) => _registry = registry;
+    internal BuilderServiceInliningPass(TypeRegistry registry,
+        Dictionary<string, Statement>? variantBodies = null)
+    {
+        _registry = registry;
+        _ownedVariantBodies = variantBodies;
+    }
 
     private static readonly HashSet<string> _foldableRoutines = new(StringComparer.Ordinal)
     {
@@ -60,6 +68,13 @@ internal sealed class BuilderServiceInliningPass
         "member_variable_count",
         "is_generic",
         "type_kind"
+    };
+
+    private static readonly HashSet<string> _sourceLocationRoutines = new(StringComparer.Ordinal)
+    {
+        "source_file", "source_line", "source_column",
+        "source_routine", "source_module", "source_text",
+        "caller_file", "caller_line", "caller_routine"
     };
 
     /// <summary>
@@ -79,39 +94,48 @@ internal sealed class BuilderServiceInliningPass
     private TypeInfo? _boolType;
     private TypeInfo? _byteSizeType;
 
-    // Set per-body in RunOnMonomorphizedBodies / RunOnPreMonomorphizedBodies so that
+    // Set per-body in RunOnInstantiatedGenericBodies so that
     // ResolveReceiverType can resolve unbound generic params (e.g. T ??Core.Byte).
     private Dictionary<string, TypeInfo>? _currentTypeSubs;
 
-    // ?�?� Public entry points ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
+    //  Public entry points
 
     /// <summary>
     /// Runs the pass on all routine declarations in <paramref name="program"/>.
     /// </summary>
     public void Run(Program program)
     {
+        // Extract module name from program's ModuleDeclaration (if any)
+        string programModule = "";
+        foreach (ISyntaxTreeNode decl in program.Declarations)
+        {
+            if (decl is ModuleDeclaration mod) { programModule = mod.Path; break; }
+        }
+
         for (int i = 0; i < program.Declarations.Count; i++)
         {
             switch (program.Declarations[i])
             {
                 case RoutineDeclaration r:
                 {
+                    _currentRoutineName = r.Name;
+                    _currentRoutineModule = programModule;
                     Statement newBody = LowerStatement(r.Body);
                     if (!ReferenceEquals(newBody, r.Body))
                         program.Declarations[i] = r with { Body = newBody };
                     break;
                 }
 
-                case EntityDeclaration e:
-                    LowerMemberList(e.Members);
+                case EntityDeclaration e when e.GenericParameters is not { Count: > 0 }:
+                    LowerMemberList(e.Members, programModule);
                     break;
 
-                case RecordDeclaration rec:
-                    LowerMemberList(rec.Members);
+                case RecordDeclaration rec when rec.GenericParameters is not { Count: > 0 }:
+                    LowerMemberList(rec.Members, programModule);
                     break;
 
                 case CrashableDeclaration cr:
-                    LowerMemberList(cr.Members);
+                    LowerMemberList(cr.Members, programModule);
                     break;
             }
         }
@@ -124,76 +148,57 @@ internal sealed class BuilderServiceInliningPass
     /// </summary>
     public void RunOnVariantBodies()
     {
-        foreach (string key in _ctx!.VariantBodies.Keys.ToList())
+        Dictionary<string, Statement> bodies = _ctx?.VariantBodies ?? _ownedVariantBodies
+            ?? throw new InvalidOperationException("No variant bodies available");
+        foreach (string key in bodies.Keys.ToList())
         {
-            Statement body = _ctx.VariantBodies[key];
+            Statement body = bodies[key];
             Statement lowered = LowerStatement(body);
             if (!ReferenceEquals(lowered, body))
-                _ctx.VariantBodies[key] = lowered;
+                bodies[key] = lowered;
         }
     }
 
     /// <summary>
-    /// Folds BS constant calls in all pre-monomorphized bodies in
-    /// <see cref="DesugaringContext.PreMonomorphizedBodies"/>.
+    /// Folds BS constant calls in all instantiated generic bodies in
+    /// <see cref="DesugaringContext.InstantiatedGenericBodies"/>.
     /// Called from <see cref="DesugaringPipeline.RunGlobal"/> after
     /// <c>GenericMonomorphizationPass</c> populates the map.
     /// </summary>
-    public void RunOnPreMonomorphizedBodies()
+    public void RunOnInstantiatedGenericBodies()
     {
-        foreach (string key in _ctx!.PreMonomorphizedBodies.Keys.ToList())
+        foreach (string key in _ctx!.InstantiatedGenericBodies.Keys.ToList())
         {
-            MonomorphizedBody entry = _ctx.PreMonomorphizedBodies[key];
+            MonomorphizedBody entry = _ctx.InstantiatedGenericBodies[key];
             if (entry.IsSynthesized) continue; // pure-synthesized: no AST to walk
 
             _currentTypeSubs = entry.TypeSubs;
             Statement lowered = LowerStatement(entry.Ast.Body);
             _currentTypeSubs = null;
             if (!ReferenceEquals(lowered, entry.Ast.Body))
-                _ctx.PreMonomorphizedBodies[key] = entry with
+                _ctx.InstantiatedGenericBodies[key] = entry with
                 {
                     Ast = entry.Ast with { Body = lowered }
                 };
         }
     }
 
-    /// <summary>
-    /// Folds BS constant calls in all pre-rewritten monomorphized bodies in
-    /// <paramref name="bodies"/>. Called by the CodeGen planner after
-    /// <c>PreRewriteAll</c> to fold any residual <c>Byte.data_size()</c>-style calls
-    /// that <see cref="GenericAstRewriter"/> left unfolded (e.g. when the receiver was
-    /// an <see cref="IdentifierExpression"/> whose name could not be looked up at rewrite
-    /// time via the string-substitution map).
-    /// </summary>
-    internal void RunOnMonomorphizedBodies(IDictionary<string, MonomorphizedBody> bodies)
-    {
-        foreach (string key in bodies.Keys.ToList())
-        {
-            MonomorphizedBody entry = bodies[key];
-            if (entry.IsSynthesized) continue;
+    //  Member list helper
 
-            _currentTypeSubs = entry.TypeSubs;
-            Statement lowered = LowerStatement(entry.Ast.Body);
-            _currentTypeSubs = null;
-            if (!ReferenceEquals(lowered, entry.Ast.Body))
-                bodies[key] = entry with { Ast = entry.Ast with { Body = lowered } };
-        }
-    }
-
-    // ?�?� Member list helper ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
-
-    private void LowerMemberList(List<Declaration> members)
+    private void LowerMemberList(List<SyntaxTree.Declaration> members, string module = "")
     {
         for (int j = 0; j < members.Count; j++)
         {
             if (members[j] is not RoutineDeclaration m) continue;
+            _currentRoutineName = m.Name;
+            _currentRoutineModule = module;
             Statement newBody = LowerStatement(m.Body);
             if (!ReferenceEquals(newBody, m.Body))
                 members[j] = m with { Body = newBody };
         }
     }
 
-    // ?�?� Statement walker ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
+    //  Statement walker
 
     private Statement LowerStatement(Statement stmt)
     {
@@ -330,14 +335,27 @@ internal sealed class BuilderServiceInliningPass
         }
     }
 
-    // ?�?� Expression walker ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
+    //  Expression walker
 
     private Expression LowerExpression(Expression expr)
     {
         // Leaf nodes: nothing to fold or recurse into.
         if (expr is LiteralExpression or TypeIdExpression) return expr;
 
-        // ?�?� BuilderService constant-call folding ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
+        // Source location constant-call folding (standalone calls, not method calls)
+        if (expr is CallExpression
+            {
+                Callee: IdentifierExpression { Name: var slName },
+                Arguments: { Count: 0 }
+            } slCall
+            && _sourceLocationRoutines.Contains(slName))
+        {
+            EnsureTypes();
+            Expression? slFolded = FoldSourceLocationCall(slName, slCall.Location);
+            if (slFolded != null) return slFolded;
+        }
+
+        //  BuilderService constant-call folding
         if (expr is CallExpression
             {
                 Callee: MemberExpression { PropertyName: var routineName } bsCallee,
@@ -353,7 +371,7 @@ internal sealed class BuilderServiceInliningPass
             }
         }
 
-        // ?�?� Structural recursion ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
+        //  Structural recursion
         switch (expr)
         {
             case BinaryExpression bin:
@@ -402,7 +420,13 @@ internal sealed class BuilderServiceInliningPass
                 Expression o = LowerExpression(idx.Object);
                 Expression i = LowerExpression(idx.Index);
                 bool changed = !ReferenceEquals(o, idx.Object) || !ReferenceEquals(i, idx.Index);
-                return changed ? idx with { Object = o, Index = i } : expr;
+                if (!changed)
+                    return expr;
+
+                var rewritten = idx with { Object = o, Index = i };
+                rewritten.ResolvedType = idx.ResolvedType;
+                rewritten.ResolvedSetItem = idx.ResolvedSetItem;
+                return rewritten;
             }
 
             case SliceExpression slice:
@@ -610,7 +634,7 @@ internal sealed class BuilderServiceInliningPass
         return changed ? result : list;
     }
 
-    // ?�?� Type resolution ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
+    //  Type resolution
 
     /// <summary>
     /// Resolves the <see cref="TypeInfo"/> for the receiver of a potential BS call.
@@ -652,7 +676,29 @@ internal sealed class BuilderServiceInliningPass
         return null;
     }
 
-    // ?�?� Constant computation ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
+    //  Source location folding
+
+    private Expression? FoldSourceLocationCall(string routineName, SourceLocation callSite)
+    {
+        return routineName switch
+        {
+            "source_file" or "caller_file" when _textType != null =>
+                MakeLiteralText(callSite.FileName, _textType, callSite),
+            "source_line" or "caller_line" when _s64Type != null =>
+                MakeLiteralS64(callSite.Line, _s64Type, callSite),
+            "source_column" when _s64Type != null =>
+                MakeLiteralS64(callSite.Column, _s64Type, callSite),
+            "source_routine" or "caller_routine" when _textType != null =>
+                MakeLiteralText(_currentRoutineName, _textType, callSite),
+            "source_module" when _textType != null =>
+                MakeLiteralText(_currentRoutineModule, _textType, callSite),
+            "source_text" when _textType != null =>
+                MakeLiteralText("<expr>", _textType, callSite),
+            _ => null
+        };
+    }
+
+    //  Constant computation
 
     /// <summary>
     /// Returns a folded <see cref="LiteralExpression"/> for the given BuilderService constant
@@ -671,29 +717,24 @@ internal sealed class BuilderServiceInliningPass
                 return MakeLiteralU64(TypeIdHelper.ComputeTypeId(type.FullName), _u64Type, loc);
 
             case "type_name" when _textType != null:
-                return MakeLiteralText(type.Name, _textType, loc);
+                return MakeLiteralText(GetShortTypeName(type), _textType, loc);
 
             case "module_name" when _textType != null:
                 return MakeLiteralText(type.Module ?? "", _textType, loc);
 
             case "full_type_name" when _textType != null:
-            {
-                string full = string.IsNullOrEmpty(type.Module)
-                    ? type.Name
-                    : $"{type.Module}.{type.Name}";
-                return MakeLiteralText(full, _textType, loc);
-            }
+                return MakeLiteralText(GetFullTypeName(type), _textType, loc);
 
             case "member_variable_count" when _s64Type != null:
             {
                 long count = type switch
                 {
-                    RecordTypeInfo r => r.MemberVariables.Count,
-                    EntityTypeInfo e => e.MemberVariables.Count,
-                    CrashableTypeInfo c => c.MemberVariables.Count,
                     TupleTypeInfo t => t.MemberVariables.Count,
                     ChoiceTypeInfo ch => ch.Cases.Count,
                     FlagsTypeInfo f => f.Members.Count,
+                    RecordTypeInfo r => r.MemberVariables.Count,
+                    EntityTypeInfo e => e.MemberVariables.Count,
+                    CrashableTypeInfo c => c.MemberVariables.Count,
                     VariantTypeInfo v => v.Members.Count,
                     _ => 0L
                 };
@@ -723,7 +764,8 @@ internal sealed class BuilderServiceInliningPass
                     TypeCategory.Flags => "FLAGS",
                     TypeCategory.Routine => "ROUTINE",
                     TypeCategory.Protocol => "PROTOCOL",
-                    _ => "RECORD"
+                    _ => throw new InvalidOperationException(
+                        $"Unhandled TypeCategory '{type.Category}' in type_kind BuilderService mapping.")
                 };
                 ChoiceCaseInfo? found = tkChoice.Cases.FirstOrDefault(c => c.Name == caseName);
                 if (found == null) return null;
@@ -745,7 +787,7 @@ internal sealed class BuilderServiceInliningPass
         _byteSizeType ??= _registry.LookupType(name: "ByteSize");
     }
 
-    // ?�?� Literal factory helpers ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
+    //  Literal factory helpers
 
     private static LiteralExpression MakeLiteralU64(ulong value, TypeInfo type, SourceLocation loc) =>
         new(Value: value, LiteralType: TokenType.U64Literal, Location: loc)
@@ -775,7 +817,33 @@ internal sealed class BuilderServiceInliningPass
         new(Value: value, LiteralType: TokenType.TextLiteral, Location: loc)
         { ResolvedType = type };
 
-    // ?�?� Data size computation (mirrors WiredRoutinePass.CalculateDataSizeForType) ?�?�
+    private string GetShortTypeName(TypeInfo type)
+    {
+        if (type is GenericParameterTypeInfo gp)
+            return _currentTypeSubs != null && _currentTypeSubs.TryGetValue(gp.Name, out TypeInfo? sub)
+                ? GetShortTypeName(sub)
+                : gp.Name;
+        if (type.TypeArguments is not { Count: > 0 } args || type.Name.Contains(value: '['))
+            return type.Name;
+        string argList = string.Join(separator: ", ", values: args.Select(selector: GetShortTypeName));
+        return $"{type.Name}[{argList}]";
+    }
+
+    private string GetFullTypeName(TypeInfo type)
+    {
+        if (type is GenericParameterTypeInfo gp)
+            return _currentTypeSubs != null && _currentTypeSubs.TryGetValue(gp.Name, out TypeInfo? sub)
+                ? GetFullTypeName(sub)
+                : gp.Name;
+        // If the name already contains '[', the type args are baked into Name — FullName is correct.
+        if (type.TypeArguments is not { Count: > 0 } args || type.Name.Contains(value: '['))
+            return type.FullName;
+        string baseName = string.IsNullOrEmpty(type.Module) ? type.Name : $"{type.Module}.{type.Name}";
+        string argList = string.Join(separator: ", ", values: args.Select(selector: GetFullTypeName));
+        return $"{baseName}[{argList}]";
+    }
+
+    //  Data size computation (mirrors WiredRoutinePass.CalculateDataSizeForType)
 
     /// <summary>
     /// Returns the byte size of <paramref name="type"/> as seen by collection pointer arithmetic.
@@ -783,11 +851,9 @@ internal sealed class BuilderServiceInliningPass
     /// </summary>
     internal static ulong CalculateDataSizeForType(TypeInfo type) => type switch
     {
+        TupleTypeInfo t => (ulong)(t.ElementTypes.Count * 8),
         RecordTypeInfo { HasDirectBackendType: true } r => LlvmBackendTypeSize(r.BackendType!),
         RecordTypeInfo r => (ulong)(r.MemberVariables.Count * 8),
-        ChoiceTypeInfo => 4,    // i32
-        FlagsTypeInfo => 8,     // i64
-        TupleTypeInfo t => (ulong)(t.ElementTypes.Count * 8),
         EntityTypeInfo => 8,    // heap pointer
         CrashableTypeInfo => 8, // heap pointer
         VariantTypeInfo v => (ulong)((v.Members.Count + 1) * 8), // tag + largest payload
@@ -806,7 +872,19 @@ internal sealed class BuilderServiceInliningPass
         "i32" or "float" => 4,
         "i64" or "double" or "ptr" => 8,
         "i128" or "fp128" => 16,
+        var s when s.StartsWith('[') => ParseLlvmArraySize(s),
+        var s when s.Contains('{') => 0,
         _ => throw new InvalidOperationException(
             $"Unknown LLVM type '{llvmType}' in LlvmBackendTypeSize — cannot determine byte size.")
     };
+
+    private static ulong ParseLlvmArraySize(string arrayType)
+    {
+        int xIdx = arrayType.IndexOf(" x ", StringComparison.Ordinal);
+        if (xIdx < 0) return 0;
+        string countPart = arrayType[1..xIdx].Trim();
+        string elemPart = arrayType[(xIdx + 3)..].TrimEnd(']').Trim();
+        if (!ulong.TryParse(countPart, out ulong count)) return 0;
+        return count * LlvmBackendTypeSize(elemPart);
+    }
 }

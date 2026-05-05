@@ -1,7 +1,8 @@
-namespace TypeModel.Types;
-
+using System.Text;
 using TypeModel.Enums;
 using TypeModel.Symbols;
+
+namespace TypeModel.Types;
 
 /// <summary>
 /// Type information for crashable types — throwable error entities.
@@ -57,7 +58,7 @@ public sealed class CrashableTypeInfo : TypeInfo
         if (string.IsNullOrEmpty(value: typeName))
             return typeName;
 
-        var sb = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
         for (int i = 0; i < typeName.Length; i++)
         {
             if (i > 0 && char.IsUpper(c: typeName[index: i]))

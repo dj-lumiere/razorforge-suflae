@@ -1,13 +1,18 @@
 using Compiler.Diagnostics;
-using SemanticVerification.Results;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
+/// <summary>
+/// Contains tests for text bytes interop.
+/// </summary>
 public class TextBytesInteropTests
 {
+    /// <summary>
+    /// Verifies that the test validates literal assigns to character.
+    /// </summary>
     [Fact]
     public void CharacterLiteral_AssignsToCharacter()
     {
@@ -20,6 +25,9 @@ public class TextBytesInteropTests
         Assert.Empty(result.Errors);
     }
 
+    /// <summary>
+    /// Verifies that the test validates indexing assigns to character.
+    /// </summary>
     [Fact]
     public void TextIndexing_AssignsToCharacter()
     {
@@ -32,6 +40,9 @@ public class TextBytesInteropTests
         Assert.Empty(result.Errors);
     }
 
+    /// <summary>
+    /// Verifies that the test validates uses is alphabetic not is letter.
+    /// </summary>
     [Fact]
     public void CharacterUsesIsAlphabetic_NotIsLetter()
     {
@@ -51,6 +62,9 @@ public class TextBytesInteropTests
             e => e.Code == SemanticDiagnosticCode.MemberNotFound);
     }
 
+    /// <summary>
+    /// Verifies that the test validates encode and bytes decode utf8 analyze.
+    /// </summary>
     [Fact]
     public void TextEncodeAndBytesDecodeUtf8_Analyze()
     {
@@ -65,6 +79,9 @@ public class TextBytesInteropTests
         Assert.Empty(result.Errors);
     }
 
+    /// <summary>
+    /// Verifies that the test validates interpret as utf8 produces characters.
+    /// </summary>
     [Fact]
     public void BytesInterpretAsUtf8_ProducesCharacters()
     {
@@ -79,6 +96,9 @@ public class TextBytesInteropTests
         Assert.Empty(result.Errors);
     }
 
+    /// <summary>
+    /// Verifies that the test validates lossy utf8 apis analyze.
+    /// </summary>
     [Fact]
     public void BytesLossyUtf8Apis_Analyze()
     {
@@ -94,6 +114,9 @@ public class TextBytesInteropTests
         Assert.Empty(result.Errors);
     }
 
+    /// <summary>
+    /// Verifies that the test validates strict utf8 apis analyze inside failable routine.
+    /// </summary>
     [Fact]
     public void BytesStrictUtf8Apis_AnalyzeInsideFailableRoutine()
     {

@@ -1,23 +1,22 @@
-using TypeModel.Types;
 using SyntaxTree;
+using TypeModel.Types;
 
-using Compiler.Postprocessing;
 namespace Compiler.Postprocessing.Passes;
 
 /// <summary>
 /// Postprocessing pass that lowers two ownership-related constructs:
 ///
 /// <list type="bullet">
-///   <item><b>Steal lowering</b> ??strips <see cref="StealExpression"/> wrappers.
-///         The source variable is already invalidated by Phase 5; at runtime ownership
-///         is transferred as a plain value, no extra call needed.</item>
-///   <item><b>Record copy injection</b> ??rewrites <c>var r2 = r1</c> and <c>r2 = r1</c>
-///         where <c>r1</c> is a "borrowed reference" (identifier or field access) of a
-///         record type to <c>r1.$copy()</c>. Required for RC wrapper types
-///         (<c>Retained[T]</c>, <c>Tracked[T]</c>, etc.) where a bit-for-bit struct copy
-///         would not increment the reference count, causing a double-free bug.
-///         For plain records (no RC fields) <c>$copy()</c> is semantically identical to
-///         a bit copy and is optimized away by LLVM inlining.</item>
+/// <item><b>Steal preservation</b> -> keeps <see cref="StealExpression"/> wrappers
+/// in the lowered AST so backend entry/codegen can observe explicit ownership
+/// transfer sites while still emitting the operand value directly.</item>
+/// <item><b>Record copy injection</b> -> rewrites <c>var r2 = r1</c> and <c>r2 = r1</c>
+/// where <c>r1</c> is a "borrowed reference" (identifier or field access) of a
+/// record type to <c>r1.$copy()</c>. Required for RC wrapper types
+///  (<c>Retained[T]</c>, <c>Tracked[T]</c>, etc.) where a bit-for-bit struct copy
+/// would not increment the reference count, causing a double-free bug.
+/// For plain records (no RC fields) <c>$copy()</c> is semantically identical to
+/// a bit copy and is optimized away by LLVM inlining.</item>
 /// </list>
 ///
 /// <para>Runs last in the per-file desugaring pipeline (after <see cref="PatternLoweringPass"/>).
@@ -30,8 +29,14 @@ namespace Compiler.Postprocessing.Passes;
 /// </summary>
 internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
 {
+    /// <summary>
+    /// Stores the loc state used by this compiler phase.
+    /// </summary>
     private static readonly SourceLocation _loc = new(FileName: "", Line: 0, Column: 0, Position: 0);
 
+    /// <summary>
+    /// Runs this compiler phase over its configured input.
+    /// </summary>
     public void Run(Program program)
     {
         for (int i = 0; i < program.Declarations.Count; i++)
@@ -61,6 +66,9 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         }
     }
 
+    /// <summary>
+    /// Runs this compiler phase over its configured input.
+    /// </summary>
     public void RunOnVariantBodies()
     {
         foreach (string key in ctx.VariantBodies.Keys.ToList())
@@ -72,6 +80,9 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         }
     }
 
+    /// <summary>
+    /// Lower member list as part of this compiler phase.
+    /// </summary>
     private static void LowerMemberList(List<SyntaxTree.Declaration> members)
     {
         for (int i = 0; i < members.Count; i++)
@@ -85,8 +96,11 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         }
     }
 
-    // ?�?� Statement walker ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
+    // Statement walker
 
+    /// <summary>
+    /// Lower statement as part of this compiler phase.
+    /// </summary>
     private static Statement LowerStatement(Statement stmt)
     {
         switch (stmt)
@@ -202,9 +216,6 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
                     : usingStmt with { Body = newBody };
             }
 
-            // Steal in call argument positions is not an ownership-transfer position
-            // (no $copy() injection needed), but the wrapper must still be stripped
-            // so no StealExpression survives to codegen.
             case ExpressionStatement es:
             {
                 Expression stripped = StripStealFromExpr(expr: es.Expression);
@@ -215,7 +226,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
 
             case DiscardStatement ds:
             {
-                // Lower discard to a plain expression statement ??the return value is
+                // Lower discard to a plain expression statement -> the return value is
                 // already dropped by not assigning it. The 'discard' keyword is codegen noise.
                 Expression stripped = StripStealFromExpr(expr: ds.Expression);
                 return new ExpressionStatement(Expression: stripped, Location: ds.Location);
@@ -226,7 +237,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         }
     }
 
-    // ?�?� Core lowering ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
+    // Core lowering
 
     /// <summary>
     /// Applies steal-stripping and <c>$copy()</c> injection to a single expression
@@ -234,13 +245,13 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
     /// </summary>
     private static Expression LowerOwnership(Expression expr)
     {
-        // Steal: strip the wrapper ??ownership is transferred as a plain value move.
+        // Preserve explicit steal so later stages can observe the ownership transfer site.
         if (expr is StealExpression steal)
-            return steal.Operand;
+            return steal;
 
         // $copy() injection: only for borrowed-reference expressions of record type.
         // Direct-backend-type records (S64, U32, Bool, etc.) map to LLVM primitives and
-        // are copied by value at the IR level ??no $copy() needed or generated.
+        // are copied by value at the IR level -> no $copy() needed or generated.
         if (IsBorrowedReference(expr: expr) &&
             expr.ResolvedType is RecordTypeInfo { HasDirectBackendType: false })
             return MakeCopyCall(source: expr);
@@ -258,16 +269,15 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         expr is IdentifierExpression or MemberExpression;
 
     /// <summary>
-    /// Recursively strips all <see cref="StealExpression"/> wrappers from an expression tree
-    /// without injecting <c>$copy()</c>. Used for non-ownership-transfer positions such as
-    /// call arguments, where <c>steal</c> is a compile-time invalidation marker only.
+    /// Recursively lowers nested expressions without erasing explicit <see cref="StealExpression"/>
+    /// markers. Steal wrappers are preserved for later ownership-transfer handling.
     /// </summary>
     private static Expression StripStealFromExpr(Expression expr)
     {
         switch (expr)
         {
             case StealExpression steal:
-                return StripStealFromExpr(expr: steal.Operand);
+                return steal;
 
             case CallExpression call:
             {
@@ -312,9 +322,12 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             PropertyName: "$copy",
             Location: _loc) { ResolvedType = source.ResolvedType };
 
+        CallLoweringKind kind = source.ResolvedType is GenericParameterTypeInfo or ProtocolTypeInfo
+            ? CallLoweringKind.RuntimeDispatch
+            : CallLoweringKind.DirectMemberRoutine;
         return new CallExpression(
             Callee: callee,
             Arguments: [],
-            Location: _loc) { ResolvedType = source.ResolvedType };
+            Location: _loc) { ResolvedType = source.ResolvedType, LoweringKind = kind };
     }
 }

@@ -1,8 +1,9 @@
-namespace Compiler.Instantiation.Passes;
-
 using Compiler.Desugaring;
+using Compiler.Desugaring.Passes;
 using Compiler.Postprocessing.Passes;
 using SyntaxTree;
+
+namespace Compiler.Instantiation.Passes;
 
 /// <summary>
 /// Phase 6 closure pass: reuse the existing generic monomorphization implementation, but run it
@@ -15,20 +16,21 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
         var adapter = new DesugaringContext(registry: ctx.Registry,
             routineBodies: ctx.RoutineBodies,
             target: ctx.Target,
-            buildMode: ctx.BuildMode);
+            buildMode: ctx.BuildMode) { SaTiming = ctx.SaTiming };
 
         foreach ((string key, Statement body) in ctx.VariantBodies)
         {
             adapter.VariantBodies[key] = body;
         }
 
-        foreach ((string key, MonomorphizedBody body) in ctx.PreMonomorphizedBodies)
+        foreach ((string key, MonomorphizedBody body) in ctx.InstantiatedGenericBodies)
         {
-            adapter.PreMonomorphizedBodies[key] = body;
+            adapter.InstantiatedGenericBodies[key] = body;
         }
 
         new GenericMonomorphizationPass(ctx: adapter).RunGlobal();
-        new BuilderServiceInliningPass(ctx: adapter).RunOnPreMonomorphizedBodies();
+        new GenericCallLoweringPass(ctx: adapter).RunOnInstantiatedGenericBodies();
+        new BuilderServiceInliningPass(ctx: adapter).RunOnInstantiatedGenericBodies();
 
         ctx.VariantBodies.Clear();
         foreach ((string key, Statement body) in adapter.VariantBodies)
@@ -36,10 +38,10 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
             ctx.VariantBodies[key] = body;
         }
 
-        ctx.PreMonomorphizedBodies.Clear();
-        foreach ((string key, MonomorphizedBody body) in adapter.PreMonomorphizedBodies)
+        ctx.InstantiatedGenericBodies.Clear();
+        foreach ((string key, MonomorphizedBody body) in adapter.InstantiatedGenericBodies)
         {
-            ctx.PreMonomorphizedBodies[key] = body;
+            ctx.InstantiatedGenericBodies[key] = body;
         }
     }
 }

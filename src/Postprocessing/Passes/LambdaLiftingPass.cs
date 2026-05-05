@@ -1,15 +1,16 @@
-using Compiler.Lexer;
+using SyntaxTree;
 using TypeModel.Enums;
 using TypeModel.Symbols;
 using TypeModel.Types;
-using SyntaxTree;
 
 namespace Compiler.Postprocessing.Passes;
 
 /// <summary>
-/// Phase 7 pass: lift non-capturing lambdas into synthesized top-level routines after
-/// verification is complete. True local captures still require closure lowering and are
-/// rejected here instead of leaking into codegen.
+/// Phase 7 pass: lift lambdas into synthesized top-level routines after verification is complete.
+/// Non-capturing lambdas are lifted as-is. Capturing lambdas (explicit <c>given</c> clause) are
+/// supported only in the immediately-invoked form — captures become leading parameters and the
+/// call site is expanded inline. Escaping capturing lambdas (stored in variables or passed as
+/// arguments) still require full closure lowering and are rejected here.
 /// </summary>
 internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
 {
@@ -424,6 +425,14 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
                         inheritedGenericConstraints: inheritedGenericConstraints,
                         includeMe: includeMe)
                 }, unary);
+
+            case CallExpression call when call.Callee is LambdaExpression capLambda
+                                         && capLambda.Captures is { Count: > 0 }:
+                return LiftCapturingLambdaIife(call, capLambda,
+                    scope: scope,
+                    inheritedGenericParameters: inheritedGenericParameters,
+                    inheritedGenericConstraints: inheritedGenericConstraints,
+                    includeMe: includeMe);
 
             case CallExpression call:
                 return CopyResolvedType(call with
@@ -871,11 +880,18 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
         bool includeMe)
     {
         HashSet<string> localCaptures = CollectLocalCaptures(lambda, scope);
+        // given-declared captures are handled by LiftCapturingLambdaIife (IIFE path).
+        // Exclude them here — LiftLambda is only reached for escaping (non-IIFE) lambdas.
+        if (lambda.Captures != null)
+            localCaptures.ExceptWith(lambda.Captures);
         if (localCaptures.Count > 0)
         {
-            string captures = string.Join(", ", localCaptures.OrderBy(name => name));
-            throw new InvalidOperationException(
-                $"Capturing lambda requires closure lowering and cannot yet be lowered in Phase 7. Captures: {captures}");
+            // SA has already reported this capture error. Return an error expression
+            // so the pipeline doesn't crash — codegen is skipped when SA errors exist.
+            return new IdentifierExpression(Name: "__capture_error__", Location: lambda.Location)
+            {
+                ResolvedType = ErrorTypeInfo.Instance
+            };
         }
 
         if (includeMe && ContainsIdentifier(lambda.Body, "me"))
@@ -892,8 +908,8 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
 
         string liftedName =
             $"__lambda_{lambda.Location.Line}_{lambda.Location.Column}_{_lambdaCounter++}";
-        List<string>? genericParameters = inheritedGenericParameters?.ToList();
-        List<GenericConstraintDeclaration>? genericConstraints =
+        var genericParameters = inheritedGenericParameters?.ToList();
+        var genericConstraints =
             inheritedGenericConstraints?.ToList();
 
         var lambdaScope = new HashSet<string>(StringComparer.Ordinal);
@@ -949,6 +965,248 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
         {
             ResolvedType = lambda.ResolvedType
         };
+    }
+
+    private Expression LiftCapturingLambdaIife(
+        CallExpression call,
+        LambdaExpression lambda,
+        HashSet<string> scope,
+        List<string>? inheritedGenericParameters,
+        List<GenericConstraintDeclaration>? inheritedGenericConstraints,
+        bool includeMe)
+    {
+        if (lambda.ResolvedType is not RoutineTypeInfo routineType)
+        {
+            throw new InvalidOperationException(
+                "Capturing lambda expression reached postprocessing without a resolved RoutineTypeInfo.");
+        }
+
+        List<string> captureNames = lambda.Captures!;
+        Dictionary<string, TypeInfo> captureTypes = CollectCaptureTypesFromBody(lambda.Body, captureNames);
+
+        string liftedName =
+            $"__lambda_{lambda.Location.Line}_{lambda.Location.Column}_{_lambdaCounter++}";
+        var genericParameters = inheritedGenericParameters?.ToList();
+        var genericConstraints = inheritedGenericConstraints?.ToList();
+
+        // Capture params use the original capture names so the body needs no renaming.
+        var captureParams = new List<Parameter>(capacity: captureNames.Count);
+        var captureParamInfos = new List<ParameterInfo>(capacity: captureNames.Count);
+        foreach (string captureName in captureNames)
+        {
+            TypeInfo captureType = captureTypes.GetValueOrDefault(captureName, ErrorTypeInfo.Instance);
+            captureParams.Add(new Parameter(
+                Name: captureName,
+                Type: TypeInfoToTypeExpression(captureType, lambda.Location),
+                DefaultValue: null,
+                Location: lambda.Location));
+            captureParamInfos.Add(new ParameterInfo(name: captureName, type: captureType));
+        }
+
+        // Lifted body scope: capture params + lambda params.
+        var lambdaScope = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string captureName in captureNames)
+            lambdaScope.Add(item: captureName);
+        foreach (Parameter param in lambda.Parameters)
+            lambdaScope.Add(item: param.Name);
+
+        Expression loweredBody = RewriteExpression(lambda.Body,
+            scope: lambdaScope,
+            inheritedGenericParameters: genericParameters,
+            inheritedGenericConstraints: genericConstraints,
+            includeMe: false);
+
+        List<Parameter> lambdaParams = BuildLiftedParameters(lambda, routineType);
+        List<ParameterInfo> lambdaParamInfos = BuildLiftedParameterInfos(lambda, routineType);
+
+        var allParams = new List<Parameter>(capacity: captureParams.Count + lambdaParams.Count);
+        allParams.AddRange(captureParams);
+        allParams.AddRange(lambdaParams);
+
+        var allParamInfos = new List<ParameterInfo>(capacity: captureParamInfos.Count + lambdaParamInfos.Count);
+        allParamInfos.AddRange(captureParamInfos);
+        allParamInfos.AddRange(lambdaParamInfos);
+
+        var liftedRoutine = new RoutineDeclaration(
+            Name: liftedName,
+            Parameters: allParams,
+            ReturnType: routineType.ReturnType != null
+                ? TypeInfoToTypeExpression(routineType.ReturnType, lambda.Location)
+                : null,
+            Body: new BlockStatement(
+                Statements:
+                [
+                    new ReturnStatement(Value: loweredBody, Location: lambda.Location)
+                ],
+                Location: lambda.Location),
+            Visibility: VisibilityModifier.Secret,
+            Annotations: [],
+            Location: lambda.Location,
+            GenericParameters: genericParameters,
+            GenericConstraints: genericConstraints,
+            IsFailable: false,
+            Storage: StorageClass.None,
+            Async: AsyncStatus.None,
+            IsDangerous: false);
+        _liftedRoutines.Add(item: liftedRoutine);
+
+        ctx.Registry.RegisterRoutine(routine: new RoutineInfo(name: liftedName)
+        {
+            Kind = RoutineKind.Function,
+            Parameters = allParamInfos,
+            ReturnType = routineType.ReturnType,
+            Visibility = VisibilityModifier.Secret,
+            Location = lambda.Location,
+            Module = _currentModuleName,
+            ModulePath = _currentModuleName?.Split('/'),
+            GenericParameters = genericParameters,
+            GenericConstraints = genericConstraints,
+            IsSynthesized = true
+        });
+
+        // Inject capture args (named, using original capture names) before the original call args.
+        var callArgs = new List<Expression>(capacity: captureNames.Count + call.Arguments.Count);
+        foreach (string captureName in captureNames)
+        {
+            captureTypes.TryGetValue(captureName, out TypeInfo? capType);
+            callArgs.Add(new NamedArgumentExpression(
+                Name: captureName,
+                Value: new IdentifierExpression(Name: captureName, Location: lambda.Location)
+                {
+                    ResolvedType = capType
+                },
+                Location: lambda.Location));
+        }
+
+        foreach (Expression arg in call.Arguments)
+        {
+            callArgs.Add(RewriteExpression(arg,
+                scope: scope,
+                inheritedGenericParameters: inheritedGenericParameters,
+                inheritedGenericConstraints: inheritedGenericConstraints,
+                includeMe: includeMe));
+        }
+
+        return CopyResolvedType(call with
+        {
+            Callee = new IdentifierExpression(Name: liftedName, Location: lambda.Location),
+            Arguments = callArgs
+        }, call);
+    }
+
+    private static Dictionary<string, TypeInfo> CollectCaptureTypesFromBody(
+        Expression body, IReadOnlyList<string> captureNames)
+    {
+        var targets = new HashSet<string>(captureNames, StringComparer.Ordinal);
+        var result = new Dictionary<string, TypeInfo>(StringComparer.Ordinal);
+        ScanExprForIdentifierTypes(body, targets, result);
+        return result;
+    }
+
+    private static void ScanExprForIdentifierTypes(
+        Expression expr, HashSet<string> targets, Dictionary<string, TypeInfo> result)
+    {
+        if (result.Count == targets.Count) return;
+
+        if (expr is IdentifierExpression id &&
+            targets.Contains(id.Name) &&
+            id.ResolvedType != null)
+        {
+            result.TryAdd(id.Name, id.ResolvedType);
+            if (result.Count == targets.Count) return;
+        }
+
+        foreach (Expression child in GetSubExpressions(expr))
+        {
+            ScanExprForIdentifierTypes(child, targets, result);
+            if (result.Count == targets.Count) return;
+        }
+    }
+
+    private static IEnumerable<Expression> GetSubExpressions(Expression expr)
+    {
+        switch (expr)
+        {
+            case LambdaExpression:
+                yield break;
+            case BinaryExpression b:
+                yield return b.Left;
+                yield return b.Right;
+                break;
+            case UnaryExpression u:
+                yield return u.Operand;
+                break;
+            case CallExpression c:
+                yield return c.Callee;
+                foreach (Expression arg in c.Arguments) yield return arg;
+                break;
+            case MemberExpression m:
+                yield return m.Object;
+                break;
+            case OptionalMemberExpression o:
+                yield return o.Object;
+                break;
+            case IndexExpression i:
+                yield return i.Object;
+                yield return i.Index;
+                break;
+            case SliceExpression s:
+                yield return s.Object;
+                yield return s.Start;
+                yield return s.End;
+                break;
+            case ConditionalExpression c:
+                yield return c.Condition;
+                yield return c.TrueExpression;
+                yield return c.FalseExpression;
+                break;
+            case RangeExpression r:
+                yield return r.Start;
+                yield return r.End;
+                if (r.Step != null) yield return r.Step;
+                break;
+            case CreatorExpression c:
+                foreach ((_, Expression val) in c.MemberVariables) yield return val;
+                break;
+            case NamedArgumentExpression n:
+                yield return n.Value;
+                break;
+            case ListLiteralExpression l:
+                foreach (Expression e in l.Elements) yield return e;
+                break;
+            case SetLiteralExpression s:
+                foreach (Expression e in s.Elements) yield return e;
+                break;
+            case DictLiteralExpression d:
+                foreach ((Expression k, Expression v) in d.Pairs) { yield return k; yield return v; }
+                break;
+            case TupleLiteralExpression t:
+                foreach (Expression e in t.Elements) yield return e;
+                break;
+            case BlockExpression b:
+                yield return b.Value;
+                break;
+            case StealExpression s:
+                yield return s.Operand;
+                break;
+            case TypeConversionExpression c:
+                yield return c.Expression;
+                break;
+            case GenericMethodCallExpression g:
+                yield return g.Object;
+                foreach (Expression arg in g.Arguments) yield return arg;
+                break;
+            case GenericMemberExpression g:
+                yield return g.Object;
+                break;
+            case InsertedTextExpression ins:
+                foreach (InsertedTextPart part in ins.Parts)
+                    if (part is ExpressionPart ep) yield return ep.Expression;
+                break;
+            case WhenExpression we:
+                if (we.Expression != null) yield return we.Expression;
+                break;
+        }
     }
 
     private Pattern RewritePatternExpressions(Pattern pattern,

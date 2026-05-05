@@ -1,6 +1,6 @@
-namespace TypeModel.Types;
-
 using SyntaxTree;
+
+namespace TypeModel.Types;
 
 /// <summary>
 /// Information about a single member in a type-based variant.

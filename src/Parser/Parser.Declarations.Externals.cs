@@ -1,9 +1,9 @@
-namespace Compiler.Parser;
-
-using Lexer;
+using Compiler.Diagnostics;
+using Compiler.Lexer;
 using SyntaxTree;
-using Diagnostics;
 using TypeModel.Enums;
+
+namespace Compiler.Parser;
 
 /// <summary>
 /// Partial class containing external block and external routine declaration parsing.
@@ -134,7 +134,7 @@ public partial class Parser
         Consume(type: TokenType.Newline,
             errorMessage: "Expected newline after external block header");
 
-        var declarations = new List<Declaration>();
+        var declarations = new List<SyntaxTree.Declaration>();
 
         if (Check(type: TokenType.Indent))
         {

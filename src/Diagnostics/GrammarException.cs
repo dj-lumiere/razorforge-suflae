@@ -6,6 +6,12 @@ namespace Compiler.Diagnostics;
 /// Exception thrown for grammar (lexer/parser) errors in both RazorForge and Suflae.
 /// Contains diagnostic code, message, source location, and language.
 /// </summary>
+/// <param name="code">The code.</param>
+/// <param name="message">The message.</param>
+/// <param name="fileName">The file name.</param>
+/// <param name="line">The line.</param>
+/// <param name="column">The column.</param>
+/// <param name="language">The language.</param>
 public class GrammarException(
     GrammarDiagnosticCode code,
     string message,

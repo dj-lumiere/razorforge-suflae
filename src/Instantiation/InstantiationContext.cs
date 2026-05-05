@@ -10,18 +10,39 @@ namespace Compiler.Instantiation;
 /// </summary>
 public sealed class InstantiationContext
 {
+    /// <summary>
+    /// Semantic registry used to resolve generic definitions and concrete instantiations.
+    /// </summary>
     public TypeRegistry Registry { get; }
 
+    /// <summary>
+    /// User programs that seed reachable generic type and routine discovery.
+    /// </summary>
     public IReadOnlyList<(Program Program, string FilePath, string Module)> UserPrograms { get; }
 
+    /// <summary>
+    /// Verified routine bodies keyed by registry key, used as source bodies for instantiation.
+    /// </summary>
     public IReadOnlyDictionary<string, Statement> RoutineBodies { get; }
 
+    /// <summary>
+    /// Synthesized error-handling variant bodies that may contain reachable generic calls.
+    /// </summary>
     public Dictionary<string, Statement> VariantBodies { get; }
 
-    public Dictionary<string, MonomorphizedBody> PreMonomorphizedBodies { get; }
+    /// <summary>
+    /// Concrete generic bodies produced by instantiation and later consumed by codegen.
+    /// </summary>
+    public Dictionary<string, MonomorphizedBody> InstantiatedGenericBodies { get; }
 
+    /// <summary>
+    /// Target platform used when generic expansion depends on platform constants.
+    /// </summary>
     public TargetConfig Target { get; }
 
+    /// <summary>
+    /// Build mode used when generic expansion depends on compile-time configuration.
+    /// </summary>
     public RfBuildMode BuildMode { get; }
 
     /// <summary>
@@ -34,11 +55,17 @@ public sealed class InstantiationContext
     /// </summary>
     public HashSet<string> ReachableGenericRoutines { get; } = [];
 
+    /// <summary>When true, passes print per-iteration diagnostics to stderr.</summary>
+    public bool SaTiming { get; set; }
+
+    /// <summary>
+    /// Initializes shared state for Phase 6 generic reachability and monomorphization.
+    /// </summary>
     public InstantiationContext(TypeRegistry registry,
         IReadOnlyList<(Program Program, string FilePath, string Module)> userPrograms,
         IReadOnlyDictionary<string, Statement> routineBodies,
         Dictionary<string, Statement>? variantBodies = null,
-        Dictionary<string, MonomorphizedBody>? preMonomorphizedBodies = null,
+        Dictionary<string, MonomorphizedBody>? instantiatedGenericBodies = null,
         TargetConfig? target = null,
         RfBuildMode buildMode = RfBuildMode.Debug)
     {
@@ -46,7 +73,7 @@ public sealed class InstantiationContext
         UserPrograms = userPrograms;
         RoutineBodies = routineBodies;
         VariantBodies = variantBodies ?? [];
-        PreMonomorphizedBodies = preMonomorphizedBodies ?? [];
+        InstantiatedGenericBodies = instantiatedGenericBodies ?? [];
         Target = target ?? TargetConfig.ForCurrentHost();
         BuildMode = buildMode;
     }

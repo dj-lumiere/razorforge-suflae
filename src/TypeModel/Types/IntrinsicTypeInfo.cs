@@ -1,6 +1,6 @@
-namespace TypeModel.Types;
-
 using TypeModel.Enums;
+
+namespace TypeModel.Types;
 
 /// <summary>
 /// LLVM intrinsic types (@intrinsic.*) - internal implementation details only.

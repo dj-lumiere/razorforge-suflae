@@ -1,6 +1,6 @@
-namespace Compiler.Synthesis;
-
 using TypeModel.Types;
+
+namespace Compiler.Synthesis;
 
 /// <summary>
 /// Result of analyzing throw/absent keywords in a failable function body.

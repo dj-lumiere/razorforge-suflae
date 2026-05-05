@@ -1,20 +1,18 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for record 'with' expression secret member validation:
-/// #45: with secret member prohibition
+/// Contains tests for record secret with.
 /// </summary>
 public class RecordSecretWithTests
 {
     #region #45: With secret member prohibition
     /// <summary>
-    /// Tests Analyze_WithOpenMemberVariable_NoError.
+    /// Verifies semantic analysis behavior for with open member variable without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -34,7 +32,7 @@ public class RecordSecretWithTests
             filter: e => e.Code == SemanticDiagnosticCode.WithSecretMemberProhibited);
     }
     /// <summary>
-    /// Tests Analyze_WithSecretMemberVariable_ReportsError.
+    /// Verifies semantic analysis behavior for with secret member variable and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -54,7 +52,7 @@ public class RecordSecretWithTests
             filter: e => e.Code == SemanticDiagnosticCode.WithSecretMemberProhibited);
     }
     /// <summary>
-    /// Tests Analyze_WithPostedMemberVariable_NoError.
+    /// Verifies semantic analysis behavior for with posted member variable without unexpected diagnostics.
     /// </summary>
 
     [Fact]

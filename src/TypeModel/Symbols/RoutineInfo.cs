@@ -1,10 +1,12 @@
+using Compiler.Resolution;
+using Verification.Enums;
+using SyntaxTree;
+using TypeModel.Enums;
+using TypeModel.Types;
+
 namespace TypeModel.Symbols;
 
-using TypeModel.Enums;
-using SemanticVerification.Enums;
-using SyntaxTree;
-using TypeModel.Types;
-using TypeSymbol = TypeModel.Types.TypeInfo;
+using TypeSymbol = TypeInfo;
 
 /// <summary>
 /// Information about a routine (standalone routine, member routine, creator).
@@ -69,20 +71,51 @@ public sealed class RoutineInfo
     }
 
     /// <summary>
-    /// Stable key for registry lookup: "BaseName#Param1,Param2".
-    /// For zero-parameter routines, equals BaseName.
+    /// Stable key for registry lookup: "BaseName[TypeArgs]#Param1,Param2".
+    /// For non-generic or unresolved routines, the type-argument segment is omitted.
+    /// For zero-parameter routines, the key is just "BaseName" or "BaseName[TypeArgs]".
     /// </summary>
     public string RegistryKey
     {
         get
         {
-            string baseName = BaseName;
+            string baseName = OwnerType != null
+                ? $"{GetTypeIdentity(type: OwnerType)}.{Name}"
+                : string.IsNullOrEmpty(value: Module)
+                    ? Name
+                    : $"{Module}.{Name}";
+            if (TypeArguments is { Count: > 0 })
+            {
+                string typeArgs = string.Join(separator: ",",
+                    values: TypeArguments.Select(GetTypeIdentity));
+                baseName = $"{baseName}[{typeArgs}]";
+            }
+
             if (Parameters.Count == 0) return baseName;
 
             string paramTypes = string.Join(separator: ",",
-                values: Parameters.Select(selector: p => p.Type.Name));
+                values: Parameters.Select(selector: p => GetTypeIdentity(type: p.Type)));
             return $"{baseName}#{paramTypes}";
         }
+    }
+
+    /// <summary>
+    /// Stable type identity for cache keys and overload matching.
+    /// Uses fully-qualified resolved type names while preserving generic-parameter
+    /// syntax for open generic definitions like <c>List[T]</c>.
+    /// </summary>
+    public static string GetTypeIdentity(TypeSymbol type)
+    {
+        if (type.GenericParameters is { Count: > 0 } && !type.Name.Contains(value: '['))
+        {
+            string baseName = string.IsNullOrEmpty(value: type.Module)
+                ? type.Name
+                : $"{type.Module}.{type.Name}";
+            return
+                $"{baseName}[{string.Join(separator: ", ", values: type.GenericParameters)}]";
+        }
+
+        return type.FullName;
     }
 
     /// <summary>The module-qualified name (e.g., "Core/S8.$add", "IO/Console.show").</summary>
@@ -384,6 +417,19 @@ public sealed class RoutineInfo
                 returnType: substitutedReturn) { IsFailable = routineType.IsFailable };
         }
 
+        if (type is TupleTypeInfo tupleType)
+        {
+            var substitutedElements = tupleType.ElementTypes
+                .Select(selector => (TypeInfo)SubstituteType(type: selector, substitution: substitution))
+                .ToList();
+            bool anyChanged = substitutedElements.Where((element, index) =>
+                    !ReferenceEquals(objA: element, objB: tupleType.ElementTypes[index: index]))
+                .Any();
+            return anyChanged
+                ? new TupleTypeInfo(elementTypes: substitutedElements)
+                : tupleType;
+        }
+
         if (type is { IsGenericResolution: true, TypeArguments: not null })
         {
             var newArgs = type.TypeArguments
@@ -394,7 +440,7 @@ public sealed class RoutineInfo
             // Route through the ambient TypeRegistry so entity-type specializations
             // (e.g. Maybe[Text] → { Hijacked[T] } layout) are picked up instead of
             // blindly using the primary generic definition's layout.
-            Compiler.Resolution.TypeRegistry? registry = Compiler.Resolution.TypeRegistry.Ambient;
+            TypeRegistry? registry = TypeRegistry.Ambient;
 
             // Use GenericDefinition to create the new resolution (not the resolution itself)
             if (type is EntityTypeInfo { GenericDefinition: not null } entityType)

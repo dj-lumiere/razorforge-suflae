@@ -1,18 +1,17 @@
-﻿using Xunit;
+using SyntaxTree;
 
 namespace RazorForge.Tests.Parser;
 
-using SyntaxTree;
 using static TestHelpers;
 
 /// <summary>
-/// Tests for parsing error handling syntax: failable routines (!), throw, absent.
+/// Contains tests for error handling.
 /// </summary>
 public class ErrorHandlingTests
 {
     #region Failable Routine Declaration
     /// <summary>
-    /// Tests Parse_FailableRoutine_WithBang.
+    /// Verifies that the parser accepts failable routine with bang.
     /// </summary>
 
     [Fact]
@@ -30,7 +29,7 @@ public class ErrorHandlingTests
         Assert.True(condition: routine.IsFailable);
     }
     /// <summary>
-    /// Tests Parse_FailableRoutine_WithParameter.
+    /// Verifies that the parser accepts failable routine with parameter.
     /// </summary>
 
     [Fact]
@@ -48,7 +47,7 @@ public class ErrorHandlingTests
         Assert.Single(collection: routine.Parameters);
     }
     /// <summary>
-    /// Tests Parse_FailableMethod_WithBang.
+    /// Verifies that the parser accepts failable method with bang.
     /// </summary>
 
     [Fact]
@@ -66,7 +65,7 @@ public class ErrorHandlingTests
         Assert.True(condition: routine.IsFailable);
     }
     /// <summary>
-    /// Tests Parse_NonFailableRoutine.
+    /// Verifies that the parser accepts non failable routine.
     /// </summary>
 
     [Fact]
@@ -87,7 +86,7 @@ public class ErrorHandlingTests
 
     #region Throw Statement
     /// <summary>
-    /// Tests Parse_ThrowStatement_Simple.
+    /// Verifies that the parser accepts throw statement simple.
     /// </summary>
 
     [Fact]
@@ -117,7 +116,7 @@ public class ErrorHandlingTests
         Assert.NotNull(@object: throwStmt);
     }
     /// <summary>
-    /// Tests Parse_ThrowStatement_WithExpression.
+    /// Verifies that the parser accepts throw statement with expression.
     /// </summary>
 
     [Fact]
@@ -144,7 +143,7 @@ public class ErrorHandlingTests
 
     #region Absent Statement
     /// <summary>
-    /// Tests Parse_AbsentStatement.
+    /// Verifies that the parser accepts absent statement.
     /// </summary>
 
     [Fact]
@@ -173,7 +172,7 @@ public class ErrorHandlingTests
         Assert.NotNull(@object: absentStmt);
     }
     /// <summary>
-    /// Tests Parse_AbsentStatement_InUnless.
+    /// Verifies that the parser accepts absent statement in unless.
     /// </summary>
 
     [Fact]
@@ -208,7 +207,7 @@ public class ErrorHandlingTests
 
     #region Combined Throw and Absent
     /// <summary>
-    /// Tests Parse_RoutineWithBothThrowAndAbsent.
+    /// Verifies that the parser accepts routine with both throw and absent.
     /// </summary>
 
     [Fact]
@@ -251,7 +250,7 @@ public class ErrorHandlingTests
 
     #region Maybe Type (?)
     /// <summary>
-    /// Tests Parse_MaybeReturnType.
+    /// Verifies that the parser accepts maybe return type.
     /// </summary>
 
     [Fact]
@@ -271,7 +270,7 @@ public class ErrorHandlingTests
         Assert.NotNull(@object: routine.ReturnType);
     }
     /// <summary>
-    /// Tests Parse_MaybeParameter.
+    /// Verifies that the parser accepts maybe parameter.
     /// </summary>
 
     [Fact]
@@ -289,7 +288,7 @@ public class ErrorHandlingTests
         Assert.Single(collection: routine.Parameters);
     }
     /// <summary>
-    /// Tests Parse_MaybeVariable.
+    /// Verifies that the parser accepts maybe variable.
     /// </summary>
 
     [Fact]
@@ -308,7 +307,7 @@ public class ErrorHandlingTests
 
     #region None Coalescing (??)
     /// <summary>
-    /// Tests Parse_NoneCoalescingOperator.
+    /// Verifies that the parser accepts none coalescing operator.
     /// </summary>
 
     [Fact]
@@ -323,7 +322,7 @@ public class ErrorHandlingTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_ChainedNoneCoalescing.
+    /// Verifies that the parser accepts chained none coalescing.
     /// </summary>
 
     [Fact]
@@ -344,7 +343,7 @@ public class ErrorHandlingTests
 
     #region Pattern Matching with Error Types
     /// <summary>
-    /// Tests Parse_WhenExpression_WithMaybe.
+    /// Verifies that the parser accepts when expression with maybe.
     /// </summary>
 
     [Fact]
@@ -376,7 +375,7 @@ public class ErrorHandlingTests
 
     #region Error Cases
     /// <summary>
-    /// Tests Parse_ThrowInNonFailableRoutine_ShouldParse.
+    /// Verifies that the parser accepts throw in non failable routine so semantic analysis can validate it.
     /// </summary>
 
     [Fact]
@@ -394,7 +393,7 @@ public class ErrorHandlingTests
         // Semantic analysis will catch this error
     }
     /// <summary>
-    /// Tests Parse_AbsentInNonFailableRoutine_ShouldParse.
+    /// Verifies that the parser accepts absent in non failable routine so semantic analysis can validate it.
     /// </summary>
 
     [Fact]
@@ -411,7 +410,7 @@ public class ErrorHandlingTests
         Assert.NotNull(@object: program);
     }
     /// <summary>
-    /// Tests Parse_ThrowWithoutExpression_Throws.
+    /// Verifies that the parser accepts throw without expression and fails in the expected way.
     /// </summary>
 
     [Fact]

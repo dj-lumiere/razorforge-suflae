@@ -2,7 +2,7 @@ module Core
 
 ### Represents immutable UTF-32 text with constant-time character indexing.
 ### `Text` is optimized for in-memory text processing rather than compact storage.
-entity Text obeys Addable, Ordered, TextRepeatable
+entity Text obeys Addable, Ordered, Hashable, TextRepeatable
   ### Stores the character buffer.
   secret data: Hijacked[Character]
   ### Stores the number of characters in the buffer.
@@ -324,6 +324,16 @@ routine Text.$cmp(other: Referring[Text]) -> ComparisonSign
   if me.count > other_count
     return ComparisonSign.ME_LARGE
   return ComparisonSign.SAME
+
+### Returns an xxHash64 hash of this value.
+### Hashing combines character code points using the xxHash64 round function.
+### :returns: The resulting `U64` hash value.
+@readonly
+routine Text.$hash() -> U64
+  var h = __hash_leaf(v: me.count)
+  for i in 0u64 til me.count
+    h = __hash_round(acc: h, h: __hash_leaf(v: U64(me[i].codepoint())))
+  return __hash_finalize(h)
 
 # Search
 

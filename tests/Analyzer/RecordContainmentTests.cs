@@ -1,21 +1,18 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for record fixed-size containment validation.
-/// Records can only contain value types (records, choices, value tuples) and Hijacked&lt;T&gt;.
-/// Entities, wrappers (handles/tokens), and other reference types are not allowed.
+/// Contains tests for record containment.
 /// </summary>
 public class RecordContainmentTests
 {
     #region Valid Record MemberVariables (no errors expected)
     /// <summary>
-    /// Tests Analyze_RecordWithPrimitiveMemberVariables_NoErrors.
+    /// Verifies semantic analysis behavior for record with primitive member variables without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -32,7 +29,7 @@ public class RecordContainmentTests
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
     /// <summary>
-    /// Tests Analyze_RecordWithRecordMemberVariable_NoErrors.
+    /// Verifies semantic analysis behavior for record with record member variable without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -50,7 +47,7 @@ public class RecordContainmentTests
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
     /// <summary>
-    /// Tests Analyze_RecordWithChoiceMemberVariable_NoErrors.
+    /// Verifies semantic analysis behavior for record with choice member variable without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -72,7 +69,7 @@ public class RecordContainmentTests
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
     /// <summary>
-    /// Tests Analyze_GenericRecordWithTypeParameter_NoErrors.
+    /// Verifies semantic analysis behavior for generic record with type parameter without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -89,7 +86,7 @@ public class RecordContainmentTests
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
     /// <summary>
-    /// Tests Analyze_GenericRecordMultipleTypeParams_NoErrors.
+    /// Verifies semantic analysis behavior for generic record multiple type params without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -106,6 +103,9 @@ public class RecordContainmentTests
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
 
+    /// <summary>
+    /// Verifies semantic analysis behavior for record with retained field without unexpected diagnostics.
+    /// </summary>
     [Fact]
     public void Analyze_RecordWithRetainedField_NoErrors()
     {
@@ -121,6 +121,9 @@ public class RecordContainmentTests
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
 
+    /// <summary>
+    /// Verifies semantic analysis behavior for record with shared field without unexpected diagnostics.
+    /// </summary>
     [Fact]
     public void Analyze_RecordWithSharedField_NoErrors()
     {
@@ -136,6 +139,9 @@ public class RecordContainmentTests
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
 
+    /// <summary>
+    /// Verifies semantic analysis behavior for record with hijacked field without unexpected diagnostics.
+    /// </summary>
     [Fact]
     public void Analyze_RecordWithHijackedField_NoErrors()
     {
@@ -151,6 +157,9 @@ public class RecordContainmentTests
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
 
+    /// <summary>
+    /// Verifies semantic analysis behavior for nested record with retained field without unexpected diagnostics.
+    /// </summary>
     [Fact]
     public void Analyze_NestedRecordWithRetainedField_NoErrors()
     {
@@ -173,7 +182,7 @@ public class RecordContainmentTests
 
     #region Invalid Record MemberVariables (errors expected)
     /// <summary>
-    /// Tests Analyze_RecordWithEntityMemberVariable_ReportsError.
+    /// Verifies semantic analysis behavior for record with entity member variable and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -192,7 +201,7 @@ public class RecordContainmentTests
                          && e.Message.Contains("user"));
     }
     /// <summary>
-    /// Tests Analyze_RecordWithEntityMemberVariable_MessageMentionsValueTypes.
+    /// Verifies semantic analysis behavior for record with entity member variable message mentions value types.
     /// </summary>
 
     [Fact]
@@ -211,6 +220,9 @@ public class RecordContainmentTests
                          && e.Message.Contains("value type"));
     }
 
+    /// <summary>
+    /// Verifies semantic analysis behavior for record with viewed field and reports the expected error.
+    /// </summary>
     [Fact]
     public void Analyze_RecordWithViewedField_ReportsError()
     {
@@ -228,6 +240,9 @@ public class RecordContainmentTests
                          && e.Message.Contains("view"));
     }
 
+    /// <summary>
+    /// Verifies semantic analysis behavior for record with grasped field and reports the expected error.
+    /// </summary>
     [Fact]
     public void Analyze_RecordWithGraspedField_ReportsError()
     {
@@ -249,7 +264,7 @@ public class RecordContainmentTests
 
     #region With Expression on Non-Records
     /// <summary>
-    /// Tests Analyze_WithOnEntity_ReportsError.
+    /// Verifies semantic analysis behavior for with on entity and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -268,7 +283,7 @@ public class RecordContainmentTests
             filter: e => e.Code == SemanticDiagnosticCode.WithExpressionNotRecord);
     }
     /// <summary>
-    /// Tests Analyze_WithOnRecord_NoError.
+    /// Verifies semantic analysis behavior for with on record without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -288,7 +303,7 @@ public class RecordContainmentTests
             filter: e => e.Code == SemanticDiagnosticCode.WithExpressionNotRecord);
     }
     /// <summary>
-    /// Tests Analyze_WithOnRecordMultiMemberVariable_NoError.
+    /// Verifies semantic analysis behavior for with on record multi member variable without unexpected diagnostics.
     /// </summary>
 
     [Fact]

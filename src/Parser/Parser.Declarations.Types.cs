@@ -1,8 +1,8 @@
-namespace Compiler.Parser;
-
-using Lexer;
+using Compiler.Diagnostics;
+using Compiler.Lexer;
 using SyntaxTree;
-using Diagnostics;
+
+namespace Compiler.Parser;
 
 /// <summary>
 /// Partial class containing type, entity, and routine declaration parsing.
@@ -60,7 +60,7 @@ public partial class Parser
         constraints = ParseGenericConstraints(genericParams: genericParams,
             existingConstraints: constraints);
 
-        var members = new List<Declaration>();
+        var members = new List<SyntaxTree.Declaration>();
         bool hasPass = false;
 
         // Parse entity body as indented block
@@ -93,8 +93,14 @@ public partial class Parser
                     continue;
                 }
 
-                IAstNode node = ParseDeclaration();
-                if (node is Declaration member)
+                ISyntaxTreeNode node = ParseDeclaration();
+                if (node is RoutineDeclaration)
+                {
+                    throw ThrowParseError(code: GrammarDiagnosticCode.InvalidDeclarationInBody,
+                        message: "Routines cannot be declared inside entity bodies. Use 'routine EntityName.method()' syntax instead.");
+                }
+
+                if (node is SyntaxTree.Declaration member)
                 {
                     members.Add(item: member);
                 }
@@ -189,7 +195,7 @@ public partial class Parser
         constraints = ParseGenericConstraints(genericParams: genericParams,
             existingConstraints: constraints);
 
-        var members = new List<Declaration>();
+        var members = new List<SyntaxTree.Declaration>();
         bool hasPass = false;
 
         // Parse record body as indented block
@@ -221,8 +227,14 @@ public partial class Parser
                     continue;
                 }
 
-                IAstNode node = ParseDeclaration();
-                if (node is Declaration member)
+                ISyntaxTreeNode node = ParseDeclaration();
+                if (node is RoutineDeclaration)
+                {
+                    throw ThrowParseError(code: GrammarDiagnosticCode.InvalidDeclarationInBody,
+                        message: "Routines cannot be declared inside record bodies. Use 'routine RecordName.method()' syntax instead.");
+                }
+
+                if (node is SyntaxTree.Declaration member)
                 {
                     members.Add(item: member);
                 }
@@ -298,12 +310,12 @@ public partial class Parser
                 continue;
             }
 
-            // Check if it's a member routine - no visibility modifiers allowed in choice
+            // Inline routines are not allowed in choice bodies.
+            // Use 'routine ChoiceName.method()' external syntax instead.
             if (Check(type: TokenType.Routine))
             {
-                Advance(); // consume 'routine'
-                RoutineDeclaration method = ParseRoutineDeclaration();
-                methods.Add(item: method);
+                throw ThrowParseError(code: GrammarDiagnosticCode.InvalidDeclarationInBody,
+                    message: "Routines cannot be declared inside choice bodies. Use 'routine ChoiceName.method()' syntax instead.");
             }
             else
             {
@@ -411,7 +423,7 @@ public partial class Parser
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
         string name = ConsumeIdentifier(errorMessage: "Expected crashable type name");
 
-        var members = new List<Declaration>();
+        var members = new List<SyntaxTree.Declaration>();
 
         Consume(type: TokenType.Newline, errorMessage: "Expected newline after crashable header");
 
@@ -435,8 +447,8 @@ public partial class Parser
                     continue;
                 }
 
-                IAstNode node = ParseDeclaration();
-                if (node is Declaration member)
+                ISyntaxTreeNode node = ParseDeclaration();
+                if (node is SyntaxTree.Declaration member)
                     members.Add(item: member);
                 else
                     throw ThrowParseError(code: GrammarDiagnosticCode.InvalidDeclarationInBody,
@@ -625,8 +637,15 @@ public partial class Parser
 
         while (!Check(type: TokenType.Dedent) && !IsAtEnd)
         {
-            if (Match(type: TokenType.Newline))
+            if (Match(TokenType.Newline, TokenType.DocComment))
             {
+                continue;
+            }
+
+            // 'pass' is valid in a protocol body that defines no methods (marker protocol)
+            if (Match(type: TokenType.Pass))
+            {
+                Match(type: TokenType.Newline);
                 continue;
             }
 
@@ -721,8 +740,8 @@ public partial class Parser
             }
             else
             {
-                // Unknown token in protocol body, skip it
-                Advance();
+                throw ThrowParseError(code: GrammarDiagnosticCode.InvalidDeclarationInBody,
+                    message: $"Unexpected '{CurrentToken.Text}' in protocol body. Only 'routine' signatures are allowed.");
             }
         }
 
@@ -856,7 +875,7 @@ public partial class Parser
     /// Creates a type alias for cleaner code.
     /// </summary>
     /// <returns>A <see cref="DefineDeclaration"/> AST node.</returns>
-    private IAstNode ParseDefineDeclaration()
+    private ISyntaxTreeNode ParseDefineDeclaration(List<string>? annotations = null)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -867,7 +886,8 @@ public partial class Parser
 
         ConsumeStatementTerminator();
 
-        return new DefineDeclaration(OldName: oldName, NewName: newName, Location: location);
+        return new DefineDeclaration(OldName: oldName, NewName: newName, Location: location,
+            Annotations: annotations is { Count: > 0 } ? annotations : null);
     }
 
     /// <summary>

@@ -77,3 +77,8 @@ old
 /.cache/clangd/index/
 /scripts/
 /.dotnet_cli/.dotnet/
+/objrun/
+/.dotnet_cli_home/.dotnet/
+/NuGet.Offline.Config
+/.dotnet-cli/.dotnet/
+/.sonarqube

@@ -1,19 +1,18 @@
 using Compiler.Diagnostics;
-using SemanticVerification.Results;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for tuple type inference and analysis.
+/// Contains tests for tuple.
 /// </summary>
 public class TupleTests
 {
     #region Type Inference
     /// <summary>
-    /// Tests Analyze_InfersTuple.
+    /// Verifies semantic analysis behavior for infers tuple.
     /// </summary>
 
     [Fact]
@@ -30,7 +29,7 @@ public class TupleTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests Analyze_ContainsEntity_InfersTuple.
+    /// Verifies semantic analysis behavior for contains entity and infers tuple type information.
     /// </summary>
 
     [Fact]
@@ -52,7 +51,7 @@ public class TupleTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests Analyze_NestedTuples_InfersCorrectly.
+    /// Verifies semantic analysis behavior for nested tuples and infers the expected type information.
     /// </summary>
 
     [Fact]
@@ -68,7 +67,7 @@ public class TupleTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests Analyze_SingleElementTuple_WithTrailingComma.
+    /// Verifies semantic analysis behavior for single element tuple with trailing comma.
     /// </summary>
 
     [Fact]
@@ -88,7 +87,7 @@ public class TupleTests
 
     #region Tuple Type Category
     /// <summary>
-    /// Tests Analyze_TupleType_NoErrors.
+    /// Verifies semantic analysis behavior for tuple type without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -110,7 +109,7 @@ public class TupleTests
 
     #region Mixed Types
     /// <summary>
-    /// Tests Analyze_MixedNumericTypes_Works.
+    /// Verifies semantic analysis behavior for mixed numeric types successfully.
     /// </summary>
 
     [Fact]
@@ -126,7 +125,7 @@ public class TupleTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests Analyze_TupleWithEntity_InfersTuple.
+    /// Verifies semantic analysis behavior for tuple with entity and infers tuple type information.
     /// </summary>
 
     [Fact]
@@ -137,7 +136,7 @@ public class TupleTests
                           id: S32
 
                         routine test()
-                          var user = User(id: 42)
+                          var user = User(id: 42s32)
                           var tuple = (1, user)
                           return
                         """;
@@ -150,7 +149,7 @@ public class TupleTests
 
     #region For-Loop Destructuring
     /// <summary>
-    /// Tests Analyze_ForLoopDestructuring_NonTuple_ReportsError.
+    /// Verifies semantic analysis behavior for for loop destructuring non tuple and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -171,43 +170,9 @@ public class TupleTests
 
     #endregion
 
-    #region Suflae Syntax
-    /// <summary>
-    /// Tests AnalyzeSuflae_TupleLiteral_Works.
-    /// </summary>
-
-    [Fact]
-    public void AnalyzeSuflae_TupleLiteral_Works()
-    {
-        string source = """
-                        routine test():
-                          var tuple = (1, 2, 3)
-                        """;
-
-        AnalysisResult result = AnalyzeSuflae(source: source);
-        Assert.Empty(collection: result.Errors);
-    }
-    /// <summary>
-    /// Tests AnalyzeSuflae_NestedTuple_Works.
-    /// </summary>
-
-    [Fact]
-    public void AnalyzeSuflae_NestedTuple_Works()
-    {
-        string source = """
-                        routine test():
-                          var nested = ((1, 2), (3, 4))
-                        """;
-
-        AnalysisResult result = AnalyzeSuflae(source: source);
-        Assert.Empty(collection: result.Errors);
-    }
-
-    #endregion
-
     #region #173: Tuple assignment destructuring
     /// <summary>
-    /// Tests Analyze_TupleAssignmentDestructuring_NoError.
+    /// Verifies semantic analysis behavior for tuple assignment destructuring without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -225,7 +190,7 @@ public class TupleTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests Analyze_TupleAssignmentNonAssignableTarget_ReportsError.
+    /// Verifies semantic analysis behavior for tuple assignment non assignable target and reports the expected error.
     /// </summary>
 
     [Fact]

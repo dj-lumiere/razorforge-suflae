@@ -1,6 +1,6 @@
-namespace TypeModel.Types;
-
 using TypeModel.Enums;
+
+namespace TypeModel.Types;
 
 /// <summary>
 /// Type information for variants (type-based tagged unions).

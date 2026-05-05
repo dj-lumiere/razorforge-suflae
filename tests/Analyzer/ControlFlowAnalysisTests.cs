@@ -1,6 +1,5 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
@@ -14,7 +13,7 @@ public class ControlFlowAnalysisTests
 {
     #region Return Path Analysis
     /// <summary>
-    /// Tests Analyze_AllPathsReturn_NoError.
+    /// Verifies semantic analysis behavior for all paths return without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -28,11 +27,12 @@ public class ControlFlowAnalysisTests
                             return 0
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
         // Should have no missing return errors
     }
     /// <summary>
-    /// Tests Analyze_WhenExpressionReturn_NoError.
+    /// Verifies semantic analysis behavior for when expression return without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -52,10 +52,11 @@ public class ControlFlowAnalysisTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
     /// <summary>
-    /// Tests Analyze_EarlyReturnInLoop_NoError.
+    /// Verifies semantic analysis behavior for early return in loop without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -70,10 +71,11 @@ public class ControlFlowAnalysisTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
     /// <summary>
-    /// Tests Analyze_UnlessElseReturn_NoError.
+    /// Verifies semantic analysis behavior for unless else return without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -86,14 +88,15 @@ public class ControlFlowAnalysisTests
                           return value
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
 
     #endregion
 
     #region Unreachable Code
     /// <summary>
-    /// Tests Analyze_CodeAfterReturn_ReportsWarning.
+    /// Verifies semantic analysis behavior for code after return and reports the expected warning.
     /// </summary>
 
     [Fact]
@@ -106,11 +109,12 @@ public class ControlFlowAnalysisTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
         // Should have warning about unreachable code
     }
     /// <summary>
-    /// Tests Analyze_CodeAfterAbsent_ReportsWarning.
+    /// Verifies semantic analysis behavior for code after absent and reports the expected warning.
     /// </summary>
 
     [Fact]
@@ -123,10 +127,11 @@ public class ControlFlowAnalysisTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
     /// <summary>
-    /// Tests Analyze_CodeAfterThrow_ReportsWarning.
+    /// Verifies semantic analysis behavior for code after throw and reports the expected warning.
     /// </summary>
 
     [Fact]
@@ -139,14 +144,15 @@ public class ControlFlowAnalysisTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
 
     #endregion
 
     #region Break and Continue Analysis
     /// <summary>
-    /// Tests Analyze_BreakInsideLoop_NoError.
+    /// Verifies semantic analysis behavior for break inside loop without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -160,10 +166,11 @@ public class ControlFlowAnalysisTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
     /// <summary>
-    /// Tests Analyze_ContinueInsideLoop_NoError.
+    /// Verifies semantic analysis behavior for continue inside loop without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -178,10 +185,11 @@ public class ControlFlowAnalysisTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
     /// <summary>
-    /// Tests Analyze_BreakOutsideLoop_ReportsError.
+    /// Verifies semantic analysis behavior for break outside loop and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -197,7 +205,7 @@ public class ControlFlowAnalysisTests
         Assert.True(condition: result.Errors.Count > 0);
     }
     /// <summary>
-    /// Tests Analyze_ContinueOutsideLoop_ReportsError.
+    /// Verifies semantic analysis behavior for continue outside loop and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -217,7 +225,7 @@ public class ControlFlowAnalysisTests
 
     #region Failable Routine Analysis
     /// <summary>
-    /// Tests Analyze_AbsentInNonFailable_ReportsError.
+    /// Verifies semantic analysis behavior for absent in non failable and reports the expected warning.
     /// </summary>
 
     [Fact]
@@ -230,11 +238,11 @@ public class ControlFlowAnalysisTests
                         """;
 
         AnalysisResult result = Analyze(source: source);
-        Assert.Contains(collection: result.Warnings,
-            filter: w => w.Code == SemanticWarningCode.ThrowAbsentInNonFailable);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.AbsentOutsideFailableFunction);
     }
     /// <summary>
-    /// Tests Analyze_ThrowInNonFailable_ReportsError.
+    /// Verifies semantic analysis behavior for throw in non failable and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -250,7 +258,7 @@ public class ControlFlowAnalysisTests
         Assert.True(condition: result.Errors.Count > 0);
     }
     /// <summary>
-    /// Tests Analyze_AbsentInFailable_NoError.
+    /// Verifies semantic analysis behavior for absent in failable without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -262,11 +270,12 @@ public class ControlFlowAnalysisTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
         // Should be valid
     }
     /// <summary>
-    /// Tests Analyze_ThrowInFailable_NoError.
+    /// Verifies semantic analysis behavior for throw in failable without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -278,7 +287,8 @@ public class ControlFlowAnalysisTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
 
     #endregion
@@ -286,7 +296,7 @@ public class ControlFlowAnalysisTests
     #region Throw Terminality (S215/S216)
 
     /// <summary>
-    /// S215: throw terminates control flow ??no return needed after it.
+    /// Verifies semantic analysis behavior for throw terminates no missing return.
     /// </summary>
     [Fact]
     public void Analyze_ThrowTerminates_NoMissingReturn()
@@ -303,7 +313,7 @@ public class ControlFlowAnalysisTests
     }
 
     /// <summary>
-    /// S215: throw in all if/else branches terminates ??no return needed.
+    /// Verifies semantic analysis behavior for throw in all branches no missing return.
     /// </summary>
     [Fact]
     public void Analyze_ThrowInAllBranches_NoMissingReturn()
@@ -323,7 +333,7 @@ public class ControlFlowAnalysisTests
     }
 
     /// <summary>
-    /// S215: absent terminates control flow ??no return needed after it.
+    /// Verifies semantic analysis behavior for absent terminates no missing return.
     /// </summary>
     [Fact]
     public void Analyze_AbsentTerminates_NoMissingReturn()
@@ -340,7 +350,7 @@ public class ControlFlowAnalysisTests
     }
 
     /// <summary>
-    /// S216: routine with only throw branches ??valid, no missing return.
+    /// Verifies semantic analysis behavior for all paths throw no missing return.
     /// </summary>
     [Fact]
     public void Analyze_AllPathsThrow_NoMissingReturn()
@@ -360,7 +370,7 @@ public class ControlFlowAnalysisTests
     }
 
     /// <summary>
-    /// S215: throw followed by dead code in block ??block still terminates.
+    /// Verifies semantic analysis behavior for throw with dead code no missing return.
     /// </summary>
     [Fact]
     public void Analyze_ThrowWithDeadCode_NoMissingReturn()
@@ -381,7 +391,7 @@ public class ControlFlowAnalysisTests
 
     #region Conditional Return Analysis
     /// <summary>
-    /// Tests Analyze_IfWithoutElse_NoReturn_ReportsError.
+    /// Verifies semantic analysis behavior for if without else no return and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -393,11 +403,12 @@ public class ControlFlowAnalysisTests
                             return 1
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
         // Should report missing return path
     }
     /// <summary>
-    /// Tests Analyze_NestedIfElse_AllPathsReturn_NoError.
+    /// Verifies semantic analysis behavior for nested if else all paths return without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -414,66 +425,15 @@ public class ControlFlowAnalysisTests
                             return 3
                         """;
 
-        Analyze(source: source);
-    }
-
-    #endregion
-
-    #region Suflae Control Flow
-    /// <summary>
-    /// Tests AnalyzeSuflae_AllPathsReturn_NoError.
-    /// </summary>
-
-    [Fact]
-    public void AnalyzeSuflae_AllPathsReturn_NoError()
-    {
-        string source = """
-                        routine get_value(condition: bool) -> Integer
-                          if condition
-                            return 1
-                          else
-                            return 0
-                        """;
-
-        AnalyzeSuflae(source: source);
-    }
-    /// <summary>
-    /// Tests AnalyzeSuflae_BreakInsideLoop_NoError.
-    /// </summary>
-
-    [Fact]
-    public void AnalyzeSuflae_BreakInsideLoop_NoError()
-    {
-        string source = """
-                        routine test()
-                          for i in 0 til 10
-                            if i == 5
-                              break
-                        """;
-
-        AnalyzeSuflae(source: source);
-    }
-    /// <summary>
-    /// Tests AnalyzeSuflae_BreakOutsideLoop_ReportsError.
-    /// </summary>
-
-    [Fact]
-    public void AnalyzeSuflae_BreakOutsideLoop_ReportsError()
-    {
-        string source = """
-                        routine test()
-                          break
-                        """;
-
-        AnalysisResult result = AnalyzeSuflae(source: source);
-        Assert.True(condition: result.Errors.Count > 0);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
 
     #endregion
 
     #region Becomes Statement Validation
     /// <summary>
-    /// Tests Analyze_WhenExpressionBlockWithBecomes_NoError.
+    /// Verifies semantic analysis behavior for when expression block with becomes without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -495,7 +455,7 @@ public class ControlFlowAnalysisTests
             filter: e => e.Message.Contains(value: "becomes", comparisonType: StringComparison.OrdinalIgnoreCase));
     }
     /// <summary>
-    /// Tests Analyze_WhenExpressionBlockMissingBecomes_ReportsError.
+    /// Verifies semantic analysis behavior for when expression block missing becomes and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -517,7 +477,7 @@ public class ControlFlowAnalysisTests
             filter: e => e.Message.Contains(value: "requires 'becomes'", comparisonType: StringComparison.OrdinalIgnoreCase));
     }
     /// <summary>
-    /// Tests Analyze_WhenExpressionSingleBecomesBlock_ReportsError.
+    /// Verifies semantic analysis behavior for when expression single becomes block and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -538,7 +498,7 @@ public class ControlFlowAnalysisTests
             filter: e => e.Message.Contains(value: "'=>' syntax", comparisonType: StringComparison.OrdinalIgnoreCase));
     }
     /// <summary>
-    /// Tests Analyze_WhenExpressionArrowSyntax_NoError.
+    /// Verifies semantic analysis behavior for when expression arrow syntax without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -558,7 +518,7 @@ public class ControlFlowAnalysisTests
             filter: e => e.Message.Contains(value: "becomes", comparisonType: StringComparison.OrdinalIgnoreCase));
     }
     /// <summary>
-    /// Tests Analyze_WhenStatementBlockWithoutBecomes_NoError.
+    /// Verifies semantic analysis behavior for when statement block without becomes without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -580,50 +540,5 @@ public class ControlFlowAnalysisTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Message.Contains(value: "becomes", comparisonType: StringComparison.OrdinalIgnoreCase));
     }
-    /// <summary>
-    /// Tests AnalyzeSuflae_WhenExpressionBlockWithBecomes_NoError.
-    /// </summary>
-
-    [Fact]
-    public void AnalyzeSuflae_WhenExpressionBlockWithBecomes_NoError()
-    {
-        // Multi-statement block with becomes is valid in Suflae
-        string source = """
-                        routine test(value: Integer) -> Integer
-                          var result = when value
-                            == 1 =>
-                              var x = value * 2
-                              becomes x
-                            else => 0
-                          return result
-                        """;
-
-        AnalysisResult result = AnalyzeSuflae(source: source);
-        Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Message.Contains(value: "becomes", comparisonType: StringComparison.OrdinalIgnoreCase));
-    }
-    /// <summary>
-    /// Tests AnalyzeSuflae_WhenExpressionBlockMissingBecomes_ReportsError.
-    /// </summary>
-
-    [Fact]
-    public void AnalyzeSuflae_WhenExpressionBlockMissingBecomes_ReportsError()
-    {
-        // Multi-statement block in when expression without becomes should error in Suflae
-        string source = """
-                        routine test(value: Integer) -> Integer
-                          var result = when value
-                            == 1 =>
-                              var x = value * 2
-                              x
-                            else => 0
-                          return result
-                        """;
-
-        AnalysisResult result = AnalyzeSuflae(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Message.Contains(value: "requires 'becomes'", comparisonType: StringComparison.OrdinalIgnoreCase));
-    }
-
     #endregion
 }

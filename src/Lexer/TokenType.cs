@@ -1,4 +1,4 @@
-﻿namespace Compiler.Lexer;
+namespace Compiler.Lexer;
 
 #region Token Type Enumeration
 
@@ -25,12 +25,15 @@ public enum TokenType
 
     #region Basic Literals
 
-    // Suflae default number types (arbitrary precision)
-    /// <summary>Arbitrary precision integer in Suflae - unsuffixed integers (42, 0xFF, 0b1010)</summary>
-    Integer,
+    /// <summary>
+    /// Undecided integer literal.
+    /// </summary>
+    UndecidedInteger,
 
-    /// <summary>Arbitrary precision decimal in Suflae - unsuffixed decimals (3.14, 2.718)</summary>
-    Decimal,
+    /// <summary>
+    /// Undecided decimal literal.
+    /// </summary>
+    UndecidedDecimal,
 
     /// <summary>Byte letter literal with prefix (b'a')</summary>
     ByteLetterLiteral,
@@ -109,6 +112,9 @@ public enum TokenType
     /// <summary>128-bit unsigned integer literal (42u128)</summary>
     U128Literal,
 
+    /// <summary>Arbitrary precision integer literal</summary>
+    IntegerLiteral,
+
     /// <summary>Address-sized unsigned integer literal (42_addr)</summary>
     AddressLiteral,
 
@@ -134,6 +140,9 @@ public enum TokenType
 
     /// <summary>128-bit decimal literal (3.14d128)</summary>
     D128Literal,
+
+    /// <summary>Arbitrary precision decimal literal</summary>
+    DecimalLiteral,
 
     // Imaginary (for complex numbers)
     /// <summary>32-bit imaginary literal (4.0j32)</summary>
@@ -595,12 +604,6 @@ public enum TokenType
     /// <summary>Inequality comparison operator (!=)</summary>
     NotEqual,
 
-    /// <summary>Reference equality comparison operator (===)</summary>
-    ReferenceEqual,
-
-    /// <summary>Reference inequality comparison operator (!==)</summary>
-    ReferenceNotEqual,
-
     /// <summary>Less than comparison operator (&lt;)</summary>
     Less,
 
@@ -828,43 +831,6 @@ public enum TokenType
     /// Example: routine sort[T]() needs T obeys Comparable
     /// </summary>
     Requires,
-
-    #endregion
-
-    #region Async/Generator Keywords
-
-    /// <summary>
-    /// Async function declaration keyword.
-    /// Marks a function as asynchronous, returning a suspended computation.
-    /// Similar to 'async' in Rust/JavaScript.
-    /// </summary>
-    Suspended,
-
-    /// <summary>
-    /// Await keyword for async operations.
-    /// Waits for a suspended computation to complete and extracts the value.
-    /// Similar to 'await' in Rust/JavaScript.
-    /// </summary>
-    Waitfor,
-
-    /// <summary>
-    /// Within keyword for await timeout settings.
-    /// </summary>
-    Within,
-
-    /// <summary>
-    /// After keyword for task dependency chains.
-    /// Declares dependencies that must complete before the current task can run.
-    /// Used with waitfor/within for declarative task graphs.
-    /// </summary>
-    After,
-
-    /// <summary>
-    /// OS thread function declaration keyword.
-    /// Marks a function as running on a dedicated OS thread (heavyweight, CPU-bound).
-    /// Counterpart to 'suspended' which uses green threads (lightweight, I/O-bound).
-    /// </summary>
-    Threaded,
 
     #endregion
 

@@ -1,21 +1,18 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for pattern validation rules:
-/// #88: Pattern order enforcement
-/// #130/#148: Duplicate pattern detection
+/// Contains tests for pattern order.
 /// </summary>
 public class PatternOrderTests
 {
     #region #88: Pattern order enforcement
     /// <summary>
-    /// Tests Analyze_WhenElseBeforeOtherPatterns_ReportsError.
+    /// Verifies semantic analysis behavior for when else before other patterns and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -37,7 +34,7 @@ public class PatternOrderTests
             filter: e => e.Code == SemanticDiagnosticCode.PatternOrderViolation);
     }
     /// <summary>
-    /// Tests Analyze_WhenElseLast_NoError.
+    /// Verifies semantic analysis behavior for when else last without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -61,7 +58,7 @@ public class PatternOrderTests
     }
 
     /// <summary>
-    /// Tests Analyze_WhenWildcardBeforeSpecificPattern_ReportsError.
+    /// Verifies semantic analysis behavior for when wildcard before specific pattern and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -87,7 +84,7 @@ public class PatternOrderTests
 
     #region #130/#148: Duplicate pattern detection
     /// <summary>
-    /// Tests Analyze_DuplicateLiteralPattern_ReportsError.
+    /// Verifies semantic analysis behavior for duplicate literal pattern and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -106,7 +103,7 @@ public class PatternOrderTests
             filter: e => e.Code == SemanticDiagnosticCode.DuplicatePattern);
     }
     /// <summary>
-    /// Tests Analyze_DuplicateChoiceCasePattern_ReportsError.
+    /// Verifies semantic analysis behavior for duplicate choice case pattern and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -129,7 +126,7 @@ public class PatternOrderTests
             filter: e => e.Code == SemanticDiagnosticCode.DuplicatePattern);
     }
     /// <summary>
-    /// Tests Analyze_DistinctPatterns_NoError.
+    /// Verifies semantic analysis behavior for distinct patterns without unexpected diagnostics.
     /// </summary>
 
     [Fact]

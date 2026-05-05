@@ -1,20 +1,18 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for variant type validation rules:
-/// #59: Variant member containment restrictions
+/// Contains tests for variant validation.
 /// </summary>
 public class VariantValidationTests
 {
     #region #59: Variant member containment
     /// <summary>
-    /// Tests Analyze_VariantWithRecordMember_NoError.
+    /// Verifies semantic analysis behavior for variant with record member without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -34,7 +32,7 @@ public class VariantValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.VariantCaseContainsInvalidType);
     }
     /// <summary>
-    /// Tests Analyze_VariantWithNestedVariant_ReportsError.
+    /// Verifies semantic analysis behavior for variant with nested variant and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -55,7 +53,7 @@ public class VariantValidationTests
                          && e.Message.Contains("nested variant"));
     }
     /// <summary>
-    /// Tests Analyze_VariantWithPrimitiveMember_NoError.
+    /// Verifies semantic analysis behavior for variant with primitive member without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -77,7 +75,7 @@ public class VariantValidationTests
 
     #region #58: Variant must dismantle immediately
     /// <summary>
-    /// Tests Analyze_VariantDismantledImmediately_NoError.
+    /// Verifies semantic analysis behavior for variant dismantled immediately without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -104,7 +102,7 @@ public class VariantValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.VariantNotDismantled);
     }
     /// <summary>
-    /// Tests Analyze_VariantNotDismantled_ReportsError.
+    /// Verifies semantic analysis behavior for variant not dismantled and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -135,7 +133,7 @@ public class VariantValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.VariantNotDismantled);
     }
     /// <summary>
-    /// Tests Analyze_VariantNeverDismantled_ReportsError.
+    /// Verifies semantic analysis behavior for variant never dismantled and reports the expected error.
     /// </summary>
 
     [Fact]

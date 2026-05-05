@@ -1,8 +1,9 @@
 using Compiler.Desugaring;
-using TypeModel.Types;
+using Compiler.Synthesis;
 using SyntaxTree;
+using TypeModel.Symbols;
+using TypeModel.Types;
 
-using Compiler.Postprocessing;
 namespace Compiler.Postprocessing.Passes;
 
 /// <summary>
@@ -73,7 +74,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
         }
     }
 
-    // ?�?� Statement lowering ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
+    //  Statement lowering
 
     private Statement LowerStatement(Statement stmt)
     {
@@ -245,7 +246,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
         return anyChanged ? result : stmts;
     }
 
-    // ?�?� Expression lowering ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
+    //  Expression lowering
 
     /// <summary>
     /// Lowers the INTERIOR of an assignment target while preserving the outermost
@@ -272,9 +273,39 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
             {
                 Expression obj = LowerExpression(idx.Object);
                 Expression index = LowerExpression(idx.Index);
-                return ReferenceEquals(obj, idx.Object) && ReferenceEquals(index, idx.Index)
-                    ? target
-                    : idx with { Object = obj, Index = index };
+
+                // Resolve $setitem with method-level generic monomorphization (parallel to the
+                // $getitem! lowering path). Non-generic owners with method-level generics (e.g.
+                // BitList.$setitem![I]) need the resolved routine stashed so codegen can dispatch
+                // to the monomorphized entry rather than hitting ResolveMethod's generic-def guard.
+                RoutineInfo? resolvedSetItem = null;
+                TypeInfo? targetType = obj.ResolvedType ?? idx.Object.ResolvedType;
+                if (targetType != null)
+                {
+                    resolvedSetItem =
+                        ctx.Registry.LookupMethod(type: targetType, methodName: "$setitem");
+                    if (resolvedSetItem != null)
+                    {
+                        var argTypes = new List<TypeInfo>();
+                        TypeInfo? indexType = index.ResolvedType ?? idx.Index.ResolvedType;
+                        if (indexType != null)
+                            argTypes.Add(item: indexType);
+                        resolvedSetItem = ResolveMethodGenericRoutine(
+                            routine: resolvedSetItem,
+                            argTypes: argTypes);
+                    }
+                }
+
+                if (ReferenceEquals(obj, idx.Object) && ReferenceEquals(index, idx.Index) &&
+                    resolvedSetItem == null)
+                {
+                    return target;
+                }
+
+                var rewritten = idx with { Object = obj, Index = index };
+                rewritten.ResolvedType = idx.ResolvedType;
+                rewritten.ResolvedSetItem = resolvedSetItem ?? idx.ResolvedSetItem;
+                return rewritten;
             }
             default:
                 return target;
@@ -285,7 +316,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
     {
         switch (expr)
         {
-            // ?�?� IndexExpression ??obj.$getitem!(idx) ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
+            // IndexExpression ??obj.$getitem!(idx)
             case IndexExpression idx:
             {
                 Expression loweredObj = LowerExpression(idx.Object);
@@ -294,15 +325,34 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 // Determine failable suffix: look up $getitem on the target type.
                 // Default to "!" (failable) ??all stdlib collections use failable $getitem!.
                 string propertyName = "$getitem!";
+                RoutineInfo? resolvedGetItem = null;
                 TypeInfo? targetType = idx.Object.ResolvedType;
                 if (targetType != null)
                 {
-                    var getItem =
+                    resolvedGetItem =
                         ctx.Registry.LookupMethod(type: targetType, methodName: "$getitem");
-                    if (getItem != null)
-                        propertyName = getItem.IsFailable ? "$getitem!" : "$getitem";
+                    if (resolvedGetItem != null)
+                    {
+                        TypeInfo? indexType = loweredIdx.ResolvedType ?? idx.Index.ResolvedType;
+                        if (indexType != null)
+                        {
+                            resolvedGetItem = ResolveMethodGenericRoutine(routine: resolvedGetItem,
+                                argTypes: [indexType]);
+                        }
+
+                        propertyName = resolvedGetItem.IsFailable ? "$getitem!" : "$getitem";
+                    }
                 }
 
+                CallLoweringKind getitemKind;
+                if (resolvedGetItem != null)
+                    getitemKind = ClassifyMethod(resolvedGetItem);
+                else if (targetType is GenericParameterTypeInfo)
+                    getitemKind = CallLoweringKind.RuntimeDispatch;
+                else if (targetType != null)
+                    getitemKind = CallLoweringKind.DirectMemberRoutine;
+                else
+                    getitemKind = CallLoweringKind.Unknown;
                 var member = new MemberExpression(
                     Object: loweredObj,
                     PropertyName: propertyName,
@@ -312,17 +362,53 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     Arguments: [loweredIdx],
                     Location: idx.Location)
                 {
-                    ResolvedType = idx.ResolvedType
+                    ResolvedRoutine = resolvedGetItem,
+                    ResolvedType = idx.ResolvedType,
+                    LoweringKind = getitemKind
                 };
             }
 
-            // ?�?� SliceExpression ??obj.$getslice(from: a, to: b) ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
+            //  SliceExpression ??obj.$getslice(from: a, to: b)
             case SliceExpression slice:
             {
                 Expression loweredObj = LowerExpression(slice.Object);
                 Expression loweredStart = LowerExpression(slice.Start);
                 Expression loweredEnd = LowerExpression(slice.End);
+                RoutineInfo? resolvedGetSlice = null;
+                TypeInfo? targetType = slice.Object.ResolvedType;
+                if (targetType != null)
+                {
+                    resolvedGetSlice =
+                        ctx.Registry.LookupMethod(type: targetType, methodName: "$getslice");
+                    if (resolvedGetSlice != null)
+                    {
+                        var argTypes = new List<TypeInfo>();
+                        TypeInfo? startType = loweredStart.ResolvedType ?? slice.Start.ResolvedType;
+                        if (startType != null)
+                        {
+                            argTypes.Add(item: startType);
+                        }
 
+                        TypeInfo? endType = loweredEnd.ResolvedType ?? slice.End.ResolvedType;
+                        if (endType != null)
+                        {
+                            argTypes.Add(item: endType);
+                        }
+
+                        resolvedGetSlice = ResolveMethodGenericRoutine(routine: resolvedGetSlice,
+                            argTypes: argTypes);
+                    }
+                }
+
+                CallLoweringKind getsliceKind;
+                if (resolvedGetSlice != null)
+                    getsliceKind = ClassifyMethod(resolvedGetSlice);
+                else if (targetType is GenericParameterTypeInfo)
+                    getsliceKind = CallLoweringKind.RuntimeDispatch;
+                else if (targetType != null)
+                    getsliceKind = CallLoweringKind.DirectMemberRoutine;
+                else
+                    getsliceKind = CallLoweringKind.Unknown;
                 var member = new MemberExpression(
                     Object: loweredObj,
                     PropertyName: "$getslice",
@@ -342,11 +428,13 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     ],
                     Location: slice.Location)
                 {
-                    ResolvedType = slice.ResolvedType
+                    ResolvedRoutine = resolvedGetSlice,
+                    ResolvedType = slice.ResolvedType,
+                    LoweringKind = getsliceKind
                 };
             }
 
-            // ?�?� GenericMemberExpression ??member + index ??$getitem! ?�?�?�?�?�?�?�?�?�?�?�?�?�?�
+            //  GenericMemberExpression ??member + index ??$getitem!
             // Parser quirk: obj.field[i] is parsed as GenericMemberExpression(obj, "field", [i]).
             // TypeArguments are index expressions in disguise; lower to IndexExpression then recurse.
             case GenericMemberExpression gme when gme.TypeArguments.Count > 0:
@@ -395,7 +483,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     };
             }
 
-            // ?�?� ChainedComparisonExpression ??AND-chain of pairwise comparisons ?�?�
+            //  ChainedComparisonExpression ??AND-chain of pairwise comparisons
             // e.g. a < b < c ??(a < b) and (b < c)
             // Middle operands may be evaluated twice; acceptable here since chained
             // comparisons in stdlib bodies use trivially pure expressions (identifiers/literals).
@@ -437,7 +525,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 return LowerExpression(result);
             }
 
-            // ?�?� BinaryExpression ??receiver.$method(you: arg) ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
+            //  BinaryExpression ??receiver.$method(you: arg)
             // Operators with GetMethodName() == null (And, Or, Is, Identical, But, ...)
             // are not overloadable and stay as BinaryExpression for codegen.
 
@@ -483,13 +571,69 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 // overload to call without performing its own (potentially ambiguous) lookup.
                 TypeInfo? receiverType = receiver.ResolvedType;
                 TypeInfo? argType = argument.ResolvedType;
-                TypeModel.Symbols.RoutineInfo? resolvedMethod = null;
+                RoutineInfo? resolvedMethod = null;
                 if (receiverType != null)
                 {
                     resolvedMethod = argType != null
                         ? ctx.Registry.LookupMethodOverload(type: receiverType, methodName: methodName,
                             argTypes: [argType])
                         : ctx.Registry.LookupMethod(type: receiverType, methodName: methodName);
+                    resolvedMethod ??= ctx.Registry.LookupMethod(type: receiverType,
+                        methodName: methodName);
+                    // If the non-failable form doesn't exist, try the failable form ($sub → $sub!).
+                    // Types like U64 only define $sub! (underflow would be undefined behaviour).
+                    // Methods are stored under their full name including '!' (e.g. "$sub!").
+                    if (resolvedMethod == null && !methodName.EndsWith('!'))
+                    {
+                        string failableName = methodName + "!";
+                        resolvedMethod = argType != null
+                            ? ctx.Registry.LookupMethodOverload(type: receiverType,
+                                methodName: failableName, argTypes: [argType])
+                            : null;
+                        resolvedMethod ??= ctx.Registry.LookupMethod(type: receiverType,
+                            methodName: failableName);
+                    }
+                }
+
+                // Mixed fixed-width integer comparisons have no direct cross-width overloads in the
+                // stdlib. Normalize both sides to a common width here so we lower to a concrete
+                // same-type comparison instead of letting codegen fall back to an arbitrary overload.
+                if (resolvedMethod == null &&
+                    receiverType != null &&
+                    argType != null &&
+                    bin.Operator is BinaryOperator.Equal or BinaryOperator.NotEqual
+                        or BinaryOperator.Less or BinaryOperator.LessEqual
+                        or BinaryOperator.Greater or BinaryOperator.GreaterEqual &&
+                    TryResolveCommonIntegerComparisonType(left: receiverType,
+                        right: argType,
+                        out TypeInfo? commonType))
+                {
+                    receiver = WrapNumericOperand(expr: receiver, targetType: commonType);
+                    argument = WrapNumericOperand(expr: argument, targetType: commonType);
+                    receiverType = commonType;
+                    argType = commonType;
+                    resolvedMethod = ctx.Registry.LookupMethodOverload(type: commonType,
+                        methodName: methodName,
+                        argTypes: [commonType]) ??
+                                     ctx.Registry.LookupMethod(type: commonType,
+                                         methodName: methodName);
+                }
+
+                if (resolvedMethod is { Parameters.Count: > 0 } &&
+                    bin.Operator is BinaryOperator.ArithmeticLeftShift
+                        or BinaryOperator.ArithmeticRightShift
+                        or BinaryOperator.LogicalLeftShift
+                        or BinaryOperator.LogicalRightShift)
+                {
+                    TypeInfo paramType = resolvedMethod.Parameters[index: 0].Type;
+                    if (argType != null &&
+                        argType.FullName != paramType.FullName &&
+                        TryGetFixedWidthIntegerInfo(type: argType, out _, out _) &&
+                        TryGetFixedWidthIntegerInfo(type: paramType, out _, out _))
+                    {
+                        argument = WrapNumericOperand(expr: argument, targetType: paramType);
+                        argType = paramType;
+                    }
                 }
 
                 // Flags types have no $bitand/$bitor/$bitnot/$eq/$ne method bodies ??codegen handles
@@ -523,14 +667,20 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     PropertyName: callName,
                     Location: bin.Location);
 
+                CallLoweringKind lk = resolvedMethod != null
+                    ? ClassifyMethod(resolvedMethod)
+                    : receiverType is GenericParameterTypeInfo ? CallLoweringKind.RuntimeDispatch
+                    : receiverType != null ? CallLoweringKind.DirectMemberRoutine
+                    : CallLoweringKind.Unknown;
+
                 return new CallExpression(
                     Callee: binCallee,
                     Arguments: [new NamedArgumentExpression(Name: paramName, Value: argument, Location: bin.Location)],
                     Location: bin.Location)
-                { ResolvedType = bin.ResolvedType, ResolvedRoutine = resolvedMethod };
+                { ResolvedType = bin.ResolvedType, ResolvedRoutine = resolvedMethod, LoweringKind = lk };
             }
 
-            // ?�?� ForceUnwrap (!!) ??operand.$unwrap() ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
+            //  ForceUnwrap (!!) ??operand.$unwrap()
             // Always lower to a CallExpression ??never fall back to UnaryExpression.
             // This runs for both user code (where ExpressionLoweringPass has already
             // run but no longer handles ForceUnwrap) and stdlib bodies (which bypass
@@ -541,9 +691,18 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
             {
                 Expression operand = LowerExpression(forceUnwrap.Operand);
                 TypeInfo? operandType = operand.ResolvedType;
-                TypeModel.Symbols.RoutineInfo? unwrapMethod = operandType != null
+                RoutineInfo? unwrapMethod = operandType != null
                     ? ctx.Registry.LookupMethod(type: operandType, methodName: "$unwrap")
                     : null;
+                CallLoweringKind unwrapKind;
+                if (unwrapMethod != null)
+                    unwrapKind = ClassifyMethod(unwrapMethod);
+                else if (operandType is GenericParameterTypeInfo)
+                    unwrapKind = CallLoweringKind.RuntimeDispatch;
+                else if (operandType != null)
+                    unwrapKind = CallLoweringKind.DirectMemberRoutine;
+                else
+                    unwrapKind = CallLoweringKind.Unknown;
                 return new CallExpression(
                     Callee: new MemberExpression(
                         Object: operand,
@@ -551,10 +710,14 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                         Location: forceUnwrap.Location),
                     Arguments: [],
                     Location: forceUnwrap.Location)
-                { ResolvedType = forceUnwrap.ResolvedType, ResolvedRoutine = unwrapMethod };
+                {
+                    ResolvedType = forceUnwrap.ResolvedType,
+                    ResolvedRoutine = unwrapMethod,
+                    LoweringKind = unwrapKind
+                };
             }
 
-            // ?�?� UnaryExpression ??operand.$method() ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
+            //  UnaryExpression ??operand.$method()
             // Not, Steal ??no wired method, stay as UnaryExpression.
 
             case UnaryExpression unary:
@@ -581,11 +744,13 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                         : unary with { Operand = operand };
                 }
 
-                TypeModel.Symbols.RoutineInfo? resolvedUnaryMethod = null;
+                RoutineInfo? resolvedUnaryMethod = null;
                 if (operandType != null)
                 {
                     resolvedUnaryMethod = ctx.Registry.LookupMethodOverload(type: operandType,
                         methodName: methodName, argTypes: []);
+                    resolvedUnaryMethod ??= ctx.Registry.LookupMethod(type: operandType,
+                        methodName: methodName);
                 }
 
                 // Always lower to a method call ??even when method isn't resolved
@@ -599,11 +764,25 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     PropertyName: callName,
                     Location: unary.Location);
 
+                CallLoweringKind unaryKind;
+                if (resolvedUnaryMethod != null)
+                    unaryKind = ClassifyMethod(resolvedUnaryMethod);
+                else if (operandType is GenericParameterTypeInfo)
+                    unaryKind = CallLoweringKind.RuntimeDispatch;
+                else if (operandType != null)
+                    unaryKind = CallLoweringKind.DirectMemberRoutine;
+                else
+                    unaryKind = CallLoweringKind.Unknown;
+
                 return new CallExpression(
                     Callee: unaryCallee,
                     Arguments: [],
                     Location: unary.Location)
-                { ResolvedType = unary.ResolvedType, ResolvedRoutine = resolvedUnaryMethod };
+                {
+                    ResolvedType = unary.ResolvedType,
+                    ResolvedRoutine = resolvedUnaryMethod,
+                    LoweringKind = unaryKind
+                };
             }
 
             case CallExpression call:
@@ -694,8 +873,12 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
             }
 
             case StealExpression steal:
-                // steal is a type-system-only annotation; strip the wrapper.
-                return LowerExpression(steal.Operand);
+            {
+                Expression loweredOperand = LowerExpression(steal.Operand);
+                return ReferenceEquals(loweredOperand, steal.Operand)
+                    ? expr
+                    : steal with { Operand = loweredOperand };
+            }
 
             case InsertedTextExpression ftext:
             {
@@ -776,5 +959,174 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
             if (!ReferenceEquals(lowered, body))
                 ctx.VariantBodies[key] = lowered;
         }
+    }
+
+    private RoutineInfo ResolveMethodGenericRoutine(RoutineInfo routine,
+        IReadOnlyList<TypeInfo> argTypes)
+    {
+        if (!routine.IsGenericDefinition || routine.GenericParameters == null)
+        {
+            return routine;
+        }
+
+        if (argTypes.Any(static t => t is ErrorTypeInfo or GenericParameterTypeInfo))
+        {
+            return routine;
+        }
+
+        var inferred = new TypeInfo?[routine.GenericParameters.Count];
+        // Skip the implicit `me` receiver parameter — argTypes only contains the explicit
+        // call-site arguments (index type, value type, etc.), so we must align them
+        // against the non-me parameters to correctly infer method-level generics like I.
+        int argIdx = 0;
+        foreach (ParameterInfo param in routine.Parameters)
+        {
+            if (param.Name == "me") continue;
+            if (argIdx >= argTypes.Count) break;
+            InferMethodGenericArguments(paramType: param.Type,
+                argType: argTypes[index: argIdx],
+                genericParameters: routine.GenericParameters,
+                inferred: inferred);
+            argIdx++;
+        }
+
+        if (inferred.Any(predicate: t => t is null or ErrorTypeInfo or GenericParameterTypeInfo))
+        {
+            return routine;
+        }
+
+        return ctx.Registry.GetOrCreateRoutineResolution(genericDef: routine,
+            typeArguments: inferred.Select(selector: t => t!).ToList());
+    }
+
+    private static void InferMethodGenericArguments(TypeInfo paramType, TypeInfo argType,
+        IReadOnlyList<string> genericParameters, TypeInfo?[] inferred)
+    {
+        if (paramType is GenericParameterTypeInfo)
+        {
+            int idx = genericParameters.ToList().IndexOf(item: paramType.Name);
+            if (idx >= 0 && inferred[idx] == null)
+            {
+                inferred[idx] = argType;
+            }
+
+            return;
+        }
+
+        if (paramType is { TypeArguments: { Count: > 0 } paramArgs } &&
+            argType is { TypeArguments: { Count: > 0 } argArgs } &&
+            paramArgs.Count == argArgs.Count)
+        {
+            for (int i = 0; i < paramArgs.Count; i++)
+            {
+                InferMethodGenericArguments(paramType: paramArgs[index: i],
+                    argType: argArgs[index: i],
+                    genericParameters: genericParameters,
+                    inferred: inferred);
+            }
+        }
+    }
+
+    private static Expression WrapNumericOperand(Expression expr, TypeInfo targetType)
+    {
+        if (expr.ResolvedType?.FullName == targetType.FullName)
+        {
+            return expr;
+        }
+
+        return new CreatorExpression(
+            TypeName: targetType.Name,
+            TypeArguments: null,
+            MemberVariables:
+            [
+                ("from", expr)
+            ],
+            Location: expr.Location)
+        {
+            ResolvedType = targetType,
+            ConstructedType = targetType
+        };
+    }
+
+    private static CallLoweringKind ClassifyMethod(RoutineInfo method)
+    {
+        if (method.LlvmIrTemplate != null) return CallLoweringKind.LlvmIntrinsic;
+        if (method.OwnerType is ProtocolTypeInfo or GenericParameterTypeInfo)
+            return CallLoweringKind.RuntimeDispatch;
+        return CallLoweringKind.DirectMemberRoutine;
+    }
+
+    private bool TryResolveCommonIntegerComparisonType(TypeInfo left, TypeInfo right,
+        out TypeInfo? commonType)
+    {
+        commonType = null;
+
+        if (!TryGetFixedWidthIntegerInfo(type: left, out bool leftSigned, out int leftWidth) ||
+            !TryGetFixedWidthIntegerInfo(type: right, out bool rightSigned, out int rightWidth))
+        {
+            return false;
+        }
+
+        bool targetSigned;
+        int targetWidth;
+        if (leftSigned == rightSigned)
+        {
+            targetSigned = leftSigned;
+            targetWidth = Math.Max(val1: leftWidth, val2: rightWidth);
+        }
+        else if (leftSigned && leftWidth > rightWidth)
+        {
+            targetSigned = true;
+            targetWidth = leftWidth;
+        }
+        else if (rightSigned && rightWidth > leftWidth)
+        {
+            targetSigned = true;
+            targetWidth = rightWidth;
+        }
+        else
+        {
+            targetSigned = true;
+            targetWidth = NextSignedWidth(minExclusive: Math.Max(val1: leftWidth, val2: rightWidth));
+            if (targetWidth == 0)
+            {
+                return false;
+            }
+        }
+
+        commonType = ctx.Registry.LookupType(name: $"{(targetSigned ? "S" : "U")}{targetWidth}");
+        return commonType != null;
+    }
+
+    private static bool TryGetFixedWidthIntegerInfo(TypeInfo type, out bool signed, out int width)
+    {
+        signed = false;
+        width = 0;
+
+        if (string.IsNullOrEmpty(value: type.Name) || type.Name.Length < 2)
+        {
+            return false;
+        }
+
+        signed = type.Name[0] == 'S';
+        if (!signed && type.Name[0] != 'U')
+        {
+            return false;
+        }
+
+        return int.TryParse(s: type.Name[1..], result: out width);
+    }
+
+    private static int NextSignedWidth(int minExclusive)
+    {
+        foreach (int candidate in new[] { 8, 16, 32, 64, 128 })
+        {
+            if (candidate > minExclusive)
+            {
+                return candidate;
+            }
+        }
+
+        return 0;
     }
 }

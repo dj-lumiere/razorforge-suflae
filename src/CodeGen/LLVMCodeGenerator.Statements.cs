@@ -1,13 +1,11 @@
-using Compiler.Instantiation;
+using System.Text;
 using Compiler.Postprocessing;
 using Compiler.Synthesis;
+using SyntaxTree;
 using TypeModel.Symbols;
+using TypeModel.Types;
 
 namespace Compiler.CodeGen;
-
-using System.Text;
-using TypeModel.Types;
-using SyntaxTree;
 
 /// <summary>
 /// Statement code generation: control flow, assignments, declarations, returns.
@@ -73,14 +71,14 @@ public partial class LlvmCodeGenerator
                 return EmitWhen(sb: sb, whenStmt: whenStmt);
 
             case DiscardStatement discard:
-                // TODO(C43): for creator expressions, skip evaluation entirely ??creators have no
+                // TODO(C43): for creator expressions, skip evaluation entirely -> creators have no
                 // observable side effects and their result is being discarded, so the allocation is wasted.
                 EmitExpression(sb: sb, expr: discard.Expression);
                 return false;
 
             case UsingStatement:
                 throw new InvalidOperationException(
-                    "UsingStatement reached codegen — UsingLoweringPass must run before codegen.");
+                    "UsingStatement reached codegen ??UsingLoweringPass must run before codegen.");
 
             case ThrowStatement throwStmt:
                 EmitThrow(sb: sb, throwStmt: throwStmt);
@@ -89,10 +87,6 @@ public partial class LlvmCodeGenerator
             case AbsentStatement:
                 EmitAbsent(sb: sb);
                 return true; // Absent terminates the block
-
-            case BecomesStatement becomesStmt:
-                throw new InvalidOperationException(
-                    message: "BecomesStatement reached codegen without being lowered.");
 
             case VariantReturnStatement variantRet:
                 EmitVariantReturn(sb: sb, variantRet: variantRet);
@@ -146,49 +140,26 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private void EmitVariableDeclaration(StringBuilder sb, VariableDeclaration varDecl)
     {
-        // Global variables are declared at module level ??no local alloca needed.
+        // Global variables are declared at module level -> no local alloca needed.
         if (varDecl.Storage == StorageClass.Global) return;
 
         // Determine the type
-        TypeInfo? varType = null;
-        if (varDecl.Type != null)
-        {
-            varType = ResolveTypeExpression(typeExpr: varDecl.Type);
-        }
-        else if (varDecl.Initializer != null)
-        {
-            varType = GetExpressionType(expr: varDecl.Initializer);
-        }
-
-        // Fallback: constructor-style call (e.g., `var x = TypeName(...)`) — look up
-        // the type by the callee's identifier. Fixes "Cannot determine type" when
-        // type inference doesn't propagate the return type of a constructor call
-        // (common for generic constructors and stdlib intrinsic-wrapped calls).
-        if (varType == null && varDecl.Initializer is CallExpression callInit)
-        {
-            string? typeName = callInit.Callee switch
-            {
-                IdentifierExpression idc => idc.Name,
-                GenericMemberExpression gmc => gmc.MemberName,
-                MemberExpression mc => mc.PropertyName,
-                _ => null
-            };
-            if (typeName != null)
-            {
-                varType = _registry.LookupType(name: typeName)
-                          ?? _registry.LookupType(name: $"Core.{typeName}")
-                          ?? _registry.GetAllTypes().FirstOrDefault(predicate: t =>
-                              t.Name == typeName || t.FullName == typeName
-                              || t.FullName.EndsWith(value: "." + typeName));
-            }
-        }
+        TypeInfo? varType = ResolveVariableDeclType(varDecl: varDecl);
 
         if (varType == null)
         {
-            string typeText = varDecl.Type != null
-                ? $"{varDecl.Type.Name}{(varDecl.Type.GenericArguments is { Count: > 0 } args ? $"[{string.Join(", ", args.Select(a => a.Name))}]" : "")}"
-                : "<null>";
-            string initializerText = varDecl.Initializer?.GetType().Name ?? "<null>";
+            string typeText = "<null>";
+            if (varDecl.Type != null)
+            {
+                typeText = varDecl.Type.Name;
+                if (varDecl.Type.GenericArguments is { Count: > 0 } args)
+                {
+                    typeText += $"[{string.Join(", ", args.Select(a => a.Name))}]";
+                }
+            }
+
+            string initializerText = varDecl.Initializer?.GetType()
+                                            .Name ?? "<null>";
             throw new InvalidOperationException(
                 message:
                 $"Cannot determine type for variable '{varDecl.Name}' (declared type: {typeText}, initializer: {initializerText})");
@@ -217,17 +188,17 @@ public partial class LlvmCodeGenerator
         _localVariables[key: varDecl.Name] = varType;
         _localVarLlvmNames[key: varDecl.Name] = uniqueName;
 
-        // Track entity variables for automatic cleanup at return points
-        // Only track when initialized via constructor (actual heap allocation)
-        if (varType is EntityTypeInfo && IsEntityConstructorCall(expr: varDecl.Initializer))
+        switch (varType)
         {
-            _localEntityVars.Add(item: (varDecl.Name, $"%{uniqueName}.addr"));
-        }
-
-        // Track record variables with RC wrapper fields for retain/release
-        if (varType is RecordTypeInfo { HasRCFields: true } rcRecord)
-        {
-            _localRcRecordVars.Add(item: (varDecl.Name, $"%{uniqueName}.addr", rcRecord));
+            // Track entity variables for automatic cleanup at return points
+            // Only track when initialized via constructor (actual heap allocation)
+            case EntityTypeInfo when IsEntityConstructorCall(expr: varDecl.Initializer):
+                _localEntityVars.Add(item: (varDecl.Name, $"%{uniqueName}.addr"));
+                break;
+            // Track record variables with RC wrapper fields for retain/release
+            case RecordTypeInfo { HasRCFields: true } rcRecord:
+                _localRcRecordVars.Add(item: (varDecl.Name, $"%{uniqueName}.addr", rcRecord));
+                break;
         }
 
         // Track variables whose type IS an RC wrapper (Retained[T], Shared[T], etc.)
@@ -237,12 +208,16 @@ public partial class LlvmCodeGenerator
         {
             _localRetainedVars.Add(item: (varDecl.Name, $"%{uniqueName}.addr", rcWrapRecord));
 
-            // Move semantics: if the initializer is entity.retain(), the entity's lifetime is
-            // now managed by the RC wrapper. Remove it from scope-exit entity cleanup to prevent
+            // Move semantics: if the initializer is entity.retain(), the RC wrapper
+            // now manages the entity's lifetime. Remove it from scope-exit entity cleanup to prevent
             // double-free (rc.release() already frees the entity when count reaches zero).
             if (varDecl.Initializer is CallExpression
                 {
-                    Callee: MemberExpression { PropertyName: "retain", Object: IdentifierExpression { Name: var srcEntityName } }
+                    Callee: MemberExpression
+                    {
+                        PropertyName: "retain",
+                        Object: IdentifierExpression { Name: var srcEntityName }
+                    }
                 })
             {
                 _localEntityVars.RemoveAll(match: e => e.Name == srcEntityName);
@@ -250,43 +225,102 @@ public partial class LlvmCodeGenerator
         }
 
         // Store initial value if present
-        if (varDecl.Initializer != null)
+        if (varDecl.Initializer == null)
         {
-            string value = EmitExpression(sb: sb, expr: varDecl.Initializer);
+            return;
+        }
 
-            // When the declaration has an explicit type annotation, the initializer may have a
-            // different LLVM type (e.g., var e: U32 = exp where exp: S128 ??trunc i128 to i32).
-            // Emit an inline type cast so the store type always matches the alloca type.
-            if (varDecl.Type != null)
+        string value = EmitExpression(sb: sb, expr: varDecl.Initializer);
+
+        // When the declaration has an explicit type annotation, the initializer may have a
+        // different LLVM type (e.g., var e: U32 = exp where exp: S128 -> trunc i128 to i32).
+        // Emit an inline type cast so the store type always matches the alloca type.
+        if (varDecl.Type != null)
+        {
+            TypeInfo? initType = GetExpressionType(expr: varDecl.Initializer);
+            if (initType != null)
             {
-                TypeInfo? initType = GetExpressionType(expr: varDecl.Initializer);
-                if (initType != null)
-                {
-                    string initLlvm = GetLlvmType(type: initType);
-                    if (initLlvm != llvmType)
-                        value = EmitPrimitiveCast(sb: sb, value: value, fromLlvm: initLlvm,
-                            toLlvm: llvmType);
-                }
-            }
-
-            EmitLine(sb: sb, line: $"  store {llvmType} {value}, ptr {varPtr}");
-
-            // Retain RC fields on initial copy
-            if (varType is RecordTypeInfo { HasRCFields: true } rcRecordInit)
-            {
-                EmitRcRecordRetain(sb: sb, llvmAddr: varPtr, recordType: rcRecordInit);
-            }
-
-            // For RC wrapper vars copied from another variable/field, bump the strong count.
-            // Calls that return Retained[T] (e.g. .retain()) already set count=1 for us.
-            if (varType is RecordTypeInfo rcWrapInit &&
-                GetGenericBaseName(type: rcWrapInit) is { } rcWrapInitBase &&
-                RcWrapperBaseNames.Contains(item: rcWrapInitBase) &&
-                varDecl.Initializer is not CallExpression)
-            {
-                EmitRetainedVarRetain(sb: sb, llvmAddr: varPtr, recordType: rcWrapInit);
+                string initLlvm = GetLlvmType(type: initType);
+                if (initLlvm != llvmType)
+                    value = EmitPrimitiveCast(sb: sb,
+                        value: value,
+                        fromLlvm: initLlvm,
+                        toLlvm: llvmType);
             }
         }
+
+        EmitLine(sb: sb, line: $"  store {llvmType} {value}, ptr {varPtr}");
+
+        // Retain RC fields on initial copy
+        if (varType is RecordTypeInfo { HasRCFields: true } rcRecordInit)
+        {
+            EmitRcRecordRetain(sb: sb, llvmAddr: varPtr, recordType: rcRecordInit);
+        }
+
+        // For RC wrapper vars copied from another variable/field, bump the strong count.
+        // Calls that return Retained[T] (e.g. .retain()) already set count=1 for us.
+        if (varType is RecordTypeInfo rcWrapInit &&
+            GetGenericBaseName(type: rcWrapInit) is { } rcWrapInitBase &&
+            RcWrapperBaseNames.Contains(item: rcWrapInitBase) &&
+            varDecl.Initializer is not CallExpression)
+        {
+            EmitRetainedVarRetain(sb: sb, llvmAddr: varPtr, recordType: rcWrapInit);
+        }
+
+        ConsumeTransferredLocalOwnership(expr: varDecl.Initializer);
+    }
+
+    /// <summary>
+    /// Resolves the variable decl type from semantic compiler state.
+    /// </summary>
+    private TypeInfo? ResolveVariableDeclType(VariableDeclaration varDecl)
+    {
+        TypeInfo? varType = null;
+        if (varDecl.Type != null)
+            varType = ResolveTypeExpression(typeExpr: varDecl.Type);
+        else if (varDecl.Initializer != null)
+            varType = GetExpressionType(expr: varDecl.Initializer);
+
+        if (varDecl.Initializer is CallExpression genericCallInit &&
+            (varType == null || GetLlvmType(type: varType) == "ptr"))
+        {
+            TypeInfo? explicitGenericReturn =
+                TryResolveExplicitGenericCallReturnType(call: genericCallInit);
+            if (explicitGenericReturn != null)
+                varType = explicitGenericReturn;
+        }
+
+        if (varType == null && varDecl.Initializer is CallExpression
+            {
+                ConstructedType: { } constructedType
+            })
+            varType = constructedType;
+
+        // Fallback: constructor-style call (e.g., `var x = TypeName(...)`) -> look up by callee name.
+        // Fixes "Cannot determine type" when type inference doesn't propagate the return type
+        // (common for generic constructors and stdlib intrinsic-wrapped calls).
+        if (varType != null || varDecl.Initializer is not CallExpression callInit)
+        {
+            return varType;
+        }
+
+        string? typeName = callInit.Callee switch
+        {
+            IdentifierExpression idc => idc.Name,
+            GenericMemberExpression gmc => gmc.MemberName,
+            MemberExpression mc => mc.PropertyName,
+            _ => null
+        };
+        if (typeName != null)
+        {
+            varType = _registry.LookupType(name: typeName) ??
+                      _registry.LookupType(name: $"Core.{typeName}") ?? _registry.GetAllTypes()
+                         .FirstOrDefault(predicate: t =>
+                              t.Name == typeName || t.FullName == typeName ||
+                              t.FullName.EndsWith(value: "." + typeName));
+        }
+
+        return varType;
     }
 
     /// <summary>
@@ -295,6 +329,47 @@ public partial class LlvmCodeGenerator
     private TypeInfo? ResolveTypeExpression(TypeExpression typeExpr)
     {
         return ResolveTypeArgument(ta: typeExpr);
+    }
+
+    /// <summary>
+    /// Attempts to resolve explicit generic call return type and reports whether it succeeded.
+    /// </summary>
+    private TypeInfo? TryResolveExplicitGenericCallReturnType(CallExpression call)
+    {
+        if (call.ConstructedType is not null and not ErrorTypeInfo)
+        {
+            return call.ConstructedType;
+        }
+
+        RoutineInfo? routine = call.ResolvedRoutine;
+        if (routine == null && call.Callee is IdentifierExpression id)
+        {
+            routine = _registry.LookupRoutine(fullName: id.Name) ??
+                      _registry.LookupRoutineByName(name: id.Name);
+        }
+
+        if (routine == null || call.TypeArguments is not { Count: > 0 } explicitTypeArgs)
+        {
+            return routine?.ReturnType;
+        }
+
+        if (routine.IsGenericDefinition &&
+            routine.GenericParameters is { Count: > 0 } genericParams &&
+            explicitTypeArgs.Count == genericParams.Count)
+        {
+            var resolvedTypeArgs = explicitTypeArgs
+                                  .Select(selector => ResolveTypeExpression(typeExpr: selector))
+                                  .Where(predicate: t => t != null)
+                                  .Cast<TypeInfo>()
+                                  .ToList();
+            if (resolvedTypeArgs.Count == explicitTypeArgs.Count)
+            {
+                routine = _registry.GetOrCreateRoutineResolution(genericDef: routine,
+                    typeArguments: resolvedTypeArgs);
+            }
+        }
+
+        return routine.ReturnType;
     }
 
     #endregion
@@ -322,30 +397,53 @@ public partial class LlvmCodeGenerator
                     member: member,
                     value: value,
                     valueType: GetExpressionType(expr: assign.Value));
-                // Move semantics: RC wrapper variable assigned to an entity field transfers
-                // ownership ??remove from scope-exit tracking so it isn't double-released.
-                // RecordCopyLoweringPass wraps borrowed-reference AssignmentStatement values in
-                // $copy(), so peel the wrapper to find the source identifier.
-                Expression effectiveVal = assign.Value is CallExpression
-                {
-                    Callee: MemberExpression { PropertyName: "$copy", Object: var copyInner },
-                    Arguments: { Count: 0 }
-                }
-                    ? copyInner
-                    : assign.Value;
-                if (effectiveVal is IdentifierExpression { Name: var srcRcName })
-                {
-                    _localRetainedVars.RemoveAll(match: e => e.Name == srcRcName);
-                }
+                ConsumeTransferredLocalOwnership(expr: assign.Value);
                 break;
 
             case IndexExpression index:
-                EmitIndexAssignment(sb: sb, index: index, value: value);
+                EmitIndexAssignment(sb: sb, index: index, rhs: assign.Value);
                 break;
 
             default:
                 throw new NotImplementedException(
                     message: $"Assignment target not implemented: {assign.Target.GetType().Name}");
+        }
+    }
+
+    /// <summary>
+    /// Performs the consume transferred local ownership step for this compiler phase.
+    /// </summary>
+    private void ConsumeTransferredLocalOwnership(Expression expr)
+    {
+        // RecordCopyLoweringPass wraps borrowed-reference values in $copy(); peel it first.
+        Expression effectiveExpr = expr is CallExpression
+        {
+            Callee: MemberExpression { PropertyName: "$copy", Object: var copyInner },
+            Arguments: { Count: 0 }
+        }
+            ? copyInner
+            : expr;
+
+        string? sourceName = effectiveExpr switch
+        {
+            StealExpression
+            {
+                Operand: IdentifierExpression { Name: var stolenName }
+            } => stolenName,
+            IdentifierExpression { Name: var identifierName } => identifierName,
+            _ => null
+        };
+
+        if (sourceName == null)
+        {
+            return;
+        }
+
+        _localEntityVars.RemoveAll(match: e => e.Name == sourceName);
+
+        if (effectiveExpr is StealExpression)
+        {
+            _localRetainedVars.RemoveAll(match: e => e.Name == sourceName);
         }
     }
 
@@ -427,7 +525,7 @@ public partial class LlvmCodeGenerator
                 value: value,
                 valueType: valueType);
         }
-        // Wrapper type forwarding: Grasped[T], Claimed[T], etc. ??write through to inner entity
+        // Wrapper type forwarding: Grasped[T], Claimed[T], etc. -> write through to inner entity
         else if (targetType is RecordTypeInfo wrapperRecord &&
                  GetGenericBaseName(type: wrapperRecord) is { } wrapBaseName &&
                  WrapperTypeNames.Contains(item: wrapBaseName) &&
@@ -446,22 +544,25 @@ public partial class LlvmCodeGenerator
                 string recordTypeName = GetRecordTypeName(record: wrapperRecord);
                 innerPtr = NextTemp();
                 // Find the Hijacked[T] field holding the inner entity pointer.
-                // e.g. Retained[T] has controller=0, data=1 ??must use data index.
+                // e.g. Retained[T] has controller=0, data=1 -> must use data index.
                 int dataFieldIndex = 0;
                 for (int fi = 0; fi < wrapperRecord.MemberVariables.Count; fi++)
                 {
                     if (wrapperRecord.MemberVariables[index: fi].Type is WrapperTypeInfo
-                            { Name: "Hijacked" } hijacked
-                        && hijacked.TypeArguments is { Count: > 0 }
-                        && hijacked.TypeArguments[index: 0] is EntityTypeInfo fieldInner
-                        && fieldInner.FullName == innerEntity.FullName)
+                        {
+                            Name: "Hijacked"
+                        } hijacked && hijacked.TypeArguments is { Count: > 0 } &&
+                        hijacked.TypeArguments[index: 0] is EntityTypeInfo fieldInner &&
+                        fieldInner.FullName == innerEntity.FullName)
                     {
                         dataFieldIndex = fi;
                         break;
                     }
                 }
+
                 EmitLine(sb: sb,
-                    line: $"  {innerPtr} = extractvalue {recordTypeName} {target}, {dataFieldIndex}");
+                    line:
+                    $"  {innerPtr} = extractvalue {recordTypeName} {target}, {dataFieldIndex}");
             }
 
             EmitEntityMemberVariableWrite(sb: sb,
@@ -472,8 +573,7 @@ public partial class LlvmCodeGenerator
                 valueType: valueType);
         }
         // Plain record field write: load current value, insertvalue, store back to alloca
-        else if (targetType is RecordTypeInfo plainRecord &&
-                 !plainRecord.HasDirectBackendType &&
+        else if (targetType is RecordTypeInfo plainRecord && !plainRecord.HasDirectBackendType &&
                  member.Object is IdentifierExpression recIdExpr)
         {
             string llvmName =
@@ -506,7 +606,8 @@ public partial class LlvmCodeGenerator
             EmitLine(sb: sb, line: $"  {loaded} = load {recTypeName}, ptr {recAllocaPtr}");
             string updated = NextTemp();
             EmitLine(sb: sb,
-                line: $"  {updated} = insertvalue {recTypeName} {loaded}, {GetLlvmType(type: fieldInfo.Type)} {value}, {fieldIndex}");
+                line:
+                $"  {updated} = insertvalue {recTypeName} {loaded}, {GetLlvmType(type: fieldInfo.Type)} {value}, {fieldIndex}");
             EmitLine(sb: sb, line: $"  store {recTypeName} {updated}, ptr {recAllocaPtr}");
         }
         else
@@ -519,115 +620,45 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Emits a store to an indexed location.
     /// </summary>
-    private void EmitIndexAssignment(StringBuilder sb, IndexExpression index, string value)
+    private void EmitIndexAssignment(StringBuilder sb, IndexExpression index, Expression rhs)
     {
+        // TODO: Record setitem is a hack and should be following $setitem member routine.
+        // TODO: Also, the $setitem routine should be just called through anyway and handled not in here.
         TypeInfo? targetType = GetExpressionType(expr: index.Object);
         TryGetTransparentProtocolTarget(type: targetType, targetType: out TypeInfo? lookupType);
         targetType = lookupType ?? targetType;
 
-        // Dispatch to $setitem if the type has one
         RoutineInfo? setItem = LookupSetItemMethod(index: index);
-        if (setItem != null && targetType != null &&
+
+        // Record $setitem!: the receiver must be the alloca pointer so mutations persist in the
+        // caller's frame. EmitMemberRoutineCall evaluates the receiver as a loaded value, which would
+        // discard writes -> so keep the pointer-based dispatch inline for this case.
+        if (setItem != null && targetType is RecordTypeInfo &&
+            setItem.Name.Contains(value: "$setitem") &&
+            index.Object is IdentifierExpression recId &&
             (!setItem.IsGenericDefinition || targetType.IsGenericResolution))
         {
-            // For record $setitem!: pass alloca pointer so mutations propagate
-            string receiver;
-            string receiverLlvm;
-            bool isRecordSetItem = targetType is RecordTypeInfo &&
-                                   setItem.Name.Contains(value: "$setitem");
-            if (isRecordSetItem && index.Object is IdentifierExpression recId)
-            {
-                string llvmName =
-                    _localVarLlvmNames.TryGetValue(key: recId.Name, value: out string? unique)
-                        ? unique
-                        : recId.Name;
-                receiver = $"%{llvmName}.addr";
-                receiverLlvm = "ptr";
-            }
-            else
-            {
-                receiver = EmitExpression(sb: sb, expr: index.Object);
-                receiverLlvm = GetParameterLlvmType(type: targetType);
-            }
-
+            string value = EmitExpression(sb: sb, expr: rhs);
+            string llvmName =
+                _localVarLlvmNames.TryGetValue(key: recId.Name, value: out string? unique)
+                    ? unique
+                    : recId.Name;
+            string receiver = $"%{llvmName}.addr";
             string indexValue = EmitExpression(sb: sb, expr: index.Index);
             TypeInfo? indexType = GetExpressionType(expr: index.Index);
 
-            // Build mangled name with proper monomorphization
-            string mangledName;
-            if (setItem.IsGenericDefinition && targetType.IsGenericResolution)
-            {
-                // Infer method-level type args from the explicit arguments (index, value)
-                var concreteArgTypes = new List<TypeInfo>();
-                if (indexType != null)
-                {
-                    concreteArgTypes.Add(item: indexType);
-                }
+            string mangledName = targetType.IsGenericResolution
+                ? Q(name: DecorateRoutineSymbolName(
+                    baseName: $"{targetType.FullName}.{SanitizeLlvmName(name: setItem.Name)}",
+                    isFailable: setItem.IsFailable))
+                : MangleRoutineName(routine: setItem);
 
-                Dictionary<string, TypeInfo>? methodTypeArgs =
-                    InferMethodTypeArgs(genericMethod: setItem, argTypes: concreteArgTypes);
+            GenerateRoutineDeclaration(routine: setItem);
 
-                if (methodTypeArgs != null)
-                {
-                    var resolvedParamNames = new List<string> { targetType.Name };
-                    if (indexType != null)
-                    {
-                        resolvedParamNames.Add(item: indexType.Name);
-                    }
-
-                    // Resolve value param type
-                    if (setItem.Parameters.Count >= 2)
-                    {
-                        TypeInfo valParamType =
-                            _planner.ResolveSubstitutedType(type: setItem.Parameters[^1].Type,
-                                subs: methodTypeArgs);
-                        resolvedParamNames.Add(item: valParamType.Name);
-                    }
-
-                    string ownerName = setItem.OwnerType?.FullName ?? targetType.FullName;
-                    mangledName =
-                        Q(name: DecorateRoutineSymbolName(
-                            baseName: $"{ownerName}.{SanitizeLlvmName(name: setItem.Name)}({string.Join(separator: ",", values: resolvedParamNames)})",
-                            isFailable: setItem.IsFailable));
-                    RecordMonomorphization(mangledName: mangledName,
-                        genericMethod: setItem,
-                        resolvedOwnerType: targetType,
-                        methodTypeArgs: methodTypeArgs);
-                }
-                else
-                {
-                    mangledName =
-                        Q(name: $"{targetType.FullName}.{SanitizeLlvmName(name: setItem.Name)}");
-                    RecordMonomorphization(mangledName: mangledName,
-                        genericMethod: setItem,
-                        resolvedOwnerType: targetType);
-                }
-            }
-            else if (targetType.IsGenericResolution)
-            {
-                mangledName =
-                    Q(name: DecorateRoutineSymbolName(
-                        baseName: $"{targetType.FullName}.{SanitizeLlvmName(name: setItem.Name)}",
-                        isFailable: setItem.IsFailable));
-                // Body pre-built by GMP; emitted by EmitFromPreMonomorphizedBodies.
-            }
-            else
-            {
-                mangledName = MangleFunctionName(routine: setItem);
-            }
-
-            GenerateFunctionDeclaration(routine: setItem);
-
-            // Build argument types
             string indexLlvm = indexType != null
                 ? GetLlvmType(type: indexType)
                 : "i64";
-            string valueLlvm = indexType != null
-                ? GetLlvmType(type: indexType)
-                : "i64"; // placeholder
-
-            // Use type arguments to resolve the value parameter type
-            // For List[T]: value is TypeArguments[0]; for Dict[K, V]: value is TypeArguments[^1]
+            string valueLlvm;
             if (targetType.TypeArguments is { Count: > 0 })
             {
                 valueLlvm = GetLlvmType(type: targetType.TypeArguments[^1]);
@@ -636,14 +667,41 @@ public partial class LlvmCodeGenerator
             {
                 valueLlvm = GetLlvmType(type: setItem.Parameters[^1].Type);
             }
+            else
+            {
+                valueLlvm = "i64";
+            }
 
-            string args =
-                $"{receiverLlvm} {receiver}, {indexLlvm} {indexValue}, {valueLlvm} {value}";
-            EmitLine(sb: sb, line: $"  call void @{mangledName}({args})");
+            EmitLine(sb: sb,
+                line:
+                $"  call void @{mangledName}(ptr {receiver}, {indexLlvm} {indexValue}, {valueLlvm} {value})");
             return;
         }
 
-        // Fallback: raw GEP + store for pointer/contiguous-memory types
+        // Entity/generic dispatch: synthesize `obj.$setitem[!](index, rhs)` and delegate to
+        // EmitMemberRoutineCall. This reuses the full owner-level + method-level generic monomorphization
+        // machinery (e.g. BitList.$setitem![I] -> BitList.$setitem![S64]) without duplicating it.
+        // OperatorLoweringPass annotates `index.ResolvedSetItem` with the method-generic-resolved
+        // routine; prefer it over a fresh lookup so codegen bypasses the generic-definition guard.
+        RoutineInfo? dispatchSetItem = index.ResolvedSetItem ?? setItem;
+        if (dispatchSetItem != null)
+        {
+            string propName = dispatchSetItem.IsFailable
+                ? "$setitem!"
+                : "$setitem";
+            var member = new MemberExpression(Object: index.Object,
+                PropertyName: propName,
+                Location: index.Location);
+            var call = new CallExpression(Callee: member,
+                Arguments: [index.Index, rhs],
+                Location: index.Location) { ResolvedRoutine = dispatchSetItem };
+            // Result is void -> discard
+            EmitExpression(sb: sb, expr: call);
+            return;
+        }
+
+        // Fallback: raw GEP + store for pointer/contiguous-memory types with no $setitem
+        string rawValue = EmitExpression(sb: sb, expr: rhs);
         string target = EmitExpression(sb: sb, expr: index.Object);
         string idxVal = EmitExpression(sb: sb, expr: index.Index);
 
@@ -661,7 +719,7 @@ public partial class LlvmCodeGenerator
         string elemPtr = NextTemp();
         EmitLine(sb: sb,
             line: $"  {elemPtr} = getelementptr {elemType}, ptr {target}, i64 {idxVal}");
-        EmitLine(sb: sb, line: $"  store {elemType} {value}, ptr {elemPtr}");
+        EmitLine(sb: sb, line: $"  store {elemType} {rawValue}, ptr {elemPtr}");
     }
 
     /// <summary>
@@ -679,748 +737,6 @@ public partial class LlvmCodeGenerator
         targetType = lookupType ?? targetType;
 
         return _registry.LookupMethod(type: targetType, methodName: "$setitem");
-    }
-
-    #endregion
-
-    #region Return Statements
-
-    /// <summary>
-    /// Emits code for a return statement.
-    /// </summary>
-    private void EmitReturn(StringBuilder sb, ReturnStatement ret)
-    {
-        if (ret.Value == null)
-        {
-            EmitRcRecordCleanup(sb: sb);
-            EmitEntityCleanup(sb: sb, returnedVarName: null);
-            if (_traceCurrentRoutine)
-                EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
-            if (_currentFunctionReturnType == null)
-                EmitLine(sb: sb, line: "  ret void");
-            else
-            {
-                string retLlvmType = GetLlvmType(type: _currentFunctionReturnType);
-                if (retLlvmType == "void")
-                    EmitLine(sb: sb, line: "  ret void");
-                else
-                {
-                    string retZero = GetZeroValue(type: _currentFunctionReturnType);
-                    EmitLine(sb: sb, line: $"  ret {retLlvmType} {retZero}");
-                }
-            }
-        }
-        else
-        {
-            // Blank is llvm void ??if the function returns void, skip evaluating the expression.
-            // BlankReturnNormalizationPass fills bare `return` with IdentifierExpression("Blank");
-            // since the return type maps to void, no LLVM value is needed.
-            string earlyType = _currentFunctionReturnType != null
-                ? GetLlvmType(type: _currentFunctionReturnType)
-                : "void"; // this should throw error
-            if (earlyType == "void")
-            {
-                EmitRcRecordCleanup(sb: sb);
-                EmitEntityCleanup(sb: sb, returnedVarName: null);
-                if (_traceCurrentRoutine)
-                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
-                // For check_/try_ variant wrappers with Blank (void) return, emit success carrier.
-                if (_currentEmittingRoutine?.AsyncStatus == AsyncStatus.CheckVariant &&
-                    _currentFunctionReturnType != null)
-                {
-                    string carrier = GetResultCarrierLlvmType(valueType: _currentFunctionReturnType);
-                    EmitLine(sb: sb, line: $"  ret {carrier} zeroinitializer");
-                }
-                else if (_currentEmittingRoutine?.AsyncStatus == AsyncStatus.TryBoolVariant)
-                {
-                    EmitLine(sb: sb, line: "  ret i1 false");
-                }
-                else
-                {
-                    EmitLine(sb: sb, line: "  ret void");
-                }
-                return;
-            }
-
-            // If returning a crashable from a failable routine, treat as throw (RF idiom).
-            // `return ErrorType(...)` in a failable function is a throw, not a normal return.
-            TypeInfo? retValType = GetExpressionType(expr: ret.Value);
-            if (retValType is CrashableTypeInfo && _currentRoutineIsFailable)
-            {
-                EmitThrow(sb: sb, throwStmt: new ThrowStatement(Error: ret.Value, Location: ret.Location));
-                return;
-            }
-
-            string value = EmitExpression(sb: sb, expr: ret.Value);
-            // Prefer current function's return type (matches the 'define' header)
-            // to avoid type mismatches between header and ret instruction
-            TypeInfo? retType = _currentFunctionReturnType ?? GetExpressionType(expr: ret.Value);
-            if (retType == null)
-            {
-                throw new InvalidOperationException(
-                    message: "Cannot determine return type for return statement");
-            }
-
-            string llvmType = GetLlvmType(type: retType);
-
-            // Skip cleanup for the returned entity variable (ownership transfers to caller)
-            string? returnedVarName = ret.Value is IdentifierExpression id &&
-                                      _localEntityVars.Any(predicate: e => e.Name == id.Name)
-                ? id.Name
-                : null;
-            EmitRcRecordCleanup(sb: sb);
-            EmitEntityCleanup(sb: sb, returnedVarName: returnedVarName);
-
-            if (_traceCurrentRoutine)
-                EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
-
-            // Auto-wrap bare values in Maybe when function returns Maybe[T] but expression is T.
-            // Maybe { i1 present, T value }: insertvalue i1 1 at 0, T at 1 (same for entity and record T).
-            if (IsMaybeType(type: retType) && value != "zeroinitializer")
-            {
-                TypeInfo? exprType = GetExpressionType(expr: ret.Value);
-                if (exprType == null || !IsMaybeType(type: exprType))
-                {
-                    TypeInfo innerType = retType.TypeArguments is { Count: > 0 }
-                        ? retType.TypeArguments[index: 0]
-                        : retType;
-                    string carrierType = GetLlvmType(type: retType);
-                    string innerLlvm = innerType is EntityTypeInfo ? "ptr" : GetLlvmType(type: innerType);
-                    string v0 = NextTemp();
-                    EmitLine(sb: sb, line: $"  {v0} = insertvalue {carrierType} zeroinitializer, i1 1, 0");
-                    string v1 = NextTemp();
-                    EmitLine(sb: sb,
-                        line: $"  {v1} = insertvalue {carrierType} {v0}, {innerLlvm} {value}, 1");
-                    EmitLine(sb: sb, line: $"  ret {carrierType} {v1}");
-                }
-                else
-                {
-                    EmitLine(sb: sb, line: $"  ret {llvmType} {value}");
-                }
-            }
-            else
-            {
-                EmitLine(sb: sb, line: $"  ret {llvmType} {value}");
-            }
-        }
-    }
-
-    /// <summary>
-    /// Returns true if the expression is an entity constructor call (heap allocation).
-    /// Matches both CreatorExpression and CallExpression that resolve to an entity type.
-    /// </summary>
-    private bool IsEntityConstructorCall(Expression? expr)
-    {
-        return expr switch
-        {
-            CreatorExpression or ListLiteralExpression or SetLiteralExpression
-                or DictLiteralExpression => true,
-            CallExpression { Callee: IdentifierExpression id } =>
-                _registry.LookupType(name: id.Name) is EntityTypeInfo,
-            _ => false
-        };
-    }
-
-    /// <summary>
-    /// Emits rf_invalidate calls for all locally-owned entity variables.
-    /// Skips the variable being returned (ownership transfers to caller).
-    /// </summary>
-    private void EmitEntityCleanup(StringBuilder sb, string? returnedVarName)
-    {
-        foreach ((string name, string llvmAddr) in _localEntityVars)
-        {
-            if (name == returnedVarName)
-            {
-                continue;
-            }
-
-            string loaded = NextTemp();
-            EmitLine(sb: sb, line: $"  {loaded} = load ptr, ptr {llvmAddr}");
-            string asInt = NextTemp();
-            EmitLine(sb: sb, line: $"  {asInt} = ptrtoint ptr {loaded} to i64");
-            EmitLine(sb: sb, line: $"  call void @rf_invalidate(i64 {asInt})");
-        }
-    }
-
-    #endregion
-
-    #region Throw / Absent / Becomes
-
-    /// <summary>
-    /// Emits code for a <see cref="VariantReturnStatement"/> inserted into error-handling variant
-    /// bodies by <see cref="Synthesis.ErrorHandlingVariantPass"/>.
-    /// Handles carrier construction for all (VariantKind, SiteKind) combinations without relying
-    /// on mutable _currentVariantIs* flag fields.
-    /// </summary>
-    private void EmitVariantReturn(StringBuilder sb, VariantReturnStatement variantRet)
-    {
-        // ReturnType is either the carrier (Maybe[T]/Result[T]/Lookup[T]) or the inner T.
-        // MonomorphizationPlanner strips the carrier for generic routines (ReturnType = T).
-        // Non-generic stdlib variant routines keep the carrier as ReturnType.
-        // Always extract inner T from the carrier when present.
-        TypeInfo returnType = _currentEmittingRoutine!.ReturnType!;
-        TypeInfo innerType = (variantRet.VariantKind == ErrorHandlingVariantKind.Try
-                              || IsCarrierType(type: returnType))
-            ? returnType.TypeArguments![index: 0]
-            : returnType;
-
-        switch (variantRet.VariantKind, variantRet.SiteKind)
-        {
-            // ?�?� Try variant ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
-            case (ErrorHandlingVariantKind.Try, VariantSiteKind.FromThrow):
-            {
-                // Evaluate error expression for side effects (matches existing EmitThrow behavior).
-                // Skip if errType is unknown (unregistered type) ??cannot construct it safely.
-                if (variantRet.Value != null)
-                {
-                    TypeInfo? errType = GetExpressionType(expr: variantRet.Value);
-                    bool isEmptyRec = errType is null or RecordTypeInfo { MemberVariables.Count: 0 }
-                        or CrashableTypeInfo { MemberVariables.Count: 0 };
-                    if (!isEmptyRec)
-                        EmitExpression(sb: sb, expr: variantRet.Value);
-                }
-
-                string tryCarrier = GetMaybeCarrierLlvmType(valueType: innerType);
-                EmitRcRecordCleanup(sb: sb);
-                if (_traceCurrentRoutine)
-                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
-                EmitLine(sb: sb, line: $"  ret {tryCarrier} zeroinitializer");
-                break;
-            }
-
-            case (ErrorHandlingVariantKind.Try, VariantSiteKind.FromAbsent):
-            {
-                string tryCarrier = GetMaybeCarrierLlvmType(valueType: innerType);
-                EmitRcRecordCleanup(sb: sb);
-                if (_traceCurrentRoutine)
-                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
-                EmitLine(sb: sb, line: $"  ret {tryCarrier} zeroinitializer");
-                break;
-            }
-
-            case (ErrorHandlingVariantKind.Try, VariantSiteKind.FromReturn):
-            {
-                // "return ErrorType(...)" in a failable routine is an error throw in RF.
-                // The ErrorHandlingVariantPass creates FromReturn for ALL return statements;
-                // detect the crashable case here and treat it as absent (zeroinitializer).
-                TypeInfo? tryRetType = variantRet.Value != null
-                    ? GetExpressionType(expr: variantRet.Value) : null;
-                bool tryRetIsCrashable = tryRetType is CrashableTypeInfo;
-
-                string? returnedVarName = variantRet.Value is IdentifierExpression tryId &&
-                                          _localEntityVars.Any(predicate: e => e.Name == tryId.Name)
-                    ? tryId.Name
-                    : null;
-                EmitRcRecordCleanup(sb: sb);
-                EmitEntityCleanup(sb: sb, returnedVarName: returnedVarName);
-                if (_traceCurrentRoutine)
-                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
-
-                // Blank (IdentifierExpression("Blank")) means void/no-value success return.
-                bool tryRetIsBlank = variantRet.Value is IdentifierExpression { Name: "Blank" };
-
-                if (tryRetIsCrashable)
-                {
-                    // Return of a crashable from a Try variant ??absent in Maybe (error is dropped).
-                    // Evaluate for side effects (allocates and immediately discards the crashable).
-                    EmitExpression(sb: sb, expr: variantRet.Value!);
-                    string tryCarrier = GetMaybeCarrierLlvmType(valueType: innerType);
-                    EmitLine(sb: sb, line: $"  ret {tryCarrier} zeroinitializer");
-                }
-                else if (variantRet.Value == null || tryRetIsBlank)
-                {
-                    // Bare return or Blank return in Try variant (Blank inner type): present with no payload.
-                    // Record Maybe { i1, Blank }: set i1 tag to 1 (present), zeroinitializer for Blank payload.
-                    string tryCarrier = GetMaybeCarrierLlvmType(valueType: innerType);
-                    string tv0 = NextTemp();
-                    EmitLine(sb: sb, line: $"  {tv0} = insertvalue {tryCarrier} zeroinitializer, i1 1, 0");
-                    EmitLine(sb: sb, line: $"  ret {tryCarrier} {tv0}");
-                }
-                else
-                {
-                    // Present value: wrap in Maybe carrier.
-                    // Maybe { i1 present, T value }: insertvalue i1 1 at 0, T at 1 (same for entity and record T).
-                    string value = EmitExpression(sb: sb, expr: variantRet.Value);
-                    string tryCarrier = GetMaybeCarrierLlvmType(valueType: innerType);
-                    {
-                        string innerLlvm = innerType is EntityTypeInfo ? "ptr" : GetLlvmType(type: innerType);
-                        string v0 = NextTemp();
-                        EmitLine(sb: sb, line: $"  {v0} = insertvalue {tryCarrier} zeroinitializer, i1 1, 0");
-                        string v1 = NextTemp();
-                        EmitLine(sb: sb, line: $"  {v1} = insertvalue {tryCarrier} {v0}, {innerLlvm} {value}, 1");
-                        EmitLine(sb: sb, line: $"  ret {tryCarrier} {v1}");
-                    }
-                }
-
-                break;
-            }
-
-            // ?�?� TryBool variant ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
-            case (ErrorHandlingVariantKind.TryBool, VariantSiteKind.FromThrow):
-            {
-                // Evaluate error for side effects
-                if (variantRet.Value != null)
-                {
-                    TypeInfo? errType = GetExpressionType(expr: variantRet.Value);
-                    bool isEmptyRec = errType is RecordTypeInfo { MemberVariables.Count: 0 }
-                        or CrashableTypeInfo { MemberVariables.Count: 0 };
-                    if (!isEmptyRec)
-                        EmitExpression(sb: sb, expr: variantRet.Value);
-                }
-
-                EmitRcRecordCleanup(sb: sb);
-                if (_traceCurrentRoutine)
-                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
-                EmitLine(sb: sb, line: "  ret i1 false");
-                break;
-            }
-
-            case (ErrorHandlingVariantKind.TryBool, VariantSiteKind.FromAbsent):
-            {
-                EmitRcRecordCleanup(sb: sb);
-                if (_traceCurrentRoutine)
-                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
-                EmitLine(sb: sb, line: "  ret i1 false");
-                break;
-            }
-
-            case (ErrorHandlingVariantKind.TryBool, VariantSiteKind.FromReturn):
-            {
-                EmitRcRecordCleanup(sb: sb);
-                EmitEntityCleanup(sb: sb, returnedVarName: null);
-                if (_traceCurrentRoutine)
-                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
-                EmitLine(sb: sb, line: "  ret i1 true");
-                break;
-            }
-
-            // ?�?� Lookup variant ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
-            case (ErrorHandlingVariantKind.Lookup, VariantSiteKind.FromThrow):
-            {
-                TypeInfo? errType = variantRet.Value != null
-                    ? GetExpressionType(expr: variantRet.Value)
-                    : null;
-                string errTypeName = errType?.Name ?? "UnknownError";
-                // Treat unknown type (errType == null) as empty ??cannot construct safely.
-                bool isEmptyRec = errType is null or RecordTypeInfo { MemberVariables.Count: 0 }
-                    or CrashableTypeInfo { MemberVariables.Count: 0 };
-                string errorVal = isEmptyRec || variantRet.Value == null
-                    ? "zeroinitializer"
-                    : EmitExpression(sb: sb, expr: variantRet.Value!);
-
-                string lookupCarrier = GetLookupCarrierLlvmType(valueType: innerType);
-                ulong errTypeId = errType != null
-                    ? TypeIdHelper.ComputeTypeId(fullName:errType.FullName)
-                    : 0;
-                string errDataAddr = EmitErrorDataAddress(sb: sb, errorType: errType ?? innerType,
-                    errorVal: errorVal, isEmptyRecord: isEmptyRec);
-
-                EmitRcRecordCleanup(sb: sb);
-                if (_traceCurrentRoutine)
-                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
-
-                string lv0 = NextTemp();
-                EmitLine(sb: sb, line: $"  {lv0} = insertvalue {lookupCarrier} zeroinitializer, i64 {errTypeId}, 0");
-                string lv1 = NextTemp();
-                EmitLine(sb: sb, line: $"  {lv1} = insertvalue {lookupCarrier} {lv0}, i64 {errDataAddr}, 1");
-                EmitLine(sb: sb, line: $"  ret {lookupCarrier} {lv1}");
-                break;
-            }
-
-            case (ErrorHandlingVariantKind.Lookup, VariantSiteKind.FromAbsent):
-            {
-                string lookupCarrier = GetLookupCarrierLlvmType(valueType: innerType);
-                EmitRcRecordCleanup(sb: sb);
-                if (_traceCurrentRoutine)
-                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
-                EmitLine(sb: sb, line: $"  ret {lookupCarrier} zeroinitializer");
-                break;
-            }
-
-            case (ErrorHandlingVariantKind.Lookup, VariantSiteKind.FromReturn):
-            {
-                TypeInfo? lookupRetType = variantRet.Value != null
-                    ? GetExpressionType(expr: variantRet.Value) : null;
-                bool lookupRetIsCrashable = lookupRetType is CrashableTypeInfo;
-
-                string? returnedVarName = variantRet.Value is IdentifierExpression lookupId &&
-                                          _localEntityVars.Any(predicate: e => e.Name == lookupId.Name)
-                    ? lookupId.Name
-                    : null;
-                EmitRcRecordCleanup(sb: sb);
-                EmitEntityCleanup(sb: sb, returnedVarName: returnedVarName);
-                if (_traceCurrentRoutine)
-                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
-
-                string lookupCarrier = GetLookupCarrierLlvmType(valueType: innerType);
-
-                // Blank (IdentifierExpression("Blank")) means void/no-value success return.
-                bool lookupRetIsBlank = variantRet.Value is IdentifierExpression { Name: "Blank" };
-
-                if (lookupRetIsCrashable)
-                {
-                    // "return ErrorType(...)" ??store error in carrier field 1.
-                    string errorVal = EmitExpression(sb: sb, expr: variantRet.Value!);
-                    ulong errTypeId = TypeIdHelper.ComputeTypeId(fullName:lookupRetType!.FullName);
-                    string errDataAddr = EmitErrorDataAddress(sb: sb, errorType: lookupRetType,
-                        errorVal: errorVal, isEmptyRecord: false);
-                    string lev0 = NextTemp();
-                    EmitLine(sb: sb,
-                        line: $"  {lev0} = insertvalue {lookupCarrier} zeroinitializer, i64 {errTypeId}, 0");
-                    string lev1 = NextTemp();
-                    EmitLine(sb: sb, line: $"  {lev1} = insertvalue {lookupCarrier} {lev0}, i64 {errDataAddr}, 1");
-                    EmitLine(sb: sb, line: $"  ret {lookupCarrier} {lev1}");
-                }
-                else if (variantRet.Value == null || lookupRetIsBlank)
-                {
-                    EmitLine(sb: sb, line: $"  ret {lookupCarrier} zeroinitializer");
-                }
-                else
-                {
-                    string value = EmitExpression(sb: sb, expr: variantRet.Value);
-                    ulong validId = TypeIdHelper.ComputeTypeId(fullName:innerType.FullName);
-                    string lrv0 = NextTemp();
-                    EmitLine(sb: sb,
-                        line: $"  {lrv0} = insertvalue {lookupCarrier} zeroinitializer, i64 {validId}, 0");
-                    string lrv1 = NextTemp();
-                    string lDataVal = EmitSuccessDataAddress(sb: sb, innerType: innerType, value: value);
-                    EmitLine(sb: sb, line: $"  {lrv1} = insertvalue {lookupCarrier} {lrv0}, i64 {lDataVal}, 1");
-                    EmitLine(sb: sb, line: $"  ret {lookupCarrier} {lrv1}");
-                }
-
-                break;
-            }
-
-            // ?�?� Check variant ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
-            case (ErrorHandlingVariantKind.Check, VariantSiteKind.FromThrow):
-            {
-                TypeInfo? errType = variantRet.Value != null
-                    ? GetExpressionType(expr: variantRet.Value)
-                    : null;
-                // Treat unknown type (errType == null) as empty ??cannot construct safely.
-                bool isEmptyRec = errType is null or RecordTypeInfo { MemberVariables.Count: 0 }
-                    or CrashableTypeInfo { MemberVariables.Count: 0 };
-                string errorVal = isEmptyRec || variantRet.Value == null
-                    ? "zeroinitializer"
-                    : EmitExpression(sb: sb, expr: variantRet.Value!);
-
-                string checkCarrier = GetResultCarrierLlvmType(valueType: innerType);
-                ulong errTypeId = errType != null
-                    ? TypeIdHelper.ComputeTypeId(fullName:errType.FullName)
-                    : 0;
-                string errDataAddr = EmitErrorDataAddress(sb: sb, errorType: errType ?? innerType,
-                    errorVal: errorVal, isEmptyRecord: isEmptyRec);
-
-                EmitRcRecordCleanup(sb: sb);
-                if (_traceCurrentRoutine)
-                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
-
-                string cv0 = NextTemp();
-                EmitLine(sb: sb, line: $"  {cv0} = insertvalue {checkCarrier} zeroinitializer, i64 {errTypeId}, 0");
-                string cv1 = NextTemp();
-                EmitLine(sb: sb, line: $"  {cv1} = insertvalue {checkCarrier} {cv0}, i64 {errDataAddr}, 1");
-                EmitLine(sb: sb, line: $"  ret {checkCarrier} {cv1}");
-                break;
-            }
-
-            case (ErrorHandlingVariantKind.Check, VariantSiteKind.FromAbsent):
-            {
-                string checkCarrier = GetResultCarrierLlvmType(valueType: innerType);
-                EmitRcRecordCleanup(sb: sb);
-                if (_traceCurrentRoutine)
-                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
-                EmitLine(sb: sb, line: $"  ret {checkCarrier} zeroinitializer");
-                break;
-            }
-
-            case (ErrorHandlingVariantKind.Check, VariantSiteKind.FromReturn):
-            {
-                TypeInfo? checkRetType = variantRet.Value != null
-                    ? GetExpressionType(expr: variantRet.Value) : null;
-                bool checkRetIsCrashable = checkRetType is CrashableTypeInfo;
-
-                string? returnedVarName = variantRet.Value is IdentifierExpression checkId &&
-                                          _localEntityVars.Any(predicate: e => e.Name == checkId.Name)
-                    ? checkId.Name
-                    : null;
-                EmitRcRecordCleanup(sb: sb);
-                EmitEntityCleanup(sb: sb, returnedVarName: returnedVarName);
-                if (_traceCurrentRoutine)
-                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
-
-                string checkCarrier = GetResultCarrierLlvmType(valueType: innerType);
-
-                // Blank (IdentifierExpression("Blank")) means void/no-value success return.
-                bool checkRetIsBlank = variantRet.Value is IdentifierExpression { Name: "Blank" };
-
-                if (checkRetIsCrashable)
-                {
-                    // "return ErrorType(...)" ??store error in carrier field 1.
-                    string errorVal = EmitExpression(sb: sb, expr: variantRet.Value!);
-                    ulong errTypeId = TypeIdHelper.ComputeTypeId(fullName:checkRetType!.FullName);
-                    string errDataAddr = EmitErrorDataAddress(sb: sb, errorType: checkRetType,
-                        errorVal: errorVal, isEmptyRecord: false);
-                    string cev0 = NextTemp();
-                    EmitLine(sb: sb,
-                        line: $"  {cev0} = insertvalue {checkCarrier} zeroinitializer, i64 {errTypeId}, 0");
-                    string cev1 = NextTemp();
-                    EmitLine(sb: sb, line: $"  {cev1} = insertvalue {checkCarrier} {cev0}, i64 {errDataAddr}, 1");
-                    EmitLine(sb: sb, line: $"  ret {checkCarrier} {cev1}");
-                }
-                else if (variantRet.Value == null || checkRetIsBlank)
-                {
-                    EmitLine(sb: sb, line: $"  ret {checkCarrier} zeroinitializer");
-                }
-                else
-                {
-                    string value = EmitExpression(sb: sb, expr: variantRet.Value);
-                    ulong validId = TypeIdHelper.ComputeTypeId(fullName:innerType.FullName);
-                    string crv0 = NextTemp();
-                    EmitLine(sb: sb,
-                        line: $"  {crv0} = insertvalue {checkCarrier} zeroinitializer, i64 {validId}, 0");
-                    string crv1 = NextTemp();
-                    string cDataVal = EmitSuccessDataAddress(sb: sb, innerType: innerType, value: value);
-                    EmitLine(sb: sb, line: $"  {crv1} = insertvalue {checkCarrier} {crv0}, i64 {cDataVal}, 1");
-                    EmitLine(sb: sb, line: $"  ret {checkCarrier} {crv1}");
-                }
-
-                break;
-            }
-
-            default:
-                throw new InvalidOperationException(
-                    message: $"Unhandled VariantReturnStatement: {variantRet.VariantKind}/{variantRet.SiteKind}");
-        }
-    }
-
-    /// <summary>
-    /// Emits code for a throw statement.
-    /// Evaluates the crashable expression, calls crash_message(), and invokes rf_crash
-    /// with the error type name, message, and source location for full error reporting.
-    /// </summary>
-    private void EmitThrow(StringBuilder sb, ThrowStatement throwStmt)
-    {
-        // rf_crash is declared via NativeDeclarations.rf registry
-
-        // Get the error type info
-        TypeInfo? errorType = GetExpressionType(expr: throwStmt.Error);
-        string typeName = errorType?.Name ?? "UnknownError";
-
-        // Check if error type is an empty record (no member variables) ??skip construction.
-        // Crashable types are entity-like and always go through EmitExpression.
-        bool isEmptyRecord = errorType is RecordTypeInfo { MemberVariables.Count: 0 };
-        string errorVal;
-        if (isEmptyRecord)
-        {
-            // Empty record ??no need to construct, use zeroinitializer
-            errorVal = "zeroinitializer";
-        }
-        else
-        {
-            errorVal = EmitExpression(sb: sb, expr: throwStmt.Error);
-        }
-
-        // Try to call crash_message() on the error to get the message Text
-        string dataPtr = "null";
-        string msgLen = "0";
-        ResolvedMethod? resolvedCrash = errorType != null
-            ? ResolveMethod(receiverType: errorType, methodName: "crash_message")
-            : null;
-        if (resolvedCrash != null)
-        {
-            // Ensure crash_message is declared/defined
-            GenerateFunctionDeclaration(routine: resolvedCrash.Routine);
-            string mangledCrash = resolvedCrash.MangledName;
-
-            string llvmReceiverType = GetLlvmType(type: errorType!);
-
-            // Call crash_message(me) ??returns ptr to Text entity
-            string textPtr = NextTemp();
-            EmitLine(sb: sb,
-                line: $"  {textPtr} = call ptr @{mangledCrash}({llvmReceiverType} {errorVal})");
-
-            // Text entity = { ptr letters_list }
-            // List[Character] entity = { ptr data, i64 count, i64 capacity }
-            // TODO: This should not be hardcoded
-            string lettersPtr = NextTemp();
-            EmitLine(sb: sb, line: $"  {lettersPtr} = load ptr, ptr {textPtr}");
-            string dataField = NextTemp();
-            EmitLine(sb: sb,
-                line:
-                $"  {dataField} = getelementptr {{ptr, i64, i64}}, ptr {lettersPtr}, i32 0, i32 0");
-            dataPtr = NextTemp();
-            EmitLine(sb: sb, line: $"  {dataPtr} = load ptr, ptr {dataField}");
-            string countField = NextTemp();
-            EmitLine(sb: sb,
-                line:
-                $"  {countField} = getelementptr {{ptr, i64, i64}}, ptr {lettersPtr}, i32 0, i32 1");
-            msgLen = NextTemp();
-            EmitLine(sb: sb, line: $"  {msgLen} = load i64, ptr {countField}");
-        }
-
-        // Emit C string constants for type name and file, cast ptr ??i64 (Address)
-        string typeCStr = EmitCStringConstant(value: typeName);
-        string fileCStr = EmitCStringConstant(value: throwStmt.Location.FileName);
-        string typeNameAsInt = NextTemp();
-        EmitLine(sb: sb, line: $"  {typeNameAsInt} = ptrtoint ptr {typeCStr} to i64");
-        string fileAsInt = NextTemp();
-        EmitLine(sb: sb, line: $"  {fileAsInt} = ptrtoint ptr {fileCStr} to i64");
-
-        // Cast message data ptr ??i64 (Address)
-        string msgDataAsInt;
-        if (dataPtr == "null")
-        {
-            msgDataAsInt = "0";
-        }
-        else
-        {
-            msgDataAsInt = NextTemp();
-            EmitLine(sb: sb, line: $"  {msgDataAsInt} = ptrtoint ptr {dataPtr} to i64");
-        }
-
-        // Clean up active scopes before crashing
-        EmitRcRecordCleanup(sb: sb);
-
-        // Call rf_crash ??never returns
-        EmitLine(sb: sb,
-            line:
-            $"  call void @rf_crash(i64 {typeNameAsInt}, i64 {typeName.Length}, i64 {fileAsInt}, i64 {throwStmt.Location.FileName.Length}, i32 {throwStmt.Location.Line}, i32 {throwStmt.Location.Column}, i64 {msgDataAsInt}, i64 {msgLen})");
-        EmitLine(sb: sb, line: "  unreachable");
-    }
-
-    /// <summary>
-    /// Converts a success value of inner type T to the i64 representation stored in a Result/Lookup
-    /// carrier's field 1. Handles entity (ptrtoint), primitive ??i64 (zext), and struct types
-    /// (heap-allocate via rf_allocate_dynamic and return address as i64).
-    /// </summary>
-    private string EmitSuccessDataAddress(StringBuilder sb, TypeInfo innerType, string value)
-    {
-        if (innerType is EntityTypeInfo)
-        {
-            string asInt = NextTemp();
-            EmitLine(sb: sb, line: $"  {asInt} = ptrtoint ptr {value} to i64");
-            return asInt;
-        }
-
-        string innerLlvm = GetLlvmType(type: innerType);
-        if (innerLlvm == "i64") return value;
-
-        // Types that need heap allocation: structs (named %Type or inline { fields }), i128, fp128.
-        // Any type that cannot be zero-extended to i64 must be heap-allocated.
-        bool needsHeapAlloc = innerLlvm.StartsWith(value: "%")
-                              || innerLlvm.StartsWith(value: "{")
-                              || innerLlvm is "i128" or "fp128";
-        if (needsHeapAlloc)
-        {
-            string sizePtr = NextTemp();
-            string sizeVal = NextTemp();
-            EmitLine(sb: sb, line: $"  {sizePtr} = getelementptr {innerLlvm}, ptr null, i32 1");
-            EmitLine(sb: sb, line: $"  {sizeVal} = ptrtoint ptr {sizePtr} to i64");
-            string heapPtr = NextTemp();
-            EmitLine(sb: sb, line: $"  {heapPtr} = call ptr @rf_allocate_dynamic(i64 {sizeVal})");
-            EmitLine(sb: sb, line: $"  store {innerLlvm} {value}, ptr {heapPtr}");
-            string asInt = NextTemp();
-            EmitLine(sb: sb, line: $"  {asInt} = ptrtoint ptr {heapPtr} to i64");
-            return asInt;
-        }
-
-        // Float or small integer type: bitcast float to i64 or zero-extend integer to i64.
-        if (innerLlvm is "double" or "float" or "half")
-        {
-            // Use same-width bitcast + zext/trunc to fit in i64
-            int bits = innerLlvm switch { "double" => 64, "float" => 32, _ => 16 };
-            string intType = $"i{bits}";
-            string bc = NextTemp();
-            EmitLine(sb: sb, line: $"  {bc} = bitcast {innerLlvm} {value} to {intType}");
-            if (bits == 64) return bc;
-            string ze = NextTemp();
-            EmitLine(sb: sb, line: $"  {ze} = zext {intType} {bc} to i64");
-            return ze;
-        }
-
-        // Small integer type (e.g., i1, i8, i16, i32): zero-extend to i64.
-        string zext = NextTemp();
-        EmitLine(sb: sb, line: $"  {zext} = zext {innerLlvm} {value} to i64");
-        return zext;
-    }
-
-    /// <summary>
-    /// Emits code to store a thrown error, returning its address as i64 for the carrier field.
-    /// For empty records (no fields), returns "0" ??crash_message ignores `me`, passing null is safe.
-    /// For entity/crashable types, they are already heap-allocated ??just convert the ptr to i64.
-    /// For non-empty records, the data is heap-allocated via rf_allocate_dynamic so the
-    /// address remains valid after the throwing function returns.
-    /// </summary>
-    private string EmitErrorDataAddress(StringBuilder sb, TypeInfo errorType, string errorVal,
-        bool isEmptyRecord)
-    {
-        if (isEmptyRecord)
-        {
-            return "0";
-        }
-
-        // Entity and crashable types are already heap-allocated (their value IS a ptr).
-        // Return the pointer itself as i64 ??no extra allocation needed.
-        // The protocol dispatch stub passes this ptr directly to crash_message(ptr %self).
-        if (errorType is EntityTypeInfo or CrashableTypeInfo)
-        {
-            string addrInt = NextTemp();
-            EmitLine(sb: sb, line: $"  {addrInt} = ptrtoint ptr {errorVal} to i64");
-            return addrInt;
-        }
-
-        string llvmErrType = GetLlvmType(type: errorType);
-
-        // Compute sizeof(RecordType) via GEP null trick: getelementptr T, null, 1 ??byte past end
-        string sizePtr = NextTemp();
-        string sizeVal = NextTemp();
-        EmitLine(sb: sb, line: $"  {sizePtr} = getelementptr {llvmErrType}, ptr null, i32 1");
-        EmitLine(sb: sb, line: $"  {sizeVal} = ptrtoint ptr {sizePtr} to i64");
-
-        // Heap-allocate storage for the error record (leaked, but errors are rare/terminal)
-        string heapPtr = NextTemp();
-        EmitLine(sb: sb, line: $"  {heapPtr} = call ptr @rf_allocate_dynamic(i64 {sizeVal})");
-        EmitLine(sb: sb, line: $"  store {llvmErrType} {errorVal}, ptr {heapPtr}");
-
-        // Return address as i64 for storage in the Result/Lookup carrier field 1
-        string addrInt2 = NextTemp();
-        EmitLine(sb: sb, line: $"  {addrInt2} = ptrtoint ptr {heapPtr} to i64");
-        return addrInt2;
-    }
-
-    /// <summary>
-    /// Emits code for an absent statement.
-    /// Returns a { i64, ptr } with tag = 0 (ABSENT) and ptr = null.
-    /// Used in try_* routines that return Maybe[T] or Lookup[T].
-    /// </summary>
-    private void EmitAbsent(StringBuilder sb)
-    {
-        // In a failable routine, `absent` is a contract violation ??crash
-        if (_currentRoutineIsFailable)
-        {
-            EmitRcRecordCleanup(sb: sb);
-            EmitLine(sb: sb,
-                line: "  call void @rf_crash(i64 0, i64 0, i64 0, i64 0, i32 0, i32 0, i64 0, i64 0)");
-            EmitLine(sb: sb, line: "  unreachable");
-            return;
-        }
-
-        // Return zeroinitializer ??tag=0 means ABSENT for Maybe[T].
-        // ReturnType is now the full Maybe[T] carrier (not the inner T), so use GetLLVMType directly.
-        TypeInfo absentRetType = _currentEmittingRoutine!.ReturnType!;
-        string absentCarrierType = GetLlvmType(type: absentRetType);
-        EmitRcRecordCleanup(sb: sb);
-        EmitLine(sb: sb, line: $"  ret {absentCarrierType} zeroinitializer");
-    }
-
-    /// <summary>
-    /// Legacy guard for the old codegen fallback. <see cref="BecomesStatement"/> should be
-    /// erased by post-verification lowering before IR emission begins.
-    /// </summary>
-    private void EmitBecomes(StringBuilder sb, BecomesStatement becomesStmt)
-    {
-        throw new InvalidOperationException(
-            message: "BecomesStatement reached EmitBecomes without prior lowering.");
     }
 
     #endregion
@@ -1458,8 +774,8 @@ public partial class LlvmCodeGenerator
                 continue;
             }
 
-            GenerateFunctionDeclaration(routine: retainMethod);
-            string mangled = MangleFunctionName(routine: retainMethod);
+            GenerateRoutineDeclaration(routine: retainMethod);
+            string mangled = MangleRoutineName(routine: retainMethod);
             string fieldLlvm = GetParameterLlvmType(type: w);
             EmitLine(sb: sb,
                 line: $"  {NextTemp()} = call {fieldLlvm} @{mangled}({fieldLlvm} {fieldVal})");
@@ -1493,8 +809,8 @@ public partial class LlvmCodeGenerator
                 continue;
             }
 
-            GenerateFunctionDeclaration(routine: releaseMethod);
-            string mangled = MangleFunctionName(routine: releaseMethod);
+            GenerateRoutineDeclaration(routine: releaseMethod);
+            string mangled = MangleRoutineName(routine: releaseMethod);
             string fieldLlvm = GetParameterLlvmType(type: w);
             EmitLine(sb: sb, line: $"  call void @{mangled}({fieldLlvm} {fieldVal})");
         }
@@ -1502,7 +818,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// Emits release calls for all tracked RC record variables at scope exit.
-    /// Called at return, throw, and absent — before EmitEntityCleanup.
+    /// Called at return, throw, and absent -> before EmitEntityCleanup.
     /// </summary>
     private void EmitRcRecordCleanup(StringBuilder sb)
     {
@@ -1534,10 +850,10 @@ public partial class LlvmCodeGenerator
             return;
         }
 
-        GenerateFunctionDeclaration(routine: retainMethod);
-        string mangled = MangleFunctionName(routine: retainMethod);
+        GenerateRoutineDeclaration(routine: retainMethod);
+        string mangled = MangleRoutineName(routine: retainMethod);
         string rcLlvm = GetParameterLlvmType(type: recordType);
-        // retain() returns Retained[T] (same struct value); discard — heap mutation already done
+        // retain() returns Retained[T] (same struct value); discard -> heap mutation already done
         EmitLine(sb: sb, line: $"  {NextTemp()} = call {rcLlvm} @{mangled}({rcLlvm} {loaded})");
     }
 
@@ -1559,11 +875,140 @@ public partial class LlvmCodeGenerator
             return;
         }
 
-        GenerateFunctionDeclaration(routine: releaseMethod);
-        string mangled = MangleFunctionName(routine: releaseMethod);
+        GenerateRoutineDeclaration(routine: releaseMethod);
+        string mangled = MangleRoutineName(routine: releaseMethod);
         string rcLlvm = GetParameterLlvmType(type: recordType);
         EmitLine(sb: sb, line: $"  call void @{mangled}({rcLlvm} {loaded})");
     }
 
     #endregion
+
+    // -----------------------------------------------------------------------------
+
+    /// <summary>
+    /// Emit if as part of this compiler phase.
+    /// </summary>
+    private bool EmitIf(StringBuilder sb, IfStatement ifStmt)
+    {
+        string condition = EmitExpression(sb: sb, expr: ifStmt.Condition);
+
+        string thenLabel = NextLabel(prefix: "if_then");
+        string endLabel = NextLabel(prefix: "if_end");
+
+        if (ifStmt.ElseBranch != null)
+        {
+            string elseLabel = NextLabel(prefix: "if_else");
+            EmitLine(sb: sb, line: $"  br i1 {condition}, label %{thenLabel}, label %{elseLabel}");
+
+            // Then branch
+            EmitLine(sb: sb, line: $"{thenLabel}:");
+            bool thenTerminated = EmitStatement(sb: sb, stmt: ifStmt.ThenBranch);
+            if (!thenTerminated)
+            {
+                EmitLine(sb: sb, line: $"  br label %{endLabel}");
+            }
+
+            // Else branch
+            EmitLine(sb: sb, line: $"{elseLabel}:");
+            bool elseTerminated = EmitStatement(sb: sb, stmt: ifStmt.ElseBranch);
+            if (!elseTerminated)
+            {
+                EmitLine(sb: sb, line: $"  br label %{endLabel}");
+            }
+
+            // If both branches terminated, the end block is unreachable
+            // but we still need to emit it for LLVM (it will be dead code eliminated)
+            if (thenTerminated && elseTerminated)
+            {
+                // Both branches return - the if statement as a whole terminates
+                // Emit end label + unreachable (dead block must still have a terminator)
+                EmitLine(sb: sb, line: $"{endLabel}:");
+                EmitLine(sb: sb, line: "  unreachable");
+                return true;
+            }
+
+            // End block is reachable from at least one branch
+            EmitLine(sb: sb, line: $"{endLabel}:");
+            return false;
+        }
+        else
+        {
+            EmitLine(sb: sb, line: $"  br i1 {condition}, label %{thenLabel}, label %{endLabel}");
+
+            // Then branch
+            EmitLine(sb: sb, line: $"{thenLabel}:");
+            bool thenTerminated = EmitStatement(sb: sb, stmt: ifStmt.ThenBranch);
+            if (!thenTerminated)
+            {
+                EmitLine(sb: sb, line: $"  br label %{endLabel}");
+            }
+
+            // End block (always reachable via the else path, even if then returns)
+            EmitLine(sb: sb, line: $"{endLabel}:");
+            return false; // If without else never fully terminates
+        }
+    }
+
+    /// <summary>
+    /// Stack of loop labels for break/continue.
+    /// </summary>
+    private readonly Stack<(string ContinueLabel, string BreakLabel)> _loopStack = new();
+
+    /// <summary>
+    /// Emits code for a loop statement (infinite loop primitive).
+    /// Unconditional back-edge: continue -> loop header, break -> end.
+    /// </summary>
+    private void EmitLoop(StringBuilder sb, LoopStatement loopStmt)
+    {
+        string bodyLabel = NextLabel(prefix: "loop_body");
+        string endLabel = NextLabel(prefix: "loop_end");
+
+        // Push loop labels: continue -> body header, break -> end
+        _loopStack.Push(item: (bodyLabel, endLabel));
+
+        // Jump to body
+        EmitLine(sb: sb, line: $"  br label %{bodyLabel}");
+
+        // Body block
+        EmitLine(sb: sb, line: $"{bodyLabel}:");
+        bool bodyTerminated = EmitStatement(sb: sb, stmt: loopStmt.Body);
+        if (!bodyTerminated)
+        {
+            EmitLine(sb: sb, line: $"  br label %{bodyLabel}");
+        }
+
+        // End block
+        EmitLine(sb: sb, line: $"{endLabel}:");
+
+        _loopStack.Pop();
+    }
+
+
+    /// <summary>
+    /// Emits code for a break statement.
+    /// </summary>
+    private void EmitBreak(StringBuilder sb)
+    {
+        if (_loopStack.Count == 0)
+        {
+            throw new InvalidOperationException(message: "Break statement outside of loop");
+        }
+
+        (_, string breakLabel) = _loopStack.Peek();
+        EmitLine(sb: sb, line: $"  br label %{breakLabel}");
+    }
+
+    /// <summary>
+    /// Emits code for a continue statement.
+    /// </summary>
+    private void EmitContinue(StringBuilder sb)
+    {
+        if (_loopStack.Count == 0)
+        {
+            throw new InvalidOperationException(message: "Continue statement outside of loop");
+        }
+
+        (string continueLabel, _) = _loopStack.Peek();
+        EmitLine(sb: sb, line: $"  br label %{continueLabel}");
+    }
 }

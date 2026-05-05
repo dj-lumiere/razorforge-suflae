@@ -93,9 +93,6 @@ public enum SemanticDiagnosticCode
     /// <summary>Bitwise 'not' operator requires an integer operand.</summary>
     BitwiseNotRequiresInteger = 57,
 
-    /// <summary>Identity operator (===, !==) only works with entity types.</summary>
-    IdentityOperatorRequiresReference = 58,
-
     /// <summary>Comparison operator cannot be used with variant types.</summary>
     ComparisonOnVariantType = 59,
 
@@ -119,9 +116,6 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Unary operator method not found on type.</summary>
     UnaryOperatorNotFound = 66,
-
-    /// <summary>Waitfor 'within' clause requires a Duration type.</summary>
-    WaitforTimeoutNotDuration = 67,
 
     /// <summary>Real-to-Complex promotion only allowed for addition and subtraction.</summary>
     RealComplexPromotionInvalid = 68,
@@ -325,9 +319,6 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Single-expression when branch should use '=>' syntax instead of block with 'becomes'.</summary>
     SingleExpressionBranchUsesBecomes = 308,
-
-    /// <summary>Indicates a type mismatch error encountered in a wait-for operation during semantic analysis.</summary>
-    WaitForTypeMisMatch = 309,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PATTERN MATCHING ERRORS (RF-S350 - RF-S399)
@@ -565,7 +556,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Set element type mismatch.</summary>
     SetElementTypeMismatch = 556,
 
-    /// <summary>Collection literal constructor argument count mismatch (e.g., ValueList[S64, 4] given 3 args).</summary>
+    /// <summary>Collection literal constructor argument count mismatch (e.g., Array[S64, 4] given 3 args).</summary>
     ArgumentCountMismatch = 557,
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -664,7 +655,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Thrown value must implement Crashable protocol.</summary>
     ThrowNotCrashable = 700,
 
-    /// <summary>Crashable type missing crash_message() -> Text implementation.</summary>
+    /// <summary>Crashable type missing crash_message() Text implementation.</summary>
     CrashMessageNotImplemented = 704,
 
     /// <summary>Only record types can be thrown (error types must be records).</summary>
@@ -681,6 +672,8 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Cannot override an @innate protocol routine.</summary>
     InnateOverrideNotAllowed = 705,
+
+    InvalidAnnotation = 706,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // ERROR HANDLING ERRORS (RF-S750 - RF-S799)
@@ -801,7 +794,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Routine cannot directly return Maybe&lt;T&gt;/Result&lt;T&gt;/Lookup&lt;T&gt; — use failable routines (!) instead.</summary>
     ErrorHandlingTypeAsReturnType = 807,
 
-    /// <summary>Nested Maybe types (Maybe[Maybe[T]] / T??) are not allowed.</summary>
+    ///<summary>Nested Maybe types (Maybe[Maybe[T]] / T??) are not allowed.</summary>
     NestedMaybeProhibited = 808,
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -827,23 +820,8 @@ public enum SemanticDiagnosticCode
     // CONCURRENCY AND TASK DEPENDENCY ERRORS (RF-S900 - RF-S949)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// <summary>Task dependency expression is not a Lookup&lt;T&gt; type.</summary>
-    DependencyNotLookupType = 900,
-
     /// <summary>Lookup&lt;T&gt; value not dismantled before end of scope.</summary>
     LookupNotDismantled = 901,
-
-    /// <summary>Waitfor expression used outside of suspended/threaded routine.</summary>
-    WaitforOutsideSuspendedRoutine = 902,
-
-    /// <summary>Non-leaf waitfor requires 'within' timeout clause.</summary>
-    WaitforRequiresTimeout = 905,
-
-    /// <summary>Dangerous external routine called without danger! block.</summary>
-    DangerousExternalCallOutsideDanger = 910,
-
-    /// <summary>Channel send() makes source variable a deadref.</summary>
-    ChannelSendOwnershipTransfer = 915,
 
     /// <summary>BuilderService routine called without 'import BuilderService'.</summary>
     BuilderServiceImportRequired = 950,
@@ -855,12 +833,30 @@ public enum SemanticDiagnosticCode
     ThreadLocalOnNonGlobal = 952,
 
     /// <summary>Bare entity type used as type argument to Maybe/Result/Lookup. Wrap in Retained[T], Shared[T], or use Owned[T?] for unique ownership.</summary>
-    BareEntityInCarrierType = 953
+    BareEntityInCarrierType = 953,
+
+    /// <summary>Residual high-level AST node survived backend-entry lowering validation.</summary>
+    IllegalBackendResidualNode = 954,
+
+    /// <summary>Backend-visible expression reached backend entry without resolved ABI/storage metadata.</summary>
+    MissingBackendRepresentation = 955,
+
+    /// <summary>Backend-visible routine or expression still carries unresolved generic placeholders.</summary>
+    UnresolvedBackendGeneric = 956,
+
+    /// <summary>Concrete monomorphized routine reached backend entry without a concrete AST body.</summary>
+    MissingMonomorphizedBody = 957,
+
+    /// <summary>Preset identifier survived to backend entry instead of being inlined earlier in the pipeline.</summary>
+    IllegalBackendPresetIdentifier = 958,
+
+    /// <summary>Constructor-like call reached backend entry without semantic lowering metadata.</summary>
+    MissingCallLoweringMetadata = 959,
 }
+
 /// <summary>
 /// Provides formatting helpers for <see cref="SemanticDiagnosticCode"/>.
 /// </summary>
-
 public static class SemanticDiagnosticCodeExtensions
 {
     /// <summary>

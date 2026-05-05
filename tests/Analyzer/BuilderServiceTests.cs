@@ -1,6 +1,5 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
@@ -13,7 +12,7 @@ public class BuilderServiceTests
 {
     #region Import Gating ??Per-Type Routines
     /// <summary>
-    /// Tests TypeName_WithoutImport_ReportsError.
+    /// Verifies that the test validates name without import and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -35,7 +34,7 @@ public class BuilderServiceTests
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
     /// <summary>
-    /// Tests TypeName_WithImport_NoError.
+    /// Verifies that the test validates name with import without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -59,7 +58,7 @@ public class BuilderServiceTests
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
     /// <summary>
-    /// Tests DataSize_WithoutImport_ReportsError.
+    /// Verifies that the test validates size without import and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -81,7 +80,7 @@ public class BuilderServiceTests
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
     /// <summary>
-    /// Tests DataSize_WithImport_NoError.
+    /// Verifies that the test validates size with import without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -109,7 +108,7 @@ public class BuilderServiceTests
 
     #region Import Gating ??Standalone Routines
     /// <summary>
-    /// Tests SourceFile_WithoutImport_ReportsError.
+    /// Verifies that the test validates file without import and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -126,7 +125,7 @@ public class BuilderServiceTests
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
     /// <summary>
-    /// Tests SourceFile_WithImport_NoError.
+    /// Verifies that the test validates file with import without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -145,7 +144,7 @@ public class BuilderServiceTests
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
     /// <summary>
-    /// Tests SourceLine_WithoutImport_ReportsError.
+    /// Verifies that the test validates line without import and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -162,7 +161,7 @@ public class BuilderServiceTests
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
     /// <summary>
-    /// Tests CallerFile_WithoutImport_ReportsError.
+    /// Verifies that the test validates file without import and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -183,7 +182,7 @@ public class BuilderServiceTests
 
     #region Wired Routines NOT Gated
     /// <summary>
-    /// Tests WiredRepresent_WithoutImport_NoError.
+    /// Verifies that the test validates represent without import without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -205,7 +204,7 @@ public class BuilderServiceTests
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
     /// <summary>
-    /// Tests WiredEq_WithoutImport_NoError.
+    /// Verifies that the test validates eq without import without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -232,7 +231,7 @@ public class BuilderServiceTests
 
     #region Multiple Routines With Import
     /// <summary>
-    /// Tests MultipleRoutines_WithImport_AllAvailable.
+    /// Verifies that the test validates routines with import all available.
     /// </summary>
 
     [Fact]
@@ -262,7 +261,7 @@ public class BuilderServiceTests
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
     /// <summary>
-    /// Tests ListRoutines_WithImport_Available.
+    /// Verifies that the test validates routines with import available.
     /// </summary>
 
     [Fact]
@@ -290,7 +289,7 @@ public class BuilderServiceTests
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
     /// <summary>
-    /// Tests StandaloneRoutines_WithImport_Available.
+    /// Verifies that the test validates routines with import available.
     /// </summary>
 
     [Fact]

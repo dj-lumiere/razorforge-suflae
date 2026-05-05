@@ -1,4 +1,5 @@
 using Compiler.Postprocessing.Passes;
+using Compiler.Instantiation;
 using Compiler.Resolution;
 using SyntaxTree;
 
@@ -10,36 +11,56 @@ namespace Compiler.Desugaring.Passes;
 ///
 /// <para>Lowered cases (require <c>ResolvedRoutine != null</c> from Phase 5):</para>
 /// <list type="bullet">
-///   <item><b>Type constructor with resolved <c>$create</c></b>:
-///         <c>Maybe[S64](value: x)</c> → <c>CallExpression(IdentifierExpression("$create"), args)</c></item>
-///   <item><b>Generic method call on receiver</b>:
-///         <c>buf.read![U8](offset)</c> →
-///         <c>CallExpression(MemberExpression(buf, "read!"), args, TypeArguments=[U8])</c></item>
+/// <item><b>Type constructor with resolved <c>$create</c></b>:
+/// <c>Maybe[S64](value: x)</c> -> <c>CallExpression(IdentifierExpression("$create"), args)</c></item>
+/// <item><b>Generic method call on receiver</b>:
+/// <c>buf.read![U8](offset)</c> ??
+/// <c>CallExpression(MemberExpression(buf, "read!"), args, TypeArguments=[U8])</c></item>
 /// </list>
 ///
 /// <para>Kept as <see cref="GenericMethodCallExpression"/> (not lowered):</para>
 /// <list type="bullet">
-///   <item>Collection literals — <c>IsCollectionLiteral == true</c>;
-///         codegen emits <c>$create + add_last</c> loops.</item>
-///   <item>Unresolved calls — <c>ResolvedRoutine == null</c> that are not named compiler
-///         intrinsics (<c>rf_invalidate</c>, <c>rf_address_of</c>, <c>hijacked_none</c>
-///         are lowered despite null ResolvedRoutine).</item>
+/// <item>Collection literals -> <c>IsCollectionLiteral == true</c>;
+/// codegen emits <c>$create + add_last</c> loops.</item>
+/// <item>Unresolved calls -> <c>ResolvedRoutine == null</c> and no safe lowering target
+/// has been determined yet.</item>
 /// </list>
 /// </summary>
 internal sealed class GenericCallLoweringPass
 {
+    /// <summary>
+    /// Stores the registry state used by this compiler phase.
+    /// </summary>
     private readonly TypeRegistry _registry;
     private readonly Dictionary<string, Statement> _variantBodies;
+    private readonly Dictionary<string, MonomorphizedBody>? _instantiatedGenericBodies;
 
+    /// <summary>
+    /// Initializes a new instance with the dependencies required for its compiler phase.
+    /// </summary>
     public GenericCallLoweringPass(DesugaringContext ctx)
-        : this(ctx.Registry, ctx.VariantBodies) { }
+        : this(ctx.Registry, ctx.VariantBodies, ctx.InstantiatedGenericBodies) { }
 
+    /// <summary>
+    /// Initializes a new instance with the dependencies required for its compiler phase.
+    /// </summary>
     public GenericCallLoweringPass(TypeRegistry registry, Dictionary<string, Statement> variantBodies)
+        : this(registry, variantBodies, null) { }
+
+    /// <summary>
+    /// Initializes a new instance with the dependencies required for its compiler phase.
+    /// </summary>
+    private GenericCallLoweringPass(TypeRegistry registry, Dictionary<string, Statement> variantBodies,
+        Dictionary<string, MonomorphizedBody>? instantiatedGenericBodies)
     {
         _registry = registry;
         _variantBodies = variantBodies;
+        _instantiatedGenericBodies = instantiatedGenericBodies;
     }
 
+    /// <summary>
+    /// Runs this compiler phase over its configured input.
+    /// </summary>
     public void Run(Program program)
     {
         for (int i = 0; i < program.Declarations.Count; i++)
@@ -84,6 +105,36 @@ internal sealed class GenericCallLoweringPass
         }
     }
 
+    /// <summary>
+    /// Lowers GMCEs in all instantiated generic bodies produced during Phase 6.
+    /// These bodies must meet the same backend-entry contract as ordinary programs.
+    /// </summary>
+    public void RunOnInstantiatedGenericBodies()
+    {
+        if (_instantiatedGenericBodies == null)
+        {
+            return;
+        }
+
+        foreach (string key in _instantiatedGenericBodies.Keys.ToList())
+        {
+            MonomorphizedBody body = _instantiatedGenericBodies[key];
+            if (body.IsSynthesized) continue;
+
+            Statement lowered = LowerStatement(body.Ast.Body);
+            if (!ReferenceEquals(lowered, body.Ast.Body))
+            {
+                _instantiatedGenericBodies[key] = body with
+                {
+                    Ast = body.Ast with { Body = lowered }
+                };
+            }
+        }
+    }
+
+    /// <summary>
+    /// Lower member list as part of this compiler phase.
+    /// </summary>
     private void LowerMemberList(List<SyntaxTree.Declaration> members)
     {
         for (int j = 0; j < members.Count; j++)
@@ -95,8 +146,11 @@ internal sealed class GenericCallLoweringPass
         }
     }
 
-    // ── Statement lowering ────────────────────────────────────────────────────
+    // -----------------------------------------------------------------------------
 
+    /// <summary>
+    /// Lower statement as part of this compiler phase.
+    /// </summary>
     private Statement LowerStatement(Statement stmt)
     {
         switch (stmt)
@@ -207,6 +261,9 @@ internal sealed class GenericCallLoweringPass
         }
     }
 
+    /// <summary>
+    /// Lower statement list as part of this compiler phase.
+    /// </summary>
     private List<Statement> LowerStatementList(List<Statement> stmts)
     {
         bool changed = false;
@@ -220,8 +277,11 @@ internal sealed class GenericCallLoweringPass
         return changed ? result : stmts;
     }
 
-    // ── Expression lowering ───────────────────────────────────────────────────
+    // -----------------------------------------------------------------------------
 
+    /// <summary>
+    /// Lower expression as part of this compiler phase.
+    /// </summary>
     private Expression LowerExpression(Expression expr)
     {
         switch (expr)
@@ -297,27 +357,7 @@ internal sealed class GenericCallLoweringPass
         // Collection literals need special codegen ($create + add_last loop).
         if (gmc.IsCollectionLiteral) return null;
 
-        // ── Compiler intrinsics by name (no ResolvedRoutine) ──────────────
-        // These are built-in free functions with generic type params that codegen handles by name.
-        string freeName = gmc.Object is IdentifierExpression freeId && freeId.Name == gmc.MethodName
-            ? gmc.MethodName
-            : "";
-        if (freeName is "rf_invalidate" or "rf_address_of" or "hijacked_none")
-        {
-            var loweredFreeArgs = new List<Expression>(capacity: gmc.Arguments.Count);
-            foreach (Expression arg in gmc.Arguments)
-                loweredFreeArgs.Add(LowerExpression(arg));
-            return new CallExpression(
-                Callee: new IdentifierExpression(Name: freeName, Location: gmc.Location),
-                Arguments: loweredFreeArgs,
-                Location: gmc.Location)
-            {
-                ResolvedRoutine = gmc.ResolvedRoutine,
-                ResolvedType = gmc.ResolvedType
-            };
-        }
-
-        // ── Entity/Record literal: Type[Args](field: value, ...) with no resolved $create ──
+        // -----------------------------------------------------------------------------
         // SA finds no matching $create overload (e.g. List[T](data:..., count:..., capacity:...))
         // because this is a raw field-initialization form, not a regular routine call.
         // Lower to CreatorExpression so codegen's EmitConstructorCall handles it.
@@ -339,11 +379,13 @@ internal sealed class GenericCallLoweringPass
                 MemberVariables: members,
                 Location: gmc.Location)
             {
+                LoweringKind = gmc.LoweringKind,
+                ConstructedType = gmc.ConstructedType,
                 ResolvedType = gmc.ResolvedType
             };
         }
 
-        // Only lower when SA has resolved the routine — provides the concrete call target.
+        // Only lower when SA has resolved the routine -> provides the concrete call target.
         if (gmc.ResolvedRoutine == null) return null;
 
         // Lower arguments first.
@@ -351,27 +393,34 @@ internal sealed class GenericCallLoweringPass
         foreach (Expression arg in gmc.Arguments)
             loweredArgs.Add(LowerExpression(arg));
 
-        // ── Type constructor: Object and MethodName are the same identifier ──
-        // e.g., Maybe[S64](value: x) — SA resolved $create and set ResolvedRoutine.
-        // Also handles LLVM intrinsic free functions (sign_extend, load, store, etc.)
-        // where Object.Name == MethodName but there is no constructable type.
+        // -----------------------------------------------------------------------------
+        // e.g., Maybe[S64](present: true, value: x) -> SA resolved $create and set ResolvedRoutine.
+        // Also handles standalone generic free routines and LLVM intrinsic free functions where
+        // Object.Name == MethodName but there is no constructable type.
         if (gmc.Object is IdentifierExpression id && id.Name == gmc.MethodName)
         {
+            bool isTypeConstruction = gmc.ConstructedType != null ||
+                                      gmc.LoweringKind is CallLoweringKind.TypeConstructor
+                                          or CallLoweringKind.WrapperConstruction
+                                          or CallLoweringKind.ValueConversion
+                                          or CallLoweringKind.CollectionConstruction;
             return new CallExpression(
                 Callee: new IdentifierExpression(
-                    Name: gmc.ResolvedRoutine.Name,
+                    Name: isTypeConstruction ? gmc.MethodName : gmc.ResolvedRoutine.Name,
                     Location: gmc.Location),
                 Arguments: loweredArgs,
                 Location: gmc.Location)
             {
+                LoweringKind = gmc.LoweringKind,
+                ConstructedType = gmc.ConstructedType,
                 ResolvedRoutine = gmc.ResolvedRoutine,
                 TypeArguments = gmc.TypeArguments.Count > 0 ? gmc.TypeArguments : null,
                 ResolvedType = gmc.ResolvedType
             };
         }
 
-        // ── Generic method call on a receiver ──────────────────────────────
-        // e.g., buf.read![U8](offset) → CallExpression with TypeArguments=[U8].
+        // -----------------------------------------------------------------------------
+        // e.g., buf.read![U8](offset) -> CallExpression with TypeArguments=[U8].
         Expression loweredObj = LowerExpression(gmc.Object);
 
         return new CallExpression(
@@ -385,6 +434,8 @@ internal sealed class GenericCallLoweringPass
             Arguments: loweredArgs,
             Location: gmc.Location)
         {
+            LoweringKind = gmc.LoweringKind,
+            ConstructedType = gmc.ConstructedType,
             ResolvedRoutine = gmc.ResolvedRoutine,
             TypeArguments = gmc.TypeArguments.Count > 0 ? gmc.TypeArguments : null,
             ResolvedType = gmc.ResolvedType

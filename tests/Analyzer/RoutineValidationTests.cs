@@ -1,21 +1,18 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for routine declaration validation rules:
-/// #151: Static/instance mismatch
-/// #157: Mutation category conflict
+/// Contains tests for routine validation.
 /// </summary>
 public class RoutineValidationTests
 {
     #region #157: Mutation category conflict
     /// <summary>
-    /// Tests Analyze_SingleMutationAnnotation_NoError.
+    /// Verifies semantic analysis behavior for single mutation annotation without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -35,7 +32,7 @@ public class RoutineValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.MutationCategoryConflict);
     }
     /// <summary>
-    /// Tests Analyze_ConflictingMutationAnnotations_ReportsError.
+    /// Verifies semantic analysis behavior for conflicting mutation annotations and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -46,7 +43,7 @@ public class RoutineValidationTests
                           x: S32
                           y: S32
                         @readonly
-                        @writable
+                        @migratable
                         routine Point.set_x(new_x: S32)
                           me.x = new_x
                           return
@@ -61,7 +58,7 @@ public class RoutineValidationTests
 
     #region #151: Static/instance mismatch
     /// <summary>
-    /// Tests Analyze_CommonRoutineCalledOnInstance_ReportsError.
+    /// Verifies semantic analysis behavior for common routine called on instance and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -84,7 +81,7 @@ public class RoutineValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.CommonRoutineMismatch);
     }
     /// <summary>
-    /// Tests Analyze_CommonRoutineCalledOnType_NoError.
+    /// Verifies semantic analysis behavior for common routine called on type without unexpected diagnostics.
     /// </summary>
 
     [Fact]

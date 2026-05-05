@@ -1,22 +1,29 @@
 using System.Text;
-using Compiler.Lexer;
 using Compiler.Instantiation;
+using Compiler.Lexer;
 using Compiler.Resolution;
-using TypeModel.Symbols;
+using Verification.Enums;
 using SyntaxTree;
+using TypeModel.Symbols;
 
 namespace Builder;
 
 /// <summary>
 /// Prints the post-desugared AST back to RF-like source text for debugging.
-/// Implements <see cref="IAstVisitor{T}"/> with <c>string</c> as the result type.
+/// Implements <see cref="ISyntaxTreeVisitor{T}"/> with <c>string</c> as the result type.
 /// </summary>
-public sealed class RfAstPrinter : IAstVisitor<string>
+public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
 {
+    /// <summary>
+    /// Stores the indent state used by this compiler phase.
+    /// </summary>
     private int _indent;
+    /// <summary>
+    /// Stores the i state used by this compiler phase.
+    /// </summary>
     private string I => new string(' ', _indent * 2);
 
-    // ── Entry point ───────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------------------
 
     /// <summary>
     /// Produces a human-readable dump of all user programs and synthesized bodies
@@ -27,21 +34,21 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         IReadOnlyDictionary<string, Statement> synthesizedBodies,
         TypeRegistry registry,
         IEnumerable<(SyntaxTree.Program Program, string FilePath, string Module)>? stdlibPrograms = null,
-        IReadOnlyDictionary<string, MonomorphizedBody>? preMonomorphizedBodies = null)
+        IReadOnlyDictionary<string, MonomorphizedBody>? instantiatedGenericBodies = null)
     {
-        // Build RegistryKey → RoutineInfo for signature reconstruction.
-        Dictionary<string, RoutineInfo> routineByKey = registry.GetAllRoutines()
-            .Where(r => r.IsSynthesized)
-            .GroupBy(r => r.RegistryKey)
-            .ToDictionary(g => g.Key, g => g.First());
+        // Build RegistryKey -> RoutineInfo for signature reconstruction.
+        var routineByKey = registry.GetAllRoutines()
+                                   .Where(r => r.IsSynthesized)
+                                   .GroupBy(r => r.RegistryKey)
+                                   .ToDictionary(g => g.Key, g => g.First());
 
         var sb = new StringBuilder();
 
         if (stdlibPrograms != null)
         {
-            sb.AppendLine("# ═══════════════════════════════════════════════════════");
+            sb.AppendLine("# ========================================================");
             sb.AppendLine("# STDLIB");
-            sb.AppendLine("# ═══════════════════════════════════════════════════════");
+            sb.AppendLine("# ========================================================");
             sb.AppendLine();
             foreach ((SyntaxTree.Program prog, string filePath, string module) in stdlibPrograms)
             {
@@ -52,9 +59,9 @@ public sealed class RfAstPrinter : IAstVisitor<string>
                 sb.AppendLine(prog.Accept(this));
                 sb.AppendLine();
             }
-            sb.AppendLine("# ═══════════════════════════════════════════════════════");
+            sb.AppendLine("# ========================================================");
             sb.AppendLine("# USER PROGRAMS");
-            sb.AppendLine("# ═══════════════════════════════════════════════════════");
+            sb.AppendLine("# ========================================================");
             sb.AppendLine();
         }
 
@@ -75,23 +82,33 @@ public sealed class RfAstPrinter : IAstVisitor<string>
             {
                 _indent = 0;
                 if (routineByKey.TryGetValue(key: key, value: out RoutineInfo? ri))
+                {
+                    // Skip generic definitions — type params are still unresolved (T, K, V, …)
+                    if (ri.IsGenericDefinition || ri.OwnerType?.IsGenericDefinition == true)
+                        continue;
                     sb.AppendLine(FormatRoutineSignature(ri: ri));
+                }
                 else
+                {
+                    // No RoutineInfo — skip keys that still carry generic brackets
+                    if (key.Contains('['))
+                        continue;
                     sb.AppendLine($"# {key}");
+                }
                 sb.AppendLine(PrintBodyOf(body));
                 sb.AppendLine();
             }
         }
 
-        if (preMonomorphizedBodies is { Count: > 0 })
+        if (instantiatedGenericBodies is { Count: > 0 })
         {
             sb.AppendLine("# === MONOMORPHIZED BODIES ===");
-            foreach ((string key, MonomorphizedBody mono) in preMonomorphizedBodies)
+            foreach ((string key, MonomorphizedBody mono) in instantiatedGenericBodies)
             {
                 _indent = 0;
                 if (mono.IsSynthesized)
                 {
-                    // Wired/synthesized routine — no AST body; note it for reference.
+                    // Wired/synthesized routine -> no AST body; note it for reference.
                     sb.AppendLine($"# {key} [synthesized, no AST body]");
                 }
                 else
@@ -107,6 +124,9 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Format routine signature as part of this compiler phase.
+    /// </summary>
     private static string FormatRoutineSignature(RoutineInfo ri)
     {
         string ownerPrefix = ri.OwnerType != null ? $"{ri.OwnerType.FullName}." : "";
@@ -119,13 +139,13 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         string retStr = ri.ReturnType != null
             ? $" -> {ri.ReturnType.FullName}"
             : " -> Blank";
-        string annotations = ri.DeclaredModification == SemanticVerification.Enums.ModificationCategory.Readonly
+        string annotations = ri.DeclaredModification == ModificationCategory.Readonly
             ? "@readonly\n"
             : "";
         return $"{annotations}routine {ownerPrefix}{ri.Name}{failable}({paramStr}){retStr}";
     }
 
-    // ── Indent helpers ────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------------------
 
     /// <summary>Prints a list of statements at _indent+1.</summary>
     private string PrintBody(IEnumerable<Statement> stmts)
@@ -151,8 +171,11 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return result;
     }
 
-    // ── Pattern helper ────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------------------
 
+    /// <summary>
+    /// Performs the print pattern step for this compiler phase.
+    /// </summary>
     private string PrintPattern(Pattern p) => p switch
     {
         LiteralPattern lit => FormatLiteralValue(lit.Value, lit.LiteralType),
@@ -172,6 +195,9 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         _ => $"#{p.GetType().Name}"
     };
 
+    /// <summary>
+    /// Format literal value as part of this compiler phase.
+    /// </summary>
     private static string FormatLiteralValue(object value, TokenType literalType) => literalType switch
     {
         TokenType.TextLiteral => $"\"{EscapeText(value?.ToString() ?? "")}\"",
@@ -210,21 +236,32 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return s;
     }
 
+    /// <summary>
+    /// Performs the escape text step for this compiler phase.
+    /// </summary>
     private static string EscapeText(string s) =>
         s.Replace("\\", "\\\\").Replace("\"", "\\\"");
 
-    // ═════════════════════════════════════════════════════════════════════════
+    // -----------------------------------------------------------------------------
     // EXPRESSIONS
-    // ═════════════════════════════════════════════════════════════════════════
+    // -----------------------------------------------------------------------------
 
+
+    /// <inheritdoc/>
     public string VisitLiteralExpression(LiteralExpression node) =>
         FormatLiteralValue(node.Value, node.LiteralType);
 
+
+    /// <inheritdoc/>
     public string VisitIdentifierExpression(IdentifierExpression node) => node.Name;
 
+
+    /// <inheritdoc/>
     public string VisitBinaryExpression(BinaryExpression node) =>
         $"({node.Left.Accept(this)} {node.Operator.ToStringRepresentation()} {node.Right.Accept(this)})";
 
+
+    /// <inheritdoc/>
     public string VisitUnaryExpression(UnaryExpression node)
     {
         string operand = node.Operand.Accept(this);
@@ -234,21 +271,33 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return opStr != null ? $"{opStr} {operand}" : $"#{node.Operator}({operand})";
     }
 
+
+    /// <inheritdoc/>
     public string VisitCompoundAssignmentExpression(CompoundAssignmentExpression node) =>
         $"{node.Target.Accept(this)} {node.Operator.ToStringRepresentation()}= {node.Value.Accept(this)}";
 
+
+    /// <inheritdoc/>
     public string VisitCallExpression(CallExpression node) =>
         $"{node.Callee.Accept(this)}({string.Join(", ", node.Arguments.Select(a => a.Accept(this)))})";
 
+
+    /// <inheritdoc/>
     public string VisitNamedArgumentExpression(NamedArgumentExpression node) =>
         $"{node.Name}: {node.Value.Accept(this)}";
 
+
+    /// <inheritdoc/>
     public string VisitMemberExpression(MemberExpression node) =>
         $"{node.Object.Accept(this)}.{node.PropertyName}";
 
+
+    /// <inheritdoc/>
     public string VisitOptionalMemberExpression(OptionalMemberExpression node) =>
         $"{node.Object.Accept(this)}?.{node.PropertyName}";
 
+
+    /// <inheritdoc/>
     public string VisitCreatorExpression(CreatorExpression node)
     {
         string typeArgs = node.TypeArguments != null && node.TypeArguments.Count > 0
@@ -259,6 +308,8 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return $"{node.TypeName}{typeArgs}({members})";
     }
 
+
+    /// <inheritdoc/>
     public string VisitTypeExpression(TypeExpression node)
     {
         if (node.GenericArguments == null || node.GenericArguments.Count == 0)
@@ -267,11 +318,15 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return $"{node.Name}[{args}]";
     }
 
+
+    /// <inheritdoc/>
     public string VisitTypeConversionExpression(TypeConversionExpression node) =>
         node.IsMethodStyle
             ? $"{node.Expression.Accept(this)}.{node.TargetType}!()"
             : $"{node.TargetType}!({node.Expression.Accept(this)})";
 
+
+    /// <inheritdoc/>
     public string VisitInsertedTextExpression(InsertedTextExpression node)
     {
         var sb = new StringBuilder("f\"");
@@ -296,12 +351,18 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return sb.ToString();
     }
 
+
+    /// <inheritdoc/>
     public string VisitTypeIdExpression(TypeIdExpression node) =>
         $"#typeid({node.Type.Accept(this)})";
 
+
+    /// <inheritdoc/>
     public string VisitCarrierPayloadExpression(CarrierPayloadExpression node) =>
         $"#carrier_payload({node.Carrier.Accept(this)}, {node.ConcreteType.Accept(this)})";
 
+
+    /// <inheritdoc/>
     public string VisitIsPatternExpression(IsPatternExpression node)
     {
         string patStr = PrintPattern(node.Pattern);
@@ -310,24 +371,36 @@ public sealed class RfAstPrinter : IAstVisitor<string>
             : $"({node.Expression.Accept(this)} {patStr})";
     }
 
+
+    /// <inheritdoc/>
     public string VisitDictEntryLiteralExpression(DictEntryLiteralExpression node) =>
         $"{node.Key.Accept(this)}: {node.Value.Accept(this)}";
 
-    // Rarely appear post-desugaring — use fallback
+    // Rarely appear post-desugaring -> use fallback
+
+    /// <inheritdoc/>
     public string VisitListLiteralExpression(ListLiteralExpression node) =>
         $"[{string.Join(", ", node.Elements.Select(e => e.Accept(this)))}]";
 
+
+    /// <inheritdoc/>
     public string VisitSetLiteralExpression(SetLiteralExpression node) =>
         $"{{{string.Join(", ", node.Elements.Select(e => e.Accept(this)))}}}";
 
+
+    /// <inheritdoc/>
     public string VisitDictLiteralExpression(DictLiteralExpression node) =>
         $"{{{string.Join(", ", node.Pairs.Select(p => $"{p.Key.Accept(this)}: {p.Value.Accept(this)}"))}}}";
 
+
+    /// <inheritdoc/>
     public string VisitTupleLiteralExpression(TupleLiteralExpression node) =>
         node.Elements.Count == 1
             ? $"({node.Elements[0].Accept(this)},)"
             : $"({string.Join(", ", node.Elements.Select(e => e.Accept(this)))})";
 
+
+    /// <inheritdoc/>
     public string VisitWithExpression(WithExpression node)
     {
         var updates = node.Updates.Select(u =>
@@ -344,18 +417,28 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return $"with({node.Base.Accept(this)}, {string.Join(", ", updates)})";
     }
 
+
+    /// <inheritdoc/>
     public string VisitIndexExpression(IndexExpression node) =>
         $"{node.Object.Accept(this)}[{node.Index.Accept(this)}]";
 
+
+    /// <inheritdoc/>
     public string VisitSliceExpression(SliceExpression node) =>
         $"{node.Object.Accept(this)}[{node.Start.Accept(this)} to {node.End.Accept(this)}]";
 
+
+    /// <inheritdoc/>
     public string VisitConditionalExpression(ConditionalExpression node) =>
         $"{node.TrueExpression.Accept(this)} if {node.Condition.Accept(this)} else {node.FalseExpression.Accept(this)}";
 
+
+    /// <inheritdoc/>
     public string VisitBlockExpression(BlockExpression node) =>
         node.Value.Accept(this);
 
+
+    /// <inheritdoc/>
     public string VisitChainedComparisonExpression(ChainedComparisonExpression node)
     {
         var sb = new StringBuilder(node.Operands[0].Accept(this));
@@ -366,6 +449,8 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return sb.ToString();
     }
 
+
+    /// <inheritdoc/>
     public string VisitRangeExpression(RangeExpression node)
     {
         string start = node.Start.Accept(this);
@@ -375,6 +460,8 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return $"({start} {keyword} {end}{step})";
     }
 
+
+    /// <inheritdoc/>
     public string VisitLambdaExpression(LambdaExpression node)
     {
         string parms = string.Join(", ", node.Parameters.Select(p =>
@@ -382,6 +469,8 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return $"({parms}) => {node.Body.Accept(this)}";
     }
 
+
+    /// <inheritdoc/>
     public string VisitGenericMethodCallExpression(GenericMethodCallExpression node)
     {
         string typeArgs = node.TypeArguments.Count > 0
@@ -395,6 +484,8 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return $"{node.Object.Accept(this)}.{node.MethodName}{typeArgs}({args})";
     }
 
+
+    /// <inheritdoc/>
     public string VisitGenericMemberExpression(GenericMemberExpression node)
     {
         string typeArgs = node.TypeArguments.Count > 0
@@ -403,6 +494,8 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return $"{node.Object.Accept(this)}.{node.MemberName}{typeArgs}";
     }
 
+
+    /// <inheritdoc/>
     public string VisitFlagsTestExpression(FlagsTestExpression node)
     {
         string connective = node.Connective == FlagsTestConnective.Or ? " or " : " and ";
@@ -420,6 +513,8 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return $"({node.Subject.Accept(this)} {kind} {flags}{excluded})";
     }
 
+
+    /// <inheritdoc/>
     public string VisitWhenExpression(WhenExpression node)
     {
         var sb = new StringBuilder();
@@ -436,15 +531,21 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return sb.ToString().TrimEnd();
     }
 
+
+    /// <inheritdoc/>
     public string VisitStealExpression(StealExpression node) =>
         $"steal {node.Operand.Accept(this)}";
 
+
+    /// <inheritdoc/>
     public string VisitWaitforExpression(WaitforExpression node)
     {
         string timeout = node.Timeout != null ? $" within {node.Timeout.Accept(this)}" : "";
         return $"waitfor {node.Operand.Accept(this)}{timeout}";
     }
 
+
+    /// <inheritdoc/>
     public string VisitDependentWaitforExpression(DependentWaitforExpression node)
     {
         string deps = string.Join(", ", node.Dependencies.Select(d =>
@@ -455,19 +556,27 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return $"after {deps} waitfor {node.Operand.Accept(this)}{timeout}";
     }
 
+
+    /// <inheritdoc/>
     public string VisitBackIndexExpression(BackIndexExpression node) =>
         $"^{node.Operand.Accept(this)}";
 
-    // ═════════════════════════════════════════════════════════════════════════
+    // -----------------------------------------------------------------------------
     // STATEMENTS
-    // ═════════════════════════════════════════════════════════════════════════
+    // -----------------------------------------------------------------------------
 
+
+    /// <inheritdoc/>
     public string VisitExpressionStatement(ExpressionStatement node) =>
         $"{I}{node.Expression.Accept(this)}";
 
+
+    /// <inheritdoc/>
     public string VisitDeclarationStatement(DeclarationStatement node) =>
         node.Declaration.Accept(this);
 
+
+    /// <inheritdoc/>
     public string VisitVariableDeclaration(VariableDeclaration node)
     {
         string typeStr = node.Type != null ? $": {node.Type.Accept(this)}" : "";
@@ -475,41 +584,67 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return $"{I}var {node.Name}{typeStr}{initStr}";
     }
 
+
+    /// <inheritdoc/>
     public string VisitAssignmentStatement(AssignmentStatement node) =>
         $"{I}{node.Target.Accept(this)} = {node.Value.Accept(this)}";
 
+
+    /// <inheritdoc/>
     public string VisitReturnStatement(ReturnStatement node) =>
         node.Value != null
             ? $"{I}return {node.Value.Accept(this)}"
             : $"{I}return <ERROR>";
 
+
+    /// <inheritdoc/>
     public string VisitBecomesStatement(BecomesStatement node) =>
         $"{I}becomes {node.Value.Accept(this)}";
 
+
+    /// <inheritdoc/>
     public string VisitThrowStatement(ThrowStatement node) =>
         $"{I}throw {node.Error.Accept(this)}";
 
+
+    /// <inheritdoc/>
     public string VisitAbsentStatement(AbsentStatement node) => $"{I}absent";
 
+
+    /// <inheritdoc/>
     public string VisitPassStatement(PassStatement node) => $"{I}pass";
 
+
+    /// <inheritdoc/>
     public string VisitBreakStatement(BreakStatement node) => $"{I}break";
 
+
+    /// <inheritdoc/>
     public string VisitContinueStatement(ContinueStatement node) => $"{I}continue";
 
+
+    /// <inheritdoc/>
     public string VisitDiscardStatement(DiscardStatement node) =>
         $"{I}discard {node.Expression.Accept(this)}";
 
+
+    /// <inheritdoc/>
     public string VisitDestructuringStatement(DestructuringStatement node) =>
         $"{I}#Destructuring";
 
+
+    /// <inheritdoc/>
     public string VisitVariantReturnStatement(VariantReturnStatement node) =>
         $"{I}#variant_return({node.VariantKind}, {node.SiteKind}" +
         $"{(node.Value != null ? ", " + node.Value.Accept(this) : "")})";
 
+
+    /// <inheritdoc/>
     public string VisitBlockStatement(BlockStatement node) =>
         PrintBody(node.Statements);
 
+
+    /// <inheritdoc/>
     public string VisitIfStatement(IfStatement node)
     {
         var sb = new StringBuilder();
@@ -535,6 +670,8 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return sb.ToString().TrimEnd();
     }
 
+
+    /// <inheritdoc/>
     public string VisitWhileStatement(WhileStatement node)
     {
         var sb = new StringBuilder();
@@ -550,6 +687,8 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return sb.ToString().TrimEnd();
     }
 
+
+    /// <inheritdoc/>
     public string VisitLoopStatement(LoopStatement node)
     {
         var sb = new StringBuilder();
@@ -558,12 +697,17 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return sb.ToString().TrimEnd();
     }
 
+
+    /// <inheritdoc/>
     public string VisitForStatement(ForStatement node) => $"{I}#ForStatement";
 
+
+    /// <inheritdoc/>
     public string VisitWhenStatement(WhenStatement node)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"{I}when {node.Expression.Accept(this)}");
+        string subject = node.Expression != null ? $" {node.Expression.Accept(this)}" : "";
+        sb.AppendLine($"{I}when{subject}");
         _indent++;
         foreach (WhenClause clause in node.Clauses)
         {
@@ -577,6 +721,8 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return sb.ToString().TrimEnd();
     }
 
+
+    /// <inheritdoc/>
     public string VisitDangerStatement(DangerStatement node)
     {
         var sb = new StringBuilder();
@@ -585,6 +731,8 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return sb.ToString().TrimEnd();
     }
 
+
+    /// <inheritdoc/>
     public string VisitUsingStatement(UsingStatement node)
     {
         var sb = new StringBuilder();
@@ -593,10 +741,12 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return sb.ToString().TrimEnd();
     }
 
-    // ═════════════════════════════════════════════════════════════════════════
+    // -----------------------------------------------------------------------------
     // DECLARATIONS
-    // ═════════════════════════════════════════════════════════════════════════
+    // -----------------------------------------------------------------------------
 
+
+    /// <inheritdoc/>
     public string VisitFunctionDeclaration(RoutineDeclaration node)
     {
         var sb = new StringBuilder();
@@ -609,10 +759,16 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return sb.ToString().TrimEnd();
     }
 
+
+    /// <inheritdoc/>
     public string VisitModuleDeclaration(ModuleDeclaration node) => $"{I}module {node.Path}";
 
+
+    /// <inheritdoc/>
     public string VisitImportDeclaration(ImportDeclaration node) => $"{I}import {node.ModulePath}";
 
+
+    /// <inheritdoc/>
     public string VisitRecordDeclaration(RecordDeclaration node)
     {
         string generics = node.GenericParameters is { Count: > 0 }
@@ -624,6 +780,8 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return PrintTypeDecl($"record {node.Name}{generics}{protos}", node.Members);
     }
 
+
+    /// <inheritdoc/>
     public string VisitEntityDeclaration(EntityDeclaration node)
     {
         string generics = node.GenericParameters is { Count: > 0 }
@@ -635,6 +793,8 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return PrintTypeDecl($"entity {node.Name}{generics}{protos}", node.Members);
     }
 
+
+    /// <inheritdoc/>
     public string VisitChoiceDeclaration(ChoiceDeclaration node)
     {
         var sb = new StringBuilder();
@@ -651,6 +811,8 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return sb.ToString().TrimEnd();
     }
 
+
+    /// <inheritdoc/>
     public string VisitFlagsDeclaration(FlagsDeclaration node)
     {
         var sb = new StringBuilder();
@@ -662,6 +824,8 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return sb.ToString().TrimEnd();
     }
 
+
+    /// <inheritdoc/>
     public string VisitVariantDeclaration(VariantDeclaration node)
     {
         string generics = node.GenericParameters is { Count: > 0 }
@@ -676,6 +840,8 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return sb.ToString().TrimEnd();
     }
 
+
+    /// <inheritdoc/>
     public string VisitProtocolDeclaration(ProtocolDeclaration node)
     {
         string generics = node.GenericParameters is { Count: > 0 }
@@ -701,6 +867,8 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return sb.ToString().TrimEnd();
     }
 
+
+    /// <inheritdoc/>
     public string VisitCrashableDeclaration(CrashableDeclaration node) =>
         PrintTypeDecl($"crashable {node.Name}", node.Members);
 
@@ -721,22 +889,32 @@ public sealed class RfAstPrinter : IAstVisitor<string>
         return sb.ToString().TrimEnd();
     }
 
+
+    /// <inheritdoc/>
     public string VisitDefineDeclaration(DefineDeclaration node) =>
         $"{I}define {node.OldName} as {node.NewName}";
 
+
+    /// <inheritdoc/>
     public string VisitExternalDeclaration(ExternalDeclaration node) =>
         $"{I}external {node.Name}";
 
+
+    /// <inheritdoc/>
     public string VisitExternalBlockDeclaration(ExternalBlockDeclaration node) =>
         $"{I}external block";
 
+
+    /// <inheritdoc/>
     public string VisitPresetDeclaration(PresetDeclaration node) =>
         $"{I}preset {node.Name}: {node.Type.Accept(this)} = {node.Value.Accept(this)}";
 
-    // ═════════════════════════════════════════════════════════════════════════
+    // -----------------------------------------------------------------------------
     // PROGRAM
-    // ═════════════════════════════════════════════════════════════════════════
+    // -----------------------------------------------------------------------------
 
+
+    /// <inheritdoc/>
     public string VisitProgram(SyntaxTree.Program node) =>
         string.Join("\n\n", node.Declarations
             .Where(d => d is not PassDeclaration)

@@ -1,20 +1,18 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for flags type semantic validation.
-/// Validates gaps #127-#135 from the compiler TODO.
+/// Contains tests for flags validation.
 /// </summary>
 public class FlagsValidationTests
 {
     #region Valid Flags (no errors expected)
     /// <summary>
-    /// Tests Flags_SimpleDeclaration_NoErrors.
+    /// Verifies flags validation behavior for simple declaration without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -34,7 +32,7 @@ public class FlagsValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.FlagsDuplicateMember);
     }
     /// <summary>
-    /// Tests Flags_IsTest_ValidMember_NoErrors.
+    /// Verifies flags validation behavior for is test valid member without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -58,7 +56,7 @@ public class FlagsValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.FlagsTypeMismatch);
     }
     /// <summary>
-    /// Tests Flags_IsNotTest_ValidMember_NoErrors.
+    /// Verifies flags validation behavior for is not test valid member without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -80,7 +78,7 @@ public class FlagsValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.FlagsMemberNotFound);
     }
     /// <summary>
-    /// Tests Flags_IsOnlyWithAnd_NoErrors.
+    /// Verifies flags validation behavior for is only with and without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -102,7 +100,7 @@ public class FlagsValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut);
     }
     /// <summary>
-    /// Tests Flags_ButOperator_SameType_NoErrors.
+    /// Verifies flags validation behavior for but operator same type without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -124,7 +122,7 @@ public class FlagsValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.FlagsTypeMismatch);
     }
     /// <summary>
-    /// Tests Flags_AndCombiner_SameType_NoErrors.
+    /// Verifies flags validation behavior for and combiner same type without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -148,7 +146,7 @@ public class FlagsValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.FlagsTypeMismatch);
     }
     /// <summary>
-    /// Tests Flags_AndCombiner_DifferentTypes_ReportsError.
+    /// Verifies flags validation behavior for and combiner different types and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -173,7 +171,7 @@ public class FlagsValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.LogicalOperatorRequiresBool);
     }
     /// <summary>
-    /// Tests Flags_AllOnAllOff_NoErrors.
+    /// Verifies flags validation behavior for all on all off without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -200,7 +198,7 @@ public class FlagsValidationTests
 
     #region #127: Max 64 members
     /// <summary>
-    /// Tests Flags_MoreThan64Members_ReportsError.
+    /// Verifies flags validation behavior for more than64 members and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -217,7 +215,7 @@ public class FlagsValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.FlagsTooManyMembers);
     }
     /// <summary>
-    /// Tests Flags_Exactly64Members_NoError.
+    /// Verifies flags validation behavior for exactly64 members without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -238,7 +236,7 @@ public class FlagsValidationTests
 
     #region Duplicate members
     /// <summary>
-    /// Tests Flags_DuplicateMember_ReportsError.
+    /// Verifies flags validation behavior for duplicate member and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -260,7 +258,7 @@ public class FlagsValidationTests
 
     #region #128: or in assignment
     /// <summary>
-    /// Tests Flags_OrInAssignment_ReportsError.
+    /// Verifies flags validation behavior for or in assignment and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -285,7 +283,7 @@ public class FlagsValidationTests
 
     #region #129: Flags when requires else
     /// <summary>
-    /// Tests Flags_WhenExpressionWithoutElse_ReportsError.
+    /// Verifies flags validation behavior for when expression without else and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -308,7 +306,7 @@ public class FlagsValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
     /// <summary>
-    /// Tests Flags_WhenExpressionWithElse_NoError.
+    /// Verifies flags validation behavior for when expression with else without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -339,7 +337,7 @@ public class FlagsValidationTests
     // 'isonly READ or WRITE' parses as '(perms isonly READ) or WRITE' ??a logical or,
     // which produces LogicalOperatorRequiresBool. No semantic check needed.
     /// <summary>
-    /// Tests Flags_IsOnlyWithOr_ProducesParseError.
+    /// Verifies flags validation behavior for is only with or produces parse error.
     /// </summary>
 
     [Fact]
@@ -365,7 +363,7 @@ public class FlagsValidationTests
 
     #region #134: No arithmetic on flags
     /// <summary>
-    /// Tests Flags_Arithmetic_ReportsError.
+    /// Verifies flags validation behavior for arithmetic and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -390,7 +388,7 @@ public class FlagsValidationTests
 
     #region #135: No custom operators on flags
     /// <summary>
-    /// Tests Flags_CustomOperator_ReportsError.
+    /// Verifies flags validation behavior for custom operator and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -415,7 +413,7 @@ public class FlagsValidationTests
 
     #region Flag member validation
     /// <summary>
-    /// Tests Flags_IsTest_UnknownMember_ReportsError.
+    /// Verifies flags validation behavior for is test unknown member and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -436,7 +434,7 @@ public class FlagsValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.FlagsMemberNotFound);
     }
     /// <summary>
-    /// Tests Flags_IsTestOnNonFlags_ReportsError.
+    /// Verifies flags validation behavior for is test on non flags and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -454,7 +452,7 @@ public class FlagsValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.UnknownType);
     }
     /// <summary>
-    /// Tests Flags_ButOperator_TypeMismatch_ReportsError.
+    /// Verifies flags validation behavior for but operator type mismatch and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -483,7 +481,7 @@ public class FlagsValidationTests
 
     #region Member Access (C98)
     /// <summary>
-    /// Tests Flags_MemberAccess_AsValue.
+    /// Verifies flags validation behavior for member access as value.
     /// </summary>
 
     [Fact]
@@ -509,7 +507,7 @@ public class FlagsValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.UnknownIdentifier);
     }
     /// <summary>
-    /// Tests Flags_MemberAccess_InvalidMember.
+    /// Verifies flags validation behavior for member access invalid member.
     /// </summary>
 
     [Fact]

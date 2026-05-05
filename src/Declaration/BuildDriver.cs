@@ -1,11 +1,11 @@
-namespace Compiler.Declaration;
-
-using TypeModel.Enums;
-using SemanticVerification.Results;
+using Compiler.Diagnostics;
+using Compiler.Lexer;
+using Compiler.Parser;
+using Verification.Results;
 using SyntaxTree;
-using Lexer;
-using Parser;
-using Diagnostics;
+using TypeModel.Enums;
+
+namespace Compiler.Declaration;
 
 /// <summary>
 /// Result of building a single source file.
@@ -252,7 +252,7 @@ public sealed class BuildDriver
             List<Token> tokens = tokenizer.Tokenize();
 
             // Parse
-            var parser = new Parser(tokens: tokens, language: language, fileName: filePath);
+            var parser = new Parser.Parser(tokens: tokens, language: language, fileName: filePath);
             Program ast = parser.Parse();
             IReadOnlyList<BuildWarning> warnings = parser.GetWarnings();
 
@@ -260,7 +260,7 @@ public sealed class BuildDriver
             string? modulePath = null;
             var imports = new List<ImportDeclaration>();
 
-            foreach (IAstNode decl in ast.Declarations)
+            foreach (ISyntaxTreeNode decl in ast.Declarations)
             {
                 if (decl is ModuleDeclaration ns)
                 {
@@ -349,7 +349,7 @@ public sealed class BuildDriver
             }
 
             string? moduleName = null;
-            foreach (IAstNode node in ast.Declarations)
+            foreach (ISyntaxTreeNode node in ast.Declarations)
             {
                 if (node is ModuleDeclaration md)
                 {
@@ -377,7 +377,7 @@ public sealed class BuildDriver
             Language language = isSuflae ? Language.Suflae : Language.RazorForge;
             var tokenizer = new Tokenizer(source: code, fileName: filePath, language: language);
             List<Token> tokens = tokenizer.Tokenize();
-            var parser = new Parser(tokens: tokens, language: language, fileName: filePath);
+            var parser = new Parser.Parser(tokens: tokens, language: language, fileName: filePath);
             return parser.Parse();
         }
         catch

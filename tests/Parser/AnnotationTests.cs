@@ -1,19 +1,17 @@
-﻿using Xunit;
+using SyntaxTree;
 
 namespace RazorForge.Tests.Parser;
 
-using SyntaxTree;
 using static TestHelpers;
 
 /// <summary>
-/// Tests for parsing attributes in RazorForge:
-/// @readonly, @writable, @crash_only, @config, @prelude, @static, compound attributes.
+/// Contains tests for attribute.
 /// </summary>
 public class AttributeTests
 {
     #region Simple Annotation Tests
     /// <summary>
-    /// Tests Parse_ReadonlyAttribute.
+    /// Verifies that the parser accepts readonly attribute.
     /// </summary>
 
     [Fact]
@@ -31,26 +29,7 @@ public class AttributeTests
         Assert.Contains(expected: "readonly", collection: routine.Annotations);
     }
     /// <summary>
-    /// Tests Parse_WritableAttribute.
-    /// </summary>
-
-    [Fact]
-    public void Parse_WritableAttribute()
-    {
-        string source = """
-                        @writable
-                        routine Counter.increment()
-                          me.count += 1
-                          return
-                        """;
-
-        Program program = AssertParses(source: source);
-        RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
-        Assert.NotNull(@object: routine.Annotations);
-        Assert.Contains(expected: "writable", collection: routine.Annotations);
-    }
-    /// <summary>
-    /// Tests Parse_CrashOnlyAttribute.
+    /// Verifies that the parser accepts crash only attribute.
     /// </summary>
 
     [Fact]
@@ -70,7 +49,7 @@ public class AttributeTests
         Assert.Contains(expected: "crash_only", collection: routine.Annotations);
     }
     /// <summary>
-    /// Tests Parse_PreludeAttribute.
+    /// Verifies that the parser accepts prelude attribute.
     /// </summary>
 
     [Fact]
@@ -89,7 +68,7 @@ public class AttributeTests
         Assert.Contains(expected: "prelude", collection: routine.Annotations);
     }
     /// <summary>
-    /// Tests Parse_StaticAttribute.
+    /// Verifies that the parser accepts static attribute.
     /// </summary>
 
     [Fact]
@@ -104,7 +83,7 @@ public class AttributeTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_InlineAttribute.
+    /// Verifies that the parser accepts inline attribute.
     /// </summary>
 
     [Fact]
@@ -123,56 +102,7 @@ public class AttributeTests
 
     #region Parameterized Annotation Tests
     /// <summary>
-    /// Tests Parse_ConfigAttributeTargetOs.
-    /// </summary>
-
-    [Fact]
-    public void Parse_ConfigAttributeTargetOs()
-    {
-        string source = """
-                        @config(target_os: "windows")
-                        routine get_config_path() -> Text
-                          return "C:\\config.toml"
-                        """;
-
-        Program program = AssertParses(source: source);
-        RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
-        Assert.NotNull(@object: routine.Annotations);
-    }
-    /// <summary>
-    /// Tests Parse_ConfigAttributeFeature.
-    /// </summary>
-
-    [Fact]
-    public void Parse_ConfigAttributeFeature()
-    {
-        string source = """
-                        @config(feature: "debug")
-                        routine debug_log(msg: Text)
-                          show(f"[DEBUG] {msg}")
-                          return
-                        """;
-
-        AssertParses(source: source);
-    }
-    /// <summary>
-    /// Tests Parse_ConfigAttributeArchitecture.
-    /// </summary>
-
-    [Fact]
-    public void Parse_ConfigAttributeArchitecture()
-    {
-        string source = """
-                        @config(target_arch: "x86_64")
-                        routine simd_add(a: Array[F32, 4], b: Array[F32, 4]) -> Array[F32, 4]
-                          pass
-                          return
-                        """;
-
-        AssertParses(source: source);
-    }
-    /// <summary>
-    /// Tests Parse_DeprecatedAttributeWithMessage.
+    /// Verifies that the parser accepts deprecated attribute with message.
     /// </summary>
 
     [Fact]
@@ -192,7 +122,7 @@ public class AttributeTests
 
     #region Compound Annotation Tests
     /// <summary>
-    /// Tests Parse_CompoundAttributes.
+    /// Verifies that the parser accepts compound attributes.
     /// </summary>
 
     [Fact]
@@ -209,7 +139,7 @@ public class AttributeTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_CompoundAttributesMultiple.
+    /// Verifies that the parser accepts compound attributes multiple.
     /// </summary>
 
     [Fact]
@@ -224,19 +154,19 @@ public class AttributeTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_CompoundProtocolAnnotations.
+    /// Verifies that the parser accepts compound protocol annotations.
     /// </summary>
 
     [Fact]
     public void Parse_CompoundProtocolAnnotations()
     {
         string source = """
-                        protocol Identifiable
+                        protocol Comparable
                           @readonly
-                          routine Me.$same(you: Me) -> Bool
+                          routine Me.$lt(you: Me) -> Bool
 
                           @readonly
-                          routine Me.$notsame(you: Me) -> Bool
+                          routine Me.$gt(you: Me) -> Bool
                         """;
 
         AssertParses(source: source);
@@ -246,7 +176,7 @@ public class AttributeTests
 
     #region Type Annotation Tests
     /// <summary>
-    /// Tests Parse_AttributeOnProtocol.
+    /// Verifies that the parser accepts attribute on protocol.
     /// </summary>
 
     [Fact]
@@ -267,7 +197,7 @@ public class AttributeTests
 
     #region Member Variable Annotation Tests
     /// <summary>
-    /// Tests Parse_AttributeOnField.
+    /// Verifies that the parser accepts attribute on field.
     /// </summary>
 
     [Fact]
@@ -285,7 +215,7 @@ public class AttributeTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_AttributeOnEntityMemberVariable.
+    /// Verifies that the parser accepts attribute on entity member variable.
     /// </summary>
 
     [Fact]
@@ -307,7 +237,7 @@ public class AttributeTests
 
     #region Multiple Annotation Lines Tests
     /// <summary>
-    /// Tests Parse_MultipleAttributeLines.
+    /// Verifies that the parser accepts multiple attribute lines.
     /// </summary>
 
     [Fact]
@@ -316,7 +246,7 @@ public class AttributeTests
         string source = """
                         @readonly
                         @inline
-                        @config(feature: "optimized")
+                        @deprecated(message: "Use fast_compute_v2 instead")
                         routine fast_compute(x: S32) -> S32
                           return x * 2
                         """;
@@ -324,7 +254,7 @@ public class AttributeTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_AttributesOnTypeAndMethods.
+    /// Verifies that the parser accepts attributes on type and methods.
     /// </summary>
 
     [Fact]
@@ -339,7 +269,6 @@ public class AttributeTests
                         routine Calculator.get() -> S32
                           return me.value
 
-                        @writable
                         routine Calculator.set(v: S32)
                           me.value = v
                           return
@@ -352,7 +281,7 @@ public class AttributeTests
 
     #region Visibility with Annotation Tests
     /// <summary>
-    /// Tests Parse_VisibilityAndAttribute.
+    /// Verifies that the parser accepts visibility and attribute.
     /// </summary>
 
     [Fact]
@@ -368,7 +297,7 @@ public class AttributeTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_PrivateWithAttribute.
+    /// Verifies that the parser accepts private with attribute.
     /// </summary>
 
     [Fact]
@@ -383,7 +312,7 @@ public class AttributeTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_InternalWithAttribute.
+    /// Verifies that the parser accepts internal with attribute.
     /// </summary>
 
     [Fact]
@@ -402,7 +331,7 @@ public class AttributeTests
 
     #region Protocol Member Routine Annotations
     /// <summary>
-    /// Tests Parse_ProtocolMethodAttributes.
+    /// Verifies that the parser accepts protocol method attributes.
     /// </summary>
 
     [Fact]
@@ -416,7 +345,6 @@ public class AttributeTests
                           @readonly
                           routine Me.is_empty() -> bool
 
-                          @writable
                           routine Me.clear()
                         """;
 
@@ -427,7 +355,7 @@ public class AttributeTests
 
     #region Test Annotation Tests
     /// <summary>
-    /// Tests Parse_TestAttribute.
+    /// Verifies that the parser accepts test attribute.
     /// </summary>
 
     [Fact]
@@ -443,7 +371,7 @@ public class AttributeTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_BenchAttribute.
+    /// Verifies that the parser accepts bench attribute.
     /// </summary>
 
     [Fact]

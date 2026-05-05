@@ -1,6 +1,5 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
@@ -13,7 +12,7 @@ using static TestHelpers;
 public class DispatchInferenceTests
 {
     /// <summary>
-    /// Tests Analyze_ConcreteVarargs_NoDispatchError.
+    /// Verifies semantic analysis behavior for concrete varargs without dispatch errors.
     /// </summary>
     [Fact]
     public void Analyze_ConcreteVarargs_NoDispatchError()
@@ -30,7 +29,7 @@ public class DispatchInferenceTests
             filter: e => e.Code == SemanticDiagnosticCode.RuntimeDispatchNotSupported);
     }
     /// <summary>
-    /// Tests Analyze_GenericConstrainedVarargs_NoDispatchError.
+    /// Verifies semantic analysis behavior for generic constrained varargs without dispatch errors.
     /// </summary>
 
     [Fact]
@@ -56,7 +55,7 @@ public class DispatchInferenceTests
             filter: e => e.Code == SemanticDiagnosticCode.RuntimeDispatchNotSupported);
     }
     /// <summary>
-    /// Tests Analyze_ProtocolVarargsSameType_NoDispatchError.
+    /// Verifies semantic analysis behavior for protocol varargs same type without dispatch errors.
     /// </summary>
 
     [Fact]
@@ -82,7 +81,7 @@ public class DispatchInferenceTests
             filter: e => e.Code == SemanticDiagnosticCode.RuntimeDispatchNotSupported);
     }
     /// <summary>
-    /// Tests Analyze_ProtocolVarargsMixedTypes_ReportsRuntimeDispatchError.
+    /// Verifies semantic analysis behavior for protocol varargs mixed types reports runtime dispatch error.
     /// </summary>
 
     [Fact]

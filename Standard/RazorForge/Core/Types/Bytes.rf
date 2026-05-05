@@ -690,22 +690,22 @@ routine BytesUtf8Iterator.$next!() -> Character
 # ============================================================================
 
 ### Copies this byte sequence into a newly allocated null-terminated C buffer.
-### :returns: The resulting `Address` value.
+### :returns: The resulting {CStr} value.
 @readonly
-routine Bytes.to_cstr() -> Address
+routine Bytes.to_cstr() -> CStr
   var len = me.count
   danger!
     var buffer = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * (len + 1u64)))
     if len > 0u64
       rf_copy_bytes_at(dest: buffer.address(), src: me.data.address(), size: Byte.data_size() * len)
     buffer.stride(count: S64(len)).inject(value: BYTE_NULL)
-    return buffer.address()
+    return CStr(from_ptr: buffer.address())
 
 ### Encodes this text as UTF-8 and returns a newly allocated null-terminated C
 ### buffer.
-### :returns: The resulting `Address` value.
+### :returns: The resulting {CStr} value.
 @readonly
-routine Text.to_cstr() -> Address
+routine Text.to_cstr() -> CStr
   var bytes = me.encode_as_utf8()
   return bytes.to_cstr()
 

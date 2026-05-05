@@ -1,4 +1,3 @@
-using TypeModel.Enums;
 using Compiler.Diagnostics;
 
 namespace Compiler.Lexer;
@@ -82,8 +81,8 @@ public partial class Tokenizer
             if (suffix == ArbitraryPrecisionSuffix)
             {
                 AddToken(type: isFloat
-                    ? TokenType.Decimal
-                    : TokenType.Integer);
+                    ? TokenType.DecimalLiteral
+                    : TokenType.IntegerLiteral);
             }
             else if (_numericSuffixToTokenType.TryGetValue(key: suffix,
                          value: out TokenType numericType))
@@ -113,21 +112,9 @@ public partial class Tokenizer
         }
         else
         {
-            // Language-conditional defaults:
-            // RF: S64Literal for integers, F64Literal for floats
-            // SF: Integer for integers, Decimal for floats
-            if (_language == Language.RazorForge)
-            {
-                AddToken(type: isFloat
-                    ? TokenType.F64Literal
-                    : TokenType.S64Literal);
-            }
-            else
-            {
-                AddToken(type: isFloat
-                    ? TokenType.Decimal
-                    : TokenType.Integer);
-            }
+            AddToken(type: isFloat
+                ? TokenType.UndecidedDecimal
+                : TokenType.UndecidedInteger);
         }
     }
 
@@ -231,8 +218,8 @@ public partial class Tokenizer
             if (suffix == ArbitraryPrecisionSuffix)
             {
                 AddToken(type: isHexFloat
-                    ? TokenType.Decimal
-                    : TokenType.Integer);
+                    ? TokenType.DecimalLiteral
+                    : TokenType.IntegerLiteral);
             }
             else if (_numericSuffixToTokenType.TryGetValue(key: suffix,
                          value: out TokenType tokenType))
@@ -254,20 +241,9 @@ public partial class Tokenizer
         }
         else
         {
-            // Language-conditional defaults for prefixed:
-            // RF: S64Literal (integer) / F64Literal (hex float), SF: Integer / Decimal
-            if (_language == Language.RazorForge)
-            {
-                AddToken(type: isHexFloat
-                    ? TokenType.F64Literal
-                    : TokenType.S64Literal);
-            }
-            else
-            {
-                AddToken(type: isHexFloat
-                    ? TokenType.Decimal
-                    : TokenType.Integer);
-            }
+            AddToken(type: isHexFloat
+                ? TokenType.UndecidedDecimal
+                : TokenType.UndecidedInteger);
         }
     }
 
@@ -297,7 +273,7 @@ public partial class Tokenizer
             // Handle arbitrary precision suffix (n) - always Integer for octal
             if (suffix == ArbitraryPrecisionSuffix)
             {
-                AddToken(type: TokenType.Integer);
+                AddToken(type: TokenType.IntegerLiteral);
             }
             else if (_numericSuffixToTokenType.TryGetValue(key: suffix,
                          value: out TokenType tokenType))
@@ -316,16 +292,7 @@ public partial class Tokenizer
         }
         else
         {
-            // Language-conditional defaults for octal:
-            // RF: S64Literal, SF: Integer
-            if (_language == Language.RazorForge)
-            {
-                AddToken(type: TokenType.S64Literal);
-            }
-            else
-            {
-                AddToken(type: TokenType.Integer);
-            }
+            AddToken(type: TokenType.UndecidedInteger);
         }
     }
 

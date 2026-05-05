@@ -1,23 +1,24 @@
-namespace Compiler.Resolution;
-
-using SemanticVerification;
-using SemanticVerification.Enums;
+using Compiler.Diagnostics;
+using Verification;
+using Verification.Enums;
+using SyntaxTree;
 using TypeModel.Enums;
 using TypeModel.Symbols;
 using TypeModel.Types;
-using SyntaxTree;
-using Diagnostics;
-using TypeSymbol = TypeModel.Types.TypeInfo;
+
+namespace Compiler.Resolution;
+
+using TypeSymbol = TypeInfo;
 
 /// <summary>
 /// Handles resolution and registration of routine signatures for the semantic analyzer.
 /// </summary>
 internal sealed class SignatureResolver
 {
-    private readonly SemanticAnalyzer _sa;
+    private readonly SemanticVerifier _sa;
     private readonly TypeResolver _typeResolver;
 
-    internal SignatureResolver(SemanticAnalyzer sa, TypeResolver typeResolver)
+    internal SignatureResolver(SemanticVerifier sa, TypeResolver typeResolver)
     {
         _sa = sa;
         _typeResolver = typeResolver;
@@ -33,7 +34,7 @@ internal sealed class SignatureResolver
     /// <param name="filterFilePath">If set, only processes pending routines from this file.</param>
     internal void ResolveAndRegisterPendingRoutines(string? filterFilePath = null)
     {
-        List<SemanticAnalyzer.PendingRoutine> toProcess;
+        List<SemanticVerifier.PendingRoutine> toProcess;
         if (filterFilePath != null)
         {
             toProcess = _sa._pendingRoutines
@@ -47,7 +48,7 @@ internal sealed class SignatureResolver
             _sa._pendingRoutines.Clear();
         }
 
-        foreach (SemanticAnalyzer.PendingRoutine pending in toProcess)
+        foreach (SemanticVerifier.PendingRoutine pending in toProcess)
         {
             ResolveAndRegisterRoutine(pending: pending);
         }
@@ -56,15 +57,14 @@ internal sealed class SignatureResolver
     /// <summary>
     /// Resolves a single pending routine's signature and registers it.
     /// </summary>
-    private void ResolveAndRegisterRoutine(SemanticAnalyzer.PendingRoutine pending)
+    private void ResolveAndRegisterRoutine(SemanticVerifier.PendingRoutine pending)
     {
         RoutineDeclaration routine = pending.Declaration;
 
         ModificationCategory declaredModification =
             routine.Annotations.Contains(item: "readonly") ? ModificationCategory.Readonly :
-            routine.Annotations.Contains(item: "writable") ? ModificationCategory.Writable :
-            routine.Annotations.Contains(item: "migrating") ? ModificationCategory.Migratable :
-            ModificationCategory.Migratable;
+            routine.Annotations.Contains(item: "migratable") ? ModificationCategory.Migratable :
+            ModificationCategory.Writable;
 
         // Phase 2 (ResolveTypeBodies) replaces user-defined entity/record types in the registry
         // with new objects that carry resolved member variables. pending.OwnerType was captured
@@ -271,7 +271,7 @@ internal sealed class SignatureResolver
     /// </summary>
     internal void ResolveExternalSignatures(Program program)
     {
-        foreach (IAstNode declaration in program.Declarations)
+        foreach (ISyntaxTreeNode declaration in program.Declarations)
         {
             switch (declaration)
             {
@@ -280,7 +280,7 @@ internal sealed class SignatureResolver
                     break;
 
                 case ExternalBlockDeclaration block:
-                    foreach (Declaration decl in block.Declarations)
+                    foreach (SyntaxTree.Declaration decl in block.Declarations)
                     {
                         if (decl is ExternalDeclaration ext)
                         {
@@ -542,7 +542,7 @@ internal sealed class SignatureResolver
         }
 
         // Get the required protocol for this wired method
-        IReadOnlyList<string>? requiredProtocols = SemanticAnalyzer.GetRequiredProtocols(wiredName: routineInfo.Name);
+        IReadOnlyList<string>? requiredProtocols = SemanticVerifier.GetRequiredProtocols(wiredName: routineInfo.Name);
         if (requiredProtocols == null || requiredProtocols.Count == 0)
         {
             return; // Not an operator method or no protocol required

@@ -1,22 +1,19 @@
 using Compiler.Diagnostics;
-using SemanticVerification.Results;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests locking in P1-P9 stabilization plan fixes.
-/// Prevents regressions in generic resolution, body matching,
-/// using semantics, and type provenance.
+/// Contains tests for stabilization plan.
 /// </summary>
 public class StabilizationPlanTests
 {
     #region P1 ??Protocol method lookup on instantiated generics
 
     /// <summary>
-    /// Verifies that protocol method lookup substitutes the owner type argument on instantiated generics.
+    /// Verifies that the test validates protocol method on generic owner and substitutes the parameter type.
     /// </summary>
     [Fact]
     public void P1_ProtocolMethodOnGenericOwner_SubstitutesParamType()
@@ -47,7 +44,7 @@ public class StabilizationPlanTests
     }
 
     /// <summary>
-    /// Verifies that generic owner and generic member routine substitutions both resolve correctly.
+    /// Verifies that the test validates generic method on generic owner both levels substituted.
     /// </summary>
     [Fact]
     public void P1_GenericMethodOnGenericOwner_BothLevelsSubstituted()
@@ -71,7 +68,7 @@ public class StabilizationPlanTests
     }
 
     /// <summary>
-    /// Verifies that a generic member routine return type resolves using the instantiated owner type argument.
+    /// Verifies that the test validates generic method return type uses owner type arg.
     /// </summary>
     [Fact]
     public void P1_GenericMethodReturnType_UsesOwnerTypeArg()
@@ -95,7 +92,7 @@ public class StabilizationPlanTests
     }
 
     /// <summary>
-    /// Verifies that protocol dispatch on nested instantiated generic types preserves the substituted owner type.
+    /// Verifies that the test validates protocol method on nested generic owner uses concrete nested type.
     /// </summary>
     [Fact]
     public void P1_ProtocolMethodOnNestedGenericOwner_UsesConcreteNestedType()
@@ -127,7 +124,7 @@ public class StabilizationPlanTests
     #region P2 ??GenericDefinition preserved across all update paths
 
     /// <summary>
-    /// Verifies that generic record protocol updates preserve the generic definition for later substitution.
+    /// Verifies that the test validates generic record preserves definition after protocol update.
     /// </summary>
     [Fact]
     public void P2_GenericRecord_PreservesDefinitionAfterProtocolUpdate()
@@ -162,7 +159,7 @@ public class StabilizationPlanTests
     }
 
     /// <summary>
-    /// Verifies that generic entity protocol updates preserve the generic definition for later substitution.
+    /// Verifies that the test validates generic entity preserves definition after protocol update.
     /// </summary>
     [Fact]
     public void P2_GenericEntity_PreservesDefinitionAfterProtocolUpdate()
@@ -199,7 +196,7 @@ public class StabilizationPlanTests
     #region P3 ??Using bound type agreement
 
     /// <summary>
-    /// Verifies that <c>using</c> binds the correct type for generic resources exposing <c>$enter</c>/<c>$exit</c>.
+    /// Verifies that the test validates using with generic resource binds correct type.
     /// </summary>
     [Fact]
     public void P3_UsingWithGenericResource_BindsCorrectType()
@@ -228,7 +225,7 @@ public class StabilizationPlanTests
     }
 
     /// <summary>
-    /// Verifies that <c>using</c> binds the fully substituted nested generic type returned by <c>$enter</c>.
+    /// Verifies that the test validates using with nested generic return binds resolved type.
     /// </summary>
     [Fact]
     public void P3_UsingWithNestedGenericReturn_BindsResolvedType()
@@ -262,7 +259,7 @@ public class StabilizationPlanTests
     #region P4 ??Routine body matching edge cases
 
     /// <summary>
-    /// Verifies that zero-argument and one-argument overloads each resolve to the correct routine body.
+    /// Verifies that the test validates overloaded routines zero arg vs one arg both match.
     /// </summary>
     [Fact]
     public void P4_OverloadedRoutines_ZeroArgVsOneArg_BothMatch()
@@ -291,7 +288,7 @@ public class StabilizationPlanTests
     }
 
     /// <summary>
-    /// Verifies that multiple <c>$create</c> overloads with distinct parameter types all resolve their bodies.
+    /// Verifies that the test validates overloaded create three overloads all match.
     /// </summary>
     [Fact]
     public void P4_OverloadedCreate_ThreeOverloads_AllMatch()
@@ -323,7 +320,7 @@ public class StabilizationPlanTests
     }
 
     /// <summary>
-    /// Verifies that routine body matching on generic owners uses resolved signatures.
+    /// Verifies that the test validates generic routine body matches by resolved signature.
     /// </summary>
     [Fact]
     public void P4_GenericRoutineBody_MatchesByResolvedSignature()
@@ -352,7 +349,7 @@ public class StabilizationPlanTests
     }
 
     /// <summary>
-    /// Verifies that overloaded member routines on a generic owner resolve the correct body when the arity matches.
+    /// Verifies that the test validates generic owner overloads same arity different types match correct body.
     /// </summary>
     [Fact]
     public void P4_GenericOwnerOverloads_SameArityDifferentTypes_MatchCorrectBody()
@@ -381,7 +378,7 @@ public class StabilizationPlanTests
     }
 
     /// <summary>
-    /// Verifies that generic creator overload matching stays stable when one overload takes the instantiated owner type.
+    /// Verifies that the test validates create overload with owner typed parameter matches correct body.
     /// </summary>
     [Fact]
     public void P4_CreateOverload_WithOwnerTypedParameter_MatchesCorrectBody()
@@ -412,7 +409,7 @@ public class StabilizationPlanTests
     #region P5 ??GenericAstRewriter no longer rewrites identifiers
 
     /// <summary>
-    /// Verifies that generic constant parameters remain for code generation to resolve rather than being rewritten in the AST.
+    /// Verifies that the test validates generic const param resolved at codegen.
     /// </summary>
     [Fact]
     public void P5_GenericConstParam_ResolvedAtCodegen()
@@ -441,7 +438,7 @@ public class StabilizationPlanTests
     #region P6 ??No string-based generic heuristics
 
     /// <summary>
-    /// Verifies that nested generic types resolve through generic definitions instead of string heuristics.
+    /// Verifies that the test validates nested generic type resolved via generic definition.
     /// </summary>
     [Fact]
     public void P6_NestedGenericType_ResolvedViaGenericDefinition()
@@ -468,7 +465,7 @@ public class StabilizationPlanTests
     }
 
     /// <summary>
-    /// Verifies that nested generic member-variable types are resolved before a member routine returns them.
+    /// Verifies that the test validates nested generic member type returns resolved inner type.
     /// </summary>
     [Fact]
     public void P6_NestedGenericMemberType_ReturnsResolvedInnerType()
@@ -506,7 +503,7 @@ public class StabilizationPlanTests
     #region Cross-cutting ??Generic + protocol + overload combined
 
     /// <summary>
-    /// Verifies that generic substitution, protocol lookup, and overload body matching work together in one scenario.
+    /// Verifies that the test validates generic with protocol and overloads.
     /// </summary>
     [Fact]
     public void Combined_GenericWithProtocolAndOverloads()

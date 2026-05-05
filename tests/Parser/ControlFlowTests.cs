@@ -1,19 +1,17 @@
-﻿using Xunit;
+using SyntaxTree;
 
 namespace RazorForge.Tests.Parser;
 
-using SyntaxTree;
 using static TestHelpers;
 
 /// <summary>
-/// Tests for parsing control flow statements in RazorForge:
-/// if/elseif/else, unless, loop, while, for, break, continue, inline if-then-else.
+/// Contains tests for control flow.
 /// </summary>
 public class ControlFlowTests
 {
     #region If Statement Tests
     /// <summary>
-    /// Tests Parse_SimpleIf.
+    /// Verifies that the parser accepts simple if.
     /// </summary>
 
     [Fact]
@@ -37,7 +35,7 @@ public class ControlFlowTests
         Assert.Null(@object: ifStmt.ElseStatement);
     }
     /// <summary>
-    /// Tests Parse_IfElse.
+    /// Verifies that the parser accepts if else.
     /// </summary>
 
     [Fact]
@@ -63,7 +61,7 @@ public class ControlFlowTests
         Assert.NotNull(@object: ifStmt.ElseStatement);
     }
     /// <summary>
-    /// Tests Parse_IfElseIfElse.
+    /// Verifies that the parser accepts if, elseif, else.
     /// </summary>
 
     [Fact]
@@ -92,7 +90,7 @@ public class ControlFlowTests
         Assert.NotNull(@object: ifStmt.ElseStatement);
     }
     /// <summary>
-    /// Tests Parse_MultipleElseIf.
+    /// Verifies that the parser accepts multiple else if.
     /// </summary>
 
     [Fact]
@@ -113,7 +111,7 @@ public class ControlFlowTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_NestedIf.
+    /// Verifies that the parser accepts nested if.
     /// </summary>
 
     [Fact]
@@ -134,7 +132,7 @@ public class ControlFlowTests
 
     #region Unless Statement Tests
     /// <summary>
-    /// Tests Parse_SimpleUnless.
+    /// Verifies that the parser accepts simple unless.
     /// </summary>
 
     [Fact]
@@ -157,7 +155,7 @@ public class ControlFlowTests
         Assert.NotNull(@object: ifStmt);
     }
     /// <summary>
-    /// Tests Parse_UnlessWithElse.
+    /// Verifies that the parser accepts unless with an else branch.
     /// </summary>
 
     [Fact]
@@ -175,7 +173,7 @@ public class ControlFlowTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_UnlessGuardClause.
+    /// Verifies that the parser accepts unless guard clause.
     /// </summary>
 
     [Fact]
@@ -196,7 +194,7 @@ public class ControlFlowTests
 
     #region Inline If-Then-Else Tests
     /// <summary>
-    /// Tests Parse_InlineIfThenElse.
+    /// Verifies that the parser accepts inline if then else.
     /// </summary>
 
     [Fact]
@@ -212,7 +210,7 @@ public class ControlFlowTests
         Assert.NotNull(@object: routine.ReturnType);
     }
     /// <summary>
-    /// Tests Parse_InlineIfThenElse_InAssignment.
+    /// Verifies that the parser accepts inline if then else in assignment.
     /// </summary>
 
     [Fact]
@@ -234,7 +232,7 @@ public class ControlFlowTests
 
     #region Loop Statement Tests
     /// <summary>
-    /// Tests Parse_InfiniteLoop.
+    /// Verifies that the parser accepts infinite loop.
     /// </summary>
 
     [Fact]
@@ -260,7 +258,7 @@ public class ControlFlowTests
         Assert.NotNull(@object: loopStmt);
     }
     /// <summary>
-    /// Tests Parse_LoopWithBreak.
+    /// Verifies that the parser accepts loop with break.
     /// </summary>
 
     [Fact]
@@ -276,7 +274,7 @@ public class ControlFlowTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_LoopWithContinue.
+    /// Verifies that the parser accepts loop with continue.
     /// </summary>
 
     [Fact]
@@ -298,7 +296,7 @@ public class ControlFlowTests
 
     #region While Loop Tests
     /// <summary>
-    /// Tests Parse_SimpleWhile.
+    /// Verifies that the parser accepts simple while.
     /// </summary>
 
     [Fact]
@@ -321,7 +319,7 @@ public class ControlFlowTests
         Assert.NotNull(@object: whileStmt);
     }
     /// <summary>
-    /// Tests Parse_WhileWithCounter.
+    /// Verifies that the parser accepts while with counter.
     /// </summary>
 
     [Fact]
@@ -339,7 +337,7 @@ public class ControlFlowTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhileWithBreak.
+    /// Verifies that the parser accepts while with break.
     /// </summary>
 
     [Fact]
@@ -357,7 +355,7 @@ public class ControlFlowTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhileWithContinue.
+    /// Verifies that the parser accepts while with continue.
     /// </summary>
 
     [Fact]
@@ -380,7 +378,7 @@ public class ControlFlowTests
 
     #region For Loop Tests
     /// <summary>
-    /// Tests Parse_ForRangeInclusive.
+    /// Verifies that the parser accepts for range inclusive.
     /// </summary>
 
     [Fact]
@@ -403,7 +401,7 @@ public class ControlFlowTests
         Assert.NotNull(@object: forStmt);
     }
     /// <summary>
-    /// Tests Parse_ForRangeWithStep.
+    /// Verifies that the parser accepts for range with step.
     /// </summary>
 
     [Fact]
@@ -419,7 +417,7 @@ public class ControlFlowTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_ForInCollection.
+    /// Verifies that the parser accepts for in collection.
     /// </summary>
 
     [Fact]
@@ -436,7 +434,7 @@ public class ControlFlowTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_ForWithEnumerate.
+    /// Verifies that the parser accepts for with enumerate.
     /// </summary>
 
     [Fact]
@@ -453,7 +451,7 @@ public class ControlFlowTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_ForWithBreak.
+    /// Verifies that the parser accepts for with break.
     /// </summary>
 
     [Fact]
@@ -471,7 +469,7 @@ public class ControlFlowTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_ForWithContinue.
+    /// Verifies that the parser accepts for with continue.
     /// </summary>
 
     [Fact]
@@ -489,7 +487,7 @@ public class ControlFlowTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_NestedFor.
+    /// Verifies that the parser accepts nested for.
     /// </summary>
 
     [Fact]
@@ -510,7 +508,7 @@ public class ControlFlowTests
 
     #region Return Statement Tests
     /// <summary>
-    /// Tests Parse_ReturnWithValue.
+    /// Verifies that the parser accepts return with value.
     /// </summary>
 
     [Fact]
@@ -532,7 +530,7 @@ public class ControlFlowTests
         Assert.NotNull(@object: returnStmt.Value);
     }
     /// <summary>
-    /// Tests Parse_ReturnWithoutValue.
+    /// Verifies that the parser accepts return without value.
     /// </summary>
 
     [Fact]
@@ -547,7 +545,7 @@ public class ControlFlowTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_EarlyReturn.
+    /// Verifies that the parser accepts early return.
     /// </summary>
 
     [Fact]
@@ -567,7 +565,7 @@ public class ControlFlowTests
 
     #region Pass Statement Tests
     /// <summary>
-    /// Tests Parse_PassStatement.
+    /// Verifies that the parser accepts pass statement.
     /// </summary>
 
     [Fact]
@@ -582,7 +580,7 @@ public class ControlFlowTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_PassInIfBranch.
+    /// Verifies that the parser accepts pass in if branch.
     /// </summary>
 
     [Fact]
@@ -604,7 +602,7 @@ public class ControlFlowTests
 
     #region Stop and Verify Tests
     /// <summary>
-    /// Tests Parse_StopWithMessage.
+    /// Verifies that the parser accepts stop with message.
     /// </summary>
 
     [Fact]
@@ -620,7 +618,7 @@ public class ControlFlowTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_VerifyWithCondition.
+    /// Verifies that the parser accepts verify with condition.
     /// </summary>
 
     [Fact]
@@ -636,7 +634,7 @@ public class ControlFlowTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_VerifyWithoutMessage.
+    /// Verifies that the parser accepts verify without message.
     /// </summary>
 
     [Fact]
@@ -652,7 +650,7 @@ public class ControlFlowTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_Breach.
+    /// Verifies that the parser accepts breach.
     /// </summary>
 
     [Fact]
@@ -667,7 +665,7 @@ public class ControlFlowTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_BreachWithoutMessage.
+    /// Verifies that the parser accepts breach without message.
     /// </summary>
 
     [Fact]
@@ -686,7 +684,7 @@ public class ControlFlowTests
 
     #region Complex Control Flow Tests
     /// <summary>
-    /// Tests Parse_ComplexNestedControlFlow.
+    /// Verifies that the parser accepts complex nested control flow.
     /// </summary>
 
     [Fact]
@@ -708,7 +706,7 @@ public class ControlFlowTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_ControlFlowWithErrorHandling.
+    /// Verifies that the parser accepts control flow with error handling.
     /// </summary>
 
     [Fact]
@@ -728,31 +726,4 @@ public class ControlFlowTests
 
     #endregion
 
-    #region Suspended Routine Tests
-    /// <summary>
-    /// Tests Parse_SuspendedRoutine_RazorForge.
-    /// </summary>
-
-    [Fact]
-    public void Parse_SuspendedRoutine_RazorForge()
-    {
-        string source = """
-                        suspended routine fetch_value() -> S32
-                          waitfor 10ms
-                          return 42
-                        """;
-
-        Program program = AssertParses(source: source);
-        RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
-
-        Assert.Equal(expected: AsyncStatus.Suspended, actual: routine.Async);
-        BlockStatement body = Assert.IsType<BlockStatement>(@object: routine.Body);
-        Assert.Contains(collection: body.Statements,
-            filter: stmt => stmt is ExpressionStatement
-            {
-                Expression: WaitforExpression
-            });
-    }
-
-    #endregion
 }

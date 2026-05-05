@@ -47,7 +47,7 @@ public sealed class TargetInfo
     /// <summary>
     /// Gets the target kind, such as <c>executable</c> or <c>library</c>.
     /// </summary>
-    public string Type { get; set; } = "executable";
+    public string Type { get; set; } = "";
     /// <summary>
     /// Gets the resolved entry module or source path for the target.
     /// </summary>
@@ -59,15 +59,20 @@ public sealed class TargetInfo
 
     /// <summary>
     /// Gets the build mode for this target ("debug", "release", "release-time", "release-space").
-    /// Defaults to "debug" when not specified.
     /// </summary>
-    public string Mode { get; set; } = "debug";
+    public string Mode { get; set; } = "";
 
     /// <summary>
     /// When true, writes the fully post-desugared AST to a .rf.desugared file alongside the .ll output.
     /// Controlled by the <c>dump-ast</c> field in the target's TOML table.
     /// </summary>
     public bool DumpAst { get; set; }
+
+    /// <summary>
+    /// When true, prints per-phase semantic-analysis timings to stderr.
+    /// Controlled by the <c>sa-timing</c> field in the target's TOML table.
+    /// </summary>
+    public bool SaTiming { get; set; }
 }
 /// <summary>
 /// Represents the parsed contents of a project manifest file.

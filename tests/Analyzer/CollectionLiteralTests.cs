@@ -1,6 +1,9 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification;
+using Verification.Results;
+using SyntaxTree;
+using TypeModel.Enums;
+using TypeModel.Types;
 
 namespace RazorForge.Tests.Analyzer;
 
@@ -12,7 +15,7 @@ using static TestHelpers;
 public class CollectionLiteralTests
 {
     /// <summary>
-    /// Tests EmptyListLiteral_WithTypeAnnotation_InfersElementType.
+    /// Verifies that the test validates list literal with type annotation infers element type.
     /// </summary>
     [Fact]
     public void EmptyListLiteral_WithTypeAnnotation_InfersElementType()
@@ -27,7 +30,7 @@ public class CollectionLiteralTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests EmptyListLiteral_WithoutTypeAnnotation_ReportsError.
+    /// Verifies that the test validates list literal without type annotation and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -44,7 +47,7 @@ public class CollectionLiteralTests
             filter: e => e.Code == SemanticDiagnosticCode.EmptyListNoTypeAnnotation);
     }
     /// <summary>
-    /// Tests EmptySetLiteral_WithTypeAnnotation_InfersElementType.
+    /// Verifies that the test validates set literal with type annotation infers element type.
     /// </summary>
 
     [Fact]
@@ -60,7 +63,7 @@ public class CollectionLiteralTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests EmptySetLiteral_WithoutTypeAnnotation_ReportsError.
+    /// Verifies that the test validates set literal without type annotation and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -77,7 +80,7 @@ public class CollectionLiteralTests
             filter: e => e.Code == SemanticDiagnosticCode.EmptySetNoTypeAnnotation);
     }
     /// <summary>
-    /// Tests EmptyDictLiteral_WithTypeAnnotation_InfersKeyValueTypes.
+    /// Verifies that the test validates dict literal with type annotation infers key value types.
     /// </summary>
 
     [Fact]
@@ -93,7 +96,7 @@ public class CollectionLiteralTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests EmptyDictLiteral_WithoutTypeAnnotation_ReportsError.
+    /// Verifies that the test validates dict literal without type annotation and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -110,7 +113,7 @@ public class CollectionLiteralTests
             filter: e => e.Code == SemanticDiagnosticCode.EmptyDictNoTypeAnnotation);
     }
     /// <summary>
-    /// Tests NonEmptySetLiteral_InfersFromElements.
+    /// Verifies that the test validates empty set literal infers from elements.
     /// </summary>
 
     [Fact]
@@ -126,7 +129,7 @@ public class CollectionLiteralTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests NonEmptyDictLiteral_InfersFromElements.
+    /// Verifies that the test validates empty dict literal infers from elements.
     /// </summary>
 
     [Fact]
@@ -141,6 +144,9 @@ public class CollectionLiteralTests
         AnalysisResult result = Analyze(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Verifies that the test validates literal with deque annotation retargets to deque.
+    /// </summary>
     [Fact]
     public void ListLiteral_WithDequeAnnotation_RetargetsToDeque()
     {
@@ -154,6 +160,9 @@ public class CollectionLiteralTests
         Assert.Empty(collection: result.Errors);
     }
 
+    /// <summary>
+    /// Verifies that the test validates literal with sorted list annotation retargets to sorted list.
+    /// </summary>
     [Fact]
     public void ListLiteral_WithSortedListAnnotation_RetargetsToSortedList()
     {
@@ -167,6 +176,9 @@ public class CollectionLiteralTests
         Assert.Empty(collection: result.Errors);
     }
 
+    /// <summary>
+    /// Verifies that the test validates literal with sorted set annotation retargets to sorted set.
+    /// </summary>
     [Fact]
     public void SetLiteral_WithSortedSetAnnotation_RetargetsToSortedSet()
     {
@@ -180,6 +192,9 @@ public class CollectionLiteralTests
         Assert.Empty(collection: result.Errors);
     }
 
+    /// <summary>
+    /// Verifies that the test validates literal with sorted dict annotation retargets to sorted dict.
+    /// </summary>
     [Fact]
     public void DictLiteral_WithSortedDictAnnotation_RetargetsToSortedDict()
     {
@@ -193,6 +208,9 @@ public class CollectionLiteralTests
         Assert.Empty(collection: result.Errors);
     }
 
+    /// <summary>
+    /// Verifies that the test validates literal with priority queue annotation retargets to priority queue.
+    /// </summary>
     [Fact]
     public void DictLiteral_WithPriorityQueueAnnotation_RetargetsToPriorityQueue()
     {
@@ -206,6 +224,9 @@ public class CollectionLiteralTests
         Assert.Empty(collection: result.Errors);
     }
 
+    /// <summary>
+    /// Verifies that the test validates literal with array annotation retargets to array.
+    /// </summary>
     [Fact]
     public void ListLiteral_WithArrayAnnotation_RetargetsToArray()
     {
@@ -219,6 +240,9 @@ public class CollectionLiteralTests
         Assert.Empty(collection: result.Errors);
     }
 
+    /// <summary>
+    /// Verifies that the test validates literal with bit array annotation retargets to bit array.
+    /// </summary>
     [Fact]
     public void ListLiteral_WithBitArrayAnnotation_RetargetsToBitArray()
     {
@@ -232,6 +256,74 @@ public class CollectionLiteralTests
         Assert.Empty(collection: result.Errors);
     }
 
+    /// <summary>
+    /// Verifies that the test validates list literal with trailing empty inner list uses sibling context.
+    /// </summary>
+    [Fact]
+    public void NestedListLiteral_WithTrailingEmptyInnerList_UsesSiblingContext()
+    {
+        string source = """
+                        routine test()
+                          var items = [[1, 2, 3], [4, 5], [6], []]
+                          return
+                        """;
+
+        Program program = Parse(source: source);
+        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        AnalysisResult result = analyzer.Analyze(program: program);
+
+        Assert.Empty(collection: result.Errors);
+
+        RoutineDeclaration routine = program.Declarations.OfType<RoutineDeclaration>()
+            .Single(predicate: declaration => declaration.Name == "test");
+        BlockStatement body = Assert.IsType<BlockStatement>(routine.Body);
+        VariableDeclaration variable = body.Statements
+            .OfType<DeclarationStatement>()
+            .Select(selector: statement => statement.Declaration)
+            .OfType<VariableDeclaration>()
+            .Single(predicate: declaration => declaration.Name == "items");
+
+        TypeInfo? resolvedType = variable.Initializer?.ResolvedType;
+        Assert.NotNull(@object: resolvedType);
+        Assert.Equal(expected: "Core.Owned[Core.List[Core.Owned[Core.List[Core.S64]]]]",
+            actual: resolvedType!.FullName);
+    }
+
+    /// <summary>
+    /// Verifies that the test validates literal without annotation defaults to owned list.
+    /// </summary>
+    [Fact]
+    public void ListLiteral_WithoutAnnotation_DefaultsToOwnedList()
+    {
+        string source = """
+                        routine test()
+                          var items = [1, 2, 3]
+                          return
+                        """;
+
+        Program program = Parse(source: source);
+        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        AnalysisResult result = analyzer.Analyze(program: program);
+
+        Assert.Empty(collection: result.Errors);
+
+        RoutineDeclaration routine = program.Declarations.OfType<RoutineDeclaration>()
+            .Single(predicate: declaration => declaration.Name == "test");
+        BlockStatement body = Assert.IsType<BlockStatement>(routine.Body);
+        VariableDeclaration variable = body.Statements
+            .OfType<DeclarationStatement>()
+            .Select(selector: statement => statement.Declaration)
+            .OfType<VariableDeclaration>()
+            .Single(predicate: declaration => declaration.Name == "items");
+
+        TypeInfo? resolvedType = variable.Initializer?.ResolvedType;
+        Assert.NotNull(@object: resolvedType);
+        Assert.Equal(expected: "Core.Owned[Core.List[Core.S64]]", actual: resolvedType!.FullName);
+    }
+
+    /// <summary>
+    /// Verifies that the test validates literal with wrong arity and reports the expected error.
+    /// </summary>
     [Fact]
     public void ArrayLiteral_WithWrongArity_ReportsError()
     {
@@ -246,6 +338,9 @@ public class CollectionLiteralTests
             filter: e => e.Code == SemanticDiagnosticCode.ArgumentCountMismatch);
     }
 
+    /// <summary>
+    /// Verifies that the test validates array literal with wrong arity and reports the expected error.
+    /// </summary>
     [Fact]
     public void BitArrayLiteral_WithWrongArity_ReportsError()
     {

@@ -1,6 +1,6 @@
-using SyntaxTree;
-using Compiler.Lexer;
 using Compiler.Diagnostics;
+using Compiler.Lexer;
+using SyntaxTree;
 
 namespace Compiler.Parser;
 
@@ -93,8 +93,7 @@ public partial class Parser
             TokenType.Identifier => GrammarDiagnosticCode.ExpectedIdentifier,
             TokenType.LeftParen => GrammarDiagnosticCode.ExpectedLeftParen,
             TokenType.As => GrammarDiagnosticCode.ExpectedAs,
-            TokenType.Waitfor => GrammarDiagnosticCode.ExpectedWaitforAfterDependencies,
-            _ => GrammarDiagnosticCode.UnexpectedToken
+_ => GrammarDiagnosticCode.UnexpectedToken
         };
     }
 
@@ -227,7 +226,7 @@ public partial class Parser
     /// <summary>
     /// Get precedence for binary operators
     /// </summary>
-    protected Precedence GetBinaryPrecedence(TokenType type)
+    protected static Precedence GetBinaryPrecedence(TokenType type)
     {
         return type switch
         {
@@ -285,7 +284,7 @@ public partial class Parser
     /// </summary>
     /// <param name="type">The token type to check.</param>
     /// <returns>True if the token is a chainable comparison operator.</returns>
-    protected bool IsChainableComparisonOperator(TokenType type)
+    protected static bool IsChainableComparisonOperator(TokenType type)
     {
         return type switch
         {
@@ -301,7 +300,7 @@ public partial class Parser
     /// </summary>
     /// <param name="type">The comparison operator token type.</param>
     /// <returns>-1 for descending (&gt;, &gt;=), 0 for equality (==), 1 for ascending (&lt;, &lt;=).</returns>
-    protected int GetComparisonDirection(TokenType type)
+    protected static int GetComparisonDirection(TokenType type)
     {
         return type switch
         {
@@ -346,7 +345,7 @@ public partial class Parser
     /// </summary>
     /// <param name="op">The binary operator to convert.</param>
     /// <returns>The corresponding token type.</returns>
-    protected TokenType BinaryOperatorToToken(BinaryOperator op)
+    protected static TokenType BinaryOperatorToToken(BinaryOperator op)
     {
         return op switch
         {
@@ -363,7 +362,7 @@ public partial class Parser
     /// <summary>
     /// Check if operator is right-associative
     /// </summary>
-    protected bool IsRightAssociative(TokenType type)
+    protected static bool IsRightAssociative(TokenType type)
     {
         return type switch
         {
@@ -558,8 +557,6 @@ public partial class Parser
 
             TokenType.Equal => BinaryOperator.Equal,
             TokenType.NotEqual => BinaryOperator.NotEqual,
-            TokenType.ReferenceEqual => BinaryOperator.Identical,
-            TokenType.ReferenceNotEqual => BinaryOperator.NotIdentical,
             TokenType.Less => BinaryOperator.Less,
             TokenType.LessEqual => BinaryOperator.LessEqual,
             TokenType.Greater => BinaryOperator.Greater,
@@ -656,8 +653,10 @@ public partial class Parser
             TokenType.D32Literal => CleanNumericSuffix(text: text, suffix: "d32"),
             TokenType.D64Literal => CleanNumericSuffix(text: text, suffix: "d64"),
             TokenType.D128Literal => CleanNumericSuffix(text: text, suffix: "d128"),
-            TokenType.Integer => text,
-            TokenType.Decimal => text,
+            TokenType.IntegerLiteral => text,
+            TokenType.DecimalLiteral => text,
+            TokenType.UndecidedInteger => text,
+            TokenType.UndecidedDecimal => text,
 
             _ => text.Contains(value: '.')
                 ? double.Parse(s: text)
@@ -680,7 +679,7 @@ public partial class Parser
         return cleaned.Replace(oldValue: "_", newValue: "");
     }
 
-    private T ParseTypedInteger<T>(string text, string suffix) where T : struct
+    private static T ParseTypedInteger<T>(string text, string suffix) where T : struct
     {
         // Remove the type suffix
         string cleanText = text.EndsWith(value: suffix)
@@ -689,7 +688,7 @@ public partial class Parser
         return (T)Convert.ChangeType(value: cleanText, conversionType: typeof(T));
     }
 
-    private T ParseTypedFloat<T>(string text, string suffix) where T : struct
+    private static T ParseTypedFloat<T>(string text, string suffix) where T : struct
     {
         // Remove the type suffix
         string cleanText = text.EndsWith(value: suffix)

@@ -143,14 +143,14 @@ routine Integer.$eq(you: Integer) -> Bool
 
 ### Compares this value with `you` using numeric ordering.
 ### :param you: The other value to compare against.
-### :returns: The resulting `CompareSign` value.
+### :returns: The resulting `ComparisonSign` value.
 @readonly
-routine Integer.$cmp(you: Integer) -> CompareSign
+routine Integer.$cmp(you: Integer) -> ComparisonSign
   var comparison_value = rf_bigint_cmp(me.handle, you.handle)
   if comparison_value < 0
-    return LEFT_SMALL
+    return ME_SMALL
   elseif comparison_value > 0
-    return RIGHT_SMALL
+    return ME_LARGE
   else
     return SAME
 

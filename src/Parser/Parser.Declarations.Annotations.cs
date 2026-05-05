@@ -1,7 +1,7 @@
-namespace Compiler.Parser;
+using Compiler.Diagnostics;
+using Compiler.Lexer;
 
-using Lexer;
-using Diagnostics;
+namespace Compiler.Parser;
 
 /// <summary>
 /// Partial class containing annotation parsing helpers for declarations.
@@ -46,7 +46,7 @@ public partial class Parser
                     annotName =
                         ConsumeIdentifier(errorMessage: "Expected annotation name after '@'");
 
-                    // Check for annotation arguments: @something("size_of") or @config(name: "value", count: 5)
+                    // Check for annotation arguments: @something("size_of") or @deprecated(message: "text")
                     if (Match(type: TokenType.LeftParen))
                     {
                         annotName += "(" + ParseAnnotationArgumentList() + ")";
@@ -141,7 +141,8 @@ public partial class Parser
         }
 
         // Numeric literals
-        if (Check(TokenType.Integer,
+        if (Check(TokenType.UndecidedInteger,
+                TokenType.IntegerLiteral,
                 TokenType.S8Literal,
                 TokenType.S16Literal,
                 TokenType.S32Literal,

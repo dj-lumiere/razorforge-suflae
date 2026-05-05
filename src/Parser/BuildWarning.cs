@@ -3,6 +3,11 @@ namespace Compiler.Parser;
 /// <summary>
 /// Represents a build-time warning for style violations or deprecated patterns
 /// </summary>
+/// <param name="message">The message.</param>
+/// <param name="line">The line.</param>
+/// <param name="column">The column.</param>
+/// <param name="severity">The severity.</param>
+/// <param name="warningCode">The warning code.</param>
 public class BuildWarning(
     string message,
     int line,

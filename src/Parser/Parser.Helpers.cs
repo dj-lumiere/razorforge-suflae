@@ -1,6 +1,6 @@
 using Compiler.Diagnostics;
-using SyntaxTree;
 using Compiler.Lexer;
+using SyntaxTree;
 
 namespace Compiler.Parser;
 
@@ -152,6 +152,53 @@ public partial class Parser
     private int GetIndentationDepth()
     {
         return _indentationStack.Count - 1; // Subtract 1 for base level
+    }
+
+    /// <summary>
+    /// Returns true if the current token sequence looks like generic type arguments
+    /// for a generic call (i.e., <c>func[T]()</c> or <c>func![T]()</c>),
+    /// as opposed to an index expression (<c>arr[0]</c>).
+    /// Disambiguation is purely structural: only the token after the matching <c>]</c>
+    /// is examined — never the content inside <c>[...]</c>.
+    /// </summary>
+    private bool IsLikelyGenericAfterIdentifier()
+    {
+        // func![T](...) — failable generic call: ! always means call
+        if (Check(type: TokenType.Bang) && PeekToken(offset: 1).Type == TokenType.LeftBracket)
+        {
+            return true;
+        }
+
+        if (!Check(type: TokenType.LeftBracket))
+        {
+            return false;
+        }
+
+        // Scan forward to find the matching ] without examining content.
+        int offset = 1;
+        int depth = 1;
+        while (depth > 0)
+        {
+            TokenType t = PeekToken(offset: offset).Type;
+            if (t is TokenType.Eof or TokenType.Newline or TokenType.Indent or TokenType.Dedent)
+            {
+                return false;
+            }
+
+            if (t == TokenType.LeftBracket)
+            {
+                depth++;
+            }
+            else if (t == TokenType.RightBracket)
+            {
+                depth--;
+            }
+
+            offset++;
+        }
+
+        // Generic call only when ] is immediately followed by (
+        return PeekToken(offset: offset).Type == TokenType.LeftParen;
     }
 
     #endregion

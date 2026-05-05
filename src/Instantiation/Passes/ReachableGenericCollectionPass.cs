@@ -1,6 +1,6 @@
-namespace Compiler.Instantiation.Passes;
-
 using TypeModel.Types;
+
+namespace Compiler.Instantiation.Passes;
 
 /// <summary>
 /// Phase 6 collection pass: snapshot the concrete generic instances already discovered by

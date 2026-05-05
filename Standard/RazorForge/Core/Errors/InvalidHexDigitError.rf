@@ -1,0 +1,10 @@
+module Core
+
+### Represents the crashable raised when a byte is not a valid ASCII hexadecimal digit.
+crashable InvalidHexDigitError
+  pass
+
+### Returns the default message for invalid ASCII hexadecimal digit failures.
+### :returns: The resulting `Text` value.
+routine InvalidHexDigitError.crash_message() -> Text
+  return "The byte is not a valid ASCII hexadecimal digit (0-9, A-F, a-f)."

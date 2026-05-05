@@ -1,17 +1,16 @@
 using Compiler.Resolution;
-using TypeModel.Types;
+using SyntaxTree;
+using TypeModel.Enums;
 using TypeModel.Symbols;
+using TypeModel.Types;
 
 namespace Compiler.Declaration;
-
-using TypeModel.Enums;
-using SyntaxTree;
 
 public sealed partial class StdlibLoader
 {
     private static void ResolveProtocolParents(TypeRegistry registry, Program program)
     {
-        foreach (IAstNode node in program.Declarations)
+        foreach (ISyntaxTreeNode node in program.Declarations)
         {
             if (node is ProtocolDeclaration protocol && protocol.ParentProtocols.Count > 0)
             {
@@ -53,7 +52,7 @@ public sealed partial class StdlibLoader
         string moduleName)
     {
         // Pass 1: Register protocol type shells (no methods yet)
-        foreach (IAstNode node in program.Declarations)
+        foreach (ISyntaxTreeNode node in program.Declarations)
         {
             if (node is ProtocolDeclaration protocol)
             {
@@ -64,7 +63,7 @@ public sealed partial class StdlibLoader
         }
 
         // Pass 2: Fill in method signatures (now all protocols are registered for cross-references)
-        foreach (IAstNode node in program.Declarations)
+        foreach (ISyntaxTreeNode node in program.Declarations)
         {
             if (node is ProtocolDeclaration protocol)
             {
@@ -83,7 +82,7 @@ public sealed partial class StdlibLoader
     private static void RegisterProgramTypes(TypeRegistry registry, Program program,
         string moduleName)
     {
-        foreach (IAstNode node in program.Declarations)
+        foreach (ISyntaxTreeNode node in program.Declarations)
         {
             switch (node)
             {
@@ -124,7 +123,7 @@ public sealed partial class StdlibLoader
     /// </summary>
     private static void ResolveProgramMemberVariables(TypeRegistry registry, Program program)
     {
-        foreach (IAstNode node in program.Declarations)
+        foreach (ISyntaxTreeNode node in program.Declarations)
         {
             switch (node)
             {
@@ -209,7 +208,7 @@ public sealed partial class StdlibLoader
     /// </summary>
     private static void ResolveProgramProtocolConformances(TypeRegistry registry, Program program)
     {
-        foreach (IAstNode node in program.Declarations)
+        foreach (ISyntaxTreeNode node in program.Declarations)
         {
             switch (node)
             {
@@ -280,12 +279,12 @@ public sealed partial class StdlibLoader
     /// Resolves member variable types from a list of member declarations.
     /// </summary>
     private static List<MemberVariableInfo> ResolveMemberVariables(TypeRegistry registry,
-        IReadOnlyList<Declaration> members, IReadOnlyList<string>? genericParams,
+        IReadOnlyList<SyntaxTree.Declaration> members, IReadOnlyList<string>? genericParams,
         TypeInfo? owner = null, string? moduleName = null)
     {
         var result = new List<MemberVariableInfo>();
         int index = 0;
-        foreach (Declaration member in members)
+        foreach (SyntaxTree.Declaration member in members)
         {
             if (member is VariableDeclaration { Type: not null } memberVariable)
             {
@@ -318,7 +317,7 @@ public sealed partial class StdlibLoader
     private static void RegisterProgramRoutines(TypeRegistry registry, Program program,
         string moduleName)
     {
-        foreach (IAstNode node in program.Declarations)
+        foreach (ISyntaxTreeNode node in program.Declarations)
         {
             switch (node)
             {
@@ -331,7 +330,7 @@ public sealed partial class StdlibLoader
                         moduleName: moduleName);
                     break;
                 case ExternalBlockDeclaration block:
-                    foreach (Declaration decl in block.Declarations)
+                    foreach (SyntaxTree.Declaration decl in block.Declarations)
                     {
                         if (decl is ExternalDeclaration ext)
                         {
@@ -345,7 +344,7 @@ public sealed partial class StdlibLoader
 
                 case CrashableDeclaration crashable:
                     // Register routine members (e.g., crash_message synthesized from message: directive)
-                    foreach (Declaration member in crashable.Members)
+                    foreach (SyntaxTree.Declaration member in crashable.Members)
                     {
                         if (member is RoutineDeclaration memberRoutine)
                         {
@@ -433,7 +432,7 @@ public sealed partial class StdlibLoader
     private static void RegisterProgramPresets(TypeRegistry registry, Program program,
         string moduleName)
     {
-        foreach (IAstNode node in program.Declarations)
+        foreach (ISyntaxTreeNode node in program.Declarations)
         {
             if (node is PresetDeclaration preset)
             {
@@ -441,12 +440,45 @@ public sealed partial class StdlibLoader
                     ResolveSimpleType(registry: registry, typeExpr: preset.Type);
                 if (presetType != null)
                 {
+                    SeedPresetValueMetadata(value: preset.Value, presetType: presetType);
                     registry.RegisterPreset(name: preset.Name,
                         type: presetType,
-                        module: moduleName);
+                        module: moduleName,
+                        value: preset.Value);
                 }
             }
         }
+    }
+
+    private static void SeedPresetValueMetadata(Expression value, TypeInfo presetType)
+    {
+        value.ResolvedType ??= presetType;
+
+        if (value is not CallExpression call ||
+            call.Callee is not IdentifierExpression identifier ||
+            call.LoweringKind != CallLoweringKind.Unknown)
+        {
+            return;
+        }
+
+        bool matchesPresetType = identifier.Name == presetType.Name ||
+                                 identifier.Name == presetType.FullName ||
+                                 presetType.FullName.EndsWith(value: "." + identifier.Name,
+                                     comparisonType: StringComparison.Ordinal);
+        if (!matchesPresetType)
+        {
+            return;
+        }
+
+        call.ResolvedType ??= presetType;
+        call.ConstructedType ??= presetType;
+
+        call.LoweringKind = presetType switch
+        {
+            RecordTypeInfo { HasDirectBackendType: true } => CallLoweringKind.TypeConstructor,
+            RecordTypeInfo { IsSingleMemberVariableWrapper: true } => CallLoweringKind.WrapperConstruction,
+            _ => call.LoweringKind
+        };
     }
 
     /// <summary>
@@ -645,7 +677,7 @@ public sealed partial class StdlibLoader
                         ? m.Type.Name[..m.Type.Name.IndexOf('[')]
                         : m.Type.Name;
                     return baseName is "Hijacked" or "Owned" or "Viewed" or "Grasped"
-                        or "Inspected" or "Claimed" or "Shared" or "Marked" or "Tracked";
+                        or "Retained" or "Tracked";
                 });
             if (allMembersPtrWrapper)
             {
@@ -662,7 +694,7 @@ public sealed partial class StdlibLoader
 
         // Build member variables list upfront (TypeInfo uses init properties with IReadOnlyList)
         var memberVariables = new List<MemberVariableInfo>();
-        foreach (Declaration member in record.Members)
+        foreach (SyntaxTree.Declaration member in record.Members)
         {
             if (member is VariableDeclaration { Type: not null } memberVariable)
             {
@@ -765,7 +797,7 @@ public sealed partial class StdlibLoader
 
         // Resolve member variables (e.g., KeyNotFoundError.key: Text)
         var memberVariables = new List<MemberVariableInfo>();
-        foreach (Declaration member in crashable.Members)
+        foreach (SyntaxTree.Declaration member in crashable.Members)
         {
             if (member is VariableDeclaration { Type: not null } field)
             {
@@ -830,7 +862,7 @@ public sealed partial class StdlibLoader
 
         // Build member variables list upfront
         var memberVariables = new List<MemberVariableInfo>();
-        foreach (Declaration member in entity.Members)
+        foreach (SyntaxTree.Declaration member in entity.Members)
         {
             if (member is VariableDeclaration { Type: not null } memberVariable)
             {
@@ -1077,7 +1109,7 @@ public sealed partial class StdlibLoader
     /// </summary>
     private static void ResolveProtocolMethodReturnTypes(TypeRegistry registry, Program program)
     {
-        foreach (IAstNode node in program.Declarations)
+        foreach (ISyntaxTreeNode node in program.Declarations)
         {
             if (node is not ProtocolDeclaration protocolDecl)
             {
@@ -1133,7 +1165,7 @@ public sealed partial class StdlibLoader
     private static void ResolveRoutineSignatures(TypeRegistry registry, Program program,
         string moduleName)
     {
-        foreach (IAstNode node in program.Declarations)
+        foreach (ISyntaxTreeNode node in program.Declarations)
         {
             if (node is not RoutineDeclaration routine)
             {

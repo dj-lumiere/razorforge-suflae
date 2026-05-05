@@ -1,8 +1,8 @@
-namespace Compiler.Declaration;
-
-using SemanticVerification.Results;
+using Compiler.Diagnostics;
+using Verification.Results;
 using SyntaxTree;
-using Diagnostics;
+
+namespace Compiler.Declaration;
 
 /// <summary>
 /// Represents a module in the dependency graph.

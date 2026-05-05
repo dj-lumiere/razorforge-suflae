@@ -1,7 +1,7 @@
-using SyntaxTree;
-using Compiler.Lexer;
-using TypeModel.Enums;
 using Compiler.Diagnostics;
+using Compiler.Lexer;
+using SyntaxTree;
+using TypeModel.Enums;
 
 namespace Compiler.Parser;
 
@@ -22,7 +22,7 @@ public partial class Parser
     /// <summary>
     /// Current position in the token stream.
     /// </summary>
-    private int _position = 0;
+    private int _position;
 
     /// <summary>
     /// Collection of warnings generated during parsing.
@@ -70,7 +70,7 @@ public partial class Parser
     /// <summary>
     /// Current indentation level being parsed.
     /// </summary>
-    private int _currentIndentationLevel = 0;
+    private int _currentIndentationLevel;
 
     #endregion
 
@@ -88,20 +88,20 @@ public partial class Parser
     /// Indicates whether we're currently parsing inside a type body (record, entity).
     /// When true, allows member variable declarations without var keywords.
     /// </summary>
-    private bool _parsingTypeBody = false;
+    private bool _parsingTypeBody;
 
     /// <summary>
     /// Indicates whether we're parsing inside a record body (actual record, not entity).
     /// When true, only secret/posted/open modifiers are allowed (not external).
     /// Also var/preset keywords are disallowed (use 'name: Type' syntax).
     /// </summary>
-    private bool _parsingStrictRecordBody = false;
+    private bool _parsingStrictRecordBody;
 
     /// <summary>
     /// Indicates whether we're currently parsing inside a routine body.
     /// When true, nested routine declarations are rejected.
     /// </summary>
-    private bool _inRoutineBody = false;
+    private bool _inRoutineBody;
 
     /// <summary>
     /// Indicates whether we are currently parsing within a 'when' pattern context.
@@ -127,7 +127,7 @@ public partial class Parser
     {
         _tokens = tokens;
         _language = language;
-        this.FileName = fileName ?? "unknown";
+        FileName = fileName ?? "unknown";
         _indentationStack.Push(item: 0); // Base indentation level
     }
 
@@ -138,7 +138,7 @@ public partial class Parser
     /// <returns>A <see cref="SyntaxTree.Program"/> containing all top-level declarations.</returns>
     public Program Parse()
     {
-        var declarations = new List<IAstNode>();
+        var declarations = new List<ISyntaxTreeNode>();
 
         while (!IsAtEnd)
         {
@@ -157,7 +157,7 @@ public partial class Parser
                     continue;
                 }
 
-                IAstNode decl = ParseDeclaration();
+                ISyntaxTreeNode decl = ParseDeclaration();
                 declarations.Add(item: decl);
             }
             catch (GrammarException ex)
@@ -215,7 +215,7 @@ public partial class Parser
     /// </remarks>
     /// <returns>The parsed declaration node.</returns>
     /// <exception cref="GrammarException">Thrown when no valid declaration or statement can be parsed.</exception>
-    private IAstNode ParseDeclaration()
+    private ISyntaxTreeNode ParseDeclaration()
     {
         // ═══════════════════════════════════════════════════════════════════════════
         // SKIP DOC COMMENTS (### comment lines before declarations)
@@ -276,11 +276,10 @@ public partial class Parser
         // Parse visibility and storage class modifiers
         (VisibilityModifier visibility, StorageClass storage) = ParseModifiers();
 
-        // Define declaration with annotations (e.g., @config(target: "windows") define CLong as S32)
+        // Define declaration with annotations (e.g., @llvm("i32") define MyInt as S32)
         if (Match(type: TokenType.Define))
         {
-            // TODO: Pass annotations to DefineDeclaration when supported
-            return ParseDefineDeclaration();
+            return ParseDefineDeclaration(annotations: annotations);
         }
 
         // ═══════════════════════════════════════════════════════════════════════════
@@ -426,17 +425,7 @@ public partial class Parser
         // ROUTINE DECLARATION (with async status modifiers)
         // ═══════════════════════════════════════════════════════════════════════════
 
-        // Check for async modifiers before 'routine'. Order: secret → suspended/threaded → routine
         AsyncStatus asyncStatus = AsyncStatus.None;
-        if (Match(type: TokenType.Suspended))
-        {
-            asyncStatus = AsyncStatus.Suspended;
-        }
-        // RF-only: threaded async status
-        else if (_language == Language.RazorForge && Match(type: TokenType.Threaded))
-        {
-            asyncStatus = AsyncStatus.Threaded;
-        }
 
         // Routine (function) declaration
         if (Match(type: TokenType.Routine))

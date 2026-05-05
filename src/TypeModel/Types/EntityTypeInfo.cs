@@ -1,7 +1,8 @@
-namespace TypeModel.Types;
-
+using Compiler.Resolution;
 using TypeModel.Enums;
 using TypeModel.Symbols;
+
+namespace TypeModel.Types;
 
 /// <summary>
 /// Type information for entities (reference types, heap-allocated).
@@ -178,19 +179,35 @@ public sealed class EntityTypeInfo : TypeInfo
                                SubstituteType(type: arg, substitution: substitution))
                           .ToList();
 
+        // Route through the ambient TypeRegistry so nested generic resolutions
+        // (e.g. Owned[BTreeDictNode[S64, S64]] inside SortedDict[S64, S64]'s root field)
+        // get registered and picked up by the monomorphization planner.
+        TypeRegistry? registry = TypeRegistry.Ambient;
+
         if (type is EntityTypeInfo { GenericDefinition: not null } entityType)
         {
-            return entityType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+            return registry != null
+                ? registry.GetOrCreateResolution(genericDef: entityType.GenericDefinition, typeArguments: newArgs)
+                : entityType.GenericDefinition.CreateInstance(typeArguments: newArgs);
         }
 
         if (type is RecordTypeInfo { GenericDefinition: not null } recordType)
         {
-            return recordType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+            return registry != null
+                ? registry.GetOrCreateResolution(genericDef: recordType.GenericDefinition, typeArguments: newArgs)
+                : recordType.GenericDefinition.CreateInstance(typeArguments: newArgs);
         }
 
         if (type is ProtocolTypeInfo { GenericDefinition: not null } protocolType)
         {
-            return protocolType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+            return registry != null
+                ? registry.GetOrCreateResolution(genericDef: protocolType.GenericDefinition, typeArguments: newArgs)
+                : protocolType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+        }
+
+        if (type is WrapperTypeInfo wrapperType)
+        {
+            return wrapperType.CreateInstance(typeArguments: newArgs);
         }
 
         return type;

@@ -1,7 +1,7 @@
-namespace TypeModel.Types;
-
-using TypeModel.Enums;
 using SyntaxTree;
+using TypeModel.Enums;
+
+namespace TypeModel.Types;
 
 /// <summary>
 /// Base class for all type information in the TypeRegistry.

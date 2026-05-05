@@ -4,8 +4,21 @@ using Compiler.Resolution;
 using Compiler.Synthesis;
 using Compiler.Targeting;
 using SyntaxTree;
+using TypeModel.Types;
 
 namespace Compiler.Desugaring;
+
+/// <summary>
+/// Pre-computed data for one runtime dispatch stub, registered at Phase 6b.
+/// Codegen reads KnownImplementers and ReturnTypeLlvm directly — no TypeRegistry access needed.
+/// </summary>
+/// <param name="Protocol">The protocol.</param>
+/// <param name="MethodName">The method name.</param>
+/// <param name="KnownImplementers">The known implementers.</param>
+public sealed record RuntimeDispatchEntry(
+    ProtocolTypeInfo Protocol,
+    string MethodName,
+    IReadOnlyList<TypeInfo> KnownImplementers);
 
 /// <summary>
 /// Shared context for all desugaring passes.
@@ -30,12 +43,12 @@ public sealed class DesugaringContext
     public Dictionary<string, Statement> VariantBodies { get; } = new();
 
     /// <summary>
-    /// Pre-rewritten monomorphized bodies produced by <see cref="GenericMonomorphizationPass"/>,
+    /// Concrete generic bodies produced by <see cref="GenericMonomorphizationPass"/>,
     /// keyed by the concrete <see cref="TypeModel.Symbols.RoutineInfo.RegistryKey"/>.
     /// Codegen checks this map before doing its own AST search and rewriting, so most
     /// generic method bodies are ready before the first IR line is emitted.
     /// </summary>
-    public Dictionary<string, MonomorphizedBody> PreMonomorphizedBodies { get; } = new();
+    public Dictionary<string, MonomorphizedBody> InstantiatedGenericBodies { get; } = new();
 
     /// <summary>Target platform — drives BuilderService platform constants.</summary>
     public TargetConfig Target { get; }
@@ -43,6 +56,19 @@ public sealed class DesugaringContext
     /// <summary>Build mode — drives BuilderService.build_mode.</summary>
     public RfBuildMode BuildMode { get; }
 
+    /// <summary>
+    /// Runtime dispatch stubs pre-registered by <c>RuntimeDispatchRegistrationPass</c>
+    /// (Phase 6b). Key: <c>"{protocol.FullName}.{methodName}"</c> (raw, not LLVM-quoted).
+    /// Codegen reads this instead of discovering dispatch stubs lazily during emit.
+    /// </summary>
+    public Dictionary<string, RuntimeDispatchEntry> PendingRuntimeDispatches { get; } = new();
+
+    /// <summary>When true, diagnostic passes print per-iteration timings to stderr.</summary>
+    public bool SaTiming { get; set; }
+
+    /// <summary>
+    /// Initializes shared state for passes that rewrite verified syntax before instantiation.
+    /// </summary>
     public DesugaringContext(TypeRegistry registry,
         IReadOnlyDictionary<string, Statement> routineBodies,
         TargetConfig? target = null,

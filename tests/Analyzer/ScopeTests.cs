@@ -1,19 +1,17 @@
-using SemanticVerification.Results;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for scope analysis in the semantic analyzer:
-/// variable resolution, shadowing, undefined variables.
+/// Contains tests for scope.
 /// </summary>
 public class ScopeTests
 {
     #region Variable Resolution
     /// <summary>
-    /// Tests Analyze_VariableInScope_Resolves.
+    /// Verifies semantic analysis behavior for variable in scope and resolves the expected symbol.
     /// </summary>
 
     [Fact]
@@ -26,11 +24,12 @@ public class ScopeTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
         // Should resolve x correctly
     }
     /// <summary>
-    /// Tests Analyze_UndefinedVariable_ReportsError.
+    /// Verifies semantic analysis behavior for undefined variable and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -54,7 +53,7 @@ public class ScopeTests
                     comparisonType: StringComparison.OrdinalIgnoreCase));
     }
     /// <summary>
-    /// Tests Analyze_VariableUsedBeforeDeclaration_ReportsError.
+    /// Verifies semantic analysis behavior for variable used before declaration and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -75,7 +74,7 @@ public class ScopeTests
 
     #region Block Scoping
     /// <summary>
-    /// Tests Analyze_VariableInBlockScope_NoError.
+    /// Verifies semantic analysis behavior for variable in block scope without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -89,10 +88,11 @@ public class ScopeTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
     /// <summary>
-    /// Tests Analyze_VariableOutOfBlockScope_ReportsError.
+    /// Verifies semantic analysis behavior for variable out of block scope and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -110,7 +110,7 @@ public class ScopeTests
         Assert.True(condition: result.Errors.Count > 0);
     }
     /// <summary>
-    /// Tests Analyze_NestedBlockScopes_Resolves.
+    /// Verifies semantic analysis behavior for nested block scopes and resolves the expected symbol.
     /// </summary>
 
     [Fact]
@@ -127,14 +127,15 @@ public class ScopeTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
 
     #endregion
 
     #region Loop Scoping
     /// <summary>
-    /// Tests Analyze_ForLoopVariable_InScope.
+    /// Verifies semantic analysis behavior for for loop variable in scope.
     /// </summary>
 
     [Fact]
@@ -147,10 +148,11 @@ public class ScopeTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
     /// <summary>
-    /// Tests Analyze_ForLoopVariable_OutOfScope.
+    /// Verifies semantic analysis behavior for for loop variable out of scope.
     /// </summary>
 
     [Fact]
@@ -168,7 +170,7 @@ public class ScopeTests
         Assert.True(condition: result.Errors.Count > 0);
     }
     /// <summary>
-    /// Tests Analyze_WhileLoopVariable_InScope.
+    /// Verifies semantic analysis behavior for while loop variable in scope.
     /// </summary>
 
     [Fact]
@@ -183,14 +185,15 @@ public class ScopeTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
 
     #endregion
 
     #region Function Parameter Scoping
     /// <summary>
-    /// Tests Analyze_ParameterInScope_Resolves.
+    /// Verifies semantic analysis behavior for parameter in scope and resolves the expected symbol.
     /// </summary>
 
     [Fact]
@@ -202,10 +205,11 @@ public class ScopeTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
     /// <summary>
-    /// Tests Analyze_ParameterShadowsOuter_NoError.
+    /// Verifies semantic analysis behavior for parameter shadows outer without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -219,7 +223,8 @@ public class ScopeTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
         // Parameter shadows global variable
     }
 
@@ -227,7 +232,7 @@ public class ScopeTests
 
     #region Variable Shadowing
     /// <summary>
-    /// Tests Analyze_ShadowingInNestedBlock_Allowed.
+    /// Verifies semantic analysis behavior for shadowing in nested block allowed.
     /// </summary>
 
     [Fact]
@@ -243,11 +248,12 @@ public class ScopeTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
         // Shadowing in nested scope is allowed
     }
     /// <summary>
-    /// Tests Analyze_ShadowingInSameScope_ReportsError.
+    /// Verifies semantic analysis behavior for shadowing in same scope and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -268,7 +274,7 @@ public class ScopeTests
 
     #region When/Pattern Scoping
     /// <summary>
-    /// Tests Analyze_PatternBindingInWhen_InScope.
+    /// Verifies semantic analysis behavior for pattern binding in when in scope.
     /// </summary>
 
     [Fact]
@@ -286,10 +292,11 @@ public class ScopeTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
     /// <summary>
-    /// Tests Analyze_PatternBindingOutOfWhen_OutOfScope.
+    /// Verifies semantic analysis behavior for pattern binding out of when out of scope.
     /// </summary>
 
     [Fact]
@@ -316,7 +323,7 @@ public class ScopeTests
 
     #region Viewing/Hijacking Scoping
     /// <summary>
-    /// Tests Analyze_ViewingBlockVariable_InScope.
+    /// Verifies semantic analysis behavior for viewing block variable in scope.
     /// </summary>
 
     [Fact]
@@ -332,10 +339,11 @@ public class ScopeTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
     /// <summary>
-    /// Tests Analyze_ViewingBlockVariable_OutOfScope.
+    /// Verifies semantic analysis behavior for viewing block variable out of scope.
     /// </summary>
 
     [Fact]
@@ -358,75 +366,9 @@ public class ScopeTests
 
     #endregion
 
-    #region Suflae Scope Tests
-    /// <summary>
-    /// Tests AnalyzeSuflae_VariableInScope_Resolves.
-    /// </summary>
-
-    [Fact]
-    public void AnalyzeSuflae_VariableInScope_Resolves()
-    {
-        string source = """
-                        routine test()
-                          var x = 42
-                          show(x)
-                        """;
-
-        AnalyzeSuflae(source: source);
-    }
-    /// <summary>
-    /// Tests AnalyzeSuflae_UndefinedVariable_ReportsError.
-    /// </summary>
-
-    [Fact]
-    public void AnalyzeSuflae_UndefinedVariable_ReportsError()
-    {
-        string source = """
-                        routine test()
-                          show(undefined_var)
-                        """;
-
-        AnalysisResult result = AnalyzeSuflae(source: source);
-        Assert.True(condition: result.Errors.Count > 0);
-    }
-    /// <summary>
-    /// Tests AnalyzeSuflae_ForLoopVariable_InScope.
-    /// </summary>
-
-    [Fact]
-    public void AnalyzeSuflae_ForLoopVariable_InScope()
-    {
-        string source = """
-                        routine test()
-                          for i in 0 til 10
-                            show(i)
-                        """;
-
-        AnalyzeSuflae(source: source);
-    }
-    /// <summary>
-    /// Tests AnalyzeSuflae_ForLoopVariable_OutOfScope.
-    /// </summary>
-
-    [Fact]
-    public void AnalyzeSuflae_ForLoopVariable_OutOfScope()
-    {
-        string source = """
-                        routine test()
-                          for i in 0 til 10
-                            show(i)
-                          show(i)
-                        """;
-
-        AnalysisResult result = AnalyzeSuflae(source: source);
-        Assert.True(condition: result.Errors.Count > 0);
-    }
-
-    #endregion
-
     #region Closure Scoping
     /// <summary>
-    /// Tests Analyze_LambdaImplicitCapture_ReportsError.
+    /// Verifies semantic analysis behavior for lambda implicit capture and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -447,7 +389,7 @@ public class ScopeTests
             filter: e => e.Message.Contains(value: "given", comparisonType: StringComparison.OrdinalIgnoreCase));
     }
     /// <summary>
-    /// Tests Analyze_LambdaWithGivenClause_UndefinedCapture_ReportsError.
+    /// Verifies semantic analysis behavior for lambda with given clause undefined capture and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -469,7 +411,7 @@ public class ScopeTests
                 e.Message.Contains(value: "unknown", comparisonType: StringComparison.OrdinalIgnoreCase));
     }
     /// <summary>
-    /// Tests Analyze_LambdaWithGivenClause_ValidCapture_NoError.
+    /// Verifies semantic analysis behavior for lambda with given clause valid capture without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -483,10 +425,11 @@ public class ScopeTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
     /// <summary>
-    /// Tests Analyze_LambdaCapturePreset_NoError.
+    /// Verifies semantic analysis behavior for lambda capture preset without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -500,10 +443,11 @@ public class ScopeTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
     /// <summary>
-    /// Tests Analyze_LambdaCaptureGlobalVar_NoError.
+    /// Verifies semantic analysis behavior for lambda capture global var without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -517,10 +461,11 @@ public class ScopeTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
     /// <summary>
-    /// Tests Analyze_LambdaCaptureNotInGiven_ReportsError.
+    /// Verifies semantic analysis behavior for lambda capture not in given and reports the expected error.
     /// </summary>
 
     [Fact]

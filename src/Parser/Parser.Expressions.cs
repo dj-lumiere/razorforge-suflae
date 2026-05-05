@@ -1,6 +1,6 @@
-using SyntaxTree;
-using Compiler.Lexer;
 using Compiler.Diagnostics;
+using Compiler.Lexer;
+using SyntaxTree;
 
 namespace Compiler.Parser;
 
@@ -159,32 +159,11 @@ public partial class Parser
             return firstExpr;
         }
 
-        // When expression: when x: pattern => expr, ...
-        // Used in expression context: return when x: ..., var y = when x: ...
+        // When expression: when x { pattern => expr, ... }
+        // Used in expression context: return when x { ... }, var y = when x { ... }
         if (Match(type: TokenType.When))
         {
             return ParseWhenExpression(location: location);
-        }
-
-        // Dependent waitfor with 'after' clause: after dep [as binding] waitfor expr [within timeout]
-        if (Match(type: TokenType.After))
-        {
-            return ParseDependentWaitfor(location: location);
-        }
-
-        // Waitfor expression: waitfor expr or waitfor expr within timeout
-        // Used for async/concurrency: var result = waitfor asyncOperation
-        if (Match(type: TokenType.Waitfor))
-        {
-            Expression operand = ParseUnary(); // Parse the expression to wait for
-            Expression? timeout = null;
-
-            if (Match(type: TokenType.Within))
-            {
-                timeout = ParseUnary(); // Parse the timeout expression
-            }
-
-            return new WaitforExpression(Operand: operand, Timeout: timeout, Location: location);
         }
 
         // List literal: [expr, expr, ...]
@@ -201,6 +180,178 @@ public partial class Parser
 
         throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedExpression,
             message: $"Unexpected token: {CurrentToken.Type}");
+    }
+
+    private WhenExpression ParseWhenExpression(SourceLocation location)
+    {
+        bool isConditionBased = false;
+        Expression? subject;
+
+        if (Check(type: TokenType.Newline))
+        {
+            isConditionBased = true;
+            subject = null;
+        }
+        else if (Check(type: TokenType.True) && PeekToken(offset: 1).Type == TokenType.Newline)
+        {
+            isConditionBased = true;
+            Advance();
+            subject = null;
+        }
+        else
+        {
+            subject = ParseExpression();
+        }
+
+        Consume(type: TokenType.Newline, errorMessage: "Expected newline after when expression");
+
+        if (!Check(type: TokenType.Indent))
+        {
+            throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedIndentedBlock,
+                message: "Expected indented block after when");
+        }
+
+        ProcessIndentToken();
+
+        var clauses = new List<WhenClause>();
+
+        while (!Check(type: TokenType.Dedent) && !IsAtEnd)
+        {
+            if (Match(TokenType.Newline, TokenType.DocComment))
+            {
+                continue;
+            }
+
+            Pattern pattern;
+            SourceLocation clauseLocation = GetLocation();
+
+            if (Match(type: TokenType.Else))
+            {
+                if (Check(type: TokenType.Identifier))
+                {
+                    TokenType nextAfterIdent = PeekToken(offset: 1).Type;
+                    if (nextAfterIdent is TokenType.FatArrow or TokenType.Newline)
+                    {
+                        string varName = ConsumeIdentifier(errorMessage: "Expected variable name after 'else'");
+                        pattern = new ElsePattern(VariableName: varName, Location: clauseLocation);
+                    }
+                    else
+                    {
+                        pattern = new ElsePattern(VariableName: null, Location: clauseLocation);
+                    }
+                }
+                else
+                {
+                    pattern = new ElsePattern(VariableName: null, Location: clauseLocation);
+                }
+            }
+            else if (isConditionBased)
+            {
+                Expression condExpr = ParseExpression();
+                pattern = new ExpressionPattern(Expression: condExpr, Location: clauseLocation);
+            }
+            else if (Match(type: TokenType.Is))
+            {
+                _inWhenPatternContext = true;
+                if (Check(type: TokenType.Identifier) && PeekToken(offset: 1).Type is TokenType.And or TokenType.Or or TokenType.But)
+                {
+                    pattern = ParseFlagsIsWhenPattern();
+                }
+                else if (Check(type: TokenType.None) || Check(type: TokenType.Identifier))
+                {
+                    pattern = ParseTypePattern();
+                }
+                else
+                {
+                    throw ThrowParseError(code: GrammarDiagnosticCode.InvalidPattern,
+                        message: $"'is' must be followed by a type name. For value comparisons, use '== {CurrentToken.Text}' instead of 'is {CurrentToken.Text}'.");
+                }
+
+                _inWhenPatternContext = false;
+            }
+            else if (Match(type: TokenType.IsNot))
+            {
+                _inWhenPatternContext = true;
+                if (Check(type: TokenType.None) || Check(type: TokenType.Identifier))
+                {
+                    TypeExpression type = ParseType();
+                    pattern = new NegatedTypePattern(Type: type, Location: clauseLocation);
+                }
+                else
+                {
+                    throw ThrowParseError(code: GrammarDiagnosticCode.InvalidPattern,
+                        message: "'isnot' must be followed by a type name.");
+                }
+
+                _inWhenPatternContext = false;
+            }
+            else if (Match(type: TokenType.IsOnly))
+            {
+                _inWhenPatternContext = true;
+                var flagNames = new List<string>();
+                flagNames.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'isonly'"));
+                while (Match(type: TokenType.And))
+                {
+                    flagNames.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
+                }
+
+                pattern = new FlagsPattern(FlagNames: flagNames,
+                    Connective: FlagsTestConnective.And,
+                    ExcludedFlags: null,
+                    IsExact: true,
+                    Location: clauseLocation);
+                _inWhenPatternContext = false;
+            }
+            else if (IsComparisonOperator(tokenType: CurrentToken.Type))
+            {
+                pattern = ParseComparisonPattern();
+            }
+            else
+            {
+                _inWhenPatternContext = true;
+                pattern = ParsePattern();
+                _inWhenPatternContext = false;
+            }
+
+            Statement body;
+            _inWhenClauseBody = true;
+
+            if (Match(type: TokenType.FatArrow))
+            {
+                if (Check(type: TokenType.Newline) && PeekToken(offset: 1).Type == TokenType.Indent)
+                {
+                    Advance();
+                    body = ParseIndentedBlock();
+                }
+                else
+                {
+                    Expression armExpr = ParseExpression();
+                    body = new ExpressionStatement(Expression: armExpr, Location: armExpr.Location);
+                }
+            }
+            else
+            {
+                Consume(type: TokenType.FatArrow, errorMessage: "Expected '=>' after when pattern");
+                Expression armExpr = ParseExpression();
+                body = new ExpressionStatement(Expression: armExpr, Location: armExpr.Location);
+            }
+
+            _inWhenClauseBody = false;
+            clauses.Add(item: new WhenClause(Pattern: pattern, Body: body, Location: GetLocation()));
+            Match(TokenType.Comma, TokenType.Newline);
+        }
+
+        if (Check(type: TokenType.Dedent))
+        {
+            ProcessDedentTokens();
+        }
+        else if (!IsAtEnd)
+        {
+            throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedDedent,
+                message: "Expected dedent after when clauses");
+        }
+
+        return new WhenExpression(Expression: subject, Clauses: clauses, Location: location);
     }
 
 }

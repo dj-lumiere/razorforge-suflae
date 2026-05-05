@@ -1,6 +1,6 @@
-namespace TypeModel.Types;
-
 using TypeModel.Enums;
+
+namespace TypeModel.Types;
 
 /// <summary>
 /// Singleton error type used when type resolution fails.

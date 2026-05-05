@@ -7,7 +7,11 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateProgramFile>false</GenerateProgramFile>
-    <Version>0.1.0</Version>
+    <Version>0.0.1</Version>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>forge</ToolCommandName>
+    <PackageId>RazorForge</PackageId>
+    <Description>The RazorForge compiler toolchain (forge CLI).</Description>
   </PropertyGroup>
 
   <!-- Native library integration -->
@@ -24,10 +28,17 @@
 
   <!-- Include native libraries in output -->
   <ItemGroup>
-    <Content Include="native\build\bin\**\*.*" LinkBase="." CopyToOutputDirectory="PreserveNewest" Condition="Exists('native\build\bin')"/>
-    <Content Include="native\build\lib\**\*.*" LinkBase="." CopyToOutputDirectory="PreserveNewest" Condition="Exists('native\build\lib')"/>
+    <Content Include="native\build\bin\**\*.*" LinkBase="." CopyToOutputDirectory="PreserveNewest" PackageCopyToOutput="true" Condition="Exists('native\build\bin')"/>
+    <Content Include="native\build\lib\**\*.*" LinkBase="." CopyToOutputDirectory="PreserveNewest" PackageCopyToOutput="true" Condition="Exists('native\build\lib')"/>
+    <Content Include="Standard\**\*" LinkBase="Standard" CopyToOutputDirectory="PreserveNewest" PackageCopyToOutput="true"/>
     <Content Include="RazorForge-Wiki\.gitea\workflows\deploy.yaml" />
     <Content Include="Suflae-Wiki\.gitea\workflows\deploy.yaml" />
+    <Content Update="Standard\RazorForge\Core\Types\SipHash.rf">
+      <LinkBase>Standard\</LinkBase>
+    </Content>
+    <Content Update="Standard\RazorForge\Core\Types\HashHelper.rf">
+      <LinkBase>Standard\</LinkBase>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
@@ -36,6 +47,7 @@
 
   <ItemGroup>
     <PackageReference Include="DebugUtils.CSharp" Version="1.8.0"/>
+    <PackageReference Include="dotnet-framework-sonarscanner" Version="9.2.0" />
     <PackageReference Include="LLVMSharp" Version="20.1.2"/>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0"/>
     <PackageReference Include="xunit" Version="2.6.6"/>
@@ -49,5 +61,9 @@
   <ItemGroup>
     <Folder Include="src\" />
     <Folder Include="tests\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="Standard\RazorForge\Core\CSubsystem\CTypes.rf" />
   </ItemGroup>
 </Project>

@@ -1,19 +1,17 @@
-﻿using Xunit;
+using SyntaxTree;
 
 namespace RazorForge.Tests.Parser;
 
-using SyntaxTree;
 using static TestHelpers;
 
 /// <summary>
-/// Tests for parsing variable declarations in RazorForge:
-/// var, type annotations, initializers, mutability.
+/// Contains tests for variable declaration.
 /// </summary>
 public class VariableDeclarationTests
 {
     #region Variable Declarations
     /// <summary>
-    /// Tests Parse_VarWithTypeAndInitializer.
+    /// Verifies that the parser accepts var with type and initializer.
     /// </summary>
 
     [Fact]
@@ -28,7 +26,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_VarWithInferredType.
+    /// Verifies that the parser accepts var with inferred type.
     /// </summary>
 
     [Fact]
@@ -43,7 +41,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_VarWithComplexType.
+    /// Verifies that the parser accepts var with complex type.
     /// </summary>
 
     [Fact]
@@ -58,7 +56,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_VarWithGenericType.
+    /// Verifies that the parser accepts var with generic type.
     /// </summary>
 
     [Fact]
@@ -73,7 +71,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_VarWithMaybeType.
+    /// Verifies that the parser accepts var with maybe type.
     /// </summary>
 
     [Fact]
@@ -88,7 +86,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_VarWithFunctionCall.
+    /// Verifies that the parser accepts var with function call.
     /// </summary>
 
     [Fact]
@@ -103,7 +101,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_VarWithExpression.
+    /// Verifies that the parser accepts var with expression.
     /// </summary>
 
     [Fact]
@@ -118,7 +116,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_VarWithMutation.
+    /// Verifies that the parser accepts var with mutation.
     /// </summary>
 
     [Fact]
@@ -135,7 +133,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_VarWithoutInitializer.
+    /// Verifies that the parser accepts var without initializer.
     /// </summary>
 
     [Fact]
@@ -155,7 +153,7 @@ public class VariableDeclarationTests
 
     #region Multiple Declarations
     /// <summary>
-    /// Tests Parse_MultipleVarDeclarations.
+    /// Verifies that the parser accepts multiple var declarations.
     /// </summary>
 
     [Fact]
@@ -176,7 +174,7 @@ public class VariableDeclarationTests
 
     #region Destructuring Declarations
     /// <summary>
-    /// Tests Parse_VarDestructuringTuple.
+    /// Verifies that the parser accepts var destructuring tuple.
     /// </summary>
 
     [Fact]
@@ -191,7 +189,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_VarDestructuringRecord.
+    /// Verifies that the parser accepts var destructuring record.
     /// </summary>
 
     [Fact]
@@ -206,7 +204,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_VarNestedDestructuring.
+    /// Verifies that the parser accepts var nested destructuring.
     /// </summary>
 
     [Fact]
@@ -221,7 +219,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_VarDestructuringWithAlias.
+    /// Verifies that the parser accepts var destructuring with alias.
     /// </summary>
 
     [Fact]
@@ -236,7 +234,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_VarDestructuringWithWildcard.
+    /// Verifies that the parser accepts var destructuring with wildcard.
     /// </summary>
 
     [Fact]
@@ -255,7 +253,7 @@ public class VariableDeclarationTests
 
     #region Type Annotations
     /// <summary>
-    /// Tests Parse_PrimitiveTypes.
+    /// Verifies that the parser accepts primitive types.
     /// </summary>
 
     [Fact]
@@ -280,7 +278,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_TextType.
+    /// Verifies that the parser accepts text type.
     /// </summary>
 
     [Fact]
@@ -295,7 +293,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_ConstGenericType.
+    /// Verifies that the parser accepts const generic type.
     /// </summary>
 
     [Fact]
@@ -310,7 +308,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_NestedGenericType.
+    /// Verifies that the parser accepts nested generic type.
     /// </summary>
 
 
@@ -330,7 +328,7 @@ public class VariableDeclarationTests
 
     #region Literal Initializers
     /// <summary>
-    /// Tests Parse_IntegerLiterals.
+    /// Verifies that the parser accepts integer literals.
     /// </summary>
 
     [Fact]
@@ -348,7 +346,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_FloatLiterals.
+    /// Verifies that the parser accepts float literals.
     /// </summary>
 
     [Fact]
@@ -365,7 +363,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_TypedNumericLiterals.
+    /// Verifies that the parser accepts typed numeric literals.
     /// </summary>
 
     [Fact]
@@ -383,7 +381,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_StringLiterals.
+    /// Verifies that the parser accepts string literals.
     /// </summary>
 
     [Fact]
@@ -400,7 +398,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_BooleanLiterals.
+    /// Verifies that the parser accepts boolean literals.
     /// </summary>
 
     [Fact]
@@ -416,7 +414,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_NoneLiteral.
+    /// Verifies that the parser accepts none literal.
     /// </summary>
 
     [Fact]
@@ -431,7 +429,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_ListLiteral.
+    /// Verifies that the parser accepts list literal.
     /// </summary>
 
     [Fact]
@@ -446,7 +444,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_EmptyListLiteral.
+    /// Verifies that the parser accepts empty list literal.
     /// </summary>
 
     [Fact]
@@ -461,7 +459,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_LongTextEscapeLiteral.
+    /// Verifies that the parser accepts long text escape literal.
     /// </summary>
 
     [Fact]
@@ -481,7 +479,7 @@ public class VariableDeclarationTests
 
     #region Field Declarations in Types
     /// <summary>
-    /// Tests Parse_RecordMemberVariables.
+    /// Verifies that the parser accepts record member variables.
     /// </summary>
 
     [Fact]
@@ -498,7 +496,7 @@ public class VariableDeclarationTests
         Assert.Equal(expected: 2, actual: record.Members.Count);
     }
     /// <summary>
-    /// Tests Parse_EntityVarMemberVariables_Rejected.
+    /// Verifies that the parser accepts entity var member variables rejected.
     /// </summary>
 
     [Fact]
@@ -514,7 +512,7 @@ public class VariableDeclarationTests
         AssertParseError(source: source);
     }
     /// <summary>
-    /// Tests Parse_EntityMultipleVarMemberVariables_Rejected.
+    /// Verifies that the parser accepts entity multiple var member variables rejected.
     /// </summary>
 
     [Fact]
@@ -535,7 +533,7 @@ public class VariableDeclarationTests
 
     #region Complex Initializers
     /// <summary>
-    /// Tests Parse_ConstructorCall.
+    /// Verifies that the parser accepts constructor call.
     /// </summary>
 
     [Fact]
@@ -550,7 +548,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_MethodCallChain.
+    /// Verifies that the parser accepts method call chain.
     /// </summary>
 
     [Fact]
@@ -565,7 +563,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_ConditionalInitializer.
+    /// Verifies that the parser accepts conditional initializer.
     /// </summary>
 
     [Fact]
@@ -580,7 +578,7 @@ public class VariableDeclarationTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_WhenExpressionInitializer.
+    /// Verifies that the parser accepts when expression initializer.
     /// </summary>
 
     [Fact]

@@ -1,14 +1,14 @@
 using Compiler.Declaration;
+using SyntaxTree;
+using TypeModel.Enums;
+using TypeModel.Symbols;
+using TypeModel.Types;
+using Verification.Enums;
+using Verification.Scopes;
 
 namespace Compiler.Resolution;
 
-using TypeModel.Enums;
-using SemanticVerification.Enums;
-using SemanticVerification.Scopes;
-using TypeModel.Symbols;
-using TypeModel.Types;
-using SyntaxTree;
-using TypeInfo = TypeModel.Types.TypeInfo;
+using TypeInfo = TypeInfo;
 
 /// <summary>
 /// Central registry for all type information in a RazorForge/Suflae program.
@@ -21,9 +21,11 @@ public sealed partial class TypeRegistry
     /// through <see cref="GetOrCreateResolution"/> (to pick up entity specializations) but
     /// have no direct registry access — notably the static Substitute* methods on
     /// <see cref="RoutineInfo"/> and <see cref="RecordTypeInfo"/>. Set by the constructor.
-    /// Compilation is single-registry per run, so a plain static is safe.
+    /// [ThreadStatic] so parallel test runs each get their own Ambient without cross-contamination.
     /// </summary>
-    public static TypeRegistry? Ambient { get; private set; }
+    [ThreadStatic]
+    private static TypeRegistry? _ambient;
+    public static TypeRegistry? Ambient => _ambient;
 
     /// <summary>The language being built.</summary>
     public Language Language { get; }
@@ -38,6 +40,51 @@ public sealed partial class TypeRegistry
 
     /// <summary>Generic type resolutions cache.</summary>
     private readonly Dictionary<string, TypeInfo> _resolutions = new();
+
+    /// <summary>
+    /// Queue of EntityTypeInfo/RecordTypeInfo instances registered after GMP tracking began.
+    /// Populated by <see cref="GetOrCreateResolution"/> only while tracking is active.
+    /// Drained by GMP's fixed-point loop to process types discovered during body rewriting.
+    /// </summary>
+    private Queue<TypeInfo>? _gmpDiscoveryQueue;
+
+    /// <summary>
+    /// Set of type FullNames determined to be live by <see cref="TypeLivenessPass"/>.
+    /// Null until the pass runs, in which case all types are treated as live (pass-through).
+    /// </summary>
+    private HashSet<string>? _liveConcreteTypes;
+
+    /// <summary>
+    /// Stores the live-type set computed by TypeLivenessPass.  Called once, before Phase 4 synthesis.
+    /// </summary>
+    public void SetLiveConcreteTypes(HashSet<string> liveTypes) => _liveConcreteTypes = liveTypes;
+
+    /// <summary>Enables GMP discovery tracking. After this call, newly created EntityTypeInfo/
+    /// RecordTypeInfo instances are pushed to the discovery queue.</summary>
+    public void StartGmpDiscoveryTracking() => _gmpDiscoveryQueue = new Queue<TypeInfo>();
+
+    /// <summary>Drains and returns all types discovered since the last drain (or since tracking
+    /// started). Returns empty if tracking is not active.</summary>
+    public IReadOnlyList<TypeInfo> DrainGmpDiscoveryQueue()
+    {
+        if (_gmpDiscoveryQueue == null || _gmpDiscoveryQueue.Count == 0)
+            return [];
+        var result = _gmpDiscoveryQueue.ToArray();
+        _gmpDiscoveryQueue.Clear();
+        return result;
+    }
+
+    /// <summary>
+    /// Returns true if the type is considered live (i.e., reachable from user-program roots).
+    /// Always true for non-generic types and generic definitions; for concrete generic instances,
+    /// requires the type to have been included in the live set by TypeLivenessPass.
+    /// </summary>
+    private bool IsConcreteTypeLive(TypeInfo t) =>
+        _liveConcreteTypes == null ||
+        t.IsGenericDefinition ||
+        t.TypeArguments == null ||
+        t.TypeArguments.Count == 0 ||
+        _liveConcreteTypes.Contains(t.FullName);
 
     /// <summary>
     /// Wrapper type resolutions cache for synthesized scoped/RC wrappers
@@ -124,6 +171,14 @@ public sealed partial class TypeRegistry
         _routinesByNameAndFailability = new();
 
     /// <summary>
+    /// All overloads for each free-function base name, enabling structural candidate search
+    /// in <see cref="LookupRoutineOverload"/> without silent first-wins fallback.
+    /// Key = BaseName (e.g., "Core.gcd"). Member-routine overloads are indexed by
+    /// <see cref="_routinesByOwner"/> instead.
+    /// </summary>
+    private readonly Dictionary<string, List<RoutineInfo>> _routineOverloads = new();
+
+    /// <summary>
     /// Lazy cache for bare-name type lookups (e.g., "List" → Collections.List).
     /// Populated on first miss in <see cref="LookupType"/> to amortize the O(N) scan.
     /// </summary>
@@ -159,7 +214,7 @@ public sealed partial class TypeRegistry
     public TypeRegistry(Language language, string? stdlibPath = null)
     {
         Language = language;
-        Ambient = this;
+        _ambient = this;
         GlobalScope = new Scope(kind: ScopeKind.Global);
         _currentScope = GlobalScope;
         _stdlibPath = stdlibPath ?? StdlibLoader.GetDefaultStdlibPath();
@@ -194,22 +249,6 @@ public sealed partial class TypeRegistry
             _types[key: intrinsic.Name] = intrinsic;
         }
 
-        // Add LLVM type name aliases for convenience in stdlib
-        // These allow using @intrinsic.double instead of @intrinsic.f64
-        // TODO: This is dead
-        var llvmAliases = new Dictionary<string, IntrinsicTypeInfo>
-        {
-            [key: "@intrinsic.half"] = IntrinsicTypeInfo.WellKnown.F16,
-            [key: "@intrinsic.float"] = IntrinsicTypeInfo.WellKnown.F32,
-            [key: "@intrinsic.double"] = IntrinsicTypeInfo.WellKnown.F64,
-            [key: "@intrinsic.fp128"] = IntrinsicTypeInfo.WellKnown.F128
-        };
-
-        foreach ((string alias, IntrinsicTypeInfo intrinsic) in llvmAliases)
-        {
-            _intrinsics[key: alias] = intrinsic;
-            _types[key: alias] = intrinsic;
-        }
     }
 
     /// <summary>
@@ -903,6 +942,25 @@ public sealed partial class TypeRegistry
         if (moduleFullKey != null && moduleFullKey != fullKey)
             _resolutions[key: moduleFullKey] = resolved;
 
+        // Notify GMP's fixed-point loop about newly discovered concrete entity/record types.
+        // Guards:
+        // 1. Fully-concrete: no unresolved GenericParameterTypeInfo args (avoids LookupMethod recursion).
+        // 2. No self-nesting: skip types where a type argument's FullName contains the outer type's
+        //    bare base name — e.g. Hijacked[Hijacked[Owned[Text]]] created by Hijacked[T].offset
+        //    body rewriting would recurse unboundedly (Hijacked^N for all N).
+        //    resolved.Name may already contain type args (e.g. "Hijacked[Owned[Text]]"),
+        //    so strip everything from '[' onwards to get just the bare name "Hijacked".
+        if (_gmpDiscoveryQueue != null && resolved is EntityTypeInfo or RecordTypeInfo &&
+            IsFullyConcrete(resolved))
+        {
+            int bracketIdx = resolved.Name.IndexOf('[');
+            string bareBaseName = bracketIdx >= 0 ? resolved.Name[..bracketIdx] : resolved.Name;
+            bool isSelfNesting = resolved.TypeArguments != null &&
+                                 resolved.TypeArguments.Any(arg => arg.FullName.Contains(bareBaseName));
+            if (!isSelfNesting)
+                _gmpDiscoveryQueue.Enqueue(resolved);
+        }
+
         return resolved;
     }
 
@@ -943,7 +1001,7 @@ public sealed partial class TypeRegistry
                 entityRes.MemberVariables.Count < genericDef.MemberVariables.Count &&
                 entityRes.TypeArguments != null)
             {
-                EntityTypeInfo fresh =
+                var fresh =
                     (EntityTypeInfo)genericDef.CreateInstance(
                         typeArguments: entityRes.TypeArguments);
                 entityRes.MemberVariables = fresh.MemberVariables;
@@ -954,8 +1012,8 @@ public sealed partial class TypeRegistry
     /// Short name for a type argument used in the shortKey of GetOrCreateResolution / TryGetResolution.
     /// WrapperTypeInfo.Name is bare ("Owned") without inner args, so we expand it recursively to
     /// "Owned[InnerName]" to prevent shortKey collisions across different inner types.
-    private static string GetShortName(TypeModel.Types.TypeInfo t) =>
-        t is TypeModel.Types.WrapperTypeInfo wt
+    private static string GetShortName(TypeInfo t) =>
+        t is WrapperTypeInfo wt
             ? $"{wt.Name}[{GetShortName(wt.InnerType)}]"
             : t.Name;
 
@@ -1195,7 +1253,6 @@ public sealed partial class TypeRegistry
             TypeCategory.Record => true,
             TypeCategory.Choice => true,
             TypeCategory.Variant => true, // Variants are value types (stack-allocated)
-            TypeCategory.Tuple => true, // Tuples are always inline structs
             _ => false
         };
     }
@@ -1205,7 +1262,7 @@ public sealed partial class TypeRegistry
     /// </summary>
     /// <param name="type">The type to check.</param>
     /// <returns>True if the type is a single-member-variable wrapper, false otherwise.</returns>
-    public bool IsSingleMemberVariableWrapper(TypeInfo type)
+    public static bool IsSingleMemberVariableWrapper(TypeInfo type)
     {
         return type is RecordTypeInfo { IsSingleMemberVariableWrapper: true };
     }
@@ -1232,9 +1289,38 @@ public sealed partial class TypeRegistry
         _resolutions.Values
                     .Where(predicate: t =>
                          t is EntityTypeInfo or RecordTypeInfo && !t.IsGenericDefinition &&
-                         t.TypeArguments is { Count: > 0 } args && args.All(predicate: a =>
-                             a is not ErrorTypeInfo and not GenericParameterTypeInfo))
+                         t.TypeArguments is { Count: > 0 } args && args.All(predicate: IsFullyConcrete) &&
+                         IsConcreteTypeLive(t))
                     .Distinct(); // dual-index stores the same TypeInfo under two keys; deduplicate by reference.
+
+    /// <summary>
+    /// All concrete generic instances, bypassing the liveness filter.
+    /// Used by GMP's fixed-point loop to discover types that were registered during
+    /// monomorphization itself (e.g. ListEmitter[Byte] discovered while rewriting List[Byte].$iter).
+    /// Wrapper types are excluded to prevent runaway growth for self-wrapping families.
+    /// </summary>
+    public IEnumerable<TypeInfo> AllConcreteGenericInstancesUnfiltered =>
+        _resolutions.Values
+                    .Where(predicate: t =>
+                         t is EntityTypeInfo or RecordTypeInfo && !t.IsGenericDefinition &&
+                         t.TypeArguments is { Count: > 0 } args && args.All(predicate: IsFullyConcrete))
+                    .Distinct();
+
+    /// <summary>
+    /// Returns true when a type argument is fully concrete — no GenericParameterTypeInfo,
+    /// ErrorTypeInfo, or Blank at any nesting depth.
+    /// </summary>
+    private static bool IsFullyConcrete(TypeInfo t)
+    {
+        if (t is GenericParameterTypeInfo or ErrorTypeInfo) return false;
+        if (t.IsBlank) return false;
+        // A generic definition has free type parameters (no TypeArguments, only GenericParameters).
+        // Wrapper instances like Hijacked[BTreeDictNode[K,V]] must not be treated as fully concrete
+        // since they still reference unresolved type params via the generic-def inner type.
+        if (t.IsGenericDefinition) return false;
+        if (t.TypeArguments is not { Count: > 0 } args) return true;
+        return args.All(predicate: IsFullyConcrete);
+    }
 
     /// <summary>
     /// Returns all concrete WrapperTypeInfo instances (e.g. Hijacked[RetainController])
@@ -1244,8 +1330,8 @@ public sealed partial class TypeRegistry
     public IEnumerable<WrapperTypeInfo> AllConcreteWrapperInstances =>
         _wrapperResolutions.Values
                            .Where(predicate: t =>
-                                t.TypeArguments is { Count: > 0 } args && args.All(predicate: a =>
-                                    a is not ErrorTypeInfo and not GenericParameterTypeInfo))
+                                t.TypeArguments is { Count: > 0 } args && args.All(predicate: IsFullyConcrete) &&
+                                IsConcreteTypeLive(t))
                            .Distinct();
 
     /// <summary>
@@ -1272,6 +1358,146 @@ public sealed partial class TypeRegistry
     public IEnumerable<TypeInfo> GetAllTypes()
     {
         return _types.Values;
+    }
+
+    /// <summary>
+    /// Returns all concrete (non-generic-definition) types that implement the given protocol.
+    /// For generic implementing types, resolves the concrete type against the protocol's type arguments.
+    /// This is the authoritative implementer list; codegen should read this instead of scanning all types.
+    /// </summary>
+    public IReadOnlyList<TypeInfo> GetProtocolImplementors(ProtocolTypeInfo protocol)
+    {
+        ProtocolTypeInfo protocolDef = protocol.GenericDefinition ?? protocol;
+        string protocolBaseName = protocolDef.Name;
+
+        var result = new List<TypeInfo>();
+        var seen = new HashSet<string>();
+
+        IEnumerable<TypeInfo> candidates = GetTypesByCategory(category: TypeCategory.Entity)
+            .Concat(second: GetTypesByCategory(category: TypeCategory.Record))
+            .Concat(second: GetTypesByCategory(category: TypeCategory.Crashable));
+
+        foreach (TypeInfo type in candidates)
+        {
+            if (type.IsGenericDefinition && protocol.TypeArguments == null)
+            {
+                continue;
+            }
+
+            if (!seen.Add(item: type.Name))
+            {
+                continue;
+            }
+
+            IReadOnlyList<TypeInfo>? implemented = type switch
+            {
+                EntityTypeInfo e => e.ImplementedProtocols,
+                RecordTypeInfo r => r.ImplementedProtocols,
+                CrashableTypeInfo c => c.ImplementedProtocols,
+                _ => null
+            };
+            if (implemented == null)
+            {
+                continue;
+            }
+
+            foreach (TypeInfo impl in implemented)
+            {
+                string implBaseName = (impl as ProtocolTypeInfo)?.GenericDefinition?.Name ?? impl.Name;
+                if (implBaseName != protocolBaseName)
+                {
+                    continue;
+                }
+
+                if (!type.IsGenericDefinition && protocol.TypeArguments is { Count: > 0 } &&
+                    impl.TypeArguments is { Count: > 0 })
+                {
+                    if (protocol.TypeArguments.Count != impl.TypeArguments.Count)
+                    {
+                        continue;
+                    }
+
+                    bool argsMatch = true;
+                    for (int i = 0; i < protocol.TypeArguments.Count; i++)
+                    {
+                        if (protocol.TypeArguments[index: i].FullName !=
+                            impl.TypeArguments[index: i].FullName)
+                        {
+                            argsMatch = false;
+                            break;
+                        }
+                    }
+
+                    if (!argsMatch)
+                    {
+                        continue;
+                    }
+
+                    result.Add(item: type);
+                }
+                else if (type.IsGenericDefinition && protocol.TypeArguments is { Count: > 0 })
+                {
+                    // Resolve generic implementing type against protocol type arguments.
+                    ProtocolTypeInfo protoDef2 = protocol.GenericDefinition ?? protocol;
+                    if (protoDef2.GenericParameters is not { Count: > 0 } ||
+                        type.GenericParameters is not { Count: > 0 })
+                    {
+                        continue;
+                    }
+
+                    var mapping = new Dictionary<string, TypeInfo>();
+                    for (int i = 0;
+                         i < protoDef2.GenericParameters.Count &&
+                         i < protocol.TypeArguments.Count;
+                         i++)
+                    {
+                        mapping[key: protoDef2.GenericParameters[index: i]] =
+                            protocol.TypeArguments[index: i];
+                    }
+
+                    var typeArgs = new List<TypeInfo>();
+                    if (impl.TypeArguments is { Count: > 0 })
+                    {
+                        foreach (TypeInfo implArg in impl.TypeArguments)
+                        {
+                            if (implArg is GenericParameterTypeInfo gp &&
+                                mapping.TryGetValue(key: gp.Name, value: out TypeInfo? concrete))
+                            {
+                                typeArgs.Add(item: concrete);
+                            }
+                            else if (mapping.TryGetValue(key: implArg.Name,
+                                         value: out TypeInfo? concrete2))
+                            {
+                                typeArgs.Add(item: concrete2);
+                            }
+                            else
+                            {
+                                typeArgs.Add(item: implArg);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        typeArgs.AddRange(collection: protocol.TypeArguments);
+                    }
+
+                    if (typeArgs.Count == type.GenericParameters.Count)
+                    {
+                        TypeInfo resolved = GetOrCreateResolution(genericDef: type,
+                            typeArguments: typeArgs);
+                        result.Add(item: resolved);
+                    }
+                }
+                else
+                {
+                    result.Add(item: type);
+                }
+
+                break;
+            }
+        }
+
+        return result;
     }
 
     #endregion
@@ -1315,6 +1541,7 @@ public sealed partial class TypeRegistry
     /// <param name="type">The type of the variable.</param>
     /// <param name="isPreset">Whether this is a preset (build-time constant).</param>
     /// <returns>True if successful, false if already declared in this scope.</returns>
+    /// <param name="presetValue">The preset value.</param>
     public bool DeclareVariable(string name, TypeInfo type, bool isPreset = false,
         Expression? presetValue = null)
     {
@@ -1333,6 +1560,7 @@ public sealed partial class TypeRegistry
     /// <param name="name">The preset name.</param>
     /// <param name="type">The type of the preset.</param>
     /// <param name="module">The module this preset belongs to.</param>
+    /// <param name="value">The value.</param>
     public void RegisterPreset(string name, TypeInfo type, string? module = null,
         Expression? value = null)
     {

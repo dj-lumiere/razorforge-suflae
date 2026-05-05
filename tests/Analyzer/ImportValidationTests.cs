@@ -1,21 +1,18 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for import validation rules:
-/// #105: Import name collision (two imports expose the same symbol name)
-/// #106: Import position enforcement (imports must appear before other declarations)
+/// Contains tests for import validation.
 /// </summary>
 public class ImportValidationTests
 {
     #region #106: Import position enforcement
     /// <summary>
-    /// Tests Analyze_ImportAfterDeclaration_ReportsError.
+    /// Verifies semantic analysis behavior for import after declaration and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -33,7 +30,7 @@ public class ImportValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.ImportPositionViolation);
     }
     /// <summary>
-    /// Tests Analyze_ImportBeforeDeclaration_NoError.
+    /// Verifies semantic analysis behavior for import before declaration without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -51,7 +48,7 @@ public class ImportValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.ImportPositionViolation);
     }
     /// <summary>
-    /// Tests Analyze_MultipleImportsBeforeDeclarations_NoError.
+    /// Verifies semantic analysis behavior for multiple imports before declarations without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -75,7 +72,7 @@ public class ImportValidationTests
 
     #region #105: Import name collision
     /// <summary>
-    /// Tests Analyze_DuplicateImportedSymbol_ReportsError.
+    /// Verifies semantic analysis behavior for duplicate imported symbol and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -93,7 +90,7 @@ public class ImportValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.ImportNameCollision);
     }
     /// <summary>
-    /// Tests Analyze_DisjointSpecificImports_NoError.
+    /// Verifies semantic analysis behavior for disjoint specific imports without unexpected diagnostics.
     /// </summary>
 
     [Fact]

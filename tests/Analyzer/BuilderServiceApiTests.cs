@@ -1,6 +1,5 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
@@ -15,7 +14,7 @@ public class BuilderServiceApiTests
 {
     #region Per-Type Routines ??Records
     /// <summary>
-    /// Tests Record_TypeName_Available.
+    /// Verifies that the test validates type name available.
     /// </summary>
 
     [Fact]
@@ -35,7 +34,7 @@ public class BuilderServiceApiTests
                        """);
     }
     /// <summary>
-    /// Tests Record_TypeKind_Available.
+    /// Verifies that the test validates type kind available.
     /// </summary>
 
     [Fact]
@@ -55,7 +54,7 @@ public class BuilderServiceApiTests
                        """);
     }
     /// <summary>
-    /// Tests Record_TypeId_Available.
+    /// Verifies that the test validates type id available.
     /// </summary>
 
     [Fact]
@@ -75,7 +74,7 @@ public class BuilderServiceApiTests
                        """);
     }
     /// <summary>
-    /// Tests Record_ModuleName_Available.
+    /// Verifies that the test validates module name available.
     /// </summary>
 
     [Fact]
@@ -95,7 +94,7 @@ public class BuilderServiceApiTests
                        """);
     }
     /// <summary>
-    /// Tests Record_IsGeneric_Available.
+    /// Verifies that the test validates is generic available.
     /// </summary>
 
     [Fact]
@@ -115,7 +114,7 @@ public class BuilderServiceApiTests
                        """);
     }
     /// <summary>
-    /// Tests Record_DataSize_Available.
+    /// Verifies that the test validates data size available.
     /// </summary>
 
     [Fact]
@@ -135,7 +134,7 @@ public class BuilderServiceApiTests
                        """);
     }
     /// <summary>
-    /// Tests Record_MemberVariableCount_Available.
+    /// Verifies that the test validates member variable count available.
     /// </summary>
 
     [Fact]
@@ -155,7 +154,7 @@ public class BuilderServiceApiTests
                        """);
     }
     /// <summary>
-    /// Tests Record_GenericArgs_Available.
+    /// Verifies that the test validates generic args available.
     /// </summary>
 
     [Fact]
@@ -175,7 +174,7 @@ public class BuilderServiceApiTests
                        """);
     }
     /// <summary>
-    /// Tests Record_Protocols_Available.
+    /// Verifies that the test validates protocols available.
     /// </summary>
 
     [Fact]
@@ -195,7 +194,7 @@ public class BuilderServiceApiTests
                        """);
     }
     /// <summary>
-    /// Tests Record_RoutineNames_Available.
+    /// Verifies that the test validates routine names available.
     /// </summary>
 
     [Fact]
@@ -215,7 +214,7 @@ public class BuilderServiceApiTests
                        """);
     }
     /// <summary>
-    /// Tests Record_Annotations_Available.
+    /// Verifies that the test validates annotations available.
     /// </summary>
 
     [Fact]
@@ -235,7 +234,7 @@ public class BuilderServiceApiTests
                        """);
     }
     /// <summary>
-    /// Tests Record_Dependencies_Available.
+    /// Verifies that the test validates dependencies available.
     /// </summary>
 
     [Fact]
@@ -255,7 +254,7 @@ public class BuilderServiceApiTests
                        """);
     }
     /// <summary>
-    /// Tests Record_OriginModule_Available.
+    /// Verifies that the test validates origin module available.
     /// </summary>
 
     [Fact]
@@ -279,7 +278,7 @@ public class BuilderServiceApiTests
 
     #region Per-Type Routines ??Entities
     /// <summary>
-    /// Tests Entity_TypeName_Available.
+    /// Verifies that the test validates type name available.
     /// </summary>
 
     [Fact]
@@ -298,7 +297,7 @@ public class BuilderServiceApiTests
                        """);
     }
     /// <summary>
-    /// Tests Entity_TypeKind_Available.
+    /// Verifies that the test validates type kind available.
     /// </summary>
 
     [Fact]
@@ -317,7 +316,7 @@ public class BuilderServiceApiTests
                        """);
     }
     /// <summary>
-    /// Tests Entity_MemberVariableCount_Available.
+    /// Verifies that the test validates member variable count available.
     /// </summary>
 
     [Fact]
@@ -340,7 +339,7 @@ public class BuilderServiceApiTests
 
     #region Per-Type Routines ??Choices
     /// <summary>
-    /// Tests Choice_TypeName_Available.
+    /// Verifies that the test validates type name available.
     /// </summary>
 
     [Fact]
@@ -361,7 +360,7 @@ public class BuilderServiceApiTests
                        """);
     }
     /// <summary>
-    /// Tests Choice_TypeKind_Available.
+    /// Verifies that the test validates type kind available.
     /// </summary>
 
     [Fact]
@@ -386,7 +385,9 @@ public class BuilderServiceApiTests
 
     #region Per-Type Routines ??Import Gating (every routine without import)
     /// <summary>
-    /// Tests PerTypeRoutine_WithoutImport_ReportsError.
+    /// <summary>
+    /// Verifies that validates w it ho ut im po rt and reports the expected error.
+    /// </summary>
     /// </summary>
 
     [Theory]
@@ -421,7 +422,9 @@ public class BuilderServiceApiTests
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
     /// <summary>
-    /// Tests PerTypeRoutine_WithImport_NoError.
+    /// <summary>
+    /// Verifies that validates w it hi mp or t without unexpected diagnostics.
+    /// </summary>
     /// </summary>
 
     [Theory]
@@ -462,7 +465,9 @@ public class BuilderServiceApiTests
 
     #region Standalone Routines ??Source Location
     /// <summary>
-    /// Tests SourceLocationRoutine_WithoutImport_ReportsError.
+    /// <summary>
+    /// Verifies that validates w it ho ut im po rt and reports the expected error.
+    /// </summary>
     /// </summary>
 
     [Theory]
@@ -488,7 +493,9 @@ public class BuilderServiceApiTests
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
     /// <summary>
-    /// Tests SourceLocationRoutine_WithImport_NoError.
+    /// <summary>
+    /// Verifies that validates w it hi mp or t without unexpected diagnostics.
+    /// </summary>
     /// </summary>
 
     [Theory]
@@ -520,7 +527,9 @@ public class BuilderServiceApiTests
 
     #region Standalone Routines ??Platform/Build Info
     /// <summary>
-    /// Tests PlatformRoutine_WithoutImport_ReportsError.
+    /// <summary>
+    /// Verifies that validates w it ho ut im po rt and reports the expected error.
+    /// </summary>
     /// </summary>
 
     [Theory]
@@ -545,7 +554,9 @@ public class BuilderServiceApiTests
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
     /// <summary>
-    /// Tests PlatformRoutine_WithImport_NoError.
+    /// <summary>
+    /// Verifies that validates w it hi mp or t without unexpected diagnostics.
+    /// </summary>
     /// </summary>
 
     [Theory]
@@ -576,7 +587,7 @@ public class BuilderServiceApiTests
 
     #region Wired Routines ??Never Gated
     /// <summary>
-    /// Tests WiredRoutine_WithoutImport_NoError.
+    /// Verifies that the test validates routine without import without unexpected diagnostics.
     /// </summary>
 
     [Theory]
@@ -608,7 +619,7 @@ public class BuilderServiceApiTests
 
     #region Multiple Routines Combined
     /// <summary>
-    /// Tests AllPerTypeRoutines_OnRecord_Available.
+    /// Verifies that the test validates per type routines on record available.
     /// </summary>
 
     [Fact]
@@ -640,7 +651,7 @@ public class BuilderServiceApiTests
                        """);
     }
     /// <summary>
-    /// Tests AllStandaloneRoutines_Available.
+    /// Verifies that the test validates standalone routines available.
     /// </summary>
 
     [Fact]
@@ -671,7 +682,7 @@ public class BuilderServiceApiTests
                        """);
     }
     /// <summary>
-    /// Tests MixedPerTypeAndStandalone_Available.
+    /// Verifies that the test validates per type and standalone available.
     /// </summary>
 
     [Fact]
@@ -697,38 +708,10 @@ public class BuilderServiceApiTests
 
     #endregion
 
-    #region data_size ??RazorForge Only
-    /// <summary>
-    /// Tests DataSize_InSuflae_NotAvailable.
-    /// </summary>
-
-    [Fact]
-    public void DataSize_InSuflae_NotAvailable()
-    {
-        string source = """
-                        import BuilderService
-
-                        record Pair
-                          a: S64
-                          b: S64
-
-                        func test()
-                          let p = Pair(a: 1, b: 2)
-                          let sz = p.data_size()
-                          return
-                        """;
-
-        AnalysisResult result = AnalyzeSuflae(source: source);
-        // data_size should not be registered for Suflae, so it should produce an error
-        Assert.True(result.Errors.Count > 0,
-            "Expected data_size() to be unavailable in Suflae");
-    }
-
-    #endregion
 
     #region Per-Type Routines ??On Different Type Kinds
     /// <summary>
-    /// Tests Entity_AllMetadata_Available.
+    /// Verifies that the test validates all metadata available.
     /// </summary>
 
     [Fact]
@@ -754,7 +737,7 @@ public class BuilderServiceApiTests
                        """);
     }
     /// <summary>
-    /// Tests Choice_AllMetadata_Available.
+    /// Verifies that the test validates all metadata available.
     /// </summary>
 
     [Fact]

@@ -1,6 +1,5 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
@@ -14,7 +13,7 @@ public class AnnotationValidationTests
 {
     #region #145: Nested conditional expression warning
     /// <summary>
-    /// Tests Analyze_SimpleConditional_NoWarning.
+    /// Verifies semantic analysis behavior for simple conditional without unexpected warnings.
     /// </summary>
 
     [Fact]
@@ -30,7 +29,7 @@ public class AnnotationValidationTests
             filter: w => w.Code == SemanticWarningCode.NestedConditionalExpression);
     }
     /// <summary>
-    /// Tests Analyze_ConditionalInRoutine_NoWarning.
+    /// Verifies semantic analysis behavior for conditional in routine without unexpected warnings.
     /// </summary>
 
     [Fact]

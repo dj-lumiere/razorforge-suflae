@@ -1,7 +1,7 @@
-namespace Compiler.Parser;
-
-using Lexer;
+using Compiler.Lexer;
 using SyntaxTree;
+
+namespace Compiler.Parser;
 
 /// <summary>
 /// Partial class containing pattern and flags-test expression parsing helpers.
@@ -256,7 +256,7 @@ public partial class Parser
     /// Checks if the current token is a keyword that should not be treated as an identifier.
     /// Used to prevent parsing keywords as binding names in pattern matching.
     /// </summary>
-    private bool IsKeywordToken(Token token)
+    private static bool IsKeywordToken(Token token)
     {
         return token.Type switch
         {
@@ -479,7 +479,9 @@ public partial class Parser
         // Special handling for unary minus on numeric literals
         // This allows parsing negative min values like -9_223_372_036_854_775_808_s64
         // All numeric literals are now strings, so we prepend "-" to the string
-        if (op.Type == TokenType.Minus && Check(TokenType.S8Literal,
+        if (op.Type == TokenType.Minus && Check(TokenType.UndecidedInteger,
+                TokenType.UndecidedDecimal,
+                TokenType.S8Literal,
                 TokenType.S16Literal,
                 TokenType.S32Literal,
                 TokenType.S64Literal,
@@ -490,7 +492,7 @@ public partial class Parser
                 TokenType.U64Literal,
                 TokenType.U128Literal,
                 TokenType.AddressLiteral,
-                TokenType.Integer,
+                TokenType.IntegerLiteral,
                 TokenType.F16Literal,
                 TokenType.F32Literal,
                 TokenType.F64Literal,
@@ -498,7 +500,7 @@ public partial class Parser
                 TokenType.D32Literal,
                 TokenType.D64Literal,
                 TokenType.D128Literal,
-                TokenType.Decimal,
+                TokenType.DecimalLiteral,
                 TokenType.J32Literal,
                 TokenType.J64Literal,
                 TokenType.J128Literal,

@@ -86,3 +86,117 @@ routine Iterable[T].accumulate[U](start: U, combiner: Routine[(U, T), U]) -> U
   for item in me
     result = combiner(result, item)
   return result
+
+### Returns the sum of all values in this iterable.
+### The first element is used as the initial accumulator; subsequent elements are added to it.
+### :returns: The resulting `T` value.
+@readonly
+routine Iterable[T].sum!() -> T
+needs T obeys Addable
+  var emitter = me.$iter()
+  var result = emitter.$next!()
+  loop
+    var item = emitter.try_next()
+    when item
+      is None => return result
+      else value => result = result + value
+
+### Returns the smallest value in this iterable.
+### :returns: The resulting `T` value.
+@readonly
+routine Iterable[T].min!() -> T
+needs T obeys Comparable
+  var emitter = me.$iter()
+  var result = emitter.$next!()
+  loop
+    var item = emitter.try_next()
+    when item
+      is None => return result
+      else value =>
+        if value < result
+          result = value
+
+### Returns the largest value in this iterable.
+### :returns: The resulting `T` value.
+@readonly
+routine Iterable[T].max!() -> T
+needs T obeys Comparable
+  var emitter = me.$iter()
+  var result = emitter.$next!()
+  loop
+    var item = emitter.try_next()
+    when item
+      is None => return result
+      else value =>
+        if value > result
+          result = value
+
+### Returns the element for which `selector` returns the smallest key.
+### :param selector: The routine that extracts a comparable key from each element.
+### :returns: The resulting `T` value.
+@readonly
+routine Iterable[T].min_by![U](selector: Routine[(T,), U]) -> T
+needs U obeys Comparable
+  var emitter = me.$iter()
+  var best = emitter.$next!()
+  var best_key = selector(best)
+  loop
+    var item = emitter.try_next()
+    when item
+      is None => return best
+      else value =>
+        var k = selector(value)
+        if k < best_key
+          best = value
+          best_key = k
+
+### Returns the element for which `selector` returns the largest key.
+### :param selector: The routine that extracts a comparable key from each element.
+### :returns: The resulting `T` value.
+@readonly
+routine Iterable[T].max_by![U](selector: Routine[(T,), U]) -> T
+needs U obeys Comparable
+  var emitter = me.$iter()
+  var best = emitter.$next!()
+  var best_key = selector(best)
+  loop
+    var item = emitter.try_next()
+    when item
+      is None => return best
+      else value =>
+        var k = selector(value)
+        if k > best_key
+          best = value
+          best_key = k
+
+### Counts how many values satisfy `predicate`.
+### :param predicate: The test applied to each element.
+### :returns: The resulting `U64` value.
+@readonly
+routine Iterable[T].get_count(predicate: Routine[(T,), Bool]) -> U64
+  var n = 0u64
+  for item in me
+    if predicate(item)
+      n = n + 1u64
+  return n
+
+### Returns the first value produced by this iterable, or `default` when the iterable is empty.
+### :param default: The value to return when the iterable yields nothing.
+### :returns: The resulting `T` value.
+@readonly
+routine Iterable[T].first_or_default(default: T) -> T
+  var emitter = me.$iter()
+  var result = emitter.try_next()
+  when result
+    is None => return default
+    else item => return item
+
+### Returns the last value produced by this iterable, or `default` when the iterable is empty.
+### :param default: The value to return when the iterable yields nothing.
+### :returns: The resulting `T` value.
+@readonly
+routine Iterable[T].last_or_default(default: T) -> T
+  var latest = default
+  for item in me
+    latest = item
+  return latest

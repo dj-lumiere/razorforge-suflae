@@ -1,6 +1,6 @@
-namespace TypeModel.Types;
-
 using TypeModel.Enums;
+
+namespace TypeModel.Types;
 
 /// <summary>
 /// Placeholder type used for unbound generic type parameters.

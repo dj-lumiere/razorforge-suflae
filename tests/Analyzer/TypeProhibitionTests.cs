@@ -1,21 +1,18 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for prohibited type constructions.
-/// Blank cannot be used as a generic type argument anywhere.
-/// Data? / Maybe[Data] is not allowed (Data already supports None).
+/// Contains tests for type prohibition.
 /// </summary>
 public class TypeProhibitionTests
 {
     #region Blank as Type Argument (rejected)
     /// <summary>
-    /// Tests Analyze_BlankNullable_ReportsError.
+    /// Verifies semantic analysis behavior for blank nullable and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -33,7 +30,7 @@ public class TypeProhibitionTests
             filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
     }
     /// <summary>
-    /// Tests Analyze_ExplicitMaybeBlank_ReportsError.
+    /// Verifies semantic analysis behavior for explicit maybe blank and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -54,7 +51,7 @@ public class TypeProhibitionTests
 
     #region Normal nullable types (allowed)
     /// <summary>
-    /// Tests Analyze_NormalNullable_NoErrors.
+    /// Verifies semantic analysis behavior for normal nullable without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -71,7 +68,7 @@ public class TypeProhibitionTests
             filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
     }
     /// <summary>
-    /// Tests Analyze_BlankDirectType_NoErrors.
+    /// Verifies semantic analysis behavior for blank direct type without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -89,7 +86,7 @@ public class TypeProhibitionTests
             filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
     }
     /// <summary>
-    /// Tests Analyze_ResultBlank_NoErrors.
+    /// Verifies semantic analysis behavior for result blank without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -107,7 +104,7 @@ public class TypeProhibitionTests
             filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
     }
     /// <summary>
-    /// Tests Analyze_LookupBlank_ReportsError.
+    /// Verifies semantic analysis behavior for lookup blank and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -129,7 +126,7 @@ public class TypeProhibitionTests
 
     #region Nested Maybe Prohibition
     /// <summary>
-    /// Tests Analyze_NestedMaybe_ReportsError.
+    /// Verifies semantic analysis behavior for nested maybe and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -146,7 +143,7 @@ public class TypeProhibitionTests
             filter: e => e.Code == SemanticDiagnosticCode.NestedMaybeProhibited);
     }
     /// <summary>
-    /// Tests Analyze_SingleMaybe_NoError.
+    /// Verifies semantic analysis behavior for single maybe without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -167,7 +164,7 @@ public class TypeProhibitionTests
 
     #region Byte Literal ASCII Validation
     /// <summary>
-    /// Tests Analyze_ByteLiteralNonAscii_ReportsError.
+    /// Verifies semantic analysis behavior for byte literal non ascii and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -183,7 +180,7 @@ public class TypeProhibitionTests
         Assert.ThrowsAny<GrammarException>(() => Analyze(source: source));
     }
     /// <summary>
-    /// Tests Analyze_ByteLiteralAscii_NoGrammarError.
+    /// Verifies semantic analysis behavior for byte literal ascii without grammar diagnostics.
     /// </summary>
 
     [Fact]

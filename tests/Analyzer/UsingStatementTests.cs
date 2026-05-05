@@ -1,20 +1,18 @@
 using Compiler.Diagnostics;
-using SemanticVerification.Results;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for using statement semantic analysis:
-/// bound variable type resolution, $enter/$exit validation.
+/// Contains tests for using statement.
 /// </summary>
 public class UsingStatementTests
 {
     #region Token Using
     /// <summary>
-    /// Tests Analyze_TokenUsing_BindsTokenType.
+    /// Verifies semantic analysis behavior for token using and binds the expected token type.
     /// </summary>
 
     [Fact]
@@ -40,7 +38,7 @@ public class UsingStatementTests
 
     #region Resource With Void $enter
     /// <summary>
-    /// Tests Analyze_ResourceWithVoidEnterExit_BindsResourceType.
+    /// Verifies semantic analysis behavior for resource with void enter exit and binds the expected resource type.
     /// </summary>
 
     [Fact]
@@ -72,7 +70,7 @@ public class UsingStatementTests
 
     #region Resource With Non-Void $enter
     /// <summary>
-    /// Tests Analyze_ResourceWithNonVoidEnter_BindsEnterReturnType.
+    /// Verifies semantic analysis behavior for resource with non void enter and binds the enter return type.
     /// </summary>
 
     [Fact]
@@ -108,7 +106,7 @@ public class UsingStatementTests
 
     #region Missing $enter/$exit
     /// <summary>
-    /// Tests Analyze_ResourceMissingEnterExit_ReportsError.
+    /// Verifies semantic analysis behavior for resource missing enter exit and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -131,7 +129,7 @@ public class UsingStatementTests
             filter: e => e.Code == SemanticDiagnosticCode.UsingTargetMissingEnterExit);
     }
     /// <summary>
-    /// Tests Analyze_ResourceWithOnlyEnter_ReportsError.
+    /// Verifies semantic analysis behavior for resource with only enter and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -161,6 +159,9 @@ public class UsingStatementTests
 
     #region Generic Using
 
+    /// <summary>
+    /// Verifies semantic analysis behavior for generic using and binds the viewed wrapper type.
+    /// </summary>
     [Fact]
     public void Analyze_GenericUsing_BindsViewedType()
     {

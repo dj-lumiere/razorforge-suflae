@@ -1,20 +1,18 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for routine declaration validation:
-/// - Duplicate routine definitions (#150)
+/// Contains tests for routine declaration.
 /// </summary>
 public class RoutineDeclarationTests
 {
     #region Duplicate Routine Definition
     /// <summary>
-    /// Tests Analyze_DuplicateRoutine_ReportsError.
+    /// Verifies semantic analysis behavior for duplicate routine and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -32,7 +30,7 @@ public class RoutineDeclarationTests
             filter: e => e.Code == SemanticDiagnosticCode.DuplicateRoutineDefinition);
     }
     /// <summary>
-    /// Tests Analyze_UniqueRoutines_NoDuplicateError.
+    /// Verifies semantic analysis behavior for unique routines no duplicate error.
     /// </summary>
 
     [Fact]

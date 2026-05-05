@@ -509,7 +509,7 @@ routine D128.$create!(from_text: Text) -> D128
 ### Returns an xxHash64-based hash of this value via the 128-bit hash path.
 ### :returns: A `U64` hash derived from the full decimal128 encoding.
 routine D128.$hash() -> U64
-  return __hash_u128(v: reinterpret_bits[D128, U128](me))
+  return __hash_u128(v: U128(me.low) | (U128(me.high) << 64_u32))
 
 # ============================================================================
 # Byte Representation
@@ -518,7 +518,7 @@ routine D128.$hash() -> U64
 ### Returns the raw bytes of this value in little-endian order.
 ### :returns: The resulting `Array[Byte, 16]` value.
 routine D128.to_bytes_le() -> Array[Byte, 16]
-  var raw = reinterpret_bits[D128, U128](me)
+  var raw = U128(me.low) | (U128(me.high) << 64_u32)
   var lo = trunc[U128, U64](raw)
   var hi = trunc[U128, U64](shift_right_unsigned[U128](raw, 64_u128))
   var result = Array[Byte, 16]()
@@ -543,7 +543,7 @@ routine D128.to_bytes_le() -> Array[Byte, 16]
 ### Returns the raw bytes of this value in big-endian order.
 ### :returns: The resulting `Array[Byte, 16]` value.
 routine D128.to_bytes_be() -> Array[Byte, 16]
-  var raw = reinterpret_bits[D128, U128](me)
+  var raw = U128(me.low) | (U128(me.high) << 64_u32)
   var lo = bswap[U64](trunc[U128, U64](shift_right_unsigned[U128](raw, 64_u128)))
   var hi = bswap[U64](trunc[U128, U64](raw))
   var result = Array[Byte, 16]()
@@ -570,4 +570,4 @@ routine D128.to_bytes_be() -> Array[Byte, 16]
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
 routine D128.$secure_hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u128(v: reinterpret_bits[D128, U128](me), k0: k0, k1: k1)
+  return __secure_hash_u128(v: U128(me.low) | (U128(me.high) << 64_u32), k0: k0, k1: k1)

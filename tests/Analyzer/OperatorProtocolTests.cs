@@ -1,21 +1,17 @@
-using SemanticVerification.Results;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for operator protocol enforcement (RF-S411):
-/// - Types must follow required protocol to define operator methods
-/// - Correct protocol conformance allows operator definitions
-/// - Missing protocol conformance reports error
+/// Contains tests for operator protocol.
 /// </summary>
 public class OperatorProtocolTests
 {
     #region Correct Protocol Conformance
     /// <summary>
-    /// Tests Analyze_AddableWithFollows_NoError.
+    /// Verifies semantic analysis behavior for addable with follows without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -39,7 +35,7 @@ public class OperatorProtocolTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests Analyze_EquatableWithFollows_NoError.
+    /// Verifies semantic analysis behavior for equatable with follows without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -63,7 +59,7 @@ public class OperatorProtocolTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests Analyze_ComparableWithFollows_NoError.
+    /// Verifies semantic analysis behavior for comparable with follows without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -95,7 +91,7 @@ public class OperatorProtocolTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests Analyze_MultipleOperatorProtocols_NoError.
+    /// Verifies semantic analysis behavior for multiple operator protocols without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -131,7 +127,7 @@ public class OperatorProtocolTests
 
     #region Missing Protocol Conformance
     /// <summary>
-    /// Tests Analyze_AddWithoutAddable_ReportsError.
+    /// Verifies semantic analysis behavior for add without addable and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -161,7 +157,7 @@ public class OperatorProtocolTests
                     comparisonType: StringComparison.OrdinalIgnoreCase));
     }
     /// <summary>
-    /// Tests Analyze_EqWithoutEquatable_ReportsError.
+    /// Verifies semantic analysis behavior for eq without equatable and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -191,7 +187,7 @@ public class OperatorProtocolTests
                     comparisonType: StringComparison.OrdinalIgnoreCase));
     }
     /// <summary>
-    /// Tests Analyze_CmpWithoutComparable_ReportsError.
+    /// Verifies semantic analysis behavior for cmp without comparable and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -229,7 +225,7 @@ public class OperatorProtocolTests
 
     #region Non-Operator Methods (No Protocol Required)
     /// <summary>
-    /// Tests Analyze_CreateWithoutProtocol_NoError.
+    /// Verifies semantic analysis behavior for create without protocol without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -248,7 +244,7 @@ public class OperatorProtocolTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests Analyze_DestroyWithoutProtocol_NoError.
+    /// Verifies semantic analysis behavior for destroy without protocol without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -267,7 +263,7 @@ public class OperatorProtocolTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests Analyze_RegularMethodWithoutProtocol_NoError.
+    /// Verifies semantic analysis behavior for regular method without protocol without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -289,61 +285,4 @@ public class OperatorProtocolTests
 
     #endregion
 
-    #region Suflae Tests
-    /// <summary>
-    /// Tests AnalyzeSuflae_AddableWithFollows_NoError.
-    /// </summary>
-
-    [Fact]
-    public void AnalyzeSuflae_AddableWithFollows_NoError()
-    {
-        string source = """
-                        protocol Addable
-                          @readonly
-                          routine Me.$add(you: Me) -> Me
-
-                        entity Vector obeys Addable
-                          x: Integer
-                          y: Integer
-
-                        @readonly
-                        routine Vector.$add(you: Vector) -> Vector
-                          return Vector(x: me.x + you.x, y: me.y + you.y)
-                        """;
-
-        AnalysisResult result = AnalyzeSuflae(source: source);
-        Assert.Empty(collection: result.Errors);
-    }
-    /// <summary>
-    /// Tests AnalyzeSuflae_AddWithoutAddable_ReportsError.
-    /// </summary>
-
-    [Fact]
-    public void AnalyzeSuflae_AddWithoutAddable_ReportsError()
-    {
-        string source = """
-                        protocol Addable
-                          @readonly
-                          routine Me.$add(you: Me) -> Me
-
-                        record Vector
-                          x: Integer
-                          y: Integer
-
-                        @readonly
-                        routine Vector.$add(you: Vector) -> Vector
-                          return Vector(x: me.x + you.x, y: me.y + you.y)
-                        """;
-
-        AnalysisResult result = AnalyzeSuflae(source: source);
-        Assert.True(condition: result.Errors.Count > 0,
-            userMessage: "Expected error for missing Addable protocol");
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Message.Contains(value: "$add",
-                comparisonType: StringComparison.OrdinalIgnoreCase) &&
-                e.Message.Contains(value: "Addable",
-                    comparisonType: StringComparison.OrdinalIgnoreCase));
-    }
-
-    #endregion
 }

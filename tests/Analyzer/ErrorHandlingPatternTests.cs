@@ -1,13 +1,18 @@
 using Compiler.Diagnostics;
-using SemanticVerification.Results;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
+/// <summary>
+/// Contains tests for error handling pattern.
+/// </summary>
 public class ErrorHandlingPatternTests
 {
+    /// <summary>
+    /// Verifies semantic analysis behavior for result is none reports pattern mismatch.
+    /// </summary>
     [Fact]
     public void Analyze_ResultIsNone_ReportsPatternMismatch()
     {
@@ -24,6 +29,9 @@ public class ErrorHandlingPatternTests
             filter: e => e.Code == SemanticDiagnosticCode.PatternTypeMismatch);
     }
 
+    /// <summary>
+    /// Verifies semantic analysis behavior for lookup uses blank absent arm without pattern mismatch errors.
+    /// </summary>
     [Fact]
     public void Analyze_LookupUsesBlankAbsentArm_NoPatternMismatch()
     {
@@ -43,6 +51,9 @@ public class ErrorHandlingPatternTests
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
 
+    /// <summary>
+    /// Verifies semantic analysis behavior for result blank uses blank value arm without pattern mismatch errors.
+    /// </summary>
     [Fact]
     public void Analyze_ResultBlankUsesBlankValueArm_NoPatternMismatch()
     {

@@ -1,7 +1,7 @@
 using Compiler.Resolution;
+using SyntaxTree;
 using TypeModel.Symbols;
 using TypeModel.Types;
-using SyntaxTree;
 
 namespace Compiler.Desugaring.Passes;
 
@@ -11,10 +11,10 @@ namespace Compiler.Desugaring.Passes;
 ///
 /// <para>Must run <em>first</em> in the per-file desugaring pipeline so that all
 /// subsequent passes (operator lowering, f-string lowering, etc.) operate on
-/// concrete literal values rather than named identifiers.  For example,</para>
+/// concrete literal values rather than named identifiers. For example,</para>
 /// <code>
 /// preset RUNS: S64 = 20_s64
-/// for _ in 0..RUNS  →  for _ in 0..S64(20)
+/// for _ in 0..RUNS ?? for _ in 0..S64(20)
 /// </code>
 /// <para>Requires <see cref="VariableInfo.PresetValue"/> to be set on preset entries in
 /// the <see cref="TypeRegistry"/>, which happens during
@@ -22,6 +22,9 @@ namespace Compiler.Desugaring.Passes;
 /// </summary>
 internal sealed class PresetInliningPass(DesugaringContext ctx)
 {
+    /// <summary>
+    /// Runs this compiler phase over its configured input.
+    /// </summary>
     public void Run(Program program)
     {
         for (int i = 0; i < program.Declarations.Count; i++)
@@ -66,6 +69,9 @@ internal sealed class PresetInliningPass(DesugaringContext ctx)
         }
     }
 
+    /// <summary>
+    /// Lower member list as part of this compiler phase.
+    /// </summary>
     private void LowerMemberList(List<SyntaxTree.Declaration> members)
     {
         for (int j = 0; j < members.Count; j++)
@@ -77,8 +83,11 @@ internal sealed class PresetInliningPass(DesugaringContext ctx)
         }
     }
 
-    // ── Statement walker ─────────────────────────────────────────────────────
+    // -----------------------------------------------------------------------------
 
+    /// <summary>
+    /// Lower statement as part of this compiler phase.
+    /// </summary>
     private Statement LowerStatement(Statement stmt)
     {
         switch (stmt)
@@ -155,6 +164,14 @@ internal sealed class PresetInliningPass(DesugaringContext ctx)
                 return ReferenceEquals(v, ret.Value) ? stmt : ret with { Value = v };
             }
 
+            case VariantReturnStatement { Value: not null } variantRet:
+            {
+                Expression v = LowerExpression(variantRet.Value);
+                return ReferenceEquals(v, variantRet.Value)
+                    ? stmt
+                    : variantRet with { Value = v };
+            }
+
             case AssignmentStatement assign:
             {
                 Expression val = LowerExpression(assign.Value);
@@ -214,11 +231,14 @@ internal sealed class PresetInliningPass(DesugaringContext ctx)
         }
     }
 
-    // ── Expression walker ─────────────────────────────────────────────────────
+    // -----------------------------------------------------------------------------
 
+    /// <summary>
+    /// Lower expression as part of this compiler phase.
+    /// </summary>
     private Expression LowerExpression(Expression expr)
     {
-        // ── Preset substitution ──────────────────────────────────────────
+        // -----------------------------------------------------------------------------
         if (expr is IdentifierExpression id)
         {
             VariableInfo? v = ctx.Registry.LookupVariable(id.Name);
@@ -234,11 +254,11 @@ internal sealed class PresetInliningPass(DesugaringContext ctx)
             return expr;
         }
 
-        // ── Leaf nodes ───────────────────────────────────────────────────
+        // -----------------------------------------------------------------------------
         if (expr is LiteralExpression or TypeExpression or TypeIdExpression)
             return expr;
 
-        // ── Structural recursion into child expressions ──────────────────
+        // -----------------------------------------------------------------------------
         switch (expr)
         {
             case BinaryExpression bin:
@@ -478,6 +498,9 @@ internal sealed class PresetInliningPass(DesugaringContext ctx)
         }
     }
 
+    /// <summary>
+    /// Lower expression list as part of this compiler phase.
+    /// </summary>
     private List<Expression> LowerExpressionList(List<Expression> list)
     {
         bool changed = false;

@@ -8,6 +8,9 @@ namespace Compiler.Instantiation;
 /// </summary>
 public sealed class InstantiationPipeline(InstantiationContext ctx)
 {
+    /// <summary>
+    /// Runs generic reachability, closure expansion, and canonical body generation.
+    /// </summary>
     public void Run()
     {
         new ReachableGenericCollectionPass(ctx).Run();

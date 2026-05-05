@@ -1,5 +1,5 @@
-using SyntaxTree;
 using Compiler.Lexer;
+using SyntaxTree;
 
 namespace Compiler.Parser;
 

@@ -8,10 +8,10 @@ record RoutineRecord
   file_id: U32
   ### Stores the routine identifier.
   routine_id: U32
-  ### Stores the namespace identifier.
-  namespace_id: U32
+  ### Stores the module identifier.
+  module_id: U32
   ### Stores the owning type identifier when applicable.
-  type_id: U32
+  type_id: U64
   ### Stores the one-based source line number.
   line_no: U32
   ### Stores the one-based source column number.

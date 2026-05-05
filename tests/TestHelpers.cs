@@ -1,16 +1,16 @@
-﻿using System.Runtime.CompilerServices;
-using Xunit;
+using System.Runtime.CompilerServices;
+using Compiler.Lexer;
+using Compiler.Resolution;
+using Verification;
+using Verification.Results;
+using SyntaxTree;
+using TypeModel.Enums;
+using TypeModel.Symbols;
+using TypeModel.Types;
 
 namespace RazorForge.Tests;
 
-using SemanticVerification;
-using TypeModel.Enums;
-using SemanticVerification.Results;
-using TypeModel.Symbols;
-using Compiler.Lexer;
-using Compiler.Resolution;
-using SyntaxTree;
-using TypeInfo = TypeModel.Types.TypeInfo;
+using TypeInfo = TypeInfo;
 
 /// <summary>
 /// Helper methods for parsing and analyzing test code.
@@ -64,7 +64,7 @@ public static class TestHelpers
     public static AnalysisResult Analyze(string source, [CallerMemberName] string? fileName = null)
     {
         Program program = Parse(source: source, fileName: fileName);
-        var analyzer = new SemanticAnalyzer(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.RazorForge);
         return analyzer.Analyze(program: program);
     }
 
@@ -160,7 +160,7 @@ public static class TestHelpers
     public static AnalysisResult AnalyzeSuflae(string source, [CallerMemberName] string? fileName = null)
     {
         Program program = ParseSuflae(source: source, fileName: fileName);
-        var analyzer = new SemanticAnalyzer(language: Language.Suflae);
+        var analyzer = new SemanticVerifier(language: Language.Suflae);
         return analyzer.Analyze(program: program);
     }
 
@@ -223,7 +223,7 @@ public static class TestHelpers
     /// <summary>
     /// Gets a declaration of a specific type from the program.
     /// </summary>
-    public static T GetDeclaration<T>(Program program) where T : IAstNode
+    public static T GetDeclaration<T>(Program program) where T : ISyntaxTreeNode
     {
         T? decl = program.Declarations
                          .OfType<T>()
@@ -235,7 +235,7 @@ public static class TestHelpers
     /// <summary>
     /// Gets all declarations of a specific type from the program.
     /// </summary>
-    public static List<T> GetDeclarations<T>(Program program) where T : IAstNode
+    public static List<T> GetDeclarations<T>(Program program) where T : ISyntaxTreeNode
     {
         return program.Declarations
                       .OfType<T>()

@@ -1,0 +1,43 @@
+module IterTools
+
+### Represents a lazy adapter that pairs elements from two sources into tuples.
+### Iteration stops as soon as either source is exhausted.
+### :typeparam T: The element type of the first source sequence.
+### :typeparam U: The element type of the second source sequence.
+entity ZipIterator[T, U] obeys Iterable[Tuple[T, U]]
+  ### Stores the first source iterable.
+  secret first: Iterable[T]
+  ### Stores the second source iterable.
+  secret second: Iterable[U]
+
+### Returns the stateful iterator that produces paired tuples lazily.
+### :returns: The resulting `ZipEmitter[T, U]` value.
+@readonly
+routine ZipIterator[T, U].$iter() -> ZipEmitter[T, U]
+  return ZipEmitter[T, U](first: me.first.$iter(), second: me.second.$iter())
+
+### Iterates over two source sequences simultaneously, pairing one element from each.
+### Iteration ends when either source is exhausted.
+### :typeparam T: The element type of the first source.
+### :typeparam U: The element type of the second source.
+entity ZipEmitter[T, U] obeys Iterator[Tuple[T, U]]
+  ### Stores the iterator for the first source.
+  secret first: Iterator[T]
+  ### Stores the iterator for the second source.
+  secret second: Iterator[U]
+
+### Returns the next paired tuple from both source iterators.
+### Propagates absence as soon as either source is exhausted.
+### :returns: The resulting `Tuple[T, U]` value.
+routine ZipEmitter[T, U].$next!() -> Tuple[T, U]
+  var a = me.first.$next!()
+  var b = me.second.$next!()
+  return (a, b)
+
+### Returns a lazy adapter that pairs each element of this iterable with an element from `other`.
+### Stops when either source is exhausted.
+### :param other: The second source iterable to zip with.
+### :returns: The resulting `ZipIterator[T, U]` value.
+@readonly
+routine Iterable[T].zip[U](other: Iterable[U]) -> ZipIterator[T, U]
+  return ZipIterator[T, U](first: me, second: other)

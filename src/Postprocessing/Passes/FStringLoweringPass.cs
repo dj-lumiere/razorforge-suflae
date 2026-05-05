@@ -1,8 +1,7 @@
 using Compiler.Lexer;
-using TypeModel.Types;
 using SyntaxTree;
+using TypeModel.Types;
 
-using Compiler.Postprocessing;
 namespace Compiler.Postprocessing.Passes;
 
 /// <summary>
@@ -77,7 +76,7 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
         }
     }
 
-    // ?�?� Statement lowering ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
+    //  Statement lowering
 
     private Statement LowerStatement(Statement stmt)
     {
@@ -232,7 +231,7 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
         return anyChanged ? result : stmts;
     }
 
-    // ?�?� Expression lowering ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
+    //  Expression lowering
 
     private Expression LowerExpression(Expression expr)
     {
@@ -291,9 +290,13 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
             {
                 Expression obj = LowerExpression(idx.Object);
                 Expression index = LowerExpression(idx.Index);
-                return ReferenceEquals(obj, idx.Object) && ReferenceEquals(index, idx.Index)
-                    ? expr
-                    : idx with { Object = obj, Index = index };
+                if (ReferenceEquals(obj, idx.Object) && ReferenceEquals(index, idx.Index))
+                    return expr;
+
+                var rewritten = idx with { Object = obj, Index = index };
+                rewritten.ResolvedType = idx.ResolvedType;
+                rewritten.ResolvedSetItem = idx.ResolvedSetItem;
+                return rewritten;
             }
 
             case SliceExpression slice:
@@ -433,7 +436,7 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
         }
     }
 
-    // ?�?� F-string lowering ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
+    //  F-string lowering
 
     /// <summary>
     /// Converts an <see cref="InsertedTextExpression"/> to a left-folded chain of

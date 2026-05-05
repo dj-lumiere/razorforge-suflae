@@ -1,11 +1,10 @@
-using Compiler.Postprocessing.Passes;
-
-namespace Compiler.CodeGen;
-
 using System.Text;
+using Compiler.Postprocessing.Passes;
+using SyntaxTree;
 using TypeModel.Symbols;
 using TypeModel.Types;
-using SyntaxTree;
+
+namespace Compiler.CodeGen;
 
 /// <summary>
 /// Expression code generation for entity construction and entity member operations.
@@ -62,11 +61,6 @@ public partial class LlvmCodeGenerator
     /// <returns>The temporary variable holding the result.</returns>
     private string EmitConstructorCall(StringBuilder sb, CreatorExpression expr)
     {
-        if (ResolveCreatorType(creator: expr) is TupleTypeInfo tupleType)
-        {
-            return EmitTupleConstruction(sb: sb, tuple: tupleType, expr: expr);
-        }
-
         TypeInfo? type = ResolveCreatorType(creator: expr);
         if (type == null)
         {
@@ -121,6 +115,8 @@ public partial class LlvmCodeGenerator
         if ((record.HasDirectBackendType || record.IsSingleMemberVariableWrapper) &&
             expr.MemberVariables.Count <= 1)
         {
+            if (expr.MemberVariables.Count == 0)
+                return GetZeroValue(type: record);
             string argValue = EmitExpression(sb: sb, expr: expr.MemberVariables[index: 0].Value);
             if (record.HasDirectBackendType)
             {
@@ -131,23 +127,10 @@ public partial class LlvmCodeGenerator
                     : targetLlvm;
                 if (argLlvm != targetLlvm)
                 {
-                    string cast = NextTemp();
-                    if (targetLlvm == "ptr" && argLlvm != "ptr")
-                    {
-                        EmitLine(sb: sb, line: $"  {cast} = inttoptr {argLlvm} {argValue} to ptr");
-                    }
-                    else if (targetLlvm != "ptr" && argLlvm == "ptr")
-                    {
-                        EmitLine(sb: sb,
-                            line: $"  {cast} = ptrtoint ptr {argValue} to {targetLlvm}");
-                    }
-                    else
-                    {
-                        EmitLine(sb: sb,
-                            line: $"  {cast} = bitcast {argLlvm} {argValue} to {targetLlvm}");
-                    }
-
-                    return cast;
+                    return EmitBackendScalarCast(sb: sb,
+                        value: argValue,
+                        sourceType: argType,
+                        targetType: record);
                 }
             }
 
@@ -174,47 +157,7 @@ public partial class LlvmCodeGenerator
         return result;
     }
 
-    private string EmitTupleConstruction(StringBuilder sb, TupleTypeInfo tuple,
-        CreatorExpression expr)
-    {
-        string typeName = GetTupleTypeName(tuple: tuple);
-        string result = "zeroinitializer";
-
-        for (int i = 0; i < tuple.ElementTypes.Count; i++)
-        {
-            Expression? element = TryGetTupleCreatorElement(creator: expr, index: i);
-            if (element == null)
-            {
-                continue;
-            }
-
-            string value = EmitExpression(sb: sb, expr: element);
-            string elementLlvmType = GetLlvmType(type: tuple.ElementTypes[index: i]);
-            string next = NextTemp();
-            EmitLine(sb: sb,
-                line:
-                $"  {next} = insertvalue {typeName} {result}, {elementLlvmType} {value}, {i}");
-            result = next;
-        }
-
-        return result;
-    }
-
-    private static Expression? TryGetTupleCreatorElement(CreatorExpression creator, int index)
-    {
-        string expectedName = $"item{index}";
-        foreach ((string name, Expression value) in creator.MemberVariables)
-        {
-            if (name == expectedName)
-            {
-                return value;
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>
+/// <summary>
     /// Constructs a record from a list of positional arguments (for TypeName(args...) calls).
     /// </summary>
     private string EmitRecordConstruction(StringBuilder sb, RecordTypeInfo record,
@@ -234,23 +177,10 @@ public partial class LlvmCodeGenerator
                     : targetLlvm;
                 if (argLlvm != targetLlvm)
                 {
-                    string cast = NextTemp();
-                    if (targetLlvm == "ptr" && argLlvm != "ptr")
-                    {
-                        EmitLine(sb: sb, line: $"  {cast} = inttoptr {argLlvm} {argValue} to ptr");
-                    }
-                    else if (targetLlvm != "ptr" && argLlvm == "ptr")
-                    {
-                        EmitLine(sb: sb,
-                            line: $"  {cast} = ptrtoint ptr {argValue} to {targetLlvm}");
-                    }
-                    else
-                    {
-                        EmitLine(sb: sb,
-                            line: $"  {cast} = bitcast {argLlvm} {argValue} to {targetLlvm}");
-                    }
-
-                    return cast;
+                    return EmitBackendScalarCast(sb: sb,
+                        value: argValue,
+                        sourceType: argType,
+                        targetType: record);
                 }
             }
 
@@ -354,34 +284,6 @@ public partial class LlvmCodeGenerator
     {
         string propertyName = expr.PropertyName;
 
-        // Choice/Flags member access: emit constant value directly (no target expression to evaluate)
-        TypeInfo? earlyObjectType = GetExpressionType(expr: expr.Object);
-        // Fallback: if SA didn't set ResolvedType (type-as-identifier), try type lookup by name
-        if (earlyObjectType == null && expr.Object is IdentifierExpression typeId)
-        {
-            earlyObjectType = LookupTypeInCurrentModule(name: typeId.Name);
-        }
-
-        if (earlyObjectType is ChoiceTypeInfo choice)
-        {
-            ChoiceCaseInfo? caseInfo =
-                choice.Cases.FirstOrDefault(predicate: c => c.Name == propertyName);
-            if (caseInfo != null)
-            {
-                return caseInfo.ComputedValue.ToString();
-            }
-        }
-
-        if (earlyObjectType is FlagsTypeInfo flags)
-        {
-            FlagsMemberInfo? memberInfo =
-                flags.Members.FirstOrDefault(predicate: m => m.Name == propertyName);
-            if (memberInfo != null)
-            {
-                return (1L << memberInfo.BitPosition).ToString();
-            }
-        }
-
         // Evaluate the target expression
         string target = EmitExpression(sb: sb, expr: expr.Object);
 
@@ -447,6 +349,10 @@ public partial class LlvmCodeGenerator
                 entityPtr: target,
                 entity: entity,
                 memberVariableName: propertyName),
+            TupleTypeInfo tuple => EmitTupleMemberVariableRead(sb: sb,
+                tupleValue: target,
+                tuple: tuple,
+                memberVariableName: propertyName),
             RecordTypeInfo record => EmitRecordMemberVariableRead(sb: sb,
                 recordValue: target,
                 record: record,
@@ -454,10 +360,6 @@ public partial class LlvmCodeGenerator
             CrashableTypeInfo crashable => EmitCrashableMemberVariableRead(sb: sb,
                 crashablePtr: target,
                 crashable: crashable,
-                memberVariableName: propertyName),
-            TupleTypeInfo tuple => EmitTupleMemberVariableRead(sb: sb,
-                tupleValue: target,
-                tuple: tuple,
                 memberVariableName: propertyName),
             // Synthetic type_id access generated by PatternLoweringPass for variant subjects.
             VariantTypeInfo variant when propertyName == "type_id" =>
@@ -608,7 +510,6 @@ public partial class LlvmCodeGenerator
         }
 
         string typeName = GetRecordTypeName(record: record);
-        string memberVariableType = GetLlvmType(type: memberVariable.Type);
 
         // Extract the member variable value
         string value = NextTemp();
@@ -647,7 +548,7 @@ public partial class LlvmCodeGenerator
                 message: $"Member variable '{memberVariableName}' not found on tuple '{tuple.Name}'");
         }
 
-        string tupleTypeName = GetTupleTypeName(tuple: tuple);
+        string tupleTypeName = GetLlvmType(type: tuple);
         string result = NextTemp();
         EmitLine(sb: sb, line: $"  {result} = extractvalue {tupleTypeName} {tupleValue}, {index}");
         return result;
@@ -715,149 +616,6 @@ public partial class LlvmCodeGenerator
 
         // Store the value
         EmitLine(sb: sb, line: $"  store {memberVariableType} {value}, ptr {memberVariablePtr}");
-    }
-
-    /// <summary>
-    /// Checks if a type is a Maybe/nullable type (Maybe[T], or error handling Maybe).
-    /// </summary>
-    /// <summary>
-    /// Resolves a TypeExpression to a TypeInfo, handling parameterized types
-    /// like SortedDict[K, V] by recursively resolving inner type arguments
-    /// via _typeSubstitutions during monomorphization.
-    /// </summary>
-    private TypeInfo? ResolveTypeArgument(TypeExpression ta)
-    {
-        // Direct substitution (e.g., T → S64)
-        if (_typeSubstitutions != null &&
-            _typeSubstitutions.TryGetValue(key: ta.Name, value: out TypeInfo? sub))
-        {
-            return sub;
-        }
-
-        // Const generic literal values (e.g., 4, 8u64) used in types like ValueList[S64, 4].
-        if (TryParseConstGenericLiteral(name: ta.Name,
-                value: out long constValue,
-                explicitType: out string? explicitType))
-        {
-            return new ConstGenericValueTypeInfo(literalText: ta.Name,
-                value: constValue,
-                explicitTypeName: explicitType);
-        }
-
-        TypeInfo? presetConst = ResolvePresetConstGenericType(name: ta.Name);
-        if (presetConst != null)
-        {
-            return presetConst;
-        }
-
-        TypeInfo? tupleType = ResolveTupleTypeExpression(typeExpr: ta);
-        if (tupleType != null)
-        {
-            return tupleType;
-        }
-
-        // If the type argument itself has generic arguments (e.g., SortedDict[K, V]),
-        // resolve those recursively and create the concrete type
-        if (ta.GenericArguments is { Count: > 0 })
-        {
-            TypeInfo? baseType = _registry.LookupType(name: ta.Name);
-            if (baseType != null)
-            {
-                var innerArgs = new List<TypeInfo>();
-                foreach (TypeExpression innerTa in ta.GenericArguments)
-                {
-                    TypeInfo? innerResolved = ResolveTypeArgument(ta: innerTa);
-                    if (innerResolved != null)
-                    {
-                        innerArgs.Add(item: innerResolved);
-                    }
-                }
-
-                if (innerArgs.Count == (baseType.GenericParameters?.Count ?? 0))
-                {
-                    return _registry.GetOrCreateResolution(genericDef: baseType,
-                        typeArguments: innerArgs);
-                }
-            }
-        }
-
-        // Try module-qualified lookup and type substitution values
-        // (handles rewritten names like "SortedDict[S64, S64]" from GenericAstRewriter)
-        TypeInfo? fromModule = LookupTypeInCurrentModule(name: ta.Name);
-        if (fromModule != null)
-        {
-            return fromModule;
-        }
-
-        if (_typeSubstitutions != null)
-        {
-            foreach (TypeInfo sub2 in _typeSubstitutions.Values)
-            {
-                if (sub2.Name == ta.Name)
-                {
-                    return sub2;
-                }
-            }
-        }
-
-        return _registry.LookupType(name: ta.Name);
-    }
-
-    private TypeInfo? ResolveTupleTypeExpression(TypeExpression typeExpr)
-    {
-        if (typeExpr.Name is not "Tuple" and not "ValueTuple")
-        {
-            return null;
-        }
-
-        if (typeExpr.GenericArguments is not { Count: > 0 } elementTypeExprs)
-        {
-            return null;
-        }
-
-        var elementTypes = new List<TypeInfo>(capacity: elementTypeExprs.Count);
-        foreach (TypeExpression elementTypeExpr in elementTypeExprs)
-        {
-            TypeInfo? elementType = ResolveTypeArgument(ta: elementTypeExpr);
-            if (elementType == null)
-            {
-                return null;
-            }
-
-            elementTypes.Add(item: elementType);
-        }
-
-        return _registry.GetOrCreateTupleType(elementTypes: elementTypes);
-    }
-
-    private static bool TryParseConstGenericLiteral(string name, out long value,
-        out string? explicitType)
-    {
-        explicitType = null;
-
-        if (long.TryParse(s: name, result: out value))
-        {
-            return true;
-        }
-
-        (string Suffix, string TypeName)[] integerSuffixes =
-        [
-            ("u8", "U8"), ("u16", "U16"), ("u32", "U32"), ("u64", "U64"), ("u128", "U128"),
-            ("s8", "S8"), ("s16", "S16"), ("s32", "S32"), ("s64", "S64"), ("s128", "S128")
-        ];
-
-        foreach ((string suffix, string typeName) in integerSuffixes)
-        {
-            if (name.EndsWith(value: suffix, comparisonType: StringComparison.OrdinalIgnoreCase) &&
-                long.TryParse(s: name[..^suffix.Length], result: out value))
-            {
-                explicitType = typeName;
-                return true;
-            }
-        }
-
-        value = 0;
-        return false;
     }
 
     /// <summary>

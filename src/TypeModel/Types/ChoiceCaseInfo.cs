@@ -1,6 +1,6 @@
-namespace TypeModel.Types;
-
 using SyntaxTree;
+
+namespace TypeModel.Types;
 
 /// <summary>
 /// Information about a single case in a choice type.

@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Compiler.Lexer;
 
 /// <summary>
@@ -100,7 +102,7 @@ public partial class Tokenizer
     /// </remarks>
     private string PeekWord()
     {
-        var word = new System.Text.StringBuilder();
+        var word = new StringBuilder();
         int offset = 0;
 
         while (!IsAtEnd() && char.IsLetterOrDigit(c: Peek(offset: offset)))

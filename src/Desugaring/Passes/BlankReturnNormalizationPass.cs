@@ -86,11 +86,13 @@ internal sealed class BlankReturnNormalizationPass(DesugaringContext ctx)
                 for (int i = 0; i < stmts.Count; i++)
                 {
                     Statement lowered = NormalizeStatement(stmt: stmts[i]);
-                    if (!ReferenceEquals(lowered, stmts[i]))
+                    if (ReferenceEquals(lowered, stmts[i]))
                     {
-                        replaced ??= [..stmts];
-                        replaced[i] = lowered;
+                        continue;
                     }
+
+                    replaced ??= [..stmts];
+                    replaced[i] = lowered;
                 }
                 return replaced != null ? b with { Statements = replaced } : b;
             }

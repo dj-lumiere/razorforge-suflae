@@ -1,6 +1,6 @@
-namespace TypeModel.Types;
-
 using TypeModel.Enums;
+
+namespace TypeModel.Types;
 
 /// <summary>
 /// Builder-synthesized wrapper types (Viewed, Grasped, Retained, Tracked, Shared, Marked, Inspected, Claimed, Hijacked, Owned).

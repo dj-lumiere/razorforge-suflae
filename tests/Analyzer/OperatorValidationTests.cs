@@ -1,23 +1,18 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for operator validation rules:
-/// #66: Index operator type-kind restriction
-/// #67: Compound assignment on read-only tokens
-/// #117: Fixed-width numeric type mismatch
-/// #119: BackIndex in Range restriction
+/// Contains tests for operator validation.
 /// </summary>
 public class OperatorValidationTests
 {
     #region #66: Index operator type-kind restriction
     /// <summary>
-    /// Tests Analyze_IndexOperatorOnEntity_NoError.
+    /// Verifies semantic analysis behavior for index operator on entity without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -39,7 +34,7 @@ public class OperatorValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.IndexOperatorTypeKindRestriction);
     }
     /// <summary>
-    /// Tests Analyze_IndexOperatorOnRecord_ReportsError.
+    /// Verifies semantic analysis behavior for index operator on record and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -66,7 +61,7 @@ public class OperatorValidationTests
 
     #region #117: Fixed-width numeric type mismatch
     /// <summary>
-    /// Tests Analyze_SameFixedWidthArithmetic_NoError.
+    /// Verifies semantic analysis behavior for same fixed width arithmetic without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -85,7 +80,7 @@ public class OperatorValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.FixedWidthTypeMismatch);
     }
     /// <summary>
-    /// Tests Analyze_MixedFixedWidthArithmetic_ReportsError.
+    /// Verifies semantic analysis behavior for mixed fixed width arithmetic and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -105,7 +100,7 @@ public class OperatorValidationTests
 
     #region #119: BackIndex in Range restriction
     /// <summary>
-    /// Tests Analyze_BackIndexInRange_ReportsError.
+    /// Verifies semantic analysis behavior for back index in range and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -122,7 +117,7 @@ public class OperatorValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.BackIndexOutsideSubscript);
     }
     /// <summary>
-    /// Tests Analyze_BackIndexInSlice_NoError.
+    /// Verifies semantic analysis behavior for back index in slice without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -143,7 +138,7 @@ public class OperatorValidationTests
 
     #region S201: Binary operator type mismatch
     /// <summary>
-    /// Tests Analyze_TextPlusList_ReportsArgumentTypeMismatch.
+    /// Verifies semantic analysis behavior for text plus list reports argument type mismatch.
     /// </summary>
 
     [Fact]
@@ -159,7 +154,7 @@ public class OperatorValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.ArgumentTypeMismatch);
     }
     /// <summary>
-    /// Tests Analyze_TextPlusText_NoError.
+    /// Verifies semantic analysis behavior for text plus text without unexpected diagnostics.
     /// </summary>
 
     [Fact]

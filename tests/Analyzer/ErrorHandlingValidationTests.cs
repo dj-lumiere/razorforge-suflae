@@ -1,27 +1,19 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
+using Verification.Results;
 using TypeModel.Symbols;
-using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for error handling semantic validation:
-/// - Throw requires named crashable type (#84)
-/// - Failable routines must contain throw or absent (#77)
-/// - @crash_only validation (#76)
-/// - Unhandled crashable call (#159)
-/// - Crashable catch-all requirement (#89)
-/// - ??= type narrowing (#42)
-/// - Result/Lookup storage restriction (#81)
+/// Contains tests for error handling validation.
 /// </summary>
 public class ErrorHandlingValidationTests
 {
     #region Throw Requires Named Crashable Type
     /// <summary>
-    /// Tests Analyze_ThrowEntity_NoRecordError.
+    /// Verifies semantic analysis behavior for throw entity no record error.
     /// </summary>
 
     [Fact]
@@ -40,7 +32,7 @@ public class ErrorHandlingValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.ThrowRequiresRecordType);
     }
     /// <summary>
-    /// Tests Analyze_ThrowRecord_NoRecordError.
+    /// Verifies semantic analysis behavior for throw record no record error.
     /// </summary>
 
     [Fact]
@@ -63,7 +55,7 @@ public class ErrorHandlingValidationTests
 
     #region Failable Without Throw or Absent
     /// <summary>
-    /// Tests Analyze_FailableWithoutThrowOrAbsent_ReportsError.
+    /// Verifies semantic analysis behavior for failable without throw or absent and reports the expected warning.
     /// </summary>
 
     [Fact]
@@ -75,11 +67,11 @@ public class ErrorHandlingValidationTests
                         """;
 
         AnalysisResult result = Analyze(source: source);
-        Assert.Contains(collection: result.Warnings,
-            filter: w => w.Code == SemanticWarningCode.FailableRoutineNeverCrashes);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrowOrAbsent);
     }
     /// <summary>
-    /// Tests Analyze_FailableWithThrow_NoError.
+    /// Verifies semantic analysis behavior for failable with throw without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -98,7 +90,7 @@ public class ErrorHandlingValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrowOrAbsent);
     }
     /// <summary>
-    /// Tests Analyze_FailableWithAbsent_NoError.
+    /// Verifies semantic analysis behavior for failable with absent without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -119,7 +111,7 @@ public class ErrorHandlingValidationTests
 
     #region @crash_only Validation (#76)
     /// <summary>
-    /// Tests Analyze_CrashOnlyOnNonFailable_ReportsError.
+    /// Verifies semantic analysis behavior for crash only on non failable and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -136,7 +128,7 @@ public class ErrorHandlingValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.CrashOnlyOnNonFailable);
     }
     /// <summary>
-    /// Tests Analyze_CrashOnlyOnFailable_NoError.
+    /// Verifies semantic analysis behavior for crash only on failable without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -156,7 +148,7 @@ public class ErrorHandlingValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.CrashOnlyOnNonFailable);
     }
     /// <summary>
-    /// Tests Analyze_CrashOnlySuppressesVariantGeneration.
+    /// Verifies semantic analysis behavior for crash only suppresses variant generation.
     /// </summary>
 
     [Fact]
@@ -179,7 +171,7 @@ public class ErrorHandlingValidationTests
         Assert.Null(@object: result.Registry.GetRoutine(name: "lookup_crash_routine"));
     }
     /// <summary>
-    /// Tests Analyze_NonCrashOnlyGeneratesVariants.
+    /// Verifies semantic analysis behavior for non crash only generates variants.
     /// </summary>
 
     [Fact]
@@ -204,7 +196,7 @@ public class ErrorHandlingValidationTests
 
     #region Unhandled Crashable Call (#159)
     /// <summary>
-    /// Tests Analyze_FailableCallAsStatement_InNonFailable_ReportsError.
+    /// Verifies semantic analysis behavior for failable call as statement in non failable and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -226,7 +218,7 @@ public class ErrorHandlingValidationTests
             filter: w => w.Code == SemanticWarningCode.UnhandledCrashableCall);
     }
     /// <summary>
-    /// Tests Analyze_FailableCallAsStatement_InFailable_NoError.
+    /// Verifies semantic analysis behavior for failable call as statement in failable without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -249,7 +241,7 @@ public class ErrorHandlingValidationTests
     }
 
     /// <summary>
-    /// Tests Analyze_LookupVariable_NotDismantledBeforeScopeExit_ReportsError.
+    /// Verifies semantic analysis behavior for lookup variable not dismantled before scope exit and reports the expected error.
     /// </summary>
 
     [Fact(Skip = "check_/lookup_ variants are generated in Phase 5, not available during Phase 3 expression analysis")]
@@ -281,7 +273,7 @@ public class ErrorHandlingValidationTests
     }
 
     /// <summary>
-    /// Tests Analyze_ResultCopiedFromVariable_ReportsError.
+    /// Verifies semantic analysis behavior for result copied from variable and reports the expected error.
     /// </summary>
 
     [Fact(Skip = "check_/lookup_ variants are generated in Phase 5, not available during Phase 3 expression analysis")]

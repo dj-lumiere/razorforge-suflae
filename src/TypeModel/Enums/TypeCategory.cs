@@ -71,6 +71,6 @@ public enum TypeCategory
     /// <summary>Builder-synthesized wrapper types (Viewed, Grasped, Retained, Tracked, Shared, Marked, Inspected, Claimed, Hijacked).</summary>
     Wrapper,
 
-    /// <summary>Compile-time constant value used as a generic argument (e.g., 4 in ValueList[S64, 4]).</summary>
+    /// <summary>Compile-time constant value used as a generic argument (e.g., 4 in Array[S64, 4]).</summary>
     ConstGenericValue
 }

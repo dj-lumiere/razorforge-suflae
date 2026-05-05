@@ -1,19 +1,20 @@
-using SemanticVerification.Results;
+using Verification;
+using Verification.Results;
 using SyntaxTree;
-using Xunit;
+using TypeModel.Enums;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for generic type resolution bugs (S191, S192, S193).
+/// Contains tests for generic resolution.
 /// </summary>
 public class GenericResolutionTests
 {
     #region S191 — Void return on generic method calls
     /// <summary>
-    /// Tests Analyze_GenericVoidMethod_ReturnsBlank.
+    /// Verifies semantic analysis behavior for generic void method returns blank.
     /// </summary>
 
     [Fact]
@@ -41,7 +42,7 @@ public class GenericResolutionTests
 
     #region S192 — Double-generic method return type
     /// <summary>
-    /// Tests Analyze_MethodLevelGenericReturnType_ResolvesCorrectly.
+    /// Verifies semantic analysis behavior for method level generic return type resolves correctly.
     /// </summary>
 
     [Fact]
@@ -66,7 +67,7 @@ public class GenericResolutionTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests Analyze_MethodLevelGenericReturnType_InfersWithoutAnnotation.
+    /// Verifies semantic analysis behavior for method level generic return type infers without annotation.
     /// </summary>
 
     [Fact]
@@ -91,7 +92,7 @@ public class GenericResolutionTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests Analyze_MethodLevelGenericDirectReturn_ResolvesCorrectly.
+    /// Verifies semantic analysis behavior for method level generic direct return resolves correctly.
     /// </summary>
 
     [Fact]
@@ -119,7 +120,7 @@ public class GenericResolutionTests
 
     #region S193 — $eq on generic record types
     /// <summary>
-    /// Tests Analyze_GenericRecordMethodLookup_WorksOnResolution.
+    /// Verifies semantic analysis behavior for generic record method lookup works on resolution.
     /// </summary>
 
     [Fact]
@@ -148,7 +149,7 @@ public class GenericResolutionTests
 
     #region LookupMethod fully-resolved results
     /// <summary>
-    /// Tests Analyze_GenericOwnerMethod_ParamTypeSubstituted.
+    /// Verifies semantic analysis behavior for generic owner method param type substituted.
     /// </summary>
 
     [Fact]
@@ -174,7 +175,7 @@ public class GenericResolutionTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests Analyze_GenericOwnerMethod_ReturnTypeSubstituted.
+    /// Verifies semantic analysis behavior for generic owner method return type substituted.
     /// </summary>
 
     [Fact]
@@ -198,7 +199,7 @@ public class GenericResolutionTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests Analyze_GenericOwnerMethod_NestedGenericSubstitution.
+    /// Verifies semantic analysis behavior for generic owner method nested generic substitution.
     /// </summary>
 
     [Fact]
@@ -228,6 +229,9 @@ public class GenericResolutionTests
 
     #region P1 — ResolvedRoutine stored for member calls
 
+    /// <summary>
+    /// Verifies semantic analysis behavior for member call on generic resolution and stores the resolved routine metadata.
+    /// </summary>
     [Fact]
     public void Analyze_MemberCallOnGenericResolution_StoresResolvedRoutine()
     {
@@ -247,8 +251,8 @@ public class GenericResolutionTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerification.SemanticAnalyzer(
-            language: TypeModel.Enums.Language.RazorForge);
+        var analyzer = new SemanticVerifier(
+            language: Language.RazorForge);
         AnalysisResult result = analyzer.Analyze(program: program);
         Assert.Empty(collection: result.Errors);
 
@@ -268,6 +272,9 @@ public class GenericResolutionTests
         Assert.Equal(expected: "S32", actual: call.ResolvedRoutine.ReturnType!.Name);
     }
 
+    /// <summary>
+    /// Verifies semantic analysis behavior for void member call on generic resolution and stores the resolved routine metadata.
+    /// </summary>
     [Fact]
     public void Analyze_VoidMemberCallOnGenericResolution_StoresResolvedRoutine()
     {
@@ -286,8 +293,8 @@ public class GenericResolutionTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerification.SemanticAnalyzer(
-            language: TypeModel.Enums.Language.RazorForge);
+        var analyzer = new SemanticVerifier(
+            language: Language.RazorForge);
         AnalysisResult result = analyzer.Analyze(program: program);
         Assert.Empty(collection: result.Errors);
 
@@ -302,6 +309,9 @@ public class GenericResolutionTests
         Assert.Equal(expected: "clear", actual: call.ResolvedRoutine!.Name);
     }
 
+    /// <summary>
+    /// Verifies semantic analysis behavior for generic method call and stores the resolved routine metadata.
+    /// </summary>
     [Fact]
     public void Analyze_GenericMethodCall_StoresResolvedRoutine()
     {
@@ -320,8 +330,8 @@ public class GenericResolutionTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerification.SemanticAnalyzer(
-            language: TypeModel.Enums.Language.RazorForge);
+        var analyzer = new SemanticVerifier(
+            language: Language.RazorForge);
         AnalysisResult result = analyzer.Analyze(program: program);
         Assert.Empty(collection: result.Errors);
 
@@ -344,7 +354,7 @@ public class GenericResolutionTests
 
     #region P2 — GenericDefinition preserved after type updates
     /// <summary>
-    /// Tests Analyze_GenericRecord_PreservesDefinitionAfterMemberUpdate.
+    /// Verifies semantic analysis behavior for generic record preserves definition after member update.
     /// </summary>
 
     [Fact]
@@ -369,7 +379,7 @@ public class GenericResolutionTests
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
-    /// Tests Analyze_GenericEntity_PreservesDefinitionAfterMemberUpdate.
+    /// Verifies semantic analysis behavior for generic entity preserves definition after member update.
     /// </summary>
 
     [Fact]
@@ -397,6 +407,9 @@ public class GenericResolutionTests
 
     #region P1 — Protocol method lookup on instantiated generic protocols
 
+    /// <summary>
+    /// Verifies semantic analysis behavior for generic protocol method and substitutes the return type.
+    /// </summary>
     [Fact]
     public void Analyze_GenericProtocolMethod_SubstitutesReturnType()
     {
@@ -424,6 +437,9 @@ public class GenericResolutionTests
         Assert.Empty(collection: result.Errors);
     }
 
+    /// <summary>
+    /// Verifies semantic analysis behavior for generic protocol method and substitutes the parameter type.
+    /// </summary>
     [Fact]
     public void Analyze_GenericProtocolMethod_SubstitutesParamType()
     {
@@ -448,6 +464,9 @@ public class GenericResolutionTests
         Assert.Empty(collection: result.Errors);
     }
 
+    /// <summary>
+    /// Verifies semantic analysis behavior for generic protocol multi param and substitutes generic parameters correctly.
+    /// </summary>
     [Fact]
     public void Analyze_GenericProtocol_MultiParam_SubstitutesCorrectly()
     {
@@ -479,6 +498,9 @@ public class GenericResolutionTests
 
     #region P4 — Routine body matching by resolved signature
 
+    /// <summary>
+    /// Verifies semantic analysis behavior for overloaded routines different generic params and matches the correct overloaded bodies.
+    /// </summary>
     [Fact]
     public void Analyze_OverloadedRoutines_DifferentGenericParams_MatchCorrectBodies()
     {
@@ -506,6 +528,9 @@ public class GenericResolutionTests
         Assert.Empty(collection: result.Errors);
     }
 
+    /// <summary>
+    /// Verifies semantic analysis behavior for extension routine generic owner and matches the correct body.
+    /// </summary>
     [Fact]
     public void Analyze_ExtensionRoutine_GenericOwner_MatchesBody()
     {
@@ -527,6 +552,9 @@ public class GenericResolutionTests
         Assert.Empty(collection: result.Errors);
     }
 
+    /// <summary>
+    /// Verifies semantic analysis behavior for overloaded routines plain vs generic param and matches the correct overloaded bodies.
+    /// </summary>
     [Fact]
     public void Analyze_OverloadedRoutines_PlainVsGenericParam_MatchCorrectBodies()
     {

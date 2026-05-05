@@ -1,26 +1,23 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
+using SyntaxTree;
+using Verification.Results;
 using TypeModel.Symbols;
 using TypeModel.Types;
-using Xunit;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for $unwrap (!!) and $unwrap_or (??) wired operator semantics.
-/// - Built-in error handling types (Maybe/Result/Lookup) use optimized inline codegen
-/// - User types can implement $unwrap / $unwrap_or to support !! / ??
-/// - Types without these methods report TypeDoesNotSupportOperator
-/// Note: try_ safe variants are generated post-analysis (Phase 5), so
-/// !! and ?? on ErrorHandlingTypeInfo cannot be exercised from test source code.
-/// Built-in error handling !! / ?? is verified through integration tests.
+/// Contains tests for unwrap operator.
 /// </summary>
 public class UnwrapOperatorTests
 {
     #region Built-in error handling infrastructure ??try_ variant generation
 
+    /// <summary>
+    /// Verifies that the test validates variant generated and returns the generated Maybe type.
+    /// </summary>
     [Fact]
     public void TryVariant_Generated_ReturnsMaybeType()
     {
@@ -38,6 +35,9 @@ public class UnwrapOperatorTests
         Assert.IsType<RecordTypeInfo>(@object: tryVariant.ReturnType);
     }
 
+    /// <summary>
+    /// Verifies that the test validates unwrap direct call in failable and returns the expected inner type.
+    /// </summary>
     [Fact]
     public void ForceUnwrap_DirectCallInFailable_ReturnsInnerType()
     {
@@ -60,6 +60,9 @@ public class UnwrapOperatorTests
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
 
+    /// <summary>
+    /// Verifies that the test validates coalesce direct call in failable and returns the expected inner type.
+    /// </summary>
     [Fact]
     public void NoneCoalesce_DirectCallInFailable_ReturnsInnerType()
     {
@@ -84,6 +87,9 @@ public class UnwrapOperatorTests
 
     #region !! on plain types without $unwrap ??error
 
+    /// <summary>
+    /// Verifies that the test validates unwrap on S64 and reports the expected error.
+    /// </summary>
     [Fact]
     public void ForceUnwrap_OnS64_ReportsError()
     {
@@ -98,6 +104,9 @@ public class UnwrapOperatorTests
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
 
+    /// <summary>
+    /// Verifies that the test validates unwrap on bool and reports the expected error.
+    /// </summary>
     [Fact]
     public void ForceUnwrap_OnBool_ReportsError()
     {
@@ -112,6 +121,9 @@ public class UnwrapOperatorTests
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
 
+    /// <summary>
+    /// Verifies that the test validates unwrap on record and reports the expected error.
+    /// </summary>
     [Fact]
     public void ForceUnwrap_OnRecord_ReportsError()
     {
@@ -130,6 +142,9 @@ public class UnwrapOperatorTests
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
 
+    /// <summary>
+    /// Verifies that the test validates unwrap on entity and reports the expected error.
+    /// </summary>
     [Fact]
     public void ForceUnwrap_OnEntity_ReportsError()
     {
@@ -147,6 +162,9 @@ public class UnwrapOperatorTests
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
 
+    /// <summary>
+    /// Verifies that the test validates unwrap on text and reports the expected error.
+    /// </summary>
     [Fact]
     public void ForceUnwrap_OnText_ReportsError()
     {
@@ -165,6 +183,9 @@ public class UnwrapOperatorTests
 
     #region ?? on plain types without $unwrap_or ??error
 
+    /// <summary>
+    /// Verifies that the test validates coalesce on S64 and reports the expected error.
+    /// </summary>
     [Fact]
     public void NoneCoalesce_OnS64_ReportsError()
     {
@@ -179,6 +200,9 @@ public class UnwrapOperatorTests
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
 
+    /// <summary>
+    /// Verifies that the test validates coalesce on bool and reports the expected error.
+    /// </summary>
     [Fact]
     public void NoneCoalesce_OnBool_ReportsError()
     {
@@ -193,6 +217,9 @@ public class UnwrapOperatorTests
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
 
+    /// <summary>
+    /// Verifies that the test validates coalesce on record and reports the expected error.
+    /// </summary>
     [Fact]
     public void NoneCoalesce_OnRecord_ReportsError()
     {
@@ -216,6 +243,9 @@ public class UnwrapOperatorTests
 
     #region !! on user type with $unwrap ??no error
 
+    /// <summary>
+    /// Verifies that the test validates unwrap on user type with unwrap without unexpected diagnostics.
+    /// </summary>
     [Fact]
     public void ForceUnwrap_OnUserTypeWithUnwrap_NoError()
     {
@@ -236,6 +266,9 @@ public class UnwrapOperatorTests
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
 
+    /// <summary>
+    /// Verifies that the test validates unwrap on entity with unwrap without unexpected diagnostics.
+    /// </summary>
     [Fact]
     public void ForceUnwrap_OnEntityWithUnwrap_NoError()
     {
@@ -260,6 +293,9 @@ public class UnwrapOperatorTests
 
     #region ?? on user type with $unwrap_or ??no error
 
+    /// <summary>
+    /// Verifies that the test validates coalesce on user type with unwrap or without unexpected diagnostics.
+    /// </summary>
     [Fact]
     public void NoneCoalesce_OnUserTypeWithUnwrapOr_NoError()
     {
@@ -280,6 +316,9 @@ public class UnwrapOperatorTests
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
 
+    /// <summary>
+    /// Verifies that the test validates coalesce on entity with unwrap or without unexpected diagnostics.
+    /// </summary>
     [Fact]
     public void NoneCoalesce_OnEntityWithUnwrapOr_NoError()
     {
@@ -304,6 +343,9 @@ public class UnwrapOperatorTests
 
     #region $unwrap / $unwrap_or are recognized as valid wired methods
 
+    /// <summary>
+    /// Verifies that the test validates declared on record no unknown wired error.
+    /// </summary>
     [Fact]
     public void UnwrapDeclaredOnRecord_NoUnknownWiredError()
     {
@@ -323,6 +365,9 @@ public class UnwrapOperatorTests
             filter: e => e.Code == SemanticDiagnosticCode.UnknownWiredRoutine);
     }
 
+    /// <summary>
+    /// Verifies that the test validates dollar method still and reports the expected error.
+    /// </summary>
     [Fact]
     public void UnknownDollarMethod_StillReportsError()
     {
@@ -343,6 +388,9 @@ public class UnwrapOperatorTests
 
     #region !! and ?? on non-failable call ??error (no error handling type)
 
+    /// <summary>
+    /// Verifies that the test validates unwrap on non failable call and reports the expected error.
+    /// </summary>
     [Fact]
     public void ForceUnwrap_OnNonFailableCall_ReportsError()
     {
@@ -360,6 +408,9 @@ public class UnwrapOperatorTests
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
 
+    /// <summary>
+    /// Verifies that the test validates coalesce on non failable call and reports the expected error.
+    /// </summary>
     [Fact]
     public void NoneCoalesce_OnNonFailableCall_ReportsError()
     {
@@ -381,6 +432,9 @@ public class UnwrapOperatorTests
 
     #region !! on choice/flags ??error (no operators on choice/flags)
 
+    /// <summary>
+    /// Verifies that the test validates unwrap on choice and reports the expected error.
+    /// </summary>
     [Fact]
     public void ForceUnwrap_OnChoice_ReportsError()
     {
@@ -399,6 +453,9 @@ public class UnwrapOperatorTests
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
 
+    /// <summary>
+    /// Verifies that the test validates coalesce on choice and reports the expected error.
+    /// </summary>
     [Fact]
     public void NoneCoalesce_OnChoice_ReportsError()
     {
@@ -420,6 +477,9 @@ public class UnwrapOperatorTests
             filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
 
+    /// <summary>
+    /// Verifies that the test validates unwrap on flags and reports the expected error.
+    /// </summary>
     [Fact]
     public void ForceUnwrap_OnFlags_ReportsError()
     {
@@ -442,6 +502,9 @@ public class UnwrapOperatorTests
 
     #region GetMethodName mapping ??$unwrap and $unwrap_or registered
 
+    /// <summary>
+    /// Verifies that the test validates unwrap get method name and returns the unwrap method name.
+    /// </summary>
     [Fact]
     public void ForceUnwrap_GetMethodName_ReturnsUnwrap()
     {
@@ -449,6 +512,9 @@ public class UnwrapOperatorTests
         Assert.Equal(expected: "$unwrap", actual: op.GetMethodName());
     }
 
+    /// <summary>
+    /// Verifies that the test validates coalesce get method name and returns the unwrap-or method name.
+    /// </summary>
     [Fact]
     public void NoneCoalesce_GetMethodName_ReturnsUnwrapOr()
     {

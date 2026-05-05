@@ -192,18 +192,13 @@ public partial class Tokenizer
 
             // Comparison and assignment
             case '=':
-                AddToken(type: Match(expected: '=') ? Match(expected: '=')
-                        ? TokenType.ReferenceEqual
-                        : TokenType.Equal :
+                AddToken(type: Match(expected: '=') ? TokenType.Equal :
                     Match(expected: '>') ? TokenType.FatArrow : TokenType.Assign);
                 break;
             case '!':
                 if (Match(expected: '='))
                 {
-                    // != or !==
-                    AddToken(type: Match(expected: '=')
-                        ? TokenType.ReferenceNotEqual
-                        : TokenType.NotEqual);
+                    AddToken(type: TokenType.NotEqual);
                 }
                 else if (Match(expected: '!'))
                 {
@@ -250,7 +245,7 @@ public partial class Tokenizer
                 }
                 else if (Match(expected: '?'))
                 {
-                    // ?? or ??=
+//?? or ??=
                     AddToken(type: Match(expected: '=')
                         ? TokenType.NoneCoalesceAssign
                         : TokenType.NoneCoalesce);

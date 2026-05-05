@@ -1,21 +1,23 @@
-namespace Compiler.Resolution;
-
-using SemanticVerification;
+using Compiler.Diagnostics;
+using Compiler.Lexer;
+using Verification;
+using SyntaxTree;
 using TypeModel.Enums;
 using TypeModel.Symbols;
 using TypeModel.Types;
-using SyntaxTree;
-using Diagnostics;
-using TypeSymbol = TypeModel.Types.TypeInfo;
+
+namespace Compiler.Resolution;
+
+using TypeSymbol = TypeInfo;
 
 /// <summary>
 /// Handles resolution of type expressions for the semantic analyzer.
 /// </summary>
 internal sealed class TypeResolver
 {
-    private readonly SemanticAnalyzer _sa;
+    private readonly SemanticVerifier _sa;
 
-    internal TypeResolver(SemanticAnalyzer sa)
+    internal TypeResolver(SemanticVerifier sa)
     {
         _sa = sa;
     }
@@ -64,12 +66,12 @@ internal sealed class TypeResolver
     /// Called after type creator resolution to avoid shadowing type creators
     /// with identically-named convenience functions (e.g., "routine U32(from: U8)").
     /// </summary>
-    internal TypeModel.Symbols.RoutineInfo? LookupRoutineWithImports(string name)
+    internal RoutineInfo? LookupRoutineWithImports(string name)
     {
         // Try Core module prefix (Core routines are auto-imported)
         if (!name.Contains(value: '.'))
         {
-            TypeModel.Symbols.RoutineInfo? result = _sa._registry.LookupRoutine(fullName: $"Core.{name}");
+            RoutineInfo? result = _sa._registry.LookupRoutine(fullName: $"Core.{name}");
             if (result != null)
             {
                 return result;
@@ -79,7 +81,7 @@ internal sealed class TypeResolver
         // Try each imported module
         foreach (string ns in _sa._importedModules)
         {
-            TypeModel.Symbols.RoutineInfo? result = _sa._registry.LookupRoutine(fullName: $"{ns}.{name}");
+            RoutineInfo? result = _sa._registry.LookupRoutine(fullName: $"{ns}.{name}");
             if (result != null)
             {
                 return result;
@@ -103,6 +105,13 @@ internal sealed class TypeResolver
             return ErrorTypeInfo.Instance;
         }
 
+        TypeSymbol resolved = ResolveTypeCore(typeExpr: typeExpr);
+        typeExpr.ResolvedType = resolved;
+        return resolved;
+    }
+
+    private TypeSymbol ResolveTypeCore(TypeExpression typeExpr)
+    {
         // Handle tuple types from parser: Tuple(T, U, ...)
         if (typeExpr is { Name: "Tuple", GenericArguments.Count: > 0 })
         {
@@ -135,7 +144,7 @@ internal sealed class TypeResolver
                 paramTypes.Add(item: (TypeInfo)ResolveType(typeExpr: paramTupleExpr));
             }
 
-            TypeInfo? returnType = ResolveType(typeExpr: returnTypeExpr) as TypeInfo;
+            TypeInfo? returnType = ResolveType(typeExpr: returnTypeExpr);
             return _sa._registry.GetOrCreateRoutineType(parameterTypes: paramTypes,
                 returnType: returnType,
                 isFailable: false);
@@ -802,30 +811,30 @@ internal sealed class TypeResolver
 
         switch (literal.LiteralType)
         {
-            case Compiler.Lexer.TokenType.True:
+            case TokenType.True:
                 value = new ConstGenericValueTypeInfo(literalText: "true",
                     value: 1,
                     explicitTypeName: "Bool");
                 return true;
 
-            case Compiler.Lexer.TokenType.False:
+            case TokenType.False:
                 value = new ConstGenericValueTypeInfo(literalText: "false",
                     value: 0,
                     explicitTypeName: "Bool");
                 return true;
 
-            case Compiler.Lexer.TokenType.Integer:
-            case Compiler.Lexer.TokenType.S8Literal:
-            case Compiler.Lexer.TokenType.S16Literal:
-            case Compiler.Lexer.TokenType.S32Literal:
-            case Compiler.Lexer.TokenType.S64Literal:
-            case Compiler.Lexer.TokenType.S128Literal:
-            case Compiler.Lexer.TokenType.U8Literal:
-            case Compiler.Lexer.TokenType.U16Literal:
-            case Compiler.Lexer.TokenType.U32Literal:
-            case Compiler.Lexer.TokenType.U64Literal:
-            case Compiler.Lexer.TokenType.U128Literal:
-            case Compiler.Lexer.TokenType.AddressLiteral:
+            case TokenType.IntegerLiteral:
+            case TokenType.S8Literal:
+            case TokenType.S16Literal:
+            case TokenType.S32Literal:
+            case TokenType.S64Literal:
+            case TokenType.S128Literal:
+            case TokenType.U8Literal:
+            case TokenType.U16Literal:
+            case TokenType.U32Literal:
+            case TokenType.U64Literal:
+            case TokenType.U128Literal:
+            case TokenType.AddressLiteral:
                 if (literal.Value is string rawNumeric)
                 {
                     if (TryParseConstGenericLiteral(name: rawNumeric,

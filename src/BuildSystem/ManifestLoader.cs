@@ -141,36 +141,28 @@ public static class ManifestLoader
     private static TargetInfo ParseTarget(string name, TomlTable table,
         Dictionary<string, string> moduleIndex)
     {
-        var target = new TargetInfo { Name = name };
-
-        if (table.TryGetValue(key: "type", value: out object? type))
-        {
-            target.Type = type?.ToString() ?? "executable";
-        }
-
-        if (table.TryGetValue(key: "entry", value: out object? entry))
-        {
-            target.Entry = entry?.ToString() ?? "";
-        }
+        var target = new TargetInfo { Name = name, Type = ReadRequiredString(table: table,
+            key: "type",
+            context: $"target '{name}'"),
+            Entry = ReadRequiredString(table: table,
+                key: "entry",
+                context: $"target '{name}'")
+        };
 
         if (table.TryGetValue(key: "lib_type", value: out object? libType))
         {
             target.LibType = libType?.ToString();
         }
 
-        if (table.TryGetValue(key: "mode", value: out object? mode))
-        {
-            target.Mode = mode?.ToString() ?? "debug";
-        }
+        target.Mode = ReadRequiredString(table: table,
+            key: "mode",
+            context: $"target '{name}'");
 
         if (table.TryGetValue(key: "dump-ast", value: out object? dumpAst))
             target.DumpAst = dumpAst is bool b && b;
 
-        if (string.IsNullOrWhiteSpace(value: target.Entry))
-        {
-            throw new InvalidOperationException(
-                message: $"{ManifestFileName}: target '{name}' must have an 'entry' field.");
-        }
+        if (table.TryGetValue(key: "sa-timing", value: out object? saTiming))
+            target.SaTiming = saTiming is bool bs && bs;
 
         // Resolve module name to file path
         if (!moduleIndex.TryGetValue(key: target.Entry, value: out string? resolvedFile))
@@ -186,6 +178,24 @@ public static class ManifestLoader
 
         target.Entry = resolvedFile;
         return target;
+    }
+
+    private static string ReadRequiredString(TomlTable table, string key, string context)
+    {
+        if (!table.TryGetValue(key: key, value: out object? raw))
+        {
+            throw new InvalidOperationException(
+                message: $"{ManifestFileName}: {context} must define '{key}'.");
+        }
+
+        string? value = raw?.ToString();
+        if (string.IsNullOrWhiteSpace(value: value))
+        {
+            throw new InvalidOperationException(
+                message: $"{ManifestFileName}: {context} field '{key}' cannot be empty.");
+        }
+
+        return value;
     }
 
     /// <summary>
@@ -223,10 +233,9 @@ public static class ManifestLoader
                     string fullPath = Path.GetFullPath(path: filePath);
                     if (!index.TryAdd(key: moduleName, value: fullPath))
                     {
-                        Console.Error.WriteLine(
-                            value: $"Warning: Duplicate module name '{moduleName}' — " +
-                                   $"'{fullPath}' conflicts with '{index[moduleName]}'. " +
-                                   "First file wins; second file will be ignored.");
+                        throw new InvalidOperationException(
+                            message: $"{ManifestFileName}: duplicate module name '{moduleName}' " +
+                                     $"resolved to both '{index[moduleName]}' and '{fullPath}'.");
                     }
                 }
             }

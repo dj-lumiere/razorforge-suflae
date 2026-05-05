@@ -1,20 +1,18 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for pattern validation in semantic analysis:
-/// variable shadowing, scope isolation, type compatibility.
+/// Contains tests for pattern validation.
 /// </summary>
 public class PatternValidationTests
 {
     #region Variable Shadowing
     /// <summary>
-    /// Tests Analyze_TypePattern_ShadowsOuterVariable_ReportsError.
+    /// Verifies semantic analysis behavior for type pattern shadows outer variable and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -34,7 +32,7 @@ public class PatternValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.IdentifierShadowing);
     }
     /// <summary>
-    /// Tests Analyze_ElsePattern_ShadowsOuterVariable_ReportsError.
+    /// Verifies semantic analysis behavior for else pattern shadows outer variable and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -54,7 +52,7 @@ public class PatternValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.IdentifierShadowing);
     }
     /// <summary>
-    /// Tests Analyze_TypePattern_UniqueVariableName_NoShadowingError.
+    /// Verifies semantic analysis behavior for type pattern unique variable name no shadowing error.
     /// </summary>
 
     [Fact]
@@ -74,7 +72,7 @@ public class PatternValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.IdentifierShadowing);
     }
     /// <summary>
-    /// Tests Analyze_TypePattern_SameNameDifferentClauses_NoShadowingError.
+    /// Verifies semantic analysis behavior for type pattern same name different clauses no shadowing error.
     /// </summary>
 
     [Fact]
@@ -98,7 +96,7 @@ public class PatternValidationTests
 
     #region Scope Isolation
     /// <summary>
-    /// Tests Analyze_WhenExpression_ClauseScopesIsolated.
+    /// Verifies semantic analysis behavior for when expression clause scopes isolated.
     /// </summary>
 
     [Fact]
@@ -123,7 +121,7 @@ public class PatternValidationTests
 
     #region Type Compatibility
     /// <summary>
-    /// Tests Analyze_TypePattern_CompatibleType_NoError.
+    /// Verifies semantic analysis behavior for type pattern compatible type without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -143,7 +141,7 @@ public class PatternValidationTests
             filter: e => e.Code == SemanticDiagnosticCode.PatternTypeMismatch);
     }
     /// <summary>
-    /// Tests Analyze_TypePattern_IncompatibleType_ReportsError.
+    /// Verifies semantic analysis behavior for type pattern incompatible type and reports the expected error.
     /// </summary>
 
     [Fact]

@@ -1,8 +1,8 @@
-namespace Compiler.CodeGen;
-
 using System.Text;
 using TypeModel.Symbols;
 using TypeModel.Types;
+
+namespace Compiler.CodeGen;
 
 /// <summary>
 /// Declaration code generation for LLVM types and routine signatures.
@@ -29,17 +29,14 @@ public partial class LlvmCodeGenerator
             }
         }
 
-        if (entity.MemberVariables.Count == 0)
+        if (entity.MemberVariables.Count == 0 && !TryRebuildEntityMembersFromAst(entity: entity))
         {
-            if (!TryRebuildEntityMembersFromAst(entity: entity))
+            TypeInfo? refreshed = _registry.LookupType(name: entity.FullName) ??
+                                  _registry.LookupType(name: entity.Name);
+            if (refreshed is EntityTypeInfo resolvedEntity &&
+                resolvedEntity.MemberVariables.Count > 0)
             {
-                TypeInfo? refreshed = _registry.LookupType(name: entity.FullName) ??
-                                      _registry.LookupType(name: entity.Name);
-                if (refreshed is EntityTypeInfo resolvedEntity &&
-                    resolvedEntity.MemberVariables.Count > 0)
-                {
-                    entity = resolvedEntity;
-                }
+                entity = resolvedEntity;
             }
         }
 
@@ -82,12 +79,12 @@ public partial class LlvmCodeGenerator
                 if (i > 0) decl.Append(value: ", ");
                 decl.Append(handler: $"{i}={entity.MemberVariables[index: i].Name}");
             }
+
             decl.AppendLine();
         }
 
         _typeDeclarationsEntity[key: typeName] = decl.ToString();
     }
-
 
     /// <summary>
     /// Generates the LLVM struct type for a crashable type.
@@ -106,16 +103,21 @@ public partial class LlvmCodeGenerator
 
         var memberVariableTypes = new List<string>();
         foreach (MemberVariableInfo memberVariable in crashable.MemberVariables)
+        {
             memberVariableTypes.Add(item: GetLlvmType(type: memberVariable.Type));
+        }
 
         var decl = new StringBuilder();
         if (memberVariableTypes.Count == 0)
+        {
             decl.AppendLine(value: $"{typeName} = type {{ i8 }}");
+        }
         else
         {
             string memberVars = string.Join(separator: ", ", values: memberVariableTypes);
             decl.AppendLine(value: $"{typeName} = type {{ {memberVars} }}");
         }
+
         _typeDeclarationsCrashable[key: typeName] = decl.ToString();
     }
 
@@ -129,6 +131,17 @@ public partial class LlvmCodeGenerator
     {
         // Backend-annotated and single-member-variable wrappers don't need struct types
         if (record.HasDirectBackendType || record.IsSingleMemberVariableWrapper)
+        {
+            return;
+        }
+
+        // Skip generic definitions and any type whose type arguments still contain unresolved
+        // generic parameters. Such types produce invalid IR (e.g. { [{N} x {T}] }). This guard
+        // fires both during GenerateTypeDeclarations and when called as a side-effect from body
+        // emission, so it is defence-in-depth against partially-concrete types leaking through.
+        if (record.IsGenericDefinition ||
+            record.TypeArguments?.Any(predicate: t =>
+                ContainsGenericParameter(t) || t is ErrorTypeInfo) == true)
         {
             return;
         }
@@ -188,6 +201,7 @@ public partial class LlvmCodeGenerator
                 if (i > 0) decl.Append(value: ", ");
                 decl.Append(handler: $"{i}={record.MemberVariables[index: i].Name}");
             }
+
             decl.AppendLine();
         }
 
@@ -202,58 +216,48 @@ public partial class LlvmCodeGenerator
     private void EnsureMemberVariableTypesGenerated(
         IReadOnlyList<MemberVariableInfo> memberVariables)
     {
+        var visited = new HashSet<string>();
         foreach (MemberVariableInfo mv in memberVariables)
         {
-            switch (mv.Type)
+            EnsureTypeGenerated(type: mv.Type, visited: visited);
+        }
+    }
+
+    // Recursively descends into a type's TypeArguments and wrapper inner types so that
+    // concrete nested generics (e.g. Owned[BTreeDictNode[S64, S64]] inside a
+    // Maybe[Owned[...]] field of SortedDict[S64, S64]) get their struct types emitted.
+    private void EnsureTypeGenerated(TypeInfo? type, HashSet<string> visited)
+    {
+        if (type == null) return;
+        if (!visited.Add(item: type.FullName)) return;
+
+        switch (type)
+        {
+            case EntityTypeInfo { IsGenericDefinition: false } nestedEntity:
+                GenerateEntityType(entity: nestedEntity);
+                break;
+            case RecordTypeInfo
             {
-                case EntityTypeInfo { IsGenericDefinition: false } nestedEntity:
-                    GenerateEntityType(entity: nestedEntity);
-                    break;
-                case RecordTypeInfo
-                {
-                    IsGenericDefinition: false, HasDirectBackendType: false,
-                    IsSingleMemberVariableWrapper: false
-                } nestedRecord:
-                    GenerateRecordType(record: nestedRecord);
-                    break;
+                IsGenericDefinition: false, HasDirectBackendType: false,
+                IsSingleMemberVariableWrapper: false
+            } nestedRecord:
+                GenerateRecordType(record: nestedRecord);
+                break;
+        }
+
+        if (type is WrapperTypeInfo wrapper)
+        {
+            EnsureTypeGenerated(type: wrapper.InnerType, visited: visited);
+        }
+
+        if (type.TypeArguments is { Count: > 0 } typeArgs)
+        {
+            foreach (TypeInfo ta in typeArgs)
+            {
+                EnsureTypeGenerated(type: ta, visited: visited);
             }
         }
     }
-
-
-    /// <summary>
-    /// Generates the LLVM type for a choice (enum).
-    /// Choice = record with single integer member variable (tag value).
-    /// </summary>
-    /// <param name="choice">The choice type info.</param>
-    private void GenerateChoiceType(ChoiceTypeInfo choice)
-    {
-        string typeName = GetChoiceTypeName(choice: choice);
-
-        // Skip if already generated
-        if (_generatedTypes.Contains(item: typeName))
-        {
-            return;
-        }
-
-        _generatedTypes.Add(item: typeName);
-
-        var decl = new StringBuilder();
-        decl.AppendLine(value: $"{typeName} = type {{ i32 }}");
-
-        // Add case values as comment
-        decl.Append(handler: $"; {typeName} cases: ");
-        for (int i = 0; i < choice.Cases.Count; i++)
-        {
-            if (i > 0) decl.Append(value: ", ");
-            ChoiceCaseInfo c = choice.Cases[index: i];
-            decl.Append(handler: $"{c.Name}={c.ComputedValue}");
-        }
-        decl.AppendLine();
-
-        _typeDeclarationsChoice[key: typeName] = decl.ToString();
-    }
-
 
     /// <summary>
     /// Generates the LLVM type for a variant (type-based tagged union).
@@ -265,30 +269,34 @@ public partial class LlvmCodeGenerator
         string typeName = GetVariantTypeName(variant: variant);
 
         // Skip if already generated
-        if (_generatedTypes.Contains(item: typeName))
+        if (!_generatedTypes.Add(item: typeName))
         {
             return;
         }
-
-        _generatedTypes.Add(item: typeName);
 
         // Calculate max payload size
         int maxPayloadSize = 0;
         foreach (VariantMemberInfo member in variant.Members)
         {
-            if (!member.IsNone && member.Type != null)
+            if (member is not { IsNone: false, Type: not null })
             {
-                int payloadSize = GetTypeSize(type: member.Type);
-                maxPayloadSize = Math.Max(val1: maxPayloadSize, val2: payloadSize);
+                continue;
             }
+
+            int payloadSize = GetTypeSize(type: member.Type);
+            maxPayloadSize = Math.Max(val1: maxPayloadSize, val2: payloadSize);
         }
 
         var decl = new StringBuilder();
         // Variant is { i64 tag, [N x i8] payload }
         if (maxPayloadSize > 0)
+        {
             decl.AppendLine(value: $"{typeName} = type {{ i64, [{maxPayloadSize} x i8] }}");
+        }
         else
+        {
             decl.AppendLine(value: $"{typeName} = type {{ i64 }}");
+        }
 
         // Add member info as comment
         decl.Append(handler: $"; {typeName} members: ");
@@ -298,35 +306,9 @@ public partial class LlvmCodeGenerator
             VariantMemberInfo m = variant.Members[index: i];
             decl.Append(handler: $"{m.Name}={m.TagValue}");
         }
+
         decl.AppendLine();
 
         _typeDeclarationsVariant[key: typeName] = decl.ToString();
-    }
-
-    /// <summary>
-    /// Generates the LLVM named type alias for a flags type.
-    /// Flags are backed by i64; the declaration exists for IR readability only.
-    /// </summary>
-    private void GenerateFlagsType(FlagsTypeInfo flags)
-    {
-        string typeName = $"%{Q(name: $"Flags.{flags.Name}")}";
-
-        if (!_generatedTypes.Add(item: typeName))
-            return;
-
-        var decl = new StringBuilder();
-        decl.AppendLine(value: $"{typeName} = type {{ i64 }}");
-
-        // Add flag members as comment (name=bitmask)
-        decl.Append(handler: $"; {typeName} flags: ");
-        for (int i = 0; i < flags.Members.Count; i++)
-        {
-            if (i > 0) decl.Append(value: ", ");
-            FlagsMemberInfo m = flags.Members[index: i];
-            decl.Append(handler: $"{m.Name}=0x{1UL << m.BitPosition:X}");
-        }
-        decl.AppendLine();
-
-        _typeDeclarationsFlags[key: typeName] = decl.ToString();
     }
 }

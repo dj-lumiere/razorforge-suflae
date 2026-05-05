@@ -1,7 +1,9 @@
+using SyntaxTree;
+using TypeModel.Types;
+
 namespace TypeModel.Symbols;
 
-using SyntaxTree;
-using TypeSymbol = TypeModel.Types.TypeInfo;
+using TypeSymbol = TypeInfo;
 
 /// <summary>
 /// Information about a parameter in a routine.

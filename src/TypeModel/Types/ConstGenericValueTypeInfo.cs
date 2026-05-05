@@ -1,12 +1,12 @@
-namespace TypeModel.Types;
-
 using TypeModel.Enums;
+
+namespace TypeModel.Types;
 
 /// <summary>
 /// Represents a compile-time constant value used as a generic argument.
-/// For example, the <c>4</c> in <c>ValueList[S64, 4]</c> or the <c>8</c> in <c>ValueBitList[8]</c>.
+/// For example, the <c>4</c> in <c>Array[S64, 4]</c> or the <c>8</c> in <c>BitArray[8]</c>.
 /// The <see cref="TypeInfo.Name"/> is the literal text (e.g., "4", "8u64") so that
-/// generic resolution names include the value (e.g., "ValueList[S64, 4]").
+/// generic resolution names include the value (e.g., "Array[S64, 4]").
 /// </summary>
 public sealed class ConstGenericValueTypeInfo : TypeInfo
 {

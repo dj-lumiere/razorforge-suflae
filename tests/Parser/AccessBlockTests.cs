@@ -1,19 +1,15 @@
-﻿using Xunit;
-
 namespace RazorForge.Tests.Parser;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for parsing scoped access blocks in RazorForge:
-/// using x.view()/x.grasp() (single-threaded), using x.inspect!()/x.claim!() (multi-threaded),
-/// using (resources).
+/// Contains tests for access block.
 /// </summary>
 public class AccessBlockTests
 {
     #region Viewing Block Tests (Single-threaded Read)
     /// <summary>
-    /// Tests Parse_SimpleViewing.
+    /// Verifies that the parser accepts simple viewing.
     /// </summary>
 
     [Fact]
@@ -30,7 +26,7 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_ViewingWithMultipleStatements.
+    /// Verifies that the parser accepts viewing with multiple statements.
     /// </summary>
 
     [Fact]
@@ -49,7 +45,7 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_NestedViewing.
+    /// Verifies that the parser accepts nested viewing.
     /// </summary>
 
     [Fact]
@@ -68,7 +64,7 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_ViewingWithMethodCall.
+    /// Verifies that the parser accepts viewing with method call.
     /// </summary>
 
     [Fact]
@@ -91,7 +87,7 @@ public class AccessBlockTests
 
     #region Hijacking Block Tests (Single-threaded Exclusive)
     /// <summary>
-    /// Tests Parse_SimpleHijacking.
+    /// Verifies that the parser accepts simple hijacking.
     /// </summary>
 
     [Fact]
@@ -108,7 +104,7 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_HijackingWithMultipleMutations.
+    /// Verifies that the parser accepts hijacking with multiple mutations.
     /// </summary>
 
     [Fact]
@@ -127,7 +123,7 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_HijackingWithControlFlow.
+    /// Verifies that the parser accepts hijacking with control flow.
     /// </summary>
 
     [Fact]
@@ -154,7 +150,7 @@ public class AccessBlockTests
 
     #region Inspecting Block Tests (Multi-threaded Read)
     /// <summary>
-    /// Tests Parse_SimpleInspecting.
+    /// Verifies that the parser accepts simple inspecting.
     /// </summary>
 
     [Fact]
@@ -171,7 +167,7 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_InspectingMultipleReaders.
+    /// Verifies that the parser accepts inspecting multiple readers.
     /// </summary>
 
     [Fact]
@@ -193,7 +189,7 @@ public class AccessBlockTests
 
     #region Seizing Block Tests (Multi-threaded Exclusive)
     /// <summary>
-    /// Tests Parse_SimpleSeizing.
+    /// Verifies that the parser accepts simple seizing.
     /// </summary>
 
     [Fact]
@@ -210,7 +206,7 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_SeizingWithMultipleMutations.
+    /// Verifies that the parser accepts seizing with multiple mutations.
     /// </summary>
 
     [Fact]
@@ -229,7 +225,7 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_SeizingDowngradeToViewing.
+    /// Verifies that the parser accepts seizing downgrade to viewing.
     /// </summary>
 
     [Fact]
@@ -252,7 +248,7 @@ public class AccessBlockTests
 
     #region Using Block Tests (Resource Management)
     /// <summary>
-    /// Tests Parse_SimpleUsing.
+    /// Verifies that the parser accepts simple using.
     /// </summary>
 
     [Fact]
@@ -269,7 +265,7 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_UsingMultipleResources.
+    /// Verifies that the parser accepts using multiple resources.
     /// </summary>
 
     [Fact]
@@ -286,7 +282,7 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_NestedUsing.
+    /// Verifies that the parser accepts nested using.
     /// </summary>
 
     [Fact]
@@ -303,7 +299,7 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_UsingWithControlFlow.
+    /// Verifies that the parser accepts using with control flow.
     /// </summary>
 
     [Fact]
@@ -322,7 +318,7 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_UsingWithErrorHandling.
+    /// Verifies that the parser accepts using with error handling.
     /// </summary>
 
     [Fact]
@@ -345,7 +341,7 @@ public class AccessBlockTests
 
     #region Combined Access Patterns
     /// <summary>
-    /// Tests Parse_ViewingThenHijacking.
+    /// Verifies that the parser accepts viewing then hijacking.
     /// </summary>
 
     [Fact]
@@ -365,7 +361,7 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_UsingWithViewing.
+    /// Verifies that the parser accepts using with viewing.
     /// </summary>
 
     [Fact]
@@ -384,7 +380,7 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_ComplexAccessPattern.
+    /// Verifies that the parser accepts complex access pattern.
     /// </summary>
 
     [Fact]
@@ -412,7 +408,7 @@ public class AccessBlockTests
 
     #region Inline Access Tests
     /// <summary>
-    /// Tests Parse_InlineView.
+    /// Verifies that the parser accepts inline view.
     /// </summary>
 
     [Fact]
@@ -428,7 +424,7 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_InlineHijack.
+    /// Verifies that the parser accepts inline hijack.
     /// </summary>
 
     [Fact]
@@ -444,7 +440,7 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_InlineViewAsArgument.
+    /// Verifies that the parser accepts inline view as argument.
     /// </summary>
 
     [Fact]
@@ -460,7 +456,7 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_InlineMultipleViews.
+    /// Verifies that the parser accepts inline multiple views.
     /// </summary>
 
     [Fact]
@@ -480,7 +476,7 @@ public class AccessBlockTests
 
     #region Consume Operation Tests
     /// <summary>
-    /// Tests Parse_ConsumeTransfer.
+    /// Verifies that the parser accepts consume transfer.
     /// </summary>
 
     [Fact]
@@ -496,7 +492,7 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_ConsumeAsArgument.
+    /// Verifies that the parser accepts consume as argument.
     /// </summary>
 
     [Fact]
@@ -516,7 +512,7 @@ public class AccessBlockTests
 
     #region Share Operation Tests
     /// <summary>
-    /// Tests Parse_ShareWithPolicy.
+    /// Verifies that the parser accepts share with policy.
     /// </summary>
 
     [Fact]
@@ -532,7 +528,7 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_ShareMutex.
+    /// Verifies that the parser accepts share mutex.
     /// </summary>
 
     [Fact]
@@ -548,7 +544,7 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
     /// <summary>
-    /// Tests Parse_TrackShared.
+    /// Verifies that the parser accepts track shared.
     /// </summary>
 
     [Fact]

@@ -1,19 +1,17 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for C38: Field accessor activation (all_fields / open_fields).
-/// These routines are auto-registered when Data type is available in stdlib.
+/// Contains tests for field accessor.
 /// </summary>
 public class FieldAccessorTests
 {
     /// <summary>
-    /// Tests Analyze_RecordWithOpenAndSecretFields_AllFieldsResolves.
+    /// Verifies semantic analysis behavior for record with open and secret fields all fields and resolves the expected symbol.
     /// </summary>
     [Fact]
     public void Analyze_RecordWithOpenAndSecretFields_AllFieldsResolves()
@@ -31,7 +29,7 @@ public class FieldAccessorTests
             filter: e => e.Code == SemanticDiagnosticCode.MethodNotFound);
     }
     /// <summary>
-    /// Tests Analyze_RecordWithOpenAndSecretFields_OpenFieldsResolves.
+    /// Verifies semantic analysis behavior for record with open and secret fields open fields and resolves the expected symbol.
     /// </summary>
 
     [Fact]

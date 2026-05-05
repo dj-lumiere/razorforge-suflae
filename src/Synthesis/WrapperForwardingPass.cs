@@ -1,8 +1,8 @@
 using Compiler.Resolution;
+using SyntaxTree;
 using TypeModel.Enums;
 using TypeModel.Symbols;
 using TypeModel.Types;
-using SyntaxTree;
 using TypeSymbol = TypeModel.Types.TypeInfo;
 
 namespace Compiler.Synthesis;
@@ -62,6 +62,11 @@ internal sealed class WrapperForwardingPass
     ];
 
     /// <summary>
+    /// Exposes the wrapper type base names so GMP can detect wrapper methods during body selection.
+    /// </summary>
+    internal static IReadOnlySet<string> WrapperTypeNames => WrapperTypes;
+
+    /// <summary>
     /// Read-only wrapper types that can only access @readonly methods.
     /// </summary>
     private static readonly HashSet<string> ReadOnlyWrapperTypes =
@@ -87,11 +92,12 @@ internal sealed class WrapperForwardingPass
     public void RunEager()
     {
         // Collect from both resolution caches: RecordTypeInfo resolutions AND WrapperTypeInfo resolutions.
-        IEnumerable<TypeSymbol> candidates =
+        var candidates =
             _registry.AllConcreteGenericInstances
                      .Where(predicate: IsWrapperType)
-                     .Cast<TypeSymbol>()
-                     .Concat(_registry.AllConcreteWrapperInstances);
+                     .Concat(_registry.AllConcreteWrapperInstances)
+                     .Distinct()
+                     .ToList();
 
         foreach (TypeSymbol wrapperType in candidates)
         {
@@ -106,15 +112,21 @@ internal sealed class WrapperForwardingPass
                 _ => innerType
             };
 
-            // Only eagerly synthesize forwarders for entity inner types.
-            // Primitive/record inner types (Byte, U8, Character, etc.) have universal methods
-            // whose codegen is not always valid for value types (e.g. get_address on i32).
-            // Primitive wrappers get forwarders lazily when SA actually encounters a call site.
-            if (innerLookupType is not EntityTypeInfo)
+            // Skip intrinsic (primitive) inner types — their codegen-only methods (e.g.
+            // get_address on i32) are not valid to forward, and they have no user-defined
+            // methods to forward anyway.  Record and entity inner types are safe to process
+            // eagerly; TrySynthesize guards against methods that don't exist on the inner type
+            // and against overwriting source-defined wrapper methods.
+            if (innerLookupType is IntrinsicTypeInfo)
                 continue;
 
-            foreach (RoutineInfo innerMethod in _registry.GetMethodsForOwner(ownerType: innerLookupType))
+            var innerMethods = _registry.GetMethodsForOwner(ownerType: innerLookupType)
+                                        .ToList();
+            foreach (RoutineInfo innerMethod in innerMethods)
             {
+                // @innate routines (type_name, module_name, etc.) are folded to literals by
+                // BuilderServiceInliningPass — never forward them onto wrapper types.
+                if (innerMethod.Annotations.Contains(value: "innate")) continue;
                 TrySynthesize(wrapperType: wrapperType,
                     methodName: innerMethod.Name,
                     isFailable: innerMethod.IsFailable);
@@ -194,6 +206,17 @@ internal sealed class WrapperForwardingPass
                     isFailable: isFailable);
         }
 
+        // Don't overwrite a method already defined on the wrapper's generic def
+        // (source-defined routines like $represent, $diagnose, $destroy take precedence).
+        if (_registry.LookupMethod(type: wrapperDef,
+                methodName: methodName,
+                isFailable: isFailable) != null)
+        {
+            return _registry.LookupMethod(type: wrapperType,
+                methodName: methodName,
+                isFailable: isFailable);
+        }
+
         var forwarder = new RoutineInfo(name: innerMethod.Name)
         {
             Kind = RoutineKind.MemberRoutine,
@@ -209,7 +232,11 @@ internal sealed class WrapperForwardingPass
             Annotations = innerMethod.Annotations,
             IsSynthesized = true,
             WrapperForwarderInnerMethod = innerMethod,
-            WrapperForwarderInnerGenericDef = innerLookupType
+            WrapperForwarderInnerGenericDef = innerLookupType,
+            // Propagate method-level generic parameters so OperatorLoweringPass can
+            // monomorphize per concrete index type (e.g. Owned[Text].$getitem![U64]).
+            GenericParameters = innerMethod.GenericParameters,
+            GenericConstraints = innerMethod.GenericConstraints,
         };
 
         // RC record wrappers (Retained[T], Tracked[T]) are structs with a `data: Hijacked[T]`
@@ -221,13 +248,16 @@ internal sealed class WrapperForwardingPass
             : null;
 
         Statement body = BuildWrapperForwarderBody(
+            wrapperType: wrapperDef,
+            innerMethod: innerMethod,
             genericParamName: genericParamName,
             methodName: innerMethod.Name,
             isFailable: innerMethod.IsFailable,
             parameters: innerMethod.Parameters,
             hasReturnValue: innerMethod.ReturnType != null &&
                 innerMethod.ReturnType.Name != "Blank",
-            dataFieldName: dataFieldName);
+            dataFieldName: dataFieldName,
+            innerIsEntity: innerType is EntityTypeInfo);
 
         _registry.RegisterRoutine(routine: forwarder);
         _synthesizedBodies[key: forwarder.RegistryKey] = (forwarder, body);
@@ -251,11 +281,18 @@ internal sealed class WrapperForwardingPass
     ///
     /// where T is the wrapper's generic parameter name.
     /// </summary>
-    private static Statement BuildWrapperForwarderBody(string genericParamName,
+    private Statement BuildWrapperForwarderBody(TypeSymbol wrapperType, RoutineInfo innerMethod,
+        string genericParamName,
         string methodName, bool isFailable, IReadOnlyList<ParameterInfo> parameters,
-        bool hasReturnValue, string? dataFieldName = null)
+        bool hasReturnValue, string? dataFieldName = null, bool innerIsEntity = false)
     {
         string callPropertyName = isFailable ? methodName + "!" : methodName;
+        TypeSymbol innerType = wrapperType.TypeArguments is { Count: > 0 }
+            ? wrapperType.TypeArguments[0]
+            : new GenericParameterTypeInfo(name: genericParamName);
+        TypeInfo? wrapperDataType = dataFieldName != null
+            ? (wrapperType as RecordTypeInfo)?.LookupMemberVariable(memberVariableName: dataFieldName)?.Type
+            : null;
         var forwardedArgs = new List<Expression>();
         foreach (ParameterInfo p in parameters)
         {
@@ -273,24 +310,40 @@ internal sealed class WrapperForwardingPass
         {
             // Record-struct wrapper: me.data.extract().method(...)
             // Skip the `raw` variable entirely — no type inference needed.
+            var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+                { ResolvedType = wrapperType };
             var dataAccess = new MemberExpression(
-                Object: new IdentifierExpression(Name: "me", Location: _synthLoc),
+                Object: meRef,
                 PropertyName: dataFieldName,
-                Location: _synthLoc);
+                Location: _synthLoc)
+            {
+                ResolvedType = wrapperDataType
+            };
+            RoutineInfo? extractMethod = wrapperDataType != null
+                ? _registry.LookupMethod(type: wrapperDataType, methodName: "extract")
+                : null;
             var readCall = new CallExpression(
                 Callee: new MemberExpression(
                     Object: dataAccess,
                     PropertyName: "extract",
                     Location: _synthLoc),
                 Arguments: [],
-                Location: _synthLoc);
+                Location: _synthLoc)
+            {
+                ResolvedRoutine = extractMethod,
+                ResolvedType = innerType
+            };
             var innerCall = new CallExpression(
                 Callee: new MemberExpression(
                     Object: readCall,
                     PropertyName: callPropertyName,
                     Location: _synthLoc),
                 Arguments: forwardedArgs,
-                Location: _synthLoc);
+                Location: _synthLoc)
+            {
+                ResolvedRoutine = innerMethod,
+                ResolvedType = innerMethod.ReturnType
+            };
             Statement callStmt = hasReturnValue
                 ? new ReturnStatement(Value: innerCall, Location: _synthLoc)
                 : new ExpressionStatement(Expression: innerCall, Location: _synthLoc);
@@ -298,9 +351,15 @@ internal sealed class WrapperForwardingPass
         }
         else
         {
-            // Pointer wrapper: var raw = Hijacked[T](me); raw.reveal().method(...)
-            // reveal() reinterprets the ptr directly as T (no dereference) — correct for
-            // Owned[T] where me IS the entity ptr, not a slot holding one.
+            // Pointer wrapper: var raw = Hijacked[T](me); raw.reveal()/extract().method(...)
+            // Entity inner types: reveal() reinterprets the ptr directly as T (no dereference)
+            //   — correct for Owned[T] where me IS the entity ptr, not a slot holding one.
+            // Record inner types: extract() dereferences the ptr to load the value — correct
+            //   for Hijacked[RecordType] where the ptr points to a heap/stack slot.
+            // innerIsEntity is determined from the concrete inner type at the call site so
+            //   generic-def forwarder bodies (where innerType is GenericParameterTypeInfo)
+            //   get the correct access method even before T is substituted.
+            string accessMethodName = innerIsEntity ? "reveal" : "extract";
             var hijackedCall = new CreatorExpression(
                 TypeName: "Hijacked",
                 TypeArguments:
@@ -319,20 +378,35 @@ internal sealed class WrapperForwardingPass
                     Visibility: VisibilityModifier.Open,
                     Location: _synthLoc),
                 Location: _synthLoc);
+            TypeSymbol hijackedInnerType = new WrapperTypeInfo(
+                wrapperName: "Hijacked",
+                innerType: innerType,
+                isReadOnly: false);
+            RoutineInfo? accessMethod = _registry.LookupMethod(type: hijackedInnerType,
+                methodName: accessMethodName);
             var readCall = new CallExpression(
                 Callee: new MemberExpression(
-                    Object: new IdentifierExpression(Name: "raw", Location: _synthLoc),
-                    PropertyName: "reveal",
+                    Object: new IdentifierExpression(Name: "raw", Location: _synthLoc)
+                        { ResolvedType = hijackedInnerType },
+                    PropertyName: accessMethodName,
                     Location: _synthLoc),
                 Arguments: [],
-                Location: _synthLoc);
+                Location: _synthLoc)
+            {
+                ResolvedRoutine = accessMethod,
+                ResolvedType = innerType
+            };
             var innerCall = new CallExpression(
                 Callee: new MemberExpression(
                     Object: readCall,
                     PropertyName: callPropertyName,
                     Location: _synthLoc),
                 Arguments: forwardedArgs,
-                Location: _synthLoc);
+                Location: _synthLoc)
+            {
+                ResolvedRoutine = innerMethod,
+                ResolvedType = innerMethod.ReturnType
+            };
             Statement callStmt = hasReturnValue
                 ? new ReturnStatement(Value: innerCall, Location: _synthLoc)
                 : new ExpressionStatement(Expression: innerCall, Location: _synthLoc);
@@ -367,7 +441,7 @@ internal sealed class WrapperForwardingPass
     /// <summary>
     /// Checks if a wrapper type is read-only (Viewed, Inspected).
     /// </summary>
-    private bool IsReadOnlyWrapper(TypeSymbol type)
+    private static bool IsReadOnlyWrapper(TypeSymbol type)
     {
         string baseName = GetBaseTypeName(typeName: type.Name);
         return ReadOnlyWrapperTypes.Contains(value: baseName);

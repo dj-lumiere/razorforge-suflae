@@ -1,15 +1,18 @@
-namespace TypeModel.Types;
-
+using System.Text;
+using Compiler.Resolution;
 using TypeModel.Enums;
 using TypeModel.Symbols;
-using CarrierKind = TypeModel.Enums.CarrierKind;
+
+namespace TypeModel.Types;
+
+using CarrierKind = CarrierKind;
 
 /// <summary>
 /// Type information for records (value types with copy semantics).
 /// Includes "primitive-like" types (s32, bool, etc.) which are single-member-variable records
 /// wrapping LLVM intrinsics.
 /// </summary>
-public sealed class RecordTypeInfo : TypeInfo
+public class RecordTypeInfo : TypeInfo
 {
     /// <inheritdoc/>
     public override TypeCategory Category => TypeCategory.Record;
@@ -23,7 +26,7 @@ public sealed class RecordTypeInfo : TypeInfo
     /// <summary>
     /// Backend type from @llvm("type") annotation. Null if not a backend-annotated type.
     /// </summary>
-    public string? BackendType { get; init; }
+    public string? BackendType { get; set; }
 
     /// <summary>
     /// Whether this record has a direct backend type mapping (via @llvm annotation).
@@ -190,7 +193,7 @@ public sealed class RecordTypeInfo : TypeInfo
             paramMap[key: genericParams[index: i]] = typeArguments[index: i];
         }
 
-        var result = new System.Text.StringBuilder();
+        var result = new StringBuilder();
         int pos = 0;
         while (pos < template.Length)
         {
@@ -422,7 +425,7 @@ public sealed class RecordTypeInfo : TypeInfo
 
         // Route through the ambient TypeRegistry so entity-type specializations
         // (e.g. Maybe[Text] → { Hijacked[T] } layout) are picked up.
-        Compiler.Resolution.TypeRegistry? registry = Compiler.Resolution.TypeRegistry.Ambient;
+        TypeRegistry? registry = TypeRegistry.Ambient;
 
         // Get the generic definition and create resolved instance with new args
         if (type is RecordTypeInfo { GenericDefinition: not null } recordType)

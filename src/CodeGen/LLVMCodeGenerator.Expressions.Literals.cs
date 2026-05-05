@@ -1,76 +1,48 @@
-using SemanticVerification;
+using System.Globalization;
+using System.Text;
+using Compiler.Lexer;
+using Verification;
+using SyntaxTree;
+using TypeModel.Types;
 
 namespace Compiler.CodeGen;
-
-using System.Text;
-using TypeModel.Types;
-using SyntaxTree;
 
 /// <summary>
 /// Expression code generation for literals and scalar literal helpers.
 /// </summary>
+// TODO: This should be on the AST level with constructor.
+/// <summary>
+/// Coordinates LLVM code generator behavior for this compiler phase.
+/// </summary>
 public partial class LlvmCodeGenerator
 {
+    /// <summary>
+    /// Emit literal as part of this compiler phase.
+    /// </summary>
     private string EmitLiteral(StringBuilder sb, LiteralExpression literal)
     {
-        // Numeric literals are stored as strings by the parser (e.g., "1_s32", "3.14_f32").
-        // Check LiteralType first to handle them as numbers, not string constants.
-        if (literal.Value is char ch)
+        switch (literal.Value)
         {
-            return EmitCharacterLiteral(sb: sb, text: ch.ToString());
-        }
-
-        if (literal.Value is string s)
-        {
-            if (IsIntegerLiteralType(type: literal.LiteralType))
-            {
+            // Numeric literals are stored as strings by the parser (e.g., "1_s32", "3.14_f32").
+            // Check LiteralType first to handle them as numbers, not string constants.
+            case string s when IsIntegerLiteralType(type: literal.LiteralType):
                 return StripNumericSuffix(text: s);
-            }
-
-            if (IsFloatLiteralType(type: literal.LiteralType))
-            {
+            case string s when IsFloatLiteralType(type: literal.LiteralType):
                 return EmitFloatLiteral(numericValue: StripNumericSuffix(text: s),
                     literalType: literal.LiteralType);
-            }
-
-            if (IsDecimalFloatLiteralType(type: literal.LiteralType))
-            {
+            case string s when IsDecimalFloatLiteralType(type: literal.LiteralType):
                 return EmitDecimalFloatLiteral(sb: sb,
                     numericValue: StripNumericSuffix(text: s),
                     literalType: literal.LiteralType);
-            }
-
-            if (IsByteSizeLiteralType(type: literal.LiteralType))
-            {
-                return EmitByteSizeLiteral(sb: sb, text: s);
-            }
-
-            if (IsDurationLiteralType(type: literal.LiteralType))
-            {
-                return EmitDurationLiteral(sb: sb, text: s, literalType: literal.LiteralType);
-            }
-
-            if (literal.LiteralType == Lexer.TokenType.CharacterLiteral)
-            {
-                return EmitCharacterLiteral(sb: sb, text: s);
-            }
-
-            if (literal.LiteralType == Lexer.TokenType.ByteLetterLiteral)
-            {
-                return EmitByteLetterLiteral(sb: sb, text: s);
-            }
-
-            if (literal.LiteralType == Lexer.TokenType.BytesLiteral)
-            {
+            case string s when literal.LiteralType == TokenType.BytesLiteral:
                 return EmitBytesLiteral(sb: sb, value: s);
-            }
-
             // Actual string literal
-            return EmitStringLiteral(sb: sb, value: s);
+            case string s:
+                return EmitStringLiteral(sb: sb, value: s);
         }
 
-        // None literal �� emit zeroinitializer for Maybe types ({ i64, ptr } with tag=0)
-        if (literal.LiteralType == Lexer.TokenType.None)
+        // None literal -> emit zeroinitializer for Maybe types ({ i64, ptr } with tag=0)
+        if (literal.LiteralType == TokenType.None)
         {
             return "zeroinitializer";
         }
@@ -79,11 +51,10 @@ public partial class LlvmCodeGenerator
         {
             int i => i.ToString(),
             long l => l.ToString(),
+            ulong ul => ul.ToString(),
             double d => $"0x{BitConverter.DoubleToInt64Bits(value: d):X16}",
-            float f => $"0x{BitConverter.DoubleToInt64Bits(value: (double)f):X16}",
-            bool b => b
-                ? "true"
-                : "false",
+            float f => $"0x{BitConverter.DoubleToInt64Bits(value: f):X16}",
+            bool b => b ? "true" : "false",
             null => "null",
             _ => literal.Value.ToString() ?? "0"
         };
@@ -92,211 +63,33 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Checks if a token type represents an integer literal.
     /// </summary>
-    private static bool IsIntegerLiteralType(Lexer.TokenType type)
+    private static bool IsIntegerLiteralType(TokenType type)
     {
-        return type is Lexer.TokenType.Integer or Lexer.TokenType.S8Literal
-            or Lexer.TokenType.S16Literal or Lexer.TokenType.S32Literal
-            or Lexer.TokenType.S64Literal or Lexer.TokenType.S128Literal
-            or Lexer.TokenType.U8Literal or Lexer.TokenType.U16Literal
-            or Lexer.TokenType.U32Literal or Lexer.TokenType.U64Literal
-            or Lexer.TokenType.U128Literal or Lexer.TokenType.AddressLiteral;
+        return type is TokenType.IntegerLiteral or TokenType.S8Literal
+            or TokenType.S16Literal or TokenType.S32Literal
+            or TokenType.S64Literal or TokenType.S128Literal
+            or TokenType.U8Literal or TokenType.U16Literal
+            or TokenType.U32Literal or TokenType.U64Literal
+            or TokenType.U128Literal or TokenType.AddressLiteral;
     }
 
     /// <summary>
     /// Checks if a token type represents a floating-point literal.
     /// </summary>
-    private static bool IsFloatLiteralType(Lexer.TokenType type)
+    private static bool IsFloatLiteralType(TokenType type)
     {
-        return type is Lexer.TokenType.Decimal or Lexer.TokenType.F16Literal
-            or Lexer.TokenType.F32Literal or Lexer.TokenType.F64Literal
-            or Lexer.TokenType.F128Literal;
-    }
-
-    private static bool IsDecimalFloatLiteralType(Lexer.TokenType type)
-    {
-        return type is Lexer.TokenType.D32Literal or Lexer.TokenType.D64Literal
-            or Lexer.TokenType.D128Literal;
-    }
-
-    private static bool IsByteSizeLiteralType(Lexer.TokenType type)
-    {
-        return type is Lexer.TokenType.ByteLiteral or Lexer.TokenType.KilobyteLiteral
-            or Lexer.TokenType.KibibyteLiteral or Lexer.TokenType.MegabyteLiteral
-            or Lexer.TokenType.MebibyteLiteral or Lexer.TokenType.GigabyteLiteral
-            or Lexer.TokenType.GibibyteLiteral;
-    }
-
-    private static bool IsDurationLiteralType(Lexer.TokenType type)
-    {
-        return type is Lexer.TokenType.WeekLiteral or Lexer.TokenType.DayLiteral
-            or Lexer.TokenType.HourLiteral or Lexer.TokenType.MinuteLiteral
-            or Lexer.TokenType.SecondLiteral or Lexer.TokenType.MillisecondLiteral
-            or Lexer.TokenType.MicrosecondLiteral or Lexer.TokenType.NanosecondLiteral;
-    }
-
-    private static readonly (string suffix, ulong multiplier)[] ByteSizeSuffixes =
-    [
-        ("gib", 1_073_741_824UL),
-        ("mib", 1_048_576UL),
-        ("kib", 1_024UL),
-        ("gb", 1_000_000_000UL),
-        ("mb", 1_000_000UL),
-        ("kb", 1_000UL),
-        ("b", 1UL)
-    ];
-
-    private string EmitByteSizeLiteral(StringBuilder sb, string text)
-    {
-        // Compute the byte value from the literal text + unit suffix.
-        ulong bytes = 0;
-        string lower = text.ToLowerInvariant();
-        foreach ((string suffix, ulong multiplier) in ByteSizeSuffixes)
-        {
-            if (lower.EndsWith(value: suffix))
-            {
-                string numPart = text[..^suffix.Length]
-                                .TrimEnd(trimChar: '_')
-                                .Replace(oldValue: "_", newValue: "");
-                if (ulong.TryParse(s: numPart, result: out ulong value))
-                {
-                    bytes = value * multiplier;
-                }
-
-                break;
-            }
-        }
-
-        // ByteSize is %Record.ByteSize = type { i64 } ? construct the aggregate.
-        TypeInfo? bsType = _registry.LookupType(name: "ByteSize");
-        string llvmType = bsType != null
-            ? GetLlvmType(type: bsType)
-            : "%Record.ByteSize";
-
-        // If ByteSize resolves to a struct, use insertvalue; if it's a plain i64, return directly
-        if (llvmType.StartsWith(value: "%"))
-        {
-            string result = NextTemp();
-            EmitLine(sb: sb, line: $"  {result} = insertvalue {llvmType} zeroinitializer, i64 {bytes}, 0");
-            return result;
-        }
-
-        return bytes.ToString();
-    }
-
-    private string EmitDurationLiteral(StringBuilder sb, string text, Lexer.TokenType literalType)
-    {
-        const long nsPerMicrosecond = 1_000L;
-        const long nsPerMillisecond = 1_000_000L;
-        const long nsPerSecond = 1_000_000_000L;
-        const long secondsPerMinute = 60L;
-        const long secondsPerHour = 3_600L;
-        const long secondsPerDay = 86_400L;
-        const long secondsPerWeek = 604_800L;
-
-        string numericPart = literalType switch
-        {
-            Lexer.TokenType.MillisecondLiteral => text[..^2],
-            Lexer.TokenType.MicrosecondLiteral => text[..^2],
-            Lexer.TokenType.NanosecondLiteral => text[..^2],
-            _ => text[..^1]
-        };
-
-        numericPart = numericPart.Replace(oldValue: "_", newValue: "");
-        if (!long.TryParse(s: numericPart, result: out long value))
-        {
-            value = 0;
-        }
-
-        long seconds = 0;
-        long nanoseconds = 0;
-        switch (literalType)
-        {
-            case Lexer.TokenType.WeekLiteral:
-                seconds = value * secondsPerWeek;
-                break;
-            case Lexer.TokenType.DayLiteral:
-                seconds = value * secondsPerDay;
-                break;
-            case Lexer.TokenType.HourLiteral:
-                seconds = value * secondsPerHour;
-                break;
-            case Lexer.TokenType.MinuteLiteral:
-                seconds = value * secondsPerMinute;
-                break;
-            case Lexer.TokenType.SecondLiteral:
-                seconds = value;
-                break;
-            case Lexer.TokenType.MillisecondLiteral:
-                seconds = value / 1_000L;
-                nanoseconds = (value % 1_000L) * nsPerMillisecond;
-                break;
-            case Lexer.TokenType.MicrosecondLiteral:
-                seconds = value / 1_000_000L;
-                nanoseconds = (value % 1_000_000L) * nsPerMicrosecond;
-                break;
-            case Lexer.TokenType.NanosecondLiteral:
-                seconds = value / nsPerSecond;
-                nanoseconds = value % nsPerSecond;
-                break;
-        }
-
-        TypeInfo? durationType = _registry.LookupType(name: "Duration");
-        string llvmType = durationType != null
-            ? GetLlvmType(type: durationType)
-            : "%Record.Duration";
-
-        string tmp1 = NextTemp();
-        EmitLine(sb: sb, line: $"  {tmp1} = insertvalue {llvmType} zeroinitializer, i64 {seconds}, 0");
-        string tmp2 = NextTemp();
-        EmitLine(sb: sb, line: $"  {tmp2} = insertvalue {llvmType} {tmp1}, i32 {nanoseconds}, 1");
-        return tmp2;
+        return type is TokenType.DecimalLiteral or TokenType.F16Literal
+            or TokenType.F32Literal or TokenType.F64Literal
+            or TokenType.F128Literal;
     }
 
     /// <summary>
-    /// Emits a Character literal as a %Record.Character aggregate with the Unicode codepoint.
+    /// Returns whether is decimal float literal type applies in the current compiler context.
     /// </summary>
-    private string EmitCharacterLiteral(StringBuilder sb, string text)
+    private static bool IsDecimalFloatLiteralType(TokenType type)
     {
-        int codepoint = text.Length > 0
-            ? char.ConvertToUtf32(s: text, index: 0)
-            : 0;
-
-        TypeInfo? letterType = _registry.LookupType(name: "Character");
-        string llvmType = letterType != null
-            ? GetLlvmType(type: letterType)
-            : "%\"Record.Character\"";
-
-        if (llvmType.StartsWith(value: "%"))
-        {
-            string result = NextTemp();
-            EmitLine(sb: sb,
-                line: $"  {result} = insertvalue {llvmType} zeroinitializer, i32 {codepoint}, 0");
-            return result;
-        }
-
-        return codepoint.ToString();
-    }
-
-    private string EmitByteLetterLiteral(StringBuilder sb, string text)
-    {
-        int byteValue = text.Length > 0
-            ? (int)text[index: 0] & 0xFF
-            : 0;
-
-        TypeInfo? byteType = _registry.LookupType(name: "Byte");
-        string llvmType = byteType != null
-            ? GetLlvmType(type: byteType)
-            : "%\"Record.Byte\"";
-
-        if (llvmType.StartsWith(value: "%"))
-        {
-            string result = NextTemp();
-            EmitLine(sb: sb,
-                line: $"  {result} = insertvalue {llvmType} zeroinitializer, i8 {byteValue}, 0");
-            return result;
-        }
-
-        return byteValue.ToString();
+        return type is TokenType.D32Literal or TokenType.D64Literal
+            or TokenType.D128Literal;
     }
 
     /// <summary>
@@ -313,7 +106,7 @@ public partial class LlvmCodeGenerator
         var bytes = new List<int>();
         foreach (char c in value)
         {
-            bytes.Add(item: (int)c & 0xFF);
+            bytes.Add(item: c & 0xFF);
         }
 
         int count = bytes.Count;
@@ -347,7 +140,7 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Strips the type suffix from a numeric literal string (e.g., "1_s32" �� "1", "3_14_f64" �� "3_14")
+    /// Strips the type suffix from a numeric literal string (e.g., "1_s32" "1", "3_14_f64" "3_14")
     /// and removes digit separator underscores.
     /// </summary>
     /// <summary>
@@ -367,7 +160,7 @@ public partial class LlvmCodeGenerator
                 }
 
                 if (ulong.TryParse(s: value[2..],
-                        style: System.Globalization.NumberStyles.HexNumber,
+                        style: NumberStyles.HexNumber,
                         provider: null,
                         result: out ulong hexVal))
                 {
@@ -405,6 +198,9 @@ public partial class LlvmCodeGenerator
         return value;
     }
 
+    /// <summary>
+    /// Stores the numeric suffixes state used by this compiler phase.
+    /// </summary>
     private static readonly string[] NumericSuffixes =
     [
         "addr", "s128", "u128", "s64", "u64", "s32", "u32",
@@ -412,9 +208,12 @@ public partial class LlvmCodeGenerator
         "d128", "d64", "d32"
     ];
 
+    /// <summary>
+    /// Performs the strip numeric suffix step for this compiler phase.
+    /// </summary>
     private static string StripNumericSuffix(string text)
     {
-        // First try: underscore-separated suffix (e.g., "1_s32" �� "1")
+        // First try: underscore-separated suffix (e.g., "1_s32" "1")
         for (int i = text.Length - 1; i >= 0; i--)
         {
             if (text[index: i] == '_' && i + 1 < text.Length &&
@@ -425,7 +224,7 @@ public partial class LlvmCodeGenerator
             }
         }
 
-        // Second try: direct suffix without underscore (e.g., "0u64" �� "0", "0x7Fu32" �� "127")
+        // Second try: direct suffix without underscore (e.g., "0u64" "0", "0x7Fu32" "127")
         string lower = text.ToLowerInvariant();
         foreach (string suffix in NumericSuffixes)
         {
@@ -445,10 +244,10 @@ public partial class LlvmCodeGenerator
     /// Emits a float literal in LLVM IR format.
     /// LLVM requires specific formats for different float types.
     /// </summary>
-    private static string EmitFloatLiteral(string numericValue, Lexer.TokenType literalType)
+    private static string EmitFloatLiteral(string numericValue, TokenType literalType)
     {
         // F128: use native parser for full 128-bit precision
-        if (literalType == Lexer.TokenType.F128Literal)
+        if (literalType == TokenType.F128Literal)
         {
             NumericLiteralParser.F128 f128 =
                 NumericLiteralParser.ParseF128(str: numericValue);
@@ -463,8 +262,8 @@ public partial class LlvmCodeGenerator
         }
 
         if (double.TryParse(s: numericValue,
-                style: System.Globalization.NumberStyles.Float,
-                provider: System.Globalization.CultureInfo.InvariantCulture,
+                style: NumberStyles.Float,
+                provider: CultureInfo.InvariantCulture,
                 result: out double d))
         {
             return EmitDoubleAsLlvmHex(d: d, literalType: literalType);
@@ -473,13 +272,16 @@ public partial class LlvmCodeGenerator
         return numericValue;
     }
 
-    private static string EmitDoubleAsLlvmHex(double d, Lexer.TokenType literalType)
+    /// <summary>
+    /// Emit double as LLVM hex as part of this compiler phase.
+    /// </summary>
+    private static string EmitDoubleAsLlvmHex(double d, TokenType literalType)
     {
-        if (literalType == Lexer.TokenType.F32Literal)
+        if (literalType == TokenType.F32Literal)
         {
             // F32: promote to double for LLVM's float hex format
             float f = (float)d;
-            long bits = BitConverter.DoubleToInt64Bits(value: (double)f);
+            long bits = BitConverter.DoubleToInt64Bits(value: f);
             return $"0x{bits:X16}";
         }
         else
@@ -490,7 +292,7 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Parses C99 hex float format: 0x1.ABCDp5 = (hex mantissa) �� 2^(exponent).
+    /// Parses C99 hex float format: 0x1.ABCDp5 = (hex mantissa) 2^(exponent).
     /// </summary>
     private static bool TryParseHexFloat(string value, out double result)
     {
@@ -525,7 +327,7 @@ public partial class LlvmCodeGenerator
             string fracPart = mantissaStr[(dotIndex + 1)..];
 
             if (intPart.Length > 0 && ulong.TryParse(s: intPart,
-                    style: System.Globalization.NumberStyles.HexNumber,
+                    style: NumberStyles.HexNumber,
                     provider: null,
                     result: out ulong intVal))
             {
@@ -549,7 +351,7 @@ public partial class LlvmCodeGenerator
         else
         {
             if (!ulong.TryParse(s: mantissaStr,
-                    style: System.Globalization.NumberStyles.HexNumber,
+                    style: NumberStyles.HexNumber,
                     provider: null,
                     result: out ulong intVal))
             {
@@ -568,21 +370,21 @@ public partial class LlvmCodeGenerator
     /// D32/D64 return scalar values. D128 emits insertvalue instructions and returns a temp.
     /// </summary>
     private string EmitDecimalFloatLiteral(StringBuilder sb, string numericValue,
-        Lexer.TokenType literalType)
+        TokenType literalType)
     {
         switch (literalType)
         {
-            case Lexer.TokenType.D32Literal:
+            case TokenType.D32Literal:
                 return NumericLiteralParser
                                        .ParseD32(str: numericValue)
                                        .Value
                                        .ToString();
-            case Lexer.TokenType.D64Literal:
+            case TokenType.D64Literal:
                 return NumericLiteralParser
                                        .ParseD64(str: numericValue)
                                        .Value
                                        .ToString();
-            case Lexer.TokenType.D128Literal:
+            case TokenType.D128Literal:
             {
                 NumericLiteralParser.D128 d128 =
                     NumericLiteralParser.ParseD128(str: numericValue);

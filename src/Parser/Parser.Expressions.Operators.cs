@@ -1,8 +1,8 @@
-namespace Compiler.Parser;
-
-using Lexer;
+using Compiler.Diagnostics;
+using Compiler.Lexer;
 using SyntaxTree;
-using Diagnostics;
+
+namespace Compiler.Parser;
 
 /// <summary>
 /// Partial class containing operator and precedence-chain parsing.
@@ -344,7 +344,7 @@ public partial class Parser
     {
         Expression expr = ParseComparison();
 
-        while (Match(TokenType.NotEqual, TokenType.ReferenceEqual, TokenType.ReferenceNotEqual))
+        while (Match(TokenType.NotEqual))
         {
             Token op = PeekToken(offset: -1);
             Expression right = ParseComparison();

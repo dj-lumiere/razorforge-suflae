@@ -10,7 +10,7 @@ namespace Compiler.Lexer;
 /// <list type="bullet">
 ///   <item><description>Arithmetic: +, -, *, /, %, **</description></item>
 ///   <item><description>Overflow variants: +%, -%, *% (wrap), +^, -^, *^, /^ (clamping)</description></item>
-///   <item><description>Comparison: ==, !=, &lt;, &gt;, &lt;=, &lt;=&gt;, &gt;=, ===, !==</description></item>
+///   <item><description>Comparison: ==, !=, &lt;, &gt;, &lt;=, &lt;=&gt;, &gt;=</description></item>
 ///   <item><description>Bitwise: &amp;, |, ^, ~, &lt;&lt;, &gt;&gt;, &lt;&lt;&lt;, &gt;&gt;&gt;</description></item>
 ///   <item><description>Special: -&gt;, =&gt;, @intrinsic, @native</description></item>
 /// </list>

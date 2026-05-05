@@ -1,18 +1,19 @@
-namespace Compiler.Resolution;
-
-using SemanticVerification;
+using Verification;
 using TypeModel.Enums;
 using TypeModel.Types;
-using TypeSymbol = TypeModel.Types.TypeInfo;
+
+namespace Compiler.Resolution;
+
+using TypeSymbol = TypeInfo;
 
 /// <summary>
 /// Handles implicit marker protocol conformance for the semantic analyzer.
 /// </summary>
 internal sealed class ProtocolConformanceAnalyzer
 {
-    private readonly SemanticAnalyzer _sa;
+    private readonly SemanticVerifier _sa;
 
-    internal ProtocolConformanceAnalyzer(SemanticAnalyzer sa)
+    internal ProtocolConformanceAnalyzer(SemanticVerifier sa)
     {
         _sa = sa;
     }
@@ -116,8 +117,6 @@ internal sealed class ProtocolConformanceAnalyzer
         {
             RecordTypeInfo r => r.ImplementedProtocols,
             EntityTypeInfo e => e.ImplementedProtocols,
-            ChoiceTypeInfo c => c.ImplementedProtocols,
-            FlagsTypeInfo f => f.ImplementedProtocols,
             CrashableTypeInfo cr => cr.ImplementedProtocols,
             _ => []
         };
@@ -130,17 +129,17 @@ internal sealed class ProtocolConformanceAnalyzer
     {
         switch (type)
         {
-            case RecordTypeInfo:
-                _sa._registry.UpdateRecordProtocols(recordName: type.FullName, protocols: protocols);
-                break;
-            case EntityTypeInfo:
-                _sa._registry.UpdateEntityProtocols(entityName: type.FullName, protocols: protocols);
-                break;
             case ChoiceTypeInfo:
                 _sa._registry.UpdateChoiceProtocols(choiceName: type.FullName, protocols: protocols);
                 break;
             case FlagsTypeInfo:
                 _sa._registry.UpdateFlagsProtocols(flagsName: type.FullName, protocols: protocols);
+                break;
+            case RecordTypeInfo:
+                _sa._registry.UpdateRecordProtocols(recordName: type.FullName, protocols: protocols);
+                break;
+            case EntityTypeInfo:
+                _sa._registry.UpdateEntityProtocols(entityName: type.FullName, protocols: protocols);
                 break;
             case CrashableTypeInfo:
                 _sa._registry.UpdateCrashableProtocols(typeName: type.FullName, protocols: protocols);

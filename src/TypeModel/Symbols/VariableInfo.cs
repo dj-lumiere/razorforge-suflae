@@ -1,5 +1,5 @@
-using TypeModel.Types;
 using SyntaxTree;
+using TypeModel.Types;
 
 namespace TypeModel.Symbols;
 

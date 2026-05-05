@@ -1,6 +1,6 @@
-using SyntaxTree;
-using Compiler.Lexer;
 using Compiler.Diagnostics;
+using Compiler.Lexer;
+using SyntaxTree;
 
 namespace Compiler.Parser;
 
@@ -269,7 +269,7 @@ public partial class Parser
     /// - 'is Type (field1, field2)' - destructuring pattern
     /// - 'isnot Type' - negated type pattern
     /// - 'isonly FLAG' - exact flags pattern
-    /// - comparison operators (==, !=, &lt;, &gt;, &lt;=, &gt;=, ===, !==)
+    /// - comparison operators (==, !=, &lt;, &gt;, &lt;=, &gt;=)
     /// - literal values (42, "hello", true)
     /// - expression patterns (for condition-based when)
     /// </remarks>
@@ -454,7 +454,7 @@ public partial class Parser
                     Location: clauseLocation);
                 _inWhenPatternContext = false;
             }
-            // Case 6: Comparison patterns (==, !=, <, >, <=, >=, ===, !==)
+            // Case 6: Comparison patterns (==, !=, <, >, <=, >=)
             else if (IsComparisonOperator(tokenType: CurrentToken.Type))
             {
                 pattern = ParseComparisonPattern();
@@ -766,21 +766,20 @@ public partial class Parser
 
     /// <summary>
     /// Checks if the given token type is a comparison operator used in when patterns.
-    /// Supported operators: ==, !=, &lt;, &gt;, &lt;=, &gt;=, ===, !==
+    /// Supported operators: ==, !=, &lt;, &gt;, &lt;=, &gt;=
     /// </summary>
     /// <param name="tokenType">The token type to check.</param>
     /// <returns>True if the token is a comparison operator for patterns.</returns>
     private static bool IsComparisonOperator(TokenType tokenType)
     {
         return tokenType is TokenType.Equal or TokenType.NotEqual or TokenType.Less
-            or TokenType.Greater or TokenType.LessEqual or TokenType.GreaterEqual
-            or TokenType.ReferenceEqual or TokenType.ReferenceNotEqual;
+            or TokenType.Greater or TokenType.LessEqual or TokenType.GreaterEqual;
     }
 
     /// <summary>
     /// Parses a comparison pattern in a when clause.
     /// Syntax: <c>== value</c>, <c>!= value</c>, <c>&lt; value</c>, <c>&gt; value</c>,
-    /// <c>&lt;= value</c>, <c>&gt;= value</c>, <c>=== value</c>, <c>!== value</c>
+    /// <c>&lt;= value</c>, <c>&gt;= value</c>
     /// </summary>
     /// <returns>A <see cref="ComparisonPattern"/> or <see cref="GuardPattern"/> AST node.</returns>
     private Pattern ParseComparisonPattern()

@@ -9,4 +9,4 @@ protocol Hashable
   ### may still collide.
   ### :returns: A `U64` hash code for this value.
   @readonly
-  routine Me.hash() -> U64
+  routine Me.$hash() -> U64

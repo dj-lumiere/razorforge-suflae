@@ -1,6 +1,5 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
@@ -11,16 +10,16 @@ using static TestHelpers;
 /// When expressions must be exhaustive (S356 error).
 /// When statements on enumerable types warn if non-exhaustive (W250 warning).
 ///
-/// Note: Variant exhaustiveness tests are deferred ??variant case names
+/// Note: Variant exhaustiveness tests are deferred - variant case names
 /// (e.g., Shape.CIRCLE) are not yet resolved by the type system in pattern context.
 /// The exhaustiveness infrastructure supports variants (CheckVariantExhaustiveness)
 /// and will activate once variant type resolution in patterns is implemented.
 /// </summary>
 public class ExhaustivenessTests
 {
-    #region Choice ??When Expression
+    #region Choice - When Expression
     /// <summary>
-    /// Tests WhenExpression_Choice_AllCasesCovered_NoError.
+    /// Verifies that validates when expression choice all cases covered no error.
     /// </summary>
 
     [Fact]
@@ -46,7 +45,7 @@ public class ExhaustivenessTests
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
     /// <summary>
-    /// Tests WhenExpression_Choice_MissingCase_ReportsError.
+    /// Verifies that validates when expression choice missing case reports error.
     /// </summary>
 
     [Fact]
@@ -71,7 +70,7 @@ public class ExhaustivenessTests
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
     /// <summary>
-    /// Tests WhenExpression_Choice_WithElse_NoError.
+    /// Verifies that validates when expression choice with else no error.
     /// </summary>
 
     [Fact]
@@ -95,7 +94,7 @@ public class ExhaustivenessTests
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
     /// <summary>
-    /// Tests WhenExpression_Choice_Shorthand_AllCasesCovered_NoError.
+    /// Verifies that validates when expression choice shorthand all cases covered no error.
     /// </summary>
 
     [Fact]
@@ -119,7 +118,7 @@ public class ExhaustivenessTests
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
     /// <summary>
-    /// Tests WhenExpression_Choice_EqualsOperator_ReportsError.
+    /// Verifies that validates when expression choice equals operator reports error.
     /// </summary>
 
     [Fact]
@@ -145,9 +144,9 @@ public class ExhaustivenessTests
 
     #endregion
 
-    #region Choice ??When Statement
+    #region Choice - When Statement
     /// <summary>
-    /// Tests WhenStatement_Choice_MissingCase_ReportsWarning.
+    /// Verifies that validates when statement choice missing case reports warning.
     /// </summary>
 
     [Fact]
@@ -171,7 +170,7 @@ public class ExhaustivenessTests
             filter: w => w.Code == SemanticWarningCode.NonExhaustiveWhen);
     }
     /// <summary>
-    /// Tests WhenStatement_Choice_AllCasesCovered_NoWarning.
+    /// Verifies that validates when statement choice all cases covered no warning.
     /// </summary>
 
     [Fact]
@@ -195,7 +194,7 @@ public class ExhaustivenessTests
             filter: w => w.Code == SemanticWarningCode.NonExhaustiveWhen);
     }
     /// <summary>
-    /// Tests WhenStatement_Choice_WithElse_NoWarning.
+    /// Verifies that validates when statement choice with else no warning.
     /// </summary>
 
     [Fact]
@@ -221,9 +220,9 @@ public class ExhaustivenessTests
 
     #endregion
 
-    #region Bool ??When Expression
+    #region Bool - When Expression
     /// <summary>
-    /// Tests WhenExpression_Bool_BothCases_NoError.
+    /// Verifies that validates when expression bool both cases no error.
     /// </summary>
 
     [Fact]
@@ -242,7 +241,7 @@ public class ExhaustivenessTests
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
     /// <summary>
-    /// Tests WhenExpression_Bool_MissingFalse_ReportsError.
+    /// Verifies that validates when expression bool missing false reports error.
     /// </summary>
 
     [Fact]
@@ -260,7 +259,7 @@ public class ExhaustivenessTests
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
     /// <summary>
-    /// Tests WhenExpression_Bool_MissingTrue_ReportsError.
+    /// Verifies that validates when expression bool missing true reports error.
     /// </summary>
 
     [Fact]
@@ -280,9 +279,9 @@ public class ExhaustivenessTests
 
     #endregion
 
-    #region Error Handling Types ??When Expression
+    #region Error Handling Types - When Expression
     /// <summary>
-    /// Tests WhenExpression_Maybe_NoneAndElse_NoError.
+    /// Verifies that validates when expression maybe none and else no error.
     /// </summary>
 
     [Fact]
@@ -305,7 +304,7 @@ public class ExhaustivenessTests
 
     #region Wildcard and Else
     /// <summary>
-    /// Tests WhenExpression_Wildcard_AlwaysExhaustive.
+    /// Verifies that validates when expression wildcard always exhaustive.
     /// </summary>
 
     [Fact]
@@ -324,7 +323,7 @@ public class ExhaustivenessTests
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
     /// <summary>
-    /// Tests WhenExpression_ElseBinding_AlwaysExhaustive.
+    /// Verifies that validates when expression else binding always exhaustive.
     /// </summary>
 
     [Fact]
@@ -343,7 +342,7 @@ public class ExhaustivenessTests
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
     /// <summary>
-    /// Tests WhenExpression_NoElse_NonEnumerableType_ReportsError.
+    /// Verifies that validates when expression no else non enumerable type reports error.
     /// </summary>
 
     [Fact]
@@ -367,7 +366,7 @@ public class ExhaustivenessTests
 
     #region Error Message Content
     /// <summary>
-    /// Tests WhenExpression_Choice_MissingCase_ErrorIncludesMissingCaseName.
+    /// Verifies that validates when expression choice missing case error includes missing case name.
     /// </summary>
 
     [Fact]
@@ -391,7 +390,7 @@ public class ExhaustivenessTests
                          && e.Message.Contains("PENDING"));
     }
     /// <summary>
-    /// Tests WhenExpression_Bool_MissingCase_ErrorIncludesMissingValue.
+    /// Verifies that validates when expression bool missing case error includes missing value.
     /// </summary>
 
     [Fact]
@@ -410,7 +409,7 @@ public class ExhaustivenessTests
                          && e.Message.Contains("false"));
     }
     /// <summary>
-    /// Tests WhenStatement_Choice_MissingCases_WarningIncludesMissingNames.
+    /// Verifies that validates when statement choice missing cases warning includes missing names.
     /// </summary>
 
     [Fact]
@@ -439,9 +438,9 @@ public class ExhaustivenessTests
 
     #endregion
 
-    #region Choice ??Unified 'is' Pattern (Phase 12)
+    #region Choice - Unified 'is' Pattern (Phase 12)
     /// <summary>
-    /// Tests WhenExpression_Choice_IsPattern_AllCases_NoError.
+    /// Verifies that validates when expression choice is a pattern all cases no error.
     /// </summary>
 
     [Fact]
@@ -467,7 +466,7 @@ public class ExhaustivenessTests
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
     /// <summary>
-    /// Tests WhenExpression_Choice_IsPattern_QualifiedName_NoError.
+    /// Verifies that validates when the expression choice is pattern-qualified name no error.
     /// </summary>
 
     [Fact]
@@ -493,7 +492,7 @@ public class ExhaustivenessTests
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
     /// <summary>
-    /// Tests WhenExpression_Choice_IsPattern_MissingCase_ReportsError.
+    /// Verifies that validates when expression choice is pattern missing case reports error.
     /// </summary>
 
     [Fact]
@@ -518,7 +517,7 @@ public class ExhaustivenessTests
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
     /// <summary>
-    /// Tests WhenExpression_Choice_IsPattern_WithElse_NoError.
+    /// Verifies that validates when the expression choice is a pattern with else no error.
     /// </summary>
 
     [Fact]
@@ -542,7 +541,7 @@ public class ExhaustivenessTests
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
     /// <summary>
-    /// Tests WhenStatement_Choice_IsPattern_MissingCase_ReportsWarning.
+    /// Verifies that validates when the statement choice is pattern missing case reports warning.
     /// </summary>
 
     [Fact]
@@ -566,7 +565,7 @@ public class ExhaustivenessTests
             filter: w => w.Code == SemanticWarningCode.NonExhaustiveWhen);
     }
     /// <summary>
-    /// Tests WhenExpression_Choice_MixedIsAndEquals_ReportsError.
+    /// Verifies that validates when expression choice mixed is and equals reports error.
     /// </summary>
 
     [Fact]
@@ -592,7 +591,7 @@ public class ExhaustivenessTests
             filter: e => e.Code == SemanticDiagnosticCode.PatternTypeMismatch);
     }
     /// <summary>
-    /// Tests WhenExpression_Choice_IsPattern_InvalidCase_ReportsError.
+    /// Verifies that validates when expression choice is pattern invalid case reports error.
     /// </summary>
 
     [Fact]
@@ -618,7 +617,7 @@ public class ExhaustivenessTests
             filter: e => e.Code == SemanticDiagnosticCode.ChoiceCaseNotFound);
     }
     /// <summary>
-    /// Tests WhenExpression_Choice_IsPattern_VariableBinding_ReportsError.
+    /// Verifies that validates when expression choice is pattern variable binding reports error.
     /// </summary>
 
     [Fact]

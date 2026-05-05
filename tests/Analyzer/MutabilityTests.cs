@@ -1,20 +1,18 @@
-using SemanticVerification.Results;
 using Compiler.Diagnostics;
-using Xunit;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for mutability analysis in the semantic analyzer:
-/// var mutability, mutation of immutable variables, readonly/writable methods.
+/// Contains tests for mutability.
 /// </summary>
 public class MutabilityTests
 {
-    #region Let Immutability
+    #region Var Mutability
     /// <summary>
-    /// Tests Analyze_VarReassignment_NoImmutableError.
+    /// Verifies semantic analysis behavior for var reassignment without immutability errors.
     /// </summary>
 
     [Fact]
@@ -37,7 +35,7 @@ public class MutabilityTests
                     comparisonType: StringComparison.OrdinalIgnoreCase));
     }
     /// <summary>
-    /// Tests Analyze_VarCompoundAssignment_NoImmutableError.
+    /// Verifies semantic analysis behavior for var compound assignment without immutability errors.
     /// </summary>
 
     [Fact]
@@ -51,11 +49,12 @@ public class MutabilityTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
         // Should not produce immutable-related errors
     }
     /// <summary>
-    /// Tests Analyze_VarReassignment_NoError.
+    /// Verifies semantic analysis behavior for var reassignment without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -68,31 +67,16 @@ public class MutabilityTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
         // Should be valid
-    }
-    /// <summary>
-    /// Tests Analyze_VarCompoundAssignment_NoError.
-    /// </summary>
-
-    [Fact]
-    public void Analyze_VarCompoundAssignment_NoError()
-    {
-        string source = """
-                        routine test()
-                          var x = 42
-                          x += 10
-                          return
-                        """;
-
-        Analyze(source: source);
     }
 
     #endregion
 
     #region Entity Field Mutability
     /// <summary>
-    /// Tests Analyze_VarMemberVariableMutation_NoError.
+    /// Verifies semantic analysis behavior for var member variable mutation without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -102,41 +86,40 @@ public class MutabilityTests
                         entity Counter
                           count: S32
 
-                        @writable
                         routine Counter.increment()
                           me.count += 1
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
     /// <summary>
-    /// Tests Analyze_WritableMemberVariableMutation_NoError.
+    /// Verifies semantic analysis behavior for writable member variable mutation without unexpected diagnostics.
     /// </summary>
 
     [Fact]
     public void Analyze_WritableMemberVariableMutation_NoError()
     {
-        // Entity fields are mutable via @writable routines
         string source = """
                         entity User
                           id: U64
                           name: Text
 
-                        @writable
                         routine User.set_id(new_id: U64)
                           me.id = new_id
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
 
     #endregion
 
     #region Readonly vs Writable Methods
     /// <summary>
-    /// Tests Analyze_ReadonlyMethodMutating_ReportsError.
+    /// Verifies semantic analysis behavior for readonly method mutating and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -156,7 +139,7 @@ public class MutabilityTests
         Assert.True(condition: result.Errors.Count > 0);
     }
     /// <summary>
-    /// Tests Analyze_ReadonlyMethodReading_NoError.
+    /// Verifies semantic analysis behavior for readonly method reading without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -171,10 +154,11 @@ public class MutabilityTests
                           return me.count
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
     /// <summary>
-    /// Tests Analyze_WritableMethodMutating_NoError.
+    /// Verifies semantic analysis behavior for writable method mutating without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -184,20 +168,20 @@ public class MutabilityTests
                         entity Counter
                           count: S32
 
-                        @writable
                         routine Counter.set_count(value: S32)
                           me.count = value
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
 
     #endregion
 
     #region Record Field Mutability
     /// <summary>
-    /// Tests Analyze_RecordMemberVariablesImmutable_NoError.
+    /// Verifies semantic analysis behavior for record member variables immutable without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -214,14 +198,15 @@ public class MutabilityTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
 
     #endregion
 
     #region Parameter Mutability
     /// <summary>
-    /// Tests Analyze_ParameterReassignment_ReportsError.
+    /// Verifies semantic analysis behavior for parameter reassignment and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -239,82 +224,9 @@ public class MutabilityTests
 
     #endregion
 
-    #region Suflae Mutability
-    /// <summary>
-    /// Tests AnalyzeSuflae_VarReassignment_NoImmutableError.
-    /// </summary>
-
-    [Fact]
-    public void AnalyzeSuflae_VarReassignment_NoImmutableError()
-    {
-        // var is mutable, so reassignment should succeed
-        string source = """
-                        routine test()
-                          var x = 42
-                          x = 10
-                        """;
-
-        AnalyzeSuflae(source: source);
-        // Should not produce immutable-related errors
-    }
-    /// <summary>
-    /// Tests AnalyzeSuflae_VarReassignment_NoError.
-    /// </summary>
-
-    [Fact]
-    public void AnalyzeSuflae_VarReassignment_NoError()
-    {
-        string source = """
-                        routine test()
-                          var x = 42
-                          x = 10
-                        """;
-
-        AnalyzeSuflae(source: source);
-    }
-    /// <summary>
-    /// Tests AnalyzeSuflae_ReadonlyMethodMutating_ReportsError.
-    /// </summary>
-
-    [Fact]
-    public void AnalyzeSuflae_ReadonlyMethodMutating_ReportsError()
-    {
-        string source = """
-                        entity Counter
-                          count: Integer
-
-                        @readonly
-                        routine Counter.increment()
-                          me.count += 1
-                        """;
-
-        AnalysisResult result = AnalyzeSuflae(source: source);
-        Assert.True(condition: result.Errors.Count > 0);
-    }
-    /// <summary>
-    /// Tests AnalyzeSuflae_WritableMethodMutating_NoError.
-    /// </summary>
-
-    [Fact]
-    public void AnalyzeSuflae_WritableMethodMutating_NoError()
-    {
-        string source = """
-                        entity Counter
-                          count: Integer
-
-                        @writable
-                        routine Counter.increment()
-                          me.count += 1
-                        """;
-
-        AnalyzeSuflae(source: source);
-    }
-
-    #endregion
-
     #region Index Mutability
     /// <summary>
-    /// Tests Analyze_IndexAssignmentOnVar_NoError.
+    /// Verifies semantic analysis behavior for index assignment on var without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -327,32 +239,15 @@ public class MutabilityTests
                           return
                         """;
 
-        Analyze(source: source);
-    }
-    /// <summary>
-    /// Tests Analyze_IndexAssignmentOnVar_NoImmutableError.
-    /// </summary>
-
-    [Fact]
-    public void Analyze_IndexAssignmentOnVar_NoImmutableError()
-    {
-        // var is mutable, so index assignment should succeed
-        string source = """
-                        routine test()
-                          var items = [1, 2, 3]
-                          items[0] = 42
-                          return
-                        """;
-
-        Analyze(source: source);
-        // Should not produce immutable-related errors
+        AnalysisResult result = Analyze(source: source);
+        Assert.NotNull(@object: result);
     }
 
     #endregion
 
     #region Hijacking Restrictions
     /// <summary>
-    /// Tests Analyze_NestedHijacking_ReportsError.
+    /// Verifies semantic analysis behavior for nested hijacking and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -389,7 +284,7 @@ public class MutabilityTests
 
     #region Entity Bare Assignment Prohibition
     /// <summary>
-    /// Tests Analyze_EntityBareAssignment_ReportsError.
+    /// Verifies semantic analysis behavior for entity bare assignment and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -409,7 +304,7 @@ public class MutabilityTests
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.BareEntityAssignment);
     }
     /// <summary>
-    /// Tests Analyze_EntityConstructorAssignment_NoError.
+    /// Verifies semantic analysis behavior for entity constructor assignment without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -429,7 +324,7 @@ public class MutabilityTests
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.BareEntityAssignment);
     }
     /// <summary>
-    /// Tests Analyze_RecordBareAssignment_NoError.
+    /// Verifies semantic analysis behavior for record bare assignment without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -449,31 +344,12 @@ public class MutabilityTests
         AnalysisResult result = Analyze(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.BareEntityAssignment);
     }
-    /// <summary>
-    /// Tests AnalyzeSuflae_EntityBareAssignment_NoError.
-    /// </summary>
-
-    [Fact]
-    public void AnalyzeSuflae_EntityBareAssignment_NoError()
-    {
-        string source = """
-                        entity Document
-                          title: Text
-
-                        routine test()
-                          var doc1 = Document(title: "My Doc")
-                          var doc2 = doc1
-                        """;
-
-        AnalysisResult result = AnalyzeSuflae(source: source);
-        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.BareEntityAssignment);
-    }
 
     #endregion
 
     #region Readonly Method Call Enforcement
     /// <summary>
-    /// Tests Analyze_ReadonlyMethodCallsWritable_ReportsError.
+    /// Verifies semantic analysis behavior for readonly method calls writable and reports the expected error.
     /// </summary>
 
     [Fact]
@@ -483,7 +359,6 @@ public class MutabilityTests
                         entity Counter
                           count: S32
 
-                        @writable
                         routine Counter.increment()
                           me.count += 1
                           return
@@ -498,7 +373,7 @@ public class MutabilityTests
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ModificationInReadonlyMethod);
     }
     /// <summary>
-    /// Tests Analyze_ReadonlyMethodCallsReadonly_NoError.
+    /// Verifies semantic analysis behavior for readonly method calls readonly without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -521,7 +396,7 @@ public class MutabilityTests
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.ModificationInReadonlyMethod);
     }
     /// <summary>
-    /// Tests Analyze_ReadonlyMethodCallsOnOther_NoError.
+    /// Verifies semantic analysis behavior for readonly method calls on other without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -531,7 +406,6 @@ public class MutabilityTests
                         entity Counter
                           count: S32
 
-                        @writable
                         routine Counter.increment()
                           me.count += 1
                           return
@@ -553,7 +427,7 @@ public class MutabilityTests
 
     #region Posted Member Variable Access
     /// <summary>
-    /// Tests Analyze_PostedMemberVariableWrite_SameModule_NoError.
+    /// Verifies semantic analysis behavior for posted member variable write same module without unexpected diagnostics.
     /// </summary>
 
     [Fact]
@@ -564,7 +438,6 @@ public class MutabilityTests
                         entity Config
                           posted name: Text
 
-                        @writable
                         routine Config.rename(new_name: Text)
                           me.name = new_name
                           return
@@ -574,7 +447,7 @@ public class MutabilityTests
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.PostedMemberAccess);
     }
     /// <summary>
-    /// Tests Analyze_PostedMemberVariableRead_NoError.
+    /// Verifies semantic analysis behavior for posted member variable read without unexpected diagnostics.
     /// </summary>
 
     [Fact]

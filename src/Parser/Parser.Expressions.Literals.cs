@@ -1,7 +1,7 @@
-namespace Compiler.Parser;
-
-using Lexer;
+using Compiler.Lexer;
 using SyntaxTree;
+
+namespace Compiler.Parser;
 
 /// <summary>
 /// Partial class containing literal and inline flow-expression parsing.
@@ -13,7 +13,9 @@ public partial class Parser
         result = null;
 
         // Integer literals (S32/S64/S128 and Integer for arbitrary precision)
-        if (Match(TokenType.Integer,
+        if (Match(TokenType.UndecidedInteger,
+                TokenType.UndecidedDecimal,
+                TokenType.IntegerLiteral,
                 TokenType.S8Literal,
                 TokenType.S16Literal,
                 TokenType.S32Literal,
@@ -25,7 +27,7 @@ public partial class Parser
                 TokenType.U64Literal,
                 TokenType.U128Literal,
                 TokenType.AddressLiteral,
-                TokenType.Decimal,
+                TokenType.DecimalLiteral,
                 TokenType.F16Literal,
                 TokenType.F32Literal,
                 TokenType.F64Literal,
