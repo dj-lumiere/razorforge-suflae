@@ -45,7 +45,8 @@ internal sealed class WrapperForwardingPass
     private static readonly SourceLocation _synthLoc = new(FileName: "", Line: 0, Column: 0, Position: 0);
 
     /// <summary>
-    /// All wrapper types that transparently forward to their inner type.
+    /// All wrapper types recognized by the compiler for layout/dispatch purposes
+    /// (codegen write-through, GMP body selection, auto-wired registration, etc.).
     /// </summary>
     private static readonly HashSet<string> WrapperTypes =
     [
@@ -59,6 +60,37 @@ internal sealed class WrapperForwardingPass
         "Tracked",   // Weak reference handle
         "Hijacked",  // Unmanaged raw pointer handle
         "Owned"      // Exclusive ownership wrapper (unique_ptr equivalent)
+    ];
+
+    /// <summary>
+    /// Wrapper types that transparently forward inner-type methods. Hijacked[T] is the
+    /// raw-pointer escape hatch — callers must explicitly use extract() / reveal() — so
+    /// it is excluded here even though it is a wrapper for layout purposes.
+    /// </summary>
+    private static readonly HashSet<string> ForwardingWrapperTypes =
+    [
+        "Viewed",
+        "Grasped",
+        "Inspected",
+        "Claimed",
+        "Shared",
+        "Marked",
+        "Retained",
+        "Tracked",
+        "Owned"
+    ];
+
+    /// <summary>
+    /// Method names that codegen invokes implicitly on wrappers without going through
+    /// semantic analysis (so the lazy synthesis path in member-access / call dispatch
+    /// will not fire for them). RunEager seeds these for every concrete wrapper instance;
+    /// all other methods are synthesized lazily on first reference.
+    /// </summary>
+    private static readonly HashSet<string> ImplicitlyInvokedMethods =
+    [
+        "retain",
+        "release",
+        "$destroy"
     ];
 
     /// <summary>
@@ -120,12 +152,14 @@ internal sealed class WrapperForwardingPass
             if (innerLookupType is IntrinsicTypeInfo)
                 continue;
 
-            var innerMethods = _registry.GetMethodsForOwner(ownerType: innerLookupType)
-                                        .ToList();
-            foreach (RoutineInfo innerMethod in innerMethods)
+            // Narrow to implicit-call methods only. User-visible calls hit the lazy path
+            // (TrySynthesizeWrapperForwarder in member-access / call dispatch); only methods
+            // codegen invokes without semantic analysis (scope cleanup, RC ops) need eager
+            // seeding. This avoids fanning out a forwarder per (wrapper × every method of T).
+            foreach (RoutineInfo innerMethod in _registry.GetMethodsForOwner(ownerType: innerLookupType))
             {
-                // @innate routines (type_name, module_name, etc.) are folded to literals by
-                // BuilderServiceInliningPass — never forward them onto wrapper types.
+                if (!ImplicitlyInvokedMethods.Contains(item: innerMethod.Name))
+                    continue;
                 if (innerMethod.Annotations.Contains(value: "innate")) continue;
                 TrySynthesize(wrapperType: wrapperType,
                     methodName: innerMethod.Name,
@@ -430,12 +464,14 @@ internal sealed class WrapperForwardingPass
     }
 
     /// <summary>
-    /// Checks if a type is a wrapper type (Viewed, Grasped, Shared, etc.).
+    /// Checks if a type is a forwarding wrapper (Viewed, Grasped, Shared, etc.).
+    /// Hijacked is intentionally excluded — its API is the explicit extract/reveal/inject
+    /// surface, not transparent forwarding of T's methods.
     /// </summary>
     private bool IsWrapperType(TypeSymbol type)
     {
         string baseName = GetBaseTypeName(typeName: type.Name);
-        return WrapperTypes.Contains(value: baseName);
+        return ForwardingWrapperTypes.Contains(value: baseName);
     }
 
     /// <summary>
