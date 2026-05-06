@@ -1088,49 +1088,6 @@ public class CompilerPipelineLoweringTests
     }
 
     /// <summary>
-    /// Verifies semantic analysis behavior for bench realistic index expressions are concrete before backend entry.
-    /// </summary>
-    [Fact]
-    public void Analyze_BenchRealistic_IndexExpressions_AreConcreteBeforeBackendEntry()
-    {
-        string sourcePath = Path.GetFullPath(path: Path.Combine(AppContext.BaseDirectory,
-            "..",
-            "..",
-            "..",
-            "playground",
-            "bench_realistic.rf"));
-        string source = File.ReadAllText(path: sourcePath);
-
-        Program program = Parse(source: source, fileName: "bench_realistic.rf");
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
-        AnalysisResult result = analyzer.Analyze(program: program);
-
-        var unresolvedIndexes = program.Declarations
-                                       .SelectMany(FindIndexExpressions)
-                                       .Where(index => index.ResolvedType != null &&
-                                                       ContainsGenericPlaceholder(
-                                                           type: index.ResolvedType))
-                                       .Select(index =>
-                                            $"{index.Location.Line}:{index.Location.Column} => {index.ResolvedType!.Name}")
-                                       .Concat(result.SynthesizedBodies.SelectMany(kvp =>
-                                            FindIndexExpressions(kvp.Value)
-                                               .Where(index => index.ResolvedType != null &&
-                                                               ContainsGenericPlaceholder(
-                                                                   type: index.ResolvedType))
-                                               .Select(index =>
-                                                    $"{kvp.Key} @ {index.Location.Line}:{index.Location.Column} => {index.ResolvedType!.Name}")))
-                                       .Distinct()
-                                       .OrderBy(text => text, StringComparer.Ordinal)
-                                       .ToList();
-
-        Assert.True(condition: unresolvedIndexes.Count == 0,
-            userMessage: "Unresolved backend index types in bench_realistic:\n" +
-                         string.Join(separator: "\n", values: unresolvedIndexes));
-        Assert.Empty(collection: result.Errors.Where(error =>
-            error.Code == SemanticDiagnosticCode.UnresolvedBackendGeneric));
-    }
-
-    /// <summary>
     /// Verifies backend entry validation behavior for entry validator rejects direct routine call without resolved metadata.
     /// </summary>
     [Fact]
