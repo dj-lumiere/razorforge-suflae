@@ -252,7 +252,7 @@ public class GenericResolutionTests
 
         Program program = Parse(source: source);
         var analyzer = new SemanticVerifier(
-            language: Language.RazorForge);
+            language: Language.RazorForge) { SaOnly = true };
         AnalysisResult result = analyzer.Analyze(program: program);
         Assert.Empty(collection: result.Errors);
 
@@ -294,7 +294,7 @@ public class GenericResolutionTests
 
         Program program = Parse(source: source);
         var analyzer = new SemanticVerifier(
-            language: Language.RazorForge);
+            language: Language.RazorForge) { SaOnly = true };
         AnalysisResult result = analyzer.Analyze(program: program);
         Assert.Empty(collection: result.Errors);
 
@@ -330,8 +330,8 @@ public class GenericResolutionTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(
-            language: Language.RazorForge);
+        // Needs full pipeline: GenericCallLoweringPass (Phase 4) lowers GenericMethodCallExpression → CallExpression
+        var analyzer = new SemanticVerifier(language: Language.RazorForge);
         AnalysisResult result = analyzer.Analyze(program: program);
         Assert.Empty(collection: result.Errors);
 

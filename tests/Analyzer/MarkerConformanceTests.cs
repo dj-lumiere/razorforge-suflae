@@ -22,7 +22,7 @@ public class MarkerConformanceTests
                           y: S32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
 
         TypeInfo? pointType = result.Registry.LookupType(name: "Point");
@@ -48,7 +48,7 @@ public class MarkerConformanceTests
                           y: S32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
 
         var record = (RecordTypeInfo)result.Registry.LookupType(name: "Point")!;
@@ -73,7 +73,7 @@ public class MarkerConformanceTests
                           label: Text
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
 
         TypeInfo? widgetType = result.Registry.LookupType(name: "Widget");
@@ -98,7 +98,7 @@ public class MarkerConformanceTests
                           BLUE
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
 
         TypeInfo? colorType = result.Registry.LookupType(name: "Color");
@@ -125,7 +125,7 @@ public class MarkerConformanceTests
                           EXECUTE
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
 
         TypeInfo? permType = result.Registry.LookupType(name: "Permission");
@@ -161,7 +161,7 @@ public class MarkerConformanceTests
                           return me.x == you.x and me.y == you.y
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -185,7 +185,7 @@ public class MarkerConformanceTests
                           return me.name == you.name
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0,
             userMessage: "Expected error for overriding @innate routine");
         Assert.Contains(collection: result.Errors,

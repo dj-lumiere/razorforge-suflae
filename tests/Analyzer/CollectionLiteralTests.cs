@@ -269,7 +269,7 @@ public class CollectionLiteralTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.RazorForge) { SaOnly = true };
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);
@@ -302,7 +302,7 @@ public class CollectionLiteralTests
                         """;
 
         Program program = Parse(source: source);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.RazorForge) { SaOnly = true };
         AnalysisResult result = analyzer.Analyze(program: program);
 
         Assert.Empty(collection: result.Errors);

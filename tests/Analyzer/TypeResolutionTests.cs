@@ -27,7 +27,7 @@ public class TypeResolutionTests
                           y: F32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         TypeInfo? type = result.Registry.GetType(name: "Point");
 
         Assert.NotNull(@object: type);
@@ -45,7 +45,7 @@ public class TypeResolutionTests
                           name: Text
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         TypeInfo? type = result.Registry.GetType(name: "User");
 
         Assert.NotNull(@object: type);
@@ -66,7 +66,7 @@ public class TypeResolutionTests
                           WEST
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         TypeInfo? type = result.Registry.GetType(name: "Direction");
 
         Assert.NotNull(@object: type);
@@ -86,7 +86,7 @@ public class TypeResolutionTests
                           Text
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         TypeInfo? type = result.Registry.GetType(name: "MyVariant");
 
         Assert.NotNull(@object: type);
@@ -105,7 +105,7 @@ public class TypeResolutionTests
                           routine Me.display() -> Text
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         TypeInfo? type = result.Registry.GetType(name: "Displayable");
 
         Assert.NotNull(@object: type);
@@ -127,7 +127,7 @@ public class TypeResolutionTests
                           value: T
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         TypeInfo? type = result.Registry.GetType(name: "Container");
 
         Assert.NotNull(@object: type);
@@ -146,7 +146,7 @@ public class TypeResolutionTests
                           value: V
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         TypeInfo? type = result.Registry.GetType(name: "Pair");
 
         Assert.NotNull(@object: type);
@@ -168,7 +168,7 @@ public class TypeResolutionTests
                           return name
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         RoutineInfo? routine = result.Registry.GetRoutine(name: "greet");
 
         Assert.NotNull(@object: routine);
@@ -191,7 +191,7 @@ public class TypeResolutionTests
                           return 0.0_f32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         RoutineInfo? routine = result.Registry.GetRoutine(name: "Point.distance");
 
         Assert.NotNull(@object: routine);
@@ -209,7 +209,7 @@ public class TypeResolutionTests
                           return 42
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         RoutineInfo? routine = result.Registry.GetRoutine(name: "get_value");
 
         Assert.NotNull(@object: routine);
@@ -233,7 +233,7 @@ public class TypeResolutionTests
                           b: U8
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         TypeInfo? type = result.Registry.GetType(name: "Color");
 
         Assert.NotNull(@object: type);
@@ -252,7 +252,7 @@ public class TypeResolutionTests
                           page_count: U32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         TypeInfo? type = result.Registry.GetType(name: "Document");
 
         Assert.NotNull(@object: type);
@@ -273,7 +273,7 @@ public class TypeResolutionTests
                           value: UnknownType
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Message.Contains(value: "UnknownType",
@@ -294,7 +294,7 @@ public class TypeResolutionTests
                           y: F32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
     /// <summary>
@@ -310,7 +310,7 @@ public class TypeResolutionTests
                           x: F32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
     /// <summary>
@@ -326,7 +326,7 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Message.Contains(value: "reserved",
@@ -345,7 +345,7 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
     /// <summary>
@@ -361,7 +361,7 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
 
@@ -385,7 +385,7 @@ public class TypeResolutionTests
                           value: T
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
         // Should have no constraint-related errors
     }
@@ -402,7 +402,7 @@ public class TypeResolutionTests
                           value: T
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
         Assert.Contains(collection: result.Errors,
             filter: e =>
@@ -434,7 +434,7 @@ public class TypeResolutionTests
                           return "point"
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
         // Should validate protocol implementation
     }
@@ -454,7 +454,7 @@ public class TypeResolutionTests
                           return 0
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -469,7 +469,7 @@ public class TypeResolutionTests
                           return 42
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -484,7 +484,7 @@ public class TypeResolutionTests
                           return 123456789
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -503,7 +503,7 @@ public class TypeResolutionTests
                           return 0
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -520,7 +520,7 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -536,7 +536,7 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -553,7 +553,7 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.IntegerLiteralOverflow);
     }
     /// <summary>
@@ -570,7 +570,7 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.IntegerLiteralOverflow);
     }
 
@@ -593,7 +593,7 @@ public class TypeResolutionTests
                           current: Shape
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantMemberVariableNotAllowed);
     }
     /// <summary>
@@ -613,7 +613,7 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantParameterNotAllowed);
     }
     /// <summary>
@@ -633,7 +633,7 @@ public class TypeResolutionTests
                           return 0.0
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantMethodNotAllowed);
     }
     /// <summary>
@@ -653,7 +653,7 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantMemberVariableNotAllowed);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantParameterNotAllowed);
     }
@@ -674,7 +674,7 @@ public class TypeResolutionTests
                           return false
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantMethodNotAllowed);
     }
     /// <summary>
@@ -699,7 +699,7 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantCopyNotAllowed);
     }
     /// <summary>
@@ -724,7 +724,7 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantReassignmentNotAllowed);
     }
     /// <summary>
@@ -748,7 +748,7 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantCopyNotAllowed);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantReassignmentNotAllowed);
     }
@@ -773,7 +773,7 @@ public class TypeResolutionTests
                           return OK
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
     /// <summary>
@@ -794,7 +794,7 @@ public class TypeResolutionTests
                           return false
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
     /// <summary>
@@ -811,7 +811,7 @@ public class TypeResolutionTests
                           INTERNAL_ERROR: 500
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ChoiceMixedValues);
     }
     /// <summary>
@@ -828,7 +828,7 @@ public class TypeResolutionTests
                           INTERNAL_ERROR: 500
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.ChoiceMixedValues);
     }
     /// <summary>
@@ -845,7 +845,7 @@ public class TypeResolutionTests
                           BLUE
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.ChoiceMixedValues);
     }
 
@@ -865,7 +865,7 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
     }
     /// <summary>
@@ -880,7 +880,7 @@ public class TypeResolutionTests
                           return 42
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
     }
     /// <summary>
@@ -895,7 +895,7 @@ public class TypeResolutionTests
                           return 42
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
     }
     /// <summary>
@@ -910,7 +910,7 @@ public class TypeResolutionTests
                           return 42
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
     }
     /// <summary>
@@ -931,7 +931,7 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
     }
 
@@ -955,7 +955,7 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         // Should not have InvalidConstGenericType error
         Assert.DoesNotContain(result.Errors,
             e => e.Code == SemanticDiagnosticCode.InvalidConstGenericType);
@@ -977,7 +977,7 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors,
             e => e.Code == SemanticDiagnosticCode.InvalidConstGenericType);
     }
@@ -1004,7 +1004,7 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors,
             e => e.Code == SemanticDiagnosticCode.InvalidConstGenericType);
     }
@@ -1028,7 +1028,7 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors,
             e => e.Code == SemanticDiagnosticCode.InvalidConstGenericType);
     }
@@ -1049,7 +1049,7 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors,
             e => e.Code == SemanticDiagnosticCode.ConstGenericTypeMismatch);
     }
@@ -1072,7 +1072,7 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors,
             e => e.Code == SemanticDiagnosticCode.UnknownType ||
                  e.Code == SemanticDiagnosticCode.ConstGenericTypeMismatch ||
@@ -1098,7 +1098,7 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors,
             e => e.Code == SemanticDiagnosticCode.UnknownType ||
                  e.Code == SemanticDiagnosticCode.ConstGenericTypeMismatch ||
@@ -1132,7 +1132,7 @@ public class TypeResolutionTests
                           return a == b
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors,
             e => e.Code == SemanticDiagnosticCode.MemberNotFound);
     }
@@ -1157,7 +1157,7 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors,
             e => e.Code == SemanticDiagnosticCode.MemberNotFound);
     }
@@ -1181,7 +1181,7 @@ public class TypeResolutionTests
                           return b.size()
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors,
             e => e.Code == SemanticDiagnosticCode.MemberNotFound);
     }

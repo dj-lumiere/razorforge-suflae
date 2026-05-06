@@ -20,7 +20,7 @@ public class BuilderServiceApiTests
     [Fact]
     public void Record_TypeName_Available()
     {
-        AssertAnalyzes("""
+        AssertAnalyzesSa("""
                        import BuilderService
 
                        record Point
@@ -40,7 +40,7 @@ public class BuilderServiceApiTests
     [Fact]
     public void Record_TypeKind_Available()
     {
-        AssertAnalyzes("""
+        AssertAnalyzesSa("""
                        import BuilderService
 
                        record Point
@@ -60,7 +60,7 @@ public class BuilderServiceApiTests
     [Fact]
     public void Record_TypeId_Available()
     {
-        AssertAnalyzes("""
+        AssertAnalyzesSa("""
                        import BuilderService
 
                        record Point
@@ -80,7 +80,7 @@ public class BuilderServiceApiTests
     [Fact]
     public void Record_ModuleName_Available()
     {
-        AssertAnalyzes("""
+        AssertAnalyzesSa("""
                        import BuilderService
 
                        record Point
@@ -100,7 +100,7 @@ public class BuilderServiceApiTests
     [Fact]
     public void Record_IsGeneric_Available()
     {
-        AssertAnalyzes("""
+        AssertAnalyzesSa("""
                        import BuilderService
 
                        record Point
@@ -120,7 +120,7 @@ public class BuilderServiceApiTests
     [Fact]
     public void Record_DataSize_Available()
     {
-        AssertAnalyzes("""
+        AssertAnalyzesSa("""
                        import BuilderService
 
                        record Point
@@ -140,7 +140,7 @@ public class BuilderServiceApiTests
     [Fact]
     public void Record_MemberVariableCount_Available()
     {
-        AssertAnalyzes("""
+        AssertAnalyzesSa("""
                        import BuilderService
 
                        record Point
@@ -160,7 +160,7 @@ public class BuilderServiceApiTests
     [Fact]
     public void Record_GenericArgs_Available()
     {
-        AssertAnalyzes("""
+        AssertAnalyzesSa("""
                        import BuilderService
 
                        record Point
@@ -180,7 +180,7 @@ public class BuilderServiceApiTests
     [Fact]
     public void Record_Protocols_Available()
     {
-        AssertAnalyzes("""
+        AssertAnalyzesSa("""
                        import BuilderService
 
                        record Point
@@ -200,7 +200,7 @@ public class BuilderServiceApiTests
     [Fact]
     public void Record_RoutineNames_Available()
     {
-        AssertAnalyzes("""
+        AssertAnalyzesSa("""
                        import BuilderService
 
                        record Point
@@ -220,7 +220,7 @@ public class BuilderServiceApiTests
     [Fact]
     public void Record_Annotations_Available()
     {
-        AssertAnalyzes("""
+        AssertAnalyzesSa("""
                        import BuilderService
 
                        record Point
@@ -240,7 +240,7 @@ public class BuilderServiceApiTests
     [Fact]
     public void Record_Dependencies_Available()
     {
-        AssertAnalyzes("""
+        AssertAnalyzesSa("""
                        import BuilderService
 
                        record Point
@@ -260,7 +260,7 @@ public class BuilderServiceApiTests
     [Fact]
     public void Record_OriginModule_Available()
     {
-        AssertAnalyzes("""
+        AssertAnalyzesSa("""
                        import BuilderService
 
                        record Point
@@ -284,7 +284,7 @@ public class BuilderServiceApiTests
     [Fact]
     public void Entity_TypeName_Available()
     {
-        AssertAnalyzes("""
+        AssertAnalyzesSa("""
                        import BuilderService
 
                        entity Counter
@@ -303,7 +303,7 @@ public class BuilderServiceApiTests
     [Fact]
     public void Entity_TypeKind_Available()
     {
-        AssertAnalyzes("""
+        AssertAnalyzesSa("""
                        import BuilderService
 
                        entity Counter
@@ -322,7 +322,7 @@ public class BuilderServiceApiTests
     [Fact]
     public void Entity_MemberVariableCount_Available()
     {
-        AssertAnalyzes("""
+        AssertAnalyzesSa("""
                        import BuilderService
 
                        entity Counter
@@ -345,7 +345,7 @@ public class BuilderServiceApiTests
     [Fact]
     public void Choice_TypeName_Available()
     {
-        AssertAnalyzes("""
+        AssertAnalyzesSa("""
                        import BuilderService
 
                        choice Color
@@ -366,7 +366,7 @@ public class BuilderServiceApiTests
     [Fact]
     public void Choice_TypeKind_Available()
     {
-        AssertAnalyzes("""
+        AssertAnalyzesSa("""
                        import BuilderService
 
                        choice Color
@@ -625,7 +625,7 @@ public class BuilderServiceApiTests
     [Fact]
     public void AllPerTypeRoutines_OnRecord_Available()
     {
-        AssertAnalyzes("""
+        AssertAnalyzesSa("""
                        import BuilderService
 
                        record Pair
@@ -657,7 +657,7 @@ public class BuilderServiceApiTests
     [Fact]
     public void AllStandaloneRoutines_Available()
     {
-        AssertAnalyzes("""
+        AssertAnalyzesSa("""
                        import BuilderService
 
                        routine test()
@@ -688,7 +688,7 @@ public class BuilderServiceApiTests
     [Fact]
     public void MixedPerTypeAndStandalone_Available()
     {
-        AssertAnalyzes("""
+        AssertAnalyzesSa("""
                        import BuilderService
 
                        record Pair
@@ -717,7 +717,7 @@ public class BuilderServiceApiTests
     [Fact]
     public void Entity_AllMetadata_Available()
     {
-        AssertAnalyzes("""
+        AssertAnalyzesSa("""
                        import BuilderService
 
                        entity Node
@@ -743,7 +743,7 @@ public class BuilderServiceApiTests
     [Fact]
     public void Choice_AllMetadata_Available()
     {
-        AssertAnalyzes("""
+        AssertAnalyzesSa("""
                        import BuilderService
 
                        choice Direction

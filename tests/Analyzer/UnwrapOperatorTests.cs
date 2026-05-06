@@ -29,7 +29,7 @@ public class UnwrapOperatorTests
                           return 42
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         RoutineInfo? tryVariant = result.Registry.GetRoutine(name: "try_get");
         Assert.NotNull(@object: tryVariant);
         Assert.IsType<RecordTypeInfo>(@object: tryVariant.ReturnType);
@@ -54,7 +54,7 @@ public class UnwrapOperatorTests
                           return x
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         // get!() returns S64 in failable context ??!! on S64 is invalid
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
@@ -78,7 +78,7 @@ public class UnwrapOperatorTests
                           return x
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
@@ -99,7 +99,7 @@ public class UnwrapOperatorTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
@@ -116,7 +116,7 @@ public class UnwrapOperatorTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
@@ -137,7 +137,7 @@ public class UnwrapOperatorTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
@@ -157,7 +157,7 @@ public class UnwrapOperatorTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
@@ -174,7 +174,7 @@ public class UnwrapOperatorTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
@@ -195,7 +195,7 @@ public class UnwrapOperatorTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
@@ -212,7 +212,7 @@ public class UnwrapOperatorTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
@@ -234,7 +234,7 @@ public class UnwrapOperatorTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
@@ -261,7 +261,7 @@ public class UnwrapOperatorTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
@@ -284,7 +284,7 @@ public class UnwrapOperatorTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
@@ -311,7 +311,7 @@ public class UnwrapOperatorTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
@@ -334,7 +334,7 @@ public class UnwrapOperatorTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
@@ -360,7 +360,7 @@ public class UnwrapOperatorTests
                           return me.value
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UnknownWiredRoutine);
     }
@@ -379,7 +379,7 @@ public class UnwrapOperatorTests
                           return me.value
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UnknownWiredRoutine);
     }
@@ -403,7 +403,7 @@ public class UnwrapOperatorTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
@@ -423,7 +423,7 @@ public class UnwrapOperatorTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
@@ -448,7 +448,7 @@ public class UnwrapOperatorTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }
@@ -472,7 +472,7 @@ public class UnwrapOperatorTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
@@ -493,7 +493,7 @@ public class UnwrapOperatorTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TypeDoesNotSupportOperator);
     }

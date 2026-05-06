@@ -17,6 +17,17 @@ using TypeInfo = TypeInfo;
 /// </summary>
 public static class TestHelpers
 {
+    #region Stdlib Snapshots
+
+    // Captured once per process; each AnalyzeSa call restores in microseconds instead of ~0.5 s.
+    private static readonly Lazy<TypeRegistry.StdlibSnapshot> _rfSnapshot =
+        new(valueFactory: () => SemanticVerifier.CaptureStdlibSnapshot(language: Language.RazorForge));
+
+    private static readonly Lazy<TypeRegistry.StdlibSnapshot> _suflaeSnapshot =
+        new(valueFactory: () => SemanticVerifier.CaptureStdlibSnapshot(language: Language.Suflae));
+
+    #endregion
+
     #region RazorForge Helpers
 
     /// <summary>
@@ -157,11 +168,14 @@ public static class TestHelpers
     /// <summary>
     /// Parses and analyzes RazorForge source, stopping after Phase 5 (SA only).
     /// Skips monomorphization and lowering — use for tests that only check errors or type annotations.
+    /// Uses a pre-analyzed stdlib snapshot so stdlib loading runs once per process, not per test.
     /// </summary>
     public static AnalysisResult AnalyzeSa(string source, [CallerMemberName] string? fileName = null)
     {
         Program program = Parse(source: source, fileName: fileName);
-        var analyzer = new SemanticVerifier(language: Language.RazorForge) { SaOnly = true };
+        var analyzer = new SemanticVerifier(
+            language: Language.RazorForge,
+            snapshot: _rfSnapshot.Value) { SaOnly = true };
         return analyzer.Analyze(program: program);
     }
 
@@ -260,11 +274,14 @@ public static class TestHelpers
 
     /// <summary>
     /// Parses and analyzes Suflae source, stopping after Phase 5 (SA only).
+    /// Uses a pre-analyzed stdlib snapshot so stdlib loading runs once per process, not per test.
     /// </summary>
     public static AnalysisResult AnalyzeSaSuflae(string source, [CallerMemberName] string? fileName = null)
     {
         Program program = ParseSuflae(source: source, fileName: fileName);
-        var analyzer = new SemanticVerifier(language: Language.Suflae) { SaOnly = true };
+        var analyzer = new SemanticVerifier(
+            language: Language.Suflae,
+            snapshot: _suflaeSnapshot.Value) { SaOnly = true };
         return analyzer.Analyze(program: program);
     }
 

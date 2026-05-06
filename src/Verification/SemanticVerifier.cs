@@ -186,6 +186,15 @@ public sealed partial class SemanticVerifier
     private readonly RfBuildMode _buildMode;
 
     /// <summary>
+    /// True when this instance was constructed from a pre-analyzed stdlib snapshot.
+    /// Causes Phase 3 to skip <c>PreRegisterStdlibVariants</c> (already registered in snapshot)
+    /// and Phase 5 to skip <c>AnalyzeStdlibBodies</c> (already analyzed in snapshot).
+    /// Only valid with <see cref="SaOnly"/> = true; the full pipeline re-runs stdlib lowering
+    /// so it cannot safely reuse snapshot state.
+    /// </summary>
+    private readonly bool _snapshotMode;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="SemanticVerifier"/> class.
     /// </summary>
     /// <param name="language">The language being analyzed (RazorForge or Suflae).</param>
@@ -202,6 +211,44 @@ public sealed partial class SemanticVerifier
         _conformanceAnalyzer = new ProtocolConformanceAnalyzer(sa: this);
         _target = target ?? TargetConfig.ForCurrentHost();
         _buildMode = buildMode;
+    }
+
+    /// <summary>
+    /// Constructs a <see cref="SemanticVerifier"/> pre-warmed from a stdlib snapshot.
+    /// Stdlib loading, body analysis, and variant pre-registration are all skipped on the
+    /// first <see cref="Analyze"/> call — use with <see cref="SaOnly"/> = true only.
+    /// </summary>
+    public SemanticVerifier(Language language, TypeRegistry.StdlibSnapshot snapshot,
+        TargetConfig? target = null, RfBuildMode buildMode = RfBuildMode.Debug)
+    {
+        _registry = new TypeRegistry(language: language, snapshot: snapshot);
+        _typeResolver = new TypeResolver(sa: this);
+        _typeBodyResolver = new TypeBodyResolver(sa: this, typeResolver: _typeResolver);
+        _signatureResolver = new SignatureResolver(sa: this, typeResolver: _typeResolver);
+        _conformanceAnalyzer = new ProtocolConformanceAnalyzer(sa: this);
+        _target = target ?? TargetConfig.ForCurrentHost();
+        _buildMode = buildMode;
+        _snapshotMode = true;
+    }
+
+    /// <summary>
+    /// Captures a pre-analyzed stdlib snapshot for the given language.
+    /// Runs a full SA initialization (including stdlib body analysis) on a minimal program,
+    /// then returns the registry snapshot for fast-restore in subsequent test instances.
+    /// </summary>
+    public static TypeRegistry.StdlibSnapshot CaptureStdlibSnapshot(Language language)
+    {
+        var sa = new SemanticVerifier(language: language) { SaOnly = true };
+        var tokens = new Compiler.Lexer.Tokenizer(
+            source: "module __snapshot__",
+            fileName: "__snapshot__",
+            language: language).Tokenize();
+        var parser = new Compiler.Parser.Parser(
+            tokens: tokens,
+            language: language,
+            fileName: "__snapshot__");
+        sa.Analyze(program: parser.Parse());
+        return sa._registry.CaptureSnapshot();
     }
 
     /// <summary>
@@ -307,7 +354,8 @@ public sealed partial class SemanticVerifier
         GenerateDerivedOperators();
         ValidateProtocolImplementations();
         PreRegisterUserVariants(program: program);
-        PreRegisterStdlibVariants();
+        // Snapshot mode: stdlib variants are already registered in the restored registry.
+        if (!_snapshotMode) PreRegisterStdlibVariants();
     }
 
     /// <summary>
@@ -321,15 +369,19 @@ public sealed partial class SemanticVerifier
         // M-0: Annotate stdlib expression types so desugaring passes can lower stdlib bodies
         // uniformly (OperatorLoweringPass, ExpressionLoweringPass, etc.).
         // Stdlib errors and warnings are suppressed from user-visible output -> use 'validate-stdlib' to surface them.
-        int errorsBeforeStdlib = _errors.Count;
-        int warningsBeforeStdlib = _warnings.Count;
-        AnalyzeStdlibBodies();
-        if (_errors.Count > errorsBeforeStdlib)
-            _errors.RemoveRange(index: errorsBeforeStdlib,
-                count: _errors.Count - errorsBeforeStdlib);
-        if (_warnings.Count > warningsBeforeStdlib)
-            _warnings.RemoveRange(index: warningsBeforeStdlib,
-                count: _warnings.Count - warningsBeforeStdlib);
+        // Snapshot mode: stdlib bodies were analyzed during snapshot capture — skip the repeat.
+        if (!_snapshotMode)
+        {
+            int errorsBeforeStdlib = _errors.Count;
+            int warningsBeforeStdlib = _warnings.Count;
+            AnalyzeStdlibBodies();
+            if (_errors.Count > errorsBeforeStdlib)
+                _errors.RemoveRange(index: errorsBeforeStdlib,
+                    count: _errors.Count - errorsBeforeStdlib);
+            if (_warnings.Count > warningsBeforeStdlib)
+                _warnings.RemoveRange(index: warningsBeforeStdlib,
+                    count: _warnings.Count - warningsBeforeStdlib);
+        }
         EagerSynthesizeAllWrapperForwarders();
     }
 

@@ -37,7 +37,7 @@ public class ErrorVariantGenerationTests
                           return User(name: "test")
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         // Should generate try_get variant
         RoutineInfo? tryVariant = result.Registry.GetRoutine(name: "try_get");
@@ -76,7 +76,7 @@ public class ErrorVariantGenerationTests
                           return value
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         // Should generate check_validate variant
         RoutineInfo? checkVariant = result.Registry.GetRoutine(name: "check_validate");
@@ -129,7 +129,7 @@ public class ErrorVariantGenerationTests
                           return User(name: "test")
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         // Should generate lookup_get_user variant
         RoutineInfo? lookupVariant = result.Registry.GetRoutine(name: "lookup_get_user");
@@ -160,7 +160,7 @@ public class ErrorVariantGenerationTests
                           return me.data.get(key)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         // Should generate try_get method variant
         RoutineInfo? tryVariant = result.Registry.GetRoutine(name: "Cache.try_get");
@@ -182,7 +182,7 @@ public class ErrorVariantGenerationTests
                           return a + b
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         // Should NOT generate try_add, check_add, or lookup_add
         Assert.Null(@object: result.Registry.GetRoutine(name: "try_add"));
@@ -202,7 +202,7 @@ public class ErrorVariantGenerationTests
                           return 42
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         // Should warn that failable routine never fails
         Assert.True(condition: result.Warnings.Count > 0 || result.Errors.Count > 0);
@@ -235,7 +235,7 @@ public class ErrorVariantGenerationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ThrowOutsideFailableFunction);
     }
@@ -252,7 +252,7 @@ public class ErrorVariantGenerationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.AbsentOutsideFailableFunction);
     }
@@ -275,7 +275,7 @@ public class ErrorVariantGenerationTests
                           throw NotAnError(value: 42)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Message.Contains(value: "Crashable",
@@ -309,7 +309,7 @@ public class ErrorVariantGenerationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         // Verify naming: routine_name! -> try_routine_name, check_routine_name
         RoutineInfo? checkVariant = result.Registry.GetRoutine(name: "check_parse_number");
@@ -340,7 +340,7 @@ public class ErrorVariantGenerationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
         Assert.Contains(collection: result.Errors,
             filter: e =>
@@ -367,7 +367,7 @@ public class ErrorVariantGenerationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
         Assert.Contains(collection: result.Errors,
             filter: e =>

@@ -27,7 +27,7 @@ public class ErrorHandlingValidationTests
                           return 0
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ThrowRequiresRecordType);
     }
@@ -46,7 +46,7 @@ public class ErrorHandlingValidationTests
                           return 0
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ThrowRequiresRecordType);
     }
@@ -66,7 +66,7 @@ public class ErrorHandlingValidationTests
                           return 42
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrowOrAbsent);
     }
@@ -85,7 +85,7 @@ public class ErrorHandlingValidationTests
                           return 42
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrowOrAbsent);
     }
@@ -102,7 +102,7 @@ public class ErrorHandlingValidationTests
                           return 0
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrowOrAbsent);
     }
@@ -123,7 +123,7 @@ public class ErrorHandlingValidationTests
                           return 42
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.CrashOnlyOnNonFailable);
     }
@@ -143,7 +143,7 @@ public class ErrorHandlingValidationTests
                           return 42
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.CrashOnlyOnNonFailable);
     }
@@ -163,7 +163,7 @@ public class ErrorHandlingValidationTests
                           return 42
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         // Should NOT generate try_, check_, or lookup_ variants
         Assert.Null(@object: result.Registry.GetRoutine(name: "try_crash_routine"));
@@ -185,7 +185,7 @@ public class ErrorHandlingValidationTests
                           return 42
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         // Without @crash_only, variants SHOULD be generated
         RoutineInfo? tryVariant = result.Registry.GetRoutine(name: "try_normal_routine");
@@ -213,7 +213,7 @@ public class ErrorHandlingValidationTests
                           return 0
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Warnings,
             filter: w => w.Code == SemanticWarningCode.UnhandledCrashableCall);
     }
@@ -235,7 +235,7 @@ public class ErrorHandlingValidationTests
                           return 0
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Warnings,
             filter: w => w.Code == SemanticWarningCode.UnhandledCrashableCall);
     }
@@ -267,7 +267,7 @@ public class ErrorHandlingValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.LookupNotDismantled);
     }
@@ -298,7 +298,7 @@ public class ErrorHandlingValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeStoredInVariable);
     }

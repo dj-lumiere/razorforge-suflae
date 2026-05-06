@@ -16,7 +16,7 @@ public class TextBytesInteropTests
     [Fact]
     public void CharacterLiteral_AssignsToCharacter()
     {
-        AnalysisResult result = Analyze("""
+        AnalysisResult result = AnalyzeSa("""
                                         routine test()
                                           var ch: Character = 'A'
                                           return
@@ -31,7 +31,7 @@ public class TextBytesInteropTests
     [Fact]
     public void TextIndexing_AssignsToCharacter()
     {
-        AnalysisResult result = Analyze("""
+        AnalysisResult result = AnalyzeSa("""
                                         routine test()
                                           var ch: Character = "Hello"[0]
                                           return
@@ -46,14 +46,14 @@ public class TextBytesInteropTests
     [Fact]
     public void CharacterUsesIsAlphabetic_NotIsLetter()
     {
-        AnalysisResult valid = Analyze("""
+        AnalysisResult valid = AnalyzeSa("""
                                        routine test(ch: Character)
                                          var ok: Bool = ch.is_alphabetic()
                                          return
                                        """);
         Assert.Empty(valid.Errors);
 
-        AnalysisResult invalid = Analyze("""
+        AnalysisResult invalid = AnalyzeSa("""
                                          routine test(ch: Character)
                                            var bad: Bool = ch.is_letter()
                                            return
@@ -68,7 +68,7 @@ public class TextBytesInteropTests
     [Fact]
     public void TextEncodeAndBytesDecodeUtf8_Analyze()
     {
-        AnalysisResult result = Analyze("""
+        AnalysisResult result = AnalyzeSa("""
                                         routine test()
                                           var text: Text = "Hello, 계"
                                           var bytes: Bytes = text.encode_as_utf8()
@@ -85,7 +85,7 @@ public class TextBytesInteropTests
     [Fact]
     public void BytesInterpretAsUtf8_ProducesCharacters()
     {
-        AnalysisResult result = Analyze("""
+        AnalysisResult result = AnalyzeSa("""
                                         routine test()
                                           var bytes: Bytes = "Hi".encode_as_utf8()
                                           for ch in bytes.interpret_as_utf8()
@@ -102,7 +102,7 @@ public class TextBytesInteropTests
     [Fact]
     public void BytesLossyUtf8Apis_Analyze()
     {
-        AnalysisResult result = Analyze("""
+        AnalysisResult result = AnalyzeSa("""
                                         routine test()
                                           var bytes: Bytes = b"\x80ABC"
                                           var text: Text = bytes.decode_as_utf8_lossy()
@@ -120,7 +120,7 @@ public class TextBytesInteropTests
     [Fact]
     public void BytesStrictUtf8Apis_AnalyzeInsideFailableRoutine()
     {
-        AnalysisResult result = Analyze("""
+        AnalysisResult result = AnalyzeSa("""
                                         routine test!()
                                           var bytes: Bytes = b"ABC"
                                           var text: Text = bytes.decode_as_utf8!()
