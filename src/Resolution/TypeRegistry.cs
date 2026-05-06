@@ -49,6 +49,13 @@ public sealed partial class TypeRegistry
     private Queue<TypeInfo>? _gmpDiscoveryQueue;
 
     /// <summary>
+    /// Set to true while <c>AnalyzeStdlibBodies</c> runs.
+    /// New resolutions created in this window are marked <see cref="TypeInfo.IsStdlibLazy"/>
+    /// and excluded from GMP until user code references them.
+    /// </summary>
+    private bool _stdlibAnalysisActive;
+
+    /// <summary>
     /// Set of type FullNames determined to be live by <see cref="TypeLivenessPass"/>.
     /// Null until the pass runs, in which case all types are treated as live (pass-through).
     /// </summary>
@@ -72,6 +79,31 @@ public sealed partial class TypeRegistry
         var result = _gmpDiscoveryQueue.ToArray();
         _gmpDiscoveryQueue.Clear();
         return result;
+    }
+
+    /// <summary>Called at the start of <c>AnalyzeStdlibBodies</c>. New resolutions created
+    /// inside this window are marked <see cref="TypeInfo.IsStdlibLazy"/> and excluded from
+    /// GMP iteration until user code references them.</summary>
+    public void BeginStdlibAnalysis() => _stdlibAnalysisActive = true;
+
+    /// <summary>Called at the end of <c>AnalyzeStdlibBodies</c>. Resumes normal eager resolution.</summary>
+    public void EndStdlibAnalysis() => _stdlibAnalysisActive = false;
+
+    /// <summary>
+    /// Clears <see cref="TypeInfo.IsStdlibLazy"/> on <paramref name="type"/> and enqueues it
+    /// to the GMP discovery queue if applicable. No-op if already materialized.
+    /// </summary>
+    private void MaterializeIfLazy(TypeInfo type)
+    {
+        if (!type.IsStdlibLazy) return;
+        type.IsStdlibLazy = false;
+        if (_gmpDiscoveryQueue == null || type is not (EntityTypeInfo or RecordTypeInfo) || !IsFullyConcrete(type))
+            return;
+        int bracketIdx = type.Name.IndexOf('[');
+        string bareBaseName = bracketIdx >= 0 ? type.Name[..bracketIdx] : type.Name;
+        bool isSelfNesting = type.TypeArguments != null &&
+                             type.TypeArguments.Any(arg => arg.FullName.Contains(bareBaseName));
+        if (!isSelfNesting) _gmpDiscoveryQueue.Enqueue(type);
     }
 
     /// <summary>
@@ -839,6 +871,7 @@ public sealed partial class TypeRegistry
         // Try resolution cache
         if (_resolutions.TryGetValue(key: name, value: out TypeInfo? resolution))
         {
+            if (!_stdlibAnalysisActive) MaterializeIfLazy(resolution);
             return resolution;
         }
 
@@ -915,12 +948,21 @@ public sealed partial class TypeRegistry
             : null;
 
         if (_resolutions.TryGetValue(key: fullKey, value: out TypeInfo? existing))
+        {
+            if (!_stdlibAnalysisActive) MaterializeIfLazy(existing);
             return existing;
+        }
         if (fullKey != shortKey && _resolutions.TryGetValue(key: shortKey, value: out existing))
+        {
+            if (!_stdlibAnalysisActive) MaterializeIfLazy(existing);
             return existing;
+        }
         if (moduleFullKey != null &&
             _resolutions.TryGetValue(key: moduleFullKey, value: out existing))
+        {
+            if (!_stdlibAnalysisActive) MaterializeIfLazy(existing);
             return existing;
+        }
 
         // If an entity-type specialization exists for this generic and the first type argument
         // is an entity type, use that specialization instead of the primary (record-type) definition.
@@ -942,23 +984,34 @@ public sealed partial class TypeRegistry
         if (moduleFullKey != null && moduleFullKey != fullKey)
             _resolutions[key: moduleFullKey] = resolved;
 
-        // Notify GMP's fixed-point loop about newly discovered concrete entity/record types.
-        // Guards:
-        // 1. Fully-concrete: no unresolved GenericParameterTypeInfo args (avoids LookupMethod recursion).
-        // 2. No self-nesting: skip types where a type argument's FullName contains the outer type's
-        //    bare base name — e.g. Hijacked[Hijacked[Owned[Text]]] created by Hijacked[T].offset
-        //    body rewriting would recurse unboundedly (Hijacked^N for all N).
-        //    resolved.Name may already contain type args (e.g. "Hijacked[Owned[Text]]"),
-        //    so strip everything from '[' onwards to get just the bare name "Hijacked".
-        if (_gmpDiscoveryQueue != null && resolved is EntityTypeInfo or RecordTypeInfo &&
-            IsFullyConcrete(resolved))
+        if (_stdlibAnalysisActive)
         {
-            int bracketIdx = resolved.Name.IndexOf('[');
-            string bareBaseName = bracketIdx >= 0 ? resolved.Name[..bracketIdx] : resolved.Name;
-            bool isSelfNesting = resolved.TypeArguments != null &&
-                                 resolved.TypeArguments.Any(arg => arg.FullName.Contains(bareBaseName));
-            if (!isSelfNesting)
-                _gmpDiscoveryQueue.Enqueue(resolved);
+            // Defer: this type was created as a side-effect of stdlib body analysis.
+            // It is excluded from GMP until user code actually references it, at which
+            // point MaterializeIfLazy will enqueue it. This prevents 22K+ phantom bodies
+            // from being monomorphized for types the user program never imports.
+            resolved.IsStdlibLazy = true;
+        }
+        else
+        {
+            // Notify GMP's fixed-point loop about newly discovered concrete entity/record types.
+            // Guards:
+            // 1. Fully-concrete: no unresolved GenericParameterTypeInfo args (avoids LookupMethod recursion).
+            // 2. No self-nesting: skip types where a type argument's FullName contains the outer type's
+            //    bare base name — e.g. Hijacked[Hijacked[Owned[Text]]] created by Hijacked[T].offset
+            //    body rewriting would recurse unboundedly (Hijacked^N for all N).
+            //    resolved.Name may already contain type args (e.g. "Hijacked[Owned[Text]]"),
+            //    so strip everything from '[' onwards to get just the bare name "Hijacked".
+            if (_gmpDiscoveryQueue != null && resolved is EntityTypeInfo or RecordTypeInfo &&
+                IsFullyConcrete(resolved))
+            {
+                int bracketIdx = resolved.Name.IndexOf('[');
+                string bareBaseName = bracketIdx >= 0 ? resolved.Name[..bracketIdx] : resolved.Name;
+                bool isSelfNesting = resolved.TypeArguments != null &&
+                                     resolved.TypeArguments.Any(arg => arg.FullName.Contains(bareBaseName));
+                if (!isSelfNesting)
+                    _gmpDiscoveryQueue.Enqueue(resolved);
+            }
         }
 
         return resolved;
@@ -1110,9 +1163,13 @@ public sealed partial class TypeRegistry
             });
         }
 
-        // Auto-register $eq and $ne (always — element-wise equality)
+        // Auto-register $eq and $ne if every element type has $eq (option a:
+        // structural derivation iff all components support it). Component types whose
+        // owners haven't opted into Equatable simply won't have $eq registered, so the
+        // tuple won't either — keeping derivation in lockstep with the underlying types.
         TypeInfo? boolType = LookupType(name: "Bool");
-        if (boolType != null)
+        if (boolType != null &&
+            elementTypes.All(predicate: et => LookupMethod(type: et, methodName: "$eq") != null))
         {
             var youParam = new ParameterInfo(name: "you", type: newType);
 
@@ -1228,6 +1285,8 @@ public sealed partial class TypeRegistry
         // Check cache
         if (_wrapperResolutions.TryGetValue(key: key, value: out WrapperTypeInfo? wrapperType))
         {
+            if (!_stdlibAnalysisActive && wrapperType.IsStdlibLazy)
+                wrapperType.IsStdlibLazy = false;
             return wrapperType;
         }
 
@@ -1236,6 +1295,9 @@ public sealed partial class TypeRegistry
             innerType: innerType,
             isReadOnly: isReadOnly) { Module = "Core" };
         _wrapperResolutions[key: key] = newType;
+
+        if (_stdlibAnalysisActive)
+            newType.IsStdlibLazy = true;
 
         return newType;
     }
@@ -1290,7 +1352,7 @@ public sealed partial class TypeRegistry
                     .Where(predicate: t =>
                          t is EntityTypeInfo or RecordTypeInfo && !t.IsGenericDefinition &&
                          t.TypeArguments is { Count: > 0 } args && args.All(predicate: IsFullyConcrete) &&
-                         IsConcreteTypeLive(t))
+                         IsConcreteTypeLive(t) && !t.IsStdlibLazy)
                     .Distinct(); // dual-index stores the same TypeInfo under two keys; deduplicate by reference.
 
     /// <summary>
@@ -1303,7 +1365,8 @@ public sealed partial class TypeRegistry
         _resolutions.Values
                     .Where(predicate: t =>
                          t is EntityTypeInfo or RecordTypeInfo && !t.IsGenericDefinition &&
-                         t.TypeArguments is { Count: > 0 } args && args.All(predicate: IsFullyConcrete))
+                         t.TypeArguments is { Count: > 0 } args && args.All(predicate: IsFullyConcrete) &&
+                         !t.IsStdlibLazy)
                     .Distinct();
 
     /// <summary>
@@ -1331,7 +1394,7 @@ public sealed partial class TypeRegistry
         _wrapperResolutions.Values
                            .Where(predicate: t =>
                                 t.TypeArguments is { Count: > 0 } args && args.All(predicate: IsFullyConcrete) &&
-                                IsConcreteTypeLive(t))
+                                IsConcreteTypeLive(t) && !t.IsStdlibLazy)
                            .Distinct();
 
     /// <summary>

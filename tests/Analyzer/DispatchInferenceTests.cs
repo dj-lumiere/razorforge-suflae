@@ -24,7 +24,7 @@ public class DispatchInferenceTests
                           return sum(1, 2, 3)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RuntimeDispatchNotSupported);
     }
@@ -50,7 +50,7 @@ public class DispatchInferenceTests
                           return max_of(a, b)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RuntimeDispatchNotSupported);
     }
@@ -76,7 +76,7 @@ public class DispatchInferenceTests
                           show(a, b)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RuntimeDispatchNotSupported);
     }
@@ -106,7 +106,7 @@ public class DispatchInferenceTests
                           show(a, b)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RuntimeDispatchNotSupported);
     }

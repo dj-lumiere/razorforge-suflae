@@ -40,7 +40,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
@@ -65,7 +65,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
@@ -89,7 +89,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
@@ -113,7 +113,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
@@ -137,7 +137,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.PatternTypeMismatch);
     }
@@ -165,7 +165,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Warnings,
             filter: w => w.Code == SemanticWarningCode.NonExhaustiveWhen);
     }
@@ -189,7 +189,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Warnings,
             filter: w => w.Code == SemanticWarningCode.NonExhaustiveWhen);
     }
@@ -213,7 +213,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Warnings,
             filter: w => w.Code == SemanticWarningCode.NonExhaustiveWhen);
     }
@@ -236,7 +236,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
@@ -254,7 +254,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
@@ -272,7 +272,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
@@ -295,7 +295,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
@@ -318,7 +318,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
@@ -337,7 +337,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
@@ -357,7 +357,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
@@ -384,7 +384,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch
                          && e.Message.Contains("PENDING"));
@@ -403,7 +403,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch
                          && e.Message.Contains("false"));
@@ -427,7 +427,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         SemanticWarning? warning = result.Warnings
             .FirstOrDefault(predicate: w => w.Code == SemanticWarningCode.NonExhaustiveWhen);
         Assert.NotNull(@object: warning);
@@ -461,7 +461,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
@@ -487,7 +487,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
@@ -512,7 +512,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
@@ -536,7 +536,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
@@ -560,7 +560,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Warnings,
             filter: w => w.Code == SemanticWarningCode.NonExhaustiveWhen);
     }
@@ -586,7 +586,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.PatternTypeMismatch);
     }
@@ -612,7 +612,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ChoiceCaseNotFound);
     }
@@ -636,7 +636,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.PatternTypeMismatch);
     }

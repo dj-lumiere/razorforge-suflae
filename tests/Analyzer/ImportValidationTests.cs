@@ -25,7 +25,7 @@ public class ImportValidationTests
                         import Core
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ImportPositionViolation);
     }
@@ -43,7 +43,7 @@ public class ImportValidationTests
                           y: S32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ImportPositionViolation);
     }
@@ -63,7 +63,7 @@ public class ImportValidationTests
                           y: S32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ImportPositionViolation);
     }
@@ -85,7 +85,7 @@ public class ImportValidationTests
                           value: S32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ImportNameCollision);
     }
@@ -103,7 +103,7 @@ public class ImportValidationTests
                           value: S32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ImportNameCollision);
     }

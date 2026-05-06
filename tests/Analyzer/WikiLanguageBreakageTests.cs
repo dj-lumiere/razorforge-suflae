@@ -133,7 +133,7 @@ public class WikiLanguageBreakageTests
                           throw SampleError(message: "boom")
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ThrowOutsideFailableFunction);
@@ -150,7 +150,7 @@ public class WikiLanguageBreakageTests
                           absent
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.AbsentOutsideFailableFunction);
@@ -167,7 +167,7 @@ public class WikiLanguageBreakageTests
                           return 1
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrowOrAbsent);
@@ -185,7 +185,7 @@ public class WikiLanguageBreakageTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.CrashOnlyOnNonFailable);
@@ -206,7 +206,7 @@ public class WikiLanguageBreakageTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.DangerousCallOutsideDangerBlock);
@@ -228,7 +228,7 @@ public class WikiLanguageBreakageTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.DangerousCallOutsideDangerBlock);
@@ -245,7 +245,7 @@ public class WikiLanguageBreakageTests
                           return None
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
@@ -265,7 +265,7 @@ public class WikiLanguageBreakageTests
                            return
                          """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsParameter);
@@ -285,7 +285,7 @@ public class WikiLanguageBreakageTests
                            value: {typeName}
                          """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsMemberVariable);
@@ -305,7 +305,7 @@ public class WikiLanguageBreakageTests
                           node: Node
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
@@ -322,7 +322,7 @@ public class WikiLanguageBreakageTests
                           view: Viewed[S32]
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code is SemanticDiagnosticCode.TokenMemberVariableNotAllowed
@@ -343,7 +343,7 @@ public class WikiLanguageBreakageTests
                           return node.view()
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TokenReturnNotAllowed);
@@ -362,7 +362,7 @@ public class WikiLanguageBreakageTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.LambdaCaptureWithoutGiven);
@@ -383,7 +383,7 @@ public class WikiLanguageBreakageTests
                            return 1
                          """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ReservedRoutinePrefix);
@@ -403,7 +403,7 @@ public class WikiLanguageBreakageTests
                           return me
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UnknownWiredRoutine);
@@ -420,7 +420,7 @@ public class WikiLanguageBreakageTests
                           break
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BreakOutsideLoop);
@@ -437,7 +437,7 @@ public class WikiLanguageBreakageTests
                           continue
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ContinueOutsideLoop);
@@ -454,7 +454,7 @@ public class WikiLanguageBreakageTests
                           return me.value
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
 
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.MeOutsideTypeMethod);

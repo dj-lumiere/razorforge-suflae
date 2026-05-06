@@ -25,7 +25,7 @@ public class TypeProhibitionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
     }
@@ -42,7 +42,7 @@ public class TypeProhibitionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
     }
@@ -63,7 +63,7 @@ public class TypeProhibitionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
     }
@@ -81,7 +81,7 @@ public class TypeProhibitionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
     }
@@ -99,7 +99,7 @@ public class TypeProhibitionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
     }
@@ -117,7 +117,7 @@ public class TypeProhibitionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
     }
@@ -138,7 +138,7 @@ public class TypeProhibitionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NestedMaybeProhibited);
     }
@@ -155,7 +155,7 @@ public class TypeProhibitionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NestedMaybeProhibited);
     }
@@ -177,7 +177,7 @@ public class TypeProhibitionTests
                           return
                         """;
 
-        Assert.ThrowsAny<GrammarException>(() => Analyze(source: source));
+        Assert.ThrowsAny<GrammarException>(() => AnalyzeSa(source: source));
     }
     /// <summary>
     /// Verifies semantic analysis behavior for byte literal ascii without grammar diagnostics.
@@ -193,7 +193,7 @@ public class TypeProhibitionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         // No GrammarException thrown ??lexer accepts ASCII byte literals
         Assert.NotNull(@object: result);
     }

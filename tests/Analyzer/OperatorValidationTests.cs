@@ -29,7 +29,7 @@ public class OperatorValidationTests
                           return 0_s32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.IndexOperatorTypeKindRestriction);
     }
@@ -52,7 +52,7 @@ public class OperatorValidationTests
                           return 0_s32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.IndexOperatorTypeKindRestriction);
     }
@@ -75,7 +75,7 @@ public class OperatorValidationTests
                           return a + b
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FixedWidthTypeMismatch);
     }
@@ -91,7 +91,7 @@ public class OperatorValidationTests
                           return a + b
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FixedWidthTypeMismatch);
     }
@@ -112,7 +112,7 @@ public class OperatorValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BackIndexOutsideSubscript);
     }
@@ -129,7 +129,7 @@ public class OperatorValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BackIndexOutsideSubscript);
     }
@@ -149,7 +149,7 @@ public class OperatorValidationTests
                           return t + xs
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ArgumentTypeMismatch);
     }
@@ -165,7 +165,7 @@ public class OperatorValidationTests
                           return a + b
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ArgumentTypeMismatch);
     }

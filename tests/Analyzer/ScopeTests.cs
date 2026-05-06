@@ -24,7 +24,7 @@ public class ScopeTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
         // Should resolve x correctly
     }
@@ -41,7 +41,7 @@ public class ScopeTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
         Assert.Contains(collection: result.Errors,
             filter: e =>
@@ -66,7 +66,7 @@ public class ScopeTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
 
@@ -88,7 +88,7 @@ public class ScopeTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
     /// <summary>
@@ -106,7 +106,7 @@ public class ScopeTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
     /// <summary>
@@ -127,7 +127,7 @@ public class ScopeTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
 
@@ -148,7 +148,7 @@ public class ScopeTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
     /// <summary>
@@ -166,7 +166,7 @@ public class ScopeTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
     /// <summary>
@@ -185,7 +185,7 @@ public class ScopeTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
 
@@ -205,7 +205,7 @@ public class ScopeTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
     /// <summary>
@@ -223,7 +223,7 @@ public class ScopeTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
         // Parameter shadows global variable
     }
@@ -248,7 +248,7 @@ public class ScopeTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
         // Shadowing in nested scope is allowed
     }
@@ -266,7 +266,7 @@ public class ScopeTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
 
@@ -292,7 +292,7 @@ public class ScopeTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
     /// <summary>
@@ -315,7 +315,7 @@ public class ScopeTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
 
@@ -339,7 +339,7 @@ public class ScopeTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
     /// <summary>
@@ -360,7 +360,7 @@ public class ScopeTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
 
@@ -383,7 +383,7 @@ public class ScopeTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Message.Contains(value: "given", comparisonType: StringComparison.OrdinalIgnoreCase));
@@ -402,7 +402,7 @@ public class ScopeTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
         Assert.Contains(collection: result.Errors,
             filter: e =>
@@ -425,7 +425,7 @@ public class ScopeTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
     /// <summary>
@@ -443,7 +443,7 @@ public class ScopeTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
     /// <summary>
@@ -461,7 +461,7 @@ public class ScopeTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
     /// <summary>
@@ -480,7 +480,7 @@ public class ScopeTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Message.Contains(value: "b", comparisonType: StringComparison.OrdinalIgnoreCase)

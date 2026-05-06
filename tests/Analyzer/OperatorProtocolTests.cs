@@ -31,7 +31,7 @@ public class OperatorProtocolTests
                           return Vector(x: me.x +% you.x, y: me.y +% you.y)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -55,7 +55,7 @@ public class OperatorProtocolTests
                           return me.x == you.x and me.y == you.y
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -87,7 +87,7 @@ public class OperatorProtocolTests
                           return SAME
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -119,7 +119,7 @@ public class OperatorProtocolTests
                           return Complex(real: me.real - you.real, imag: me.imag - you.imag)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
@@ -147,7 +147,7 @@ public class OperatorProtocolTests
                           return Vector(x: me.x + you.x, y: me.y + you.y)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0,
             userMessage: "Expected error for missing Addable protocol");
         Assert.Contains(collection: result.Errors,
@@ -177,7 +177,7 @@ public class OperatorProtocolTests
                           return me.x == you.x and me.y == you.y
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0,
             userMessage: "Expected error for missing Equatable protocol");
         Assert.Contains(collection: result.Errors,
@@ -211,7 +211,7 @@ public class OperatorProtocolTests
                           return SAME
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0,
             userMessage: "Expected error for missing Comparable protocol");
         Assert.Contains(collection: result.Errors,
@@ -240,7 +240,7 @@ public class OperatorProtocolTests
                           return Point(x: 0, y: 0)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -259,7 +259,7 @@ public class OperatorProtocolTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -279,7 +279,7 @@ public class OperatorProtocolTests
                           return 0.0
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 

@@ -26,7 +26,7 @@ public class CollectionLiteralTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -42,7 +42,7 @@ public class CollectionLiteralTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyListNoTypeAnnotation);
     }
@@ -59,7 +59,7 @@ public class CollectionLiteralTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -75,7 +75,7 @@ public class CollectionLiteralTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptySetNoTypeAnnotation);
     }
@@ -92,7 +92,7 @@ public class CollectionLiteralTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -108,7 +108,7 @@ public class CollectionLiteralTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyDictNoTypeAnnotation);
     }
@@ -125,7 +125,7 @@ public class CollectionLiteralTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -141,7 +141,7 @@ public class CollectionLiteralTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -156,7 +156,7 @@ public class CollectionLiteralTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
@@ -172,7 +172,7 @@ public class CollectionLiteralTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
@@ -188,7 +188,7 @@ public class CollectionLiteralTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
@@ -204,7 +204,7 @@ public class CollectionLiteralTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
@@ -220,7 +220,7 @@ public class CollectionLiteralTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
@@ -236,7 +236,7 @@ public class CollectionLiteralTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
@@ -252,7 +252,7 @@ public class CollectionLiteralTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
@@ -333,7 +333,7 @@ public class CollectionLiteralTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ArgumentCountMismatch);
     }
@@ -350,7 +350,7 @@ public class CollectionLiteralTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ArgumentCountMismatch);
     }

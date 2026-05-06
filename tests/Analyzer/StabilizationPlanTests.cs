@@ -39,7 +39,7 @@ public class StabilizationPlanTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
@@ -63,7 +63,7 @@ public class StabilizationPlanTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
@@ -87,7 +87,7 @@ public class StabilizationPlanTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
@@ -115,7 +115,7 @@ public class StabilizationPlanTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
@@ -154,7 +154,7 @@ public class StabilizationPlanTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
@@ -187,7 +187,7 @@ public class StabilizationPlanTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
@@ -219,7 +219,7 @@ public class StabilizationPlanTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UsingTargetMissingEnterExit);
     }
@@ -250,7 +250,7 @@ public class StabilizationPlanTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
@@ -282,7 +282,7 @@ public class StabilizationPlanTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UnresolvedRoutineBody);
     }
@@ -314,7 +314,7 @@ public class StabilizationPlanTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UnresolvedRoutineBody);
     }
@@ -343,7 +343,7 @@ public class StabilizationPlanTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UnresolvedRoutineBody);
     }
@@ -372,7 +372,7 @@ public class StabilizationPlanTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UnresolvedRoutineBody);
     }
@@ -399,7 +399,7 @@ public class StabilizationPlanTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UnresolvedRoutineBody);
     }
@@ -429,7 +429,7 @@ public class StabilizationPlanTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
@@ -460,7 +460,7 @@ public class StabilizationPlanTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
@@ -494,7 +494,7 @@ public class StabilizationPlanTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
@@ -535,7 +535,7 @@ public class StabilizationPlanTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 

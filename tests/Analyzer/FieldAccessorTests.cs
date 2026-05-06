@@ -24,7 +24,7 @@ public class FieldAccessorTests
                           return p.all_fields()
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.MethodNotFound);
     }
@@ -43,7 +43,7 @@ public class FieldAccessorTests
                           return p.open_fields()
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.MethodNotFound);
     }

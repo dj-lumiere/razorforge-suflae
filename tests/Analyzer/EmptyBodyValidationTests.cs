@@ -26,7 +26,7 @@ public class EmptyBodyValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
     }
@@ -44,7 +44,7 @@ public class EmptyBodyValidationTests
         // record with no body (no indent after header) ??followed by another decl to ensure valid parse
         string source = "record Empty\nrecord Other\n  pass\n";
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
     }
@@ -60,7 +60,7 @@ public class EmptyBodyValidationTests
                           pass
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
     }
@@ -74,7 +74,7 @@ public class EmptyBodyValidationTests
         // entity with no body (no indent after header)
         string source = "entity Empty\nentity Other\n  pass\n";
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
     }
@@ -90,7 +90,7 @@ public class EmptyBodyValidationTests
                           pass
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
     }
@@ -108,7 +108,7 @@ public class EmptyBodyValidationTests
         // choice with no cases
         string source = "choice Empty\nchoice Other\n  OK\n";
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyEnumerationBody);
     }
@@ -122,7 +122,7 @@ public class EmptyBodyValidationTests
         // variant with no cases
         string source = "variant Empty\nvariant Other\n  SOME\n";
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyEnumerationBody);
     }
@@ -136,7 +136,7 @@ public class EmptyBodyValidationTests
         // flags with no members
         string source = "flags Empty\nflags Other\n  READ\n";
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyEnumerationBody);
     }

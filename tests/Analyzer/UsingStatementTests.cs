@@ -30,7 +30,7 @@ public class UsingStatementTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
@@ -62,7 +62,7 @@ public class UsingStatementTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
@@ -97,7 +97,7 @@ public class UsingStatementTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         // h should be typed as Handle (from $enter return), so h.fd should resolve
         Assert.Empty(collection: result.Errors);
     }
@@ -124,7 +124,7 @@ public class UsingStatementTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UsingTargetMissingEnterExit);
     }
@@ -150,7 +150,7 @@ public class UsingStatementTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UsingTargetMissingEnterExit);
     }
@@ -188,7 +188,7 @@ public class UsingStatementTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 

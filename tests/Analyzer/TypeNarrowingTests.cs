@@ -28,7 +28,7 @@ public class TypeNarrowingTests
                           return 0
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -47,7 +47,7 @@ public class TypeNarrowingTests
                           return value
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -66,7 +66,7 @@ public class TypeNarrowingTests
                           return 0
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -86,7 +86,7 @@ public class TypeNarrowingTests
                             return value
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
@@ -105,7 +105,7 @@ public class TypeNarrowingTests
                           return value
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ReturnTypeMismatch);
     }
@@ -130,7 +130,7 @@ public class TypeNarrowingTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
@@ -154,7 +154,7 @@ public class TypeNarrowingTests
 
         // Should not crash ??the is/isnot check may produce warnings
         // but should not cause an internal error
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
 

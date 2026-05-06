@@ -24,7 +24,7 @@ public class AnnotationValidationTests
                           return if x then 1_s32 else 0_s32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Warnings,
             filter: w => w.Code == SemanticWarningCode.NestedConditionalExpression);
     }
@@ -40,7 +40,7 @@ public class AnnotationValidationTests
                           return if x > 0_s32 then "positive" else "non-positive"
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Warnings,
             filter: w => w.Code == SemanticWarningCode.NestedConditionalExpression);
     }

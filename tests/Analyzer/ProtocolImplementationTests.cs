@@ -32,7 +32,7 @@ public class ProtocolImplementationTests
                           return "point"
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
         // Should validate protocol implementation
     }
@@ -53,7 +53,7 @@ public class ProtocolImplementationTests
                           y: F32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
     /// <summary>
@@ -77,7 +77,7 @@ public class ProtocolImplementationTests
                           return 0
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
 
@@ -104,7 +104,7 @@ public class ProtocolImplementationTests
                           return "point"
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
         // Should warn about missing @readonly annotation
     }
@@ -128,7 +128,7 @@ public class ProtocolImplementationTests
                           return "point"
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
 
@@ -163,7 +163,7 @@ public class ProtocolImplementationTests
                           return me.value - other.value
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
     /// <summary>
@@ -190,7 +190,7 @@ public class ProtocolImplementationTests
                           return "value"
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
 
@@ -217,7 +217,7 @@ public class ProtocolImplementationTests
                           return 0
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
 
@@ -245,7 +245,7 @@ public class ProtocolImplementationTests
                           return Point(x: me.x + other.x, y: me.y + other.y)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
     /// <summary>
@@ -269,7 +269,7 @@ public class ProtocolImplementationTests
                           return Point(x: me.x, y: me.y)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
 
@@ -296,7 +296,7 @@ public class ProtocolImplementationTests
                           return me.value
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
 
@@ -332,7 +332,7 @@ public class ProtocolImplementationTests
                           return "Point(x, y)"
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
     /// <summary>
@@ -360,7 +360,7 @@ public class ProtocolImplementationTests
                           return "Point(x, y)"
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
 
@@ -385,7 +385,7 @@ public class ProtocolImplementationTests
                           return "point"
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.InvalidGeneratedInnatePlacement);
     }
     /// <summary>
@@ -406,7 +406,7 @@ public class ProtocolImplementationTests
                           return "point"
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.InvalidGeneratedInnatePlacement);
     }
     /// <summary>
@@ -434,7 +434,7 @@ public class ProtocolImplementationTests
                           return me.x == you.x and me.y == you.y
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.InvalidGeneratedInnatePlacement);
     }
     /// <summary>
@@ -454,7 +454,7 @@ public class ProtocolImplementationTests
                           name: Text
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.InvalidGeneratedInnatePlacement);
     }
 
@@ -482,7 +482,7 @@ public class ProtocolImplementationTests
                           return false
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.InnateOverrideNotAllowed);
     }
     /// <summary>
@@ -502,7 +502,7 @@ public class ProtocolImplementationTests
                           name: Text
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.InnateOverrideNotAllowed);
     }
 
@@ -538,7 +538,7 @@ public class ProtocolImplementationTests
                           return me.x != you.x or me.y != you.y
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.GeneratedOperatorOverride);
     }
     /// <summary>
@@ -566,7 +566,7 @@ public class ProtocolImplementationTests
                           return me.x == you.x and me.y == you.y
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
@@ -592,7 +592,7 @@ public class ProtocolImplementationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
 

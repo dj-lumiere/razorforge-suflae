@@ -28,7 +28,7 @@ public class ChoiceValidationTests
                           WEST
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ChoiceMixedValues);
         Assert.DoesNotContain(collection: result.Errors,
@@ -48,7 +48,7 @@ public class ChoiceValidationTests
                           ERROR: 500
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ChoiceMixedValues);
         Assert.DoesNotContain(collection: result.Errors,
@@ -68,7 +68,7 @@ public class ChoiceValidationTests
                           ME_LARGE: 1
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ChoiceMixedValues);
         Assert.DoesNotContain(collection: result.Errors,
@@ -91,7 +91,7 @@ public class ChoiceValidationTests
                           HUGE: 9000000000000000000
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ChoiceCaseValueOverflow);
     }
@@ -113,7 +113,7 @@ public class ChoiceValidationTests
                           THIRD: 3
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ChoiceMixedValues);
     }
@@ -135,7 +135,7 @@ public class ChoiceValidationTests
                           THIRD: 1
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ChoiceDuplicateValue);
     }
@@ -161,7 +161,7 @@ public class ChoiceValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
@@ -183,7 +183,7 @@ public class ChoiceValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
@@ -205,7 +205,7 @@ public class ChoiceValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
@@ -227,7 +227,7 @@ public class ChoiceValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
@@ -249,7 +249,7 @@ public class ChoiceValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
@@ -275,7 +275,7 @@ public class ChoiceValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.MemberNotFound);
         Assert.DoesNotContain(collection: result.Errors,
@@ -299,7 +299,7 @@ public class ChoiceValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.MemberNotFound);
     }
@@ -322,7 +322,7 @@ public class ChoiceValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.MemberNotFound);
         Assert.DoesNotContain(collection: result.Errors,

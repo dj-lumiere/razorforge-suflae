@@ -27,7 +27,7 @@ public class VariantValidationTests
                           Point
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.VariantCaseContainsInvalidType);
     }
@@ -47,7 +47,7 @@ public class VariantValidationTests
                           None
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.VariantCaseContainsInvalidType
                          && e.Message.Contains("nested variant"));
@@ -66,7 +66,7 @@ public class VariantValidationTests
                           None
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.VariantCaseContainsInvalidType);
     }
@@ -97,7 +97,7 @@ public class VariantValidationTests
                             else => pass
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.VariantNotDismantled);
     }
@@ -128,7 +128,7 @@ public class VariantValidationTests
                             else => pass
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.VariantNotDismantled);
     }
@@ -153,7 +153,7 @@ public class VariantValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.VariantNotDismantled);
     }

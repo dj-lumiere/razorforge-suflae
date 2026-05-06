@@ -25,7 +25,7 @@ public class FlagsValidationTests
                           EXECUTE
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FlagsTooManyMembers);
         Assert.DoesNotContain(collection: result.Errors,
@@ -49,7 +49,7 @@ public class FlagsValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FlagsMemberNotFound);
         Assert.DoesNotContain(collection: result.Errors,
@@ -73,7 +73,7 @@ public class FlagsValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FlagsMemberNotFound);
     }
@@ -95,7 +95,7 @@ public class FlagsValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut);
     }
@@ -117,7 +117,7 @@ public class FlagsValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FlagsTypeMismatch);
     }
@@ -139,7 +139,7 @@ public class FlagsValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.LogicalOperatorRequiresBool);
         Assert.DoesNotContain(collection: result.Errors,
@@ -166,7 +166,7 @@ public class FlagsValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.LogicalOperatorRequiresBool);
     }
@@ -189,7 +189,7 @@ public class FlagsValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.MethodNotFound);
     }
@@ -210,7 +210,7 @@ public class FlagsValidationTests
                             {{members}}
                           """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FlagsTooManyMembers);
     }
@@ -227,7 +227,7 @@ public class FlagsValidationTests
                             {{members}}
                           """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FlagsTooManyMembers);
     }
@@ -249,7 +249,7 @@ public class FlagsValidationTests
                           READ
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FlagsDuplicateMember);
     }
@@ -274,7 +274,7 @@ public class FlagsValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FlagsOrInAssignment);
     }
@@ -301,7 +301,7 @@ public class FlagsValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
@@ -324,7 +324,7 @@ public class FlagsValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
@@ -353,7 +353,7 @@ public class FlagsValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         // Parser treats 'or' after isonly as logical or, not flags connective
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.LogicalOperatorRequiresBool);
@@ -379,7 +379,7 @@ public class FlagsValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnFlagsType);
     }
@@ -404,7 +404,7 @@ public class FlagsValidationTests
                           return me
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FlagsCustomOperatorNotAllowed);
     }
@@ -429,7 +429,7 @@ public class FlagsValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FlagsMemberNotFound);
     }
@@ -446,7 +446,7 @@ public class FlagsValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         // 'READ' is not a type, so this produces UnknownType (not FlagsTypeMismatch)
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.UnknownType);
@@ -472,7 +472,7 @@ public class FlagsValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FlagsTypeMismatch);
     }
@@ -498,7 +498,7 @@ public class FlagsValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.MemberNotFound);
         Assert.DoesNotContain(collection: result.Errors,
@@ -523,7 +523,7 @@ public class FlagsValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.MemberNotFound);
     }

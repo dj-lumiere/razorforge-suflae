@@ -29,7 +29,7 @@ public class PatternOrderTests
                             is Color.RED => 1_s32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.PatternOrderViolation);
     }
@@ -52,7 +52,7 @@ public class PatternOrderTests
                             else => 0_s32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.PatternOrderViolation);
     }
@@ -75,7 +75,7 @@ public class PatternOrderTests
                             is Color.RED => 1_s32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.PatternOrderViolation);
     }
@@ -98,7 +98,7 @@ public class PatternOrderTests
                             else => 0_s32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.DuplicatePattern);
     }
@@ -121,7 +121,7 @@ public class PatternOrderTests
                             else => 0_s32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.DuplicatePattern);
     }
@@ -144,7 +144,7 @@ public class PatternOrderTests
                             is Color.BLUE => 3_s32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.DuplicatePattern);
     }

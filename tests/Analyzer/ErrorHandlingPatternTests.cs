@@ -24,7 +24,7 @@ public class ErrorHandlingPatternTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.PatternTypeMismatch);
     }
@@ -44,7 +44,7 @@ public class ErrorHandlingPatternTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.PatternTypeMismatch);
         Assert.DoesNotContain(collection: result.Errors,
@@ -65,7 +65,7 @@ public class ErrorHandlingPatternTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.PatternTypeMismatch);
         Assert.DoesNotContain(collection: result.Errors,

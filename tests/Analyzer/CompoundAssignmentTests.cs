@@ -36,7 +36,7 @@ public class CompoundAssignmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
     }
@@ -62,7 +62,7 @@ public class CompoundAssignmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
     }
@@ -96,7 +96,7 @@ public class CompoundAssignmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
     }
@@ -129,7 +129,7 @@ public class CompoundAssignmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
     }
@@ -155,7 +155,7 @@ public class CompoundAssignmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
     }
@@ -186,7 +186,7 @@ public class CompoundAssignmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.AssignmentToImmutable);
     }
@@ -213,7 +213,7 @@ public class CompoundAssignmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
@@ -243,7 +243,7 @@ public class CompoundAssignmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
     }
@@ -270,7 +270,7 @@ public class CompoundAssignmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
     }
@@ -294,7 +294,7 @@ public class CompoundAssignmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
     /// <summary>
@@ -312,7 +312,7 @@ public class CompoundAssignmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
         // Should not produce immutable-related errors
     }

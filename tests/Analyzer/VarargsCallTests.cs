@@ -27,7 +27,7 @@ public class VarargsCallTests
                           return collect(1, 2, 3, 4, 5)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RuntimeDispatchNotSupported);
         Assert.DoesNotContain(collection: result.Errors,
@@ -51,7 +51,7 @@ public class VarargsCallTests
                           return l.log(1, 2, 3)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RuntimeDispatchNotSupported);
         Assert.DoesNotContain(collection: result.Errors,
@@ -70,7 +70,7 @@ public class VarargsCallTests
                           return 0
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.VarargsNotFirst);
     }
@@ -100,7 +100,7 @@ public class VarargsCallTests
                           show(a, b)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RuntimeDispatchNotSupported);
     }
@@ -126,7 +126,7 @@ public class VarargsCallTests
                           show(a, b)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RuntimeDispatchNotSupported);
     }
@@ -153,7 +153,7 @@ public class VarargsCallTests
                           var p = Pool(capacity: 32u64)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -175,7 +175,7 @@ public class VarargsCallTests
                           var p = Pool(32u64)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -195,7 +195,7 @@ public class VarargsCallTests
                           var p = Pool(data: 0u64, count: 0u64, capacity: 32u64)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -214,7 +214,7 @@ public class VarargsCallTests
                           var w = Wrapper(value: 42)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -236,7 +236,7 @@ public class VarargsCallTests
                           var p = Pool(1u64, 2u64)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
     }
@@ -255,7 +255,7 @@ public class VarargsCallTests
                           var e = Empty()
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>
@@ -275,7 +275,7 @@ public class VarargsCallTests
                           var c = Celsius(100.0)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 }

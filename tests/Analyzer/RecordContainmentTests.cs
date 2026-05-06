@@ -24,7 +24,7 @@ public class RecordContainmentTests
                           y: S32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
@@ -42,7 +42,7 @@ public class RecordContainmentTests
                           inner: Inner
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
@@ -64,7 +64,7 @@ public class RecordContainmentTests
                           color: Color
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
@@ -81,7 +81,7 @@ public class RecordContainmentTests
                           value: T
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
@@ -98,7 +98,7 @@ public class RecordContainmentTests
                           value: V
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
@@ -116,7 +116,7 @@ public class RecordContainmentTests
                           ref: Retained[Node]
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
@@ -134,7 +134,7 @@ public class RecordContainmentTests
                           ref: Shared[Node]
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
@@ -152,7 +152,7 @@ public class RecordContainmentTests
                           ptr: Hijacked[Node]
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
@@ -173,7 +173,7 @@ public class RecordContainmentTests
                           count: S32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
@@ -195,7 +195,7 @@ public class RecordContainmentTests
                           user: User
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType
                          && e.Message.Contains("user"));
@@ -214,7 +214,7 @@ public class RecordContainmentTests
                           conn: Connection
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType
                          && e.Message.Contains("value type"));
@@ -234,7 +234,7 @@ public class RecordContainmentTests
                           view: Viewed[Node]
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TokenMemberVariableNotAllowed
                          && e.Message.Contains("view"));
@@ -254,7 +254,7 @@ public class RecordContainmentTests
                           grasped: Grasped[Node]
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TokenMemberVariableNotAllowed
                          && e.Message.Contains("grasped"));
@@ -278,7 +278,7 @@ public class RecordContainmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.WithExpressionNotRecord);
     }
@@ -298,7 +298,7 @@ public class RecordContainmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.WithExpressionNotRecord);
     }
@@ -318,7 +318,7 @@ public class RecordContainmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.WithExpressionNotRecord);
     }

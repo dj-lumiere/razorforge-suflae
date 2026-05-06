@@ -30,7 +30,7 @@ public class DiscardTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
         Assert.Empty(collection: result.Warnings);
     }
@@ -50,7 +50,7 @@ public class DiscardTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
         Assert.True(condition: result.Warnings.Count > 0,
             userMessage: "Expected warning for unused return value");
@@ -77,7 +77,7 @@ public class DiscardTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
         Assert.Empty(collection: result.Warnings);
     }
@@ -97,7 +97,7 @@ public class DiscardTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
         // No warning about unused return value since it's assigned
         Assert.DoesNotContain(collection: result.Warnings,
@@ -127,7 +127,7 @@ public class DiscardTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
     /// <summary>

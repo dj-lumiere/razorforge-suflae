@@ -32,6 +32,14 @@ public abstract class TypeInfo
     /// <summary>Whether this is the Blank (unit/void) type.</summary>
     public bool IsBlank => Name == "Blank";
 
+    /// <summary>
+    /// Set to true when this concrete generic instance was first created during stdlib body
+    /// analysis. Such types are excluded from <c>AllConcreteGenericInstances</c> and GMP
+    /// until user code references them, at which point the registry clears this flag
+    /// and enqueues the type for monomorphization.
+    /// </summary>
+    public bool IsStdlibLazy { get; internal set; }
+
     /// <summary>The visibility of this type.</summary>
     public VisibilityModifier Visibility { get; init; } = VisibilityModifier.Open;
 

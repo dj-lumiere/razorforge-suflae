@@ -210,6 +210,14 @@ public sealed partial class SemanticVerifier
     /// </summary>
     public bool SaTiming { get; set; }
 
+    /// <summary>
+    /// When true, stops after Phase 5 (semantic verification) and skips Phase 4 global
+    /// desugaring, Phase 6 instantiation, Phase 7 postprocessing, and Phase 5b checks.
+    /// Use for tests that only assert on SA errors or type annotations — saves ~10× time
+    /// by avoiding monomorphization and lowering passes.
+    /// </summary>
+    public bool SaOnly { get; set; }
+
     #endregion
 
     #region Public API
@@ -241,12 +249,16 @@ public sealed partial class SemanticVerifier
         _registry.RegisterUserProgram(program: program,
             filePath: _currentFilePath,
             module: _currentModuleName ?? "");
-        CollectStdlibBodiesForVariantGeneration();
-        RunPhase4GlobalDesugaring();
-        RunPhase6Instantiation();
-        RunPhase7Postprocessing(program: program);
-        RunPhase5bPostDesugarChecks();
-        FinalizeReturnTypes();
+
+        if (!SaOnly)
+        {
+            CollectStdlibBodiesForVariantGeneration();
+            RunPhase4GlobalDesugaring();
+            RunPhase6Instantiation();
+            RunPhase7Postprocessing(program: program);
+            RunPhase5bPostDesugarChecks();
+            FinalizeReturnTypes();
+        }
 
         // Merge synthesized operator bodies and pre-transformed variant bodies
         var allSynthesized = _synthesizedBodies.ToDictionary(keySelector: kvp => kvp.Key,
@@ -386,7 +398,7 @@ public sealed partial class SemanticVerifier
             void Step(string label)
             {
                 sw.Stop();
-                Console.Error.WriteLine(value: $"[SA]   Phase 6 sub ??{label}: {sw.ElapsedMilliseconds} ms");
+                Console.Error.WriteLine(value: $"[SA]   Phase 6 sub - {label}: {sw.ElapsedMilliseconds} ms");
                 sw.Restart();
             }
             new ReachableGenericCollectionPass(ctx: ctx).Run();
@@ -543,6 +555,13 @@ public sealed partial class SemanticVerifier
             return;
         }
 
+        // Mark the registry so that any concrete generic instances created as side-effects
+        // of stdlib body analysis are tagged IsStdlibLazy and excluded from GMP iteration.
+        // Types the user program actually needs will be materialized when user SA references them.
+        _registry.BeginStdlibAnalysis();
+        try
+        {
+
         string previousFilePath = _currentFilePath;
         var previousImports = new HashSet<string>(collection: _importedModules,
             comparer: StringComparer.OrdinalIgnoreCase);
@@ -592,6 +611,12 @@ public sealed partial class SemanticVerifier
         foreach (string ns in previousImports)
         {
             _importedModules.Add(item: ns);
+        }
+
+        } // try
+        finally
+        {
+            _registry.EndStdlibAnalysis();
         }
     }
 
@@ -755,30 +780,33 @@ public sealed partial class SemanticVerifier
         new TypeLivenessPass(registry: _registry).Run();
         Mark(label: "Phase 5.5 global ??TypeLivenessPass");
 
-        // Phase 4 global: error handling variants + future global passes (runs once)
-        CollectStdlibBodiesForVariantGeneration();
-        Mark(label: "Phase 4 global ??CollectStdlibBodiesForVariantGeneration");
-        RunPhase4GlobalDesugaring();
-        Mark(label: "Phase 4 global ??RunPhase4GlobalDesugaring");
-        RunPhase6Instantiation();
-        Mark(label: "Phase 6 ??RunPhase6Instantiation (monomorphization)");
-
-        // Phase 7 per-file: type-aware lowering on verified, type-annotated AST
-        foreach ((Program program, string filePath) in files)
+        if (!SaOnly)
         {
-            RestoreImportState(filePath: filePath,
-                importSnapshots: importSnapshots,
-                symbolNameSnapshots: symbolNameSnapshots,
-                moduleNameSnapshots: moduleNameSnapshots);
+            // Phase 4 global: error handling variants + future global passes (runs once)
+            CollectStdlibBodiesForVariantGeneration();
+            Mark(label: "Phase 4 global ??CollectStdlibBodiesForVariantGeneration");
+            RunPhase4GlobalDesugaring();
+            Mark(label: "Phase 4 global ??RunPhase4GlobalDesugaring");
+            RunPhase6Instantiation();
+            Mark(label: "Phase 6 ??RunPhase6Instantiation (monomorphization)");
 
-            RunPhase7Postprocessing(program: program);
+            // Phase 7 per-file: type-aware lowering on verified, type-annotated AST
+            foreach ((Program program, string filePath) in files)
+            {
+                RestoreImportState(filePath: filePath,
+                    importSnapshots: importSnapshots,
+                    symbolNameSnapshots: symbolNameSnapshots,
+                    moduleNameSnapshots: moduleNameSnapshots);
+
+                RunPhase7Postprocessing(program: program);
+            }
+            Mark(label: "Phase 7 per-file ??type-aware postprocessing");
+
+            RunPhase5bPostDesugarChecks();
+            Mark(label: "Phase 5b ??PostDesugarChecks");
+            FinalizeReturnTypes();
+            Mark(label: "Phase 5b ??FinalizeReturnTypes");
         }
-        Mark(label: "Phase 7 per-file ??type-aware postprocessing");
-
-        RunPhase5bPostDesugarChecks();
-        Mark(label: "Phase 5b ??PostDesugarChecks");
-        FinalizeReturnTypes();
-        Mark(label: "Phase 5b ??FinalizeReturnTypes");
 
         // Merge synthesized operator bodies and pre-transformed variant bodies
         var allSynthesized2 = _synthesizedBodies.ToDictionary(keySelector: kvp => kvp.Key,

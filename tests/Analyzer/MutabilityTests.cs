@@ -26,7 +26,7 @@ public class MutabilityTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e =>
                 e.Message.Contains(value: "immutable",
@@ -49,7 +49,7 @@ public class MutabilityTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
         // Should not produce immutable-related errors
     }
@@ -67,7 +67,7 @@ public class MutabilityTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
         // Should be valid
     }
@@ -91,7 +91,7 @@ public class MutabilityTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
     /// <summary>
@@ -111,7 +111,7 @@ public class MutabilityTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
 
@@ -135,7 +135,7 @@ public class MutabilityTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
     /// <summary>
@@ -154,7 +154,7 @@ public class MutabilityTests
                           return me.count
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
     /// <summary>
@@ -173,7 +173,7 @@ public class MutabilityTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
 
@@ -198,7 +198,7 @@ public class MutabilityTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
 
@@ -218,7 +218,7 @@ public class MutabilityTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
 
@@ -239,7 +239,7 @@ public class MutabilityTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
 
@@ -270,7 +270,7 @@ public class MutabilityTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
         Assert.Contains(collection: result.Errors,
             filter: e =>
@@ -300,7 +300,7 @@ public class MutabilityTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.BareEntityAssignment);
     }
     /// <summary>
@@ -320,7 +320,7 @@ public class MutabilityTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.BareEntityAssignment);
     }
     /// <summary>
@@ -341,7 +341,7 @@ public class MutabilityTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.BareEntityAssignment);
     }
 
@@ -369,7 +369,7 @@ public class MutabilityTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ModificationInReadonlyMethod);
     }
     /// <summary>
@@ -392,7 +392,7 @@ public class MutabilityTests
                           return me.get_count()
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.ModificationInReadonlyMethod);
     }
     /// <summary>
@@ -416,7 +416,7 @@ public class MutabilityTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         // Calling a mutating method on 'other' (not 'me') is allowed in @readonly
         Assert.DoesNotContain(result.Errors,
             e => e.Code == SemanticDiagnosticCode.ModificationInReadonlyMethod
@@ -443,7 +443,7 @@ public class MutabilityTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.PostedMemberAccess);
     }
     /// <summary>
@@ -463,7 +463,7 @@ public class MutabilityTests
                           return me.name
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.PostedMemberAccess);
     }
 

@@ -32,9 +32,6 @@ internal sealed class AutoWiredRegistrationPass
         TypeSymbol? s64Type = _registry.LookupType(name: "S64");
         TypeSymbol? byteSizeType = _registry.LookupType(name: "ByteSize");
 
-        // Look up protocols for auto-conformance
-        TypeSymbol? hashableProtocol = _registry.LookupType(name: "Hashable");
-
         // Look up List[T] for list-returning synthesized routines
         TypeSymbol? listDef = _registry.LookupType(name: "List");
         TypeSymbol? listTextType = listDef != null && textType != null
@@ -114,7 +111,11 @@ internal sealed class AutoWiredRegistrationPass
                                                ?? type.Name);
                     if (!type.IsBlank && !isWrapper)
                     {
-                        if (u64Type != null)
+                        // $hash / $eq are opt-in: only auto-derived when the record explicitly
+                        // declares `obeys Hashable` / `obeys Equatable`. This avoids fanning out
+                        // synthesized bodies (and corresponding LLVM defs) for every record in
+                        // scope, and gives users an explicit place to override semantics.
+                        if (u64Type != null && ObeysProtocol(type: type, protocolName: "Hashable"))
                         {
                             MaybeRegisterWired(owner: type,
                                 name: "$hash",
@@ -122,7 +123,7 @@ internal sealed class AutoWiredRegistrationPass
                                 existingMethods: existingMethods);
                         }
 
-                        if (boolType != null)
+                        if (boolType != null && ObeysProtocol(type: type, protocolName: "Equatable"))
                         {
                             MaybeRegisterWiredWithParam(owner: type,
                                 name: "$eq",
@@ -139,23 +140,10 @@ internal sealed class AutoWiredRegistrationPass
                             existingMethods: existingMethods);
                     }
 
-                    // #27: Records with all-Hashable fields auto-add Hashable conformance.
-                    // Wrapper types are excluded — their Hashable conformance depends on inner T,
-                    // not on their own (absent) fields.
-                    if (!isWrapper && hashableProtocol != null && type is RecordTypeInfo record &&
-                        record.ImplementedProtocols.All(predicate: p => p.Name != "Hashable") &&
-                        AllFieldsHashable(record: record))
-                    {
-                        var protocols = record.ImplementedProtocols.ToList();
-                        protocols.Add(item: hashableProtocol);
-                        _registry.UpdateRecordProtocols(recordName: type.FullName,
-                            protocols: protocols);
-                    }
-
                     break;
 
                 case TypeCategory.Entity:
-                    if (boolType != null)
+                    if (boolType != null && ObeysProtocol(type: type, protocolName: "Equatable"))
                     {
                         MaybeRegisterWiredWithParam(owner: type,
                             name: "$eq",
@@ -198,6 +186,10 @@ internal sealed class AutoWiredRegistrationPass
                     break;
 
                 case TypeCategory.Choice:
+                    // Choices/flags get $eq/$hash unconditionally — equality is unambiguous
+                    // tag-compare with no field-selection design choice to make. Stdlib's
+                    // ComparisonSign and BuilderService enums rely on this for $represent /
+                    // $diagnose / derived comparison operators.
                     if (u64Type != null)
                     {
                         MaybeRegisterWired(owner: type,
@@ -305,6 +297,7 @@ internal sealed class AutoWiredRegistrationPass
                     break;
 
                 case TypeCategory.Flags:
+                    // See Choice case above — equality is unambiguous bit-compare; always-on.
                     if (u64Type != null)
                     {
                         MaybeRegisterWired(owner: type,
@@ -583,57 +576,62 @@ internal sealed class AutoWiredRegistrationPass
     }
 
     /// <summary>
-    /// Checks whether all member variables of a record implement Hashable.
-    /// Primitives (S32, U64, Text, Bool, etc.), choices, flags, and other records
-    /// that are Hashable are considered hashable. Entities, variants, and
-    /// generic parameters are not.
+    /// Returns true if <paramref name="type"/> declares conformance to the named protocol
+    /// via <c>obeys</c>, either directly or transitively through a parent protocol.
+    /// Used to gate auto-derivation of <c>$eq</c> / <c>$hash</c> on records, entities,
+    /// choices, and flags — these are now opt-in rather than universal.
     /// </summary>
-    private bool AllFieldsHashable(RecordTypeInfo record)
+    private bool ObeysProtocol(TypeSymbol type, string protocolName)
     {
-        IReadOnlyList<MemberVariableInfo> fields = record.MemberVariables;
-        if (fields.Count == 0)
+        IReadOnlyList<TypeSymbol>? implemented = type switch
         {
-            return true; // empty records are trivially hashable
-        }
-
-        foreach (MemberVariableInfo field in fields)
+            ChoiceTypeInfo c => c.ImplementedProtocols,
+            FlagsTypeInfo f => f.ImplementedProtocols,
+            RecordTypeInfo r => r.ImplementedProtocols,
+            EntityTypeInfo e => e.ImplementedProtocols,
+            _ => null
+        };
+        if (implemented == null)
         {
-            TypeSymbol fieldType = field.Type;
-
-            // Intrinsic types (primitives) are always hashable
-            if (fieldType is IntrinsicTypeInfo)
-            {
-                continue;
-            }
-
-            // Choices and flags are always hashable
-            if (fieldType is ChoiceTypeInfo or FlagsTypeInfo)
-            {
-                continue;
-            }
-
-            // Records are hashable if they implement Hashable (recursive)
-            if (fieldType is RecordTypeInfo fieldRecord)
-            {
-                if (fieldRecord.ImplementedProtocols.Any(predicate: p => p.Name == "Hashable"))
-                {
-                    continue;
-                }
-
-                // Check structurally: does it have hash()?
-                if (_registry.LookupMethod(type: fieldType, methodName: "$hash") != null)
-                {
-                    continue;
-                }
-
-                return false;
-            }
-
-            // Entities, variants, generic parameters, etc. — not hashable
             return false;
         }
 
-        return true;
+        var seen = new HashSet<string>();
+        foreach (TypeSymbol p in implemented)
+        {
+            if (CheckProtocol(p, protocolName, seen))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private bool CheckProtocol(TypeSymbol candidate, string targetName, HashSet<string> seen)
+    {
+        if (!seen.Add(candidate.Name))
+        {
+            return false;
+        }
+        if (candidate.Name == targetName)
+        {
+            return true;
+        }
+        // Resolve the latest version from the registry — ImplementedProtocols entries
+        // can be stale (immutable type updates). The fully-populated parent list lives
+        // on the registry's current ProtocolTypeInfo.
+        TypeSymbol latest = _registry.LookupType(name: candidate.Name) ?? candidate;
+        if (latest is ProtocolTypeInfo proto)
+        {
+            foreach (ProtocolTypeInfo parent in proto.ParentProtocols)
+            {
+                if (CheckProtocol(parent, targetName, seen))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /// <summary>

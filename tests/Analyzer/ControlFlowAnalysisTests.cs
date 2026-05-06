@@ -27,7 +27,7 @@ public class ControlFlowAnalysisTests
                             return 0
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
         // Should have no missing return errors
     }
@@ -52,7 +52,7 @@ public class ControlFlowAnalysisTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
     /// <summary>
@@ -71,7 +71,7 @@ public class ControlFlowAnalysisTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
     /// <summary>
@@ -88,7 +88,7 @@ public class ControlFlowAnalysisTests
                           return value
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
 
@@ -109,7 +109,7 @@ public class ControlFlowAnalysisTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
         // Should have warning about unreachable code
     }
@@ -127,7 +127,7 @@ public class ControlFlowAnalysisTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
     /// <summary>
@@ -144,7 +144,7 @@ public class ControlFlowAnalysisTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
 
@@ -166,7 +166,7 @@ public class ControlFlowAnalysisTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
     /// <summary>
@@ -185,7 +185,7 @@ public class ControlFlowAnalysisTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
     /// <summary>
@@ -201,7 +201,7 @@ public class ControlFlowAnalysisTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
     /// <summary>
@@ -217,7 +217,7 @@ public class ControlFlowAnalysisTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
 
@@ -237,7 +237,7 @@ public class ControlFlowAnalysisTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.AbsentOutsideFailableFunction);
     }
@@ -254,7 +254,7 @@ public class ControlFlowAnalysisTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
     /// <summary>
@@ -270,7 +270,7 @@ public class ControlFlowAnalysisTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
         // Should be valid
     }
@@ -287,7 +287,7 @@ public class ControlFlowAnalysisTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
 
@@ -306,7 +306,7 @@ public class ControlFlowAnalysisTests
                           throw ValueError("bad value")
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Message.Contains(value: "not all code paths return",
                 comparisonType: StringComparison.OrdinalIgnoreCase));
@@ -326,7 +326,7 @@ public class ControlFlowAnalysisTests
                             throw ValueError("too small")
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Message.Contains(value: "not all code paths return",
                 comparisonType: StringComparison.OrdinalIgnoreCase));
@@ -343,7 +343,7 @@ public class ControlFlowAnalysisTests
                           absent
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Message.Contains(value: "not all code paths return",
                 comparisonType: StringComparison.OrdinalIgnoreCase));
@@ -363,7 +363,7 @@ public class ControlFlowAnalysisTests
                             throw ValueError("b")
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Message.Contains(value: "not all code paths return",
                 comparisonType: StringComparison.OrdinalIgnoreCase));
@@ -381,7 +381,7 @@ public class ControlFlowAnalysisTests
                           var x = 10
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Message.Contains(value: "not all code paths return",
                 comparisonType: StringComparison.OrdinalIgnoreCase));
@@ -403,7 +403,7 @@ public class ControlFlowAnalysisTests
                             return 1
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
         // Should report missing return path
     }
@@ -425,7 +425,7 @@ public class ControlFlowAnalysisTests
                             return 3
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);
     }
 
@@ -450,7 +450,7 @@ public class ControlFlowAnalysisTests
                           return result
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Message.Contains(value: "becomes", comparisonType: StringComparison.OrdinalIgnoreCase));
     }
@@ -472,7 +472,7 @@ public class ControlFlowAnalysisTests
                           return result
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Message.Contains(value: "requires 'becomes'", comparisonType: StringComparison.OrdinalIgnoreCase));
     }
@@ -493,7 +493,7 @@ public class ControlFlowAnalysisTests
                           return result
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Message.Contains(value: "'=>' syntax", comparisonType: StringComparison.OrdinalIgnoreCase));
     }
@@ -513,7 +513,7 @@ public class ControlFlowAnalysisTests
                           return result
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Message.Contains(value: "becomes", comparisonType: StringComparison.OrdinalIgnoreCase));
     }
@@ -536,7 +536,7 @@ public class ControlFlowAnalysisTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Message.Contains(value: "becomes", comparisonType: StringComparison.OrdinalIgnoreCase));
     }

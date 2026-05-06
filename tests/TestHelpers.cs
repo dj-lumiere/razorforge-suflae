@@ -155,6 +155,48 @@ public static class TestHelpers
     }
 
     /// <summary>
+    /// Parses and analyzes RazorForge source, stopping after Phase 5 (SA only).
+    /// Skips monomorphization and lowering — use for tests that only check errors or type annotations.
+    /// </summary>
+    public static AnalysisResult AnalyzeSa(string source, [CallerMemberName] string? fileName = null)
+    {
+        Program program = Parse(source: source, fileName: fileName);
+        var analyzer = new SemanticVerifier(language: Language.RazorForge) { SaOnly = true };
+        return analyzer.Analyze(program: program);
+    }
+
+    /// <summary>
+    /// Asserts that SA-only analysis succeeds without errors.
+    /// </summary>
+    public static AnalysisResult AssertAnalyzesSa(string source, [CallerMemberName] string? fileName = null)
+    {
+        AnalysisResult result = AnalyzeSa(source: source, fileName: fileName);
+        if (result.Errors.Count > 0)
+        {
+            string errorMessages = string.Join(separator: "\n",
+                values: result.Errors.Select(selector: e => $"  - {e.Message} at {e.Location}"));
+            Assert.Fail(
+                message: $"Expected no errors but got {result.Errors.Count}:\n{errorMessages}");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Asserts that SA-only analysis produces the expected error.
+    /// </summary>
+    public static AnalysisResult AssertHasErrorSa(string source, string expectedErrorSubstring, [CallerMemberName] string? fileName = null)
+    {
+        AnalysisResult result = AnalyzeSa(source: source, fileName: fileName);
+        Assert.True(condition: result.Errors.Count > 0,
+            userMessage: "Expected at least one error");
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Message.Contains(value: expectedErrorSubstring,
+                comparisonType: StringComparison.OrdinalIgnoreCase));
+        return result;
+    }
+
+    /// <summary>
     /// Parses and analyzes Suflae source code.
     /// </summary>
     public static AnalysisResult AnalyzeSuflae(string source, [CallerMemberName] string? fileName = null)
@@ -208,6 +250,47 @@ public static class TestHelpers
     public static AnalysisResult AssertHasErrorSuflae(string source, string expectedErrorSubstring, [CallerMemberName] string? fileName = null)
     {
         AnalysisResult result = AnalyzeSuflae(source: source, fileName: fileName);
+        Assert.True(condition: result.Errors.Count > 0,
+            userMessage: "Expected at least one error");
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Message.Contains(value: expectedErrorSubstring,
+                comparisonType: StringComparison.OrdinalIgnoreCase));
+        return result;
+    }
+
+    /// <summary>
+    /// Parses and analyzes Suflae source, stopping after Phase 5 (SA only).
+    /// </summary>
+    public static AnalysisResult AnalyzeSaSuflae(string source, [CallerMemberName] string? fileName = null)
+    {
+        Program program = ParseSuflae(source: source, fileName: fileName);
+        var analyzer = new SemanticVerifier(language: Language.Suflae) { SaOnly = true };
+        return analyzer.Analyze(program: program);
+    }
+
+    /// <summary>
+    /// Asserts that Suflae SA-only analysis succeeds without errors.
+    /// </summary>
+    public static AnalysisResult AssertAnalyzesSaSuflae(string source, [CallerMemberName] string? fileName = null)
+    {
+        AnalysisResult result = AnalyzeSaSuflae(source: source, fileName: fileName);
+        if (result.Errors.Count > 0)
+        {
+            string errorMessages = string.Join(separator: "\n",
+                values: result.Errors.Select(selector: e => $"  - {e.Message} at {e.Location}"));
+            Assert.Fail(
+                message: $"Expected no errors but got {result.Errors.Count}:\n{errorMessages}");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Asserts that Suflae SA-only analysis produces the expected error.
+    /// </summary>
+    public static AnalysisResult AssertHasErrorSaSuflae(string source, string expectedErrorSubstring, [CallerMemberName] string? fileName = null)
+    {
+        AnalysisResult result = AnalyzeSaSuflae(source: source, fileName: fileName);
         Assert.True(condition: result.Errors.Count > 0,
             userMessage: "Expected at least one error");
         Assert.Contains(collection: result.Errors,
