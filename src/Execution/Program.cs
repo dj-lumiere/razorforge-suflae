@@ -24,6 +24,8 @@ internal partial class Program
     /// </summary>
     public static int Main(string[] args)
     {
+        RuntimeShadowLoader.Install();
+
         if (args.Length == 0)
         {
             PrintUsage();

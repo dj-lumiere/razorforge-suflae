@@ -1033,7 +1033,7 @@ public partial class LlvmCodeGenerator
                         && synthInfo.OwnerType.GenericParameters is { Count: > 0 } gParams)
                     {
                         TypeInfo genericOwner = synthInfo.OwnerType;
-                        foreach (TypeInfo candidateOwner in _registry.AllConcreteGenericInstancesUnfiltered)
+                        foreach (TypeInfo candidateOwner in _registry.AllConcreteGenericInstancesUnfiltered.ToList())
                         {
                             if (candidateOwner.IsGenericDefinition) continue;
                             if (candidateOwner.TypeArguments is not { Count: > 0 } tArgs) continue;

@@ -88,6 +88,13 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         "$contains", "$notcontains",
         "$hash",
         "$iter", "try_next",
+        // Arithmetic / bitwise / shift operators — primitive owners (U32, U64, etc.) define
+        // these as wired methods. Operator-lowering produces calls to them but may leave
+        // ResolvedRoutine = null in stdlib bodies whose receivers lack ResolvedType
+        // (e.g. CStr.$create's UTF-8 encoder uses cp & 0x3F, cp >> 6).
+        "$add", "$sub", "$mul", "$div", "$mod",
+        "$bitand", "$bitor", "$bitxor", "$bitnot",
+        "$ashl", "$ashr", "$lshl", "$lshr",
     };
 
     private void BuildAstIndices()
@@ -157,9 +164,14 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
 
         foreach (object node in calls)
         {
+            if (node is ThrowStatement throwStmt)
+            {
+                EnqueueThrowCrashMessage(throwStmt: throwStmt, typeSubs: frame.TypeSubs);
+                continue;
+            }
             RoutineInfo? resolved = node switch
             {
-                CallExpression ce => ce.ResolvedRoutine,
+                CallExpression ce => ce.ResolvedRoutine ?? ResolveNoArgConstructor(ce: ce) ?? ResolveMemberCall(ce: ce),
                 GenericMethodCallExpression gce => gce.ResolvedRoutine,
                 CreatorExpression cre => ResolveCreatorRoutine(cre: cre),
                 _ => null
@@ -182,9 +194,14 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             CollectCalls(node: variantBody, sink: variantCalls);
             foreach (object node in variantCalls)
             {
+                if (node is ThrowStatement throwStmt)
+                {
+                    EnqueueThrowCrashMessage(throwStmt: throwStmt, typeSubs: frame.TypeSubs);
+                    continue;
+                }
                 RoutineInfo? resolved = node switch
                 {
-                    CallExpression ce => ce.ResolvedRoutine,
+                    CallExpression ce => ce.ResolvedRoutine ?? ResolveNoArgConstructor(ce: ce) ?? ResolveMemberCall(ce: ce),
                     GenericMethodCallExpression gce => gce.ResolvedRoutine,
                     CreatorExpression cre => ResolveCreatorRoutine(cre: cre),
                     _ => null
@@ -258,10 +275,16 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                     CollectCalls(node: synthBody, sink: synthCalls);
                     foreach (object node in synthCalls)
                     {
+                        if (node is ThrowStatement throwStmt)
+                        {
+                            EnqueueThrowCrashMessage(throwStmt: throwStmt, typeSubs: subs);
+                            continue;
+                        }
                         RoutineInfo? resolved = node switch
                         {
-                            CallExpression ce => ce.ResolvedRoutine,
+                            CallExpression ce => ce.ResolvedRoutine ?? ResolveNoArgConstructor(ce: ce) ?? ResolveMemberCall(ce: ce),
                             GenericMethodCallExpression gce => gce.ResolvedRoutine,
+                            CreatorExpression cre => ResolveCreatorRoutine(cre: cre),
                             _ => null
                         };
                         if (resolved == null) continue;
@@ -341,7 +364,91 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     {
         TypeInfo? ct = cre.ConstructedType;
         if (ct == null) return null;
+        // Match overload by parameter count — Text() (no args) and Text(from: CStr) are
+        // distinct $create overloads on the same type. LookupMethod alone returns the
+        // first-registered one and misses the no-arg variant when callers use it.
+        int argCount = cre.MemberVariables.Count;
+        bool found = false;
+        foreach (RoutineInfo m in ctx.Registry.GetMethodsForType(type: ct))
+        {
+            if (m.Name == "$create" && m.Parameters.Count == argCount)
+            {
+                EnqueueCallee(callee: m);
+                found = true;
+            }
+        }
+        TypeInfo? genDef = ct switch
+        {
+            RecordTypeInfo r => r.GenericDefinition,
+            EntityTypeInfo e => e.GenericDefinition,
+            _ => null
+        };
+        if (genDef != null && !ReferenceEquals(objA: genDef, objB: ct))
+        {
+            foreach (RoutineInfo m in ctx.Registry.GetMethodsForType(type: genDef))
+            {
+                if (m.Name == "$create" && m.Parameters.Count == argCount)
+                {
+                    EnqueueCallee(callee: m);
+                    found = true;
+                }
+            }
+        }
+        if (!found && argCount == 0)
+        {
+            // Fallback for no-arg constructors that codegen calls by mangled name
+            // <Type>.$create even when no explicit RoutineInfo exists.
+            _live.Add(item: $"{ct.FullName}.$create");
+        }
         return ctx.Registry.LookupMethod(type: ct, methodName: "$create");
+    }
+
+    /// <summary>
+    /// SA leaves <c>CallExpression.ResolvedRoutine</c> null for no-arg type-creator calls (e.g.
+    /// <c>Text()</c>) — only <c>ConstructedType</c> is set. Codegen emits a call to
+    /// <c>&lt;Type&gt;.$create</c> by mangled name, so we must mark that key live ourselves.
+    /// </summary>
+    private RoutineInfo? ResolveNoArgConstructor(CallExpression ce)
+    {
+        if (ce.Arguments.Count != 0) return null;
+        TypeInfo? ct = ce.ConstructedType;
+        if (ct == null) return null;
+        foreach (RoutineInfo m in ctx.Registry.GetMethodsForType(type: ct))
+        {
+            if (m.Name == "$create" && m.Parameters.Count == 0) return m;
+        }
+        // Fallback: codegen mangles by FullName regardless of registration.
+        _live.Add(item: $"{ct.FullName}.$create");
+        return null;
+    }
+
+    /// <summary>
+    /// OperatorLoweringPass produces <c>receiver.$op(you: arg)</c> CallExpressions but leaves
+    /// <c>ResolvedRoutine = null</c> when the method couldn't be resolved at lowering time
+    /// (e.g. stdlib bodies whose receiver lacks <c>ResolvedType</c>). Retry the lookup here
+    /// using the receiver's resolved type so primitive operators like <c>U32.$bitand</c>
+    /// reachable through stdlib bodies (<c>CStr.$create</c>) become live.
+    /// </summary>
+    private RoutineInfo? ResolveMemberCall(CallExpression ce)
+    {
+        if (ce.Callee is not MemberExpression member) return null;
+        TypeInfo? receiverType = member.Object.ResolvedType;
+        if (receiverType == null) return null;
+        return ctx.Registry.LookupMethod(type: receiverType, methodName: member.PropertyName);
+    }
+
+    /// <summary>
+    /// EmitThrow in codegen calls <c>errorType.crash_message</c> directly to format the panic
+    /// message — there is no source-AST CallExpression to drive reachability. Mark it live here
+    /// for every throw site we walk.
+    /// </summary>
+    private void EnqueueThrowCrashMessage(ThrowStatement throwStmt, Dictionary<string, TypeInfo> typeSubs)
+    {
+        TypeInfo? errorType = throwStmt.Error.ResolvedType
+            ?? (throwStmt.Error is CreatorExpression cre ? cre.ConstructedType : null);
+        if (errorType == null) return;
+        RoutineInfo? crashMsg = ctx.Registry.LookupMethod(type: errorType, methodName: "crash_message");
+        if (crashMsg != null) EnqueueCallee(callee: crashMsg);
     }
 
     private RoutineInfo? ResolveGenericDefRoutine(RoutineInfo callee)
@@ -400,7 +507,67 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// </summary>
     private RoutineInfo SubstituteRoutine(RoutineInfo routine, Dictionary<string, TypeInfo> typeSubs)
     {
-        if (typeSubs.Count == 0 || routine.OwnerType == null) return routine;
+        if (typeSubs.Count == 0) return routine;
+
+        // Standalone generic routine (e.g. hijacked_from[T]). Build the concrete instantiation
+        // and add its registry key directly to _live, so GMP picks it up via LiveRoutineKeys.
+        if (routine.OwnerType == null)
+        {
+            // Case A: pure generic def — substitute by GenericParameters.
+            if (routine.IsGenericDefinition)
+            {
+                IReadOnlyList<string>? rgParams = routine.GenericParameters;
+                if (rgParams != null)
+                {
+                    var concreteTypeArgs = new List<TypeInfo>(capacity: rgParams.Count);
+                    bool allOk = true;
+                    foreach (string p in rgParams)
+                    {
+                        if (typeSubs.TryGetValue(key: p, value: out TypeInfo? sub))
+                            concreteTypeArgs.Add(item: sub);
+                        else { allOk = false; break; }
+                    }
+                    if (allOk)
+                    {
+                        RoutineInfo resolved = ctx.Registry.GetOrCreateRoutineResolution(
+                            genericDef: routine, typeArguments: concreteTypeArgs);
+                        _live.Add(item: resolved.RegistryKey);
+                        return resolved;
+                    }
+                }
+            }
+            // Case B: SA produced a "resolved" instance whose TypeArguments are still
+            // GenericParameterTypeInfo (e.g. hijacked_from[T] where T comes from the enclosing
+            // List[T]). Substitute those through the frame.
+            if (routine.TypeArguments is { Count: > 0 } tArgs
+                && tArgs.Any(predicate: t => t is GenericParameterTypeInfo))
+            {
+                var substArgs = new List<TypeInfo>(capacity: tArgs.Count);
+                bool allOk = true;
+                foreach (TypeInfo a in tArgs)
+                {
+                    if (a is GenericParameterTypeInfo gpa)
+                    {
+                        if (typeSubs.TryGetValue(key: gpa.Name, value: out TypeInfo? sub))
+                            substArgs.Add(item: sub);
+                        else { allOk = false; break; }
+                    }
+                    else
+                    {
+                        substArgs.Add(item: a);
+                    }
+                }
+                if (allOk)
+                {
+                    RoutineInfo? genDef = routine.GenericDefinition ?? routine;
+                    RoutineInfo resolved = ctx.Registry.GetOrCreateRoutineResolution(
+                        genericDef: genDef, typeArguments: substArgs);
+                    _live.Add(item: resolved.RegistryKey);
+                    return resolved;
+                }
+            }
+            return routine;
+        }
 
         TypeInfo owner = routine.OwnerType;
 
@@ -554,7 +721,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     private static void CollectCalls(object? node, List<object> sink)
     {
         if (node == null) return;
-        if (node is CallExpression || node is GenericMethodCallExpression || node is CreatorExpression) sink.Add(item: node);
+        if (node is CallExpression || node is GenericMethodCallExpression || node is CreatorExpression || node is ThrowStatement) sink.Add(item: node);
 
         Type t = node.GetType();
         if (t.IsPrimitive || node is string || t.IsEnum) return;

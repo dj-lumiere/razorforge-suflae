@@ -92,7 +92,10 @@ public partial class LlvmCodeGenerator
             case CallLoweringKind.TypeConstructor or CallLoweringKind.WrapperConstruction when constructedType is RecordTypeInfo
             {
                 HasDirectBackendType: true
-            } directRecord && arguments.Count == 1:
+            } directRecord && arguments.Count == 1 &&
+                ShouldInlineDirectBackendConstruction(record: directRecord,
+                    arg: arguments[index: 0],
+                    resolvedRoutine: resolvedRoutine):
                 return EmitRecordConstruction(sb: sb, record: directRecord, arguments: arguments);
             case CallLoweringKind.TypeConstructor or CallLoweringKind.WrapperConstruction when constructedType is RecordTypeInfo ctorRecord && ctorRecord.MemberVariables.Count > 0 &&
                 arguments.Count == ctorRecord.MemberVariables.Count && arguments.All(
@@ -416,6 +419,35 @@ public partial class LlvmCodeGenerator
 
             return result;
         }
+    }
+
+    /// <summary>
+    /// Decides whether a 1-arg construction of a `@llvm("...")` record should be inlined as
+    /// a scalar cast / reinterpret instead of dispatching to its `$create` routine.
+    /// Inline when no $create was resolved, OR when the resolved routine's parameter LLVM
+    /// type differs from the wrapper's backend type (a scalar primitive cast like U64(s8)).
+    /// Otherwise call the routine — same LLVM type with a resolved $create indicates a real
+    /// conversion (e.g. CStr.$create(from: Referring[Text])), which a reinterpret would skip.
+    /// </summary>
+    private bool ShouldInlineDirectBackendConstruction(RecordTypeInfo record, Expression arg,
+        RoutineInfo? resolvedRoutine)
+    {
+        if (resolvedRoutine == null) return true;
+
+        TypeInfo? argType = GetExpressionType(expr: arg);
+        if (argType == null) return false;
+
+        string targetLlvm = GetLlvmType(type: record);
+        string argLlvm = GetLlvmType(type: argType);
+        if (argLlvm != targetLlvm) return true;
+
+        // Same LLVM type. If the resolved routine's first param doesn't match the arg type,
+        // SA picked the wrong overload (e.g. synthesized U64(Address) resolving to U64.$create(S8));
+        // a no-op reinterpret is the correct lowering since LLVM types coincide.
+        if (resolvedRoutine.Parameters.Count == 0) return true;
+        TypeInfo? paramType = resolvedRoutine.Parameters[index: 0].Type;
+        if (paramType == null) return false;
+        return paramType.FullName != argType.FullName;
     }
 
     /// <summary>
