@@ -120,7 +120,10 @@ internal sealed class AutoWiredRegistrationPass
                                      WrapperForwardingPass.WrapperTypeNames.Contains(
                                          item: (type as RecordTypeInfo)?.GenericDefinition?.Name
                                                ?? type.Name);
-                    if (!type.IsBlank && !isWrapper)
+                    // @llvm("ptr")-backed opaque handles (BigIntHandle, BigDecHandle, etc.)
+                    // have no semantic equality / hash — they're raw pointers. Skip auto-derivation.
+                    bool isOpaqueBackend = type is RecordTypeInfo r && r.HasDirectBackendType;
+                    if (!type.IsBlank && !isWrapper && !isOpaqueBackend)
                     {
                         // $hash / $eq are opt-in: only auto-derived when the record explicitly
                         // declares `obeys Hashable` / `obeys Equatable`. This avoids fanning out

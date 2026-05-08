@@ -182,14 +182,14 @@ internal static class GenericAstRewriter
                         : arg);
                 }
 
-                if (Registry != null)
+                if (Registry != null && newWrapperArgs.Count == 1)
                 {
-                    TypeInfo? wrapperDef = Registry.LookupType(name: wrapper.Name);
-                    if (wrapperDef is { IsGenericDefinition: true })
-                    {
-                        return Registry.TryGetResolution(genericDef: wrapperDef,
-                            typeArguments: newWrapperArgs) ?? original;
-                    }
+                    // Create-if-missing — body rewriting can encounter wrapper parameterizations
+                    // (e.g., Hijacked[Owned[Text]]) that no earlier pass materialized. Without
+                    // creation here, GMP never sees the type and codegen emits unresolved symbols.
+                    return Registry.GetOrCreateWrapperType(wrapperName: wrapper.Name,
+                        innerType: newWrapperArgs[0],
+                        isReadOnly: wrapper.IsReadOnly);
                 }
             }
 

@@ -109,18 +109,44 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             ProcessConcreteType(preExisting);
         }
 
+        // Same for wrapper instances (Hijacked[T], Owned[T], etc.). Wrappers like Hijacked have
+        // explicit method definitions in stdlib that need monomorphization for each concrete T,
+        // but live in _wrapperResolutions and aren't enqueued by NotifyConcreteRegistration.
+        foreach (TypeInfo preExisting in ctx.Registry.AllConcreteWrapperInstancesUnfiltered.ToList())
+        {
+            if (!processedTypes.Add(preExisting.FullName)) continue;
+            ProcessConcreteType(preExisting);
+        }
+
         // Fixed-point expansion: drain types created during body rewriting
         // (e.g. ListEmitter[Byte] registered when GenericAstRewriter rewrites List[Byte].$iter).
         // The self-nesting guard in GetOrCreateResolution prevents Hijacked^N infinite chains.
         IReadOnlyList<TypeInfo> discovered;
-        while ((discovered = ctx.Registry.DrainGmpDiscoveryQueue()).Count > 0)
+        bool madeProgress;
+        do
         {
-            foreach (TypeInfo newType in discovered)
+            madeProgress = false;
+            while ((discovered = ctx.Registry.DrainGmpDiscoveryQueue()).Count > 0)
             {
-                if (!processedTypes.Add(newType.FullName)) continue;
-                ProcessConcreteType(newType);
+                foreach (TypeInfo newType in discovered)
+                {
+                    if (!processedTypes.Add(newType.FullName)) continue;
+                    ProcessConcreteType(newType);
+                    madeProgress = true;
+                }
             }
-        }
+
+            // Wrapper instances aren't enqueued by NotifyConcreteRegistration (it only handles
+            // EntityTypeInfo/RecordTypeInfo). Re-scan _wrapperResolutions each round to pick up
+            // new wrappers like Hijacked[Owned[Text]] that GenericAstRewriter created while
+            // rewriting Owned[List[Owned[Text]]] forwarder bodies.
+            foreach (TypeInfo wrapper in ctx.Registry.AllConcreteWrapperInstancesUnfiltered.ToList())
+            {
+                if (!processedTypes.Add(wrapper.FullName)) continue;
+                ProcessConcreteType(wrapper);
+                madeProgress = true;
+            }
+        } while (madeProgress);
 
         if (timing)
         {
@@ -189,17 +215,13 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             // Strategy-B reachability gate: when LiveRoutineKeys is populated, only emit bodies
             // for routines reachable from program entry points. Empty set disables the filter
             // (legacy fan-out behavior). RoutineReachabilityPass populates the set.
-            if (ctx.LiveRoutineKeys.Count > 0 && !ctx.LiveRoutineKeys.Contains(item: key))
-            {
-                if (key.Contains("List[Core.Owned") && (key.Contains("$eq") || key.Contains("$contains")))
-                    Console.Error.WriteLine($"[GMP-gate-skip] {key}");
+            // Wired routines bypass the gate: codegen/synthesis emit them unconditionally for
+            // every live owner type. Types created during GMP body rewriting (e.g.,
+            // ListEmitter[Byte] from List[Byte].$represent) post-date RoutineReachabilityPass
+            // and so were never seeded — without this bypass their wired routines vanish.
+            if (ctx.LiveRoutineKeys.Count > 0 && !ctx.LiveRoutineKeys.Contains(item: key)
+                && !IsWiredRoutineName(genMethod.Name))
                 continue;
-            }
-            if (key.Contains("List[Core.Owned") && (key.Contains("$eq") || key.Contains("$contains")))
-                Console.Error.WriteLine($"[GMP-gate-pass] {key}");
-
-            // Trace BuildBody outcome for the troublesome routines.
-            bool isTracedKey = key.Contains("List[Core.Owned") && (key.Contains("$eq") || key.Contains("$contains"));
 
             MonomorphizedBody? body = BuildBody(
                 genMethod: genMethod,
@@ -208,13 +230,22 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 typeSubs: typeSubs,
                 stringSubs: stringSubs);
 
-            if (isTracedKey)
-                Console.Error.WriteLine($"[BuildBody-result] {key} body={(body == null ? "null" : "ok")} synthesized={body?.IsSynthesized} originalName={genMethod.OriginalName}");
-
             if (body != null)
                 ctx.InstantiatedGenericBodies[key] = body;
         }
     }
+
+    /// Routines reachable only through synthesized bodies (e.g., for-loop iteration in
+    /// auto-generated $represent / $diagnose) that ReachabilityPass cannot trace because the
+    /// owner type (ListEmitter[Byte], etc.) is created post-pass during GMP body rewriting.
+    /// Restricted to iteration-related names — broader sets cascade into derived-op chains
+    /// ($ne→$eq, $notcontains→$contains) where the "missing companion" is the actual culprit.
+    private static readonly HashSet<string> _gateBypassNames = new(StringComparer.Ordinal)
+    {
+        "try_next",
+    };
+
+    private static bool IsWiredRoutineName(string name) => _gateBypassNames.Contains(name);
 
     private void ProcessResolvedMethodGenericRoutines()
     {
@@ -251,7 +282,9 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 RoutineDeclaration? astDecl = FindInStdlib(
                     genericAstName: astName,
                     expectedParamCount: resolvedRoutine.GenericDefinition.Parameters.Count,
-                    typeSubs: typeSubs);
+                    typeSubs: typeSubs,
+                    expectedParamNames: resolvedRoutine.GenericDefinition.Parameters
+                        .Select(static p => p.Name).ToList());
                 if (astDecl == null)
                 {
                     // Check if the generic definition has a synthesized body in VariantBodies.

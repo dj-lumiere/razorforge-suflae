@@ -1363,6 +1363,20 @@ public sealed partial class TypeRegistry
                            .Distinct();
 
     /// <summary>
+    /// All concrete wrapper instances bypassing the liveness filter. Mirror of
+    /// <see cref="AllConcreteGenericInstancesUnfiltered"/> for wrapper types — used by GMP to
+    /// monomorphize methods on wrappers like <c>Hijacked[Owned[Text]]</c> that were created
+    /// during stdlib analysis but never reached the liveness walk (e.g. as a field type of an
+    /// iterator entity referenced indirectly via $represent/$diagnose).
+    /// </summary>
+    public IEnumerable<WrapperTypeInfo> AllConcreteWrapperInstancesUnfiltered =>
+        _wrapperResolutions.Values
+                           .Where(predicate: t =>
+                                t.TypeArguments is { Count: > 0 } args && args.All(predicate: IsFullyConcrete) &&
+                                !t.IsStdlibLazy)
+                           .Distinct();
+
+    /// <summary>
     /// Gets all types that can have methods (records, entities, choices, flags).
     /// </summary>
     /// <returns>An enumerable of all types that can have methods.</returns>

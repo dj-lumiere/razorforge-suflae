@@ -90,7 +90,22 @@ internal sealed class WrapperForwardingPass
     [
         "retain",
         "release",
-        "$destroy"
+        "$destroy",
+        // Operators/hashing/display: invoked from generic stdlib container
+        // bodies after monomorphization, so they bypass SA's lazy synthesis
+        // path. Wrappers do not define these themselves — they transparently
+        // forward to inner T (e.g. Owned[Text].$eq → Text.$eq).
+        "$eq",
+        "$ne",
+        "$cmp",
+        "$lt",
+        "$le",
+        "$gt",
+        "$ge",
+        "$hash",
+        "$secure_hash",
+        "$represent",
+        "$diagnose"
     ];
 
     /// <summary>

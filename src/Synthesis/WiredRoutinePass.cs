@@ -694,12 +694,14 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 Object: fieldAccess,
                 PropertyName: "$hash",
                 Location: _synthLoc) { ResolvedType = u64Type };
+            RoutineInfo? fieldHashRoutine = ctx.Registry.LookupMethod(type: field.Type, methodName: "$hash");
             Expression fieldHash = new CallExpression(
                 Callee: hashMethod,
                 Arguments: [],
                 Location: _synthLoc)
             {
                 ResolvedType = u64Type,
+                ResolvedRoutine = fieldHashRoutine,
                 LoweringKind = CallLoweringKind.DirectMemberRoutine
             };
 
@@ -936,6 +938,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 { ResolvedType = ownerType };
             var fieldAccess = new MemberExpression(Object: meRef, PropertyName: field.Name,
                 Location: _synthLoc) { ResolvedType = field.Type };
+            RoutineInfo? fieldSecureHashRoutine = ctx.Registry.LookupMethod(type: field.Type, methodName: "$secure_hash");
             Expression fieldHash = new CallExpression(
                 Callee: new MemberExpression(Object: fieldAccess, PropertyName: "$secure_hash",
                     Location: _synthLoc) { ResolvedType = u64Type },
@@ -947,6 +950,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 Location: _synthLoc)
             {
                 ResolvedType = u64Type,
+                ResolvedRoutine = fieldSecureHashRoutine,
                 LoweringKind = CallLoweringKind.DirectMemberRoutine
             };
 

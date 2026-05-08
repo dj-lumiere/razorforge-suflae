@@ -538,6 +538,15 @@ public sealed partial class TypeRegistry
         var candidates = new List<RoutineInfo>();
         CollectMemberRoutineCandidates(type: type, methodName: methodName, candidates: candidates);
 
+        // Protocol abstract methods are never a valid dispatch target on a concrete receiver —
+        // RF protocols are abstract-only (no default impls). Including them would let lookup
+        // pick `Equatable.$eq(Self)` for `S128 == S64`, masking the integer-promotion fallback
+        // and emitting an unresolved `Core.Equatable.$eq` symbol at link time.
+        if (type is not ProtocolTypeInfo)
+        {
+            candidates.RemoveAll(match: c => c.OwnerType is ProtocolTypeInfo);
+        }
+
         if (candidates.Count == 0)
         {
             return null;
