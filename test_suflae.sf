@@ -1,6 +1,0 @@
-routine greet(name: Text) -> Text:
-    return f"Hello, {name}!"
-
-routine start():
-    let message = greet("World")
-    show(message)
