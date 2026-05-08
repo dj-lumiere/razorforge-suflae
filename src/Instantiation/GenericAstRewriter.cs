@@ -29,7 +29,8 @@ internal static class GenericAstRewriter
     public static RoutineDeclaration Rewrite(RoutineDeclaration routine,
         IReadOnlyDictionary<string, string> subs,
         IReadOnlyDictionary<string, TypeInfo>? typeSubs = null,
-        TypeRegistry? registry = null)
+        TypeRegistry? registry = null,
+        RoutineInfo? enclosingRoutine = null)
     {
         var ctx = typeSubs != null && registry != null
             ? new RewriteContext(subs, typeSubs, registry)
@@ -38,6 +39,17 @@ internal static class GenericAstRewriter
         var rewrittenParams = routine.Parameters
                                      .Select(selector: p => RewriteParameter(param: p, ctx: ctx))
                                      .ToList();
+
+        foreach (Parameter p in rewrittenParams)
+        {
+            TypeInfo? pType = p.Type?.ResolvedType ?? (p.Type != null ? ctx.ResolveTypeExpressionPublic(p.Type) : null);
+            if (pType != null) ctx.ParamTypes[p.Name] = pType;
+        }
+        if (enclosingRoutine?.OwnerType is { } ownerType)
+        {
+            TypeInfo resolvedOwner = ctx.ResolveType(ownerType) ?? ownerType;
+            ctx.ParamTypes["me"] = resolvedOwner;
+        }
         TypeExpression? rewrittenReturnType = routine.ReturnType != null
             ? RewriteType(type: routine.ReturnType, ctx: ctx)
             : null;
@@ -77,6 +89,15 @@ internal static class GenericAstRewriter
         public IReadOnlyDictionary<string, string> StringSubs { get; } = stringSubs;
         public IReadOnlyDictionary<string, TypeInfo>? TypeSubs { get; } = typeSubs;
         public TypeRegistry? Registry { get; } = registry;
+
+        /// <summary>
+        /// Map of parameter name to substituted TypeInfo for the routine being rewritten.
+        /// Populated by <see cref="Rewrite"/> and the public <see cref="RewriteStatement"/>
+        /// overloads that accept a routine. Used to backfill <c>IdentifierExpression.ResolvedType</c>
+        /// when SA failed to annotate a parameter reference (e.g. <c>you.address()</c> in
+        /// <c>Hijacked[T].$cmp</c>'s generic-def body).
+        /// </summary>
+        public Dictionary<string, TypeInfo> ParamTypes { get; } = new();
 
         /// <summary>
         /// Resolves a <see cref="TypeInfo"/> through the substitution map. Returns null
@@ -494,6 +515,8 @@ internal static class GenericAstRewriter
             return null;
         }
 
+        public TypeInfo? ResolveTypeExpressionPublic(TypeExpression typeExpr) => ResolveTypeExpression(typeExpr);
+
         private TypeInfo? ResolveTypeExpression(TypeExpression typeExpr)
         {
             if (Registry == null)
@@ -674,21 +697,9 @@ internal static class GenericAstRewriter
                        TypeArguments = null
                    },
 
-            CallExpression call => ReclassifyIfNeeded(call with
-            {
-                Callee = RewriteExpression(expr: call.Callee, ctx: ctx),
-                Arguments = call.Arguments
-                                .Select(selector: a => RewriteExpression(expr: a, ctx: ctx))
-                                .ToList(),
-                TypeArguments = call.TypeArguments
-                                    ?.Select(selector: ta => RewriteType(type: ta, ctx: ctx))
-                                     .ToList()
-            }, ctx),
+            CallExpression call => ReclassifyIfNeeded(CloneCall(call, ctx), ctx),
 
-            MemberExpression me => me with
-            {
-                Object = RewriteExpression(expr: me.Object, ctx: ctx)
-            },
+            MemberExpression me => CloneMember(me, ctx),
 
             OptionalMemberExpression ome => ome with
             {
@@ -854,6 +865,8 @@ internal static class GenericAstRewriter
                 Carrier = RewriteExpression(expr: cpe.Carrier, ctx: ctx)
             },
 
+            NamedArgumentExpression nae => nae with { Value = RewriteExpression(expr: nae.Value, ctx: ctx) },
+
             IdentifierExpression identifier => identifier with { },
 
             // Leaf nodes ??no children to rewrite
@@ -983,6 +996,40 @@ internal static class GenericAstRewriter
         return result;
     }
 
+    private static CallExpression CloneCall(CallExpression call, RewriteContext ctx)
+    {
+        var rewritten = call with
+        {
+            Callee = RewriteExpression(expr: call.Callee, ctx: ctx),
+            Arguments = call.Arguments
+                            .Select(selector: a => RewriteExpression(expr: a, ctx: ctx))
+                            .ToList(),
+            TypeArguments = call.TypeArguments
+                                ?.Select(selector: ta => RewriteType(type: ta, ctx: ctx))
+                                 .ToList()
+        };
+        rewritten.ResolvedRoutine = call.ResolvedRoutine;
+        rewritten.ResolvedDispatch = call.ResolvedDispatch;
+        rewritten.LoweringKind = call.LoweringKind;
+        rewritten.ConstructedType = call.ConstructedType;
+        rewritten.IsCollectionLiteral = call.IsCollectionLiteral;
+        rewritten.ResolvedType = call.ResolvedType;
+        return rewritten;
+    }
+
+    private static MemberExpression CloneMember(MemberExpression me, RewriteContext ctx)
+    {
+        Expression newObj = RewriteExpression(expr: me.Object, ctx: ctx);
+        if (newObj.ResolvedType == null && newObj is IdentifierExpression idObj &&
+            ctx.ParamTypes.TryGetValue(idObj.Name, out TypeInfo? paramType))
+        {
+            newObj.ResolvedType = paramType;
+        }
+        var rewritten = me with { Object = newObj };
+        rewritten.ResolvedType = me.ResolvedType;
+        return rewritten;
+    }
+
     //  BuilderService constant folding
 
     /// <summary>
@@ -1001,6 +1048,8 @@ internal static class GenericAstRewriter
         // the RF parser may produce either depending on context.
         string? typeName = callee.Object switch
         {
+            IdentifierExpression id when id.Name == "me" &&
+                ctx.ParamTypes.TryGetValue(key: "me", value: out TypeInfo? meType) => meType.FullName,
             IdentifierExpression id when ctx.StringSubs.TryGetValue(
                 key: id.Name, value: out string? sub) => sub,
             IdentifierExpression id => id.Name,
@@ -1180,11 +1229,27 @@ internal static class GenericAstRewriter
     public static Statement RewriteStatement(Statement stmt,
         IReadOnlyDictionary<string, string> subs,
         IReadOnlyDictionary<string, TypeInfo>? typeSubs,
-        TypeRegistry? registry)
-        => RewriteStatement(stmt: stmt,
-            ctx: typeSubs != null && registry != null
-                ? new RewriteContext(subs, typeSubs, registry)
-                : new RewriteContext(subs, null, null));
+        TypeRegistry? registry,
+        RoutineInfo? enclosingRoutine = null)
+    {
+        var ctx = typeSubs != null && registry != null
+            ? new RewriteContext(subs, typeSubs, registry)
+            : new RewriteContext(subs, null, null);
+        if (enclosingRoutine?.Parameters != null)
+        {
+            foreach (ParameterInfo p in enclosingRoutine.Parameters)
+            {
+                TypeInfo? resolvedParamType = ctx.ResolveType(p.Type) ?? p.Type;
+                if (resolvedParamType != null) ctx.ParamTypes[p.Name] = resolvedParamType;
+            }
+        }
+        if (enclosingRoutine?.OwnerType is { } ownerType)
+        {
+            TypeInfo resolvedOwner = ctx.ResolveType(ownerType) ?? ownerType;
+            ctx.ParamTypes["me"] = resolvedOwner;
+        }
+        return RewriteStatement(stmt: stmt, ctx: ctx);
+    }
 
     private static Statement RewriteStatement(Statement stmt,
         RewriteContext ctx)

@@ -186,12 +186,30 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             if (ctx.InstantiatedGenericBodies.ContainsKey(key))
                 continue;
 
+            // Strategy-B reachability gate: when LiveRoutineKeys is populated, only emit bodies
+            // for routines reachable from program entry points. Empty set disables the filter
+            // (legacy fan-out behavior). RoutineReachabilityPass populates the set.
+            if (ctx.LiveRoutineKeys.Count > 0 && !ctx.LiveRoutineKeys.Contains(item: key))
+            {
+                if (key.Contains("List[Core.Owned") && (key.Contains("$eq") || key.Contains("$contains")))
+                    Console.Error.WriteLine($"[GMP-gate-skip] {key}");
+                continue;
+            }
+            if (key.Contains("List[Core.Owned") && (key.Contains("$eq") || key.Contains("$contains")))
+                Console.Error.WriteLine($"[GMP-gate-pass] {key}");
+
+            // Trace BuildBody outcome for the troublesome routines.
+            bool isTracedKey = key.Contains("List[Core.Owned") && (key.Contains("$eq") || key.Contains("$contains"));
+
             MonomorphizedBody? body = BuildBody(
                 genMethod: genMethod,
                 concreteInfo: concreteInfo,
                 genDef: genDef,
                 typeSubs: typeSubs,
                 stringSubs: stringSubs);
+
+            if (isTracedKey)
+                Console.Error.WriteLine($"[BuildBody-result] {key} body={(body == null ? "null" : "ok")} synthesized={body?.IsSynthesized} originalName={genMethod.OriginalName}");
 
             if (body != null)
                 ctx.InstantiatedGenericBodies[key] = body;
@@ -248,7 +266,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                             keySelector: kvp => kvp.Key,
                             elementSelector: kvp => kvp.Value.FullName);
                         Statement rewritten = GenericAstRewriter.RewriteStatement(
-                            defVariantBody, stringSubs2, typeSubs, ctx.Registry);
+                            defVariantBody, stringSubs2, typeSubs, ctx.Registry, resolvedRoutine);
                         ctx.InstantiatedGenericBodies[resolvedRoutine.RegistryKey] = new MonomorphizedBody(
                             Ast: WrapInShellDecl(name: resolvedRoutine.Name, body: rewritten,
                                 info: resolvedRoutine),
@@ -272,7 +290,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                             keySelector: kvp => kvp.Key,
                             elementSelector: kvp => kvp.Value.FullName);
                         Statement rewritten3 = GenericAstRewriter.RewriteStatement(
-                            genDefGenDefBody, stringSubs3, typeSubs, ctx.Registry);
+                            genDefGenDefBody, stringSubs3, typeSubs, ctx.Registry, resolvedRoutine);
                         ctx.InstantiatedGenericBodies[resolvedRoutine.RegistryKey] = new MonomorphizedBody(
                             Ast: WrapInShellDecl(name: resolvedRoutine.Name, body: rewritten3,
                                 info: resolvedRoutine),
@@ -315,7 +333,8 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                         routine: astDecl,
                         subs: stringSubs,
                         typeSubs: typeSubs,
-                        registry: ctx.Registry);
+                        registry: ctx.Registry,
+                        enclosingRoutine: resolvedRoutine);
 
                 ctx.InstantiatedGenericBodies[resolvedRoutine.RegistryKey] = new MonomorphizedBody(
                     Ast: rewrittenDecl,
@@ -410,7 +429,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 typeSubs.Values.First() is not EntityTypeInfo;
             if (!isWrapperWithNonEntityInner)
             {
-                Statement rewritten = GenericAstRewriter.RewriteStatement(variantBody, stringSubs, typeSubs, ctx.Registry);
+                Statement rewritten = GenericAstRewriter.RewriteStatement(variantBody, stringSubs, typeSubs, ctx.Registry, concreteInfo);
                 return new MonomorphizedBody(
                     Ast: WrapInShellDecl(name: concreteInfo.Name, body: rewritten, info: concreteInfo),
                     Info: concreteInfo,
@@ -425,7 +444,12 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         // If we skipped a variant body to force stdlib fallback (wrapper with non-entity T),
         // don't stop here — fall through to FindInStdlib below.
         if (genMethod.IsSynthesized && !skippedVariantBodyForStdlibFallback)
-            return null; // body comes from WiredRoutinePass via ctx.VariantBodies
+        {
+            string ck = concreteInfo.RegistryKey;
+            if (ck.Contains("List[Core.Owned") && (ck.Contains("$eq") || ck.Contains("$contains")))
+                Console.Error.WriteLine($"[BuildBody-null-synth] gen={genMethod.RegistryKey} concrete={ck}");
+            return null;
+        }
         // Regular method: search stdlib + user program ASTs
         string astName = BuildAstName(genDef: genDef, routineName: genMethod.Name);
         var paramNames = genMethod.Parameters.Select(static p => p.Name).ToList();
@@ -436,14 +460,20 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             expectedParamNames: paramNames);
 
         if (astDecl == null)
+        {
+            string ck = concreteInfo.RegistryKey;
+            if (ck.Contains("List[Core.Owned") && (ck.Contains("$eq") || ck.Contains("$contains")))
+                Console.Error.WriteLine($"[BuildBody-stdlib-miss] gen={genMethod.RegistryKey} concrete={ck} astName={astName}");
             return null;
+        }
 
         RoutineDeclaration rewrittenDecl =
             GenericAstRewriter.Rewrite(
                 routine: astDecl,
                 subs: stringSubs,
                 typeSubs: typeSubs,
-                registry: ctx.Registry);
+                registry: ctx.Registry,
+                enclosingRoutine: concreteInfo);
 
         return new MonomorphizedBody(
             Ast: rewrittenDecl,
@@ -513,7 +543,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         // Pre-built variant body from ErrorHandlingVariantPass (keyed by generic method RegistryKey)
         if (ctx.VariantBodies.TryGetValue(key: genMethod.RegistryKey, out Statement? prebuiltVariant))
         {
-            Statement rewritten = GenericAstRewriter.RewriteStatement(prebuiltVariant, stringSubs, typeSubs, ctx.Registry);
+            Statement rewritten = GenericAstRewriter.RewriteStatement(prebuiltVariant, stringSubs, typeSubs, ctx.Registry, emitInfo);
             return new MonomorphizedBody(
                 Ast: WrapInShellDecl(name: emitInfo.Name, body: rewritten, info: emitInfo),
                 Info: emitInfo,
@@ -537,7 +567,8 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 routine: astDecl,
                 subs: stringSubs,
                 typeSubs: typeSubs,
-                registry: ctx.Registry);
+                registry: ctx.Registry,
+                enclosingRoutine: emitInfo);
 
         // The fallback body is the original failable AST (ReturnStatement nodes, not
         // VariantReturnStatement). Transform it so codegen emits carrier construction.

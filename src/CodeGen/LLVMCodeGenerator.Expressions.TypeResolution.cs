@@ -797,8 +797,11 @@ public partial class LlvmCodeGenerator
             IdentifierExpression id => id.Name,
             _ => call.Callee.GetType().Name
         };
+        string memberObjResolvedDesc = call.Callee is MemberExpression me
+            ? me.Object.ResolvedType?.FullName ?? "<null>"
+            : "<not member>";
         throw new InvalidOperationException(
-            $"CallExpression '{calleeDesc}' has no SA-resolved return type (ResolvedRoutine=null, ConstructedType=null). " +
+            $"CallExpression '{calleeDesc}' has no SA-resolved return type (ResolvedRoutine=null, ConstructedType=null, ObjectResolvedType={memberObjResolvedDesc}). " +
             $"Semantic analysis must annotate all calls. Routine: {_currentEmittingRoutine?.Name ?? "<unknown>"}.");
     }
 

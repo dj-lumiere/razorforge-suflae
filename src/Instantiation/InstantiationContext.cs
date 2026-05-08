@@ -55,6 +55,16 @@ public sealed class InstantiationContext
     /// </summary>
     public HashSet<string> ReachableGenericRoutines { get; } = [];
 
+    /// <summary>
+    /// Strategy-B live routine set: <see cref="RoutineInfo.RegistryKey"/> values reachable from
+    /// program entry points (<c>start()</c>, <c>@test</c>, <c>@bench</c>) via a transitive
+    /// call-graph BFS. When non-empty, GMP gates body emission on membership so unreachable
+    /// methods on live concrete types (e.g. <c>List[Owned[Text]].insertion_sort</c> when no caller
+    /// uses it) are skipped, preventing the stdlib closure cascade from forcing emission of
+    /// unused routines. Populated by <c>RoutineReachabilityPass</c>; empty disables filtering.
+    /// </summary>
+    public HashSet<string> LiveRoutineKeys { get; } = new(comparer: StringComparer.Ordinal);
+
     /// <summary>When true, passes print per-iteration diagnostics to stderr.</summary>
     public bool SaTiming { get; set; }
 

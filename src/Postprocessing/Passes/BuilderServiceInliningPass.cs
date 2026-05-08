@@ -394,7 +394,17 @@ internal sealed class BuilderServiceInliningPass
                 List<Expression> args = LowerExpressionList(call.Arguments);
                 bool changed = !ReferenceEquals(callee, call.Callee)
                                || !ReferenceEquals(args, call.Arguments);
-                return changed ? call with { Callee = callee, Arguments = args } : expr;
+                if (!changed) return expr;
+                var rewritten = call with { Callee = callee, Arguments = args };
+                // ResolvedRoutine/ResolvedType/etc. are mutable {get;set;} properties — `with` drops them.
+                rewritten.ResolvedRoutine = call.ResolvedRoutine;
+                rewritten.ResolvedDispatch = call.ResolvedDispatch;
+                rewritten.LoweringKind = call.LoweringKind;
+                rewritten.ConstructedType = call.ConstructedType;
+                rewritten.IsCollectionLiteral = call.IsCollectionLiteral;
+                rewritten.TypeArguments = call.TypeArguments;
+                rewritten.ResolvedType = call.ResolvedType;
+                return rewritten;
             }
 
             case NamedArgumentExpression named:

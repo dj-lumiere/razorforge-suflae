@@ -67,6 +67,12 @@ public sealed class DesugaringContext
     public bool SaTiming { get; set; }
 
     /// <summary>
+    /// Strategy-B live routine set (RegistryKey values reachable from program entry points).
+    /// When non-empty, GMP gates body emission on membership; empty disables filtering.
+    /// </summary>
+    public HashSet<string> LiveRoutineKeys { get; } = new(comparer: StringComparer.Ordinal);
+
+    /// <summary>
     /// Initializes shared state for passes that rewrite verified syntax before instantiation.
     /// </summary>
     public DesugaringContext(TypeRegistry registry,

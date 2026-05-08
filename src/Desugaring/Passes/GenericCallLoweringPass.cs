@@ -119,8 +119,10 @@ internal sealed class GenericCallLoweringPass
         foreach (string key in _instantiatedGenericBodies.Keys.ToList())
         {
             MonomorphizedBody body = _instantiatedGenericBodies[key];
-            if (body.IsSynthesized) continue;
-
+            // NOTE: Previously skipped synthesized bodies (assumed they never contained GMCEs),
+            // but wrapper $represent/$diagnose forwarders synthesized by WiredRoutinePass /
+            // wrapper-forwarder synthesis DO contain GMCEs (e.g. Hijacked[T].x calls). Lower
+            // them too so they meet the codegen contract.
             Statement lowered = LowerStatement(body.Ast.Body);
             if (!ReferenceEquals(lowered, body.Ast.Body))
             {
@@ -301,13 +303,26 @@ internal sealed class GenericCallLoweringPass
                     argsChanged |= !ReferenceEquals(lowered, arg);
                 }
                 bool changed = !ReferenceEquals(callee, call.Callee) || argsChanged;
-                return changed ? call with { Callee = callee, Arguments = args } : expr;
+                if (!changed) return expr;
+                var rewritten = call with { Callee = callee, Arguments = args };
+                // ResolvedRoutine/ResolvedType/etc. are mutable {get;set;} props — `with` drops them.
+                rewritten.ResolvedRoutine = call.ResolvedRoutine;
+                rewritten.ResolvedDispatch = call.ResolvedDispatch;
+                rewritten.LoweringKind = call.LoweringKind;
+                rewritten.ConstructedType = call.ConstructedType;
+                rewritten.IsCollectionLiteral = call.IsCollectionLiteral;
+                rewritten.TypeArguments = call.TypeArguments;
+                rewritten.ResolvedType = call.ResolvedType;
+                return rewritten;
             }
 
             case MemberExpression me:
             {
                 Expression obj = LowerExpression(me.Object);
-                return ReferenceEquals(obj, me.Object) ? expr : me with { Object = obj };
+                if (ReferenceEquals(obj, me.Object)) return expr;
+                var rewritten = me with { Object = obj };
+                rewritten.ResolvedType = me.ResolvedType;
+                return rewritten;
             }
 
             case BinaryExpression bin:
@@ -364,14 +379,22 @@ internal sealed class GenericCallLoweringPass
         if (gmc.Object is IdentifierExpression literalId && literalId.Name == gmc.MethodName
             && gmc.ResolvedRoutine == null
             && _registry.LookupType(name: gmc.MethodName) != null
-            && gmc.Arguments.Count > 0
-            && gmc.Arguments.All(predicate: a => a is NamedArgumentExpression))
+            && gmc.Arguments.Count > 0)
         {
+            // Accept either fully named args (record-style field init) or fully positional
+            // (constructor call form like Hijacked[T](me) from synthesized wrapper bodies).
+            // CreatorExpression's MemberVariables uses ("", expr) for positional entries.
+            bool allNamed = gmc.Arguments.All(predicate: a => a is NamedArgumentExpression);
+            bool anyNamed = gmc.Arguments.Any(predicate: a => a is NamedArgumentExpression);
+            if (!allNamed && anyNamed) return null; // mixed named/positional — not our case
+
             var members = new List<(string Name, Expression Value)>(capacity: gmc.Arguments.Count);
             foreach (Expression arg in gmc.Arguments)
             {
-                var named = (NamedArgumentExpression)arg;
-                members.Add((named.Name, LowerExpression(named.Value)));
+                if (arg is NamedArgumentExpression named)
+                    members.Add((named.Name, LowerExpression(named.Value)));
+                else
+                    members.Add(("", LowerExpression(arg)));
             }
             return new CreatorExpression(
                 TypeName: gmc.MethodName,
