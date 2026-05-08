@@ -748,20 +748,17 @@ routine SortedSet[T].update_subtree_size(node: BTreeSetNode[T])
 ### :returns: The element at that sorted position.
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
 @readonly
-routine SortedSet[T].$getitem![I](index: I) -> T
-needs I obeys Integral
-  var idx = index.U64()
-  if idx >= me.count
-    throw IndexOutOfBoundsError(index: idx, count: me.count)
-  return me.get_by_rank(me.root!!, idx)
+routine SortedSet[T].$getitem!(index: U64) -> T
+  if index >= me.count
+    throw IndexOutOfBoundsError(index: index, count: me.count)
+  return me.get_by_rank(me.root!!, index)
 
 ### Returns the element addressed by a back index in sorted order.
 ### `^0` is the largest element, `^1` the second-largest, and so on.
 ### :param index: The backward position to resolve.
 ### :returns: The element at the resolved sorted position.
 @readonly
-routine SortedSet[T].$getitem![I](index: BackIndex[I]) -> T
-needs I obeys Integral
+routine SortedSet[T].$getitem!(index: BackIndex) -> T
   var idx = index.resolve(me.count)
   return me.get_by_rank(me.root!!, idx)
 

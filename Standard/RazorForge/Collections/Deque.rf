@@ -263,24 +263,20 @@ routine Deque[T].reserve(new_capacity: U64)
 ### :returns: The element at that logical position.
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
 @readonly
-routine Deque[T].$getitem![I](index: I) -> T
-needs I obeys Integral
-  var idx = index.U64()
-  if idx >= me.count
-    throw IndexOutOfBoundsError(index: idx, count: me.count)
-  var physical_idx = me.physical_index(idx)
+routine Deque[T].$getitem!(index: U64) -> T
+  if index >= me.count
+    throw IndexOutOfBoundsError(index: index, count: me.count)
+  var physical_idx = me.physical_index(index)
   return me.read_at(physical_idx)
 
 ### Replaces the element at the given zero-based logical position.
 ### :param index: The zero-based logical position to update.
 ### :param value: The replacement element.
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
-routine Deque[T].$setitem![I](index: I, value: T)
-needs I obeys Integral
-  var idx = index.U64()
-  if idx >= me.count
-    throw IndexOutOfBoundsError(index: idx, count: me.count)
-  var physical_idx = me.physical_index(idx)
+routine Deque[T].$setitem!(index: U64, value: T)
+  if index >= me.count
+    throw IndexOutOfBoundsError(index: index, count: me.count)
+  var physical_idx = me.physical_index(index)
   me.write_at(physical_idx: physical_idx, value: value)
   return
 
@@ -293,8 +289,7 @@ needs I obeys Integral
 ### :param index: The backward position to resolve.
 ### :returns: The element at the resolved position.
 @readonly
-routine Deque[T].$getitem![I](index: BackIndex[I]) -> T
-needs I obeys Integral
+routine Deque[T].$getitem!(index: BackIndex) -> T
   var idx = index.resolve(me.count)
   var physical_idx = me.physical_index(idx)
   return me.read_at(physical_idx)
@@ -302,8 +297,7 @@ needs I obeys Integral
 ### Replaces the element addressed by a back index.
 ### :param index: The backward position to resolve.
 ### :param value: The replacement element.
-routine Deque[T].$setitem![I](index: BackIndex[I], value: T)
-needs I obeys Integral
+routine Deque[T].$setitem!(index: BackIndex, value: T)
   var idx = index.resolve(me.count)
   var physical_idx = me.physical_index(idx)
   me.write_at(physical_idx: physical_idx, value: value)

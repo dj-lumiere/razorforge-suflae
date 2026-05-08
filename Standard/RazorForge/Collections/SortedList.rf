@@ -641,16 +641,13 @@ routine SortedList[T].remove_all(value: T) -> U64
 # ============================================================================
 
 @readonly
-routine SortedList[T].$getitem![I](index: I) -> T
-needs I obeys Integral
-  var idx = index.U64()
-  if idx >= me.count
-    throw IndexOutOfBoundsError(index: idx, count: me.count)
-  return me.get_by_rank(me.root!!, idx)
+routine SortedList[T].$getitem!(index: U64) -> T
+  if index >= me.count
+    throw IndexOutOfBoundsError(index: index, count: me.count)
+  return me.get_by_rank(me.root!!, index)
 
 @readonly
-routine SortedList[T].$getitem![I](index: BackIndex[I]) -> T
-needs I obeys Integral
+routine SortedList[T].$getitem!(index: BackIndex) -> T
   var idx = index.resolve(me.count)
   return me.get_by_rank(me.root!!, idx)
 

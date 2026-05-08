@@ -188,24 +188,20 @@ routine List[T].remove_at!(index: U64) -> T
 ### :returns: The element at that position.
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
 @readonly
-routine List[T].$getitem![I](index: I) -> T
-needs I obeys Integral
-  var idx = index.U64()
-  if idx >= me.count
-    throw IndexOutOfBoundsError(index: idx.U64(), count: me.count.U64())
-  var byte_offset = T.data_size() * idx
+routine List[T].$getitem!(index: U64) -> T
+  if index >= me.count
+    throw IndexOutOfBoundsError(index: index, count: me.count)
+  var byte_offset = T.data_size() * index
   return me.data.offset(byte_offset).extract()
 
 ### Replaces the element at `index` with `value`.
 ### :param index: The zero-based position to update.
 ### :param value: The replacement value.
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
-routine List[T].$setitem![I](index: I, value: T)
-needs I obeys Integral
-  var idx = index.U64()
-  if idx >= me.count
-    throw IndexOutOfBoundsError(index: idx.U64(), count: me.count.U64())
-  var byte_offset = T.data_size() * idx
+routine List[T].$setitem!(index: U64, value: T)
+  if index >= me.count
+    throw IndexOutOfBoundsError(index: index, count: me.count)
+  var byte_offset = T.data_size() * index
   me.data.offset(byte_offset).inject(value)
   return
 
@@ -217,8 +213,7 @@ needs I obeys Integral
 ### :param index: The backward position to resolve (`^0` is the last element).
 ### :returns: The element at the resolved position.
 @readonly
-routine List[T].$getitem![I](index: BackIndex[I]) -> T
-needs I obeys Integral
+routine List[T].$getitem!(index: BackIndex) -> T
   var idx = index.resolve(me.count)
   var byte_offset = T.data_size() * idx
   return me.data.offset(byte_offset).extract()
@@ -226,8 +221,7 @@ needs I obeys Integral
 ### Replaces the element addressed by a back index.
 ### :param index: The backward position to resolve (`^0` is the last element).
 ### :param value: The replacement value.
-routine List[T].$setitem![I](index: BackIndex[I], value: T)
-needs I obeys Integral
+routine List[T].$setitem!(index: BackIndex, value: T)
   var idx = index.resolve(me.count)
   var byte_offset = T.data_size() * idx
   me.data.offset(byte_offset).inject(value)
@@ -261,18 +255,14 @@ routine List[T].set_raw(index: U64, value: T)
 ### :returns: A new `List[T]` holding the selected elements.
 ### :throws: {IndexOutOfBoundsError} if either bound exceeds `count()`.
 @readonly
-routine List[T].$getslice![I](start: I, end: I) -> List[T]
-needs I obeys Integral
-  var s = start.U64()
-  var e = end.U64()
-
-  if s > me.count or e > me.count
-    throw IndexOutOfBoundsError(index: e.U64(), count: me.count.U64())
+routine List[T].$getslice!(start: U64, end: U64) -> List[T]
+  if start > me.count or end > me.count
+    throw IndexOutOfBoundsError(index: end, count: me.count)
 
   var result = List[T]()
-  var i = s
+  var i = start
   loop
-    if i >= e
+    if i >= end
       break
     var byte_offset = T.data_size() * i
     result.add_last(me.data.offset(byte_offset).extract())
@@ -290,8 +280,7 @@ needs I obeys Integral
 ### :param end: The exclusive ending back index.
 ### :returns: A new `List[T]` holding the selected elements.
 @readonly
-routine List[T].$getslice![I](start: BackIndex[I], end: BackIndex[I]) -> List[T]
-needs I obeys Integral
+routine List[T].$getslice!(start: BackIndex, end: BackIndex) -> List[T]
   var s = start.resolve(me.count)
   var e = end.resolve(me.count)
 

@@ -699,13 +699,48 @@ routine SortedDict[K, V].update_subtree_size(node: BTreeDictNode[K, V])
 # Get helpers
 # ============================================================================
 
-### Returns the value for `key`. Equivalent to `dict[key]`.
-### :param key: The key to look up.
-### :returns: The associated value.
-### :throws: `KeyNotFoundError` if `key` is not present.
+### Returns the entry at the given zero-based sorted rank.
+### Rank 0 is the entry with the smallest key; rank `count()-1` is the largest.
+### :param i: The zero-based sorted rank to read.
+### :returns: The {DictEntry[K, V]} at that sorted position.
+### :throws: {IndexOutOfBoundsError} if `i >= count()`.
 @readonly
-routine SortedDict[K, V].get!(key: K) -> V
-  return me[key]
+routine SortedDict[K, V].get_by_rank!(i: U64) -> DictEntry[K, V]
+  if i >= me.count
+    throw IndexOutOfBoundsError(index: i, count: me.count)
+  return me.get_by_rank_node(me.root!!, i)
+
+### Returns the entry addressed by a back index in sorted order.
+### `^1` is the entry with the largest key, `^2` the second-largest, and so on.
+### :param i: The backward sorted rank to resolve.
+### :returns: The {DictEntry[K, V]} at the resolved sorted position.
+@readonly
+routine SortedDict[K, V].get_by_rank!(i: BackIndex) -> DictEntry[K, V]
+  var rank = i.resolve(me.count)
+  return me.get_by_rank_node(me.root!!, rank)
+
+### Returns the entry at zero-based sorted rank `rank` within `node`'s subtree.
+### :param node: The subtree root to search.
+### :param rank: Zero-based position in the in-order traversal of this subtree.
+### :returns: The {DictEntry[K, V]} at that rank.
+@readonly
+routine SortedDict[K, V].get_by_rank_node(node: BTreeDictNode[K, V], rank: U64) -> DictEntry[K, V]
+  if node.is_leaf
+    return DictEntry[K, V](key: node.key_get(rank), value: node.value_get(rank))
+
+  var remaining = rank
+  var i = 0u64
+  while i < node.children_count()
+    var child_size = node.children_get(i).subtree_size
+    if remaining < child_size
+      return me.get_by_rank_node(node.children_get(i), remaining)
+    remaining = remaining -% child_size
+    if i < node.keys_count()
+      if remaining == 0u64
+        return DictEntry[K, V](key: node.key_get(i), value: node.value_get(i))
+      remaining = remaining -% 1u64
+    i = i +% 1u64
+  return DictEntry[K, V](key: node.key_get(0u64), value: node.value_get(0u64))
 
 ### Returns the value for `key`, or `default` if the key is not present.
 ### :param key: The key to look up.

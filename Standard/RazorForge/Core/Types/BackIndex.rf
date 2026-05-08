@@ -2,18 +2,17 @@ module Core
 
 
 ### Represents an index measured from the end of a collection.
-### `BackIndex[I]` is the type behind `^` syntax such as `list[^1]` and `text[^2]`.
-### :typeparam I: The integral type used to store the offset.
+### `BackIndex` is the type behind `^` syntax such as `list[^1]` and `text[^2]`.
 ### :see: {Range[T]}, {Containers-And-Iterators}
-record BackIndex[I obeys Integral]
-  ### Stores the end-relative offset where `1` means the last element.
-  offset: I
+@llvm("i64")
+record BackIndex
+  pass
 
 ### Creates a back index from an end-relative offset.
 ### :param offset: The end-relative offset where `1` means the last element.
-### :returns: The resulting `BackIndex[I]` value.
-routine BackIndex[I obeys Integral](offset: I) -> BackIndex[I]
-  return BackIndex[I](offset: offset)
+### :returns: The resulting `BackIndex` value.
+routine BackIndex.$create(offset: U64) -> BackIndex
+  return reinterpret_bits[U64, BackIndex](offset)
 
 ### Resolves this back index against a collection length.
 ### For example, `^1` resolves to the last valid position and `^length`
@@ -21,38 +20,30 @@ routine BackIndex[I obeys Integral](offset: I) -> BackIndex[I]
 ### :param length: The collection length used as the reference point.
 ### :returns: The resulting `U64` value.
 @readonly
-routine BackIndex[I obeys Integral].resolve(length: U64) -> U64
-  var offset_u64 = me.offset.U64()
-  if offset_u64 > length
+routine BackIndex.resolve!(length: U64) -> U64
+  var raw = reinterpret_bits[BackIndex, U64](me)
+  if raw > length
     stop!("BackIndex out of bounds")
-  return length -% offset_u64
+  return length -% raw
 
-### Returns the stored end-relative offset in its original integral type.
-### :returns: The resulting `I` value.
-@readonly
-routine BackIndex[I obeys Integral].get_offset() -> I
-  return me.offset
-
-### Returns the stored offset converted to `U64`.
-### This is useful when generic collection code needs a normalized unsigned
-### value.
+### Returns the stored end-relative offset.
 ### :returns: The resulting `U64` value.
 @readonly
-routine BackIndex[I obeys Integral].offset_u64() -> U64
-  return me.offset.U64()
+routine BackIndex.get_offset() -> U64
+  return reinterpret_bits[BackIndex, U64](me)
 
 ### Returns `true` when both back indices represent the same end-relative
 ### offset.
 ### :param other: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine BackIndex[I obeys Integral].$eq(other: BackIndex[I]) -> Bool
-  return me.offset.U64() == other.offset.U64()
+routine BackIndex.$eq(other: BackIndex) -> Bool
+  return reinterpret_bits[BackIndex, U64](me) == reinterpret_bits[BackIndex, U64](other)
 
 ### Compares this back index with another by effective position from the end.
 ### A smaller offset means a position closer to the end of the collection.
 ### :param other: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
-routine BackIndex[I obeys Integral].$cmp(other: BackIndex[I]) -> ComparisonSign
-  return other.offset.$cmp(me.offset)
+routine BackIndex.$cmp(other: BackIndex) -> ComparisonSign
+  return reinterpret_bits[BackIndex, U64](other).$cmp(reinterpret_bits[BackIndex, U64](me))

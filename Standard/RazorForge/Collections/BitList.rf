@@ -216,25 +216,19 @@ routine BitList.clear()
 ### :returns: The resulting `Bool` value.
 ### :throws: May throw {IndexOutOfBoundsError}.
 @readonly
-routine BitList.$getitem![I](index: I) -> Bool
-needs I obeys Integral
-  # Get bit at index - O(1)
-  var idx = index.U64()
-  if idx >= me.count
-    throw IndexOutOfBoundsError(index: idx, count: me.count)
-  return me.get_bit_internal(U64(idx))
+routine BitList.$getitem!(index: U64) -> Bool
+  if index >= me.count
+    throw IndexOutOfBoundsError(index: index, count: me.count)
+  return me.get_bit_internal(index)
 
 ### Replaces the bit stored at the given zero-based position.
 ### :param index: The zero-based logical position to update.
 ### :param value: The replacement bit value.
 ### :throws: May throw {IndexOutOfBoundsError}.
-routine BitList.$setitem![I](index: I, value: Bool)
-needs I obeys Integral
-  # Set bit at index - O(1)
-  var idx = index.U64()
-  if idx >= me.count
-    throw IndexOutOfBoundsError(index: idx, count: me.count)
-  me.set_bit_internal(U64(idx), value)
+routine BitList.$setitem!(index: U64, value: Bool)
+  if index >= me.count
+    throw IndexOutOfBoundsError(index: index, count: me.count)
+  me.set_bit_internal(index, value)
   return
 
 # ============================================================================
@@ -246,20 +240,16 @@ needs I obeys Integral
 ### :param index: The backward position to resolve.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine BitList.$getitem![I](index: BackIndex[I]) -> Bool
-needs I obeys Integral
-  # Get bit from end - ^1 is last, ^2 is second-to-last
+routine BitList.$getitem!(index: BackIndex) -> Bool
   var idx = index.resolve(me.count)
-  return me.get_bit_internal(U64(idx))
+  return me.get_bit_internal(idx)
 
 ### Replaces the bit addressed by a back index.
 ### :param index: The backward position to resolve.
 ### :param value: The replacement bit value.
-routine BitList.$setitem![I](index: BackIndex[I], value: Bool)
-needs I obeys Integral
-  # Set bit from end - ^1 is last, ^2 is second-to-last
+routine BitList.$setitem!(index: BackIndex, value: Bool)
   var idx = index.resolve(me.count)
-  me.set_bit_internal(U64(idx), value)
+  me.set_bit_internal(idx, value)
   return
 
 # ============================================================================

@@ -48,23 +48,19 @@ needs N is U64
 ### :returns: The element stored at that position.
 ### :throws: {IndexOutOfBoundsError} if `index >= N`.
 @readonly
-routine Array[T, N].$getitem![I](index: I) -> T
-needs I obeys Integral
-  var idx = index.U64!()
-  if idx >= N
-    throw IndexOutOfBoundsError(index: idx, count: me.count())
-  return element_at[Array[T, N], T](me, idx)
+routine Array[T, N].$getitem!(index: U64) -> T
+  if index >= N
+    throw IndexOutOfBoundsError(index: index, count: me.count())
+  return element_at[Array[T, N], T](me, index)
 
 ### Replaces the element at `index` with `value`.
 ### :param index: The zero-based position to update.
 ### :param value: The replacement value.
 ### :throws: {IndexOutOfBoundsError} if `index >= N`.
-routine Array[T, N].$setitem![I](index: I, value: T)
-needs I obeys Integral
-  var idx = index.U64!()
-  if idx >= N
-    throw IndexOutOfBoundsError(index: idx, count: me.count())
-  me = set_element_at[Array[T, N], T](me, idx, value)
+routine Array[T, N].$setitem!(index: U64, value: T)
+  if index >= N
+    throw IndexOutOfBoundsError(index: index, count: me.count())
+  me = set_element_at[Array[T, N], T](me, index, value)
   return
 
 # ============================================================================
@@ -76,8 +72,7 @@ needs I obeys Integral
 ### :param index: The backward position to resolve.
 ### :returns: The element at the resolved position.
 @readonly
-routine Array[T, N].$getitem![I](index: BackIndex[I]) -> T
-needs I obeys Integral
+routine Array[T, N].$getitem!(index: BackIndex) -> T
   var idx = index.resolve(N)
   return me[idx]
 

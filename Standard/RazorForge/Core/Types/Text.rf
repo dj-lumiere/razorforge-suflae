@@ -178,20 +178,21 @@ routine Text.is_empty() -> Bool
 ### :param index: The zero-based position to use.
 ### :returns: The resulting `Character` value.
 @readonly
-routine Text.$getitem![I obeys Integral](index: I) -> Character
-  var i = U64(index)
-  if i >= me.count
-    absent
+routine Text.$getitem!(index: U64) -> Character
+  if index >= me.count
+    throw IndexOutOfBoundsError(index: index, count: me.count)
   danger!
-    return me.data.stride(count: S64(i)).extract()
+    return me.data.stride(count: S64(index)).extract()
 
 ### Returns the character addressed by a back index.
 ### Back indices count from the end of the text using the `^` syntax.
 ### :param index: The backward position to resolve.
 ### :returns: The resulting `Character` value.
 @readonly
-routine Text.$getitem![I obeys Integral](index: BackIndex[I]) -> Character
+routine Text.$getitem!(index: BackIndex) -> Character
   var i = index.resolve(length: me.count)
+  if i >= me.count
+    throw IndexOutOfBoundsError(index: i, count: me.count)
   danger!
     return me.data.stride(count: S64(i)).extract()
 
@@ -201,15 +202,13 @@ routine Text.$getitem![I obeys Integral](index: BackIndex[I]) -> Character
 ### :param end: The exclusive ending position.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.$getslice![I obeys Integral](start: I, end: I) -> Text
-  var s = U64(start)
-  var e = U64(end)
-  if s >= e or e > me.count
+routine Text.$getslice!(start: U64, end: U64) -> Text
+  if start >= end or end > me.count
     absent
-  var n = e - s
+  var n = end - start
   danger!
     var buf = Hijacked[Character](rf_allocate_dynamic(size: Character.data_size() * n))
-    var src_ptr = me.data.stride(count: S64(s))
+    var src_ptr = me.data.stride(count: S64(start))
     rf_copy_bytes_at(dest: buf.address(), src: src_ptr.address(), size: Character.data_size() * n)
     return Text(data: buf, count: n)
 
@@ -219,7 +218,7 @@ routine Text.$getslice![I obeys Integral](start: I, end: I) -> Text
 ### :param end: The exclusive ending position.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.$getslice![I obeys Integral](start: BackIndex[I], end: BackIndex[I]) -> Text
+routine Text.$getslice!(start: BackIndex, end: BackIndex) -> Text
   var s = start.resolve(length: me.count)
   var e = end.resolve(length: me.count)
   if s >= e

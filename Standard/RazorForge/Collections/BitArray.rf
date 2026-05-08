@@ -63,14 +63,12 @@ routine BitArray[N].is_empty() -> Bool
 ### :returns: `true` if the bit at `index` is set; `false` if it is clear.
 ### :throws: {IndexOutOfBoundsError} if `index >= N`.
 @readonly
-routine BitArray[N].$getitem![I](index: I) -> Bool
-needs I obeys Integral
-  var idx = index.U64!()
-  if idx >= N
-    throw IndexOutOfBoundsError(index: idx, count: N)
+routine BitArray[N].$getitem!(index: U64) -> Bool
+  if index >= N
+    throw IndexOutOfBoundsError(index: index, count: N)
   # Access bit at index within packed bytes
-  var byte_idx = idx // 8u64
-  var bit_off = U8(idx % 8u64)
+  var byte_idx = index // 8u64
+  var bit_off = U8(index % 8u64)
   var byte_val = byte_at[BitArray[N]](me,byte_idx)
   return (byte_val & (1u8 << bit_off)) != 0u8
 
@@ -79,8 +77,7 @@ needs I obeys Integral
 ### :param index: The backward position to resolve.
 ### :returns: `true` if the bit at the resolved position is set; `false` if it is clear.
 @readonly
-routine BitArray[N].$getitem![I](index: BackIndex[I]) -> Bool
-needs I obeys Integral
+routine BitArray[N].$getitem!(index: BackIndex) -> Bool
   var idx = index.resolve(N)
   return me[idx]
 
