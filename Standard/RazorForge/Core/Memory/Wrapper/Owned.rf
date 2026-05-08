@@ -57,4 +57,4 @@ routine Owned[T].$diagnose() -> Text
   danger!
     var raw = Hijacked[T](me)
     var addr = raw.get_address()
-    return me.type_name() + "(addr: " + addr.$represent() + ", " + raw.reveal().$diagnose() + ")"
+    return f"{me.type_name()}(addr: {addr}, {raw.reveal():?})"

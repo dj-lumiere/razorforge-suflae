@@ -403,3 +403,23 @@ routine Duration.$represent() -> Text
 ### :returns: The resulting `Text` value.
 routine Duration.$diagnose() -> Text
   return "Duration(seconds: " + me.seconds.$represent() + ", nanoseconds: " + me.nanoseconds.$represent() + ")"
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns an xxHash64-based hash of this duration.
+### :returns: A `U64` hash combining the seconds and nanoseconds components.
+routine Duration.$hash() -> U64
+  var acc = __hash_round(acc: 0_u64, h: me.seconds.$hash())
+  acc = __hash_round(acc: acc, h: me.nanoseconds.$hash())
+  return __hash_finalize(h: acc)
+
+### Returns a SipHash-2-4 keyed hash of this duration.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
+routine Duration.$secure_hash(k0: U64, k1: U64) -> U64
+  var acc = __hash_round(acc: 0_u64, h: me.seconds.$secure_hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.nanoseconds.$secure_hash(k0: k0, k1: k1))
+  return __hash_finalize(h: acc)

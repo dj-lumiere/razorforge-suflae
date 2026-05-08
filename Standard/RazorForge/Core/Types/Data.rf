@@ -11,3 +11,25 @@ record Data
   secret data_address: Address
   ### Stores the size in bytes of the boxed payload.
   secret data_size: ByteSize
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns an xxHash64-based hash of this boxed value's identity.
+### :returns: A `U64` hash combining the type id, address, and size.
+routine Data.$hash() -> U64
+  var acc = __hash_round(acc: 0_u64, h: me.type_id.$hash())
+  acc = __hash_round(acc: acc, h: U64(me.data_address).$hash())
+  acc = __hash_round(acc: acc, h: me.data_size.$hash())
+  return __hash_finalize(h: acc)
+
+### Returns a SipHash-2-4 keyed hash of this boxed value's identity.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
+routine Data.$secure_hash(k0: U64, k1: U64) -> U64
+  var acc = __hash_round(acc: 0_u64, h: me.type_id.$secure_hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: __secure_hash_u64(v: U64(me.data_address), k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.data_size.$secure_hash(k0: k0, k1: k1))
+  return __hash_finalize(h: acc)

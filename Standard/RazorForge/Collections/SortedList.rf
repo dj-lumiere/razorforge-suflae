@@ -767,7 +767,7 @@ routine SortedList[T].$iter() -> SortedListIterator[T]
 ### :param from: The sorted list to convert.
 ### :returns: A new {List[T]} containing all elements in ascending order.
 routine List[T].$create(from: SortedList[T]) -> List[T]
-  var result = List[T](from.count)
+  var result = List[T](capacity: from.count)
   if from.root is None
     return result
   from.collect_inorder(from.root!!, result)

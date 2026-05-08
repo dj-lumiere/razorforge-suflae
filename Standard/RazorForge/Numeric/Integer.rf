@@ -117,7 +117,7 @@ routine Integer.$floordiv(other: Integer) -> Integer
 ### :param other: The non-zero divisor.
 ### :returns: The remainder value associated with `//`.
 @readonly
-routine Integer.$rem(other: Integer) -> Integer
+routine Integer.$mod(other: Integer) -> Integer
   var result = Integer(handle: rf_bigint_new())
   rf_bigint_mod(result.handle, me.handle, other.handle)
   return result

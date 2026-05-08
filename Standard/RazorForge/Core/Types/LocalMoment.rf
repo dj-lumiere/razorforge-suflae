@@ -269,3 +269,23 @@ routine LocalMoment.$represent() -> Text
 ### :returns: The resulting `Text` value.
 routine LocalMoment.$diagnose() -> Text
   return "LocalMoment(moment: " + me.moment.$diagnose() + ", offset: " + me.offset.$diagnose() + ")"
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns an xxHash64-based hash of this local moment.
+### :returns: A `U64` hash combining the underlying moment and offset.
+routine LocalMoment.$hash() -> U64
+  var acc = __hash_round(acc: 0_u64, h: me.moment.$hash())
+  acc = __hash_round(acc: acc, h: me.offset.$hash())
+  return __hash_finalize(h: acc)
+
+### Returns a SipHash-2-4 keyed hash of this local moment.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
+routine LocalMoment.$secure_hash(k0: U64, k1: U64) -> U64
+  var acc = __hash_round(acc: 0_u64, h: me.moment.$secure_hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.offset.$secure_hash(k0: k0, k1: k1))
+  return __hash_finalize(h: acc)

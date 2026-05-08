@@ -186,4 +186,4 @@ routine Hijacked[T].$represent() -> Text
 ### :returns: The resulting `Text` value.
 @readonly
 routine Hijacked[T].$diagnose() -> Text
-  return me.type_name() + "(addr: " + me.address().$represent() + ", none: " + me.is_none().$represent() + ")"
+  return f"{me.type_name()}(addr: {me.address()}, none: {me.is_none()})"

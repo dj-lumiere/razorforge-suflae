@@ -220,3 +220,19 @@ routine ByteSize.$represent() -> Text
 ### :returns: The resulting `Text` value.
 routine ByteSize.$diagnose() -> Text
   return "ByteSize(" + me.value.$represent() + ")"
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns an xxHash64-based hash of this byte size.
+### :returns: A `U64` hash of the underlying byte count.
+routine ByteSize.$hash() -> U64
+  return __hash_leaf(v: me.value)
+
+### Returns a SipHash-2-4 keyed hash of this byte size.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
+routine ByteSize.$secure_hash(k0: U64, k1: U64) -> U64
+  return __secure_hash_u64(v: me.value, k0: k0, k1: k1)

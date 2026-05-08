@@ -211,3 +211,23 @@ routine C64.is_real() -> Bool
 ### :returns: `true` if `me.real == 0.0`.
 routine C64.is_imaginary() -> Bool
   return me.real == 0.0_f64
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns an xxHash64-based hash of this complex value.
+### :returns: A `U64` hash combining both components.
+routine C64.$hash() -> U64
+  var acc = __hash_round(acc: 0_u64, h: me.real.$hash())
+  acc = __hash_round(acc: acc, h: me.imag.$hash())
+  return __hash_finalize(h: acc)
+
+### Returns a SipHash-2-4 keyed hash of this complex value.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
+routine C64.$secure_hash(k0: U64, k1: U64) -> U64
+  var acc = __hash_round(acc: 0_u64, h: me.real.$secure_hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.imag.$secure_hash(k0: k0, k1: k1))
+  return __hash_finalize(h: acc)

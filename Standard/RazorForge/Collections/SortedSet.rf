@@ -892,7 +892,7 @@ routine SortedSet[T].$iter() -> SortedSetIterator[T]
 ### :param from: The set to copy values from.
 ### :returns: The resulting `List[T]` value.
 routine List[T].$create(from: SortedSet[T]) -> List[T]
-  var result = List[T](from.count)
+  var result = List[T](capacity: from.count)
   if from.root is None
     return result
   from.collect_inorder(from.root!!, result)

@@ -1,7 +1,7 @@
 module Numerics
 preset DECIMAL_DEFAULT_PRECISION: S32 = 50
 
-### Represents an arbitrary-precision decimal floating-point value backed by MAPM.
+### Represents an arbitrary-precision decimal floating-point value backed by decNumber.
 ### `Decimal` is intended for exact decimal-domain workloads such as finance, formatting, and high-precision analysis.
 ### It trades fixed-size machine arithmetic for controllable precision and decimal-oriented behavior.
 ### :see: {Integer}, {Complex}, {Numeric-Types}

@@ -344,7 +344,7 @@ routine Set[T].is_disjoint(other: Set[T]) -> Bool
 ### :param from: The set to copy elements from.
 ### :returns: A new {List[T]} containing all elements of `from`.
 routine List[T].$create(from: Set[T]) -> List[T]
-  var result = List[T](from.count)
+  var result = List[T](capacity: from.count)
   for val in from
     result.add_last(val)
   return result

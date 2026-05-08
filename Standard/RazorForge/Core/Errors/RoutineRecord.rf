@@ -16,3 +16,31 @@ record RoutineRecord
   line_no: U32
   ### Stores the one-based source column number.
   column_no: U32
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns an xxHash64-based hash of this routine record.
+### :returns: A `U64` hash combining all identifier fields.
+routine RoutineRecord.$hash() -> U64
+  var acc = __hash_round(acc: 0_u64, h: me.file_id.$hash())
+  acc = __hash_round(acc: acc, h: me.routine_id.$hash())
+  acc = __hash_round(acc: acc, h: me.module_id.$hash())
+  acc = __hash_round(acc: acc, h: me.type_id.$hash())
+  acc = __hash_round(acc: acc, h: me.line_no.$hash())
+  acc = __hash_round(acc: acc, h: me.column_no.$hash())
+  return __hash_finalize(h: acc)
+
+### Returns a SipHash-2-4 keyed hash of this routine record.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
+routine RoutineRecord.$secure_hash(k0: U64, k1: U64) -> U64
+  var acc = __hash_round(acc: 0_u64, h: me.file_id.$secure_hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.routine_id.$secure_hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.module_id.$secure_hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.type_id.$secure_hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.line_no.$secure_hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.column_no.$secure_hash(k0: k0, k1: k1))
+  return __hash_finalize(h: acc)
