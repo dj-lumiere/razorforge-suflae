@@ -12,7 +12,7 @@ namespace Compiler.Lexer;
 ///   <item><description>Overflow variants: +%, -%, *% (wrap), +^, -^, *^, /^ (clamping)</description></item>
 ///   <item><description>Comparison: ==, !=, &lt;, &gt;, &lt;=, &lt;=&gt;, &gt;=</description></item>
 ///   <item><description>Bitwise: &amp;, |, ^, ~, &lt;&lt;, &gt;&gt;, &lt;&lt;&lt;, &gt;&gt;&gt;</description></item>
-///   <item><description>Special: -&gt;, =&gt;, @intrinsic, @native</description></item>
+///   <item><description>Special: -&gt;, =&gt;, @native</description></item>
 /// </list>
 /// </remarks>
 public partial class Tokenizer
@@ -316,24 +316,11 @@ public partial class Tokenizer
     #region Special Operators
 
     /// <summary>
-    /// Scans tokens starting with '@' (@intrinsic or standalone @).
+    /// Scans tokens starting with '@' (annotation marker).
     /// </summary>
     private void ScanAtSign()
     {
-        if (Peek() == 'i' && PeekWord() == "intrinsic")
-        {
-            // Consume "intrinsic" (9 characters)
-            for (int i = 0; i < 9; i += 1)
-            {
-                Advance();
-            }
-
-            AddToken(type: TokenType.Intrinsic);
-        }
-        else
-        {
-            AddToken(type: TokenType.At);
-        }
+        AddToken(type: TokenType.At);
     }
 
     #endregion

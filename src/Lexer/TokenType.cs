@@ -741,9 +741,6 @@ public enum TokenType
     /// <summary>Annotation operator (@)</summary>
     At,
 
-    /// <summary>Intrinsic type (@intrinsic) - LLVM IR primitive types like i8, i32, f64, ptr</summary>
-    Intrinsic,
-
     /// <summary>Comment operator (#)</summary>
     Hash,
 

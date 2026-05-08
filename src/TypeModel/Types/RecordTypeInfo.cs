@@ -34,25 +34,8 @@ public class RecordTypeInfo : TypeInfo
     public bool HasDirectBackendType => BackendType != null;
 
     /// <summary>
-    /// Whether this is a single-member-variable record that wraps an intrinsic type.
-    /// These records can be treated as their underlying LLVM type for operations.
-    /// Examples: s32, bool, f64, Address
-    /// </summary>
-    public bool IsSingleMemberVariableWrapper => MemberVariables is [{ Type: IntrinsicTypeInfo }];
-
-    /// <summary>
-    /// For single-member-variable wrappers, gets the underlying intrinsic type.
-    /// Returns null if not a single-member-variable wrapper.
-    /// </summary>
-    public IntrinsicTypeInfo? UnderlyingIntrinsic =>
-        IsSingleMemberVariableWrapper
-            ? MemberVariables[index: 0].Type as IntrinsicTypeInfo
-            : null;
-
-    /// <summary>
     /// The LLVM type representation for this record.
     /// For @llvm-annotated records, uses the backend type directly.
-    /// For single-member-variable wrappers, this is the intrinsic type (e.g., "i32").
     /// For multi-member-variable records, this is a struct type.
     /// </summary>
     public string LlvmType
@@ -62,11 +45,6 @@ public class RecordTypeInfo : TypeInfo
             if (BackendType != null)
             {
                 return BackendType;
-            }
-
-            if (UnderlyingIntrinsic != null)
-            {
-                return UnderlyingIntrinsic.LlvmType;
             }
 
             // Multi-member-variable record: struct type
@@ -466,7 +444,6 @@ public class RecordTypeInfo : TypeInfo
     {
         return memberVariable.Type switch
         {
-            IntrinsicTypeInfo intrinsic => intrinsic.LlvmType,
             RecordTypeInfo record => record.LlvmType,
             _ => "ptr" // Reference types are pointers
         };

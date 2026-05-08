@@ -94,11 +94,6 @@ public partial class LlvmCodeGenerator
                 HasDirectBackendType: true
             } directRecord && arguments.Count == 1:
                 return EmitRecordConstruction(sb: sb, record: directRecord, arguments: arguments);
-            case CallLoweringKind.TypeConstructor or CallLoweringKind.WrapperConstruction when constructedType is RecordTypeInfo
-            {
-                IsSingleMemberVariableWrapper: true
-            } wrapperRecord && arguments.Count == 1:
-                return EmitRecordConstruction(sb: sb, record: wrapperRecord, arguments: arguments);
             case CallLoweringKind.TypeConstructor or CallLoweringKind.WrapperConstruction when constructedType is RecordTypeInfo ctorRecord && ctorRecord.MemberVariables.Count > 0 &&
                 arguments.Count == ctorRecord.MemberVariables.Count && arguments.All(
                     predicate: a =>
@@ -896,7 +891,6 @@ public partial class LlvmCodeGenerator
         if (actualType is RecordTypeInfo
             {
                 HasDirectBackendType: false,
-                IsSingleMemberVariableWrapper: false,
                 MemberVariables.Count: 1
             } record)
         {
@@ -988,12 +982,6 @@ public partial class LlvmCodeGenerator
                 "Classify it during semantic analysis.");
         }
 
-        if (calledType is RecordTypeInfo { IsSingleMemberVariableWrapper: true })
-        {
-            throw new InvalidOperationException(
-                $"Wrapper constructor '{functionName}' reached LLVM codegen without lowering metadata. " +
-                "Classify it during semantic analysis.");
-        }
     }
 
     /// <summary>

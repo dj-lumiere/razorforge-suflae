@@ -234,7 +234,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 if (resolvedRoutine.GenericDefinition == null ||
                     ctx.InstantiatedGenericBodies.ContainsKey(resolvedRoutine.RegistryKey) ||
                     ctx.VariantBodies.ContainsKey(resolvedRoutine.RegistryKey) ||
-                    resolvedRoutine.OwnerType is ProtocolTypeInfo or IntrinsicTypeInfo)
+                    resolvedRoutine.OwnerType is ProtocolTypeInfo)
                 {
                     continue;
                 }

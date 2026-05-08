@@ -19,7 +19,6 @@ partial class TypeRegistry
 
         // Type storage
         public Dictionary<string, TypeInfo> Types { get; init; } = null!;
-        public Dictionary<string, IntrinsicTypeInfo> Intrinsics { get; init; } = null!;
         public Dictionary<string, TypeInfo> Resolutions { get; init; } = null!;
         public Dictionary<string, WrapperTypeInfo> WrapperResolutions { get; init; } = null!;
         public Dictionary<string, TypeInfo> EntitySpecializations { get; init; } = null!;
@@ -57,7 +56,6 @@ partial class TypeRegistry
         {
             Language = Language,
             Types = new Dictionary<string, TypeInfo>(_types),
-            Intrinsics = new Dictionary<string, IntrinsicTypeInfo>(_intrinsics),
             Resolutions = new Dictionary<string, TypeInfo>(_resolutions),
             WrapperResolutions = new Dictionary<string, WrapperTypeInfo>(_wrapperResolutions),
             EntitySpecializations = new Dictionary<string, TypeInfo>(_entitySpecializations),
@@ -97,7 +95,6 @@ partial class TypeRegistry
 
         // Restore type storage from snapshot
         foreach (var kv in snapshot.Types) _types[kv.Key] = kv.Value;
-        foreach (var kv in snapshot.Intrinsics) _intrinsics[kv.Key] = kv.Value;
         foreach (var kv in snapshot.Resolutions) _resolutions[kv.Key] = kv.Value;
         foreach (var kv in snapshot.WrapperResolutions) _wrapperResolutions[kv.Key] = kv.Value;
         foreach (var kv in snapshot.EntitySpecializations) _entitySpecializations[kv.Key] = kv.Value;

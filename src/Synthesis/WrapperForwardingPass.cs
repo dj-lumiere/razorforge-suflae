@@ -144,14 +144,6 @@ internal sealed class WrapperForwardingPass
                 _ => innerType
             };
 
-            // Skip intrinsic (primitive) inner types — their codegen-only methods (e.g.
-            // get_address on i32) are not valid to forward, and they have no user-defined
-            // methods to forward anyway.  Record and entity inner types are safe to process
-            // eagerly; TrySynthesize guards against methods that don't exist on the inner type
-            // and against overwriting source-defined wrapper methods.
-            if (innerLookupType is IntrinsicTypeInfo)
-                continue;
-
             // Narrow to implicit-call methods only. User-visible calls hit the lazy path
             // (TrySynthesizeWrapperForwarder in member-access / call dispatch); only methods
             // codegen invokes without semantic analysis (scope cleanup, RC ops) need eager

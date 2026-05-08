@@ -277,8 +277,6 @@ public sealed partial class SemanticVerifier
         call.LoweringKind = presetType switch
         {
             RecordTypeInfo { HasDirectBackendType: true } => CallLoweringKind.TypeConstructor,
-            RecordTypeInfo { IsSingleMemberVariableWrapper: true } => CallLoweringKind
-               .WrapperConstruction,
             _ => call.LoweringKind
         };
     }

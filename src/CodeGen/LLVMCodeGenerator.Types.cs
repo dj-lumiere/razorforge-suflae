@@ -103,20 +103,11 @@ public partial class LlvmCodeGenerator
         type = ResolveTypeSubstitution(type: type);
         return type switch
         {
-            // Intrinsic types map directly to LLVM
-            IntrinsicTypeInfo intrinsic => GetIntrinsicLlvmType(intrinsic: intrinsic),
-
             // Records with @llvm annotation -> use backend type directly (skip generic definitions with template holes)
             RecordTypeInfo
             {
                 HasDirectBackendType: true, IsGenericDefinition: false
             } record => record.LlvmType,
-
-            // Legacy single-member-variable wrappers -> unwrap to underlying intrinsic
-            // TODO(C78): extend this to ALL single-field records as an automatic inlining
-            // optimization -> eliminates one level of struct wrapping for zero-overhead wrappers.
-            RecordTypeInfo { IsSingleMemberVariableWrapper: true } record => GetLlvmType(
-                type: record.UnderlyingIntrinsic!),
 
             // Generic definition records (unresolved) -> pointer fallback
             RecordTypeInfo { IsGenericDefinition: true } => "ptr",
@@ -177,38 +168,6 @@ public partial class LlvmCodeGenerator
             // Unknown
             _ => throw new InvalidOperationException(
                 message: $"Unknown type category: {type.Category}")
-        };
-    }
-
-    /// <summary>
-    /// Gets the LLVM type for an intrinsic type.
-    /// </summary>
-    private string GetIntrinsicLlvmType(IntrinsicTypeInfo intrinsic)
-    {
-        return intrinsic.Name switch
-        {
-            // Integer types
-            "@intrinsic.i1" => "i1",
-            "@intrinsic.i8" => "i8",
-            "@intrinsic.i16" => "i16",
-            "@intrinsic.i32" => "i32",
-            "@intrinsic.i64" => "i64",
-            "@intrinsic.i128" => "i128",
-
-            // Floating-point types
-            "@intrinsic.f16" => "half",
-            "@intrinsic.f32" => "float",
-            "@intrinsic.f64" => "double",
-            "@intrinsic.f128" => "fp128",
-
-            // Pointer type
-            "@intrinsic.ptr" => "ptr",
-
-            // Void (for function returns)
-            "@intrinsic.void" => "void",
-
-            _ => throw new InvalidOperationException(
-                message: $"Unknown intrinsic type: {intrinsic.Name}")
         };
     }
 
@@ -364,8 +323,6 @@ public partial class LlvmCodeGenerator
         {
             RecordTypeInfo { HasDirectBackendType: true, IsGenericDefinition: false } record =>
                 GetTypeSizeFromLlvmType(llvmType: record.BackendType!),
-            RecordTypeInfo { IsSingleMemberVariableWrapper: true } record => GetTypeSize(
-                type: record.UnderlyingIntrinsic!),
             RecordTypeInfo record => CalculateRecordSize(record: record),
             EntityTypeInfo => _pointerSizeBytes, // Entities are heap-allocated, stored as pointers
             CrashableTypeInfo => _pointerSizeBytes, // Crashable types are heap-allocated entities

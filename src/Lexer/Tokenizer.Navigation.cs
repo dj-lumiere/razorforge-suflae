@@ -98,7 +98,7 @@ public partial class Tokenizer
     /// The word (sequence of letters, digits, underscores) at current position.
     /// </returns>
     /// <remarks>
-    /// Used for multi-character token detection like @intrinsic and @native.
+    /// Used for multi-character token detection like @native.
     /// </remarks>
     private string PeekWord()
     {

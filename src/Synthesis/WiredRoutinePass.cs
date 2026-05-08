@@ -1723,7 +1723,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
         // Skip compiler-internal/non-synthesizable categories.
         if (owner.Category is TypeCategory.TypeParameter or TypeCategory.Error
-            or TypeCategory.Intrinsic or TypeCategory.ProtocolSelf
+            or TypeCategory.ProtocolSelf
             or TypeCategory.ConstGenericValue)
             return false;
 

@@ -528,12 +528,6 @@ public sealed partial class StdlibLoader
 
         string typeName = typeExpr.Name;
 
-        // Handle intrinsic types (@intrinsic.*)
-        if (typeName.StartsWith(value: "@intrinsic."))
-        {
-            return registry.LookupType(name: typeName);
-        }
-
         // Generic parameter name (T, K, V) → placeholder for substitution
         if (genericParams != null && genericParams.Contains(value: typeName))
         {

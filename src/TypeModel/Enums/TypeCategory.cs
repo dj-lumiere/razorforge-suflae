@@ -27,9 +27,6 @@ public enum TypeCategory
     /// </summary>
     ProtocolSelf,
 
-    /// <summary>LLVM intrinsic types (@intrinsic.*) - builder internal only.</summary>
-    Intrinsic,
-
     // ═══════════════════════════════════════════════════════════════════════
     // User-Defined Type Categories
     // ═══════════════════════════════════════════════════════════════════════

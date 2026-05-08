@@ -35,9 +35,6 @@ public sealed partial class TypeRegistry
     /// <summary>All registered types by their full name.</summary>
     private readonly Dictionary<string, TypeInfo> _types = new();
 
-    /// <summary>Intrinsic types by name.</summary>
-    private readonly Dictionary<string, IntrinsicTypeInfo> _intrinsics = new();
-
     /// <summary>Generic type resolutions cache.</summary>
     private readonly Dictionary<string, TypeInfo> _resolutions = new();
 
@@ -251,9 +248,6 @@ public sealed partial class TypeRegistry
         _currentScope = GlobalScope;
         _stdlibPath = stdlibPath ?? StdlibLoader.GetDefaultStdlibPath();
 
-        // Register intrinsic types (always needed)
-        RegisterIntrinsics();
-
         // Register well-known error handling types BEFORE loading the Core module.
         // This ensures that when Core stdlib routines (e.g. Maybe[T].$unwrap) are registered
         // during LoadCoreModule, LookupType("Maybe") returns the initial Maybe definition
@@ -269,19 +263,6 @@ public sealed partial class TypeRegistry
     }
 
     #region Initialization
-
-    /// <summary>
-    /// Registers all well-known intrinsic types.
-    /// </summary>
-    private void RegisterIntrinsics()
-    {
-        foreach (IntrinsicTypeInfo intrinsic in IntrinsicTypeInfo.WellKnown.All)
-        {
-            _intrinsics[key: intrinsic.Name] = intrinsic;
-            _types[key: intrinsic.Name] = intrinsic;
-        }
-
-    }
 
     /// <summary>
     /// Loads the Core module from stdlib files.
@@ -862,12 +843,6 @@ public sealed partial class TypeRegistry
             return type;
         }
 
-        // Try intrinsic prefix
-        if (_intrinsics.TryGetValue(key: name, value: out IntrinsicTypeInfo? intrinsic))
-        {
-            return intrinsic;
-        }
-
         // Try resolution cache
         if (_resolutions.TryGetValue(key: name, value: out TypeInfo? resolution))
         {
@@ -1317,16 +1292,6 @@ public sealed partial class TypeRegistry
             TypeCategory.Variant => true, // Variants are value types (stack-allocated)
             _ => false
         };
-    }
-
-    /// <summary>
-    /// Checks if a type is a single-member-variable record wrapping an intrinsic.
-    /// </summary>
-    /// <param name="type">The type to check.</param>
-    /// <returns>True if the type is a single-member-variable wrapper, false otherwise.</returns>
-    public static bool IsSingleMemberVariableWrapper(TypeInfo type)
-    {
-        return type is RecordTypeInfo { IsSingleMemberVariableWrapper: true };
     }
 
     /// <summary>

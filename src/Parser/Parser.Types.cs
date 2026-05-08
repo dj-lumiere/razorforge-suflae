@@ -36,9 +36,8 @@ public partial class Parser
     /// <remarks>
     /// Type forms in priority order:
     /// 1. Me - Self type in protocols/member routines
-    /// 2. @intrinsic.xxx - LLVM IR intrinsic types (RazorForge stdlib)
-    /// 3. Name[T, U] - Generic named type
-    /// 4. Name - Simple named type
+    /// 2. Name[T, U] - Generic named type
+    /// 3. Name - Simple named type
     ///
     /// Named types support qualified paths like razorforge/Collections.Dict
     /// for referencing types from other modules in type annotations.
@@ -56,34 +55,7 @@ public partial class Parser
         }
 
         // ═══════════════════════════════════════════════════════════════════════════
-        // CASE 2: Intrinsic type - direct LLVM IR types
-        // ═══════════════════════════════════════════════════════════════════════════
-        // Forms: @intrinsic.i1, @intrinsic.i32, @intrinsic.f64, @intrinsic.iptr, @intrinsic.uptr
-        if (Match(type: TokenType.Intrinsic))
-        {
-            Consume(type: TokenType.Dot, errorMessage: "Expected '.' after '@intrinsic'");
-
-            // Allow any identifier as intrinsic type name (i1, i8, i16, i32, i64, i128, f16, f32, f64, f128, iptr, uptr, etc.)
-            if (!Match(type: TokenType.Identifier))
-            {
-                throw new GrammarException(code: GrammarDiagnosticCode.ExpectedIdentifier,
-                    message:
-                    $"Expected intrinsic type name after '@intrinsic.', got {CurrentToken.Type}",
-                    fileName: FileName,
-                    line: CurrentToken.Line,
-                    column: CurrentToken.Column,
-                    language: _language);
-            }
-
-            string intrinsicName = PeekToken(offset: -1)
-               .Text;
-            return new TypeExpression(Name: $"@intrinsic.{intrinsicName}",
-                GenericArguments: null,
-                Location: location);
-        }
-
-        // ═══════════════════════════════════════════════════════════════════════════
-        // CASE 3: Tuple type - (T, U) or (T,)
+        // CASE 2: Tuple type - (T, U) or (T,)
         // ═══════════════════════════════════════════════════════════════════════════
         if (Match(type: TokenType.LeftParen))
         {

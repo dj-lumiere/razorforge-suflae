@@ -112,7 +112,7 @@ public partial class LlvmCodeGenerator
         CreatorExpression expr)
     {
         // Backend-annotated or single-member-variable wrapper: just return the inner value
-        if ((record.HasDirectBackendType || record.IsSingleMemberVariableWrapper) &&
+        if (record.HasDirectBackendType &&
             expr.MemberVariables.Count <= 1)
         {
             if (expr.MemberVariables.Count == 0)
@@ -164,7 +164,7 @@ public partial class LlvmCodeGenerator
         List<Expression> arguments)
     {
         // Backend-annotated or single-member-variable wrapper: just return the inner value
-        if ((record.HasDirectBackendType || record.IsSingleMemberVariableWrapper) &&
+        if (record.HasDirectBackendType &&
             arguments.Count <= 1)
         {
             string argValue = EmitExpression(sb: sb, expr: arguments[index: 0]);
@@ -484,7 +484,7 @@ public partial class LlvmCodeGenerator
         }
 
         // Backend-annotated or single-member-variable wrapper: the value IS the field
-        if (record.HasDirectBackendType || record.IsSingleMemberVariableWrapper)
+        if (record.HasDirectBackendType)
         {
             return recordValue;
         }

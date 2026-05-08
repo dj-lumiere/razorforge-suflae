@@ -17,8 +17,6 @@ public static class BackendReprResolver
     {
         return type switch
         {
-            IntrinsicTypeInfo intrinsic => ResolveIntrinsic(intrinsic: intrinsic, target: target),
-
             TupleTypeInfo tuple => new BackendRepr(
                 Kind: BackendReprKind.Aggregate,
                 SourceType: type,
@@ -31,12 +29,6 @@ public static class BackendReprResolver
             {
                 HasDirectBackendType: true, IsGenericDefinition: false
             } record => ResolveDirectBackendRecord(record: record),
-
-            RecordTypeInfo { IsSingleMemberVariableWrapper: true } record =>
-                Resolve(type: record.UnderlyingIntrinsic!, registry: registry, target: target) with
-                {
-                    SourceType = type
-                },
 
             RecordTypeInfo record => new BackendRepr(
                 Kind: BackendReprKind.Aggregate,
@@ -109,31 +101,6 @@ public static class BackendReprResolver
                 LlvmAbiType: "ptr",
                 PointerFlavor: PointerFlavor.Raw)
         };
-    }
-
-    /// <summary>
-    /// Maps intrinsic semantic types to the LLVM scalar or pointer type used at ABI boundaries.
-    /// </summary>
-    private static BackendRepr ResolveIntrinsic(IntrinsicTypeInfo intrinsic, TargetConfig target)
-    {
-        string llvmAbiType = intrinsic.Name switch
-        {
-            "@intrinsic.ptr" => "ptr",
-            _ => intrinsic.LlvmType
-        };
-
-        BackendReprKind kind = llvmAbiType == "ptr"
-            ? BackendReprKind.RawPtr
-            : BackendReprKind.Scalar;
-        PointerFlavor flavor = llvmAbiType == "ptr"
-            ? PointerFlavor.Raw
-            : PointerFlavor.None;
-
-        return new BackendRepr(
-            Kind: kind,
-            SourceType: intrinsic,
-            LlvmAbiType: llvmAbiType,
-            PointerFlavor: flavor);
     }
 
     /// <summary>

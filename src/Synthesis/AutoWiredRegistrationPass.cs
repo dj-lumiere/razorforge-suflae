@@ -459,9 +459,9 @@ internal sealed class AutoWiredRegistrationPass
 
             foreach (TypeSymbol type in _registry.GetAllTypes())
             {
-                // Include concrete storable types + intrinsics
+                // Include concrete storable types
                 if (type.Category is not (TypeCategory.Record or TypeCategory.Entity
-                    or TypeCategory.Choice or TypeCategory.Flags or TypeCategory.Intrinsic))
+                    or TypeCategory.Choice or TypeCategory.Flags))
                 {
                     continue;
                 }

@@ -129,8 +129,8 @@ public partial class LlvmCodeGenerator
     /// <param name="record">The record type info.</param>
     private void GenerateRecordType(RecordTypeInfo record)
     {
-        // Backend-annotated and single-member-variable wrappers don't need struct types
-        if (record.HasDirectBackendType || record.IsSingleMemberVariableWrapper)
+        // Backend-annotated records don't need struct types
+        if (record.HasDirectBackendType)
         {
             return;
         }
@@ -238,8 +238,7 @@ public partial class LlvmCodeGenerator
                 break;
             case RecordTypeInfo
             {
-                IsGenericDefinition: false, HasDirectBackendType: false,
-                IsSingleMemberVariableWrapper: false
+                IsGenericDefinition: false, HasDirectBackendType: false
             } nestedRecord:
                 GenerateRecordType(record: nestedRecord);
                 break;

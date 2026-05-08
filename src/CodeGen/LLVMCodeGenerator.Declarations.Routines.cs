@@ -68,14 +68,14 @@ public partial class LlvmCodeGenerator
         foreach (ParameterInfo param in routine.Parameters)
         {
             if (param.Type is RecordTypeInfo paramRecord && !paramRecord.HasDirectBackendType &&
-                !paramRecord.IsSingleMemberVariableWrapper && !paramRecord.IsGenericDefinition)
+                !paramRecord.IsGenericDefinition)
             {
                 GenerateRecordType(record: paramRecord);
             }
         }
 
         if (routine.ReturnType is RecordTypeInfo returnRecord &&
-            !returnRecord.HasDirectBackendType && !returnRecord.IsSingleMemberVariableWrapper &&
+            !returnRecord.HasDirectBackendType &&
             !returnRecord.IsGenericDefinition)
         {
             GenerateRecordType(record: returnRecord);
@@ -650,18 +650,8 @@ public partial class LlvmCodeGenerator
     {
         return type switch
         {
-            IntrinsicTypeInfo intrinsic => intrinsic.Name switch
-            {
-                "@intrinsic.i1" => "false",
-                "@intrinsic.f16" or "@intrinsic.f32" or "@intrinsic.f64"
-                    or "@intrinsic.f128" => "0.0",
-                "@intrinsic.ptr" => "null",
-                _ => "0"
-            },
             RecordTypeInfo { HasDirectBackendType: true } record => GetZeroValueForLlvmType(
                 llvmType: record.BackendType!),
-            RecordTypeInfo { IsSingleMemberVariableWrapper: true } record => GetZeroValue(
-                type: record.UnderlyingIntrinsic!),
             EntityTypeInfo or WrapperTypeInfo => "null",
             _ => "zeroinitializer"
         };
