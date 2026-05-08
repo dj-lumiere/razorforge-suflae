@@ -314,6 +314,39 @@ public sealed partial class StdlibLoader
     /// Registers routine declarations from a program.
     /// This is pass 2 of module-based loading - all types are already registered.
     /// </summary>
+    /// <summary>
+    /// BuilderService per-type routines whose stdlib decls return
+    /// <c>List[Owned[FieldInfo|ProtocolInfo|RoutineInfo]]</c> or <c>Dict[Owned[Text], Data]</c>.
+    /// Registering these as universal <c>T.x()</c> routines from BuilderService.rf forces GMP to
+    /// monomorphize the heavy carrier closure (BTreeListNode/Owned/Array/ArrayIterator) for every
+    /// type even when the user program never imports BuilderService.
+    /// AutoWiredRegistrationPass re-registers these per-type when (and only when) the user actually
+    /// imports BuilderService, so skipping the stdlib decls here is safe.
+    /// </summary>
+    private static readonly HashSet<string> BuilderServiceClosureCascadingRoutines =
+        new(comparer: StringComparer.Ordinal)
+        {
+            "protocol_info",
+            "routine_info",
+            "member_variable_info",
+            "all_member_variables",
+            "open_member_variables"
+        };
+
+    private static bool ShouldSkipBuilderServiceRoutineDecl(RoutineDeclaration routine,
+        string moduleName)
+    {
+        if (!moduleName.Equals(value: "BuilderService", comparisonType: StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string name = routine.Name;
+        int dot = name.IndexOf(value: '.');
+        string method = dot > 0 ? name[(dot + 1)..] : name;
+        return BuilderServiceClosureCascadingRoutines.Contains(item: method);
+    }
+
     private static void RegisterProgramRoutines(TypeRegistry registry, Program program,
         string moduleName)
     {
@@ -322,6 +355,11 @@ public sealed partial class StdlibLoader
             switch (node)
             {
                 case RoutineDeclaration routine:
+                    if (ShouldSkipBuilderServiceRoutineDecl(routine: routine,
+                            moduleName: moduleName))
+                    {
+                        break;
+                    }
                     RegisterRoutine(registry: registry, routine: routine, moduleName: moduleName);
                     break;
                 case ExternalDeclaration external:
@@ -1168,6 +1206,11 @@ public sealed partial class StdlibLoader
         foreach (ISyntaxTreeNode node in program.Declarations)
         {
             if (node is not RoutineDeclaration routine)
+            {
+                continue;
+            }
+
+            if (ShouldSkipBuilderServiceRoutineDecl(routine: routine, moduleName: moduleName))
             {
                 continue;
             }

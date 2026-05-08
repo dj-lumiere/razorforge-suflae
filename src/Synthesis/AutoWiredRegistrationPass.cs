@@ -23,7 +23,7 @@ internal sealed class AutoWiredRegistrationPass
         _registry = registry;
     }
 
-    public void Run()
+    public void Run(bool builderServiceImported = true)
     {
         // Look up required types (bail on each if not available)
         TypeSymbol? textType = _registry.LookupType(name: "Text");
@@ -38,30 +38,41 @@ internal sealed class AutoWiredRegistrationPass
             ? _registry.GetOrCreateResolution(genericDef: listDef, typeArguments: [textType])
             : null;
 
-        // Look up BuilderService helper types (from stdlib or previous registration)
-        TypeSymbol? fieldInfoType = _registry.LookupType(name: "FieldInfo");
-        TypeSymbol? protocolInfoType = _registry.LookupType(name: "ProtocolInfo");
-        TypeSymbol? routineInfoType = _registry.LookupType(name: "RoutineInfo");
-
-        TypeSymbol? listFieldInfoType = listDef != null && fieldInfoType != null
-            ? _registry.GetOrCreateResolution(genericDef: listDef, typeArguments: [fieldInfoType])
-            : null;
-        TypeSymbol? listProtocolInfoType = listDef != null && protocolInfoType != null
-            ? _registry.GetOrCreateResolution(genericDef: listDef,
-                typeArguments: [protocolInfoType])
-            : null;
-        TypeSymbol? listRoutineInfoType = listDef != null && routineInfoType != null
-            ? _registry.GetOrCreateResolution(genericDef: listDef,
-                typeArguments: [routineInfoType])
-            : null;
-
-        // Look up Dict[Text, Data] for all_fields() / open_fields()
-        TypeSymbol? dictDef = _registry.LookupType(name: "Dict");
+        // BuilderService helper-type closures (List[FieldInfo], List[ProtocolInfo],
+        // List[RoutineInfo], Dict[Text,Data]) are only resolved when the user program
+        // actually imports BuilderService. Otherwise GMP would drag in the full
+        // BTreeListNode/Owned/Array/ArrayIterator closure for every type via the
+        // metadata routines registered on each type.
+        // Data itself is needed unconditionally for the Data.$create auto-registration below.
         TypeSymbol? dataType = _registry.LookupType(name: "Data");
-        TypeSymbol? dictTextDataType = dictDef != null && textType != null && dataType != null
-            ? _registry.GetOrCreateResolution(genericDef: dictDef,
-                typeArguments: [textType, dataType])
-            : null;
+        TypeSymbol? listFieldInfoType = null;
+        TypeSymbol? listProtocolInfoType = null;
+        TypeSymbol? listRoutineInfoType = null;
+        TypeSymbol? dictTextDataType = null;
+        if (builderServiceImported)
+        {
+            TypeSymbol? fieldInfoType = _registry.LookupType(name: "FieldInfo");
+            TypeSymbol? protocolInfoType = _registry.LookupType(name: "ProtocolInfo");
+            TypeSymbol? routineInfoType = _registry.LookupType(name: "RoutineInfo");
+
+            listFieldInfoType = listDef != null && fieldInfoType != null
+                ? _registry.GetOrCreateResolution(genericDef: listDef, typeArguments: [fieldInfoType])
+                : null;
+            listProtocolInfoType = listDef != null && protocolInfoType != null
+                ? _registry.GetOrCreateResolution(genericDef: listDef,
+                    typeArguments: [protocolInfoType])
+                : null;
+            listRoutineInfoType = listDef != null && routineInfoType != null
+                ? _registry.GetOrCreateResolution(genericDef: listDef,
+                    typeArguments: [routineInfoType])
+                : null;
+
+            TypeSymbol? dictDef = _registry.LookupType(name: "Dict");
+            dictTextDataType = dictDef != null && textType != null && dataType != null
+                ? _registry.GetOrCreateResolution(genericDef: dictDef,
+                    typeArguments: [textType, dataType])
+                : null;
+        }
 
         foreach (TypeSymbol type in _registry.GetTypesWithMethods())
         {
