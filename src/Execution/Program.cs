@@ -632,7 +632,9 @@ internal partial class Program
                 buildMode: buildMode,
                 synthesizedBodies: result.SynthesizedBodies,
                 instantiatedGenericBodies: result.InstantiatedGenericBodies,
-                pendingRuntimeDispatches: result.PendingRuntimeDispatches);
+                pendingRuntimeDispatches: result.PendingRuntimeDispatches,
+                liveRoutineKeys: result.LiveRoutineKeys,
+                liveOwnerTypeNames: result.LiveOwnerTypeNames);
             string llvmIr = generator.Generate();
 
             // Output
@@ -1043,7 +1045,9 @@ internal partial class Program
                 buildMode: buildMode,
                 synthesizedBodies: result.SynthesizedBodies,
                 instantiatedGenericBodies: result.InstantiatedGenericBodies,
-                pendingRuntimeDispatches: result.PendingRuntimeDispatches);
+                pendingRuntimeDispatches: result.PendingRuntimeDispatches,
+                liveRoutineKeys: result.LiveRoutineKeys,
+                liveOwnerTypeNames: result.LiveOwnerTypeNames);
             string llvmIr = generator.Generate();
 
             // Output
@@ -1366,8 +1370,12 @@ internal partial class Program
             compilerRtArg = " --rtlib=compiler-rt";
         }
         string lldFlag = OperatingSystem.IsWindows() ? " -fuse-ld=lld" : "";
+        // Surface every undefined-symbol error during development instead of stopping at lld-link's
+        // default cap (~20). lld-link uses /errorlimit:N; ld.lld has no equivalent cap.
+        string linkerErrorLimitFlag =
+            OperatingSystem.IsWindows() ? " -Wl,/errorlimit:0" : "";
         string clangArgs =
-            $"{clangOptLevel}{framePointerFlag}{lldFlag} -o \"{exeFile}\" \"{optFile}\" -L\"{runtimeLibDir}\" -lrazorforge_runtime{compilerRtArg}{windowsThreadingLibs}";
+            $"{clangOptLevel}{framePointerFlag}{lldFlag} -o \"{exeFile}\" \"{optFile}\" -L\"{runtimeLibDir}\" -lrazorforge_runtime{compilerRtArg}{windowsThreadingLibs}{linkerErrorLimitFlag}";
 
         var clangPsi = new ProcessStartInfo
         {

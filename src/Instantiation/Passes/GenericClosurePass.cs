@@ -33,6 +33,11 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
             adapter.LiveRoutineKeys.Add(item: key);
         }
 
+        foreach (string typeName in ctx.LiveOwnerTypeNames)
+        {
+            adapter.LiveOwnerTypeNames.Add(item: typeName);
+        }
+
         new GenericMonomorphizationPass(ctx: adapter).RunGlobal();
         new GenericCallLoweringPass(ctx: adapter).RunOnInstantiatedGenericBodies();
         new BuilderServiceInliningPass(ctx: adapter).RunOnInstantiatedGenericBodies();

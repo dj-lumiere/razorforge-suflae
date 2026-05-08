@@ -168,6 +168,16 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
 
     private void ProcessConcreteType(TypeInfo concreteType)
     {
+        // Strategy-B reachability gate at the type level: when LiveOwnerTypeNames is populated,
+        // skip concrete instances that no reachable routine ever owned. This prevents
+        // unreachable types like Array[BuildMode, 63] or BTreeListNode[Text] from emitting
+        // try_next/$getitem!/etc. via the wired-routine bypass on the per-routine gate.
+        if (ctx.LiveOwnerTypeNames.Count > 0
+            && !ctx.LiveOwnerTypeNames.Contains(item: concreteType.FullName))
+        {
+            return;
+        }
+
         TypeInfo? genDef = concreteType switch
         {
             EntityTypeInfo { GenericDefinition: { } d } => d,
@@ -266,6 +276,18 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                     ctx.InstantiatedGenericBodies.ContainsKey(resolvedRoutine.RegistryKey) ||
                     ctx.VariantBodies.ContainsKey(resolvedRoutine.RegistryKey) ||
                     resolvedRoutine.OwnerType is ProtocolTypeInfo)
+                {
+                    continue;
+                }
+
+                // Reachability gate: SA's RoutineResolutions index includes routines that were
+                // type-checked during analysis but never reached from program entry points.
+                // ProcessConcreteType applies this gate at line ~222; this path historically
+                // bypassed it, causing Phase B to emit unreachable bodies whose call sites
+                // reference further unreachable routines (linker errors).
+                if (ctx.LiveRoutineKeys.Count > 0
+                    && !ctx.LiveRoutineKeys.Contains(item: resolvedRoutine.RegistryKey)
+                    && !IsWiredRoutineName(resolvedRoutine.Name))
                 {
                     continue;
                 }

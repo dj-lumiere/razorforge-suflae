@@ -19,6 +19,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     private readonly HashSet<string> _live = new(comparer: StringComparer.Ordinal);
     private readonly HashSet<string> _visited = new(comparer: StringComparer.Ordinal);
     private readonly Queue<Frame> _worklist = new();
+    private readonly HashSet<TypeInfo> _liveOwnerTypes =
+        new(comparer: ReferenceEqualityComparer.Instance);
 
     private Dictionary<string, RoutineDeclaration> _userByName = new(comparer: StringComparer.Ordinal);
     private Dictionary<string, RoutineDeclaration> _stdlibByName = new(comparer: StringComparer.Ordinal);
@@ -31,9 +33,29 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         BuildAstIndices();
         SeedFromEntryPoints();
         Drain();
-        SeedWiredRoutinesOnLiveTypes();
-        Drain();
+        // Loop until fixed-point: every time we drain we may discover new owner types
+        // (e.g. Bool first reached during synthesized-body walks of Tuple[S8, Bool].$hash).
+        // The wired-routine seed must rerun on those new owners so their $eq/$hash/etc.
+        // become live.
+        int prevOwnerCount;
+        do
+        {
+            prevOwnerCount = _liveOwnerTypes.Count;
+            SeedWiredRoutinesOnLiveTypes();
+            Drain();
+        } while (_liveOwnerTypes.Count > prevOwnerCount);
         foreach (string key in _live) ctx.LiveRoutineKeys.Add(item: key);
+        foreach (TypeInfo owner in _liveOwnerTypes) ctx.LiveOwnerTypeNames.Add(item: owner.FullName);
+
+        string dumpPath = System.Environment.GetEnvironmentVariable(variable: "RF_REACHABILITY_DUMP");
+        if (!string.IsNullOrEmpty(value: dumpPath))
+        {
+            var lines = new List<string> { "=== LIVE ROUTINES ===" };
+            lines.AddRange(collection: _live.OrderBy(keySelector: s => s));
+            lines.Add(item: "=== LIVE OWNER TYPES ===");
+            lines.AddRange(collection: _liveOwnerTypes.Select(selector: t => t.FullName).OrderBy(keySelector: s => s));
+            System.IO.File.WriteAllLines(path: dumpPath, contents: lines);
+        }
     }
 
     /// <summary>
@@ -46,12 +68,9 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// </summary>
     private void SeedWiredRoutinesOnLiveTypes()
     {
-        // Use unfiltered to also include types TypeLivenessPass marked dead but codegen still
-        // emits (e.g. Hijacked[LocalMoment], ListEmitter[Owned[Text]] forwarders).
-        List<TypeInfo> liveTypes = ctx.Registry.AllConcreteGenericInstancesUnfiltered
-            .Concat(second: ctx.Registry.AllConcreteWrapperInstances)
-            .ToList();
-        foreach (TypeInfo type in liveTypes)
+        // Snapshot — EnqueueCallee mutates _liveOwnerTypes when it marks new owners live.
+        TypeInfo[] snapshot = _liveOwnerTypes.ToArray();
+        foreach (TypeInfo type in snapshot)
         {
             foreach (string wiredName in WiredRoutineNames)
             {
@@ -111,6 +130,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         Dictionary<string, TypeInfo> typeSubs)
     {
         string key = routine.RegistryKey;
+        if (routine.OwnerType is { } owner) _liveOwnerTypes.Add(item: owner);
         if (_live.Add(item: key))
         {
             ExpandSyntheticSiblings(callee: routine);
@@ -141,6 +161,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             {
                 CallExpression ce => ce.ResolvedRoutine,
                 GenericMethodCallExpression gce => gce.ResolvedRoutine,
+                CreatorExpression cre => ResolveCreatorRoutine(cre: cre),
                 _ => null
             };
             if (resolved == null) continue;
@@ -165,6 +186,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 {
                     CallExpression ce => ce.ResolvedRoutine,
                     GenericMethodCallExpression gce => gce.ResolvedRoutine,
+                    CreatorExpression cre => ResolveCreatorRoutine(cre: cre),
                     _ => null
                 };
                 if (resolved == null) continue;
@@ -178,6 +200,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // Mark live first — synthesized leafs (no AST body) still need to be in the live set
         // so GMP emits them and codegen can resolve the symbol.
         bool isFirstSeen = _live.Add(item: callee.RegistryKey);
+        if (callee.OwnerType is { } liveOwner) _liveOwnerTypes.Add(item: liveOwner);
         if (isFirstSeen)
         {
             ExpandSyntheticSiblings(callee: callee);
@@ -208,7 +231,46 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // Find AST decl by name. Routine name forms used in stdlib: "List[T].insertion_sort",
         // "S64.$add", "show". For methods, we try the owner-base + name combinations.
         RoutineDeclaration? decl = FindDecl(callee: callee);
-        if (decl == null) return; // synthesized leaf — already marked live above
+        if (decl == null)
+        {
+            // No source AST — but the routine may have a synthesized body in VariantBodies
+            // (e.g. Tuple[S8, Bool].$hash, generated record/entity $eq/$cmp/$hash). Walk that
+            // body directly so its calls (S8.$hash, Bool.$hash, ...) reach the live set.
+            // Without this, synthesized routines are leaf nodes in the BFS and their callees
+            // never become live → linker errors.
+            //
+            // For concrete generic instantiations (e.g. Range[U64].$iter), the synthesized body
+            // is keyed under the generic-def routine (Range[T].$iter). Fall back to that key and
+            // walk with the substitution map so calls like me.is_ascending() resolve to the
+            // concrete Range[U64].is_ascending and become live.
+            if (!ctx.VariantBodies.TryGetValue(key: callee.RegistryKey, out Statement? synthBody))
+            {
+                RoutineInfo? genericDefRoutine = ResolveGenericDefRoutine(callee: callee);
+                if (genericDefRoutine != null)
+                    ctx.VariantBodies.TryGetValue(key: genericDefRoutine.RegistryKey, out synthBody);
+            }
+            if (synthBody != null)
+            {
+                string synthVisitKey = $"{callee.RegistryKey}|{string.Join(separator: ",", values: subs.Select(selector: kv => $"{kv.Key}={kv.Value.FullName}"))}";
+                if (_visited.Add(item: synthVisitKey))
+                {
+                    var synthCalls = new List<object>();
+                    CollectCalls(node: synthBody, sink: synthCalls);
+                    foreach (object node in synthCalls)
+                    {
+                        RoutineInfo? resolved = node switch
+                        {
+                            CallExpression ce => ce.ResolvedRoutine,
+                            GenericMethodCallExpression gce => gce.ResolvedRoutine,
+                            _ => null
+                        };
+                        if (resolved == null) continue;
+                        EnqueueCallee(callee: SubstituteRoutine(routine: resolved, typeSubs: subs));
+                    }
+                }
+            }
+            return;
+        }
 
         // Enqueue for body walking. Use a visit-key gate to avoid re-walking under same subs.
         string visitKey = $"{callee.RegistryKey}|{string.Join(separator: ",", values: subs.Select(selector: kv => $"{kv.Key}={kv.Value.FullName}"))}";
@@ -270,6 +332,33 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         }
     }
 
+    /// <summary>
+    /// Maps a concrete-owner routine (e.g. <c>Range[U64].$iter</c>) to its generic-def
+    /// counterpart (<c>Range[T].$iter</c>). Returns null if the owner isn't a generic
+    /// instantiation or the method isn't found on the def.
+    /// </summary>
+    private RoutineInfo? ResolveCreatorRoutine(CreatorExpression cre)
+    {
+        TypeInfo? ct = cre.ConstructedType;
+        if (ct == null) return null;
+        return ctx.Registry.LookupMethod(type: ct, methodName: "$create");
+    }
+
+    private RoutineInfo? ResolveGenericDefRoutine(RoutineInfo callee)
+    {
+        TypeInfo? owner = callee.OwnerType;
+        if (owner == null) return null;
+        TypeInfo? genDef = owner switch
+        {
+            RecordTypeInfo r => r.GenericDefinition,
+            EntityTypeInfo e => e.GenericDefinition,
+            WrapperTypeInfo w => ctx.Registry.LookupType(name: w.Name),
+            _ => null
+        };
+        if (genDef == null || ReferenceEquals(objA: genDef, objB: owner)) return null;
+        return ctx.Registry.LookupMethod(type: genDef, methodName: callee.Name);
+    }
+
     private RoutineDeclaration? FindDecl(RoutineInfo callee)
     {
         // Standalone routine: try by bare name in user, then stdlib.
@@ -314,6 +403,56 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         if (typeSubs.Count == 0 || routine.OwnerType == null) return routine;
 
         TypeInfo owner = routine.OwnerType;
+
+        // Owner like ListEmitter[T] — stored as a resolution where TypeArguments contains
+        // GenericParameterTypeInfo. Substitute the params to get a concrete owner.
+        if (owner.TypeArguments is { Count: > 0 } ownerTArgs
+            && ownerTArgs.Any(predicate: t => t is GenericParameterTypeInfo))
+        {
+            TypeInfo? ownerGenDef = owner switch
+            {
+                RecordTypeInfo r => r.GenericDefinition,
+                EntityTypeInfo e => e.GenericDefinition,
+                WrapperTypeInfo w => ctx.Registry.LookupType(name: w.Name),
+                _ => null
+            };
+            if (ownerGenDef != null)
+            {
+                var substArgs = new List<TypeInfo>(capacity: ownerTArgs.Count);
+                bool allOk = true;
+                foreach (TypeInfo arg in ownerTArgs)
+                {
+                    if (arg is GenericParameterTypeInfo paramArg)
+                    {
+                        if (typeSubs.TryGetValue(key: paramArg.Name, value: out TypeInfo? sub))
+                            substArgs.Add(item: sub);
+                        else { allOk = false; break; }
+                    }
+                    else
+                    {
+                        substArgs.Add(item: arg);
+                    }
+                }
+                if (allOk)
+                {
+                    TypeInfo concreteOwner = ctx.Registry.GetOrCreateResolution(
+                        genericDef: ownerGenDef, typeArguments: substArgs);
+                    _liveOwnerTypes.Add(item: concreteOwner);
+                    RoutineInfo? resolved = ctx.Registry.LookupMethod(type: concreteOwner, methodName: routine.Name);
+                    if (resolved != null) return resolved;
+                    // Fallback: synthesized routine, mark substituted RegistryKey live
+                    var synthSubs = new Dictionary<string, TypeInfo>(comparer: StringComparer.Ordinal);
+                    IReadOnlyList<string>? defParams = ownerGenDef.GenericParameters;
+                    if (defParams != null)
+                    {
+                        for (int i = 0; i < defParams.Count && i < substArgs.Count; i++)
+                            synthSubs[key: defParams[index: i]] = substArgs[index: i];
+                    }
+                    string concreteKey = ComputeConcreteRegistryKey(routine: routine, concreteOwner: concreteOwner, subs: synthSubs);
+                    _live.Add(item: concreteKey);
+                }
+            }
+        }
         // If owner is itself a generic param T and frame has T → ConcreteType, substitute.
         if (owner is GenericParameterTypeInfo gp && typeSubs.TryGetValue(key: gp.Name, value: out TypeInfo? concrete))
         {
@@ -340,11 +479,35 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             {
                 TypeInfo concreteOwner = ctx.Registry.GetOrCreateResolution(
                     genericDef: owner, typeArguments: concreteArgs);
+                _liveOwnerTypes.Add(item: concreteOwner);
                 RoutineInfo? resolved = ctx.Registry.LookupMethod(type: concreteOwner, methodName: routine.Name);
                 if (resolved != null) return resolved;
+                // Synthesized routines (try_next, $represent, $diagnose, wrapper forwarders) live
+                // only on the generic-def. Manually mark the substituted RegistryKey live so the
+                // codegen Phase B/C gates emit the concrete-form symbol that callers reference.
+                string concreteKey = ComputeConcreteRegistryKey(routine: routine, concreteOwner: concreteOwner, subs: typeSubs);
+                _live.Add(item: concreteKey);
             }
         }
         return routine;
+    }
+
+    private static string ComputeConcreteRegistryKey(RoutineInfo routine, TypeInfo concreteOwner, Dictionary<string, TypeInfo> subs)
+    {
+        string ownerKey = concreteOwner.TypeArguments is { Count: > 0 }
+            ? $"{concreteOwner.Module}.{concreteOwner.Name}[{string.Join(",", concreteOwner.TypeArguments.Select(t => t.FullName))}]"
+            : string.IsNullOrEmpty(value: concreteOwner.Module)
+                ? concreteOwner.Name
+                : $"{concreteOwner.Module}.{concreteOwner.Name}";
+        string baseName = $"{ownerKey}.{routine.Name}";
+        if (routine.Parameters.Count == 0) return baseName;
+        string paramTypes = string.Join(",", routine.Parameters.Select(p =>
+        {
+            TypeInfo? pt = p.Type;
+            if (pt is GenericParameterTypeInfo gp && subs.TryGetValue(key: gp.Name, value: out TypeInfo? c)) pt = c;
+            return pt?.FullName ?? "?";
+        }));
+        return $"{baseName}#{paramTypes}";
     }
 
     /// <summary>
@@ -352,13 +515,59 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// <see cref="GenericMethodCallExpression"/> encountered. Robust to AST schema changes — any
     /// property of a record type that holds Statements/Expressions (or lists thereof) is traversed.
     /// </summary>
+    private static void DumpAstInline(object? node, string indent, int depth, int maxDepth)
+    {
+        if (node == null || depth > maxDepth) return;
+        Type t = node.GetType();
+        if (t.IsPrimitive || node is string || t.IsEnum) return;
+        Console.Error.WriteLine($"[trace]{indent}{t.Name}");
+        foreach (System.Reflection.PropertyInfo prop in t.GetProperties(
+            bindingAttr: System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+        {
+            if (prop.GetIndexParameters().Length > 0) continue;
+            object? value;
+            try { value = prop.GetValue(obj: node); }
+            catch { continue; }
+            if (value == null) continue;
+            if (value is Expression || value is Statement || value is SyntaxTree.Declaration)
+            {
+                Console.Error.WriteLine($"[trace]{indent}  .{prop.Name}=");
+                DumpAstInline(node: value, indent: indent + "    ", depth: depth + 1, maxDepth: maxDepth);
+            }
+            else if (value is IEnumerable enumerable && value is not string)
+            {
+                int i = 0;
+                foreach (object? item in enumerable)
+                {
+                    if (item == null) continue;
+                    Type it = item.GetType();
+                    if (it.IsPrimitive || item is string || it.IsEnum) continue;
+                    Console.Error.WriteLine($"[trace]{indent}  .{prop.Name}[{i}]=");
+                    DumpAstInline(node: item, indent: indent + "    ", depth: depth + 1, maxDepth: maxDepth);
+                    i++;
+                    if (i > 8) break;
+                }
+            }
+        }
+    }
+
     private static void CollectCalls(object? node, List<object> sink)
     {
         if (node == null) return;
-        if (node is CallExpression || node is GenericMethodCallExpression) sink.Add(item: node);
+        if (node is CallExpression || node is GenericMethodCallExpression || node is CreatorExpression) sink.Add(item: node);
 
         Type t = node.GetType();
         if (t.IsPrimitive || node is string || t.IsEnum) return;
+
+        // ValueTuples expose Item1/Item2 as fields; ITuple lets us index them uniformly.
+        if (node is System.Runtime.CompilerServices.ITuple tuple)
+        {
+            for (int i = 0; i < tuple.Length; i++)
+            {
+                CollectCalls(node: tuple[i], sink: sink);
+            }
+            return;
+        }
 
         foreach (System.Reflection.PropertyInfo prop in t.GetProperties(
             bindingAttr: System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
@@ -377,11 +586,26 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             {
                 foreach (object? item in enumerable)
                 {
+                    if (item == null) continue;
                     if (item is Expression || item is Statement || item is SyntaxTree.Declaration)
                     {
                         CollectCalls(node: item, sink: sink);
                     }
+                    else
+                    {
+                        // Walk tuple items / wrapper records — CreatorExpression.MemberVariables is
+                        // List<(string, Expression)>; the Expression hides inside an unrelated struct.
+                        Type it = item.GetType();
+                        if (!it.IsPrimitive && item is not string && !it.IsEnum)
+                        {
+                            CollectCalls(node: item, sink: sink);
+                        }
+                    }
                 }
+            }
+            else if (value is System.Runtime.CompilerServices.ITuple)
+            {
+                CollectCalls(node: value, sink: sink);
             }
         }
     }

@@ -1,6 +1,7 @@
 using System.Text;
 using Compiler.Desugaring;
 using Compiler.Instantiation;
+using Compiler.Instantiation.Passes;
 using Compiler.Resolution;
 using Compiler.Targeting;
 using SyntaxTree;
@@ -34,7 +35,22 @@ public partial class LlvmCodeGenerator
     private IReadOnlyDictionary<string, MonomorphizedBody> _instantiatedGenericBodies =
         new Dictionary<string, MonomorphizedBody>();
 
+    /// <summary>
+    /// Reachable routine RegistryKeys produced by <see cref="RoutineReachabilityPass"/>.
+    /// When non-empty, Phase A's stdlib body emission gates by this set in addition to
+    /// <see cref="_generatedRoutines"/>, preventing the lazy-declaration cascade from
+    /// emitting bodies for unreachable routines.
+    /// </summary>
+    private HashSet<string> _liveRoutineKeys = new(comparer: StringComparer.Ordinal);
+
+    /// <summary>
+    /// Live concrete owner type FullNames from RoutineReachabilityPass. Used to drive Phase C
+    /// monomorphization of synthesized routines (try_next, $represent, $diagnose) for generic owners.
+    /// </summary>
+    private HashSet<string> _liveOwnerTypeNames = new(comparer: StringComparer.Ordinal);
+
     /// <summary>Wrapper type base names for member forwarding in codegen.</summary>
+    // TODO: It shouldn't know about all these types
     private static readonly HashSet<string> WrapperTypeNames =
     [
         "Viewed", "Grasped", "Retained", "Tracked", "Inspected", "Claimed", "Shared",
@@ -90,9 +106,6 @@ public partial class LlvmCodeGenerator
 
     /// <summary>Set of already-generated function declarations to avoid duplicates.</summary>
     private readonly HashSet<string> _generatedRoutines = [];
-
-    /// <summary>Counter for generating unique lambda function names.</summary>
-    private int _lambdaCounter;
 
     /// <summary>Counter for generating unique string constant names.</summary>
     private int _stringCounter;
@@ -220,7 +233,9 @@ public partial class LlvmCodeGenerator
         TargetConfig? target = null, RfBuildMode buildMode = RfBuildMode.Debug,
         IReadOnlyDictionary<string, Statement>? synthesizedBodies = null,
         IReadOnlyDictionary<string, MonomorphizedBody>? instantiatedGenericBodies = null,
-        IReadOnlyDictionary<string, RuntimeDispatchEntry>? pendingRuntimeDispatches = null) :
+        IReadOnlyDictionary<string, RuntimeDispatchEntry>? pendingRuntimeDispatches = null,
+        IReadOnlyCollection<string>? liveRoutineKeys = null,
+        IReadOnlyCollection<string>? liveOwnerTypeNames = null) :
         this(userPrograms:
             [(program, program.Location.FileName, "")],
             registry: registry,
@@ -229,7 +244,9 @@ public partial class LlvmCodeGenerator
             buildMode: buildMode,
             synthesizedBodies: synthesizedBodies,
             instantiatedGenericBodies: instantiatedGenericBodies,
-            pendingRuntimeDispatches: pendingRuntimeDispatches)
+            pendingRuntimeDispatches: pendingRuntimeDispatches,
+            liveRoutineKeys: liveRoutineKeys,
+            liveOwnerTypeNames: liveOwnerTypeNames)
     {
     }
 
@@ -251,7 +268,9 @@ public partial class LlvmCodeGenerator
         TargetConfig? target = null, RfBuildMode buildMode = RfBuildMode.Debug,
         IReadOnlyDictionary<string, Statement>? synthesizedBodies = null,
         IReadOnlyDictionary<string, MonomorphizedBody>? instantiatedGenericBodies = null,
-        IReadOnlyDictionary<string, RuntimeDispatchEntry>? pendingRuntimeDispatches = null)
+        IReadOnlyDictionary<string, RuntimeDispatchEntry>? pendingRuntimeDispatches = null,
+        IReadOnlyCollection<string>? liveRoutineKeys = null,
+        IReadOnlyCollection<string>? liveOwnerTypeNames = null)
     {
         _target = target ?? TargetConfig.ForCurrentHost();
         if (_target.PointerBitWidth != 64)
@@ -268,6 +287,12 @@ public partial class LlvmCodeGenerator
         if (synthesizedBodies != null) _synthesizedBodies = synthesizedBodies;
         if (instantiatedGenericBodies != null)
             _instantiatedGenericBodies = instantiatedGenericBodies;
+        if (liveRoutineKeys != null && liveRoutineKeys.Count > 0)
+            _liveRoutineKeys = new HashSet<string>(collection: liveRoutineKeys,
+                comparer: StringComparer.Ordinal);
+        if (liveOwnerTypeNames != null && liveOwnerTypeNames.Count > 0)
+            _liveOwnerTypeNames = new HashSet<string>(collection: liveOwnerTypeNames,
+                comparer: StringComparer.Ordinal);
         if (pendingRuntimeDispatches != null)
         {
             foreach ((string key, RuntimeDispatchEntry entry) in pendingRuntimeDispatches)
@@ -899,6 +924,17 @@ public partial class LlvmCodeGenerator
                         continue;
                     }
 
+                    // Reachability gate: when LiveRoutineKeys is populated, skip stdlib
+                    // routines not reachable from program entry points. This prevents the
+                    // lazy-declaration cascade (declare X -> emit X -> declare Y -> emit Y)
+                    // from pulling in entire stdlib subgraphs (SortedList, BTreeNode, etc.)
+                    // that the user program never invokes.
+                    if (_liveRoutineKeys.Count > 0
+                        && !_liveRoutineKeys.Contains(item: routineInfo.RegistryKey))
+                    {
+                        continue;
+                    }
+
                     // Skip if already defined
                     if (_generatedRoutineDefs.Contains(item: funcName))
                     {
@@ -919,14 +955,14 @@ public partial class LlvmCodeGenerator
             }
 
             // Phase B: Emit pre-built instantiated generic bodies (monomorphized by GMP in Phase 6).
-            // No _generatedRoutines guard: emit all bodies eagerly so that methods never called
-            // from user code (e.g., $create(capacity:), reserve) are still available in the IR.
-            // declare/define conflicts are prevented by the RF-declarations assembly loop at the
-            // end of Generate() which skips declares for functions that already have a define.
+            // Gate on the live-routine set so dead instantiations don't drag in their callees.
             foreach ((string _, MonomorphizedBody body) in _instantiatedGenericBodies)
             {
                 string instFuncName = MangleRoutineName(routine: body.Info);
                 if (_generatedRoutineDefs.Contains(item: instFuncName)) continue;
+                if (_liveRoutineKeys.Count > 0
+                    && !_liveRoutineKeys.Contains(item: body.Info.RegistryKey))
+                    continue;
 
                 var savedSubs = _typeSubstitutions;
                 _typeSubstitutions = body.TypeSubs;
@@ -965,12 +1001,15 @@ public partial class LlvmCodeGenerator
             }
 
             // Phase C: Emit synthesized variant bodies (try_/check_/lookup_ and derived operators).
-            // No _generatedRoutines guard: emit all bodies eagerly. A synthesized try_/check_/
-            // lookup_ body is useful even when the user only calls the failable version directly.
+            // Gate on the live-routine set: a synthesized $ne body for a dead type would call a
+            // dead $eq, leaving the linker hanging on the dead $eq symbol.
             foreach ((string key, Statement synthBodyAst) in _synthesizedBodies)
             {
                 RoutineInfo? synthInfo = _registry.LookupRoutine(fullName: key);
                 if (synthInfo == null || synthInfo.IsGenericDefinition) continue;
+                if (_liveRoutineKeys.Count > 0
+                    && !_liveRoutineKeys.Contains(item: synthInfo.RegistryKey))
+                    continue;
                 // Skip routines whose owner type still has unresolved generic parameters
                 // (e.g. $represent/$hash on DictEntry[K, V] — the generic definition).
                 // IsGenericDefinition only covers routines with their own type params (like
@@ -985,6 +1024,67 @@ public partial class LlvmCodeGenerator
                 // emit the body with the wrapper's type parameter substituted.
                 if (synthInfo.OwnerType?.IsGenericDefinition == true)
                 {
+                    // Non-wrapper synthesized bodies on generic-def owners (try_next, $represent,
+                    // $diagnose, $hash, $eq for generic types like ListEmitter[T], List[T]).
+                    // For each live concrete instantiation of this owner, lookup the substituted
+                    // method (LookupMethod normalizes generic-def methods onto concrete owners),
+                    // set up _typeSubstitutions, and emit one body per concrete owner.
+                    if (synthInfo is { IsSynthesized: true, WrapperForwarderInnerMethod: null }
+                        && synthInfo.OwnerType.GenericParameters is { Count: > 0 } gParams)
+                    {
+                        TypeInfo genericOwner = synthInfo.OwnerType;
+                        foreach (TypeInfo candidateOwner in _registry.AllConcreteGenericInstancesUnfiltered)
+                        {
+                            if (candidateOwner.IsGenericDefinition) continue;
+                            if (candidateOwner.TypeArguments is not { Count: > 0 } tArgs) continue;
+                            if (tArgs.Count != gParams.Count) continue;
+                            // Match by generic-def reference: candidate must be an instantiation of genericOwner.
+                            TypeInfo? candidateGenDef = candidateOwner switch
+                            {
+                                RecordTypeInfo r => r.GenericDefinition,
+                                EntityTypeInfo e => e.GenericDefinition,
+                                WrapperTypeInfo w => _registry.LookupType(name: w.Name),
+                                _ => null
+                            };
+                            if (candidateGenDef == null
+                                || !ReferenceEquals(objA: candidateGenDef, objB: genericOwner))
+                                continue;
+                            if (_liveOwnerTypeNames.Count > 0
+                                && !_liveOwnerTypeNames.Contains(item: candidateOwner.FullName))
+                                continue;
+                            RoutineInfo? concreteMethod = _registry.LookupMethod(
+                                type: candidateOwner, methodName: synthInfo.Name);
+                            if (concreteMethod == null) continue;
+                            if (_liveRoutineKeys.Count > 0
+                                && !_liveRoutineKeys.Contains(item: concreteMethod.RegistryKey))
+                                continue;
+                            string monoFuncName = MangleRoutineName(routine: concreteMethod);
+                            if (_generatedRoutineDefs.Contains(item: monoFuncName)) continue;
+                            var savedMonoSubs = _typeSubstitutions;
+                            var newSubs = new Dictionary<string, TypeInfo>(comparer: StringComparer.Ordinal);
+                            for (int gi = 0; gi < gParams.Count; gi++)
+                                newSubs[key: gParams[index: gi]] = tArgs[index: gi];
+                            _typeSubstitutions = newSubs;
+                            try
+                            {
+                                _generatedRoutineDefs.Add(item: monoFuncName);
+                                _generatedRoutines.Add(item: monoFuncName);
+                                EmitSynthesizedBodyFromAst(routine: concreteMethod,
+                                    funcName: monoFuncName, body: synthBodyAst);
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.Error.WriteLine(value:
+                                    $"Warning: Phase C monomorphized synth codegen failed for '{monoFuncName}': {ex.Message}");
+                                _generatedRoutineDefs.Remove(item: monoFuncName);
+                                _generatedRoutines.Remove(item: monoFuncName);
+                            }
+                            finally
+                            {
+                                _typeSubstitutions = savedMonoSubs;
+                            }
+                        }
+                    }
                     if (synthInfo is { IsSynthesized: true, WrapperForwarderInnerMethod: not null } &&
                         synthInfo.OwnerType.GenericParameters is { Count: 1 } wrapperParams)
                     {

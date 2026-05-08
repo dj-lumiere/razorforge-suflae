@@ -65,6 +65,15 @@ public sealed class InstantiationContext
     /// </summary>
     public HashSet<string> LiveRoutineKeys { get; } = new(comparer: StringComparer.Ordinal);
 
+    /// <summary>
+    /// Strategy-B live owner-type set: <see cref="TypeInfo.FullName"/> values for concrete owner
+    /// types whose routines were reached by the entry-point BFS. GMP gates
+    /// <c>ProcessConcreteType</c> on membership so unreachable concrete instances
+    /// (e.g. <c>Array[BuildMode, 63]</c>, <c>BTreeListNode[Text]</c>) don't get monomorphized at all.
+    /// Populated by <c>RoutineReachabilityPass</c>; empty disables filtering.
+    /// </summary>
+    public HashSet<string> LiveOwnerTypeNames { get; } = new(comparer: StringComparer.Ordinal);
+
     /// <summary>When true, passes print per-iteration diagnostics to stderr.</summary>
     public bool SaTiming { get; set; }
 

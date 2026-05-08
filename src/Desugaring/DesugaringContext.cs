@@ -73,6 +73,13 @@ public sealed class DesugaringContext
     public HashSet<string> LiveRoutineKeys { get; } = new(comparer: StringComparer.Ordinal);
 
     /// <summary>
+    /// Live concrete owner-type FullNames mirrored from
+    /// <c>InstantiationContext.LiveOwnerTypeNames</c>. GMP skips
+    /// <c>ProcessConcreteType</c> for any concrete type not in this set when non-empty.
+    /// </summary>
+    public HashSet<string> LiveOwnerTypeNames { get; } = new(comparer: StringComparer.Ordinal);
+
+    /// <summary>
     /// Initializes shared state for passes that rewrite verified syntax before instantiation.
     /// </summary>
     public DesugaringContext(TypeRegistry registry,

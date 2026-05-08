@@ -272,10 +272,11 @@ public sealed partial class SemanticVerifier
     /// </remarks>
     private TypeSymbol AnalyzeBackIndexExpression(BackIndexExpression back)
     {
-        // Analyze the operand
-        TypeSymbol operandType = AnalyzeExpression(expression: back.Operand);
+        // BackIndex stores its offset as U64; retype untyped integer literals (`^1`) accordingly.
+        TypeSymbol? u64Type = _registry.LookupType(name: "U64");
+        TypeSymbol operandType =
+            AnalyzeExpression(expression: back.Operand, expectedType: u64Type);
 
-        // Validate that the operand is an integer type
         if (!IsIntegerType(type: operandType))
         {
             ReportError(code: SemanticDiagnosticCode.BackIndexRequiresInteger,
@@ -284,8 +285,6 @@ public sealed partial class SemanticVerifier
                 location: back.Location);
         }
 
-        // Return a BackIndex type (or Address as the underlying representation)
-        // BackIndex is conceptually a wrapper around an offset from the end
         TypeSymbol? backIndexType = _registry.LookupType(name: "BackIndex");
         if (backIndexType != null)
         {

@@ -165,6 +165,13 @@ public sealed partial class SemanticVerifier
         new Dictionary<string, MonomorphizedBody>();
 
     /// <summary>
+    /// Reachable routine keys produced by <see cref="RoutineReachabilityPass"/>.
+    /// Captured from <see cref="InstantiationContext.LiveRoutineKeys"/> after Phase 6.
+    /// </summary>
+    private IReadOnlyCollection<string> _liveRoutineKeys = Array.Empty<string>();
+    private IReadOnlyCollection<string> _liveOwnerTypeNames = Array.Empty<string>();
+
+    /// <summary>
     /// runtime dispatch stubs pre-registered by Phase 6b
     /// <see cref="Compiler.Postprocessing.Passes.RuntimeDispatchRegistrationPass"/>.
     /// Forwarded to <see cref="AnalysisResult"/> and then to codegen.
@@ -325,7 +332,9 @@ public sealed partial class SemanticVerifier
             ParsedLiterals: _parsedLiterals,
             SynthesizedBodies: allSynthesized,
             InstantiatedGenericBodies: _instantiatedGenericBodies,
-            PendingRuntimeDispatches: _pendingRuntimeDispatches);
+            PendingRuntimeDispatches: _pendingRuntimeDispatches,
+            LiveRoutineKeys: _liveRoutineKeys,
+            LiveOwnerTypeNames: _liveOwnerTypeNames);
     }
 
     /// <summary>Phase 1: Collect all type shapes and routine stubs -> no names resolved.</summary>
@@ -467,6 +476,8 @@ public sealed partial class SemanticVerifier
 
         _variantBodies = ctx.VariantBodies;
         _instantiatedGenericBodies = ctx.InstantiatedGenericBodies;
+        _liveRoutineKeys = ctx.LiveRoutineKeys.ToArray();
+        _liveOwnerTypeNames = ctx.LiveOwnerTypeNames.ToArray();
 
         // Classify call expressions (set LoweringKind) in rewritten instantiated generic bodies.
         // GenericAstRewriter preserves source-AST structure but doesn't re-classify try_next
@@ -816,7 +827,9 @@ public sealed partial class SemanticVerifier
                 ParsedLiterals: _parsedLiterals,
                 SynthesizedBodies: new Dictionary<string, Statement>(),
                 InstantiatedGenericBodies: _instantiatedGenericBodies,
-                PendingRuntimeDispatches: _pendingRuntimeDispatches);
+                PendingRuntimeDispatches: _pendingRuntimeDispatches,
+                LiveRoutineKeys: _liveRoutineKeys,
+            LiveOwnerTypeNames: _liveOwnerTypeNames);
         }
 
         foreach ((Program program, string filePath) in files)
@@ -874,7 +887,9 @@ public sealed partial class SemanticVerifier
             ParsedLiterals: _parsedLiterals,
             SynthesizedBodies: allSynthesized2,
             InstantiatedGenericBodies: _instantiatedGenericBodies,
-            PendingRuntimeDispatches: _pendingRuntimeDispatches);
+            PendingRuntimeDispatches: _pendingRuntimeDispatches,
+            LiveRoutineKeys: _liveRoutineKeys,
+            LiveOwnerTypeNames: _liveOwnerTypeNames);
     }
 
     /// <summary>
@@ -1127,8 +1142,15 @@ public sealed partial class SemanticVerifier
     /// <param name="location">The source location of the warning.</param>
     internal void ReportWarning(SemanticWarningCode code, string message, SourceLocation location)
     {
+        if (SuppressedWarnings.Contains(item: code)) return;
         _warnings.Add(item: new SemanticWarning(Code: code, Message: message, Location: location));
     }
+
+    private static readonly HashSet<SemanticWarningCode> SuppressedWarnings = new()
+    {
+        SemanticWarningCode.UnusedRoutineReturnValue,
+        SemanticWarningCode.UnhandledCrashableCall,
+    };
 
     #endregion
 

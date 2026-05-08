@@ -24,6 +24,9 @@ namespace Verification.Results;
 /// <param name="PendingRuntimeDispatches">runtime dispatch stubs pre-registered by Phase 6b,
 /// keyed by <c>"{protocol.FullName}.{methodName}"</c>. Codegen reads from this instead of
 /// discovering dispatch stubs lazily during IR emit.</param>
+/// <param name="LiveRoutineKeys">Reachable routine RegistryKeys computed by
+/// <see cref="RoutineReachabilityPass"/>. Codegen Phase A uses this to gate stdlib
+/// body emission so unreachable routines are not emitted.</param>
 public sealed record AnalysisResult(
     TypeRegistry Registry,
     IReadOnlyList<SemanticError> Errors,
@@ -31,7 +34,9 @@ public sealed record AnalysisResult(
     IReadOnlyDictionary<SourceLocation, ParsedLiteral> ParsedLiterals,
     IReadOnlyDictionary<string, Statement> SynthesizedBodies,
     IReadOnlyDictionary<string, MonomorphizedBody> InstantiatedGenericBodies,
-    IReadOnlyDictionary<string, RuntimeDispatchEntry> PendingRuntimeDispatches)
+    IReadOnlyDictionary<string, RuntimeDispatchEntry> PendingRuntimeDispatches,
+    IReadOnlyCollection<string> LiveRoutineKeys,
+    IReadOnlyCollection<string> LiveOwnerTypeNames)
 {
     /// <summary>Whether analysis completed without errors.</summary>
     public bool Success => Errors.Count == 0;

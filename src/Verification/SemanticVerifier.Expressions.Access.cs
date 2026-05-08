@@ -259,10 +259,55 @@ public sealed partial class SemanticVerifier
         return memberType;
     }
 
+    /// <summary>
+    /// Resolves the index parameter type of a `$getitem` routine for a given lookup type, with
+    /// owner generic parameters substituted. Returns null when the routine or parameter is missing.
+    /// `me` is implicit and not in <see cref="RoutineInfo.Parameters"/>; the index is at index 0.
+    /// </summary>
+    private TypeSymbol? ResolveIndexParameterType(RoutineInfo? getItem, TypeSymbol lookupType)
+    {
+        if (getItem is not { Parameters.Count: >= 1 }) return null;
+        TypeSymbol paramType = getItem.Parameters[index: 0].Type;
+        return SubstituteOwnerGenerics(paramType: paramType, lookupType: lookupType,
+            ownerType: getItem.OwnerType);
+    }
+
+    /// <summary>
+    /// Resolves a slice-bound parameter type at <paramref name="paramIndex"/> on `$getslice`
+    /// (0 = start, 1 = end), with owner generics substituted. `me` is implicit, not in Parameters.
+    /// </summary>
+    private TypeSymbol? ResolveSliceBoundParameterType(RoutineInfo? getSlice, TypeSymbol lookupType,
+        int paramIndex)
+    {
+        if (getSlice == null || getSlice.Parameters.Count <= paramIndex) return null;
+        TypeSymbol paramType = getSlice.Parameters[index: paramIndex].Type;
+        return SubstituteOwnerGenerics(paramType: paramType, lookupType: lookupType,
+            ownerType: getSlice.OwnerType);
+    }
+
+    private TypeSymbol? SubstituteOwnerGenerics(TypeSymbol paramType, TypeSymbol lookupType,
+        TypeSymbol? ownerType)
+    {
+        if (lookupType.TypeArguments is not { Count: > 0 }) return paramType;
+
+        TypeSymbol? lookupGenericDef = GetGenericDefinition(resolution: lookupType);
+        IReadOnlyList<string>? ownerGenericParams = lookupGenericDef?.GenericParameters
+            ?? ownerType?.GenericParameters;
+        if (ownerGenericParams is not { Count: > 0 }) return paramType;
+
+        var substitutions = new Dictionary<string, TypeSymbol>();
+        for (int i = 0; i < ownerGenericParams.Count && i < lookupType.TypeArguments.Count; i++)
+        {
+            substitutions[key: ownerGenericParams[index: i]] = lookupType.TypeArguments[index: i];
+        }
+        return substitutions.Count > 0
+            ? SubstituteWithMapping(type: paramType, substitutions: substitutions)
+            : paramType;
+    }
+
     private TypeSymbol AnalyzeIndexExpression(IndexExpression index)
     {
         TypeSymbol objectType = AnalyzeExpression(expression: index.Object);
-        AnalyzeExpression(expression: index.Index);
         TryGetTransparentProtocolTarget(type: objectType, targetType: out TypeSymbol lookupType);
 
         // Look for $getitem method — LookupMethod handles generic resolutions
@@ -281,6 +326,14 @@ public sealed partial class SemanticVerifier
                 ?? TrySynthesizeWrapperForwarder(wrapperType: lookupType,
                     methodName: "$getitem", isFailable: true);
         }
+
+        // Analyze the index expression with the indexer parameter type as expected type so
+        // untyped integer literals (`arr[0]`) retype to U64/S64/etc. instead of defaulting to S64
+        // and tripping S767 fixed-width-mixing diagnostics.
+        TypeSymbol? indexExpectedType = ResolveIndexParameterType(getItem: getItem,
+            lookupType: lookupType);
+        AnalyzeExpression(expression: index.Index, expectedType: indexExpectedType);
+
         if (getItem?.ReturnType != null)
         {
             TypeSymbol returnType = getItem.ReturnType;
@@ -325,12 +378,20 @@ public sealed partial class SemanticVerifier
     private TypeSymbol AnalyzeSliceExpression(SliceExpression slice)
     {
         TypeSymbol objectType = AnalyzeExpression(expression: slice.Object);
-        AnalyzeExpression(expression: slice.Start);
-        AnalyzeExpression(expression: slice.End);
         TryGetTransparentProtocolTarget(type: objectType, targetType: out TypeSymbol lookupType);
 
         // Look for $getslice method — LookupMethod handles generic resolutions
         RoutineInfo? getSlice = _registry.LookupMethod(type: lookupType, methodName: "$getslice");
+
+        // Plumb expected type into start/end so integer literals retype to the slice indexer's
+        // bound type. $getslice is `me, start, end` — start = Parameters[1], end = Parameters[2].
+        TypeSymbol? startExpected = ResolveSliceBoundParameterType(getSlice: getSlice,
+            lookupType: lookupType, paramIndex: 1);
+        TypeSymbol? endExpected = ResolveSliceBoundParameterType(getSlice: getSlice,
+            lookupType: lookupType, paramIndex: 2);
+        AnalyzeExpression(expression: slice.Start, expectedType: startExpected);
+        AnalyzeExpression(expression: slice.End, expectedType: endExpected);
+
         if (getSlice?.ReturnType != null)
         {
             TypeSymbol returnType = getSlice.ReturnType;
