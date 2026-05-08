@@ -6,7 +6,7 @@ module Core
 ### Unicode code points, IPv4 addresses, pixel colours, and shift amounts
 ### (the shift operators expect `U32` for their count argument).
 @llvm("i32")
-record U32 obeys UnsignedIntegral, Ordered, ConstCompatible, AtomicType
+record U32 obeys UnsignedIntegral, Ordered, ConstCompatible
   pass
 
 # Constants for U32 limits

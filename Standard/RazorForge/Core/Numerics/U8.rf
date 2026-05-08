@@ -5,7 +5,7 @@ module Core
 ### `U8` is the standard byte-sized unsigned integer type in RazorForge, used
 ### for raw byte manipulation, character codes, and compact numeric data.
 @llvm("i8")
-record U8 obeys UnsignedIntegral, Ordered, ConstCompatible, AtomicType
+record U8 obeys UnsignedIntegral, Ordered, ConstCompatible
   pass
 
 # Constants for U8 limits
