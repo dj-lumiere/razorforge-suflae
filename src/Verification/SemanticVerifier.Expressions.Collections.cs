@@ -649,23 +649,21 @@ public sealed partial class SemanticVerifier
                 paramType = elemType;
             }
 
-            if (paramType is GenericParameterTypeInfo)
+            Expression argExpr = arguments[index: i] is NamedArgumentExpression na
+                ? na.Value
+                : arguments[index: i];
+            TypeSymbol argType = AnalyzeExpression(expression: argExpr);
+            if (argType == ErrorTypeInfo.Instance)
             {
-                int idx = genericRoutine.GenericParameters
-                                        .ToList()
-                                        .IndexOf(item: paramType.Name);
-                if (idx >= 0 && typeArgs[idx] == null)
-                {
-                    Expression arg = arguments[index: i] is NamedArgumentExpression na
-                        ? na.Value
-                        : arguments[index: i];
-                    TypeSymbol argType = AnalyzeExpression(expression: arg);
-                    if (argType != ErrorTypeInfo.Instance)
-                    {
-                        typeArgs[idx] = argType;
-                    }
-                }
+                continue;
             }
+
+            // Recurse into TypeArguments so const- and type-generics inside a parameterized
+            // pattern (e.g. `array: Array[Byte, N]`) bind from the matching position in argType.
+            InferMethodTypeArgumentsFromTypes(paramType: paramType,
+                argType: argType,
+                genericParameters: genericRoutine.GenericParameters,
+                inferred: typeArgs);
         }
 
         // All type args must be inferred

@@ -409,11 +409,25 @@ public sealed partial class SemanticVerifier
             IsMaybeType(type: target) && target.TypeArguments is { Count: 1 })
         {
             TypeSymbol typeArg = target.TypeArguments[0];
-            return source.Name == typeArg.Name ||
-                   source.FullName == typeArg.FullName ||
-                   source.FullName == typeArg.Name ||
-                   source.Name == typeArg.FullName;
+            if (source.Name == typeArg.Name ||
+                source.FullName == typeArg.FullName ||
+                source.FullName == typeArg.Name ||
+                source.Name == typeArg.FullName)
+                return true;
+            // Raw entity E → Maybe[Owned[E]]: rvalue entity auto-wraps into Owned, then carrier.
+            if (source.Category == TypeCategory.Entity &&
+                typeArg is WrapperTypeInfo { Name: "Owned" } ownedInner &&
+                (source.Name == ownedInner.InnerType.Name ||
+                 source.FullName == ownedInner.InnerType.FullName))
+                return true;
         }
+
+        // Raw entity E (rvalue) → Owned[E]: a freshly produced entity transfers ownership.
+        if (source.Category == TypeCategory.Entity &&
+            target is WrapperTypeInfo { Name: "Owned" } ownedTgt &&
+            (source.Name == ownedTgt.InnerType.Name ||
+             source.FullName == ownedTgt.InnerType.FullName))
+            return true;
 
         // No implicit conversions - all type conversions must be explicit via creator syntax
         return false;

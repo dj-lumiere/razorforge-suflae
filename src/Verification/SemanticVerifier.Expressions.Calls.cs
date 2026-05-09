@@ -94,6 +94,26 @@ public sealed partial class SemanticVerifier
                         routine = monomorphized;
                 }
 
+                // Implicit type-argument inference for a generic routine call without explicit `[...]`.
+                // Without this, callers like `set_byte_at(arr, 0, b)` keep the generic definition and
+                // its return type stays `Array[Byte, N]`, breaking assignment/conversion checks.
+                if (routine is { IsGenericDefinition: true } &&
+                    (call.TypeArguments == null || call.TypeArguments.Count == 0) &&
+                    routine.GenericParameters is { Count: > 0 } &&
+                    call.Arguments.Count == routine.Parameters.Count)
+                {
+                    IReadOnlyList<TypeInfo>? inferred =
+                        InferGenericTypeArguments(genericRoutine: routine,
+                            arguments: call.Arguments);
+                    if (inferred != null)
+                    {
+                        RoutineInfo? monomorphized = _registry.GetOrCreateRoutineResolution(
+                            genericDef: routine, typeArguments: inferred);
+                        if (monomorphized != null)
+                            routine = monomorphized;
+                    }
+                }
+
                 // Overload resolution: re-resolve when the initial lookup (first-wins by base name)
                 // returns a routine with a different arity than the call site. This handles the case
                 // where a zero-arg overload was registered first but the call has arguments, or where
