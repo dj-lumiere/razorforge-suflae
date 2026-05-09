@@ -162,9 +162,42 @@ public sealed partial class SemanticVerifier
                                                          })
                                                         .Where(predicate: n =>
                                                              !string.IsNullOrEmpty(value: n));
-            string registryKey =
-                $"{baseName}#{string.Join(separator: ",", values: paramTypeNames)}";
-            routineInfo = _registry.LookupRoutine(fullName: registryKey);
+            string paramSig = string.Join(separator: ",", values: paramTypeNames);
+            string registryKey = $"{baseName}#{paramSig}";
+            routineInfo = _registry.LookupRoutine(fullName: registryKey,
+                isFailable: routine.IsFailable);
+
+            // Fallback: extension methods on concrete generic specializations
+            // (e.g., `List[Byte].$create`) register under the concrete owner type,
+            // producing a RegistryKey like `Core.List[Core.Byte].$create#Core.Bytes`.
+            // The first lookup above used the generic-def-normalized owner
+            // (`Core.List[T].$create`), so it missed. Resolve the concrete owner
+            // type from the routine name and rebuild the canonical key.
+            if (routineInfo == null && routine.Name.Contains(value: '.'))
+            {
+                int dotIdx = routine.Name.IndexOf(value: '.');
+                string ownerExprText = routine.Name[..dotIdx];
+                string mName = routine.Name[(dotIdx + 1)..];
+                if (ownerExprText.Contains(value: '['))
+                {
+                    TypeExpression? ownerExpr =
+                        ParseTypeExpressionString(text: ownerExprText,
+                                                  location: routine.Location);
+                    if (ownerExpr != null)
+                    {
+                        TypeSymbol resolvedOwner = ResolveType(typeExpr: ownerExpr);
+                        if (resolvedOwner is not ErrorTypeInfo)
+                        {
+                            string ownerIdentity =
+                                RoutineInfo.GetTypeIdentity(type: resolvedOwner);
+                            string concreteKey =
+                                $"{ownerIdentity}.{mName}#{paramSig}";
+                            routineInfo =
+                                _registry.LookupRoutine(fullName: concreteKey);
+                        }
+                    }
+                }
+            }
         }
 
         _currentRoutine = prevRoutine;
@@ -825,6 +858,62 @@ public sealed partial class SemanticVerifier
                 $"Cannot assign value of type '{valueType.Name}' to target of type '{targetType.Name}'.",
                 location: assign.Location);
         }
+    }
+
+    #endregion
+
+    #region Type Expression Parsing Helpers
+
+    /// <summary>
+    /// Parses a textual type expression like "List[Byte]" or "Dict[K, List[V]]"
+    /// into a synthetic <see cref="TypeExpression"/> AST node. Used to recover
+    /// owner-type bindings from a routine's name string when the AST does not
+    /// carry the owner as a separate node. Returns null on malformed input.
+    /// </summary>
+    private static TypeExpression? ParseTypeExpressionString(string text,
+        SourceLocation location)
+    {
+        text = text.Trim();
+        if (string.IsNullOrEmpty(value: text)) return null;
+
+        int bracketIdx = text.IndexOf(value: '[');
+        if (bracketIdx < 0)
+        {
+            return new TypeExpression(Name: text,
+                GenericArguments: null,
+                Location: location);
+        }
+
+        if (!text.EndsWith(value: ']')) return null;
+        string head = text[..bracketIdx];
+        string inner = text[(bracketIdx + 1)..^1];
+
+        List<TypeExpression> args = [];
+        int depth = 0;
+        int start = 0;
+        for (int i = 0; i < inner.Length; i++)
+        {
+            char c = inner[index: i];
+            if (c == '[') depth++;
+            else if (c == ']') depth--;
+            else if (c == ',' && depth == 0)
+            {
+                TypeExpression? arg = ParseTypeExpressionString(
+                    text: inner[start..i], location: location);
+                if (arg == null) return null;
+                args.Add(item: arg);
+                start = i + 1;
+            }
+        }
+
+        TypeExpression? lastArg =
+            ParseTypeExpressionString(text: inner[start..], location: location);
+        if (lastArg == null) return null;
+        args.Add(item: lastArg);
+
+        return new TypeExpression(Name: head,
+            GenericArguments: args,
+            Location: location);
     }
 
     #endregion

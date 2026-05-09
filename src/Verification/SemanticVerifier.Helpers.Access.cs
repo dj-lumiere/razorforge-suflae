@@ -42,6 +42,14 @@ public sealed partial class SemanticVerifier
             return; // Token validation only applies to RazorForge
         }
 
+        // Exempt token-producing routines: when the routine's declared return type IS a
+        // token type, the routine itself is the canonical constructor for that token
+        // (e.g. T.grasp() -> Grasped[T]). Block escapes from non-token routines only.
+        if (_currentRoutine?.ReturnType != null && IsInlineOnlyTokenType(type: _currentRoutine.ReturnType))
+        {
+            return;
+        }
+
         if (IsInlineOnlyTokenType(type: type))
         {
             ReportError(code: SemanticDiagnosticCode.TokenReturnNotAllowed,

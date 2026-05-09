@@ -1113,6 +1113,14 @@ public sealed partial class SemanticVerifier
         ValidateExclusiveTokenUniqueness(arguments: call.Arguments, location: call.Location);
 
         call.LoweringKind = CallLoweringKind.DynamicCall;
+
+        // When the callee is a routine value (e.g. a parameter typed Routine[(T,T), Bool]),
+        // the call's result type is the routine's return type, not the routine type itself.
+        if (calleeType is RoutineTypeInfo routineType)
+        {
+            return routineType.ReturnType ?? _registry.LookupType(name: "Blank") ?? ErrorTypeInfo.Instance;
+        }
+
         return calleeType;
     }
 

@@ -257,8 +257,11 @@ internal sealed class SignatureResolver
             AsyncStatus = routine.Async
         };
 
-        // Duplicate detection by full signature (RegistryKey includes param types)
-        if (_sa._registry.HasRoutine(key: finalRoutine.RegistryKey))
+        // Duplicate detection by full signature (RegistryKey includes param types).
+        // A user-written routine is allowed to shadow a synthesized (builder-generated) one
+        // with the same signature — RegisterRoutine handles the overwrite precedence.
+        RoutineInfo? existingByKey = _sa._registry.LookupRoutine(fullName: finalRoutine.RegistryKey);
+        if (existingByKey != null && !existingByKey.IsSynthesized)
         {
             _sa.ReportError(code: SemanticDiagnosticCode.DuplicateRoutineDefinition,
                 message: $"Routine '{pending.RoutineName}' is already defined.",

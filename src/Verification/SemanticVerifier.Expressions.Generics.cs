@@ -122,18 +122,53 @@ public sealed partial class SemanticVerifier
 
             if (method.IsGenericDefinition)
             {
-                if (method.GenericParameters == null ||
-                    method.GenericParameters.Count != typeArgs.Count)
+                // Owner-level generic params (e.g. T from Hijacked[T]) are bound by the receiver.
+                // Compare typeArgs only against method-level params (e.g. U from recast_as[U]).
+                var ownerGenericParamNames = GetOwnerGenericParameterNames(ownerType: objectType);
+                IReadOnlyList<string> methodOnlyParams =
+                    method.GenericParameters?
+                          .Where(predicate: gp => !ownerGenericParamNames.Contains(item: gp))
+                          .ToList() ?? (IReadOnlyList<string>)Array.Empty<string>();
+
+                if (methodOnlyParams.Count != typeArgs.Count)
                 {
                     ReportError(code: SemanticDiagnosticCode.WrongTypeArgumentCount,
                         message:
-                        $"Method '{method.Name}' expects {method.GenericParameters?.Count ?? 0} type arguments, got {typeArgs.Count}.",
+                        $"Method '{method.Name}' expects {methodOnlyParams.Count} type arguments, got {typeArgs.Count}.",
                         location: generic.Location);
                     return ErrorTypeInfo.Instance;
                 }
 
+                // Build full type-argument list aligned to method.GenericParameters order.
+                // For owner-level params, take the binding from the receiver's TypeArguments;
+                // for method-level params, take from the user-supplied typeArgs in order.
+                List<TypeSymbol> fullTypeArgs;
+                if (method.GenericParameters != null &&
+                    method.GenericParameters.Count != typeArgs.Count)
+                {
+                    fullTypeArgs = new List<TypeSymbol>(capacity: method.GenericParameters.Count);
+                    int methodArgIdx = 0;
+                    var ownerBindings = BuildOwnerBindingMap(ownerType: objectType);
+                    foreach (string paramName in method.GenericParameters)
+                    {
+                        if (ownerGenericParamNames.Contains(item: paramName) &&
+                            ownerBindings.TryGetValue(key: paramName, value: out TypeInfo? ownerArg))
+                        {
+                            fullTypeArgs.Add(item: ownerArg);
+                        }
+                        else if (methodArgIdx < typeArgs.Count)
+                        {
+                            fullTypeArgs.Add(item: typeArgs[index: methodArgIdx++]);
+                        }
+                    }
+                }
+                else
+                {
+                    fullTypeArgs = typeArgs.ToList();
+                }
+
                 method = _registry.GetOrCreateRoutineResolution(genericDef: method,
-                    typeArguments: typeArgs.ToList());
+                    typeArguments: fullTypeArgs);
             }
 
             generic.ResolvedRoutine = method;
@@ -434,6 +469,74 @@ public sealed partial class SemanticVerifier
         }
 
         return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
+    }
+
+    private static Dictionary<string, TypeInfo> BuildOwnerBindingMap(TypeInfo? ownerType)
+    {
+        var map = new Dictionary<string, TypeInfo>();
+        if (ownerType == null)
+            return map;
+
+        TypeInfo? def = ownerType switch
+        {
+            RecordTypeInfo r => r.GenericDefinition ?? (r.IsGenericDefinition ? r : null),
+            EntityTypeInfo e => e.GenericDefinition ?? (e.IsGenericDefinition ? e : null),
+            ProtocolTypeInfo p => p.GenericDefinition ?? (p.IsGenericDefinition ? p : null),
+            WrapperTypeInfo w => w.IsGenericDefinition ? w : null,
+            _ => ownerType.IsGenericDefinition ? ownerType : null
+        };
+
+        IReadOnlyList<string>? paramNames =
+            def?.GenericParameters ?? ownerType.GenericParameters;
+        IReadOnlyList<TypeInfo>? args = ownerType.TypeArguments;
+
+        if (paramNames != null && args != null)
+        {
+            for (int i = 0; i < paramNames.Count && i < args.Count; i++)
+            {
+                map[key: paramNames[index: i]] = args[index: i];
+            }
+            return map;
+        }
+
+        // Fallback: receiver is an unsubstituted generic instance like Hijacked[T] inside its own
+        // body. Map each param name to a same-named GenericParameterTypeInfo placeholder.
+        if (paramNames != null)
+        {
+            foreach (string p in paramNames)
+            {
+                map[key: p] = new GenericParameterTypeInfo(name: p);
+            }
+        }
+        return map;
+    }
+
+    private static HashSet<string> GetOwnerGenericParameterNames(TypeInfo? ownerType)
+    {
+        var names = new HashSet<string>();
+        if (ownerType == null)
+            return names;
+
+        TypeInfo? def = ownerType switch
+        {
+            RecordTypeInfo r => r.GenericDefinition ?? (r.IsGenericDefinition ? r : null),
+            EntityTypeInfo e => e.GenericDefinition ?? (e.IsGenericDefinition ? e : null),
+            ProtocolTypeInfo p => p.GenericDefinition ?? (p.IsGenericDefinition ? p : null),
+            WrapperTypeInfo w => w.IsGenericDefinition ? w : null,
+            _ => ownerType.IsGenericDefinition ? ownerType : null
+        };
+
+        if (def?.GenericParameters != null)
+        {
+            foreach (string p in def.GenericParameters)
+                names.Add(item: p);
+        }
+        else if (ownerType.GenericParameters != null)
+        {
+            foreach (string p in ownerType.GenericParameters)
+                names.Add(item: p);
+        }
+        return names;
     }
 
     private TypeSymbol HandleUnknownExpression(Expression expression)

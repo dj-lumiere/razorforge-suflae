@@ -177,6 +177,15 @@ public sealed partial class SemanticVerifier
     /// </remarks>
     private TypeSymbol AnalyzeStealExpression(StealExpression steal)
     {
+        // Steal has side effects (deadref marking) and emits diagnostics. Overload-resolution
+        // pre-passes can re-analyze argument expressions, which would re-emit errors and
+        // double-process the steal. Cache the resolved type on the node so repeated analysis
+        // of the same StealExpression is a no-op.
+        if (steal.ResolvedType != null)
+        {
+            return steal.ResolvedType;
+        }
+
         // Analyze the operand
         TypeSymbol operandType = AnalyzeExpression(expression: steal.Operand);
 
@@ -188,6 +197,7 @@ public sealed partial class SemanticVerifier
                 message: $"Cannot steal '{tokenKind}' - scope-bound wrappers cannot be stolen. " +
                          $"Only raw entities can be stolen.",
                 location: steal.Location);
+            steal.ResolvedType = operandType;
             return operandType;
         }
 
@@ -197,6 +207,7 @@ public sealed partial class SemanticVerifier
             ReportError(code: SemanticDiagnosticCode.StealHijacked,
                 message: "Cannot steal 'Hijacked[T]' - internal ownership type cannot be stolen.",
                 location: steal.Location);
+            steal.ResolvedType = operandType;
             return operandType;
         }
 
@@ -208,6 +219,7 @@ public sealed partial class SemanticVerifier
             ReportError(code: SemanticDiagnosticCode.StealScopeBoundToken,
                 message: $"Cannot steal '{operandType.Name}' - only raw entities and Owned[T] can be stolen.",
                 location: steal.Location);
+            steal.ResolvedType = operandType;
             return operandType;
         }
 
@@ -218,6 +230,7 @@ public sealed partial class SemanticVerifier
         }
 
         // Return the same type (raw entity or Owned[T]); steal transfers ownership
+        steal.ResolvedType = operandType;
         return operandType;
     }
 

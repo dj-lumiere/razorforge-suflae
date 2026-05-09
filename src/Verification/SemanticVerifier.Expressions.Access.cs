@@ -881,8 +881,15 @@ public sealed partial class SemanticVerifier
                 location: range.End.Location);
         }
 
-        // Range types must be compatible
-        if (!IsNumericType(type: startType) || !IsNumericType(type: endType))
+        // Range types must be compatible. Const-generic parameters (e.g., `N`
+        // declared as `needs N is U64`) and numeric-constrained generic parameters
+        // are also acceptable as range bounds since they hold a numeric value at
+        // each monomorphization.
+        bool startNumeric = IsNumericType(type: startType) ||
+                            IsNumericGenericParam(type: startType);
+        bool endNumeric = IsNumericType(type: endType) ||
+                          IsNumericGenericParam(type: endType);
+        if (!startNumeric || !endNumeric)
         {
             ReportError(code: SemanticDiagnosticCode.RangeBoundsNotNumeric,
                 message: "Range bounds must be numeric types.",

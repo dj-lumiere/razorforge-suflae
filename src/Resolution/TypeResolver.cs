@@ -495,6 +495,53 @@ internal sealed class TypeResolver
             return true;
         }
 
+        // Universal methods (routine T.bar()) — owner IS the generic parameter itself.
+        if (_sa._currentRoutine?.OwnerType is GenericParameterTypeInfo gp &&
+            gp.Name == name)
+        {
+            return true;
+        }
+
+        // Wrapper types (Hijacked[T].foo) carry the inner-type binding via
+        // InnerType rather than GenericParameters. If the inner type is
+        // itself a generic-parameter placeholder, accept that name.
+        if (_sa._currentRoutine?.OwnerType is WrapperTypeInfo wrap &&
+            wrap.InnerType is GenericParameterTypeInfo wgp &&
+            wgp.Name == name)
+        {
+            return true;
+        }
+
+        // Some owner types lose their declared GenericParameters list when
+        // they're stored back as a resolved-type representation (e.g.,
+        // Name="Hijacked[T]" with an empty GenericParameters list). Recover
+        // the bound names by parsing the bracketed segment of the owner Name.
+        string? ownerName = _sa._currentRoutine?.OwnerType?.Name;
+        if (!string.IsNullOrEmpty(value: ownerName) &&
+            ownerName.Contains(value: '['))
+        {
+            int open = ownerName.IndexOf(value: '[');
+            int close = ownerName.LastIndexOf(value: ']');
+            if (close > open)
+            {
+                string inner = ownerName[(open + 1)..close];
+                int depth = 0;
+                int start = 0;
+                for (int i = 0; i <= inner.Length; i++)
+                {
+                    if (i == inner.Length ||
+                        (inner[index: i] == ',' && depth == 0))
+                    {
+                        string arg = inner[start..i].Trim();
+                        if (arg == name) return true;
+                        start = i + 1;
+                    }
+                    else if (inner[index: i] == '[') depth++;
+                    else if (inner[index: i] == ']') depth--;
+                }
+            }
+        }
+
         return false;
     }
 

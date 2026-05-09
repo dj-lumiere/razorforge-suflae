@@ -468,6 +468,49 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
+    /// Returns true if the type is a generic parameter whose constraint resolves to a numeric type
+    /// (e.g., a const-generic <c>N</c> declared as <c>needs N is U64</c>) or a const-generic value
+    /// whose explicit type is numeric. Such parameters carry a numeric value at each
+    /// monomorphization and are acceptable wherever a numeric value is expected.
+    /// </summary>
+    private bool IsNumericGenericParam(TypeSymbol type)
+    {
+        if (type is ConstGenericValueTypeInfo) return true;
+
+        if (type is GenericParameterTypeInfo gp)
+        {
+            string name = gp.Name;
+            // Search the active generic-constraint scope for a numeric constraint on this name.
+            // Constraints can live on the routine, the enclosing type, or — for
+            // extension methods — on the routine's owner type (e.g., `Array[T,N]`
+            // declares `needs N is U64`).
+            IReadOnlyList<IReadOnlyList<GenericConstraintDeclaration>?> sources =
+            [
+                _currentRoutine?.GenericConstraints,
+                _currentType?.GenericConstraints,
+                _currentRoutine?.OwnerType?.GenericConstraints
+            ];
+            foreach (IReadOnlyList<GenericConstraintDeclaration>? constraints in sources)
+            {
+                if (constraints == null) continue;
+                foreach (GenericConstraintDeclaration c in constraints)
+                {
+                    if (c.ParameterName != name) continue;
+                    if (c.ConstraintType != ConstraintKind.ConstGeneric) continue;
+                    if (c.ConstraintTypes is not { Count: > 0 } types) continue;
+                    foreach (TypeExpression boundExpr in types)
+                    {
+                        TypeSymbol? bound = LookupTypeWithImports(name: boundExpr.Name);
+                        if (bound != null && IsNumericType(type: bound)) return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Returns true if the type implements the <c>Integral</c> protocol (i.e., is a fixed-width or
     /// arbitrary-precision integer type such as s32, u64, uaddr, or Suflae's Integer).
     /// </summary>
@@ -516,6 +559,13 @@ public sealed partial class SemanticVerifier
 
         // Use LookupMethod which handles generic resolutions (e.g., Hijacked[Point].$eq)
         if (_registry.LookupMethod(type: type, methodName: methodName) != null)
+            return true;
+
+        // Phase D: transparent wrappers (Owned[T], etc.) forward operator wired methods
+        // to the inner T's implementation. Synthesize the forwarder lazily.
+        if (IsWrapperType(type: type) &&
+            TrySynthesizeWrapperForwarder(wrapperType: type, methodName: methodName,
+                isFailable: false) != null)
             return true;
 
         // For generic parameters, check if any constrained protocol declares the method.

@@ -21,8 +21,21 @@ public sealed partial class TypeRegistry
         string registryKey = routine.RegistryKey;
         string baseName = routine.BaseName;
 
-        // Register under RegistryKey for exact overload matching
-        _routines[key: registryKey] = routine;
+        // Register under RegistryKey for exact overload matching.
+        // Never let a synthesized (builder-generated) routine overwrite a user-written one:
+        // explicit user routines override synthetic same-signature defaults (e.g., a user
+        // `T.$create(field: Foo)` overrides the auto-generated record field constructor).
+        if (_routines.TryGetValue(key: registryKey, value: out RoutineInfo? existingByKey))
+        {
+            bool existingIsUser = !existingByKey.IsSynthesized;
+            bool incomingIsSynthetic = routine.IsSynthesized;
+            if (!(existingIsUser && incomingIsSynthetic))
+                _routines[key: registryKey] = routine;
+        }
+        else
+        {
+            _routines[key: registryKey] = routine;
+        }
 
         // Also register under base name (first overload wins for unqualified lookup)
         if (!_routines.ContainsKey(key: baseName))
