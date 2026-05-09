@@ -80,21 +80,41 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         }
     }
 
+    // Closed set of overloadable wired routines per RazorForge-Wiki/docs/Operators.md
+    // (operator → wired-routine table). Operator-lowering may leave ResolvedRoutine = null on
+    // stdlib bodies whose receivers lack ResolvedType (e.g. CStr.$create's UTF-8 encoder uses
+    // cp & 0x3F, cp >> 6) — seeding these names per live owner backstops that.
+    // Excluded: $create/$destroy (driven by CreatorExpression / scope), and $getitem!/$setitem!
+    // (driven by index syntax) — those have dedicated reachability paths.
     private static readonly string[] WiredRoutineNames =
     {
-        "$represent", "$diagnose",
+        // Display / hash
+        "$represent", "$diagnose", "$hash", "$secure_hash",
+        // Equality / comparison
         "$eq", "$ne",
         "$cmp", "$lt", "$le", "$gt", "$ge",
+        // Containment
         "$contains", "$notcontains",
-        "$hash",
-        "$iter", "try_next",
-        // Arithmetic / bitwise / shift operators — primitive owners (U32, U64, etc.) define
-        // these as wired methods. Operator-lowering produces calls to them but may leave
-        // ResolvedRoutine = null in stdlib bodies whose receivers lack ResolvedType
-        // (e.g. CStr.$create's UTF-8 encoder uses cp & 0x3F, cp >> 6).
-        "$add", "$sub", "$mul", "$div", "$mod",
+        // Iteration
+        "$iter", "$next!", "try_next",
+        // Arithmetic — standard
+        "$add", "$sub", "$mul", "$truediv", "$floordiv", "$mod", "$pow", "$neg",
+        // Arithmetic — wrapping
+        "$add_wrap", "$sub_wrap", "$mul_wrap", "$pow_wrap",
+        // Arithmetic — clamping
+        "$add_clamp", "$sub_clamp", "$mul_clamp", "$truediv_clamp", "$pow_clamp",
+        // Bitwise
         "$bitand", "$bitor", "$bitxor", "$bitnot",
+        // Shift
         "$ashl", "$ashr", "$lshl", "$lshr",
+        // In-place arithmetic
+        "$iadd", "$isub", "$imul", "$itruediv", "$ifloordiv", "$imod", "$ipow",
+        // In-place bitwise
+        "$ibitand", "$ibitor", "$ibitxor",
+        // In-place shift
+        "$iashl", "$iashr", "$ilshl", "$ilshr",
+        // Unwrap (Maybe / Result / Lookup)
+        "$unwrap", "$unwrap_or",
     };
 
     private void BuildAstIndices()
