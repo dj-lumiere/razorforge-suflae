@@ -50,7 +50,7 @@ public partial class LlvmCodeGenerator
     private HashSet<string> _liveOwnerTypeNames = new(comparer: StringComparer.Ordinal);
 
     /// <summary>Wrapper type base names for member forwarding in codegen.</summary>
-    // TODO: It shouldn't know about all these types
+    // TODO: It shouldn't know about all these types because they are going to be llvm ptr anyway.
     private static readonly HashSet<string> WrapperTypeNames =
     [
         "Viewed", "Grasped", "Retained", "Tracked", "Inspected", "Claimed", "Shared",

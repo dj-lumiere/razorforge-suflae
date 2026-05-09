@@ -22,8 +22,14 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     private readonly HashSet<TypeInfo> _liveOwnerTypes =
         new(comparer: ReferenceEqualityComparer.Instance);
 
-    private Dictionary<string, RoutineDeclaration> _userByName = new(comparer: StringComparer.Ordinal);
-    private Dictionary<string, RoutineDeclaration> _stdlibByName = new(comparer: StringComparer.Ordinal);
+    private Dictionary<string, List<RoutineDeclaration>> _userByName = new(comparer: StringComparer.Ordinal);
+    private Dictionary<string, List<RoutineDeclaration>> _stdlibByName = new(comparer: StringComparer.Ordinal);
+
+    // Per-frame local variable type map (params + var decls). Used by ResolveMemberCall and
+    // ResolveCallStyleConstructor to recover receiver types in stdlib bodies where SA didn't
+    // populate ResolvedType on identifier expressions.
+    private Dictionary<string, TypeInfo> _localTypes = new(comparer: StringComparer.Ordinal);
+    private TypeInfo? _meType;
 
     private readonly record struct Frame(RoutineInfo Routine, RoutineDeclaration Decl,
         Dictionary<string, TypeInfo> TypeSubs);
@@ -123,7 +129,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         {
             foreach (RoutineDeclaration decl in program.Declarations.OfType<RoutineDeclaration>())
             {
-                _userByName[key: decl.Name] = decl;
+                AddDecl(map: _userByName, name: decl.Name, decl: decl);
             }
         }
 
@@ -131,9 +137,20 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         {
             foreach (RoutineDeclaration decl in program.Declarations.OfType<RoutineDeclaration>())
             {
-                _stdlibByName.TryAdd(key: decl.Name, value: decl);
+                AddDecl(map: _stdlibByName, name: decl.Name, decl: decl);
             }
         }
+    }
+
+    private static void AddDecl(Dictionary<string, List<RoutineDeclaration>> map, string name,
+        RoutineDeclaration decl)
+    {
+        if (!map.TryGetValue(key: name, value: out List<RoutineDeclaration>? list))
+        {
+            list = new List<RoutineDeclaration>();
+            map[key: name] = list;
+        }
+        list.Add(item: decl);
     }
 
     private void SeedFromEntryPoints()
@@ -178,9 +195,16 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
 
     private void ProcessFrame(Frame frame)
     {
+        // Set up per-frame inference scope: parameter types + receiver type for `me`.
+        _localTypes = BuildLocalTypes(decl: frame.Decl, typeSubs: frame.TypeSubs);
+        _meType = frame.Routine.OwnerType;
+
         // Walk the body and collect every CallExpression / GenericMethodCallExpression.
         var calls = new List<object>();
         CollectCalls(node: frame.Decl.Body, sink: calls);
+
+        // Pull var-decl types into _localTypes by walking the body once.
+        CollectLocalVarTypes(node: frame.Decl.Body, map: _localTypes);
 
         foreach (object node in calls)
         {
@@ -191,7 +215,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             }
             RoutineInfo? resolved = node switch
             {
-                CallExpression ce => ce.ResolvedRoutine ?? ResolveNoArgConstructor(ce: ce) ?? ResolveMemberCall(ce: ce),
+                CallExpression ce => ce.ResolvedRoutine ?? ResolveNoArgConstructor(ce: ce) ?? ResolveCallStyleConstructor(ce: ce) ?? ResolveMemberCall(ce: ce),
                 GenericMethodCallExpression gce => gce.ResolvedRoutine,
                 CreatorExpression cre => ResolveCreatorRoutine(cre: cre),
                 _ => null
@@ -221,7 +245,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 }
                 RoutineInfo? resolved = node switch
                 {
-                    CallExpression ce => ce.ResolvedRoutine ?? ResolveNoArgConstructor(ce: ce) ?? ResolveMemberCall(ce: ce),
+                    CallExpression ce => ce.ResolvedRoutine ?? ResolveNoArgConstructor(ce: ce) ?? ResolveCallStyleConstructor(ce: ce) ?? ResolveMemberCall(ce: ce),
                     GenericMethodCallExpression gce => gce.ResolvedRoutine,
                     CreatorExpression cre => ResolveCreatorRoutine(cre: cre),
                     _ => null
@@ -302,7 +326,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                         }
                         RoutineInfo? resolved = node switch
                         {
-                            CallExpression ce => ce.ResolvedRoutine ?? ResolveNoArgConstructor(ce: ce) ?? ResolveMemberCall(ce: ce),
+                            CallExpression ce => ce.ResolvedRoutine ?? ResolveNoArgConstructor(ce: ce) ?? ResolveCallStyleConstructor(ce: ce) ?? ResolveMemberCall(ce: ce),
                             GenericMethodCallExpression gce => gce.ResolvedRoutine,
                             CreatorExpression cre => ResolveCreatorRoutine(cre: cre),
                             _ => null
@@ -452,9 +476,171 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     private RoutineInfo? ResolveMemberCall(CallExpression ce)
     {
         if (ce.Callee is not MemberExpression member) return null;
-        TypeInfo? receiverType = member.Object.ResolvedType;
+        TypeInfo? receiverType = member.Object.ResolvedType ?? InferExpressionType(e: member.Object);
         if (receiverType == null) return null;
         return ctx.Registry.LookupMethod(type: receiverType, methodName: member.PropertyName);
+    }
+
+    /// <summary>
+    /// Handles call-style constructor invocations like <c>Byte(U8(cp))</c> — a CallExpression
+    /// whose Callee is an IdentifierExpression naming a type, with no ResolvedRoutine. Codegen
+    /// emits a call to <c>&lt;Type&gt;.$create(...)</c> by mangled name; mark the matching
+    /// $create overload live by parameter count.
+    /// </summary>
+    private RoutineInfo? ResolveCallStyleConstructor(CallExpression ce)
+    {
+        if (ce.Arguments.Count == 0) return null; // ResolveNoArgConstructor handles those
+        TypeInfo? ct = ce.ConstructedType;
+        if (ct == null && ce.Callee is IdentifierExpression idCallee)
+        {
+            ct = ctx.Registry.LookupType(name: idCallee.Name);
+        }
+        if (ct == null) return null;
+        int argCount = ce.Arguments.Count;
+
+        // Infer arg types so we can disambiguate overloads like Byte.$create(Byte)
+        // vs Byte.$create(U8).
+        var argTypes = new TypeInfo?[argCount];
+        for (int i = 0; i < argCount; i++)
+            argTypes[i] = InferExpressionType(e: ce.Arguments[index: i]);
+
+        RoutineInfo? PickOverload(IEnumerable<RoutineInfo> methods)
+        {
+            RoutineInfo? countOnly = null;
+            foreach (RoutineInfo m in methods)
+            {
+                if (m.Name != "$create" || m.Parameters.Count != argCount) continue;
+                countOnly ??= m;
+                bool typesMatch = true;
+                for (int i = 0; i < argCount; i++)
+                {
+                    TypeInfo? at = argTypes[i];
+                    if (at == null) continue; // unknown — accept
+                    if (m.Parameters[index: i].Type?.Name != at.Name)
+                    { typesMatch = false; break; }
+                }
+                if (typesMatch) return m;
+            }
+            return countOnly;
+        }
+
+        RoutineInfo? match = PickOverload(methods: ctx.Registry.GetMethodsForType(type: ct));
+        if (match == null)
+        {
+            TypeInfo? genDef = ct switch
+            {
+                RecordTypeInfo r => r.GenericDefinition,
+                EntityTypeInfo e => e.GenericDefinition,
+                _ => null
+            };
+            if (genDef != null && !ReferenceEquals(objA: genDef, objB: ct))
+                match = PickOverload(methods: ctx.Registry.GetMethodsForType(type: genDef));
+        }
+        return match;
+    }
+
+    /// <summary>
+    /// Infers an expression's type using a local-variable map plus chained method-call return
+    /// types. Backstops <see cref="Expression.ResolvedType"/> for stdlib bodies where SA leaves
+    /// receiver types unset (e.g. <c>buffer.offset(write_pos.bytes()).inject(...)</c>).
+    /// </summary>
+    private TypeInfo? InferExpressionType(Expression e)
+    {
+        if (e.ResolvedType != null) return e.ResolvedType;
+        switch (e)
+        {
+            case IdentifierExpression id:
+                if (id.Name == "me") return _meType;
+                if (_localTypes.TryGetValue(key: id.Name, value: out TypeInfo? t)) return t;
+                // Treat bare type identifier as the type itself (for `Byte(...)` callee resolution).
+                return ctx.Registry.LookupType(name: id.Name);
+            case CallExpression ce:
+                if (ce.ResolvedRoutine?.ReturnType != null) return ce.ResolvedRoutine.ReturnType;
+                if (ce.ConstructedType != null) return ce.ConstructedType;
+                if (ce.Callee is MemberExpression mem)
+                {
+                    TypeInfo? recv = InferExpressionType(e: mem.Object);
+                    if (recv == null) return null;
+                    RoutineInfo? mm = ctx.Registry.LookupMethod(type: recv, methodName: mem.PropertyName);
+                    return mm?.ReturnType;
+                }
+                if (ce.Callee is IdentifierExpression idC)
+                    return ctx.Registry.LookupType(name: idC.Name);
+                return null;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Builds the parameter portion of the local-type map. Var-decl types are added later by
+    /// <see cref="CollectLocalVarTypes"/> after a full body walk.
+    /// </summary>
+    private Dictionary<string, TypeInfo> BuildLocalTypes(RoutineDeclaration decl,
+        Dictionary<string, TypeInfo> typeSubs)
+    {
+        var map = new Dictionary<string, TypeInfo>(comparer: StringComparer.Ordinal);
+        foreach (Parameter p in decl.Parameters)
+        {
+            if (p.Type == null) continue;
+            TypeInfo? t = ResolveTypeExpression(typeExpr: p.Type, typeSubs: typeSubs);
+            if (t != null) map[key: p.Name] = t;
+        }
+        return map;
+    }
+
+    /// <summary>
+    /// Walks the body and registers <c>var x = ...</c> bindings into the local-type map. Uses
+    /// the explicit type annotation when present, falling back to inferring from the initializer.
+    /// </summary>
+    private void CollectLocalVarTypes(object? node, Dictionary<string, TypeInfo> map)
+    {
+        if (node == null) return;
+        if (node is VariableDeclaration vd)
+        {
+            TypeInfo? t = vd.Type != null
+                ? ResolveTypeExpression(typeExpr: vd.Type, typeSubs: null)
+                : (vd.Initializer != null ? InferExpressionType(e: vd.Initializer) : null);
+            if (t != null) map[key: vd.Name] = t;
+        }
+        Type nt = node.GetType();
+        if (nt.IsPrimitive || node is string || nt.IsEnum) return;
+
+        if (node is IEnumerable e2 && node is not string)
+        {
+            foreach (object? item in e2)
+                if (item != null) CollectLocalVarTypes(node: item, map: map);
+            return;
+        }
+
+        foreach (System.Reflection.PropertyInfo prop in nt.GetProperties(
+            bindingAttr: System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+        {
+            if (prop.GetIndexParameters().Length > 0) continue;
+            object? val;
+            try { val = prop.GetValue(obj: node); } catch { continue; }
+            if (val == null) continue;
+            if (val is Expression || val is Statement || val is SyntaxTree.Declaration)
+                CollectLocalVarTypes(node: val, map: map);
+            else if (val is IEnumerable list && val is not string)
+            {
+                foreach (object? item in list)
+                    if (item != null) CollectLocalVarTypes(node: item, map: map);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Resolves a TypeExpression to a TypeInfo via the registry. Honors generic arguments by
+    /// recursively resolving and looking up the instantiation. Generic-param substitutions are
+    /// applied first when <paramref name="typeSubs"/> is non-null.
+    /// </summary>
+    private TypeInfo? ResolveTypeExpression(TypeExpression typeExpr,
+        Dictionary<string, TypeInfo>? typeSubs)
+    {
+        if (typeExpr.ResolvedType != null) return typeExpr.ResolvedType;
+        if (typeSubs != null && typeSubs.TryGetValue(key: typeExpr.Name, value: out TypeInfo? sub))
+            return sub;
+        return ctx.Registry.LookupType(name: typeExpr.Name);
     }
 
     /// <summary>
@@ -491,8 +677,10 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // Standalone routine: try by bare name in user, then stdlib.
         if (callee.OwnerType == null)
         {
-            if (_userByName.TryGetValue(key: callee.Name, value: out RoutineDeclaration? u)) return u;
-            if (_stdlibByName.TryGetValue(key: callee.Name, value: out RoutineDeclaration? s)) return s;
+            if (_userByName.TryGetValue(key: callee.Name, value: out List<RoutineDeclaration>? u))
+                return MatchOverload(decls: u, callee: callee);
+            if (_stdlibByName.TryGetValue(key: callee.Name, value: out List<RoutineDeclaration>? s))
+                return MatchOverload(decls: s, callee: callee);
             return null;
         }
 
@@ -502,6 +690,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         {
             RecordTypeInfo r => r.GenericDefinition,
             EntityTypeInfo e => e.GenericDefinition,
+            WrapperTypeInfo w => ctx.Registry.LookupType(name: w.Name),
             _ => null
         };
         // Try short generic-def form first (e.g. "List[T].insertion_sort").
@@ -510,14 +699,61 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             string genericKey = $"{RoutineInfo.GetTypeIdentity(type: genDef)}.{callee.Name}";
             // Stdlib decl name is the SHORT form like "List[T].insertion_sort".
             string shortKey = $"{genDef.Name}[{string.Join(separator: ", ", values: genDef.GenericParameters ?? [])}].{callee.Name}";
-            if (_stdlibByName.TryGetValue(key: shortKey, value: out RoutineDeclaration? gd)) return gd;
-            if (_stdlibByName.TryGetValue(key: genericKey, value: out RoutineDeclaration? gd2)) return gd2;
+            if (_stdlibByName.TryGetValue(key: shortKey, value: out List<RoutineDeclaration>? gd))
+                return MatchOverload(decls: gd, callee: callee);
+            if (_stdlibByName.TryGetValue(key: genericKey, value: out List<RoutineDeclaration>? gd2))
+                return MatchOverload(decls: gd2, callee: callee);
         }
         // Concrete owner: e.g. "S32.$add" or "Bytes.split".
         string concreteKey = $"{owner.Name}.{callee.Name}";
-        if (_stdlibByName.TryGetValue(key: concreteKey, value: out RoutineDeclaration? c)) return c;
-        if (_userByName.TryGetValue(key: concreteKey, value: out RoutineDeclaration? cu)) return cu;
+        if (_stdlibByName.TryGetValue(key: concreteKey, value: out List<RoutineDeclaration>? c))
+            return MatchOverload(decls: c, callee: callee);
+        if (_userByName.TryGetValue(key: concreteKey, value: out List<RoutineDeclaration>? cu))
+            return MatchOverload(decls: cu, callee: callee);
         return null;
+    }
+
+    /// <summary>
+    /// Picks the overload whose AST parameter list matches the callee's signature. Falls back
+    /// to count-only match, then the first decl, so single-overload lookups stay correct.
+    /// </summary>
+    private static RoutineDeclaration? MatchOverload(List<RoutineDeclaration> decls, RoutineInfo callee)
+    {
+        if (decls.Count == 1) return decls[index: 0];
+        int paramCount = callee.Parameters.Count;
+        // Pass 1: match by param count + serialized param type signatures.
+        foreach (RoutineDeclaration d in decls)
+        {
+            if (d.Parameters.Count != paramCount) continue;
+            bool typesMatch = true;
+            for (int i = 0; i < paramCount; i++)
+            {
+                string declSig = TypeExpressionSig(typeExpr: d.Parameters[index: i].Type);
+                string calleeSig = callee.Parameters[index: i].Type?.Name ?? "";
+                if (declSig != calleeSig) { typesMatch = false; break; }
+            }
+            if (typesMatch) return d;
+        }
+        // Pass 2: count-only.
+        foreach (RoutineDeclaration d in decls)
+        {
+            if (d.Parameters.Count == paramCount) return d;
+        }
+        return decls[index: 0];
+    }
+
+    /// <summary>
+    /// Serializes a TypeExpression to the same form TypeInfo.Name uses for generic instances:
+    /// <c>Name[Arg1, Arg2]</c>. Used by overload matching to compare against callee parameter
+    /// type names which include their generic args inline.
+    /// </summary>
+    private static string TypeExpressionSig(TypeExpression? typeExpr)
+    {
+        if (typeExpr == null) return "";
+        if (typeExpr.GenericArguments is not { Count: > 0 }) return typeExpr.Name;
+        var args = string.Join(separator: ", ",
+            values: typeExpr.GenericArguments.Select(selector: TypeExpressionSig));
+        return $"{typeExpr.Name}[{args}]";
     }
 
     /// <summary>

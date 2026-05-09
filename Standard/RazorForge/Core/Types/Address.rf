@@ -124,7 +124,7 @@ routine Address.is_power_of_two() -> Bool
 ### :returns: The resulting `Address` value.
 @readonly
 routine Address.$add(offset: ByteSize) -> Address
-  return add[Address](me, Address(offset.value))
+  return add[Address](me, reinterpret_bits[ByteSize, Address](value: offset))
 
 ### Returns the byte distance from this address to another address.
 ### :param other: The address to subtract.
@@ -138,7 +138,7 @@ routine Address.$sub(other: Address) -> ByteSize
 ### :returns: The resulting `Address` value.
 @readonly
 routine Address.$sub(offset: ByteSize) -> Address
-  return sub[Address](me, Address(offset.value))
+  return sub[Address](me, reinterpret_bits[ByteSize, Address](value: offset))
 
 # ============================================================================
 # Text Representation and Parsing

@@ -21,7 +21,7 @@ routine Byte.$create(from: Byte) -> Byte
 ### :param from: The source value to convert.
 ### :returns: The resulting `Byte` value.
 routine Byte.$create(from: U8) -> Byte
-  return reinterpret_bits[Byte](from)
+  return reinterpret_bits[U8, Byte](value: from)
 
 # Common byte constants
 preset BYTE_NULL: Byte = Byte(0x00u8)

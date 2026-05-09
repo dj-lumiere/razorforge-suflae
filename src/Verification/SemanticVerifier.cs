@@ -464,6 +464,8 @@ public sealed partial class SemanticVerifier
             }
             new ReachableGenericCollectionPass(ctx: ctx).Run();
             Step(label: "ReachableGenericCollectionPass");
+            new RoutineReachabilityPass(ctx: ctx).Run();
+            Step(label: "RoutineReachabilityPass");
             new GenericClosurePass(ctx: ctx).Run();
             Step(label: "GenericClosurePass");
             new GenericCanonicalizationPass(ctx: ctx).Run();
