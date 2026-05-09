@@ -426,8 +426,8 @@ routine SortedDict[K, V].add(key: K, value: V) -> Bool
     var new_root = BTreeDictNode[K, V](is_leaf: false)
     new_root.children_add_last(old_root)
     me.split_child(new_root, 0u64)
-    me.root = steal new_root
     new_root.subtree_size = new_root.children_get(0u64).subtree_size +% new_root.children_get(1u64).subtree_size +% 1u64
+    me.root = steal new_root
 
   var inserted = me.insert_non_full(me.root!!, key, value)
   if inserted
