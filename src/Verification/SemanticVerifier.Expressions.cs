@@ -206,6 +206,21 @@ public sealed partial class SemanticVerifier
         TypeSymbol leftType = AnalyzeExpression(expression: binary.Left);
         TypeSymbol rightType = AnalyzeExpression(expression: binary.Right);
 
+        // Re-infer unsuffixed integer literals against the typed peer so
+        // comparisons like 'me.strong_count == 0' don't default the literal to S64.
+        if (binary.Right is LiteralExpression rightLit &&
+            rightLit.LiteralType is TokenType.IntegerLiteral or TokenType.S64Literal or TokenType.UndecidedInteger &&
+            IsFixedWidthIntegerType(type: leftType) && leftType.Name != rightType.Name)
+        {
+            rightType = AnalyzeExpression(expression: binary.Right, expectedType: leftType);
+        }
+        else if (binary.Left is LiteralExpression leftLit &&
+                 leftLit.LiteralType is TokenType.IntegerLiteral or TokenType.S64Literal or TokenType.UndecidedInteger &&
+                 IsFixedWidthIntegerType(type: rightType) && leftType.Name != rightType.Name)
+        {
+            leftType = AnalyzeExpression(expression: binary.Left, expectedType: rightType);
+        }
+
         switch (binary.Operator)
         {
             // Handle assignment operator
@@ -820,7 +835,9 @@ public sealed partial class SemanticVerifier
                 return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
 
             case UnaryOperator.Minus:
-                if (!IsNumericType(type: operandType))
+                if (operandType != ErrorTypeInfo.Instance &&
+                    !IsNumericType(type: operandType) &&
+                    _registry.LookupMethod(type: operandType, methodName: "$neg") == null)
                 {
                     ReportError(code: SemanticDiagnosticCode.NegationRequiresNumeric,
                         message: "Negation operator requires a numeric operand.",

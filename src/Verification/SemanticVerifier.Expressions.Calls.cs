@@ -153,23 +153,33 @@ public sealed partial class SemanticVerifier
                     }
                 }
 
-                // Overload resolution: if the found routine is non-generic and the first
-                // argument doesn't match, try a specific or generic overload (e.g., show[T])
+                // Overload resolution: if the found routine is non-generic and any
+                // positional argument doesn't match the bound routine's parameter type,
+                // try a specific or generic overload (e.g., show[T] or a ByteSize overload
+                // when the U64 overload was first-bound).
                 if (routine is { IsGenericDefinition: false } && call.Arguments.Count > 0 &&
-                    routine.Parameters.Count > 0)
+                    routine.Parameters.Count == call.Arguments.Count)
                 {
-                    Expression firstArg = call.Arguments[index: 0] is NamedArgumentExpression na
-                        ? na.Value
-                        : call.Arguments[index: 0];
-                    TypeSymbol firstArgType = AnalyzeExpression(expression: firstArg);
-                    TypeSymbol firstParamType = routine.Parameters[index: 0].Type;
-                    if (firstArgType != ErrorTypeInfo.Instance &&
-                        firstArgType.FullName != firstParamType.FullName &&
-                        !IsAssignableTo(source: firstArgType, target: firstParamType))
+                    bool anyMismatch = false;
+                    for (int i = 0; i < call.Arguments.Count; i++)
+                    {
+                        Expression argExpr = call.Arguments[index: i] is NamedArgumentExpression nax
+                            ? nax.Value
+                            : call.Arguments[index: i];
+                        TypeSymbol at = AnalyzeExpression(expression: argExpr);
+                        if (at == ErrorTypeInfo.Instance) continue;
+                        TypeSymbol pt = routine.Parameters[index: i].Type;
+                        if (at.FullName != pt.FullName && !IsAssignableTo(source: at, target: pt))
+                        {
+                            anyMismatch = true;
+                            break;
+                        }
+                    }
+                    if (anyMismatch)
                     {
                         // Collect all resolved arg types for better overload disambiguation
-                        var resolvedArgTypes = new List<TypeSymbol> { firstArgType };
-                        for (int i = 1; i < call.Arguments.Count; i++)
+                        var resolvedArgTypes = new List<TypeSymbol>();
+                        for (int i = 0; i < call.Arguments.Count; i++)
                         {
                             Expression actualArg =
                                 call.Arguments[index: i] is NamedArgumentExpression nai
@@ -387,14 +397,15 @@ public sealed partial class SemanticVerifier
                         }
                     }
 
-                    // S510: Type creators with 2+ fields require all named arguments
+                    // S510: Type creators with 3+ fields require all named arguments.
+                    // W258: For 2 fields, naming is recommended but only emits a warning.
                     int memberCount = type switch
                     {
                         EntityTypeInfo e => e.MemberVariables.Count,
                         RecordTypeInfo r => r.MemberVariables.Count,
                         _ => 0
                     };
-                    if (memberCount >= 2)
+                    if (memberCount >= 3)
                     {
                         foreach (Expression arg in call.Arguments)
                         {
@@ -403,6 +414,19 @@ public sealed partial class SemanticVerifier
                                 ReportError(code: SemanticDiagnosticCode.NamedArgumentRequired,
                                     message:
                                     $"Type '{id.Name}' has {memberCount} fields - all constructor arguments must be named.",
+                                    location: arg.Location);
+                            }
+                        }
+                    }
+                    else if (memberCount == 2)
+                    {
+                        foreach (Expression arg in call.Arguments)
+                        {
+                            if (arg is not NamedArgumentExpression)
+                            {
+                                ReportWarning(code: SemanticWarningCode.NamedArgumentRecommended,
+                                    message:
+                                    $"Type '{id.Name}' has 2 fields - naming constructor arguments is recommended for clarity.",
                                     location: arg.Location);
                             }
                         }

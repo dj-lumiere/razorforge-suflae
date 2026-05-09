@@ -117,6 +117,20 @@ public sealed partial class TypeRegistry
             return overload;
         }
 
+        // Core-prefix fallback: bare callee names (e.g., "rf_allocate_dynamic_uninit") register
+        // under "Core.rf_allocate_dynamic_uninit#…". Mirror LookupRoutine's behavior so overload
+        // resolution can find module-qualified registrations from unqualified call sites.
+        if (!baseName.Contains(value: '.'))
+        {
+            string coreKey = argTypes.Count == 0
+                ? $"Core.{baseName}"
+                : $"Core.{baseName}#{paramTypeNames}";
+            if (_routines.TryGetValue(key: coreKey, value: out RoutineInfo? coreOverload))
+            {
+                return coreOverload;
+            }
+        }
+
         // Try matching generic overloads by reconstructing the generic parameter pattern.
         // e.g., arg SortedSet[S64] → its generic def is SortedSet with GenericParameters ["T"]
         //        → try key "List.$create#SortedSet[T]" which matches the registered generic overload.
@@ -153,8 +167,13 @@ public sealed partial class TypeRegistry
         // Structural candidate search: iterate all overloads registered for this base name and
         // match positionally by full type identity (module-qualified, includes generic args).
         // Runs before the first-wins fallback so multi-overload disambiguation is type-correct.
-        if (_routineOverloads.TryGetValue(key: baseName, value: out List<RoutineInfo>? overloadCandidates)
-            && overloadCandidates.Count > 1)
+        List<RoutineInfo>? overloadCandidates;
+        if (!_routineOverloads.TryGetValue(key: baseName, value: out overloadCandidates) &&
+            !baseName.Contains(value: '.'))
+        {
+            _routineOverloads.TryGetValue(key: $"Core.{baseName}", value: out overloadCandidates);
+        }
+        if (overloadCandidates is { Count: > 1 })
         {
             foreach (RoutineInfo candidate in overloadCandidates)
             {
