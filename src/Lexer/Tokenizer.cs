@@ -143,6 +143,8 @@ public partial class Tokenizer
             // Variable declarations
             [key: "var"] = TokenType.Var,
             [key: "preset"] = TokenType.Preset,
+            [key: "lateinit"] = TokenType.LateInit,
+            [key: "uninit"] = TokenType.Uninit,
 
             // Access modifiers
             [key: "secret"] = TokenType.Secret,

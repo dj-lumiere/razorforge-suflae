@@ -298,6 +298,19 @@ public enum TokenType
     /// </summary>
     Preset,
 
+    /// <summary>
+    /// Late-init modifier on var declarations: `lateinit var x: T`.
+    /// Allows declaration without initializer; user pledges to assign before reading.
+    /// Definite-assignment analysis is deferred to a later compiler version.
+    /// </summary>
+    LateInit,
+
+    /// <summary>
+    /// Built-in expression of inferred type yielding uninitialized memory:
+    /// `var x: T = uninit`. Pure escape hatch — reading before assignment is UB.
+    /// </summary>
+    Uninit,
+
     #endregion
 
     #region Access Modifiers

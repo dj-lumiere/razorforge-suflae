@@ -169,9 +169,46 @@ public sealed partial class SemanticVerifier
 
         _currentRoutine = prevRoutine;
 
+        // Prefer the overload whose failability matches the routine being analyzed, so
+        // bodies of failable variants don't get matched against a non-failable first-wins entry.
+        routineInfo ??= _registry.LookupRoutine(fullName: baseName,
+            isFailable: routine.IsFailable);
         routineInfo ??= _registry.LookupRoutine(fullName: baseName);
+
+        // Fall back to the original concrete-specialization name (e.g., "Core.List[U16].decode_as_utf16")
+        // for extension methods registered under the concrete owner type rather than the generic def.
+        if (routineInfo == null && routine.Name.Contains(value: '['))
+        {
+            string? module = GetCurrentModuleName();
+            string concreteName = string.IsNullOrEmpty(value: module)
+                ? routine.Name
+                : $"{module}.{routine.Name}";
+            routineInfo = _registry.LookupRoutine(fullName: concreteName)
+                ?? _registry.LookupRoutineByQualifiedName(qualifiedName: concreteName);
+        }
+
+        // Final fallback: scan all routines for one with the same method name.
+        // Tolerates registration/verification key mismatches for overloaded extension methods
+        // and concrete generic specializations. Prefer matching IsFailable to disambiguate
+        // overloads that share a base name but differ on '!'.
+        if (routineInfo == null && routine.Name.Contains(value: '.'))
+        {
+            int dot = routine.Name.LastIndexOf(value: '.');
+            string methodName = routine.Name[(dot + 1)..];
+            routineInfo = _registry.LookupAnyByMethodName(methodName: methodName,
+                isFailable: routine.IsFailable);
+        }
+
         if (routineInfo == null)
         {
+            // @innate routines may be intentionally skipped at registration
+            // (e.g., BuilderService closure-cascading stubs synthesized per-type).
+            if (routine.Annotations.Contains(item: "innate"))
+            {
+                _currentRoutine = prevRoutine;
+                return;
+            }
+
             ReportError(code: SemanticDiagnosticCode.UnresolvedRoutineBody,
                 message:
                 $"Routine '{baseName}' body could not be matched to a registered declaration.",
@@ -480,6 +517,19 @@ public sealed partial class SemanticVerifier
                     location: varDecl.Location);
                 varType = ErrorTypeInfo.Instance;
             }
+        }
+
+        // #16: Plain `var x: T` without an initializer is disallowed (uninitialized memory).
+        // Use `lateinit var x: T` (deferred-init pledge) or `var x: T = uninit` (explicit UB).
+        if (_registry.Language == Language.RazorForge &&
+            varDecl is { Type: not null, Initializer: null } &&
+            !varDecl.IsLateInit)
+        {
+            ReportError(code: SemanticDiagnosticCode.VariableNeedsTypeOrInitializer,
+                message:
+                $"Variable '{varDecl.Name}' has a type annotation but no initializer. " +
+                "Use 'lateinit var' to defer initialization, or '= uninit' for an explicit uninitialized binding.",
+                location: varDecl.Location);
         }
 
         // If we have both type annotation and initializer, verify compatibility

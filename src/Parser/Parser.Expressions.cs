@@ -61,6 +61,13 @@ public partial class Parser
                 Location: location);
         }
 
+        // 'uninit' built-in expression — yields uninitialized memory of the surrounding
+        // binding's annotated type. Only valid as the RHS of `var x: T = uninit`.
+        if (Match(type: TokenType.Uninit))
+        {
+            return new UninitExpression(Location: location);
+        }
+
         // Numeric literals (integers and floats)
         if (TryParseNumericLiteral(location: location, result: out Expression? numericExpr))
         {

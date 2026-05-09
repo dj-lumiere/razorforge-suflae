@@ -596,4 +596,5 @@ public partial class Parser
         Token next = PeekToken(offset: 1);
         return next.Type is TokenType.Obeys or TokenType.Is or TokenType.In;
     }
+
 }

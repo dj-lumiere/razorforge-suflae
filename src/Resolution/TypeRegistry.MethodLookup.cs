@@ -291,6 +291,25 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
+    /// Looks up any registered routine (free or member) whose Name equals <paramref name="methodName"/>.
+    /// Linear scan; intended as a last-resort fallback when name-construction mismatches obscure the
+    /// canonical registry key (e.g. extension methods on concrete generic specializations).
+    /// </summary>
+    public RoutineInfo? LookupAnyByMethodName(string methodName, bool? isFailable = null)
+    {
+        foreach (RoutineInfo routine in _routines.Values)
+        {
+            if (routine.Name == methodName &&
+                (isFailable == null || routine.IsFailable == isFailable))
+            {
+                return routine;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Finds a generic overload of a free function by name (e.g., show[T] for "show").
     /// O(1): backed by <see cref="_genericFreeFunctions"/> index populated in <see cref="RegisterRoutine"/>.
     /// </summary>

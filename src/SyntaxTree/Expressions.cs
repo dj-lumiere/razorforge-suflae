@@ -651,6 +651,22 @@ public record BlockExpression(Expression Value, SourceLocation Location)
 }
 
 /// <summary>
+/// Built-in `uninit` expression that yields uninitialized memory of the
+/// surrounding binding's annotated type. Pure escape hatch — reading without
+/// prior write is undefined behavior. Only valid as the right-hand side of
+/// `var x: T = uninit` (the binding's type annotation provides the type).
+/// </summary>
+public record UninitExpression(SourceLocation Location)
+    : Expression(Location: Location)
+{
+    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
+    public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
+    {
+        return visitor.VisitUninitExpression(node: this);
+    }
+}
+
+/// <summary>
 /// Expression that chains multiple comparison operations in a single statement.
 /// Allows natural mathematical notation like a &lt; b &lt; c instead of a &lt; b and b &lt; c.
 /// </summary>

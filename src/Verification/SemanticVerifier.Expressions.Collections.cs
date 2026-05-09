@@ -405,6 +405,24 @@ public sealed partial class SemanticVerifier
         return AnalyzeExpression(expression: block.Value);
     }
 
+    /// <summary>
+    /// Analyzes an `uninit` expression. The type comes from the surrounding
+    /// binding's annotation (passed in as <paramref name="expectedType"/>).
+    /// Without an expected type, `uninit` cannot be type-checked and is an error.
+    /// </summary>
+    private TypeSymbol AnalyzeUninitExpression(UninitExpression uninit, TypeSymbol? expectedType)
+    {
+        if (expectedType == null || expectedType == ErrorTypeInfo.Instance)
+        {
+            ReportError(code: SemanticDiagnosticCode.VariableNeedsTypeOrInitializer,
+                message:
+                "'uninit' requires a type annotation on the surrounding binding (e.g. 'var x: T = uninit').",
+                location: uninit.Location);
+            return ErrorTypeInfo.Instance;
+        }
+        return expectedType;
+    }
+
     private TypeSymbol AnalyzeWithExpression(WithExpression with)
     {
         TypeSymbol baseType = AnalyzeExpression(expression: with.Base);

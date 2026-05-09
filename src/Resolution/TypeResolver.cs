@@ -573,6 +573,37 @@ internal sealed class TypeResolver
         TypeExpression requiredTypeExpr = constraint.ConstraintTypes[index: 0];
         string requiredTypeName = requiredTypeExpr.Name;
 
+        // Type-kind marker names (e.g. `needs T is EntityType`) are stored as ConstGeneric
+        // constraints by the parser, but they assert a category, not const-compatibility.
+        // Validate the corresponding category and return.
+        switch (requiredTypeName)
+        {
+            case "EntityType":
+                ValidateReferenceTypeConstraint(typeArg: typeArg,
+                    constraint: constraint, location: location);
+                return;
+            case "RecordType":
+                ValidateValueTypeConstraint(typeArg: typeArg,
+                    constraint: constraint, location: location);
+                return;
+            case "RoutineType":
+                ValidateRoutineTypeConstraint(typeArg: typeArg,
+                    constraint: constraint, location: location);
+                return;
+            case "ChoiceType":
+                ValidateChoiceTypeConstraint(typeArg: typeArg,
+                    constraint: constraint, location: location);
+                return;
+            case "VariantType":
+                ValidateVariantTypeConstraint(typeArg: typeArg,
+                    constraint: constraint, location: location);
+                return;
+            case "Crashable":
+                ValidateCrashableTypeConstraint(typeArg: typeArg,
+                    constraint: constraint, location: location);
+                return;
+        }
+
         // Resolve the required type and check ConstCompatible conformance
         TypeSymbol? requiredType = LookupTypeWithImports(name: requiredTypeName);
         if (requiredType == null)

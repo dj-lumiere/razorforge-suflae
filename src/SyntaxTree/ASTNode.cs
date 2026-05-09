@@ -208,6 +208,11 @@ public interface ISyntaxTreeVisitor<T>
     /// <returns>Result of visiting the block expression</returns>
     T VisitBlockExpression(BlockExpression node);
 
+    /// <summary>Visits an `uninit` expression node — uninitialized memory escape hatch.</summary>
+    /// <param name="node">The uninit expression to visit</param>
+    /// <returns>Result of visiting the uninit expression</returns>
+    T VisitUninitExpression(UninitExpression node);
+
     /// <summary>Visits a chained comparison expression node (like 1 &lt; x &lt; 10)</summary>
     /// <param name="node">The chained comparison expression to visit</param>
     /// <returns>Result of visiting the chained comparison expression</returns>

@@ -101,6 +101,18 @@ public sealed partial class SemanticVerifier
                 return memberVariable.Type;
             }
         }
+        else if (lookupType is CrashableTypeInfo crashable)
+        {
+            MemberVariableInfo? memberVariable =
+                crashable.LookupMemberVariable(memberVariableName: member.PropertyName);
+            if (memberVariable != null)
+            {
+                ValidateMemberVariableAccess(memberVariable: memberVariable,
+                    isWrite: false,
+                    accessLocation: member.Location);
+                return memberVariable.Type;
+            }
+        }
         // Wrapper type forwarding: Viewed<T>, Grasped<T>, Shared<T>, etc.
         else if (IsWrapperType(type: lookupType))
         {

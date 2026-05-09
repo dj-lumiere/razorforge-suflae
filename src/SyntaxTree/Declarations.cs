@@ -95,7 +95,8 @@ public record VariableDeclaration(
     VisibilityModifier Visibility,
     SourceLocation Location,
     StorageClass Storage = StorageClass.None,
-    IReadOnlyList<string>? Annotations = null) : Declaration(Location: Location)
+    IReadOnlyList<string>? Annotations = null,
+    bool IsLateInit = false) : Declaration(Location: Location)
 {
     /// <inheritdoc/>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)

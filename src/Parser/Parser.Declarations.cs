@@ -18,7 +18,8 @@ public partial class Parser
     private VariableDeclaration ParseVariableDeclaration(
         VisibilityModifier visibility = VisibilityModifier.Open,
         StorageClass storage = StorageClass.None,
-        IReadOnlyList<string>? annotations = null)
+        IReadOnlyList<string>? annotations = null,
+        bool isLateInit = false)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -44,7 +45,8 @@ public partial class Parser
             Visibility: visibility,
             Location: location,
             Storage: storage,
-            Annotations: annotations?.Count > 0 ? annotations : null);
+            Annotations: annotations?.Count > 0 ? annotations : null,
+            IsLateInit: isLateInit);
     }
 
     /// <summary>
@@ -143,6 +145,9 @@ public partial class Parser
         string name = ConsumeIdentifier(errorMessage: "Expected routine name");
 
         List<string>? genericParams = null;
+        // Serialized type-arg strings used to rebuild the routine name (e.g., "DictEntry[K, V]"),
+        // distinct from genericParams which holds the leaf identifiers that are bound (e.g., K, V).
+        List<string>? receiverTypeArgStrings = null;
         List<GenericConstraintDeclaration>? inlineConstraints = null;
         bool hasGenericParams = false;
 
@@ -151,15 +156,20 @@ public partial class Parser
         {
             if (HasNestedBrackets())
             {
-                // Nested generics: parse as type expressions (e.g., List[DictEntry[K, V]])
-                var typeArgs = new List<string>();
+                // Nested generics: parse as type expressions (e.g., List[DictEntry[K, V]]).
+                // The bound generic parameters are the leaf identifiers (no further generics)
+                // — e.g., for `List[DictEntry[K, V]]` → bind K and V, not "DictEntry".
+                var typeArgStrings = new List<string>();
+                var leafParams = new List<string>();
                 do
                 {
                     TypeExpression typeArg = ParseTypeOrConstGeneric();
-                    typeArgs.Add(item: SerializeTypeExpression(type: typeArg));
+                    typeArgStrings.Add(item: SerializeTypeExpression(type: typeArg));
+                    CollectLeafGenericParams(type: typeArg, into: leafParams);
                 } while (Match(type: TokenType.Comma));
 
-                genericParams = typeArgs;
+                genericParams = leafParams;
+                receiverTypeArgStrings = typeArgStrings;
                 hasGenericParams = true;
                 Consume(type: TokenType.RightBracket,
                     errorMessage: "Expected ']' after generic parameters");
@@ -192,9 +202,13 @@ public partial class Parser
             // If we parsed generic params before the dot, embed them in the name
             // This transforms: name="List", generics=["T"], part="append"
             //             to: name="List[T].append"
-            if (hasGenericParams && !name.Contains(value: '.') && genericParams != null)
+            // For nested receivers (e.g. List[DictEntry[K, V]]), use the serialized type-arg
+            // strings rather than the bound leaf identifiers so the name preserves structure.
+            if (hasGenericParams && !name.Contains(value: '.') &&
+                (receiverTypeArgStrings != null || genericParams != null))
             {
-                name = name + "[" + string.Join(separator: ", ", values: genericParams) + "]." +
+                List<string> nameArgs = receiverTypeArgStrings ?? genericParams!;
+                name = name + "[" + string.Join(separator: ", ", values: nameArgs) + "]." +
                        part;
                 hasGenericParams = false; // Only add once
             }
@@ -487,6 +501,28 @@ public partial class Parser
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Walks a TypeExpression and appends every leaf identifier (no further generic args)
+    /// into <paramref name="into"/> in left-to-right order, deduplicating. Used to extract
+    /// generic-parameter identifiers from nested receiver types like `List[DictEntry[K, V]]`
+    /// → ["K", "V"]. Identifiers with dots (qualified names) are excluded.
+    /// </summary>
+    private static void CollectLeafGenericParams(TypeExpression type, List<string> into)
+    {
+        if (type.GenericArguments is { Count: > 0 } args)
+        {
+            foreach (TypeExpression arg in args)
+            {
+                CollectLeafGenericParams(type: arg, into: into);
+            }
+            return;
+        }
+
+        if (type.Name.Contains(value: '.')) return;
+        if (into.Contains(item: type.Name)) return;
+        into.Add(item: type.Name);
     }
 
     /// <summary>

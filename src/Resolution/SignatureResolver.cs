@@ -76,6 +76,16 @@ internal sealed class SignatureResolver
             ? (_sa._registry.LookupType(name: pending.OwnerType.FullName) ?? pending.OwnerType)
             : null;
 
+        // Filter routine.GenericParameters to exclude names that resolve to real types in the
+        // registry. The parser collects leaf identifiers from nested receiver types like
+        // `List[DictEntry[K, V]]` — these include both unresolved names (K, V) which are
+        // genuine generic params and registered names (e.g., S64 in `List[Pair[K, S64]]`)
+        // which should not be re-introduced as params.
+        List<string>? filteredGenericParams = routine.GenericParameters?
+            .Where(predicate: p => _sa._registry.LookupType(name: p) is null)
+            .ToList();
+        if (filteredGenericParams is { Count: 0 }) filteredGenericParams = null;
+
         // Create preliminary RoutineInfo for generic parameter resolution context.
         // IsGenericParameter() checks _currentRoutine.GenericParameters to know which
         // type names are generic params (e.g., T, U) vs real types.
@@ -83,7 +93,7 @@ internal sealed class SignatureResolver
         {
             Kind = pending.Kind,
             OwnerType = refreshedOwnerType,
-            GenericParameters = routine.GenericParameters,
+            GenericParameters = filteredGenericParams,
             GenericConstraints = routine.GenericConstraints,
             Module = pending.Module,
             IsFailable = routine.IsFailable,
@@ -210,7 +220,7 @@ internal sealed class SignatureResolver
         }
 
         // Merge implicit generics with explicit generics
-        List<string> allGenericParams = routine.GenericParameters?.ToList() ?? [];
+        List<string> allGenericParams = filteredGenericParams?.ToList() ?? [];
         allGenericParams.AddRange(collection: implicitGenerics);
 
         // Merge implicit constraints with explicit constraints

@@ -204,7 +204,8 @@ public sealed class RoutineInfo
     public IReadOnlyList<string> Annotations { get; init; } = [];
 
     /// <summary>Whether this routine is marked @readonly (can be called through Viewed/Inspected).</summary>
-    public bool IsReadOnly => Annotations.Contains(value: "readonly");
+    public bool IsReadOnly =>
+        Annotations.Contains(value: "readonly") || ModificationCategory == ModificationCategory.Readonly;
 
     /// <summary>
     /// For external("llvm") routines, the LLVM IR template from @llvm_ir annotation.

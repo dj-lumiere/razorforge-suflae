@@ -43,9 +43,24 @@ public partial class LlvmCodeGenerator
             // Named arguments appear inside synthesized AST bodies (e.g., me.$eq(you: you)).
             // The name is irrelevant to codegen -> just emit the inner value positionally.
             NamedArgumentExpression named => EmitExpression(sb: sb, expr: named.Value),
+            UninitExpression uninit => EmitUninitExpression(uninit: uninit),
             _ => throw new NotImplementedException(
                 message: $"Expression type not implemented: {expr.GetType().Name}")
         };
+    }
+
+    /// <summary>
+    /// Generates code for an `uninit` expression — yields LLVM `undef` of the
+    /// surrounding binding's type. Reading without a prior write is UB.
+    /// </summary>
+    private string EmitUninitExpression(UninitExpression uninit)
+    {
+        if (uninit.ResolvedType is null)
+        {
+            throw new InvalidOperationException(
+                message: "UninitExpression reached codegen without a ResolvedType.");
+        }
+        return "undef";
     }
 
     /// <summary>

@@ -365,7 +365,13 @@ public partial class Parser
             return ParseMemberVariableDeclaration(visibility: visibility);
         }
 
-        // Variable declarations
+        // Variable declarations — optionally prefixed with `lateinit`
+        bool declLateInit = false;
+        if (Check(type: TokenType.LateInit) && PeekToken(offset: 1).Type == TokenType.Var)
+        {
+            Advance(); // consume 'lateinit'
+            declLateInit = true;
+        }
         if (Match(TokenType.Var, TokenType.Preset))
         {
             // 'global var' is no longer accepted — use 'global name: Type' directly
@@ -393,7 +399,7 @@ public partial class Parser
             }
 
             return ParseVariableDeclaration(visibility: visibility, storage: storage,
-                annotations: annotations);
+                annotations: annotations, isLateInit: declLateInit);
         }
 
         // 'global name: Type = value' — no 'var' required for global declarations.
@@ -708,6 +714,12 @@ public partial class Parser
         // ═══════════════════════════════════════════════════════════════════════════
 
         // Variable declarations (can appear in statement context)
+        bool stmtLateInit = false;
+        if (Check(type: TokenType.LateInit) && PeekToken(offset: 1).Type == TokenType.Var)
+        {
+            Advance(); // consume 'lateinit'
+            stmtLateInit = true;
+        }
         if (Match(TokenType.Var, TokenType.Preset))
         {
             // Check if this is destructuring: var (a, b) = expr
@@ -716,7 +728,7 @@ public partial class Parser
                 return ParseDestructuringDeclaration();
             }
 
-            VariableDeclaration varDecl = ParseVariableDeclaration();
+            VariableDeclaration varDecl = ParseVariableDeclaration(isLateInit: stmtLateInit);
             // Wrap the variable declaration as a declaration statement
             return new DeclarationStatement(Declaration: varDecl, Location: varDecl.Location);
         }

@@ -230,6 +230,12 @@ public partial class LlvmCodeGenerator
             return;
         }
 
+        // `var x: T = uninit` — alloca only, no store. Reading without prior write is UB.
+        if (varDecl.Initializer is UninitExpression)
+        {
+            return;
+        }
+
         string value = EmitExpression(sb: sb, expr: varDecl.Initializer);
 
         // When the declaration has an explicit type annotation, the initializer may have a

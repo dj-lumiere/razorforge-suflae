@@ -437,6 +437,9 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
     public string VisitBlockExpression(BlockExpression node) =>
         node.Value.Accept(this);
 
+    /// <inheritdoc/>
+    public string VisitUninitExpression(UninitExpression node) => "uninit";
+
 
     /// <inheritdoc/>
     public string VisitChainedComparisonExpression(ChainedComparisonExpression node)
