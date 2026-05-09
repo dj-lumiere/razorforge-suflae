@@ -1,5 +1,7 @@
 module Core
 
+import BuilderService
+
 ### Exclusively owned heap pointer. Forwards all of {T}'s API transparently.
 ### Comparisons are by value (delegates to {T}), not by pointer address.
 ### Ownership transfers via `steal`; freed automatically when it leaves scope.
@@ -34,9 +36,8 @@ dangerous routine Owned[T].from_raw(raw: Hijacked[T]) -> Owned[T]
 ### Returns the heap address of the owned allocation.
 ### :returns: The raw heap address of the allocation backing this owned value.
 dangerous routine Owned[T].get_address() -> Address
-  danger!
-    var raw = Hijacked[T](me)
-    return raw.get_address()
+  var raw = Hijacked[T](me)
+  return raw.get_address()
 
 # ============================================================================
 # Display (transparent — delegates to inner value)

@@ -1,5 +1,7 @@
 module Core
 
+import Collections
+
 ### Represents a 64-bit IEEE 754 decimal floating-point value.
 ### `D64` is the general-purpose decimal type for calculations that need more
 ### range and precision than `D32` while preserving decimal semantics.
@@ -263,7 +265,7 @@ routine D64.round() -> D64
 
 ### Truncates this decimal value toward zero.
 ### :returns: The resulting `D64` value.
-routine D64.trunc() -> D64
+routine D64.int_truncate() -> D64
   var bits = reinterpret_bits[D64, U64](me)
   var result = rf_d64_trunc(bits)
   return reinterpret_bits[U64, D64](result)
@@ -414,7 +416,7 @@ routine D64.$create!(from_text: Text) -> D64
       i = i + 1u64
     if not has_digit
       throw InvalidValueError(input: from_text, target: "D64")
-  var cstr_val = from_text.CStr()
+  var cstr_val = CStr(from: from_text)
   var bits = rf_d64_from_string(cstr_val)
   return reinterpret_bits[U64, D64](bits)
 
@@ -436,29 +438,29 @@ routine D64.$hash() -> U64
 routine D64.to_bytes_le() -> Array[Byte, 8]
   var raw = reinterpret_bits[D64, U64](me)
   var result = Array[Byte, 8]()
-  result = set_byte_at(array: result, index: 0_u64, value: trunc[U64, U8](raw))
-  result = set_byte_at(array: result, index: 1_u64, value: trunc[U64, U8](shift_right_unsigned[U64](raw, 8_u64)))
-  result = set_byte_at(array: result, index: 2_u64, value: trunc[U64, U8](shift_right_unsigned[U64](raw, 16_u64)))
-  result = set_byte_at(array: result, index: 3_u64, value: trunc[U64, U8](shift_right_unsigned[U64](raw, 24_u64)))
-  result = set_byte_at(array: result, index: 4_u64, value: trunc[U64, U8](shift_right_unsigned[U64](raw, 32_u64)))
-  result = set_byte_at(array: result, index: 5_u64, value: trunc[U64, U8](shift_right_unsigned[U64](raw, 40_u64)))
-  result = set_byte_at(array: result, index: 6_u64, value: trunc[U64, U8](shift_right_unsigned[U64](raw, 48_u64)))
-  result = set_byte_at(array: result, index: 7_u64, value: trunc[U64, U8](shift_right_unsigned[U64](raw, 56_u64)))
+  result = set_byte_at(array: result, index: 0_u64, value: int_truncate[U64, U8](raw))
+  result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 8_u64)))
+  result = set_byte_at(array: result, index: 2_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 16_u64)))
+  result = set_byte_at(array: result, index: 3_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 24_u64)))
+  result = set_byte_at(array: result, index: 4_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 32_u64)))
+  result = set_byte_at(array: result, index: 5_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 40_u64)))
+  result = set_byte_at(array: result, index: 6_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 48_u64)))
+  result = set_byte_at(array: result, index: 7_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 56_u64)))
   return result
 
 ### Returns the raw bytes of this value in big-endian order.
 ### :returns: The resulting `Array[Byte, 8]` value.
 routine D64.to_bytes_be() -> Array[Byte, 8]
-  var raw = bswap[U64](reinterpret_bits[D64, U64](me))
+  var raw = byte_swap[U64](reinterpret_bits[D64, U64](me))
   var result = Array[Byte, 8]()
-  result = set_byte_at(array: result, index: 0_u64, value: trunc[U64, U8](raw))
-  result = set_byte_at(array: result, index: 1_u64, value: trunc[U64, U8](shift_right_unsigned[U64](raw, 8_u64)))
-  result = set_byte_at(array: result, index: 2_u64, value: trunc[U64, U8](shift_right_unsigned[U64](raw, 16_u64)))
-  result = set_byte_at(array: result, index: 3_u64, value: trunc[U64, U8](shift_right_unsigned[U64](raw, 24_u64)))
-  result = set_byte_at(array: result, index: 4_u64, value: trunc[U64, U8](shift_right_unsigned[U64](raw, 32_u64)))
-  result = set_byte_at(array: result, index: 5_u64, value: trunc[U64, U8](shift_right_unsigned[U64](raw, 40_u64)))
-  result = set_byte_at(array: result, index: 6_u64, value: trunc[U64, U8](shift_right_unsigned[U64](raw, 48_u64)))
-  result = set_byte_at(array: result, index: 7_u64, value: trunc[U64, U8](shift_right_unsigned[U64](raw, 56_u64)))
+  result = set_byte_at(array: result, index: 0_u64, value: int_truncate[U64, U8](raw))
+  result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 8_u64)))
+  result = set_byte_at(array: result, index: 2_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 16_u64)))
+  result = set_byte_at(array: result, index: 3_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 24_u64)))
+  result = set_byte_at(array: result, index: 4_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 32_u64)))
+  result = set_byte_at(array: result, index: 5_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 40_u64)))
+  result = set_byte_at(array: result, index: 6_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 48_u64)))
+  result = set_byte_at(array: result, index: 7_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 56_u64)))
   return result
 
 ### Returns a keyed hash of this value using SipHash-2-4.

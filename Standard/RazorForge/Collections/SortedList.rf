@@ -243,7 +243,7 @@ routine BTreeListNode[T].children_add_range_from(other: BTreeListNode[T], start:
 routine BTreeListNode[T].$create(is_leaf: Bool) -> BTreeListNode[T]
   return BTreeListNode[T](
     keys: zero_value[Array[T, 63]](),
-    children: zero_value[Array[BTreeListNode[T], 64]](),
+    children: zero_value[Array[Owned[BTreeListNode[T]], 64]](),
     key_count: 0u64,
     child_count: 0u64,
     subtree_size: 0u64,
@@ -290,7 +290,9 @@ routine SortedList[T].clear()
 routine SortedList[T].$contains(value: T) -> Bool
   if me.root is None
     return false
-  return me.search_node(node: me.root!!, value: value)
+  danger!
+    var root_ref = Hijacked[BTreeListNode[T]](me.root!!).reveal()
+    return me.search_node(node: root_ref, value: value)
 
 ### Descends the subtree rooted at `node` to find `value`.
 ### :param node: The subtree root to search.
@@ -313,7 +315,9 @@ routine SortedList[T].search_node(node: BTreeListNode[T], value: T) -> Bool
 routine SortedList[T].count_of(value: T) -> U64
   if me.root is None
     return 0u64
-  return me.count_in_node(node: me.root!!, value: value)
+  danger!
+    var root_ref = Hijacked[BTreeListNode[T]](me.root!!).reveal()
+    return me.count_in_node(node: root_ref, value: value)
 
 ### Counts occurrences of `value` in the subtree rooted at `node`.
 ### :param node: The subtree root to search.
@@ -382,14 +386,17 @@ routine SortedList[T].add(value: T)
     return
 
   if me.root!!.keys_count() >= B_LIST -% 1u64
-    var old_root = me.root!!
-    var new_root = BTreeListNode[T](is_leaf: false)
-    new_root.children_add_last(old_root)
-    me.split_child(parent_node: new_root, child_idx: 0u64)
-    new_root.subtree_size = new_root.children_get(0u64).subtree_size +% new_root.children_get(1u64).subtree_size +% 1u64
-    me.root = steal new_root
+    danger!
+      var old_root = Hijacked[BTreeListNode[T]](me.root!!).reveal()
+      var new_root = BTreeListNode[T](is_leaf: false)
+      new_root.children_add_last(value: old_root)
+      me.split_child(parent_node: new_root, child_idx: 0u64)
+      new_root.subtree_size = new_root.children_get(0u64).subtree_size +% new_root.children_get(1u64).subtree_size +% 1u64
+      me.root = steal new_root
 
-  me.insert_non_full(node: me.root!!, value: value)
+  danger!
+    var root_ref = Hijacked[BTreeListNode[T]](me.root!!).reveal()
+    me.insert_non_full(node: root_ref, value: value)
   me.count = me.count +% 1u64
   return
 
@@ -464,7 +471,10 @@ routine SortedList[T].remove(value: T) -> Bool
   if me.root is None
     return false
 
-  var removed = me.remove_from_node(node: me.root!!, value: value)
+  var removed = false
+  danger!
+    var root_ref = Hijacked[BTreeListNode[T]](me.root!!).reveal()
+    removed = me.remove_from_node(node: root_ref, value: value)
   if removed
     me.count = me.count -% 1u64
     if me.root!!.keys_count() == 0u64 and not me.root!!.is_leaf
@@ -644,12 +654,18 @@ routine SortedList[T].remove_all(value: T) -> U64
 routine SortedList[T].$getitem!(index: U64) -> T
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
-  return me.get_by_rank(node: me.root!!, rank: index)
+  danger!
+    var root_ref = Hijacked[BTreeListNode[T]](me.root!!).reveal()
+    return me.get_by_rank(node: root_ref, rank: index)
 
 @readonly
 routine SortedList[T].$getitem!(index: BackIndex) -> T
-  var idx = index.resolve(me.count)
-  return me.get_by_rank(node: me.root!!, rank: idx)
+  var idx = index.resolve!(me.count)
+  if idx >= me.count
+    throw IndexOutOfBoundsError(index: idx, count: me.count)
+  danger!
+    var root_ref = Hijacked[BTreeListNode[T]](me.root!!).reveal()
+    return me.get_by_rank(node: root_ref, rank: idx)
 
 ### Returns the element at zero-based sorted rank `rank` within `node`'s subtree.
 ### :param node: The subtree root to search.
@@ -688,7 +704,9 @@ routine SortedList[T].range(min_val: T, max_val: T) -> List[T]
   var result = List[T]()
   if me.root is None
     return result
-  me.range_collect(node: me.root!!, min_val: min_val, max_val: max_val, result: result)
+  danger!
+    var root_ref = Hijacked[BTreeListNode[T]](me.root!!).reveal()
+    me.range_collect(node: root_ref, min_val: min_val, max_val: max_val, result: result)
   return result
 
 ### Appends elements in `[min_val, max_val]` from `node`'s subtree into `result`.
@@ -767,7 +785,9 @@ routine List[T].$create(from: SortedList[T]) -> List[T]
   var result = List[T](capacity: from.count)
   if from.root is None
     return result
-  from.collect_inorder(node: from.root!!, result: result)
+  danger!
+    var root_ref = Hijacked[BTreeListNode[T]](from.root!!).reveal()
+    from.collect_inorder(node: root_ref, result: result)
   return result
 
 ### Appends all keys from `node`'s subtree into `result` via in-order traversal.

@@ -135,20 +135,23 @@ routine SecureDict[K, V].h1(hash: U64) -> U64
 ### :returns: The key value at that slot.
 @readonly
 routine SecureDict[K, V].read_key(slot: U64) -> K
-  return me.keys.offset(K.data_size() * slot).extract()
+  danger!
+    return me.keys.offset(K.data_size() * slot).extract()
 
 ### Returns the value stored at `slot` without checking whether the slot is live.
 ### :param slot: The slot index to read from.
 ### :returns: The value at that slot.
 @readonly
 routine SecureDict[K, V].read_val(slot: U64) -> V
-  return me.vals.offset(V.data_size() * slot).extract()
+  danger!
+    return me.vals.offset(V.data_size() * slot).extract()
 
 ### Overwrites the value at `slot` without changing the control byte.
 ### :param slot: The slot index to write to.
 ### :param val: The new value to store.
 routine SecureDict[K, V].write_val(slot: U64, val: V)
-  me.vals.offset(V.data_size() * slot).inject(val)
+  danger!
+    me.vals.offset(V.data_size() * slot).inject(val)
   return
 
 ### Searches for `key` by linear probing from its primary secure-hash slot.

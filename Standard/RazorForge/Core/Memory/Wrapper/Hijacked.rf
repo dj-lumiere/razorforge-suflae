@@ -1,5 +1,7 @@
 module Core
 
+import BuilderService
+
 ### Represents an unmanaged typed raw pointer.
 ### `Hijacked[T]` is the low-level pointer wrapper for memory that is outside RazorForge's ownership and borrow rules.
 ### Use it for FFI, allocators, explicit memory layout work, and runtime plumbing where safety is intentionally bypassed.
@@ -11,11 +13,13 @@ record Hijacked[T]
 
 ### Returns the raw address carried by this pointer.
 ### :returns: The raw address stored in this pointer.
+@readonly
 dangerous routine Hijacked[T].get_address() -> Address
   return pointer_to_int[T, Address](me)
 
 ### Returns the raw address of a bare value when it is reinterpreted as a pointer slot.
 ### :returns: The address of this value viewed as a pointer-sized slot.
+@readonly
 dangerous routine T.get_address() -> Address
   return pointer_to_int[T, Address](reinterpret_bits[T, Hijacked[T]](me))
 
@@ -27,6 +31,7 @@ dangerous routine Hijacked[T].$create(from: Address) -> Hijacked[T]
 
 ### Produces an unmanaged pointer alias of `me`.
 ### :returns: An unmanaged pointer alias of this value.
+@readonly
 dangerous routine T.hijack() -> Hijacked[T]
   return Hijacked[T](me.get_address())
 
@@ -47,7 +52,7 @@ needs T is EntityType
 ### :returns: The entity `T` at this address, without loading from a pointer slot.
 dangerous routine Hijacked[T].reveal() -> T
 needs T is EntityType
-  return int_to_pointer[Address, T](me.get_address())
+  return reinterpret_bits[Hijacked[T], T](me)
 
 ### Stores `value` at the address referenced by this pointer.
 ### :param value: The value to write.
@@ -99,12 +104,12 @@ dangerous routine Hijacked[T].inject_at_offset(at: ByteSize, value: T)
   return
 
 ### Deallocates the memory at this pointer's address.
-dangerous routine Hijacked[T].invalidate!()
+dangerous routine Hijacked[T].invalidate()
   rf_invalidate(me.address())
   return
 
 ### Zeroes out the pointed-to memory without deallocating it.
-dangerous routine Hijacked[T].detonate!()
+dangerous routine Hijacked[T].detonate()
   rf_set_bytes_at(dest: me.address(), value: 0_u8, size: T.data_size())
   return
 
@@ -124,6 +129,7 @@ dangerous routine hijacked_from[T](addr: Address) -> Hijacked[T]
 
 ### Returns `true` if this pointer is null (address zero).
 ### :returns: `true` if this pointer holds address zero.
+@readonly
 routine Hijacked[T].is_none() -> Bool
   return int_eq[Hijacked[T]](me, hijacked_none[T]())
 
@@ -144,19 +150,22 @@ routine Hijacked[T].$eq(you: Hijacked[T]) -> Bool
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine Hijacked[T].$cmp(you: Hijacked[T]) -> ComparisonSign
-  return me.address().$cmp(you: you.address())
+  danger!
+    return me.address().$cmp(you: you.address())
 
 ### Returns an xxHash64 hash of this pointer's address.
 ### :returns: An xxHash64 hash of this pointer's address.
 routine Hijacked[T].$hash() -> U64
-  return __hash_leaf(v: U64(me.address()))
+  danger!
+    return __hash_leaf(v: U64(me.address()))
 
 ### Returns a SipHash-2-4 keyed hash of this pointer's address.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A SipHash-2-4 keyed hash of this pointer's address.
 routine Hijacked[T].$secure_hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u64(v: U64(me.address()), k0: k0, k1: k1)
+  danger!
+    return __secure_hash_u64(v: U64(me.address()), k0: k0, k1: k1)
 
 # NOTE: All operations on Hijacked[T] are inherently unsafe
 # Undefined behavior can occur if:
@@ -180,10 +189,12 @@ routine Hijacked[T].$secure_hash(k0: U64, k1: U64) -> U64
 ### :returns: The resulting `Text` value.
 @readonly
 routine Hijacked[T].$represent() -> Text
-  return me.type_name()
+  danger!
+    return me.type_name()
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Hijacked[T].$diagnose() -> Text
-  return f"{me.type_name()}(addr: {me.address()}, none: {me.is_none()})"
+  danger!
+    return f"{me.type_name()}(addr: {me.address()}, none: {me.is_none()})"

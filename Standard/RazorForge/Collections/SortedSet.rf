@@ -248,7 +248,7 @@ needs T obeys Comparable
 routine BTreeSetNode[T].$create(is_leaf: Bool) -> BTreeSetNode[T]
   return BTreeSetNode[T](
     keys: zero_value[Array[T, 63]](),
-    children: zero_value[Array[BTreeSetNode[T], 64]](),
+    children: zero_value[Array[Owned[BTreeSetNode[T]], 64]](),
     key_count: 0u64,
     child_count: 0u64,
     subtree_size: 0u64,
@@ -301,7 +301,9 @@ routine SortedSet[T].clear()
 routine SortedSet[T].$contains(value: T) -> Bool
   if me.root is None
     return false
-  return me.search_node(node: me.root!!, value: value)
+  danger!
+    var root_ref = Hijacked[BTreeSetNode[T]](me.root!!).reveal()
+    return me.search_node(node: root_ref, value: value)
 
 ### Searches for `value` in the subtree rooted at `node`.
 ### Each node is searched by lower-bound lookup before descending, which keeps
@@ -374,17 +376,21 @@ routine SortedSet[T].add(value: T) -> Bool
   # If root is full, split it before descending.
   # We must do this proactively so insert_non_full never encounters a full node.
   if me.root!!.keys_count() >= B -% 1u64
-    var old_root = me.root!!
-    var new_root = BTreeSetNode[T](is_leaf: false)
-    new_root.children_add_last(old_root)
-    me.split_child(parent_node: new_root, child_idx: 0u64)
-    # Compute new root's subtree_size from its children before transferring ownership.
-    # After a split, new_root has 1 key and 2 children.
-    new_root.subtree_size = new_root.children_get(0u64).subtree_size +% new_root.children_get(1u64).subtree_size +% 1u64
-    me.root = steal new_root
+    danger!
+      var old_root = Hijacked[BTreeSetNode[T]](me.root!!).reveal()
+      var new_root = BTreeSetNode[T](is_leaf: false)
+      new_root.children_add_last(value: old_root)
+      me.split_child(parent_node: new_root, child_idx: 0u64)
+      # Compute new root's subtree_size from its children before transferring ownership.
+      # After a split, new_root has 1 key and 2 children.
+      new_root.subtree_size = new_root.children_get(0u64).subtree_size +% new_root.children_get(1u64).subtree_size +% 1u64
+      me.root = steal new_root
 
   # Single-pass insert: returns false if duplicate found during descent.
-  var inserted = me.insert_non_full(node: me.root!!, value: value)
+  var inserted = false
+  danger!
+    var root_ref = Hijacked[BTreeSetNode[T]](me.root!!).reveal()
+    inserted = me.insert_non_full(node: root_ref, value: value)
   if inserted
     me.count = me.count +% 1u64
   return inserted
@@ -495,7 +501,10 @@ routine SortedSet[T].remove(value: T) -> Bool
     return false
 
   # Single-pass remove: returns true if value was found and removed.
-  var removed = me.remove_from_node(node: me.root!!, value: value)
+  var removed = false
+  danger!
+    var root_ref = Hijacked[BTreeSetNode[T]](me.root!!).reveal()
+    removed = me.remove_from_node(node: root_ref, value: value)
 
   if removed
     me.count = me.count -% 1u64
@@ -751,7 +760,9 @@ routine SortedSet[T].update_subtree_size(node: BTreeSetNode[T])
 routine SortedSet[T].$getitem!(index: U64) -> T
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
-  return me.get_by_rank(node: me.root!!, rank: index)
+  danger!
+    var root_ref = Hijacked[BTreeSetNode[T]](me.root!!).reveal()
+    return me.get_by_rank(node: root_ref, rank: index)
 
 ### Returns the element addressed by a back index in sorted order.
 ### `^0` is the largest element, `^1` the second-largest, and so on.
@@ -759,8 +770,12 @@ routine SortedSet[T].$getitem!(index: U64) -> T
 ### :returns: The element at the resolved sorted position.
 @readonly
 routine SortedSet[T].$getitem!(index: BackIndex) -> T
-  var idx = index.resolve(me.count)
-  return me.get_by_rank(node: me.root!!, rank: idx)
+  var idx = index.resolve!(me.count)
+  if idx >= me.count
+    throw IndexOutOfBoundsError(index: idx, count: me.count)
+  danger!
+    var root_ref = Hijacked[BTreeSetNode[T]](me.root!!).reveal()
+    return me.get_by_rank(node: root_ref, rank: idx)
 
 ### Returns the element at the given in-order rank within the subtree rooted at `node`.
 ### Cached subtree sizes allow whole branches to be skipped in O(log n).
@@ -807,7 +822,9 @@ routine SortedSet[T].range(min_val: T, max_val: T) -> List[T]
   var result = List[T]()
   if me.root is None
     return result
-  me.range_collect(node: me.root!!, min_val: min_val, max_val: max_val, result: result)
+  danger!
+    var root_ref = Hijacked[BTreeSetNode[T]](me.root!!).reveal()
+    me.range_collect(node: root_ref, min_val: min_val, max_val: max_val, result: result)
   return result
 
 ### Traverses `node` and appends every value within `[min_val, max_val]` to `result`.
@@ -892,7 +909,9 @@ routine List[T].$create(from: SortedSet[T]) -> List[T]
   var result = List[T](capacity: from.count)
   if from.root is None
     return result
-  from.collect_inorder(node: from.root!!, result: result)
+  danger!
+    var root_ref = Hijacked[BTreeSetNode[T]](from.root!!).reveal()
+    from.collect_inorder(node: root_ref, result: result)
   return result
 
 ### Appends every value in `node` to `result` using in-order traversal.

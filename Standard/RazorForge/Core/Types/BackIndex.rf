@@ -23,7 +23,7 @@ routine BackIndex.$create(offset: U64) -> BackIndex
 routine BackIndex.resolve!(length: U64) -> U64
   var raw = reinterpret_bits[BackIndex, U64](me)
   if raw > length
-    stop!("BackIndex out of bounds")
+    throw IndexOutOfBoundsError(index: raw, count: length)
   return length -% raw
 
 ### Returns the stored end-relative offset.

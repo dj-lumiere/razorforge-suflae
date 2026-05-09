@@ -1,8 +1,10 @@
 module Core
 
+import BuilderService
+
 ### Represents immutable UTF-32 text with constant-time character indexing.
 ### `Text` is optimized for in-memory text processing rather than compact storage.
-entity Text obeys Addable, Ordered, Hashable, TextRepeatable
+entity Text obeys Addable, Ordered, Hashable, TextRepeatable, Iterable[Character]
   ### Stores the character buffer.
   secret data: Hijacked[Character]
   ### Stores the number of characters in the buffer.
@@ -70,24 +72,24 @@ routine Text.$create(from: CStr) -> Text
         break
       var b0 = from[i]
 
-      if b0 <= 0x7Fu8
+      if b0 <= Byte(0x7Fu8)
         # ASCII: single byte
         list.add_last(Character(U32(b0)))
         i = i + 1u64
-      elseif 0xC0u8 <= b0 <= 0xDFu8 and i + 1u64 < len
+      elseif Byte(0xC0u8) <= b0 <= Byte(0xDFu8) and i + 1u64 < len
         # 2-byte sequence
         var b1 = from[i + 1u64]
         var cp = ((U32(b0) & 0x1Fu32) << 6u32) | (U32(b1) & 0x3Fu32)
         list.add_last(Character(cp))
         i = i + 2u64
-      elseif 0xE0u8 <= b0 <= 0xEFu8 and i + 2u64 < len
+      elseif Byte(0xE0u8) <= b0 <= Byte(0xEFu8) and i + 2u64 < len
         # 3-byte sequence
         var b1 = from[i + 1u64]
         var b2 = from[i + 2u64]
         var cp = ((U32(b0) & 0x0Fu32) << 12u32) | ((U32(b1) & 0x3Fu32) << 6u32) | (U32(b2) & 0x3Fu32)
         list.add_last(Character(cp))
         i = i + 3u64
-      elseif 0xF0u8 <= b0 <= 0xF7u8 and i + 3u64 < len
+      elseif Byte(0xF0u8) <= b0 <= Byte(0xF7u8) and i + 3u64 < len
         # 4-byte sequence
         var b1 = from[i + 1u64]
         var b2 = from[i + 2u64]
@@ -98,48 +100,6 @@ routine Text.$create(from: CStr) -> Text
       else
         # Invalid byte — replacement character
         list.add_last(Character(0xFFFDu32))
-        i = i + 1u64
-    return Text(from_list: list)
-
-### Decodes UTF-16 text from a wide C string.
-### Invalid surrogate pairs are replaced with the Unicode replacement character.
-### :param from: The source wide string.
-### :returns: The resulting `Text` value.
-routine Text.$create(from: CWStr) -> Text
-  danger!
-    var len = from.count()
-    if len == 0u64
-      return Text()
-
-    var list = List[Character]()
-    var i: U64 = 0u64
-    loop
-      if i >= len
-        break
-      var high = Hijacked[U16](from.ptr.get_address() +% Address(i * 2u64)).extract()
-
-      # Check for high surrogate (U+D800 to U+DBFF)
-      if high >= 0xD800u16 and high <= 0xDBFFu16 and i + 1u64 < len
-        var low = Hijacked[U16](from.ptr.get_address() +% Address((i +% 1u64) * 2u64)).extract()
-        # Check for low surrogate (U+DC00 to U+DFFF)
-        if low >= 0xDC00u16 and low <= 0xDFFFu16
-          # Valid surrogate pair - decode to codepoint
-          var high_bits = (U32(high) - 0xD800u32) << 10u32
-          var low_bits = U32(low) - 0xDC00u32
-          var codepoint = high_bits | low_bits + 0x10000u32
-          list.add_last(Character(codepoint))
-          i = i + 2u64
-        else
-          # Invalid low surrogate - use replacement character
-          list.add_last(Character(0xFFFDu32))
-          i = i + 1u64
-      elseif high >= 0xDC00u16 and high <= 0xDFFFu16
-        # Orphan low surrogate - use replacement character
-        list.add_last(Character(0xFFFDu32))
-        i = i + 1u64
-      else
-        # BMP character (not a surrogate)
-        list.add_last(Character(U32(high)))
         i = i + 1u64
     return Text(from_list: list)
 
@@ -561,7 +521,7 @@ routine Text.remove_suffix(suffix: Referring[Text]) -> Text
 ### :returns: The resulting `Text` value.
 @readonly
 routine Text.repeat(times: U64) -> Text
-  return me.$mul(count: times)
+  return me.$mul[U64](count: times)
 
 ### Returns a copy with the value order reversed.
 ### Characters are reversed by position; no grapheme-aware processing is applied.
@@ -708,21 +668,6 @@ routine Text.words() -> List[Owned[Text]]
   return parts
 
 # Conversion to modifiable list
-
-### Creates a mutable character list from immutable text.
-### The resulting list receives a copied snapshot of the text contents.
-### :param from: The source text to convert.
-### :returns: The resulting `List[Character]` value.
-routine List[Character].$create(from: Text) -> List[Character]
-  var result = List[Character](from.count)
-  var i: U64 = 0u64
-  loop
-    if i >= from.count
-      break
-    danger!
-      result.add_last(from.data.stride(count: S64(i)).extract())
-    i += 1u64
-  return result
 
 # Iteration
 

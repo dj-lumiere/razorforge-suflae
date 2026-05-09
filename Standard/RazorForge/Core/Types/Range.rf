@@ -35,8 +35,6 @@ routine Range[T](start: T, end: T, inclusive: Bool) -> Range[T]
 ### :param inclusive: `true` to include `end`; `false` to stop before it.
 ### :returns: The resulting `Range[T]` value.
 routine Range[T](start: T, end: T, step: T, inclusive: Bool) -> Range[T]
-  if step == 0
-    stop!("Range step cannot be zero")
   return Range[T](start: start, end: end, step: step, inclusive: inclusive)
 
 ### Returns true if this value is ascending.

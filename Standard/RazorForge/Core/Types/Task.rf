@@ -1,5 +1,7 @@
 module Core
 
+import BuilderService
+
 ### Represents an opaque runtime task handle.
 ### `Task[T]` identifies an asynchronous computation whose eventual result type is `T`.
 ### The handle itself is pointer-backed and is meaningful to the task runtime rather than to user code as raw memory.
@@ -22,7 +24,7 @@ dangerous routine Task[T].get_address() -> Address
 ### :param from: The task runtime address to wrap.
 ### :returns: The resulting `Task[T]` value.
 dangerous routine Task[T].$create(from: Address) -> Task[T]
-  return int_to_pointer[Address, Task[T]](from)
+  return reinterpret_bits[Hijacked[Task[T]], Task[T]](int_to_pointer[Address, Task[T]](from))
 
 ### Returns the null task handle.
 ### This is the task-handle equivalent of an absent pointer value.
@@ -42,7 +44,8 @@ routine Task[T].is_none() -> Bool
 ### :returns: The resulting `U64` value.
 @readonly
 routine Task[T].id() -> U64
-  return rf_task_id(me.get_address())
+  danger!
+    return rf_task_id(me.get_address())
 
 ### Returns the display form of this task handle.
 ### The display form intentionally keeps output concise and type-oriented.

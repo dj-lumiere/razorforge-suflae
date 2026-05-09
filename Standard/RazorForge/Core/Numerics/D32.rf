@@ -1,5 +1,7 @@
 module Core
 
+import Collections
+
 ### Represents a 32-bit IEEE 754 decimal floating-point value.
 ### `D32` is the compact decimal type for values that should preserve decimal
 ### intent through arithmetic and formatting, especially for human-entered or
@@ -270,7 +272,7 @@ routine D32.round() -> D32
 
 ### Truncates this decimal value toward zero.
 ### :returns: The resulting `D32` value.
-routine D32.trunc() -> D32
+routine D32.int_truncate() -> D32
   var bits = reinterpret_bits[D32, U32](me)
   var result = rf_d32_trunc(bits)
   return reinterpret_bits[U32, D32](result)
@@ -425,7 +427,7 @@ routine D32.$create!(from_text: Text) -> D32
       i = i + 1u64
     if not has_digit
       throw InvalidValueError(input: from_text, target: "D32")
-  var cstr_val = from_text.CStr()
+  var cstr_val = CStr(from: from_text)
   var bits = rf_d32_from_string(cstr_val)
   return reinterpret_bits[U32, D32](bits)
 
@@ -436,7 +438,7 @@ routine D32.$create!(from_text: Text) -> D32
 ### Returns an xxHash64-based hash of this value, derived from its raw bit pattern.
 ### :returns: A `U64` hash of the decimal32 encoding.
 routine D32.$hash() -> U64
-  return __hash_leaf(v: zext[U32, U64](reinterpret_bits[D32, U32](me)))
+  return __hash_leaf(v: zero_extend[U32, U64](reinterpret_bits[D32, U32](me)))
 
 # ============================================================================
 # Byte Representation
@@ -447,21 +449,21 @@ routine D32.$hash() -> U64
 routine D32.to_bytes_le() -> Array[Byte, 4]
   var raw = reinterpret_bits[D32, U32](me)
   var result = Array[Byte, 4]()
-  result = set_byte_at(array: result, index: 0_u64, value: trunc[U32, U8](raw))
-  result = set_byte_at(array: result, index: 1_u64, value: trunc[U32, U8](shift_right_unsigned[U32](raw, 8_u32)))
-  result = set_byte_at(array: result, index: 2_u64, value: trunc[U32, U8](shift_right_unsigned[U32](raw, 16_u32)))
-  result = set_byte_at(array: result, index: 3_u64, value: trunc[U32, U8](shift_right_unsigned[U32](raw, 24_u32)))
+  result = set_byte_at(array: result, index: 0_u64, value: int_truncate[U32, U8](raw))
+  result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U32, U8](shift_right_unsigned[U32](raw, 8_u32)))
+  result = set_byte_at(array: result, index: 2_u64, value: int_truncate[U32, U8](shift_right_unsigned[U32](raw, 16_u32)))
+  result = set_byte_at(array: result, index: 3_u64, value: int_truncate[U32, U8](shift_right_unsigned[U32](raw, 24_u32)))
   return result
 
 ### Returns the raw bytes of this value in big-endian order.
 ### :returns: The resulting `Array[Byte, 4]` value.
 routine D32.to_bytes_be() -> Array[Byte, 4]
-  var raw = bswap[U32](reinterpret_bits[D32, U32](me))
+  var raw = byte_swap[U32](reinterpret_bits[D32, U32](me))
   var result = Array[Byte, 4]()
-  result = set_byte_at(array: result, index: 0_u64, value: trunc[U32, U8](raw))
-  result = set_byte_at(array: result, index: 1_u64, value: trunc[U32, U8](shift_right_unsigned[U32](raw, 8_u32)))
-  result = set_byte_at(array: result, index: 2_u64, value: trunc[U32, U8](shift_right_unsigned[U32](raw, 16_u32)))
-  result = set_byte_at(array: result, index: 3_u64, value: trunc[U32, U8](shift_right_unsigned[U32](raw, 24_u32)))
+  result = set_byte_at(array: result, index: 0_u64, value: int_truncate[U32, U8](raw))
+  result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U32, U8](shift_right_unsigned[U32](raw, 8_u32)))
+  result = set_byte_at(array: result, index: 2_u64, value: int_truncate[U32, U8](shift_right_unsigned[U32](raw, 16_u32)))
+  result = set_byte_at(array: result, index: 3_u64, value: int_truncate[U32, U8](shift_right_unsigned[U32](raw, 24_u32)))
   return result
 
 ### Returns a keyed hash of this value using SipHash-2-4.
@@ -469,4 +471,4 @@ routine D32.to_bytes_be() -> Array[Byte, 4]
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
 routine D32.$secure_hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u64(v: zext[U32, U64](reinterpret_bits[D32, U32](me)), k0: k0, k1: k1)
+  return __secure_hash_u64(v: zero_extend[U32, U64](reinterpret_bits[D32, U32](me)), k0: k0, k1: k1)

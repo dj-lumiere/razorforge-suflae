@@ -1,18 +1,20 @@
 module Core
 
+import BuilderService
+
 ### Represents temporary unmanaged mutable access to an entity.
 ### `Grasped[T]` is the non-storable access type used for explicit low-level manipulation outside the borrow-safe wrappers.
 ### :typeparam T: The entity type being accessed.
 ### :see: {Viewed[T]}, {Hijacked[T]}, {Access-Types}
 @llvm("ptr")
 record Grasped[T] obeys Controlling[T]
-needs T is EntityType
   pass
 
 ### Produces a temporary unmanaged mutable view of `me`.
 ### :returns: The resulting `Grasped[T]` value.
 routine T.grasp() -> Grasped[T]
-  return Grasped[T](me.hijack())
+  danger!
+    return Grasped[T](me.hijack())
 
 # NOTE: No creators, no manual methods - all operations handled by compiler
 # The address member variable is managed internally by the `.grasp()` implementation

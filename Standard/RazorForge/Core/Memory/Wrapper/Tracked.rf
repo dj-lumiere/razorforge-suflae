@@ -1,5 +1,7 @@
 module Core
 
+import BuilderService
+
 ### Single-threaded weak reference. Thin pointer to the same {RetainController[T]} as {Retained[T]}.
 ### Does not keep the entity alive. Use {recover!()} to attempt upgrade to a strong reference.
 ### :typeparam T: The exclusively owned entity type.
@@ -16,17 +18,17 @@ needs T is EntityType
 ### :returns: A new weak handle to the same entity's controller.
 routine Tracked[T].track() -> Tracked[T]
   danger!
-    var ctrl = hijacked_from[RetainController[T]](me.get_address())
+    var ctrl = hijacked_from[RetainController[T]](me.get_address()).reveal()
     ctrl.increase_weak_count()
   return me
 
 ### Decrements the weak count, destroying the controller when both counts reach zero.
 dangerous routine Tracked[T].release()
-  danger!
-    var ctrl = hijacked_from[RetainController[T]](me.get_address())
-    ctrl.decrease_weak_count()
-    if ctrl.should_deallocate_controller()
-      ctrl.invalidate!()
+  var ctrl_ptr = hijacked_from[RetainController[T]](me.get_address())
+  var ctrl = ctrl_ptr.reveal()
+  ctrl.decrease_weak_count()
+  if ctrl.should_deallocate_controller()
+    ctrl_ptr.invalidate()
   return
 
 ### Attempts to upgrade to a strong reference.
@@ -34,7 +36,7 @@ dangerous routine Tracked[T].release()
 ### :absent: Returns absent when the entity has already been destroyed.
 routine Tracked[T].recover!() -> Retained[T]
   danger!
-    var ctrl = hijacked_from[RetainController[T]](me.get_address())
+    var ctrl = hijacked_from[RetainController[T]](me.get_address()).reveal()
     if ctrl.strong_count() == 0
       absent
     ctrl.increase_strong_count()

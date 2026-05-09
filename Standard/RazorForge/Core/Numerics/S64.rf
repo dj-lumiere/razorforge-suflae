@@ -19,19 +19,19 @@ preset S64_ONE: S64 = 1_s64
 ### Sign-extends a signed 8-bit integer to `S64`.
 ### :param from: The source value.
 ### :returns: The `S64` representation of `from`.
-routine S64.$create!(from: S8) -> S64
+routine S64.$create(from: S8) -> S64
   return sign_extend[S8, S64](from)
 
 ### Sign-extends a signed 16-bit integer to `S64`.
 ### :param from: The source value.
 ### :returns: The `S64` representation of `from`.
-routine S64.$create!(from: S16) -> S64
+routine S64.$create(from: S16) -> S64
   return sign_extend[S16, S64](from)
 
 ### Sign-extends a signed 32-bit integer to `S64`.
 ### :param from: The source value.
 ### :returns: The `S64` representation of `from`.
-routine S64.$create!(from: S32) -> S64
+routine S64.$create(from: S32) -> S64
   return sign_extend[S32, S64](from)
 
 ### Returns `from` unchanged (identity conversion).
@@ -45,26 +45,26 @@ routine S64.$create(from: S64) -> S64
 ### :returns: The `S64` representation of `from`.
 ### :throws: {IntegerOverflowError} if `from` is outside the `S64` range.
 routine S64.$create!(from: S128) -> S64
-  if not (S64_MIN <= from <= S64_MAX)
+  if not (-9223372036854775808s128 <= from <= 9223372036854775807s128)
     throw IntegerOverflowError()
   return int_truncate[S128, S64](from)
 
 ### Zero-extends an unsigned 8-bit integer to `S64`.
 ### :param from: The source value.
 ### :returns: The `S64` representation of `from`.
-routine S64.$create!(from: U8) -> S64
+routine S64.$create(from: U8) -> S64
   return zero_extend[U8, S64](from)
 
 ### Zero-extends an unsigned 16-bit integer to `S64`.
 ### :param from: The source value.
 ### :returns: The `S64` representation of `from`.
-routine S64.$create!(from: U16) -> S64
+routine S64.$create(from: U16) -> S64
   return zero_extend[U16, S64](from)
 
 ### Zero-extends an unsigned 32-bit integer to `S64`.
 ### :param from: The source value.
 ### :returns: The `S64` representation of `from`.
-routine S64.$create!(from: U32) -> S64
+routine S64.$create(from: U32) -> S64
   return zero_extend[U32, S64](from)
 
 ### Reinterprets a `U64` as `S64` using two's complement.
@@ -95,24 +95,33 @@ routine S64.$create!(from: F16) -> S64
 ### :param from: The source float value.
 ### :returns: The truncated `S64` representation.
 routine S64.$create!(from: F32) -> S64
+  if from.is_nan() or not (-9223372036854775808.0_f32 <= from <= 9223372036854775807.0_f32)
+    throw IntegerOverflowError()
   return float_to_signed[F32, S64](from)
 
 ### Truncates a 64-bit float to `S64`, rounding toward zero.
 ### :param from: The source float value.
 ### :returns: The truncated `S64` representation.
 routine S64.$create!(from: F64) -> S64
+  if from.is_nan() or not (-9223372036854775808.0_f64 <= from <= 9223372036854775807.0_f64)
+    throw IntegerOverflowError()
   return float_to_signed[F64, S64](from)
 
 ### Truncates a 128-bit float to `S64` by narrowing to `F64` first.
 ### :param from: The source float value.
 ### :returns: The truncated `S64` representation.
 routine S64.$create!(from: F128) -> S64
-  return from.F64!().S64!()
+  if from.is_nan() or not (-9223372036854775808.0_f128 <= from <= 9223372036854775807.0_f128)
+    throw IntegerOverflowError()
+  return from.F64().S64!()
 
 ### Converts a 32-bit decimal float to `S64`.
 ### :param from: The source decimal float value.
 ### :returns: The truncated `S64` representation.
 routine S64.$create!(from: D32) -> S64
+  var as_f128 = from.F128()
+  if not as_f128.is_finite() or as_f128 < -9223372036854775808.0_f128 or as_f128 > 9223372036854775807.0_f128
+    throw IntegerOverflowError()
   var bits = reinterpret_bits[D32, U32](from)
   return d32_to_s64(bits)
 
@@ -120,6 +129,9 @@ routine S64.$create!(from: D32) -> S64
 ### :param from: The source decimal float value.
 ### :returns: The truncated `S64` representation.
 routine S64.$create!(from: D64) -> S64
+  var as_f128 = from.F128()
+  if not as_f128.is_finite() or as_f128 < -9223372036854775808.0_f128 or as_f128 > 9223372036854775807.0_f128
+    throw IntegerOverflowError()
   var bits = reinterpret_bits[D64, U64](from)
   return d64_to_s64(bits)
 
@@ -127,6 +139,9 @@ routine S64.$create!(from: D64) -> S64
 ### :param from: The source decimal float value.
 ### :returns: The truncated `S64` representation.
 routine S64.$create!(from: D128) -> S64
+  var as_f128 = from.F128()
+  if not as_f128.is_finite() or as_f128 < -9223372036854775808.0_f128 or as_f128 > 9223372036854775807.0_f128
+    throw IntegerOverflowError()
   return d128_to_s64(low: from.low, high: from.high)
 
 # ============================================================================
@@ -217,6 +232,8 @@ routine S64.$mod!(you: S64) -> S64
 ### Returns `-me` (arithmetic negation).
 ### :returns: The negated value.
 routine S64.$neg!() -> S64
+  if me == -9223372036854775808_s64
+    throw IntegerOverflowError()
   return sub[S64](0_s64, me)
 
 # ============================================================================
@@ -331,7 +348,7 @@ routine S64.pow_with_overflow!(exp: S64) -> (S64, Bool)
   if me == 0 and exp == 0
     throw IndeterminateResultError()
   if exp < 0
-    return NegativeExponentError()
+    throw NegativeExponentError()
   while e > 0
     if (e & 1) == 1
       var mul_result = result.mul_with_overflow(base)
@@ -360,13 +377,13 @@ routine S64.$pow!(exp: S64) -> S64
 ### :returns: The result modulo 2⁶⁴ in two's complement.
 ### :throws: {IndeterminateResultError} if `me == 0 and exp == 0`.
 routine S64.$pow_wrap!(exp: S64) -> S64
-  var result: S64 = 1
-  var base: S64 = me
-  var e: U32 = exp
   if me == 0 and exp == 0
     throw IndeterminateResultError()
   if exp < 0_s64
-    return NegativeExponentError()
+    throw NegativeExponentError()
+  var result: S64 = 1
+  var base: S64 = me
+  var e: U32 = U32(exp)
   while e > 0
     if (e & 1) == 1
       result = result.$mul_wrap(base)
@@ -385,7 +402,7 @@ routine S64.$pow_clamp!(exp: S64) -> S64
   if me == 0 and exp == 0
     throw IndeterminateResultError()
   if exp < 0
-    return NegativeExponentError()
+    throw NegativeExponentError()
   while exp > 0
     if (exp & 1) == 1
       result = result.$mul_clamp(base)

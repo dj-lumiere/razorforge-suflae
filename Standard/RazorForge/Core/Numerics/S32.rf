@@ -105,6 +105,8 @@ routine S32.$create!(from: F16) -> S32
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the value is outside the S32 range.
 routine S32.$create!(from: F32) -> S32
+  if from.is_nan() or not (-2147483648.0_f32 <= from <= 2147483647.0_f32)
+    throw IntegerOverflowError()
   return float_to_signed[F32, S32](from)
 
 ### Converts an `F64` to `S32`, truncating toward zero.
@@ -112,6 +114,8 @@ routine S32.$create!(from: F32) -> S32
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the value is outside the S32 range.
 routine S32.$create!(from: F64) -> S32
+  if from.is_nan() or not (-2147483648.0_f64 <= from <= 2147483647.0_f64)
+    throw IntegerOverflowError()
   return float_to_signed[F64, S32](from)
 
 ### Converts an `F128` to `S32` by narrowing to `F64` first, then truncating.
@@ -126,6 +130,9 @@ routine S32.$create!(from: F128) -> S32
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the integer part is outside the S32 range.
 routine S32.$create!(from: D32) -> S32
+  var as_f64 = from.F64()
+  if not as_f64.is_finite() or as_f64 < -2147483648.0_f64 or as_f64 > 2147483647.0_f64
+    throw IntegerOverflowError()
   var bits = reinterpret_bits[D32, U32](from)
   return d32_to_s32(bits)
 
@@ -134,6 +141,9 @@ routine S32.$create!(from: D32) -> S32
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the integer part is outside the S32 range.
 routine S32.$create!(from: D64) -> S32
+  var as_f64 = from.F64()
+  if not as_f64.is_finite() or as_f64 < -2147483648.0_f64 or as_f64 > 2147483647.0_f64
+    throw IntegerOverflowError()
   var bits = reinterpret_bits[D64, U64](from)
   return d64_to_s32(bits)
 
@@ -142,6 +152,9 @@ routine S32.$create!(from: D64) -> S32
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the integer part is outside the S32 range.
 routine S32.$create!(from: D128) -> S32
+  var as_f64 = from.F64()
+  if not as_f64.is_finite() or as_f64 < -2147483648.0_f64 or as_f64 > 2147483647.0_f64
+    throw IntegerOverflowError()
   return d128_to_s32(low: from.low, high: from.high)
 
 # ============================================================================
@@ -233,6 +246,8 @@ routine S32.$mod!(you: S32) -> S32
 ### Returns `-me` (arithmetic negation), with wrapping behavior on `S32_MIN`.
 ### :returns: The negated value. `-S32_MIN` wraps to `S32_MIN` (−2147483648).
 routine S32.$neg!() -> S32
+  if me == -2147483648_s32
+    throw IntegerOverflowError()
   return sub[S32](0, me)
 
 # ============================================================================
@@ -339,14 +354,14 @@ routine S32.$mul_clamp(you: S32) -> S32
 ### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
 ### :throws: {NegativeExponentError} if `exp < 0`.
 routine S32.pow_with_overflow!(exp: S32) -> (S32, Bool)
-  var result: S32 = 1
-  var base: S32 = me
-  var e: U32 = exp
-  var overflow = false
   if me == 0 and exp == 0
     throw IndeterminateResultError()
   if exp < 0
-    return NegativeExponentError()
+    throw NegativeExponentError()
+  var result: S32 = 1
+  var base: S32 = me
+  var e: U32 = U32(exp)
+  var overflow = false
   while e > 0
     if (e & 1) == 1
       var mul_result = result.mul_with_overflow(base)
@@ -377,13 +392,13 @@ routine S32.$pow!(exp: S32) -> S32
 ### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
 ### :throws: {NegativeExponentError} if `exp < 0`.
 routine S32.$pow_wrap!(exp: S32) -> S32
-  var result: S32 = 1
-  var base: S32 = me
-  var e: U32 = exp
   if me == 0 and exp == 0
     throw IndeterminateResultError()
   if exp < 0_s32
-    return NegativeExponentError()
+    throw NegativeExponentError()
+  var result: S32 = 1
+  var base: S32 = me
+  var e: U32 = U32(exp)
   while e > 0
     if (e & 1) == 1
       result = result.$mul_wrap(base)
@@ -398,13 +413,13 @@ routine S32.$pow_wrap!(exp: S32) -> S32
 ### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
 ### :throws: {NegativeExponentError} if `exp < 0`.
 routine S32.$pow_clamp!(exp: S32) -> S32
-  var result: S32 = 1
-  var base: S32 = me
-  var e: U32 = exp
   if me == 0 and exp == 0
     throw IndeterminateResultError()
   if exp < 0
-    return NegativeExponentError()
+    throw NegativeExponentError()
+  var result: S32 = 1
+  var base: S32 = me
+  var e: U32 = U32(exp)
   while e > 0
     if (e & 1) == 1
       result = result.$mul_clamp(base)

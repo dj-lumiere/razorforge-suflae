@@ -1,5 +1,7 @@
 module Core
 
+import BuilderService
+
 ### Single-threaded strong reference. Thin pointer to {RetainController[T]}.
 ### Equivalent to `Rc[T]` in Rust. Copying bumps the strong count; dropping decrements it.
 ### :typeparam T: The exclusively owned entity type.
@@ -29,27 +31,27 @@ needs T is EntityType
 ### :returns: A new strong handle sharing the same underlying entity.
 routine Retained[T].retain() -> Retained[T]
   danger!
-    var ctrl = Hijacked[RetainController[T]](me)
+    var ctrl = Hijacked[RetainController[T]](me).reveal()
     ctrl.increase_strong_count()
   return me
 
 ### Decrements the strong count, destroying the entity when it reaches zero.
 ### Destroys the controller when both strong and weak counts reach zero.
 dangerous routine Retained[T].release()
-  danger!
-    var ctrl = Hijacked[RetainController[T]](me)
-    ctrl.decrease_strong_count()
-    if ctrl.should_deallocate_data()
-      ctrl.drop_data()
-      if ctrl.should_deallocate_controller()
-        ctrl.invalidate!()
+  var ctrl_ptr = Hijacked[RetainController[T]](me)
+  var ctrl = ctrl_ptr.reveal()
+  ctrl.decrease_strong_count()
+  if ctrl.should_deallocate_data()
+    ctrl.drop_data()
+    if ctrl.should_deallocate_controller()
+      ctrl_ptr.invalidate()
   return
 
 ### Creates a weak reference to the same entity.
 ### :returns: A new weak handle to the same entity's controller.
 routine Retained[T].track() -> Tracked[T]
   danger!
-    var ctrl = Hijacked[RetainController[T]](me)
+    var ctrl = Hijacked[RetainController[T]](me).reveal()
     ctrl.increase_weak_count()
     return Tracked[T](me)
 
@@ -61,14 +63,14 @@ routine Retained[T].track() -> Tracked[T]
 ### :returns: The number of live strong handles to this entity.
 routine Retained[T].strong_count() -> S32
   danger!
-    var ctrl = Hijacked[RetainController[T]](me)
+    var ctrl = Hijacked[RetainController[T]](me).reveal()
     return ctrl.strong_count()
 
 ### Returns the current weak reference count.
 ### :returns: The number of live weak handles to this entity's controller.
 routine Retained[T].weak_count() -> S32
   danger!
-    var ctrl = Hijacked[RetainController[T]](me)
+    var ctrl = Hijacked[RetainController[T]](me).reveal()
     return ctrl.weak_count()
 
 # ============================================================================
@@ -80,7 +82,7 @@ routine Retained[T].weak_count() -> S32
 @readonly
 routine Retained[T].$represent() -> Text
   danger!
-    var ctrl = Hijacked[RetainController[T]](me)
+    var ctrl = Hijacked[RetainController[T]](me).reveal()
     return ctrl.borrow_data().extract().$represent()
 
 ### Returns the textual representation of this value.
@@ -88,7 +90,7 @@ routine Retained[T].$represent() -> Text
 @readonly
 routine Retained[T].$diagnose() -> Text
   danger!
-    var ctrl = Hijacked[RetainController[T]](me)
+    var ctrl = Hijacked[RetainController[T]](me).reveal()
     var rc = ctrl.strong_count()
     var weak = ctrl.weak_count()
     var addr = ctrl.borrow_data().get_address()

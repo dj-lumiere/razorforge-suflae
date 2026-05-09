@@ -36,7 +36,7 @@ routine S16.$create(from: S16) -> S16
 ### :returns: The lower 16 bits of `from` interpreted as signed.
 ### :throws: {IntegerOverflowError} if `from` is not in `-32768..=32767`.
 routine S16.$create!(from: S32) -> S16
-  if not (S16_MIN <= from <= S16_MAX)
+  if not (-32768s32 <= from <= 32767s32)
     throw IntegerOverflowError()
   return int_truncate[S32, S16](from)
 
@@ -45,7 +45,7 @@ routine S16.$create!(from: S32) -> S16
 ### :returns: The lower 16 bits of `from` interpreted as signed.
 ### :throws: {IntegerOverflowError} if `from` is not in `-32768..=32767`.
 routine S16.$create!(from: S64) -> S16
-  if not (S16_MIN <= from <= S16_MAX)
+  if not (-32768s64 <= from <= 32767s64)
     throw IntegerOverflowError()
   return int_truncate[S64, S16](from)
 
@@ -54,14 +54,14 @@ routine S16.$create!(from: S64) -> S16
 ### :returns: The lower 16 bits of `from` interpreted as signed.
 ### :throws: {IntegerOverflowError} if `from` is not in `-32768..=32767`.
 routine S16.$create!(from: S128) -> S16
-  if not (S16_MIN <= from <= S16_MAX)
+  if not (-32768s128 <= from <= 32767s128)
     throw IntegerOverflowError()
   return int_truncate[S128, S16](from)
 
 ### Zero-extends a `U8` to `S16` (always succeeds — `U8` max 255 fits in S16).
 ### :param from: The `U8` value to widen.
 ### :returns: An `S16` equal in value to `from`.
-routine S16.$create!(from: U8) -> S16
+routine S16.$create(from: U8) -> S16
   return zero_extend[U8, S16](from)
 
 ### Reinterprets a `U16` as `S16` using two's complement, throwing if the value exceeds 32767.
@@ -225,7 +225,7 @@ routine S16.$floordiv!(you: S16) -> S16
 ### :param you: The divisor.
 ### :returns: The floor modulo — result has the same sign as `you`.
 ### :throws: {DivisionByZeroError} if `you == 0`.
-routine S16.$mod(you: S16) -> S16
+routine S16.$mod!(you: S16) -> S16
   if you == 0
     throw DivisionByZeroError()
   var remainder = signed_rem[S16](me, you)
@@ -344,14 +344,14 @@ routine S16.$mul_clamp(you: S16) -> S16
 ### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
 ### :throws: {NegativeExponentError} if `exp < 0`.
 routine S16.pow_with_overflow!(exp: S16) -> (S16, Bool)
-  var result: S16 = 1
-  var base: S16 = me
-  var e: U32 = exp
-  var overflow = false
   if me == 0 and exp == 0
     throw IndeterminateResultError()
   if exp < 0
-    return NegativeExponentError()
+    throw NegativeExponentError()
+  var result: S16 = 1
+  var base: S16 = me
+  var e: U32 = U32(exp)
+  var overflow = false
   while e > 0
     if (e & 1) == 1
       var mul_result = result.mul_with_overflow(base)
@@ -382,13 +382,13 @@ routine S16.$pow!(exp: S16) -> S16
 ### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
 ### :throws: {NegativeExponentError} if `exp < 0`.
 routine S16.$pow_wrap!(exp: S16) -> S16
-  var result: S16 = 1
-  var base: S16 = me
-  var e: U32 = exp
   if me == 0 and exp == 0
     throw IndeterminateResultError()
   if exp < 0_s16
-    return NegativeExponentError()
+    throw NegativeExponentError()
+  var result: S16 = 1
+  var base: S16 = me
+  var e: U32 = U32(exp)
   while e > 0
     if (e & 1) == 1
       result = result.$mul_wrap(base)
@@ -403,13 +403,13 @@ routine S16.$pow_wrap!(exp: S16) -> S16
 ### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
 ### :throws: {NegativeExponentError} if `exp < 0`.
 routine S16.$pow_clamp!(exp: S16) -> S16
-  var result: S16 = 1
-  var base: S16 = me
-  var e: U32 = exp
   if me == 0 and exp == 0
     throw IndeterminateResultError()
   if exp < 0
-    return NegativeExponentError()
+    throw NegativeExponentError()
+  var result: S16 = 1
+  var base: S16 = me
+  var e: U32 = U32(exp)
   while e > 0
     if (e & 1) == 1
       result = result.$mul_clamp(base)

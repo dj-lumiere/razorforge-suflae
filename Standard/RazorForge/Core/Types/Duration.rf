@@ -268,13 +268,6 @@ routine Duration.int_abs() -> Duration
 routine Duration.$add(you: Duration) -> Duration
   return normalize_duration(seconds: me.seconds +% you.seconds, nanoseconds: S64(me.nanoseconds) +% S64(you.nanoseconds))
 
-### Failable variant of `$add`; delegates to `$add` and never throws.
-### :param you: The addend.
-### :returns: The combined `Duration`.
-@readonly
-routine Duration.$add!(you: Duration) -> Duration
-  return me.$add(you)
-
 ### Returns `me - you`, subtracting `you` from this duration and normalizing.
 ### :param you: The duration to subtract.
 ### :returns: The resulting `Duration`.

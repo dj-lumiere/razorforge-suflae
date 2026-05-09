@@ -73,7 +73,9 @@ routine Array[T, N].$setitem!(index: U64, value: T)
 ### :returns: The element at the resolved position.
 @readonly
 routine Array[T, N].$getitem!(index: BackIndex) -> T
-  var idx = index.resolve(N)
+  var idx = index.resolve!(N)
+  if idx >= N
+    throw IndexOutOfBoundsError(index: idx, count: N)
   return me[idx]
 
 # ============================================================================
@@ -157,7 +159,7 @@ routine Array[T, N].$iter() -> ArrayIterator[T, N]
 ### :returns: The element at the current index.
 ### :absent: All `N` elements have been yielded.
 routine ArrayIterator[T, N].$next!() -> T
-  if me.index >= N
+  if me.index >= U64(N)
     absent
   var value = me.list[me.index]
   me.index = me.index + 1u64

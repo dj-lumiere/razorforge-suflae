@@ -290,7 +290,9 @@ routine Deque[T].$setitem!(index: U64, value: T)
 ### :returns: The element at the resolved position.
 @readonly
 routine Deque[T].$getitem!(index: BackIndex) -> T
-  var idx = index.resolve(me.count)
+  var idx = index.resolve!(me.count)
+  if idx >= me.count
+    throw IndexOutOfBoundsError(index: idx, count: me.count)
   var physical_idx = me.physical_index(idx)
   return me.read_at(physical_idx)
 
@@ -298,7 +300,9 @@ routine Deque[T].$getitem!(index: BackIndex) -> T
 ### :param index: The backward position to resolve.
 ### :param value: The replacement element.
 routine Deque[T].$setitem!(index: BackIndex, value: T)
-  var idx = index.resolve(me.count)
+  var idx = index.resolve!(me.count)
+  if idx >= me.count
+    throw IndexOutOfBoundsError(index: idx, count: me.count)
   var physical_idx = me.physical_index(idx)
   me.write_at(physical_idx: physical_idx, value: value)
   return
@@ -373,9 +377,10 @@ routine Deque[T].$iter() -> DequeEmitter[T]
 routine DequeEmitter[T].$next!() -> T
   if me.index >= me.count
     absent
+  var physical = (me.start +% me.index) & (me.capacity -% 1u64)
+  lateinit var _result: T
   danger!
-    var physical = (me.start +% me.index) & (me.capacity -% 1u64)
-    var _result = me.data.offset(T.data_size() * physical).extract()
+    _result = me.data.offset(T.data_size() * physical).extract()
   me.index = me.index + 1u64
   return _result
 

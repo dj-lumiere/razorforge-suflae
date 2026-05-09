@@ -69,22 +69,22 @@ routine PriorityQueue[TPriority, TElement].$create() -> PriorityQueue[TPriority,
 routine PriorityQueue[TPriority, TElement].$create(capacity: U64) -> PriorityQueue[TPriority, TElement]
   var priority_byte_size = TPriority.data_size() * capacity
   var element_byte_size = TElement.data_size() * capacity
-  var priority_ptr = rf_allocate_dynamic_uninit(priority_byte_size)
-  var element_ptr = rf_allocate_dynamic_uninit(element_byte_size)
-  return PriorityQueue[TPriority, TElement](
-    priorities: Hijacked[TPriority](priority_ptr),
-    elements: Hijacked[TElement](element_ptr),
-    count: 0u64,
-    capacity: capacity
-  )
+  danger!
+    var priority_ptr = rf_allocate_dynamic_uninit(priority_byte_size)
+    var element_ptr = rf_allocate_dynamic_uninit(element_byte_size)
+    return PriorityQueue[TPriority, TElement](
+      priorities: Hijacked[TPriority](priority_ptr),
+      elements: Hijacked[TElement](element_ptr),
+      count: 0u64,
+      capacity: capacity
+    )
 
 ### Releases the raw heap buffers owned by this queue.
 routine PriorityQueue[TPriority, TElement].$destroy()
-  if not me.priorities.is_none()
-    danger!
+  danger!
+    if not me.priorities.is_none()
       rf_invalidate(pointer_to_int[TPriority, Address](me.priorities))
-  if not me.elements.is_none()
-    danger!
+    if not me.elements.is_none()
       rf_invalidate(pointer_to_int[TElement, Address](me.elements))
   return
 
@@ -97,30 +97,35 @@ routine PriorityQueue[TPriority, TElement].$destroy()
 ### :returns: The priority stored at that heap node.
 @inline
 routine PriorityQueue[TPriority, TElement].get_priority_raw(index: U64) -> TPriority
-  return me.priorities.offset(TPriority.data_size() * index).extract()
+  danger!
+    return me.priorities.offset(TPriority.data_size() * index).extract()
 
 ### Writes `value` into the priority buffer at `index` without bounds checking.
 ### :param index: The zero-based heap position to update.
 ### :param value: The priority value to store.
 @inline
 routine PriorityQueue[TPriority, TElement].set_priority_raw(index: U64, value: TPriority)
-  me.priorities.offset(TPriority.data_size() * index).inject(value)
+  danger!
+    me.priorities.offset(TPriority.data_size() * index).inject(value)
   return
 
 ### Returns the element at `index` without bounds checking.
 ### Paired with `get_priority_raw` when swapping heap nodes during sift operations.
 ### :param index: The zero-based heap position to read.
 ### :returns: The element stored at that heap node.
+@readonly
 @inline
 routine PriorityQueue[TPriority, TElement].get_element_raw(index: U64) -> TElement
-  return me.elements.offset(TElement.data_size() * index).extract()
+  danger!
+    return me.elements.offset(TElement.data_size() * index).extract()
 
 ### Writes `value` into the element buffer at `index` without bounds checking.
 ### :param index: The zero-based heap position to update.
 ### :param value: The element value to store.
 @inline
 routine PriorityQueue[TPriority, TElement].set_element_raw(index: U64, value: TElement)
-  me.elements.offset(TElement.data_size() * index).inject(value)
+  danger!
+    me.elements.offset(TElement.data_size() * index).inject(value)
   return
 
 ### Returns the full heap entry at `index` as a `PQEntry`.
@@ -151,21 +156,18 @@ routine PriorityQueue[TPriority, TElement].reserve(new_capacity: U64)
     var priority_byte_size = TPriority.data_size() * new_capacity
     var element_byte_size = TElement.data_size() * new_capacity
 
-    if me.priorities.is_none()
-      danger!
+    danger!
+      if me.priorities.is_none()
         var ptr = rf_allocate_dynamic_uninit(priority_byte_size)
         me.priorities = Hijacked[TPriority](ptr)
-    else
-      danger!
+      else
         var ptr = rf_reallocate_dynamic(ptr: pointer_to_int[TPriority, Address](me.priorities), size: priority_byte_size)
         me.priorities = Hijacked[TPriority](ptr)
 
-    if me.elements.is_none()
-      danger!
+      if me.elements.is_none()
         var ptr = rf_allocate_dynamic_uninit(element_byte_size)
         me.elements = Hijacked[TElement](ptr)
-    else
-      danger!
+      else
         var ptr = rf_reallocate_dynamic(ptr: pointer_to_int[TElement, Address](me.elements), size: element_byte_size)
         me.elements = Hijacked[TElement](ptr)
 
@@ -263,6 +265,7 @@ routine PriorityQueue[TPriority, TElement].sift_down(index: U64)
 
 ### Returns the number of entries currently stored in the queue.
 ### :returns: The live entry count.
+@readonly
 routine PriorityQueue[TPriority, TElement].count() -> U64
   return me.count
 
@@ -381,13 +384,13 @@ needs TElement obeys Equatable
 ### Creates a `List[PQEntry]` from the queue's current heap array in storage order.
 ### The resulting list is in heap order, not globally sorted by priority.
 ### Use `drain()` on a copy if you need priority order without consuming the queue.
-### :param from: The queue to copy entries from.
+### :param source: The queue to copy entries from.
 ### :returns: A `List[PQEntry[TPriority, TElement]]` in heap array order.
-routine List[PQEntry[TPriority, TElement]].$create(from: PriorityQueue[TPriority, TElement]) -> List[PQEntry[TPriority, TElement]]
-  var result = List[PQEntry[TPriority, TElement]](from.count())
+routine List[PQEntry[TPriority, TElement]].$create(source: PriorityQueue[TPriority, TElement]) -> List[PQEntry[TPriority, TElement]]
+  var result = List[PQEntry[TPriority, TElement]](source.count())
   var i = 0u64
-  while i < from.count()
-    result.add_last(from.get_entry_raw(i))
+  while i < source.count()
+    result.add_last(source.get_entry_raw(i))
     i = i +% 1u64
   return result
 
@@ -425,10 +428,12 @@ routine PriorityQueue[TPriority, TElement].$iter() -> PriorityQueueIterator[TPri
 routine PriorityQueueIterator[TPriority, TElement].$next!() -> PQEntry[TPriority, TElement]
   if me.index >= me.count
     absent
+  lateinit var p: TPriority
+  lateinit var e: TElement
   danger!
-    var p = me.priorities.offset(TPriority.data_size() * me.index).extract()
-    var e = me.elements.offset(TElement.data_size() * me.index).extract()
-    var _result = PQEntry[TPriority, TElement](priority: p, element: e)
+    p = me.priorities.offset(TPriority.data_size() * me.index).extract()
+    e = me.elements.offset(TElement.data_size() * me.index).extract()
+  var _result = PQEntry[TPriority, TElement](priority: p, element: e)
   me.index = me.index + 1u64
   return _result
 

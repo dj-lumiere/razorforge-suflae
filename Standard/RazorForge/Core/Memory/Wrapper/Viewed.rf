@@ -1,18 +1,20 @@
 module Core
 
+import BuilderService
+
 ### Represents temporary read-only access to an entity.
 ### `Viewed[T]` is the non-storable borrow type produced by `.view()` for single-threaded observation.
 ### :typeparam T: The entity type being viewed.
 ### :see: {Grasped[T]}, {Claimed[T]}, {Inspected[T]}, {Access-Types}
 @llvm("ptr")
 record Viewed[T] obeys Referring[T]
-needs T is EntityType
   pass
 
 ### Produces a temporary read-only view of `me`.
 ### :returns: The resulting `Viewed[T]` value.
 routine T.view() -> Viewed[T]
-  return Viewed[T](me.hijack())
+  danger!
+    return Viewed[T](me.hijack())
 
 # NOTE: No creators, no manual methods - all operations handled by compiler
 # The address member variable is managed internally by the `.view()` implementation

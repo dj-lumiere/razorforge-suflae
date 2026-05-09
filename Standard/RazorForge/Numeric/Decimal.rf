@@ -347,7 +347,7 @@ routine Decimal.round(decimal_places: S32 = 0) -> Decimal
 ### :param decimal_places: The number of digits to keep after the decimal point.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.trunc(decimal_places: S32 = 0) -> Decimal
+routine Decimal.int_truncate(decimal_places: S32 = 0) -> Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_trunc(result.handle, decimal_places, me.handle)
   return result

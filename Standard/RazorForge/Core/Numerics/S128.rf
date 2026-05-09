@@ -24,55 +24,55 @@ preset S128_ONE: S128 = 1_s128
 ### Sign-extends an `S8` to `S128` (always succeeds).
 ### :param from: The `S8` value to widen.
 ### :returns: An `S128` with the same signed value as `from`.
-routine S128.$create!(from: S8) -> S128
+routine S128.$create(from: S8) -> S128
   return sign_extend[S8, S128](from)
 
 ### Sign-extends an `S16` to `S128` (always succeeds).
 ### :param from: The `S16` value to widen.
 ### :returns: An `S128` with the same signed value as `from`.
-routine S128.$create!(from: S16) -> S128
+routine S128.$create(from: S16) -> S128
   return sign_extend[S16, S128](from)
 
 ### Sign-extends an `S32` to `S128` (always succeeds).
 ### :param from: The `S32` value to widen.
 ### :returns: An `S128` with the same signed value as `from`.
-routine S128.$create!(from: S32) -> S128
+routine S128.$create(from: S32) -> S128
   return sign_extend[S32, S128](from)
 
 ### Sign-extends an `S64` to `S128` (always succeeds).
 ### :param from: The `S64` value to widen.
 ### :returns: An `S128` with the same signed value as `from`.
-routine S128.$create!(from: S64) -> S128
+routine S128.$create(from: S64) -> S128
   return sign_extend[S64, S128](from)
 
 ### Identity conversion — returns `from` unchanged.
 ### :param from: The `S128` value to return.
 ### :returns: `from` unchanged.
-routine S128.$create!(from: S128) -> S128
+routine S128.$create(from: S128) -> S128
   return from
 
 ### Zero-extends a `U8` to `S128` (always succeeds — positive values fit).
 ### :param from: The `U8` value to widen.
 ### :returns: An `S128` equal in value to `from`.
-routine S128.$create!(from: U8) -> S128
+routine S128.$create(from: U8) -> S128
   return zero_extend[U8, S128](from)
 
 ### Zero-extends a `U16` to `S128` (always succeeds — positive values fit).
 ### :param from: The `U16` value to widen.
 ### :returns: An `S128` equal in value to `from`.
-routine S128.$create!(from: U16) -> S128
+routine S128.$create(from: U16) -> S128
   return zero_extend[U16, S128](from)
 
 ### Zero-extends a `U32` to `S128` (always succeeds — positive values fit).
 ### :param from: The `U32` value to widen.
 ### :returns: An `S128` equal in value to `from`.
-routine S128.$create!(from: U32) -> S128
+routine S128.$create(from: U32) -> S128
   return zero_extend[U32, S128](from)
 
 ### Zero-extends a `U64` to `S128` (always succeeds — positive values fit).
 ### :param from: The `U64` value to widen.
 ### :returns: An `S128` equal in value to `from`.
-routine S128.$create!(from: U64) -> S128
+routine S128.$create(from: U64) -> S128
   return zero_extend[U64, S128](from)
 
 ### Reinterprets a `U128` as `S128` using two's complement, throwing if the value exceeds S128_MAX.
@@ -222,6 +222,8 @@ routine S128.$mod!(you: S128) -> S128
 ### Returns `-me` (arithmetic negation), with wrapping behavior on `S128_MIN`.
 ### :returns: The negated value. `-S128_MIN` wraps to `S128_MIN`.
 routine S128.$neg!() -> S128
+  if me == S128_MIN
+    throw IntegerOverflowError()
   return sub[S128](0, me)
 
 # ============================================================================
@@ -335,14 +337,14 @@ routine S128.$mul_clamp(you: S128) -> S128
 ### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
 ### :throws: {NegativeExponentError} if `exp < 0`.
 routine S128.pow_with_overflow!(exp: S128) -> (S128, Bool)
-  var result: S128 = 1
-  var base: S128 = me
-  var e: U32 = exp
-  var overflow = false
   if me == 0 and exp == 0
     throw IndeterminateResultError()
   if exp < 0
-    return NegativeExponentError()
+    throw NegativeExponentError()
+  var result: S128 = 1
+  var base: S128 = me
+  var e: U32 = U32(exp)
+  var overflow = false
   while e > 0
     if (e & 1) == 1
       var mul_result = result.mul_with_overflow(base)
@@ -373,13 +375,13 @@ routine S128.$pow!(exp: S128) -> S128
 ### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
 ### :throws: {NegativeExponentError} if `exp < 0`.
 routine S128.$pow_wrap!(exp: S128) -> S128
-  var result: S128 = 1
-  var base: S128 = me
-  var e: U32 = exp
   if me == 0 and exp == 0
     throw IndeterminateResultError()
   if exp < 0_s128
-    return NegativeExponentError()
+    throw NegativeExponentError()
+  var result: S128 = 1
+  var base: S128 = me
+  var e: U32 = U32(exp)
   while e > 0
     if (e & 1) == 1
       result = result.$mul_wrap(base)
@@ -394,13 +396,13 @@ routine S128.$pow_wrap!(exp: S128) -> S128
 ### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
 ### :throws: {NegativeExponentError} if `exp < 0`.
 routine S128.$pow_clamp!(exp: S128) -> S128
-  var result: S128 = 1
-  var base: S128 = me
-  var e: U32 = exp
   if me == 0 and exp == 0
     throw IndeterminateResultError()
   if exp < 0
-    return NegativeExponentError()
+    throw NegativeExponentError()
+  var result: S128 = 1
+  var base: S128 = me
+  var e: U32 = U32(exp)
   while e > 0
     if (e & 1) == 1
       result = result.$mul_clamp(base)

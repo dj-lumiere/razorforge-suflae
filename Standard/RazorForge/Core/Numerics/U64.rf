@@ -64,19 +64,19 @@ routine U64.$create!(from: S128) -> U64
 ### Zero-extends an unsigned 8-bit integer to `U64`.
 ### :param from: The source value.
 ### :returns: The `U64` representation of `from`.
-routine U64.$create!(from: U8) -> U64
+routine U64.$create(from: U8) -> U64
   return zero_extend[U8, U64](from)
 
 ### Zero-extends an unsigned 16-bit integer to `U64`.
 ### :param from: The source value.
 ### :returns: The `U64` representation of `from`.
-routine U64.$create!(from: U16) -> U64
+routine U64.$create(from: U16) -> U64
   return zero_extend[U16, U64](from)
 
 ### Zero-extends an unsigned 32-bit integer to `U64`.
 ### :param from: The source value.
 ### :returns: The `U64` representation of `from`.
-routine U64.$create!(from: U32) -> U64
+routine U64.$create(from: U32) -> U64
   return zero_extend[U32, U64](from)
 
 ### Returns `from` unchanged (identity conversion).
@@ -104,12 +104,16 @@ routine U64.$create!(from: F16) -> U64
 ### :param from: The source float value.
 ### :returns: The truncated `U64` representation.
 routine U64.$create!(from: F32) -> U64
+  if from.is_nan() or not (0.0_f32 <= from <= 18446744073709551615.0_f32)
+    throw IntegerOverflowError()
   return float_to_unsigned[F32, U64](from)
 
 ### Truncates a 64-bit float to `U64`, rounding toward zero.
 ### :param from: The source float value.
 ### :returns: The truncated `U64` representation.
 routine U64.$create!(from: F64) -> U64
+  if from.is_nan() or not (0.0_f64 <= from <= 18446744073709551615.0_f64)
+    throw IntegerOverflowError()
   return float_to_unsigned[F64, U64](from)
 
 ### Truncates a 128-bit float to `U64` by narrowing to `F64` first.
@@ -304,12 +308,12 @@ routine U64.$mul_clamp(you: U64) -> U64
 ### :returns: A tuple of `(result, overflow_flag)`.
 ### :throws: {IndeterminateResultError} if `me == 0 and exp == 0`.
 routine U64.pow_with_overflow!(exp: U64) -> (U64, Bool)
-  var result: U64 = 1
-  var base: U64 = me
-  var e: U32 = exp
-  var overflow = false
   if me == 0 and exp == 0
     throw IndeterminateResultError()
+  var result: U64 = 1
+  var base: U64 = me
+  var e: U32 = U32(exp)
+  var overflow = false
   while e > 0
     if (e & 1) == 1
       var mul_result = result.mul_with_overflow(base)
@@ -338,11 +342,11 @@ routine U64.$pow!(exp: U64) -> U64
 ### :returns: The result modulo 2⁶⁴.
 ### :throws: {IndeterminateResultError} if `me == 0 and exp == 0`.
 routine U64.$pow_wrap!(exp: U64) -> U64
-  var result: U64 = 1
-  var base: U64 = me
-  var e: U32 = exp
   if me == 0 and exp == 0
     throw IndeterminateResultError()
+  var result: U64 = 1
+  var base: U64 = me
+  var e: U32 = U32(exp)
   while e > 0
     if (e & 1) == 1
       result = result.$mul_wrap(base)
@@ -356,11 +360,11 @@ routine U64.$pow_wrap!(exp: U64) -> U64
 ### :returns: The clamped result.
 ### :throws: {IndeterminateResultError} if `me == 0 and exp == 0`.
 routine U64.$pow_clamp!(exp: U64) -> U64
-  var result: U64 = 1
-  var base: U64 = me
-  var e: U32 = exp
   if me == 0 and exp == 0
     throw IndeterminateResultError()
+  var result: U64 = 1
+  var base: U64 = me
+  var e: U32 = U32(exp)
   while e > 0
     if (e & 1) == 1
       result = result.$mul_clamp(base)

@@ -1,5 +1,7 @@
 module Core
 
+import Collections
+
 ### Represents a 128-bit IEEE 754 decimal floating-point value.
 ### `D128` is the highest-precision fixed-size decimal type in the stdlib and is
 ### intended for calculations that need decimal semantics with substantially more
@@ -226,7 +228,7 @@ routine D128.round() -> D128
 
 ### Truncates this decimal value toward zero.
 ### :returns: The resulting `D128` value.
-routine D128.trunc() -> D128
+routine D128.int_truncate() -> D128
   return rf_d128_trunc(low: me.low, high: me.high)
 
 # ============================================================================
@@ -499,7 +501,7 @@ routine D128.$create!(from_text: Text) -> D128
       i = i + 1u64
     if not has_digit
       throw InvalidValueError(input: from_text, target: "D128")
-  var cstr_val = from_text.CStr()
+  var cstr_val = CStr(from: from_text)
   return rf_d128_from_string(cstr_val)
 
 # ============================================================================
@@ -519,50 +521,50 @@ routine D128.$hash() -> U64
 ### :returns: The resulting `Array[Byte, 16]` value.
 routine D128.to_bytes_le() -> Array[Byte, 16]
   var raw = U128(me.low) | (U128(me.high) << 64_u32)
-  var lo = trunc[U128, U64](raw)
-  var hi = trunc[U128, U64](shift_right_unsigned[U128](raw, 64_u128))
+  var lo = int_truncate[U128, U64](raw)
+  var hi = int_truncate[U128, U64](shift_right_unsigned[U128](raw, 64_u128))
   var result = Array[Byte, 16]()
-  result = set_byte_at(array: result, index: 0_u64, value: trunc[U64, U8](lo))
-  result = set_byte_at(array: result, index: 1_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 8_u64)))
-  result = set_byte_at(array: result, index: 2_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 16_u64)))
-  result = set_byte_at(array: result, index: 3_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 24_u64)))
-  result = set_byte_at(array: result, index: 4_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 32_u64)))
-  result = set_byte_at(array: result, index: 5_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 40_u64)))
-  result = set_byte_at(array: result, index: 6_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 48_u64)))
-  result = set_byte_at(array: result, index: 7_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 56_u64)))
-  result = set_byte_at(array: result, index: 8_u64, value: trunc[U64, U8](hi))
-  result = set_byte_at(array: result, index: 9_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 8_u64)))
-  result = set_byte_at(array: result, index: 10_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 16_u64)))
-  result = set_byte_at(array: result, index: 11_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 24_u64)))
-  result = set_byte_at(array: result, index: 12_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 32_u64)))
-  result = set_byte_at(array: result, index: 13_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 40_u64)))
-  result = set_byte_at(array: result, index: 14_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 48_u64)))
-  result = set_byte_at(array: result, index: 15_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 56_u64)))
+  result = set_byte_at(array: result, index: 0_u64, value: int_truncate[U64, U8](lo))
+  result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 8_u64)))
+  result = set_byte_at(array: result, index: 2_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 16_u64)))
+  result = set_byte_at(array: result, index: 3_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 24_u64)))
+  result = set_byte_at(array: result, index: 4_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 32_u64)))
+  result = set_byte_at(array: result, index: 5_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 40_u64)))
+  result = set_byte_at(array: result, index: 6_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 48_u64)))
+  result = set_byte_at(array: result, index: 7_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 56_u64)))
+  result = set_byte_at(array: result, index: 8_u64, value: int_truncate[U64, U8](hi))
+  result = set_byte_at(array: result, index: 9_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 8_u64)))
+  result = set_byte_at(array: result, index: 10_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 16_u64)))
+  result = set_byte_at(array: result, index: 11_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 24_u64)))
+  result = set_byte_at(array: result, index: 12_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 32_u64)))
+  result = set_byte_at(array: result, index: 13_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 40_u64)))
+  result = set_byte_at(array: result, index: 14_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 48_u64)))
+  result = set_byte_at(array: result, index: 15_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 56_u64)))
   return result
 
 ### Returns the raw bytes of this value in big-endian order.
 ### :returns: The resulting `Array[Byte, 16]` value.
 routine D128.to_bytes_be() -> Array[Byte, 16]
   var raw = U128(me.low) | (U128(me.high) << 64_u32)
-  var lo = bswap[U64](trunc[U128, U64](shift_right_unsigned[U128](raw, 64_u128)))
-  var hi = bswap[U64](trunc[U128, U64](raw))
+  var lo = byte_swap[U64](int_truncate[U128, U64](shift_right_unsigned[U128](raw, 64_u128)))
+  var hi = byte_swap[U64](int_truncate[U128, U64](raw))
   var result = Array[Byte, 16]()
-  result = set_byte_at(array: result, index: 0_u64, value: trunc[U64, U8](lo))
-  result = set_byte_at(array: result, index: 1_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 8_u64)))
-  result = set_byte_at(array: result, index: 2_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 16_u64)))
-  result = set_byte_at(array: result, index: 3_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 24_u64)))
-  result = set_byte_at(array: result, index: 4_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 32_u64)))
-  result = set_byte_at(array: result, index: 5_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 40_u64)))
-  result = set_byte_at(array: result, index: 6_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 48_u64)))
-  result = set_byte_at(array: result, index: 7_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 56_u64)))
-  result = set_byte_at(array: result, index: 8_u64, value: trunc[U64, U8](hi))
-  result = set_byte_at(array: result, index: 9_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 8_u64)))
-  result = set_byte_at(array: result, index: 10_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 16_u64)))
-  result = set_byte_at(array: result, index: 11_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 24_u64)))
-  result = set_byte_at(array: result, index: 12_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 32_u64)))
-  result = set_byte_at(array: result, index: 13_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 40_u64)))
-  result = set_byte_at(array: result, index: 14_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 48_u64)))
-  result = set_byte_at(array: result, index: 15_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 56_u64)))
+  result = set_byte_at(array: result, index: 0_u64, value: int_truncate[U64, U8](lo))
+  result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 8_u64)))
+  result = set_byte_at(array: result, index: 2_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 16_u64)))
+  result = set_byte_at(array: result, index: 3_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 24_u64)))
+  result = set_byte_at(array: result, index: 4_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 32_u64)))
+  result = set_byte_at(array: result, index: 5_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 40_u64)))
+  result = set_byte_at(array: result, index: 6_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 48_u64)))
+  result = set_byte_at(array: result, index: 7_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 56_u64)))
+  result = set_byte_at(array: result, index: 8_u64, value: int_truncate[U64, U8](hi))
+  result = set_byte_at(array: result, index: 9_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 8_u64)))
+  result = set_byte_at(array: result, index: 10_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 16_u64)))
+  result = set_byte_at(array: result, index: 11_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 24_u64)))
+  result = set_byte_at(array: result, index: 12_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 32_u64)))
+  result = set_byte_at(array: result, index: 13_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 40_u64)))
+  result = set_byte_at(array: result, index: 14_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 48_u64)))
+  result = set_byte_at(array: result, index: 15_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 56_u64)))
   return result
 
 ### Returns a keyed hash of this value using SipHash-2-4.

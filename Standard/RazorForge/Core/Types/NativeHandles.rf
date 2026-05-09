@@ -18,7 +18,7 @@ dangerous routine BigIntHandle.get_address() -> Address
 ### :param from: The address to wrap.
 ### :returns: The resulting `BigIntHandle` value.
 dangerous routine BigIntHandle.$create(from: Address) -> BigIntHandle
-  return int_to_pointer[Address, BigIntHandle](from)
+  return reinterpret_bits[Hijacked[BigIntHandle], BigIntHandle](int_to_pointer[Address, BigIntHandle](from))
 
 ### Returns the null `BigIntHandle` value.
 ### This sentinel indicates that no live runtime object is associated with the
@@ -51,7 +51,7 @@ dangerous routine BigDecHandle.get_address() -> Address
 ### :param from: The address to wrap.
 ### :returns: The resulting `BigDecHandle` value.
 dangerous routine BigDecHandle.$create(from: Address) -> BigDecHandle
-  return int_to_pointer[Address, BigDecHandle](from)
+  return reinterpret_bits[Hijacked[BigDecHandle], BigDecHandle](int_to_pointer[Address, BigDecHandle](from))
 
 ### Returns the null `BigDecHandle` value.
 ### This sentinel indicates that no live runtime object is associated with the

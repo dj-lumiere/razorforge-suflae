@@ -1,4 +1,6 @@
 module Core
+
+import Collections
 # Core F16 type definition - maps to LLVM half
 
 ### Represents a 16-bit IEEE 754 binary floating-point value.
@@ -399,7 +401,7 @@ routine F16.$create!(from_text: Text) -> F16
       i = i + 1u64
     if not has_digit
       throw InvalidValueError(input: from_text, target: "F16")
-  var cstr_val = from_text.CStr()
+  var cstr_val = CStr(from: from_text)
   return rf_parse_F16(cstr_val)
 
 # ============================================================================
@@ -427,7 +429,7 @@ routine F16.to_bytes_le() -> Array[Byte, 2]
 ### Returns the raw bytes of this value in big-endian order.
 ### :returns: The resulting `Array[Byte, 2]` value.
 routine F16.to_bytes_be() -> Array[Byte, 2]
-  var raw = bswap[U16](reinterpret_bits[F16, U16](me))
+  var raw = byte_swap[U16](reinterpret_bits[F16, U16](me))
   var result = Array[Byte, 2]()
   result = set_byte_at(array: result, index: 0_u64, value: int_truncate[U16, U8](raw))
   result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U16, U8](shift_right_unsigned[U16](raw, 8_u16)))

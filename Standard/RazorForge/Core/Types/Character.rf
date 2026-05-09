@@ -280,6 +280,6 @@ routine Character.is_emoji() -> Bool
 ### :param delta: The amount to add or subtract.
 ### :returns: The resulting `Character` value.
 @readonly
-routine Character.offset![I obeys Integral](delta: I) -> Character
-  var new_value = S64(U32(me)) + delta.to_s64()
+routine Character.offset!(delta: S64) -> Character
+  var new_value = S64(U32(me)) + delta
   return Character(U32(new_value))

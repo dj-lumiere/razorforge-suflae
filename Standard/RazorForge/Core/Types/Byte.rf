@@ -82,7 +82,7 @@ routine Byte.in_range(low: U8, high: U8) -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Byte.is_ascii() -> Bool
-  return U8(me) <= 0x7F
+  return U8(me) <= 0x7Fu8
 
 ### Returns `true` when this byte is the ASCII encoding of `0` through `9`.
 ### :returns: The resulting `Bool` value.

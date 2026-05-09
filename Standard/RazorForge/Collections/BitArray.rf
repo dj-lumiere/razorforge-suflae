@@ -93,7 +93,9 @@ routine BitArray[N].$getitem!(index: U64) -> Bool
 ### :returns: `true` if the bit at the resolved position is set; `false` if it is clear.
 @readonly
 routine BitArray[N].$getitem!(index: BackIndex) -> Bool
-  var idx = index.resolve(N)
+  var idx = index.resolve!(N)
+  if idx >= N
+    throw IndexOutOfBoundsError(index: idx, count: N)
   return me[idx]
 
 # ============================================================================

@@ -1,4 +1,6 @@
 module Core
+
+import Collections
 # Core F32 type definition - maps to LLVM float
 
 ### Represents a 32-bit IEEE 754 binary floating-point value.
@@ -441,7 +443,7 @@ routine F32.$create!(from_text: Text) -> F32
       i = i + 1u64
     if not has_digit
       throw InvalidValueError(input: from_text, target: "F32")
-  var cstr_val = from_text.CStr()
+  var cstr_val = CStr(from: from_text)
   return rf_parse_F32(cstr_val)
 
 # ============================================================================
@@ -471,7 +473,7 @@ routine F32.to_bytes_le() -> Array[Byte, 4]
 ### Returns the raw bytes of this value in big-endian order.
 ### :returns: The resulting `Array[Byte, 4]` value.
 routine F32.to_bytes_be() -> Array[Byte, 4]
-  var raw = bswap[U32](reinterpret_bits[F32, U32](me))
+  var raw = byte_swap[U32](reinterpret_bits[F32, U32](me))
   var result = Array[Byte, 4]()
   result = set_byte_at(array: result, index: 0_u64, value: int_truncate[U32, U8](raw))
   result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U32, U8](shift_right_unsigned[U32](raw, 8_u32)))

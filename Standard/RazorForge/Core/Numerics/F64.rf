@@ -1,4 +1,6 @@
 module Core
+
+import Collections
 # Core F64 type definition - maps to LLVM double
 
 ### A 64-bit IEEE 754 binary floating-point value (double precision).
@@ -446,7 +448,7 @@ routine F64.$create!(from_text: Text) -> F64
       i = i + 1u64
     if not has_digit
       throw InvalidValueError(input: from_text, target: "F64")
-  var cstr_val = from_text.CStr()
+  var cstr_val = CStr(from: from_text)
   return rf_parse_F64(cstr_val)
 
 # ============================================================================
@@ -480,7 +482,7 @@ routine F64.to_bytes_le() -> Array[Byte, 8]
 ### Returns the raw bytes of this value in big-endian order.
 ### :returns: The resulting `Array[Byte, 8]` value.
 routine F64.to_bytes_be() -> Array[Byte, 8]
-  var raw = bswap[U64](reinterpret_bits[F64, U64](me))
+  var raw = byte_swap[U64](reinterpret_bits[F64, U64](me))
   var result = Array[Byte, 8]()
   result = set_byte_at(array: result, index: 0_u64, value: int_truncate[U64, U8](raw))
   result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 8_u64)))

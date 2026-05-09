@@ -219,6 +219,8 @@ routine U8.$floordiv!(you: U8) -> U8
 ### :param you: The divisor.
 ### :returns: The remainder `me % you`. Behavior is undefined if `you == 0`.
 routine U8.$mod!(you: U8) -> U8
+  if you == 0_u8
+    throw DivisionByZeroError()
   return unsigned_rem[U8](me, you)
 
 # ============================================================================
@@ -311,12 +313,12 @@ routine U8.$mul_clamp(you: U8) -> U8
 ### :returns: A tuple of `(wrapped_result, overflowed)`.
 ### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
 routine U8.pow_with_overflow!(exp: U8) -> (U8, Bool)
-  var result: U8 = 1
-  var base: U8 = me
-  var e: U32 = exp
-  var overflow = false
   if me == 0 and exp == 0
     throw IndeterminateResultError()
+  var result: U8 = 1
+  var base: U8 = me
+  var e: U32 = U32(exp)
+  var overflow = false
   while e > 0
     if (e & 1) == 1
       var mul_result = result.mul_with_overflow(base)
@@ -345,11 +347,11 @@ routine U8.$pow!(exp: U8) -> U8
 ### :returns: The result modulo 256.
 ### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
 routine U8.$pow_wrap!(exp: U8) -> U8
-  var result: U8 = 1
-  var base: U8 = me
-  var e: U32 = exp
   if me == 0 and exp == 0
     throw IndeterminateResultError()
+  var result: U8 = 1
+  var base: U8 = me
+  var e: U32 = U32(exp)
   while e > 0
     if (e & 1) == 1
       result = result.$mul_wrap(base)
@@ -363,11 +365,11 @@ routine U8.$pow_wrap!(exp: U8) -> U8
 ### :returns: The result, or `255` if it would overflow.
 ### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
 routine U8.$pow_clamp!(exp: U8) -> U8
-  var result: U8 = 1
-  var base: U8 = me
-  var e: U32 = exp
   if me == 0 and exp == 0
     throw IndeterminateResultError()
+  var result: U8 = 1
+  var base: U8 = me
+  var e: U32 = U32(exp)
   while e > 0
     if (e & 1) == 1
       result = result.$mul_clamp(base)

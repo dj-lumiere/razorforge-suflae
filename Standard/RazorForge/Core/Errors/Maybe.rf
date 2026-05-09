@@ -31,26 +31,17 @@ routine Maybe[T].$diagnose() -> Text needs T is RecordType
 ### Use this when absence is a logic error rather than an expected branch.
 ### :returns: The contained `T` value.
 ### :throws: {AbsentValueError} if this `Maybe` is absent.
-routine Maybe[T].$unwrap() -> T needs T is RecordType
+routine Maybe[T].$unwrap!() -> T needs T is RecordType
   if not me.present
     throw AbsentValueError()
   return me.value
 
-### Returns the wrapped value or `default` when absent.
+### Returns the wrapped value or `fallback` when absent.
 ### This avoids branching at the call site when a fixed fallback is acceptable.
-### :param default: The fallback value to return when absent.
-### :returns: The contained `T` value, or `default` if this `Maybe` is absent.
-routine Maybe[T].$unwrap_or(default: T) -> T needs T is RecordType
+### :param fallback: The fallback value to return when absent.
+### :returns: The contained `T` value, or `fallback` if this `Maybe` is absent.
+routine Maybe[T].$unwrap_or(fallback: T) -> T needs T is RecordType
   if not me.present
-    return default
-  return me.value
-
-### Returns the wrapped value or computes a fallback when absent.
-### The fallback routine is only invoked when the optional is empty.
-### :param or_else: The fallback routine to invoke when no value is present.
-### :returns: The resulting `T` value.
-routine Maybe[T].$unwrap_or(or_else: Routine[Me, T]) -> T needs T is RecordType
-  if not me.present
-    return or_else()
+    return fallback
   return me.value
 

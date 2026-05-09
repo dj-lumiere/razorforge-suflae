@@ -67,13 +67,13 @@ routine U32.$create!(from: S128) -> U32
 ### Zero-extends a `U8` to `U32`.
 ### :param from: The `U8` value to widen.
 ### :returns: A `U32` equal in value to `from`.
-routine U32.$create!(from: U8) -> U32
+routine U32.$create(from: U8) -> U32
   return zero_extend[U8, U32](from)
 
 ### Zero-extends a `U16` to `U32`.
 ### :param from: The `U16` value to widen.
 ### :returns: A `U32` equal in value to `from`.
-routine U32.$create!(from: U16) -> U32
+routine U32.$create(from: U16) -> U32
   return zero_extend[U16, U32](from)
 
 ### Identity conversion — returns `from` unchanged.
@@ -112,6 +112,8 @@ routine U32.$create!(from: F16) -> U32
 ### :returns: The integer part of `from` as a `U32`.
 ### :throws: {IntegerOverflowError} if the value is negative or exceeds 4294967295.
 routine U32.$create!(from: F32) -> U32
+  if from.is_nan() or not (0.0_f32 <= from <= 4294967295.0_f32)
+    throw IntegerOverflowError()
   return float_to_unsigned[F32, U32](from)
 
 ### Converts an `F64` to `U32`, truncating toward zero.
@@ -119,6 +121,8 @@ routine U32.$create!(from: F32) -> U32
 ### :returns: The integer part of `from` as a `U32`.
 ### :throws: {IntegerOverflowError} if the value is negative or exceeds 4294967295.
 routine U32.$create!(from: F64) -> U32
+  if from.is_nan() or not (0.0_f64 <= from <= 4294967295.0_f64)
+    throw IntegerOverflowError()
   return float_to_unsigned[F64, U32](from)
 
 ### Converts an `F128` to `U32` by narrowing to `F64` first, then truncating.
@@ -221,6 +225,8 @@ routine U32.$floordiv!(you: U32) -> U32
 ### :param you: The divisor.
 ### :returns: The remainder `me % you`. Behavior is undefined if `you == 0`.
 routine U32.$mod!(you: U32) -> U32
+  if you == 0_u32
+    throw DivisionByZeroError()
   return unsigned_rem[U32](me, you)
 
 # ============================================================================

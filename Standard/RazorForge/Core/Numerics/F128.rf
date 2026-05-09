@@ -1,4 +1,6 @@
 module Core
+
+import Collections
 # Core F128 type definition - maps to LLVM fp128
 
 ### Represents a 128-bit IEEE 754 binary floating-point value.
@@ -593,10 +595,10 @@ routine F128.hash() -> U64
   if me.is_nan()
     lo = 0_u64
     hi = 0x7FFF800000000000_u64
-  if bits == shl[U128](zero_extend[U64, U128](0x8000000000000000_u64), 64_u32)
+  if bits == shift_left[U128](zero_extend[U64, U128](0x8000000000000000_u64), 64_u128)
     lo = 0_u64
     hi = 0_u64
-  return xor[U64](lo, mul[U64](hi, 1099511628211_u64))
+  return bit_xor[U64](lo, mul[U64](hi, 1099511628211_u64))
 
 # ============================================================================
 # Text Representation and Parsing
@@ -666,7 +668,7 @@ routine F128.$create!(from_text: Text) -> F128
       i = i + 1u64
     if not has_digit
       throw InvalidValueError(input: from_text, target: "F128")
-  var cstr_val = from_text.CStr()
+  var cstr_val = CStr(from: from_text)
   return rf_parse_F128(cstr_val)
 
 # ============================================================================
@@ -713,8 +715,8 @@ routine F128.to_bytes_be() -> Array[Byte, 16]
   var raw = reinterpret_bits[F128, U128](me)
   var lo = int_truncate[U128, U64](raw >>> 64u32)
   var hi = int_truncate[U128, U64](raw)
-  lo = bswap[U64](lo)
-  hi = bswap[U64](hi)
+  lo = byte_swap[U64](lo)
+  hi = byte_swap[U64](hi)
   var result = Array[Byte, 16]()
   result = set_byte_at(array: result, index: 0_u64, value: int_truncate[U64, U8](lo))
   result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 8_u64)))

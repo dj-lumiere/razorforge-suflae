@@ -846,24 +846,6 @@ external("C") routine rf_cstr_compare(a: CStr, b: CStr) -> S32
 external("C") routine rf_cstr_copy(dest: CStr, src: CStr) -> CStr
 
 # ============================================================================
-# Wide C String Operations (CWStr / wchar_t*)
-# ============================================================================
-
-### Returns the length of a null-terminated wide C string in code units.
-### :param ptr: The wide string pointer to measure.
-### :returns: The number of wide characters before the terminator.
-external("C") routine rf_cwstr_count(ptr: Address) -> U64
-### Compares two null-terminated wide C strings lexicographically.
-### :param a: The left-hand string.
-### :param b: The right-hand string.
-### :returns: A negative, zero, or positive comparison result.
-external("C") routine rf_cwstr_compare(a: Address, b: Address) -> S32
-### Copies a null-terminated wide C string into destination storage.
-### :param dest: The destination buffer.
-### :param src: The source string.
-external("C") routine rf_cwstr_copy(dest: Address, src: Address)
-
-# ============================================================================
 # Stack Trace + Crash Reporting
 # ============================================================================
 

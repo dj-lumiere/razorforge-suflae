@@ -1,8 +1,10 @@
 module Core
 
+import BuilderService
+
 ### Represents the `Bytes` entity.
 ### `Bytes` is an immutable owning byte sequence intended for binary data rather than text.
-entity Bytes
+entity Bytes obeys Iterable[Byte]
   ### Raw buffer of byte values.
   secret data: Hijacked[Byte]
   ### Number of bytes in the buffer.
@@ -89,15 +91,15 @@ routine Bytes.$create(ptr: Address, count: U64) -> Bytes
     return Bytes(data: buf, count: count)
 
 ### Creates a byte sequence by copying `count` bytes from a hijacked pointer.
-### :param ptr: The source pointer.
+### :param source: The source pointer.
 ### :param count: The number of bytes to copy.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.$create(ptr: Hijacked[Byte], count: U64) -> Bytes
+routine Bytes.$create(srcptr: Hijacked[Byte], count: U64) -> Bytes
   if count == 0u64
     return Bytes()
   danger!
     var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * count))
-    rf_copy_bytes_at(dest: buf.address(), src: ptr.address(), size: Byte.data_size() * count)
+    rf_copy_bytes_at(dest: buf.address(), src: srcptr.address(), size: Byte.data_size() * count)
     return Bytes(data: buf, count: count)
 
 # Core operations
@@ -259,7 +261,7 @@ routine Bytes.ends_with(suffix: Referring[Bytes]) -> Bool
   if suffix.count > me.count
     return false
   var offset = me.count - suffix.count
-  for i in 0 til suffix.count
+  for i in 0_u64 til suffix.count
     if me[offset + i] != suffix[i]
       return false
   return true
@@ -270,7 +272,7 @@ routine Bytes.ends_with(suffix: Referring[Bytes]) -> Bool
 ### :absent: Returns absent when the requested value is unavailable.
 @readonly
 routine Bytes.find!(byte: Byte) -> U64
-  for i in 0 til me.count
+  for i in 0_u64 til me.count
     if me[i] == byte
       return i
   absent
@@ -333,16 +335,16 @@ routine Bytes.repeat(times: U64) -> Bytes
 # Conversion to modifiable list
 
 ### Creates a mutable byte list by copying the contents of `Bytes`.
-### :param from: The byte sequence to convert.
+### :param source: The byte sequence to convert.
 ### :returns: The resulting `List[Byte]` value.
-routine List[Byte].$create(from: Bytes) -> List[Byte]
-  var result = List[Byte](from.count)
+routine List[Byte].$create(source: Bytes) -> List[Byte]
+  var result = List[Byte](source.count)
   var i: U64 = 0u64
   loop
-    if i >= from.count
+    if i >= source.count
       break
     danger!
-      result.add_last(from.data.stride(count: S64(i)).extract())
+      result.add_last(source.data.stride(count: S64(i)).extract())
     i += 1u64
   return result
 
@@ -421,17 +423,17 @@ routine Text.encode_as_utf8() -> Bytes
       codepoint <= 0x7Fu32 =>
         result.add_last(Byte(U8(codepoint)))
       codepoint <= 0x7FFu32 =>
-        result.add_last(Byte(U8!(0xC0u32 | (codepoint >> 6u32))))
-        result.add_last(Byte(U8!(0x80u32 | (codepoint & 0x3Fu32))))
+        result.add_last(Byte(int_truncate[U32, U8](0xC0u32 | (codepoint >> 6u32))))
+        result.add_last(Byte(int_truncate[U32, U8](0x80u32 | (codepoint & 0x3Fu32))))
       codepoint <= 0xFFFFu32 =>
-        result.add_last(Byte(U8!(0xE0u32 | (codepoint >> 12u32))))
-        result.add_last(Byte(U8!(0x80u32 | ((codepoint >> 6u32) & 0x3Fu32))))
-        result.add_last(Byte(U8!(0x80u32 | (codepoint & 0x3Fu32))))
+        result.add_last(Byte(int_truncate[U32, U8](0xE0u32 | (codepoint >> 12u32))))
+        result.add_last(Byte(int_truncate[U32, U8](0x80u32 | ((codepoint >> 6u32) & 0x3Fu32))))
+        result.add_last(Byte(int_truncate[U32, U8](0x80u32 | (codepoint & 0x3Fu32))))
       else =>
-        result.add_last(Byte(U8!(0xF0u32 | (codepoint >> 18u32))))
-        result.add_last(Byte(U8!(0x80u32 | ((codepoint >> 12u32) & 0x3Fu32))))
-        result.add_last(Byte(U8!(0x80u32 | ((codepoint >> 6u32) & 0x3Fu32))))
-        result.add_last(Byte(U8!(0x80u32 | (codepoint & 0x3Fu32))))
+        result.add_last(Byte(int_truncate[U32, U8](0xF0u32 | (codepoint >> 18u32))))
+        result.add_last(Byte(int_truncate[U32, U8](0x80u32 | ((codepoint >> 12u32) & 0x3Fu32))))
+        result.add_last(Byte(int_truncate[U32, U8](0x80u32 | ((codepoint >> 6u32) & 0x3Fu32))))
+        result.add_last(Byte(int_truncate[U32, U8](0x80u32 | (codepoint & 0x3Fu32))))
   return Bytes(from_list: result)
 
 ### Decodes this byte sequence as UTF-8, replacing malformed subsequences with
@@ -568,53 +570,125 @@ routine Bytes.decode_as_utf8!() -> Text
     result.add_last(Character(codepoint))
   return Text(from_list: result)
 
-### Represents the `BytesUtf8View` record.
+### Represents a strict lazy UTF-8 view over a borrowed `Bytes` value.
+### Iteration throws {MalformedUtf8Error} on the first ill-formed subsequence.
 record BytesUtf8View obeys Iterable[Character]
   ### Raw pointer to the underlying `Bytes` entity. Caller guarantees lifetime.
   secret bytes: Hijacked[Bytes]
 
-### Represents the `BytesUtf8Iterator` record.
+### Represents the iterator backing {BytesUtf8View}.
 record BytesUtf8Iterator
   ### Raw pointer to the underlying `Bytes` entity. Caller guarantees lifetime.
   secret bytes: Hijacked[Bytes]
   ### Stores the index.
   index: U64
 
-### Returns a lazy UTF-8 view over this byte sequence.
-### Malformed subsequences are handled lossily during iteration.
-### :returns: The resulting `BytesUtf8View` value.
-@readonly
-routine Bytes.interpret_as_utf8() -> BytesUtf8View
-  danger!
-    return BytesUtf8View(bytes: me.hijack())
+### Represents a lossy lazy UTF-8 view over a borrowed `Bytes` value.
+### Iteration substitutes U+FFFD for any ill-formed subsequence and never fails.
+record BytesUtf8LossyView obeys Iterable[Character]
+  ### Raw pointer to the underlying `Bytes` entity. Caller guarantees lifetime.
+  secret bytes: Hijacked[Bytes]
 
-### Returns a validated UTF-8 view over this byte sequence.
-### The byte sequence is checked eagerly before the lazy view is returned.
+### Represents the iterator backing {BytesUtf8LossyView}.
+record BytesUtf8LossyIterator
+  ### Raw pointer to the underlying `Bytes` entity. Caller guarantees lifetime.
+  secret bytes: Hijacked[Bytes]
+  ### Stores the index.
+  index: U64
+
+### Returns a strict lazy UTF-8 view over this byte sequence.
+### The bytes are validated eagerly so subsequent iteration is guaranteed to
+### succeed; iteration throws {MalformedUtf8Error} only if the underlying bytes
+### are mutated after construction.
 ### :returns: The resulting `BytesUtf8View` value.
+### :throws: {MalformedUtf8Error} if these bytes are not well-formed UTF-8.
 @readonly
 routine Bytes.interpret_as_utf8!() -> BytesUtf8View
-  discard me.decode_as_utf8!()
+  var validated = me.decode_as_utf8!()
   danger!
     return BytesUtf8View(bytes: me.hijack())
 
-### Returns a lazy lossy UTF-8 view over this byte sequence.
-### This is the explicit named form of `interpret_as_utf8`.
-### :returns: The resulting `BytesUtf8View` value.
+### Returns a lossy lazy UTF-8 view over this byte sequence.
+### Malformed subsequences are surfaced as the Unicode replacement character
+### (U+FFFD) during iteration.
+### :returns: The resulting `BytesUtf8LossyView` value.
 @readonly
-routine Bytes.interpret_as_utf8_lossy() -> BytesUtf8View
-  return me.interpret_as_utf8()
+routine Bytes.interpret_as_utf8_lossy() -> BytesUtf8LossyView
+  danger!
+    return BytesUtf8LossyView(bytes: me.hijack())
 
-### Returns an iterator over the UTF-8 view.
+### Returns an iterator over this strict UTF-8 view.
 ### :returns: The resulting `BytesUtf8Iterator` value.
 @readonly
 routine BytesUtf8View.$iter() -> BytesUtf8Iterator
   return BytesUtf8Iterator(bytes: me.bytes, index: 0u64)
 
-### Returns the next decoded character from this UTF-8 iterator.
-### Malformed subsequences are surfaced as the replacement character.
+### Returns an iterator over this lossy UTF-8 view.
+### :returns: The resulting `BytesUtf8LossyIterator` value.
+@readonly
+routine BytesUtf8LossyView.$iter() -> BytesUtf8LossyIterator
+  return BytesUtf8LossyIterator(bytes: me.bytes, index: 0u64)
+
+### Returns the next decoded character from this strict UTF-8 iterator.
 ### :returns: The resulting `Character` value.
-### :absent: Returns absent when the requested value is unavailable.
+### :absent: Returns absent when iteration is exhausted.
+### :throws: {MalformedUtf8Error} on the first ill-formed subsequence.
 routine BytesUtf8Iterator.$next!() -> Character
+  danger!
+    var bref = me.bytes.extract()
+    if me.index >= bref.count
+      absent
+
+    var b0 = U32(bref[me.index].codepoint())
+    var codepoint: U32 = 0u32
+
+    when
+      (b0 & 0x80u32) == 0u32 =>
+        codepoint = b0
+        me.index += 1u64
+      (b0 & 0xE0u32) == 0xC0u32 =>
+        if me.index + 1u64 >= bref.count
+          throw MalformedUtf8Error(index: me.index, reason: "truncated 2-byte sequence")
+        var b1 = U32(bref[me.index + 1u64].codepoint())
+        if (b1 & 0xC0u32) != 0x80u32 or b0 < 0xC2u32
+          throw MalformedUtf8Error(index: me.index, reason: "invalid 2-byte sequence")
+        codepoint = ((b0 & 0x1Fu32) << 6u32) | (b1 & 0x3Fu32)
+        me.index += 2u64
+      (b0 & 0xF0u32) == 0xE0u32 =>
+        if me.index + 2u64 >= bref.count
+          throw MalformedUtf8Error(index: me.index, reason: "truncated 3-byte sequence")
+        var b1 = U32(bref[me.index + 1u64].codepoint())
+        var b2 = U32(bref[me.index + 2u64].codepoint())
+        if (b1 & 0xC0u32) != 0x80u32 or (b2 & 0xC0u32) != 0x80u32
+          throw MalformedUtf8Error(index: me.index, reason: "invalid 3-byte sequence")
+        var candidate = ((b0 & 0x0Fu32) << 12u32) | ((b1 & 0x3Fu32) << 6u32) | (b2 & 0x3Fu32)
+        if candidate < 0x800u32 or (0xD800u32 <= candidate <= 0xDFFFu32)
+          throw MalformedUtf8Error(index: me.index, reason: "overlong or surrogate codepoint")
+        codepoint = candidate
+        me.index += 3u64
+      (b0 & 0xF8u32) == 0xF0u32 =>
+        if me.index + 3u64 >= bref.count
+          throw MalformedUtf8Error(index: me.index, reason: "truncated 4-byte sequence")
+        var b1 = U32(bref[me.index + 1u64].codepoint())
+        var b2 = U32(bref[me.index + 2u64].codepoint())
+        var b3 = U32(bref[me.index + 3u64].codepoint())
+        if (b1 & 0xC0u32) != 0x80u32 or (b2 & 0xC0u32) != 0x80u32 or (b3 & 0xC0u32) != 0x80u32
+          throw MalformedUtf8Error(index: me.index, reason: "invalid 4-byte sequence")
+        var candidate = ((b0 & 0x07u32) << 18u32) | ((b1 & 0x3Fu32) << 12u32) | ((b2 & 0x3Fu32) << 6u32) | (b3 & 0x3Fu32)
+        if candidate < 0x10000u32 or candidate > 0x10FFFFu32
+          throw MalformedUtf8Error(index: me.index, reason: "codepoint out of range")
+        codepoint = candidate
+        me.index += 4u64
+      else =>
+        throw MalformedUtf8Error(index: me.index, reason: "invalid leading byte")
+
+    return Character(codepoint)
+
+### Returns the next decoded character from this lossy UTF-8 iterator.
+### Malformed subsequences are surfaced as the replacement character (U+FFFD).
+### :returns: The resulting `Character` value.
+### :absent: Returns absent when iteration is exhausted.
+routine BytesUtf8LossyIterator.$next!() -> Character
   danger!
     var bref = me.bytes.extract()
     if me.index >= bref.count
@@ -634,10 +708,10 @@ routine BytesUtf8Iterator.$next!() -> Character
             codepoint = ((b0 & 0x1Fu32) << 6u32) | (b1 & 0x3Fu32)
             me.index += 2u64
           else
-            codepoint = CHARACTER_REPLACEMENT.codepoint()
+            codepoint = 0xFFFDu32
             me.index += 1u64
         else
-          codepoint = CHARACTER_REPLACEMENT.codepoint()
+          codepoint = 0xFFFDu32
           me.index += 1u64
       (b0 & 0xF0u32) == 0xE0u32 =>
         if me.index + 2u64 < bref.count
@@ -650,13 +724,13 @@ routine BytesUtf8Iterator.$next!() -> Character
               codepoint = candidate
               me.index += 3u64
             else
-              codepoint = CHARACTER_REPLACEMENT.codepoint()
+              codepoint = 0xFFFDu32
               me.index += 1u64
           else
-            codepoint = CHARACTER_REPLACEMENT.codepoint()
+            codepoint = 0xFFFDu32
             me.index += 1u64
         else
-          codepoint = CHARACTER_REPLACEMENT.codepoint()
+          codepoint = 0xFFFDu32
           me.index += 1u64
       (b0 & 0xF8u32) == 0xF0u32 =>
         if me.index + 3u64 < bref.count
@@ -670,19 +744,19 @@ routine BytesUtf8Iterator.$next!() -> Character
               codepoint = candidate
               me.index += 4u64
             else
-              codepoint = CHARACTER_REPLACEMENT.codepoint()
+              codepoint = 0xFFFDu32
               me.index += 1u64
           else
-            codepoint = CHARACTER_REPLACEMENT.codepoint()
+            codepoint = 0xFFFDu32
             me.index += 1u64
         else
-          codepoint = CHARACTER_REPLACEMENT.codepoint()
+          codepoint = 0xFFFDu32
           me.index += 1u64
       else =>
-        codepoint = CHARACTER_REPLACEMENT.codepoint()
+        codepoint = 0xFFFDu32
         me.index += 1u64
 
-  return Character(codepoint)
+    return Character(codepoint)
 
 # ============================================================================
 # C-String Interop
@@ -768,27 +842,31 @@ routine List[U16].decode_as_utf16() -> Text
 ### Returns an xxHash64 hash of the underlying byte buffer's address.
 ### :returns: A `U64` hash of this view.
 routine BytesUtf8View.$hash() -> U64
-  return __hash_leaf(v: U64(me.bytes.address()))
+  danger!
+    return __hash_leaf(v: U64(me.bytes.address()))
 
 ### Returns a SipHash-2-4 keyed hash of the underlying byte buffer's address.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
 routine BytesUtf8View.$secure_hash(k0: U64, k1: U64) -> U64
-  return __secure_hash_u64(v: U64(me.bytes.address()), k0: k0, k1: k1)
+  danger!
+    return __secure_hash_u64(v: U64(me.bytes.address()), k0: k0, k1: k1)
 
 ### Returns an xxHash64 hash of this iterator's buffer address and current index.
 ### :returns: A `U64` hash combining the buffer address and the current index.
 routine BytesUtf8Iterator.$hash() -> U64
-  var acc = __hash_round(acc: 0_u64, h: __hash_leaf(v: U64(me.bytes.address())))
-  acc = __hash_round(acc: acc, h: me.index.$hash())
-  return __hash_finalize(h: acc)
+  danger!
+    var acc = __hash_round(acc: 0_u64, h: __hash_leaf(v: U64(me.bytes.address())))
+    acc = __hash_round(acc: acc, h: me.index.$hash())
+    return __hash_finalize(h: acc)
 
 ### Returns a SipHash-2-4 keyed hash of this iterator.
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
 routine BytesUtf8Iterator.$secure_hash(k0: U64, k1: U64) -> U64
-  var acc = __hash_round(acc: 0_u64, h: __secure_hash_u64(v: U64(me.bytes.address()), k0: k0, k1: k1))
-  acc = __hash_round(acc: acc, h: me.index.$secure_hash(k0: k0, k1: k1))
-  return __hash_finalize(h: acc)
+  danger!
+    var acc = __hash_round(acc: 0_u64, h: __secure_hash_u64(v: U64(me.bytes.address()), k0: k0, k1: k1))
+    acc = __hash_round(acc: acc, h: me.index.$secure_hash(k0: k0, k1: k1))
+    return __hash_finalize(h: acc)
