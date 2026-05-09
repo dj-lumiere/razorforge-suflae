@@ -597,6 +597,18 @@ public sealed partial class SemanticVerifier
                         isFailable: isFailableMethodCall);
                 }
 
+                // Generic-parameter receiver: resolve via Obeys constraints from the current
+                // routine and its owner type. e.g. `key.$hash()` where `K obeys Hashable`
+                // dispatches through Hashable's protocol method.
+                if (method == null && dispatchType is GenericParameterTypeInfo genParam)
+                {
+                    var constraints = ActiveConstraintsFor(paramName: genParam.Name).ToList();
+                    method = _registry.LookupMethodViaConstraints(param: genParam,
+                        methodName: callLookupName,
+                        isFailable: isFailableMethodCall,
+                        constraints: constraints);
+                }
+
                 if (method != null && !method.IsGenericDefinition && call.Arguments.Count > 0)
                 {
                     var resolvedArgTypes = new List<TypeSymbol>(capacity: call.Arguments.Count);
@@ -660,9 +672,12 @@ public sealed partial class SemanticVerifier
                         }
                     }
 
-                    // #151: Static/instance mismatch — common routine called on instance
+                    // #151: Static/instance mismatch — common routine called on instance.
+                    // Generic type parameters (e.g., `T` inside `Dict[K, V]` body) are not
+                    // registered as types but ARE valid receivers for common routines.
                     if (method.IsCommon && member.Object is IdentifierExpression instanceId &&
-                        LookupTypeWithImports(name: instanceId.Name) == null)
+                        LookupTypeWithImports(name: instanceId.Name) == null &&
+                        !IsGenericParameter(name: instanceId.Name))
                     {
                         ReportError(code: SemanticDiagnosticCode.CommonRoutineMismatch,
                             message:

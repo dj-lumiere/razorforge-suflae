@@ -652,6 +652,7 @@ public sealed partial class StdlibLoader
             IsFailable = routine.IsFailable,
             IsVariadic = routine.Parameters.Any(predicate: p => p.IsVariadic),
             GenericParameters = routine.GenericParameters,
+            GenericConstraints = routine.GenericConstraints,
             AsyncStatus = routine.Async,
             Annotations = routine.Annotations,
             IsDangerous = routine.IsDangerous,
@@ -782,6 +783,7 @@ public sealed partial class StdlibLoader
             Visibility = record.Visibility,
             ImplementedProtocols = protocols,
             GenericParameters = record.GenericParameters,
+            GenericConstraints = record.GenericConstraints,
             BackendType = ExtractLlvmAnnotation(annotations: record.Annotations),
             CarrierKind = inheritedCarrierKind
         };
@@ -940,7 +942,8 @@ public sealed partial class StdlibLoader
             Module = moduleName,
             Visibility = entity.Visibility,
             ImplementedProtocols = protocols,
-            GenericParameters = entity.GenericParameters
+            GenericParameters = entity.GenericParameters,
+            GenericConstraints = entity.GenericConstraints
         };
 
         // Back-fill Owner + Index now that typeInfo exists (Owner is needed for module access checks)
@@ -1096,7 +1099,8 @@ public sealed partial class StdlibLoader
         {
             Module = moduleName,
             Members = members,
-            GenericParameters = variant.GenericParameters
+            GenericParameters = variant.GenericParameters,
+            GenericConstraints = variant.GenericConstraints
         };
 
         registry.RegisterType(type: typeInfo);
@@ -1132,7 +1136,8 @@ public sealed partial class StdlibLoader
             Module = moduleName,
             Visibility = protocol.Visibility,
             Methods = [], // Filled in by FillProtocolMethods
-            GenericParameters = protocol.GenericParameters
+            GenericParameters = protocol.GenericParameters,
+            GenericConstraints = protocol.GenericConstraints
         };
 
         registry.RegisterType(type: typeInfo);

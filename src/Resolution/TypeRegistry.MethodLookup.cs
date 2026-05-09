@@ -504,6 +504,10 @@ public sealed partial class TypeRegistry
             return SubstituteMethodForOwner(method: universalMethod, resolvedOwner: type);
         }
 
+        // Generic parameter receivers route through caller-supplied constraints — see
+        // LookupMethodViaConstraints below. The plain LookupMethod path has no routine
+        // context to discover Obeys constraints, so it cannot resolve them here.
+
         // Check implemented protocols for default implementations
         IReadOnlyList<TypeInfo>? protocols = type switch
         {
@@ -521,6 +525,38 @@ public sealed partial class TypeRegistry
                 {
                     return protocolMethod;
                 }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves a method on a generic-parameter receiver by walking <c>Obeys</c> constraints
+    /// supplied by the caller (typically the current routine + its owner type). Each constraint
+    /// protocol is queried via <see cref="LookupMethod"/>, which synthesizes a <see cref="RoutineInfo"/>
+    /// from the matching <see cref="ProtocolMethodInfo"/>. Returns the first hit, or null.
+    /// </summary>
+    public RoutineInfo? LookupMethodViaConstraints(GenericParameterTypeInfo param,
+        string methodName, bool? isFailable,
+        IEnumerable<GenericConstraintDeclaration> constraints)
+    {
+        foreach (GenericConstraintDeclaration c in constraints)
+        {
+            if (c.ParameterName != param.Name ||
+                c.ConstraintType != ConstraintKind.Obeys ||
+                c.ConstraintTypes == null)
+                continue;
+            foreach (TypeExpression protocolExpr in c.ConstraintTypes)
+            {
+                TypeInfo? proto = LookupType(name: protocolExpr.Name);
+                if (proto is not ProtocolTypeInfo)
+                    continue;
+                RoutineInfo? method = LookupMethod(type: proto,
+                    methodName: methodName,
+                    isFailable: isFailable);
+                if (method != null)
+                    return method;
             }
         }
 

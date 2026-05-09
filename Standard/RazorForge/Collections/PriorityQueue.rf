@@ -370,6 +370,7 @@ routine PriorityQueue[TPriority, TElement].drain() -> List[TElement]
 ### :returns: `true` if `element` is found in any heap entry; `false` otherwise.
 @readonly
 routine PriorityQueue[TPriority, TElement].$contains(element: TElement) -> Bool
+needs TElement obeys Equatable
   var i = 0u64
   while i < me.count
     if me.get_element_raw(i) == element

@@ -345,6 +345,14 @@ public sealed partial class SemanticVerifier
             return true;
         }
 
+        // FullName equality: handles wrapper types where Name may be bare ("Hijacked") on
+        // one side but parameterized ("Hijacked[Core.U8]") on the other due to differing
+        // construction paths. FullName normalizes both forms.
+        if (source.FullName == target.FullName)
+        {
+            return true;
+        }
+
         // Error types are assignable to anything (to reduce cascading errors)
         if (source.Category == TypeCategory.Error || target.Category == TypeCategory.Error)
         {
@@ -380,6 +388,15 @@ public sealed partial class SemanticVerifier
         {
             return ImplementsProtocol(type: source, protocolName: target.Name);
         }
+
+        // Const generic: `needs N is U64` means N is a U64 value at runtime.
+        // Treat N as assignable to U64 (and vice versa).
+        if (source is GenericParameterTypeInfo srcGen &&
+            ConstGenericMatches(paramName: srcGen.Name, otherTypeName: target.Name))
+            return true;
+        if (target is GenericParameterTypeInfo tgtGen &&
+            ConstGenericMatches(paramName: tgtGen.Name, otherTypeName: source.Name))
+            return true;
 
         // None (Maybe generic def) is assignable to any Maybe[T]
         if (source.IsGenericDefinition && source.Name == "Maybe" && IsMaybeType(type: target))
@@ -481,14 +498,27 @@ public sealed partial class SemanticVerifier
         {
             foreach (GenericConstraintDeclaration c in ActiveConstraintsFor(paramName: type.Name))
             {
-                if (c.ConstraintType != ConstraintKind.Obeys || c.ConstraintTypes == null)
-                    continue;
-                foreach (TypeExpression protocolExpr in c.ConstraintTypes)
+                if (c.ConstraintType == ConstraintKind.Obeys && c.ConstraintTypes != null)
                 {
-                    TypeSymbol? proto = _registry.LookupType(name: protocolExpr.Name);
-                    if (proto is ProtocolTypeInfo protoType &&
-                        protoType.Methods.Any(m => m.Name == methodName || m.Name + "!" == methodName))
-                        return true;
+                    foreach (TypeExpression protocolExpr in c.ConstraintTypes)
+                    {
+                        TypeSymbol? proto = _registry.LookupType(name: protocolExpr.Name);
+                        if (proto is ProtocolTypeInfo &&
+                            ProtocolDeclaresMethod(proto: proto, methodName: methodName))
+                            return true;
+                    }
+                }
+                // `needs N is U64` — operator support follows the underlying value type.
+                else if (c.ConstraintType == ConstraintKind.ConstGeneric && c.ConstraintTypes != null)
+                {
+                    foreach (TypeExpression ct in c.ConstraintTypes)
+                    {
+                        TypeSymbol? underlying = _registry.LookupType(name: ct.Name);
+                        if (underlying != null &&
+                            underlying.Category != TypeCategory.Protocol &&
+                            _registry.LookupMethod(type: underlying, methodName: methodName) != null)
+                            return true;
+                    }
                 }
             }
         }
@@ -500,6 +530,44 @@ public sealed partial class SemanticVerifier
     /// Yields all active generic constraints for the named parameter from the current routine
     /// and its owner type.
     /// </summary>
+    /// <summary>
+    /// Returns true if the named generic parameter has a `is &lt;TypeName&gt;` const-generic
+    /// constraint matching <paramref name="otherTypeName"/>. Note: ConstraintKind.ConstGeneric is
+    /// also used for `is EntityType`/`is RecordType` etc., which don't represent value types —
+    /// callers handle those via Category checks first.
+    /// </summary>
+    /// <summary>
+    /// Returns true if the protocol (or any protocol it transitively obeys) declares a method
+    /// matching the given name. e.g. <c>Comparable</c> obeys <c>Equatable</c>, so
+    /// <c>$eq</c> is reachable through <c>Comparable</c>.
+    /// </summary>
+    private bool ProtocolDeclaresMethod(TypeSymbol proto, string methodName,
+        HashSet<string>? visited = null)
+    {
+        if (proto is not ProtocolTypeInfo p) return false;
+        visited ??= new HashSet<string>(StringComparer.Ordinal);
+        if (!visited.Add(item: p.Name)) return false;
+        if (p.Methods.Any(predicate: m =>
+                m.Name == methodName || m.Name + "!" == methodName))
+            return true;
+        foreach (ProtocolTypeInfo parent in p.ParentProtocols)
+            if (ProtocolDeclaresMethod(proto: parent, methodName: methodName, visited: visited))
+                return true;
+        return false;
+    }
+
+    private bool ConstGenericMatches(string paramName, string otherTypeName)
+    {
+        foreach (GenericConstraintDeclaration c in ActiveConstraintsFor(paramName: paramName))
+        {
+            if (c.ConstraintType != ConstraintKind.ConstGeneric || c.ConstraintTypes == null)
+                continue;
+            foreach (TypeExpression ct in c.ConstraintTypes)
+                if (ct.Name == otherTypeName) return true;
+        }
+        return false;
+    }
+
     private IEnumerable<GenericConstraintDeclaration> ActiveConstraintsFor(string paramName)
     {
         if (_currentRoutine?.GenericConstraints != null)

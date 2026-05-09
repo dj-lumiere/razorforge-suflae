@@ -371,6 +371,7 @@ routine List[T].$eq(other: List[T]) -> Bool
 ### :returns: `true` if `value` is found; `false` if no element matches.
 @readonly
 routine List[T].$contains(value: T) -> Bool
+needs T obeys Equatable
   var i = 0u64
   while i < me.count()
     if me[i] == value

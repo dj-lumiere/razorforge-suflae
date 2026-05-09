@@ -407,6 +407,7 @@ routine Deque[T].last_or_default(default_value: T) -> T
 ### :returns: `true` if `value` is found; `false` if no element matches.
 @readonly
 routine Deque[T].$contains(value: T) -> Bool
+needs T obeys Equatable
   var i = 0u64
   while i < me.count
     if me[i] == value

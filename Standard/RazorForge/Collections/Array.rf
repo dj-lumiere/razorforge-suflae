@@ -117,6 +117,7 @@ routine Array[T, N].last!() -> T
 ### :returns: `true` if `value` is found; `false` otherwise.
 @readonly
 routine Array[T, N].$contains(value: T) -> Bool
+needs T obeys Equatable
   for i in 0u64 til N
     if me[i] == value
       return true
@@ -128,6 +129,7 @@ routine Array[T, N].$contains(value: T) -> Bool
 ### :absent: No element equals `value`.
 @readonly
 routine Array[T, N].index_of!(value: T) -> U64
+needs T obeys Equatable
   for i in 0u64 til N
     if me[i] == value
       return i
