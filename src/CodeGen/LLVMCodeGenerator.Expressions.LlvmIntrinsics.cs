@@ -218,6 +218,34 @@ public partial class LlvmCodeGenerator
     /// Emits LLVM IR from a template mold string with <c>{hole}</c> substitution.
     /// Supports multi-line templates (for overflow intrinsics, alloca/GEP patterns, etc.).
     /// </summary>
+    /// LLVM rejects bitcast between integer and pointer types. The reinterpret_bits intrinsic
+    /// template emits `bitcast {From} {value} to {To}`, which is invalid when one side is `ptr`
+    /// and the other is `iN`. Rewrite those cases to use `inttoptr` / `ptrtoint`.
+    private static string FixIntPtrBitcast(string line)
+    {
+        const string marker = "= bitcast ";
+        int idx = line.IndexOf(value: marker, comparisonType: StringComparison.Ordinal);
+        if (idx < 0) return line;
+        int valueStart = idx + marker.Length;
+        int toIdx = line.IndexOf(value: " to ", startIndex: valueStart,
+            comparisonType: StringComparison.Ordinal);
+        if (toIdx < 0) return line;
+        string fromType = line.Substring(startIndex: valueStart, length: toIdx - valueStart)
+            .Split(separator: ' ')[0];
+        string toType = line.Substring(startIndex: toIdx + 4).Trim();
+        bool fromIsInt = fromType.Length > 1 && fromType[0] == 'i' && char.IsDigit(c: fromType[1]);
+        bool toIsInt = toType.Length > 1 && toType[0] == 'i' && char.IsDigit(c: toType[1]);
+        bool fromIsPtr = fromType == "ptr";
+        bool toIsPtr = toType == "ptr";
+        if (fromIsInt && toIsPtr)
+            return line.Substring(startIndex: 0, length: idx + 2) + "inttoptr " +
+                   line.Substring(startIndex: valueStart);
+        if (fromIsPtr && toIsInt)
+            return line.Substring(startIndex: 0, length: idx + 2) + "ptrtoint " +
+                   line.Substring(startIndex: valueStart);
+        return line;
+    }
+
     private string EmitFromTemplate(StringBuilder sb, string mold, RoutineInfo method,
         List<string> llvmTypeArgs, List<string> args)
     {
@@ -271,6 +299,8 @@ public partial class LlvmCodeGenerator
                 substituted = substituted.Replace(oldValue: $"{{{paramName}}}",
                     newValue: args[index: i]);
             }
+
+            substituted = FixIntPtrBitcast(line: substituted);
 
             EmitLine(sb: sb, line: $"  {substituted}");
 
