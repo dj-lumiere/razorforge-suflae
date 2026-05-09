@@ -137,13 +137,13 @@ routine CStr.$getitem!(index: U64) -> Byte
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine CStr.$eq(you: CStr) -> Bool
-  return rf_cstr_compare(me, you) == 0s32
+  return rf_cstr_compare(a: me, b: you) == 0s32
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine CStr.$cmp(you: CStr) -> ComparisonSign
-  var cmp = rf_cstr_compare(me, you)
+  var cmp = rf_cstr_compare(a: me, b: you)
   if cmp < 0s32
     return ME_SMALL
   if cmp > 0s32
@@ -156,7 +156,7 @@ routine CStr.$cmp(you: CStr) -> ComparisonSign
 routine CStr.copy() -> CStr
   var len = me.count()
   var buffer = Hijacked[Byte](rf_allocate_dynamic(len + 1u64))
-  rf_cstr_copy(CStr(from_ptr: buffer), me)
+  rf_cstr_copy(dest: CStr(from_ptr: buffer), src: me)
   return reinterpret_bits[Hijacked[Byte], CStr](buffer)
 
 ### Copies the bytes of a C string into an immutable `Bytes` value.

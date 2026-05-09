@@ -138,8 +138,8 @@ routine PriorityQueue[TPriority, TElement].get_entry_raw(index: U64) -> PQEntry[
 ### :param entry: The entry whose priority and element to store.
 @inline
 routine PriorityQueue[TPriority, TElement].set_entry_raw(index: U64, entry: PQEntry[TPriority, TElement])
-  me.set_priority_raw(index, entry.priority)
-  me.set_element_raw(index, entry.element)
+  me.set_priority_raw(index: index, value: entry.priority)
+  me.set_element_raw(index: index, value: entry.element)
   return
 
 ### Ensures the queue can hold at least `new_capacity` entries without growing again.
@@ -157,7 +157,7 @@ routine PriorityQueue[TPriority, TElement].reserve(new_capacity: U64)
         me.priorities = Hijacked[TPriority](ptr)
     else
       danger!
-        var ptr = rf_reallocate_dynamic(pointer_to_int[TPriority, Address](me.priorities), priority_byte_size)
+        var ptr = rf_reallocate_dynamic(ptr: pointer_to_int[TPriority, Address](me.priorities), size: priority_byte_size)
         me.priorities = Hijacked[TPriority](ptr)
 
     if me.elements.is_none()
@@ -166,7 +166,7 @@ routine PriorityQueue[TPriority, TElement].reserve(new_capacity: U64)
         me.elements = Hijacked[TElement](ptr)
     else
       danger!
-        var ptr = rf_reallocate_dynamic(pointer_to_int[TElement, Address](me.elements), element_byte_size)
+        var ptr = rf_reallocate_dynamic(ptr: pointer_to_int[TElement, Address](me.elements), size: element_byte_size)
         me.elements = Hijacked[TElement](ptr)
 
     me.capacity = new_capacity
@@ -213,13 +213,13 @@ routine PriorityQueue[TPriority, TElement].sift_up(index: U64)
     var p = me.parent_index(hole_idx)
     var parent_priority = me.get_priority_raw(p)
     if hole_priority < parent_priority
-      me.set_priority_raw(hole_idx, parent_priority)
-      me.set_element_raw(hole_idx, me.get_element_raw(p))
+      me.set_priority_raw(index: hole_idx, value: parent_priority)
+      me.set_element_raw(index: hole_idx, value: me.get_element_raw(p))
       hole_idx = p
     else
       break
-  me.set_priority_raw(hole_idx, hole_priority)
-  me.set_element_raw(hole_idx, hole_element)
+  me.set_priority_raw(index: hole_idx, value: hole_priority)
+  me.set_element_raw(index: hole_idx, value: hole_element)
   return
 
 ### Restores the min-heap property by pushing the entry at `index` toward the leaves.
@@ -249,12 +249,12 @@ routine PriorityQueue[TPriority, TElement].sift_down(index: U64)
     if hole_priority <= child_priority
       break
 
-    me.set_priority_raw(hole_idx, child_priority)
-    me.set_element_raw(hole_idx, me.get_element_raw(child))
+    me.set_priority_raw(index: hole_idx, value: child_priority)
+    me.set_element_raw(index: hole_idx, value: me.get_element_raw(child))
     hole_idx = child
 
-  me.set_priority_raw(hole_idx, hole_priority)
-  me.set_element_raw(hole_idx, hole_element)
+  me.set_priority_raw(index: hole_idx, value: hole_priority)
+  me.set_element_raw(index: hole_idx, value: hole_element)
   return
 
 # ============================================================================
@@ -286,8 +286,8 @@ routine PriorityQueue[TPriority, TElement].add(element: TElement, priority: TPri
     me.grow()
 
   var insert_idx = me.count
-  me.set_priority_raw(insert_idx, priority)
-  me.set_element_raw(insert_idx, element)
+  me.set_priority_raw(index: insert_idx, value: priority)
+  me.set_element_raw(index: insert_idx, value: element)
   me.count = insert_idx +% 1u64
   me.sift_up(insert_idx)
   return
@@ -303,8 +303,8 @@ routine PriorityQueue[TPriority, TElement].remove!() -> TElement
   var result = me.get_element_raw(0u64)
   var last_idx = me.count - 1u64
   if last_idx > 0u64
-    me.set_priority_raw(0u64, me.get_priority_raw(last_idx))
-    me.set_element_raw(0u64, me.get_element_raw(last_idx))
+    me.set_priority_raw(index: 0u64, value: me.get_priority_raw(last_idx))
+    me.set_element_raw(index: 0u64, value: me.get_element_raw(last_idx))
   me.count = last_idx
 
   if not me.is_empty()
@@ -348,7 +348,7 @@ routine PriorityQueue[TPriority, TElement].add_all(elements: List[TElement], pri
   var i = 0u64
   var limit = if elements.count() < priorities.count() then elements.count() else priorities.count()
   while i < limit
-    me.add(elements[i], priorities[i])
+    me.add(element: elements[i], priority: priorities[i])
     i = i +% 1u64
   return
 

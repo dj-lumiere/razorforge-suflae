@@ -125,7 +125,7 @@ routine F16.$create(from: D64) -> F16
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F16` value.
 routine F16.$create(from: D128) -> F16
-  var f32_val = rf_d128_to_f32(from.low_bits(), from.high_bits())
+  var f32_val = rf_d128_to_f32(low: from.low_bits(), high: from.high_bits())
   return float_narrow[F32, F16](f32_val)
 
 # ============================================================================
@@ -420,8 +420,8 @@ routine F16.$hash() -> U64
 routine F16.to_bytes_le() -> Array[Byte, 2]
   var raw = reinterpret_bits[F16, U16](me)
   var result = Array[Byte, 2]()
-  result = set_byte_at(result, 0_u64, int_truncate[U16, U8](raw))
-  result = set_byte_at(result, 1_u64, int_truncate[U16, U8](shift_right_unsigned[U16](raw, 8_u16)))
+  result = set_byte_at(array: result, index: 0_u64, value: int_truncate[U16, U8](raw))
+  result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U16, U8](shift_right_unsigned[U16](raw, 8_u16)))
   return result
 
 ### Returns the raw bytes of this value in big-endian order.
@@ -429,8 +429,8 @@ routine F16.to_bytes_le() -> Array[Byte, 2]
 routine F16.to_bytes_be() -> Array[Byte, 2]
   var raw = bswap[U16](reinterpret_bits[F16, U16](me))
   var result = Array[Byte, 2]()
-  result = set_byte_at(result, 0_u64, int_truncate[U16, U8](raw))
-  result = set_byte_at(result, 1_u64, int_truncate[U16, U8](shift_right_unsigned[U16](raw, 8_u16)))
+  result = set_byte_at(array: result, index: 0_u64, value: int_truncate[U16, U8](raw))
+  result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U16, U8](shift_right_unsigned[U16](raw, 8_u16)))
   return result
 
 ### Returns a keyed hash of this value using SipHash-2-4.

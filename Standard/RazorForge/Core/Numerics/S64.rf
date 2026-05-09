@@ -127,7 +127,7 @@ routine S64.$create!(from: D64) -> S64
 ### :param from: The source decimal float value.
 ### :returns: The truncated `S64` representation.
 routine S64.$create!(from: D128) -> S64
-  return d128_to_s64(from.low, from.high)
+  return d128_to_s64(low: from.low, high: from.high)
 
 # ============================================================================
 # Arithmetic Operations

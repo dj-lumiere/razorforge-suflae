@@ -133,7 +133,7 @@ routine D128.$create(from: D128) -> D128
 ### :returns: The resulting `D128` value.
 ### :throws: {NumericOverflowError} if the result is non-finite.
 routine D128.$add!(you: D128) -> D128
-  var result = rf_d128_add(me.low, me.high, you.low, you.high)
+  var result = rf_d128_add(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
   if not result.is_finite()
     throw NumericOverflowError(description: f"D128 addition produced non-finite result: {me} + {you}")
   return result
@@ -143,7 +143,7 @@ routine D128.$add!(you: D128) -> D128
 ### :returns: The resulting `D128` value.
 ### :throws: {NumericOverflowError} if the result is non-finite.
 routine D128.$sub!(you: D128) -> D128
-  var result = rf_d128_sub(me.low, me.high, you.low, you.high)
+  var result = rf_d128_sub(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
   if not result.is_finite()
     throw NumericOverflowError(description: f"D128 subtraction produced non-finite result: {me} - {you}")
   return result
@@ -153,7 +153,7 @@ routine D128.$sub!(you: D128) -> D128
 ### :returns: The resulting `D128` value.
 ### :throws: {NumericOverflowError} if the result is non-finite.
 routine D128.$mul!(you: D128) -> D128
-  var result = rf_d128_mul(me.low, me.high, you.low, you.high)
+  var result = rf_d128_mul(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
   if not result.is_finite()
     throw NumericOverflowError(description: f"D128 multiplication produced non-finite result: {me} * {you}")
   return result
@@ -163,7 +163,7 @@ routine D128.$mul!(you: D128) -> D128
 ### :returns: The resulting `D128` value.
 ### :throws: {NumericOverflowError} if the result is non-finite (including division by zero).
 routine D128.$truediv!(you: D128) -> D128
-  var result = rf_d128_div(me.low, me.high, you.low, you.high)
+  var result = rf_d128_div(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
   if not result.is_finite()
     throw NumericOverflowError(description: f"D128 division produced non-finite result: {me} / {you}")
   return result
@@ -172,7 +172,7 @@ routine D128.$truediv!(you: D128) -> D128
 ### :returns: The resulting `D128` value.
 routine D128.$neg() -> D128
   var zero = D128_ZERO
-  return rf_d128_sub(zero.low, zero.high, me.low, me.high)
+  return rf_d128_sub(a_low: zero.low, a_high: zero.high, b_low: me.low, b_high: me.high)
 
 # ============================================================================
 # Comparison Operations
@@ -182,13 +182,13 @@ routine D128.$neg() -> D128
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine D128.$eq(you: D128) -> Bool
-  return rf_d128_cmp(me.low, me.high, you.low, you.high) == 0
+  return rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high) == 0
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine D128.$cmp(you: D128) -> ComparisonSign
-  var cmp = rf_d128_cmp(me.low, me.high, you.low, you.high)
+  var cmp = rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
   if cmp < 0
     return ME_SMALL
   if cmp > 0
@@ -202,32 +202,32 @@ routine D128.$cmp(you: D128) -> ComparisonSign
 ### Returns the decimal square root of this value.
 ### :returns: The resulting `D128` value.
 routine D128.sqrt() -> D128
-  return rf_d128_sqrt(me.low, me.high)
+  return rf_d128_sqrt(low: me.low, high: me.high)
 
 ### Returns the absolute value.
 ### :returns: The resulting `D128` value.
 routine D128.abs() -> D128
-  return rf_d128_abs(me.low, me.high)
+  return rf_d128_abs(low: me.low, high: me.high)
 
 ### Rounds this decimal value toward positive infinity.
 ### :returns: The resulting `D128` value.
 routine D128.ceil() -> D128
-  return rf_d128_ceil(me.low, me.high)
+  return rf_d128_ceil(low: me.low, high: me.high)
 
 ### Rounds this decimal value toward negative infinity.
 ### :returns: The resulting `D128` value.
 routine D128.floor() -> D128
-  return rf_d128_floor(me.low, me.high)
+  return rf_d128_floor(low: me.low, high: me.high)
 
 ### Rounds this decimal value to the nearest integral decimal value.
 ### :returns: The resulting `D128` value.
 routine D128.round() -> D128
-  return rf_d128_round(me.low, me.high)
+  return rf_d128_round(low: me.low, high: me.high)
 
 ### Truncates this decimal value toward zero.
 ### :returns: The resulting `D128` value.
 routine D128.trunc() -> D128
-  return rf_d128_trunc(me.low, me.high)
+  return rf_d128_trunc(low: me.low, high: me.high)
 
 # ============================================================================
 # Trigonometric Functions (via F128 conversion + LibBF)
@@ -236,38 +236,38 @@ routine D128.trunc() -> D128
 ### Returns the sine of this decimal value, interpreting it as radians.
 ### :returns: The resulting `D128` value.
 routine D128.sin() -> D128
-  return rf_d128_sin(me.low, me.high)
+  return rf_d128_sin(low: me.low, high: me.high)
 
 ### Returns the cosine of this decimal value, interpreting it as radians.
 ### :returns: The resulting `D128` value.
 routine D128.cos() -> D128
-  return rf_d128_cos(me.low, me.high)
+  return rf_d128_cos(low: me.low, high: me.high)
 
 ### Returns the tangent of this decimal value, interpreting it as radians.
 ### :returns: The resulting `D128` value.
 routine D128.tan() -> D128
-  return rf_d128_tan(me.low, me.high)
+  return rf_d128_tan(low: me.low, high: me.high)
 
 ### Returns the inverse sine of this decimal value.
 ### :returns: The resulting `D128` value.
 routine D128.asin() -> D128
-  return rf_d128_asin(me.low, me.high)
+  return rf_d128_asin(low: me.low, high: me.high)
 
 ### Returns the inverse cosine of this decimal value.
 ### :returns: The resulting `D128` value.
 routine D128.acos() -> D128
-  return rf_d128_acos(me.low, me.high)
+  return rf_d128_acos(low: me.low, high: me.high)
 
 ### Returns the inverse tangent of this decimal value.
 ### :returns: The resulting `D128` value.
 routine D128.atan() -> D128
-  return rf_d128_atan(me.low, me.high)
+  return rf_d128_atan(low: me.low, high: me.high)
 
 ### Returns the quadrant-aware angle of the point `(x, me)`.
 ### :param x: The x-coordinate paired with this y-coordinate.
 ### :returns: The resulting `D128` value.
 routine D128.atan2(x: D128) -> D128
-  return rf_d128_atan2(me.low, me.high, x.low, x.high)
+  return rf_d128_atan2(y_low: me.low, y_high: me.high, x_low: x.low, x_high: x.high)
 
 # ============================================================================
 # Hyperbolic Functions (via F128 conversion + LibBF)
@@ -276,17 +276,17 @@ routine D128.atan2(x: D128) -> D128
 ### Returns the hyperbolic sine of this decimal value.
 ### :returns: The resulting `D128` value.
 routine D128.sinh() -> D128
-  return rf_d128_sinh(me.low, me.high)
+  return rf_d128_sinh(low: me.low, high: me.high)
 
 ### Returns the hyperbolic cosine of this decimal value.
 ### :returns: The resulting `D128` value.
 routine D128.cosh() -> D128
-  return rf_d128_cosh(me.low, me.high)
+  return rf_d128_cosh(low: me.low, high: me.high)
 
 ### Returns the hyperbolic tangent of this decimal value.
 ### :returns: The resulting `D128` value.
 routine D128.tanh() -> D128
-  return rf_d128_tanh(me.low, me.high)
+  return rf_d128_tanh(low: me.low, high: me.high)
 
 # ============================================================================
 # Exponential and Logarithmic Functions (via F128 conversion + LibBF)
@@ -295,27 +295,27 @@ routine D128.tanh() -> D128
 ### Returns `e` raised to this decimal value.
 ### :returns: The resulting `D128` value.
 routine D128.exp() -> D128
-  return rf_d128_exp(me.low, me.high)
+  return rf_d128_exp(low: me.low, high: me.high)
 
 ### Returns `2` raised to this decimal value.
 ### :returns: The resulting `D128` value.
 routine D128.exp2() -> D128
-  return rf_d128_exp2(me.low, me.high)
+  return rf_d128_exp2(low: me.low, high: me.high)
 
 ### Returns the natural logarithm of this decimal value.
 ### :returns: The resulting `D128` value.
 routine D128.log() -> D128
-  return rf_d128_log(me.low, me.high)
+  return rf_d128_log(low: me.low, high: me.high)
 
 ### Returns the base-2 logarithm of this decimal value.
 ### :returns: The resulting `D128` value.
 routine D128.log2() -> D128
-  return rf_d128_log2(me.low, me.high)
+  return rf_d128_log2(low: me.low, high: me.high)
 
 ### Returns the base-10 logarithm of this decimal value.
 ### :returns: The resulting `D128` value.
 routine D128.log10() -> D128
-  return rf_d128_log10(me.low, me.high)
+  return rf_d128_log10(low: me.low, high: me.high)
 
 # ============================================================================
 # Power Functions (via F128 conversion + LibBF)
@@ -325,7 +325,7 @@ routine D128.log10() -> D128
 ### :param exp: The exponent value.
 ### :returns: The resulting `D128` value.
 routine D128.pow(exp: D128) -> D128
-  return rf_d128_pow(me.low, me.high, exp.low, exp.high)
+  return rf_d128_pow(base_low: me.low, base_high: me.high, exp_low: exp.low, exp_high: exp.high)
 
 ### Raises this decimal value to `exp` and rejects non-finite results.
 ### :param exp: The exponent value.
@@ -339,13 +339,13 @@ routine D128.$pow!(exp: D128) -> D128
 ### Returns the real cube root of this decimal value.
 ### :returns: The resulting `D128` value.
 routine D128.cbrt() -> D128
-  return rf_d128_cbrt(me.low, me.high)
+  return rf_d128_cbrt(low: me.low, high: me.high)
 
 ### Returns the Euclidean length of the vector `(me, y)`.
 ### :param y: The second coordinate.
 ### :returns: The resulting `D128` value.
 routine D128.hypot(y: D128) -> D128
-  return rf_d128_hypot(me.low, me.high, y.low, y.high)
+  return rf_d128_hypot(x_low: me.low, x_high: me.high, y_low: y.low, y_high: y.high)
 
 # ============================================================================
 # Utility Methods
@@ -355,13 +355,13 @@ routine D128.hypot(y: D128) -> D128
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D128` value.
 routine D128.min(you: D128) -> D128
-  return if rf_d128_cmp(me.low, me.high, you.low, you.high) <= 0 then me else you
+  return if rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high) <= 0 then me else you
 
 ### Returns the larger of this value and `you`.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `D128` value.
 routine D128.max(you: D128) -> D128
-  return if rf_d128_cmp(me.low, me.high, you.low, you.high) >= 0 then me else you
+  return if rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high) >= 0 then me else you
 
 ### Restricts this value to the closed interval `[min_val, max_val]`.
 ### :param min_val: The lower bound to enforce.
@@ -374,24 +374,24 @@ routine D128.clamp(min_val: D128, max_val: D128) -> D128
 ### :returns: The resulting `Bool` value.
 routine D128.is_positive() -> Bool
   var zero = D128_ZERO
-  return rf_d128_cmp(me.low, me.high, zero.low, zero.high) > 0
+  return rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: zero.low, b_high: zero.high) > 0
 
 ### Returns `true` when this decimal value is less than zero.
 ### :returns: The resulting `Bool` value.
 routine D128.is_negative() -> Bool
   var zero = D128_ZERO
-  return rf_d128_cmp(me.low, me.high, zero.low, zero.high) < 0
+  return rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: zero.low, b_high: zero.high) < 0
 
 ### Returns `true` when this decimal value compares equal to zero.
 ### :returns: The resulting `Bool` value.
 routine D128.is_zero() -> Bool
   var zero = D128_ZERO
-  return rf_d128_cmp(me.low, me.high, zero.low, zero.high) == 0
+  return rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: zero.low, b_high: zero.high) == 0
 
 ### Returns `true` when this decimal value is finite.
 ### :returns: Whether the runtime encoding represents a finite number.
 routine D128.is_finite() -> Bool
-  return rf_d128_isfinite(me.low, me.high) != 0_s32
+  return rf_d128_isfinite(low: me.low, high: me.high) != 0_s32
 
 ### Returns the sign of this value as `-1d128`, `0d128`, or `1d128`.
 ### :returns: The resulting `D128` value.
@@ -399,8 +399,8 @@ routine D128.signum() -> D128
   var zero = D128_ZERO
   var one = D128_ONE
   return when
-    rf_d128_cmp(me.low, me.high, zero.low, zero.high) > 0 => one
-    rf_d128_cmp(me.low, me.high, zero.low, zero.high) < 0 => rf_d128_sub(zero.low, zero.high, one.low, one.high)
+    rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: zero.low, b_high: zero.high) > 0 => one
+    rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: zero.low, b_high: zero.high) < 0 => rf_d128_sub(a_low: zero.low, a_high: zero.high, b_low: one.low, b_high: one.high)
     else => zero
 
 # ============================================================================
@@ -431,7 +431,7 @@ routine D128.from_bits(low: U64, high: U64) -> D128
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 routine D128.$represent() -> Text
-  var cstr_result = rf_d128_to_string(me.low_bits(), me.high_bits())
+  var cstr_result = rf_d128_to_string(low: me.low_bits(), high: me.high_bits())
   return Text(from: CStr(from_ptr: cstr_result))
 
 ### Returns the textual representation of this value.
@@ -522,22 +522,22 @@ routine D128.to_bytes_le() -> Array[Byte, 16]
   var lo = trunc[U128, U64](raw)
   var hi = trunc[U128, U64](shift_right_unsigned[U128](raw, 64_u128))
   var result = Array[Byte, 16]()
-  result = set_byte_at(result, 0_u64,  trunc[U64, U8](lo))
-  result = set_byte_at(result, 1_u64,  trunc[U64, U8](shift_right_unsigned[U64](lo, 8_u64)))
-  result = set_byte_at(result, 2_u64,  trunc[U64, U8](shift_right_unsigned[U64](lo, 16_u64)))
-  result = set_byte_at(result, 3_u64,  trunc[U64, U8](shift_right_unsigned[U64](lo, 24_u64)))
-  result = set_byte_at(result, 4_u64,  trunc[U64, U8](shift_right_unsigned[U64](lo, 32_u64)))
-  result = set_byte_at(result, 5_u64,  trunc[U64, U8](shift_right_unsigned[U64](lo, 40_u64)))
-  result = set_byte_at(result, 6_u64,  trunc[U64, U8](shift_right_unsigned[U64](lo, 48_u64)))
-  result = set_byte_at(result, 7_u64,  trunc[U64, U8](shift_right_unsigned[U64](lo, 56_u64)))
-  result = set_byte_at(result, 8_u64,  trunc[U64, U8](hi))
-  result = set_byte_at(result, 9_u64,  trunc[U64, U8](shift_right_unsigned[U64](hi, 8_u64)))
-  result = set_byte_at(result, 10_u64, trunc[U64, U8](shift_right_unsigned[U64](hi, 16_u64)))
-  result = set_byte_at(result, 11_u64, trunc[U64, U8](shift_right_unsigned[U64](hi, 24_u64)))
-  result = set_byte_at(result, 12_u64, trunc[U64, U8](shift_right_unsigned[U64](hi, 32_u64)))
-  result = set_byte_at(result, 13_u64, trunc[U64, U8](shift_right_unsigned[U64](hi, 40_u64)))
-  result = set_byte_at(result, 14_u64, trunc[U64, U8](shift_right_unsigned[U64](hi, 48_u64)))
-  result = set_byte_at(result, 15_u64, trunc[U64, U8](shift_right_unsigned[U64](hi, 56_u64)))
+  result = set_byte_at(array: result, index: 0_u64, value: trunc[U64, U8](lo))
+  result = set_byte_at(array: result, index: 1_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 8_u64)))
+  result = set_byte_at(array: result, index: 2_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 16_u64)))
+  result = set_byte_at(array: result, index: 3_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 24_u64)))
+  result = set_byte_at(array: result, index: 4_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 32_u64)))
+  result = set_byte_at(array: result, index: 5_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 40_u64)))
+  result = set_byte_at(array: result, index: 6_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 48_u64)))
+  result = set_byte_at(array: result, index: 7_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 56_u64)))
+  result = set_byte_at(array: result, index: 8_u64, value: trunc[U64, U8](hi))
+  result = set_byte_at(array: result, index: 9_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 8_u64)))
+  result = set_byte_at(array: result, index: 10_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 16_u64)))
+  result = set_byte_at(array: result, index: 11_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 24_u64)))
+  result = set_byte_at(array: result, index: 12_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 32_u64)))
+  result = set_byte_at(array: result, index: 13_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 40_u64)))
+  result = set_byte_at(array: result, index: 14_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 48_u64)))
+  result = set_byte_at(array: result, index: 15_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 56_u64)))
   return result
 
 ### Returns the raw bytes of this value in big-endian order.
@@ -547,22 +547,22 @@ routine D128.to_bytes_be() -> Array[Byte, 16]
   var lo = bswap[U64](trunc[U128, U64](shift_right_unsigned[U128](raw, 64_u128)))
   var hi = bswap[U64](trunc[U128, U64](raw))
   var result = Array[Byte, 16]()
-  result = set_byte_at(result, 0_u64,  trunc[U64, U8](lo))
-  result = set_byte_at(result, 1_u64,  trunc[U64, U8](shift_right_unsigned[U64](lo, 8_u64)))
-  result = set_byte_at(result, 2_u64,  trunc[U64, U8](shift_right_unsigned[U64](lo, 16_u64)))
-  result = set_byte_at(result, 3_u64,  trunc[U64, U8](shift_right_unsigned[U64](lo, 24_u64)))
-  result = set_byte_at(result, 4_u64,  trunc[U64, U8](shift_right_unsigned[U64](lo, 32_u64)))
-  result = set_byte_at(result, 5_u64,  trunc[U64, U8](shift_right_unsigned[U64](lo, 40_u64)))
-  result = set_byte_at(result, 6_u64,  trunc[U64, U8](shift_right_unsigned[U64](lo, 48_u64)))
-  result = set_byte_at(result, 7_u64,  trunc[U64, U8](shift_right_unsigned[U64](lo, 56_u64)))
-  result = set_byte_at(result, 8_u64,  trunc[U64, U8](hi))
-  result = set_byte_at(result, 9_u64,  trunc[U64, U8](shift_right_unsigned[U64](hi, 8_u64)))
-  result = set_byte_at(result, 10_u64, trunc[U64, U8](shift_right_unsigned[U64](hi, 16_u64)))
-  result = set_byte_at(result, 11_u64, trunc[U64, U8](shift_right_unsigned[U64](hi, 24_u64)))
-  result = set_byte_at(result, 12_u64, trunc[U64, U8](shift_right_unsigned[U64](hi, 32_u64)))
-  result = set_byte_at(result, 13_u64, trunc[U64, U8](shift_right_unsigned[U64](hi, 40_u64)))
-  result = set_byte_at(result, 14_u64, trunc[U64, U8](shift_right_unsigned[U64](hi, 48_u64)))
-  result = set_byte_at(result, 15_u64, trunc[U64, U8](shift_right_unsigned[U64](hi, 56_u64)))
+  result = set_byte_at(array: result, index: 0_u64, value: trunc[U64, U8](lo))
+  result = set_byte_at(array: result, index: 1_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 8_u64)))
+  result = set_byte_at(array: result, index: 2_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 16_u64)))
+  result = set_byte_at(array: result, index: 3_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 24_u64)))
+  result = set_byte_at(array: result, index: 4_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 32_u64)))
+  result = set_byte_at(array: result, index: 5_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 40_u64)))
+  result = set_byte_at(array: result, index: 6_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 48_u64)))
+  result = set_byte_at(array: result, index: 7_u64, value: trunc[U64, U8](shift_right_unsigned[U64](lo, 56_u64)))
+  result = set_byte_at(array: result, index: 8_u64, value: trunc[U64, U8](hi))
+  result = set_byte_at(array: result, index: 9_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 8_u64)))
+  result = set_byte_at(array: result, index: 10_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 16_u64)))
+  result = set_byte_at(array: result, index: 11_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 24_u64)))
+  result = set_byte_at(array: result, index: 12_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 32_u64)))
+  result = set_byte_at(array: result, index: 13_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 40_u64)))
+  result = set_byte_at(array: result, index: 14_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 48_u64)))
+  result = set_byte_at(array: result, index: 15_u64, value: trunc[U64, U8](shift_right_unsigned[U64](hi, 56_u64)))
   return result
 
 ### Returns a keyed hash of this value using SipHash-2-4.

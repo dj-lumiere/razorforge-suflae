@@ -124,7 +124,7 @@ routine days_to_day(days_since_epoch: S64) -> S64
 ### :param second: The second component.
 ### :returns: The resulting `Moment` value.
 routine Moment.$create(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64) -> Moment
-  var d = ymd_to_days(year, month, day)
+  var d = ymd_to_days(year: year, month: month, day: day)
   var s = d *% SECONDS_PER_DAY +% hour *% SECONDS_PER_HOUR +% minute *% SECONDS_PER_MINUTE +% second
   return Moment(seconds: s, nanoseconds: 0_u32)
 
@@ -245,7 +245,7 @@ routine Moment.timestamp_ms() -> S64
 ### :returns: The resulting `Moment` value.
 @readonly
 routine Moment.add_duration(duration: Duration) -> Moment
-  return normalize_moment(me.seconds +% duration.total_seconds(), S64(me.nanoseconds) +% S64(duration.subsec_nanoseconds()))
+  return normalize_moment(seconds: me.seconds +% duration.total_seconds(), nanoseconds: S64(me.nanoseconds) +% S64(duration.subsec_nanoseconds()))
 
 ### Returns this moment shifted backward by `duration`.
 ### :param duration: The time span to subtract.
@@ -260,7 +260,7 @@ routine Moment.subtract_duration(duration: Duration) -> Moment
 ### :returns: The resulting `Duration` value.
 @readonly
 routine Moment.elapsed_since(earlier: Moment) -> Duration
-  return normalize_duration(me.seconds -% earlier.seconds, S64(me.nanoseconds) -% S64(earlier.nanoseconds))
+  return normalize_duration(seconds: me.seconds -% earlier.seconds, nanoseconds: S64(me.nanoseconds) -% S64(earlier.nanoseconds))
 
 ### Returns the moment reached by advancing this one by `you`.
 ### :param you: The duration to advance by.

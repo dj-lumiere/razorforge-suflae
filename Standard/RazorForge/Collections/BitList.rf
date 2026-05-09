@@ -195,7 +195,7 @@ routine BitList.reserve(new_capacity: U64)
     # whole words at word boundaries, so the untouched tail is never read.
     if me.count > 0u64
       var copy_words = (me.count +% 63u64) >> 6u32
-      rf_copy_bytes_at(new_data.get_address(), me.data.get_address(), copy_words *% 8u64)
+      rf_copy_bytes_at(dest: new_data.get_address(), src: me.data.get_address(), size: copy_words *% 8u64)
 
     me.data = new_data
     me.capacity = new_capacity
@@ -228,7 +228,7 @@ routine BitList.$getitem!(index: U64) -> Bool
 routine BitList.$setitem!(index: U64, value: Bool)
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
-  me.set_bit_internal(index, value)
+  me.set_bit_internal(index: index, value: value)
   return
 
 # ============================================================================
@@ -249,7 +249,7 @@ routine BitList.$getitem!(index: BackIndex) -> Bool
 ### :param value: The replacement bit value.
 routine BitList.$setitem!(index: BackIndex, value: Bool)
   var idx = index.resolve(me.count)
-  me.set_bit_internal(idx, value)
+  me.set_bit_internal(index: idx, value: value)
   return
 
 # ============================================================================
@@ -264,7 +264,7 @@ routine BitList.set_all(value: Bool)
   # Set all bits to the same value
   var byte_count = (me.count +% 7u64) >> 3u32
   var fill_byte = if value then 0xFFu8 else 0x00u8
-  rf_set_bytes_at(me.data.get_address(), fill_byte, byte_count)
+  rf_set_bytes_at(dest: me.data.get_address(), value: fill_byte, size: byte_count)
   return
 
 ### Toggles the bit at `index`.
@@ -277,7 +277,7 @@ needs I obeys Integral
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   var current = me.get_bit_internal(U64(idx))
-  me.set_bit_internal(U64(idx), not current)
+  me.set_bit_internal(index: U64(idx), value: not current)
   return
 
 ### Inverts every stored bit in place.

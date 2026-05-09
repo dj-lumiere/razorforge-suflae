@@ -132,7 +132,7 @@ routine BitArray[N].with_flipped(index: U64) -> BitArray[N]
   if index >= N
     return me
   var current = me[index]
-  return me.with_set(index, not current)
+  return me.with_set(index: index, value: not current)
 
 # ============================================================================
 # Bit Queries

@@ -168,8 +168,8 @@ routine BTreeDictNode[K, V].entries_add_at(i: U64, k: K, v: V)
       var kdst_addr = kbase.stride(count: (i +% 1u64).S64()).get_address()
       var vsrc_addr = vbase.stride(count: i.S64()).get_address()
       var vdst_addr = vbase.stride(count: (i +% 1u64).S64()).get_address()
-      rf_copy_bytes_at(kdst_addr, ksrc_addr, k_elem_size * shift_count)
-      rf_copy_bytes_at(vdst_addr, vsrc_addr, v_elem_size * shift_count)
+      rf_copy_bytes_at(dest: kdst_addr, src: ksrc_addr, size: k_elem_size * shift_count)
+      rf_copy_bytes_at(dest: vdst_addr, src: vsrc_addr, size: v_elem_size * shift_count)
     kbase.stride(count: i.S64()).inject(value: k)
     vbase.stride(count: i.S64()).inject(value: v)
   me.key_count = me.key_count +% 1u64
@@ -186,7 +186,7 @@ routine BTreeDictNode[K, V].children_add_at(i: U64, value: BTreeDictNode[K, V])
       var shift_count = me.child_count -% i
       var src_addr = base.stride(count: i.S64()).get_address()
       var dst_addr = base.stride(count: (i +% 1u64).S64()).get_address()
-      rf_copy_bytes_at(dst_addr, src_addr, elem_size * shift_count)
+      rf_copy_bytes_at(dest: dst_addr, src: src_addr, size: elem_size * shift_count)
     base.stride(count: i.S64()).inject(value: value)
   me.child_count = me.child_count +% 1u64
   return
@@ -205,8 +205,8 @@ routine BTreeDictNode[K, V].entries_remove_at(i: U64)
       var kdst_addr = kbase.stride(count: i.S64()).get_address()
       var vsrc_addr = vbase.stride(count: (i +% 1u64).S64()).get_address()
       var vdst_addr = vbase.stride(count: i.S64()).get_address()
-      rf_copy_bytes_at(kdst_addr, ksrc_addr, k_elem_size * shift_count)
-      rf_copy_bytes_at(vdst_addr, vsrc_addr, v_elem_size * shift_count)
+      rf_copy_bytes_at(dest: kdst_addr, src: ksrc_addr, size: k_elem_size * shift_count)
+      rf_copy_bytes_at(dest: vdst_addr, src: vsrc_addr, size: v_elem_size * shift_count)
   me.key_count = me.key_count -% 1u64
   return
 
@@ -220,7 +220,7 @@ routine BTreeDictNode[K, V].children_remove_at(i: U64)
       var shift_count = me.child_count -% i -% 1u64
       var src_addr = base.stride(count: (i +% 1u64).S64()).get_address()
       var dst_addr = base.stride(count: i.S64()).get_address()
-      rf_copy_bytes_at(dst_addr, src_addr, elem_size * shift_count)
+      rf_copy_bytes_at(dest: dst_addr, src: src_addr, size: elem_size * shift_count)
   me.child_count = me.child_count -% 1u64
   return
 
@@ -259,8 +259,8 @@ routine BTreeDictNode[K, V].entries_add_range_from(other: BTreeDictNode[K, V], s
       var kdst_addr = me.keys_base().stride(count: me.key_count.S64()).get_address()
       var vsrc_addr = other.values_base().stride(count: start.S64()).get_address()
       var vdst_addr = me.values_base().stride(count: me.key_count.S64()).get_address()
-      rf_copy_bytes_at(kdst_addr, ksrc_addr, k_elem_size * count)
-      rf_copy_bytes_at(vdst_addr, vsrc_addr, v_elem_size * count)
+      rf_copy_bytes_at(dest: kdst_addr, src: ksrc_addr, size: k_elem_size * count)
+      rf_copy_bytes_at(dest: vdst_addr, src: vsrc_addr, size: v_elem_size * count)
   me.key_count = me.key_count +% count
   return
 
@@ -274,7 +274,7 @@ routine BTreeDictNode[K, V].children_add_range_from(other: BTreeDictNode[K, V], 
       var elem_size = Address.data_size()
       var src_addr = other.children_base().stride(count: start.S64()).get_address()
       var dst_addr = me.children_base().stride(count: me.child_count.S64()).get_address()
-      rf_copy_bytes_at(dst_addr, src_addr, elem_size * count)
+      rf_copy_bytes_at(dest: dst_addr, src: src_addr, size: elem_size * count)
   me.child_count = me.child_count +% count
   return
 
@@ -354,7 +354,7 @@ routine SortedDict[K, V].lower_bound(node: BTreeDictNode[K, V], key: K) -> U64
 routine SortedDict[K, V].$contains(key: K) -> Bool
   if me.root is None
     return false
-  return me.search_node(me.root!!, key)
+  return me.search_node(node: me.root!!, key: key)
 
 ### Descends the subtree rooted at `node` to find `key`.
 ### :param node: The subtree root to search.
@@ -363,12 +363,12 @@ routine SortedDict[K, V].$contains(key: K) -> Bool
 @readonly
 @inline
 routine SortedDict[K, V].search_node(node: BTreeDictNode[K, V], key: K) -> Bool
-  var i = me.lower_bound(node, key)
+  var i = me.lower_bound(node: node, key: key)
   if i < node.keys_count() and key == node.key_get(i)
     return true
   if node.is_leaf
     return false
-  return me.search_node(node.children_get(i), key)
+  return me.search_node(node: node.children_get(i), key: key)
 
 ### Returns the value associated with `key`.
 ### :param key: The key to look up.
@@ -378,7 +378,7 @@ routine SortedDict[K, V].search_node(node: BTreeDictNode[K, V], key: K) -> Bool
 routine SortedDict[K, V].$getitem!(key: K) -> V
   if me.root is None
     throw KeyNotFoundError(key: key.$represent())
-  return me.get_from_node(me.root!!, key)
+  return me.get_from_node(node: me.root!!, key: key)
 
 ### Descends `node` to retrieve the value for `key`, throwing if not found.
 ### :param node: The subtree root to search.
@@ -387,12 +387,12 @@ routine SortedDict[K, V].$getitem!(key: K) -> V
 ### :throws: `KeyNotFoundError` if `key` is not present.
 @readonly
 routine SortedDict[K, V].get_from_node(node: BTreeDictNode[K, V], key: K) -> V
-  var i = me.lower_bound(node, key)
+  var i = me.lower_bound(node: node, key: key)
   if i < node.keys_count() and key == node.key_get(i)
     return node.value_get(i)
   if node.is_leaf
     throw KeyNotFoundError(key: key.$represent())
-  return me.get_from_node(node.children_get(i), key)
+  return me.get_from_node(node: node.children_get(i), key: key)
 
 ### Updates the value associated with `key`.
 ### :param key: The key to update.
@@ -416,7 +416,7 @@ routine SortedDict[K, V].$setitem!(key: K, value: V)
 routine SortedDict[K, V].add(key: K, value: V) -> Bool
   if me.root is None
     me.root = BTreeDictNode[K, V](is_leaf: true)
-    me.root!!.entries_add_last(key, value)
+    me.root!!.entries_add_last(k: key, v: value)
     me.root!!.subtree_size = 1u64
     me.count = 1u64
     return true
@@ -425,11 +425,11 @@ routine SortedDict[K, V].add(key: K, value: V) -> Bool
     var old_root = me.root!!
     var new_root = BTreeDictNode[K, V](is_leaf: false)
     new_root.children_add_last(old_root)
-    me.split_child(new_root, 0u64)
+    me.split_child(parent_node: new_root, child_idx: 0u64)
     new_root.subtree_size = new_root.children_get(0u64).subtree_size +% new_root.children_get(1u64).subtree_size +% 1u64
     me.root = steal new_root
 
-  var inserted = me.insert_non_full(me.root!!, key, value)
+  var inserted = me.insert_non_full(node: me.root!!, key: key, value: value)
   if inserted
     me.count = me.count +% 1u64
   return inserted
@@ -441,26 +441,26 @@ routine SortedDict[K, V].add(key: K, value: V) -> Bool
 ### :returns: `true` if a new entry was inserted; `false` if an existing key was updated.
 @inline
 routine SortedDict[K, V].insert_non_full(node: BTreeDictNode[K, V], key: K, value: V) -> Bool
-  var i = me.lower_bound(node, key)
+  var i = me.lower_bound(node: node, key: key)
 
   if i < node.keys_count() and node.key_get(i) == key
-    node.value_set(i, value)
+    node.value_set(i: i, value: value)
     return false
 
   if node.is_leaf
-    node.entries_add_at(i, key, value)
+    node.entries_add_at(i: i, k: key, v: value)
     node.subtree_size = node.subtree_size +% 1u64
     return true
   else
     if node.children_get(i).keys_count() >= B_DICT -% 1u64
-      me.split_child(node, i)
+      me.split_child(parent_node: node, child_idx: i)
       if key == node.key_get(i)
-        node.value_set(i, value)
+        node.value_set(i: i, value: value)
         return false
       if key > node.key_get(i)
         i = i +% 1u64
 
-    var inserted = me.insert_non_full(node.children_get(i), key, value)
+    var inserted = me.insert_non_full(node: node.children_get(i), key: key, value: value)
     if inserted
       node.subtree_size = node.subtree_size +% 1u64
     return inserted
@@ -474,10 +474,10 @@ routine SortedDict[K, V].split_child(parent_node: BTreeDictNode[K, V], child_idx
   var mid = unsigned_div[U64](B_DICT -% 1u64, 2u64)
 
   var new_node = BTreeDictNode[K, V](is_leaf: child.is_leaf)
-  new_node.entries_add_range_from(child, mid +% 1u64, child.keys_count() -% mid -% 1u64)
+  new_node.entries_add_range_from(other: child, start: mid +% 1u64, count: child.keys_count() -% mid -% 1u64)
 
   if not child.is_leaf
-    new_node.children_add_range_from(child, mid +% 1u64, child.children_count() -% mid -% 1u64)
+    new_node.children_add_range_from(other: child, start: mid +% 1u64, count: child.children_count() -% mid -% 1u64)
 
   var mid_key = child.key_get(mid)
   var mid_value = child.value_get(mid)
@@ -503,8 +503,8 @@ routine SortedDict[K, V].split_child(parent_node: BTreeDictNode[K, V], child_idx
       i = i +% 1u64
     new_node.subtree_size = right_size
 
-  parent_node.entries_add_at(child_idx, mid_key, mid_value)
-  parent_node.children_add_at(child_idx +% 1u64, steal new_node)
+  parent_node.entries_add_at(i: child_idx, k: mid_key, v: mid_value)
+  parent_node.children_add_at(i: child_idx +% 1u64, value: steal new_node)
   return
 
 # ============================================================================
@@ -518,7 +518,7 @@ routine SortedDict[K, V].remove(key: K) -> Bool
   if me.root is None
     return false
 
-  var removed = me.remove_from_node(me.root!!, key)
+  var removed = me.remove_from_node(node: me.root!!, key: key)
   if removed
     me.count = me.count -% 1u64
     if me.root!!.keys_count() == 0u64 and not me.root!!.is_leaf
@@ -533,7 +533,7 @@ routine SortedDict[K, V].remove(key: K) -> Bool
 ### :returns: `true` if the key was found and removed.
 @inline
 routine SortedDict[K, V].remove_from_node(node: BTreeDictNode[K, V], key: K) -> Bool
-  var i = me.lower_bound(node, key)
+  var i = me.lower_bound(node: node, key: key)
 
   if i < node.keys_count() and key == node.key_get(i)
     if node.is_leaf
@@ -544,30 +544,30 @@ routine SortedDict[K, V].remove_from_node(node: BTreeDictNode[K, V], key: K) -> 
       var left = node.children_get(i)
       var right = node.children_get(i +% 1u64)
       if left.keys_count() > MIN_KEYS_DICT
-        var pred = me.get_predecessor(node, i)
-        node.key_set(i, pred.key)
-        node.value_set(i, pred.value)
-        discard me.remove_from_node(left, pred.key)
+        var pred = me.get_predecessor(node: node, idx: i)
+        node.key_set(i: i, value: pred.key)
+        node.value_set(i: i, value: pred.value)
+        discard me.remove_from_node(node: left, key: pred.key)
         node.subtree_size = node.subtree_size -% 1u64
         return true
       elseif right.keys_count() > MIN_KEYS_DICT
-        var succ = me.get_successor(node, i)
-        node.key_set(i, succ.key)
-        node.value_set(i, succ.value)
-        discard me.remove_from_node(right, succ.key)
+        var succ = me.get_successor(node: node, idx: i)
+        node.key_set(i: i, value: succ.key)
+        node.value_set(i: i, value: succ.value)
+        discard me.remove_from_node(node: right, key: succ.key)
         node.subtree_size = node.subtree_size -% 1u64
         return true
       else
-        me.merge_children_at(node, i)
-        var removed = me.remove_from_node(node.children_get(i), key)
+        me.merge_children_at(node: node, i: i)
+        var removed = me.remove_from_node(node: node.children_get(i), key: key)
         if removed
           node.subtree_size = node.subtree_size -% 1u64
         return removed
   else
     if node.is_leaf
       return false
-    i = me.fix_child(node, i)
-    var removed = me.remove_from_node(node.children_get(i), key)
+    i = me.fix_child(node: node, i: i)
+    var removed = me.remove_from_node(node: node.children_get(i), key: key)
     if removed
       node.subtree_size = node.subtree_size -% 1u64
     return removed
@@ -603,11 +603,11 @@ routine SortedDict[K, V].merge_children_at(node: BTreeDictNode[K, V], i: U64)
   var left = node.children_get(i)
   var right = node.children_get(i +% 1u64)
 
-  left.entries_add_last(node.key_get(i), node.value_get(i))
-  left.entries_add_range_from(right, 0u64, right.keys_count())
+  left.entries_add_last(k: node.key_get(i), v: node.value_get(i))
+  left.entries_add_range_from(other: right, start: 0u64, count: right.keys_count())
 
   if not right.is_leaf
-    left.children_add_range_from(right, 0u64, right.children_count())
+    left.children_add_range_from(other: right, start: 0u64, count: right.children_count())
 
   left.subtree_size = left.subtree_size +% right.subtree_size +% 1u64
 
@@ -624,15 +624,15 @@ routine SortedDict[K, V].fix_child(node: BTreeDictNode[K, V], i: U64) -> U64
   if node.children_get(i).keys_count() > MIN_KEYS_DICT
     return i
   if i > 0u64 and node.children_get(i -% 1u64).keys_count() > MIN_KEYS_DICT
-    me.rotate_right_at(node, i)
+    me.rotate_right_at(node: node, i: i)
     return i
   if i +% 1u64 < node.children_count() and node.children_get(i +% 1u64).keys_count() > MIN_KEYS_DICT
-    me.rotate_left_at(node, i)
+    me.rotate_left_at(node: node, i: i)
     return i
   if i > 0u64
-    me.merge_children_at(node, i -% 1u64)
+    me.merge_children_at(node: node, i: i -% 1u64)
     return i -% 1u64
-  me.merge_children_at(node, i)
+  me.merge_children_at(node: node, i: i)
   return i
 
 ### Borrows the last entry from the left sibling of `node.children[i]` through the parent separator.
@@ -643,15 +643,15 @@ routine SortedDict[K, V].rotate_right_at(node: BTreeDictNode[K, V], i: U64)
   var left = node.children_get(i -% 1u64)
   var child = node.children_get(i)
 
-  child.entries_add_at(0u64, node.key_get(i -% 1u64), node.value_get(i -% 1u64))
+  child.entries_add_at(i: 0u64, k: node.key_get(i -% 1u64), v: node.value_get(i -% 1u64))
 
   if not child.is_leaf
-    child.children_add_at(0u64, left.children_get(left.children_count() -% 1u64))
+    child.children_add_at(i: 0u64, value: left.children_get(left.children_count() -% 1u64))
     left.children_remove_last()
 
   var last = left.keys_count() -% 1u64
-  node.key_set(i -% 1u64, left.key_get(last))
-  node.value_set(i -% 1u64, left.value_get(last))
+  node.key_set(i: i -% 1u64, value: left.key_get(last))
+  node.value_set(i: i -% 1u64, value: left.value_get(last))
   left.entries_remove_last()
 
   me.update_subtree_size(left)
@@ -666,14 +666,14 @@ routine SortedDict[K, V].rotate_left_at(node: BTreeDictNode[K, V], i: U64)
   var right = node.children_get(i +% 1u64)
   var child = node.children_get(i)
 
-  child.entries_add_last(node.key_get(i), node.value_get(i))
+  child.entries_add_last(k: node.key_get(i), v: node.value_get(i))
 
   if not child.is_leaf
     child.children_add_last(right.children_get(0u64))
     right.children_remove_at(0u64)
 
-  node.key_set(i, right.key_get(0u64))
-  node.value_set(i, right.value_get(0u64))
+  node.key_set(i: i, value: right.key_get(0u64))
+  node.value_set(i: i, value: right.value_get(0u64))
   right.entries_remove_at(0u64)
 
   me.update_subtree_size(right)
@@ -708,7 +708,7 @@ routine SortedDict[K, V].update_subtree_size(node: BTreeDictNode[K, V])
 routine SortedDict[K, V].get_by_rank!(i: U64) -> DictEntry[K, V]
   if i >= me.count
     throw IndexOutOfBoundsError(index: i, count: me.count)
-  return me.get_by_rank_node(me.root!!, i)
+  return me.get_by_rank_node(node: me.root!!, rank: i)
 
 ### Returns the entry addressed by a back index in sorted order.
 ### `^1` is the entry with the largest key, `^2` the second-largest, and so on.
@@ -717,7 +717,7 @@ routine SortedDict[K, V].get_by_rank!(i: U64) -> DictEntry[K, V]
 @readonly
 routine SortedDict[K, V].get_by_rank!(i: BackIndex) -> DictEntry[K, V]
   var rank = i.resolve(me.count)
-  return me.get_by_rank_node(me.root!!, rank)
+  return me.get_by_rank_node(node: me.root!!, rank: rank)
 
 ### Returns the entry at zero-based sorted rank `rank` within `node`'s subtree.
 ### :param node: The subtree root to search.
@@ -733,7 +733,7 @@ routine SortedDict[K, V].get_by_rank_node(node: BTreeDictNode[K, V], rank: U64) 
   while i < node.children_count()
     var child_size = node.children_get(i).subtree_size
     if remaining < child_size
-      return me.get_by_rank_node(node.children_get(i), remaining)
+      return me.get_by_rank_node(node: node.children_get(i), rank: remaining)
     remaining = remaining -% child_size
     if i < node.keys_count()
       if remaining == 0u64
@@ -750,7 +750,7 @@ routine SortedDict[K, V].get_by_rank_node(node: BTreeDictNode[K, V], rank: U64) 
 routine SortedDict[K, V].get_or(key: K, default: V) -> V
   if me.root is None
     return default
-  return me.get_or_from_node(me.root!!, key, default)
+  return me.get_or_from_node(node: me.root!!, key: key, default: default)
 
 ### Descends `node` to retrieve the value for `key`, returning `default` if not found.
 ### :param node: The subtree root to search.
@@ -759,12 +759,12 @@ routine SortedDict[K, V].get_or(key: K, default: V) -> V
 ### :returns: The mapped value if found, otherwise `default`.
 @readonly
 routine SortedDict[K, V].get_or_from_node(node: BTreeDictNode[K, V], key: K, default: V) -> V
-  var i = me.lower_bound(node, key)
+  var i = me.lower_bound(node: node, key: key)
   if i < node.keys_count() and key == node.key_get(i)
     return node.value_get(i)
   if node.is_leaf
     return default
-  return me.get_or_from_node(node.children_get(i), key, default)
+  return me.get_or_from_node(node: node.children_get(i), key: key, default: default)
 
 # ============================================================================
 # Min/Max
@@ -820,7 +820,7 @@ routine SortedDict[K, V].keys() -> List[K]
   var result = List[K](me.count)
   if me.root is None
     return result
-  me.collect_keys(me.root!!, result)
+  me.collect_keys(node: me.root!!, result: result)
   return result
 
 ### Appends all keys from `node`'s subtree into `result` via in-order traversal.
@@ -831,11 +831,11 @@ routine SortedDict[K, V].collect_keys(node: BTreeDictNode[K, V], result: List[K]
   var i = 0u64
   while i < node.keys_count()
     if not node.is_leaf
-      me.collect_keys(node.children_get(i), result)
+      me.collect_keys(node: node.children_get(i), result: result)
     result.add_last(node.key_get(i))
     i = i +% 1u64
   if not node.is_leaf
-    me.collect_keys(node.children_get(node.children_count() -% 1u64), result)
+    me.collect_keys(node: node.children_get(node.children_count() -% 1u64), result: result)
   return
 
 ### Returns all values in key-ascending order.
@@ -845,7 +845,7 @@ routine SortedDict[K, V].values() -> List[V]
   var result = List[V](me.count)
   if me.root is None
     return result
-  me.collect_values(me.root!!, result)
+  me.collect_values(node: me.root!!, result: result)
   return result
 
 ### Appends all values from `node`'s subtree into `result` via in-order traversal.
@@ -856,11 +856,11 @@ routine SortedDict[K, V].collect_values(node: BTreeDictNode[K, V], result: List[
   var i = 0u64
   while i < node.keys_count()
     if not node.is_leaf
-      me.collect_values(node.children_get(i), result)
+      me.collect_values(node: node.children_get(i), result: result)
     result.add_last(node.value_get(i))
     i = i +% 1u64
   if not node.is_leaf
-    me.collect_values(node.children_get(node.children_count() -% 1u64), result)
+    me.collect_values(node: node.children_get(node.children_count() -% 1u64), result: result)
   return
 
 # ============================================================================
@@ -881,7 +881,7 @@ routine SortedDict[K, V].get_by_rank(node: BTreeDictNode[K, V], rank: U64) -> Di
   while i < node.children_count()
     var child_size = node.children_get(i).subtree_size
     if remaining < child_size
-      return me.get_by_rank(node.children_get(i), remaining)
+      return me.get_by_rank(node: node.children_get(i), rank: remaining)
     remaining = remaining -% child_size
     if i < node.keys_count()
       if remaining == 0u64
@@ -916,11 +916,11 @@ routine SortedDict[K, V].collect_inorder(node: BTreeDictNode[K, V], result: List
   var i = 0u64
   while i < node.keys_count()
     if not node.is_leaf
-      me.collect_inorder(node.children_get(i), result)
+      me.collect_inorder(node: node.children_get(i), result: result)
     result.add_last(DictEntry[K, V](key: node.key_get(i), value: node.value_get(i)))
     i = i +% 1u64
   if not node.is_leaf
-    me.collect_inorder(node.children_get(node.children_count() -% 1u64), result)
+    me.collect_inorder(node: node.children_get(node.children_count() -% 1u64), result: result)
   return
 
 ### Iterator that yields entries of a {SortedDict[K, V]} in ascending key order.
@@ -933,7 +933,7 @@ entity SortedDictIterator[K, V] obeys Iterator[DictEntry[K, V]]
 routine SortedDictIterator[K, V].$next!() -> DictEntry[K, V]
   if me.index >= me.dict.count()
     absent
-  var entry = me.dict.get_by_rank(me.dict.root!!, me.index)
+  var entry = me.dict.get_by_rank(node: me.dict.root!!, rank: me.index)
   me.index = me.index + 1u64
   return entry
 

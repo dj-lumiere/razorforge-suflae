@@ -76,7 +76,7 @@ routine normalize_duration(seconds: S64, nanoseconds: S64) -> Duration
 ### :param nanoseconds: The nanosecond component within the current second.
 ### :returns: The resulting `Duration` value.
 routine Duration.$create(seconds: S64, nanoseconds: U32) -> Duration
-  return normalize_duration(seconds, S64(nanoseconds))
+  return normalize_duration(seconds: seconds, nanoseconds: S64(nanoseconds))
 
 ### Returns the zero duration.
 ### :returns: The resulting `Duration` value.
@@ -87,7 +87,7 @@ routine Duration.zero() -> Duration
 ### :param ns: The duration in nanoseconds.
 ### :returns: The resulting `Duration` value.
 routine Duration.from_nanoseconds(ns: S64) -> Duration
-  return normalize_duration(0_s64, ns)
+  return normalize_duration(seconds: 0_s64, nanoseconds: ns)
 
 ### Creates a value from microseconds.
 ### :param us: The duration in microseconds.
@@ -95,7 +95,7 @@ routine Duration.from_nanoseconds(ns: S64) -> Duration
 routine Duration.from_microseconds(us: S64) -> Duration
   var s = signed_div[S64](us, 1_000_000_s64)
   var ns = signed_rem[S64](us, 1_000_000_s64) *% NS_PER_MICROSECOND
-  return normalize_duration(s, ns)
+  return normalize_duration(seconds: s, nanoseconds: ns)
 
 ### Creates a value from milliseconds.
 ### :param ms: The duration in milliseconds.
@@ -103,7 +103,7 @@ routine Duration.from_microseconds(us: S64) -> Duration
 routine Duration.from_milliseconds(ms: S64) -> Duration
   var s = signed_div[S64](ms, 1_000_s64)
   var ns = signed_rem[S64](ms, 1_000_s64) *% NS_PER_MILLISECOND
-  return normalize_duration(s, ns)
+  return normalize_duration(seconds: s, nanoseconds: ns)
 
 ### Creates a value from seconds.
 ### :param s: The duration in seconds.
@@ -266,7 +266,7 @@ routine Duration.int_abs() -> Duration
 ### :returns: The combined `Duration`.
 @readonly
 routine Duration.$add(you: Duration) -> Duration
-  return normalize_duration(me.seconds +% you.seconds, S64(me.nanoseconds) +% S64(you.nanoseconds))
+  return normalize_duration(seconds: me.seconds +% you.seconds, nanoseconds: S64(me.nanoseconds) +% S64(you.nanoseconds))
 
 ### Failable variant of `$add`; delegates to `$add` and never throws.
 ### :param you: The addend.
@@ -280,7 +280,7 @@ routine Duration.$add!(you: Duration) -> Duration
 ### :returns: The resulting `Duration`.
 @readonly
 routine Duration.$sub(you: Duration) -> Duration
-  return normalize_duration(me.seconds -% you.seconds, S64(me.nanoseconds) -% S64(you.nanoseconds))
+  return normalize_duration(seconds: me.seconds -% you.seconds, nanoseconds: S64(me.nanoseconds) -% S64(you.nanoseconds))
 
 ### Returns the negated value.
 ### :returns: The resulting `Duration` value.
@@ -298,7 +298,7 @@ routine Duration.$neg() -> Duration
 routine Duration.scale(factor: S64) -> Duration
   var total_ns = S64(me.nanoseconds) *% factor
   var total_s = me.seconds *% factor
-  return normalize_duration(total_s, total_ns)
+  return normalize_duration(seconds: total_s, nanoseconds: total_ns)
 
 ### Returns the product of this value and the other value.
 ### :param factor: The scale factor to apply.

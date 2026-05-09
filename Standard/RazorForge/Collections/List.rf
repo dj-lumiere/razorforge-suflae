@@ -120,7 +120,7 @@ routine List[T].remove_last!() -> T
 ### :param value: The value to insert.
 @migratable
 routine List[T].add_first(value: T)
-  me.add_at!(0u64, value)
+  me.add_at!(index: 0u64, value: value)
   return
 
 ### Inserts `value` at `index`, shifting later elements right by one position.
@@ -143,7 +143,7 @@ routine List[T].add_at!(index: U64, value: T)
       var elem_size = T.data_size()
       var src_ptr:Hijacked[T] = me.data.offset(elem_size * index)
       var dst_ptr:Hijacked[T] = me.data.offset(elem_size * (index + 1u64))
-      rf_copy_bytes_at(dst_ptr.get_address(), src_ptr.get_address(), elem_size * (me.count - index))
+      rf_copy_bytes_at(dest: dst_ptr.get_address(), src: src_ptr.get_address(), size: elem_size * (me.count - index))
 
   me.data.offset(T.data_size() * index).inject(value)
   me.count = me.count + 1u64
@@ -174,7 +174,7 @@ routine List[T].remove_at!(index: U64) -> T
       var elem_size = T.data_size()
       var src_ptr = me.data.offset(elem_size * (index + 1u64))
       var dst_ptr = me.data.offset(elem_size * index)
-      rf_copy_bytes_at(dst_ptr.get_address(), src_ptr.get_address(), elem_size * (me.count - 1u64 - index))
+      rf_copy_bytes_at(dest: dst_ptr.get_address(), src: src_ptr.get_address(), size: elem_size * (me.count - 1u64 - index))
 
   me.count = me.count - 1u64
   return value
@@ -309,7 +309,7 @@ routine List[T].reserve(new_capacity: U64)
         me.data = hijacked_from[T](ptr)
     else
       danger!
-        var ptr = rf_reallocate_dynamic(pointer_to_int[T, Address](me.data), new_byte_size)
+        var ptr = rf_reallocate_dynamic(ptr: pointer_to_int[T, Address](me.data), size: new_byte_size)
         me.data = hijacked_from[T](ptr)
 
     me.capacity = new_capacity
@@ -424,7 +424,7 @@ routine List[T].add_range!(source: List[T], from: U64, count: U64)
     var elem_size = T.data_size()
     var src_ptr = source.data.offset(elem_size * from)
     var dst_ptr = me.data.offset(elem_size * me.count)
-    rf_copy_bytes_at(dst_ptr.get_address(), src_ptr.get_address(), elem_size * count)
+    rf_copy_bytes_at(dest: dst_ptr.get_address(), src: src_ptr.get_address(), size: elem_size * count)
 
   me.count = new_count
   return
@@ -457,7 +457,7 @@ needs T obeys Comparable
 
   # Insertion sort small lists directly
   if me.count <= SORT_MIN_RUN
-    me.insertion_sort(0u64, me.count)
+    me.insertion_sort(start: 0u64, end: me.count)
     return
 
   # Phase 1: insertion sort each chunk of SORT_MIN_RUN
@@ -468,7 +468,7 @@ needs T obeys Comparable
     var end = i + SORT_MIN_RUN
     if end > me.count
       end = me.count
-    me.insertion_sort(i, end)
+    me.insertion_sort(start: i, end: end)
     i = i + SORT_MIN_RUN
 
   # Phase 2: iterative bottom-up merge, doubling width each pass
@@ -493,7 +493,7 @@ needs T obeys Comparable
         right = me.count
 
       if mid < right
-        me.merge_into(left, mid, right, buffer)
+        me.merge_into(left: left, mid: mid, right: right, buffer: buffer)
 
       left = left + width *% 2u64
 
@@ -509,7 +509,7 @@ routine List[T].sort_by(compare: Routine[(T, T), Bool])
     return
 
   if me.count <= SORT_MIN_RUN
-    me.insertion_sort_by(0u64, me.count, compare)
+    me.insertion_sort_by(start: 0u64, end: me.count, compare: compare)
     return
 
   var i = 0u64
@@ -519,7 +519,7 @@ routine List[T].sort_by(compare: Routine[(T, T), Bool])
     var end = i + SORT_MIN_RUN
     if end > me.count
       end = me.count
-    me.insertion_sort_by(i, end, compare)
+    me.insertion_sort_by(start: i, end: end, compare: compare)
     i = i + SORT_MIN_RUN
 
   var buffer = List[T](capacity: me.count)
@@ -543,7 +543,7 @@ routine List[T].sort_by(compare: Routine[(T, T), Bool])
         right = me.count
 
       if mid < right
-        me.merge_into_by(left, mid, right, buffer, compare)
+        me.merge_into_by(left: left, mid: mid, right: right, buffer: buffer, compare: compare)
 
       left = left + width *% 2u64
 
@@ -557,7 +557,7 @@ routine List[T].sort_by(compare: Routine[(T, T), Bool])
 routine List[T].sorted() -> List[T]
 needs T obeys Comparable
   var copy = List[T](capacity: me.count)
-  copy.add_range!(me, 0u64, me.count)
+  copy.add_range!(source: me, from: 0u64, count: me.count)
   copy.sort()
   return copy
 
@@ -568,7 +568,7 @@ needs T obeys Comparable
 @readonly
 routine List[T].sorted_by(compare: Routine[(T, T), Bool]) -> List[T]
   var copy = List[T](capacity: me.count)
-  copy.add_range!(me, 0u64, me.count)
+  copy.add_range!(source: me, from: 0u64, count: me.count)
   copy.sort_by(compare)
   return copy
 
@@ -584,8 +584,8 @@ routine List[T].reverse()
     if lo >= hi
       break
     var temp = me.get_raw(lo)
-    me.set_raw(lo, me.get_raw(hi))
-    me.set_raw(hi, temp)
+    me.set_raw(index: lo, value: me.get_raw(hi))
+    me.set_raw(index: hi, value: temp)
     lo = lo + 1u64
     hi = hi - 1u64
   return
@@ -612,9 +612,9 @@ needs T obeys Comparable
       var prev = me.get_raw(j - 1u64)
       if not (key < prev)
         break
-      me.set_raw(j, prev)
+      me.set_raw(index: j, value: prev)
       j = j - 1u64
-    me.set_raw(j, key)
+    me.set_raw(index: j, value: key)
     i = i + 1u64
   return
 
@@ -635,9 +635,9 @@ routine List[T].insertion_sort_by(start: U64, end: U64, compare: Routine[(T, T),
       var prev = me.get_raw(j - 1u64)
       if not compare(key, prev)
         break
-      me.set_raw(j, prev)
+      me.set_raw(index: j, value: prev)
       j = j - 1u64
-    me.set_raw(j, key)
+    me.set_raw(index: j, value: key)
     i = i + 1u64
   return
 
@@ -655,7 +655,7 @@ needs T obeys Comparable
   loop
     if i >= right
       break
-    buffer.set_raw(i, me.get_raw(i))
+    buffer.set_raw(index: i, value: me.get_raw(i))
     i = i + 1u64
 
   var a = left
@@ -668,10 +668,10 @@ needs T obeys Comparable
     var va = buffer.get_raw(a)
     var vb = buffer.get_raw(b)
     if vb < va
-      me.set_raw(out, vb)
+      me.set_raw(index: out, value: vb)
       b = b + 1u64
     else
-      me.set_raw(out, va)
+      me.set_raw(index: out, value: va)
       a = a + 1u64
     out = out + 1u64
 
@@ -679,7 +679,7 @@ needs T obeys Comparable
   loop
     if a >= mid
       break
-    me.set_raw(out, buffer.get_raw(a))
+    me.set_raw(index: out, value: buffer.get_raw(a))
     a = a + 1u64
     out = out + 1u64
 
@@ -687,7 +687,7 @@ needs T obeys Comparable
   loop
     if b >= right
       break
-    me.set_raw(out, buffer.get_raw(b))
+    me.set_raw(index: out, value: buffer.get_raw(b))
     b = b + 1u64
     out = out + 1u64
   return
@@ -704,7 +704,7 @@ routine List[T].merge_into_by(left: U64, mid: U64, right: U64, buffer: List[T], 
   loop
     if i >= right
       break
-    buffer.set_raw(i, me.get_raw(i))
+    buffer.set_raw(index: i, value: me.get_raw(i))
     i = i + 1u64
 
   var a = left
@@ -717,24 +717,24 @@ routine List[T].merge_into_by(left: U64, mid: U64, right: U64, buffer: List[T], 
     var va = buffer.get_raw(a)
     var vb = buffer.get_raw(b)
     if compare(vb, va)
-      me.set_raw(out, vb)
+      me.set_raw(index: out, value: vb)
       b = b + 1u64
     else
-      me.set_raw(out, va)
+      me.set_raw(index: out, value: va)
       a = a + 1u64
     out = out + 1u64
 
   loop
     if a >= mid
       break
-    me.set_raw(out, buffer.get_raw(a))
+    me.set_raw(index: out, value: buffer.get_raw(a))
     a = a + 1u64
     out = out + 1u64
 
   loop
     if b >= right
       break
-    me.set_raw(out, buffer.get_raw(b))
+    me.set_raw(index: out, value: buffer.get_raw(b))
     b = b + 1u64
     out = out + 1u64
   return

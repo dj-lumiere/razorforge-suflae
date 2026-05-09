@@ -142,7 +142,7 @@ routine S32.$create!(from: D64) -> S32
 ### :returns: The integer part of `from` as an `S32`.
 ### :throws: {IntegerOverflowError} if the integer part is outside the S32 range.
 routine S32.$create!(from: D128) -> S32
-  return d128_to_s32(from.low, from.high)
+  return d128_to_s32(low: from.low, high: from.high)
 
 # ============================================================================
 # Arithmetic Operations

@@ -686,7 +686,7 @@ routine Text.join(parts: List[Owned[Text]]) -> Text
 ### :returns: The resulting `List[Owned[Text]]` value.
 @readonly
 routine Text.lines() -> List[Owned[Text]]
-  var normalized = me.replace("\r\n", "\n")
+  var normalized = me.replace(old: "\r\n", new: "\n")
   return normalized.split(CHARACTER_NEWLINE)
 
 ### Returns the whitespace-delimited words in this text.
