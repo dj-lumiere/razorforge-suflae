@@ -153,6 +153,9 @@ public enum SemanticWarningCode
     // STYLE WARNINGS (RF-W300 - RF-W349)
     // ═══════════════════════════════════════════════════════════════════════════
 
+    /// <summary>Two-argument call without named arguments — recommended but not required.</summary>
+    NamedArgumentRecommended = 258,
+
     /// <summary>Type name does not follow PascalCase convention.</summary>
     TypeNameNotPascalCase = 300,
 

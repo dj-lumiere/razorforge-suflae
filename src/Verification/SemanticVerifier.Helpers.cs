@@ -130,12 +130,15 @@ public sealed partial class SemanticVerifier
         var boundParams = new Dictionary<int, Expression>();
         int positionalIndex = 0;
 
-        // S510: Routines with 2+ non-me parameters require all arguments to be named.
+        // S510: Routines with 3+ non-me parameters require all arguments to be named.
         // This prevents argument-swap bugs at call sites. Variadic routines are exempt
         // because their extra positional args don't map to named parameters.
+        // For exactly 2 parameters, naming is recommended (warning W258) — binary ops
+        // like swap(a, b) or move(from, to) are usually clear from context.
         int nonMeParamCount =
             parameters.Count(predicate: p => p.Name != "me" && !p.HasDefaultValue);
-        bool requiresNamedArgs = nonMeParamCount >= 2 && !routine.IsVariadic;
+        bool requiresNamedArgs = nonMeParamCount >= 3 && !routine.IsVariadic;
+        bool recommendsNamedArgs = nonMeParamCount == 2 && !routine.IsVariadic;
 
         foreach (Expression arg in arguments)
         {
@@ -183,6 +186,14 @@ public sealed partial class SemanticVerifier
                     ReportError(code: SemanticDiagnosticCode.NamedArgumentRequired,
                         message:
                         $"Routine '{routine.Name}' has {nonMeParamCount} parameters - all arguments must be named.",
+                        location: arg.Location);
+                }
+                else if (recommendsNamedArgs)
+                {
+                    // W258: Named arguments recommended for 2-parameter calls.
+                    ReportWarning(code: SemanticWarningCode.NamedArgumentRecommended,
+                        message:
+                        $"Routine '{routine.Name}' has 2 parameters - naming arguments is recommended for clarity.",
                         location: arg.Location);
                 }
                 else if (seenNamed)
