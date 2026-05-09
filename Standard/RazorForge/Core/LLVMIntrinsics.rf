@@ -626,16 +626,16 @@ external("llvm") routine atomic_compare_and_exchange[T](ptr: Hijacked[T], expect
 ### :param array: The aggregate value to inspect.
 ### :param index: The zero-based byte offset.
 ### :returns: The byte stored at `index`.
-@llvm_ir("{result} = alloca {Array}\nstore {Array} {array}, ptr {prev}\n{result} = getelementptr {Array}, ptr {prev}, i32 0, i64 {index}\n{result} = load i8, ptr {prev}")
-external("llvm") routine byte_at[Array](array: Array, index: U64) -> U8
+@llvm_ir("{result} = alloca [{N} x i8]\nstore [{N} x i8] {array}, ptr {prev}\n{result} = getelementptr [{N} x i8], ptr {prev}, i32 0, i64 {index}\n{result} = load i8, ptr {prev}")
+external("llvm") routine byte_at[N](array: Array[Byte, N], index: U64) -> U8
 
 ### Sets the byte at component.
 ### :param array: The `array` value.
 ### :param index: The zero-based position to use.
 ### :param value: The value to use.
-### :returns: The resulting `Array` value.
-@llvm_ir("{result} = alloca {Array}\nstore {Array} {array}, ptr {prev}\n{result} = getelementptr {Array}, ptr {prev}, i32 0, i64 {index}\nstore i8 {value}, ptr {prev}\n{result} = load {Array}, ptr {first}")
-external("llvm") routine set_byte_at[Array](array: Array, index: U64, value: U8) -> Array
+### :returns: The resulting `Array[Byte, N]` value.
+@llvm_ir("{result} = alloca [{N} x i8]\nstore [{N} x i8] {array}, ptr {prev}\n{result} = getelementptr [{N} x i8], ptr {prev}, i32 0, i64 {index}\nstore i8 {value}, ptr {prev}\n{result} = load [{N} x i8], ptr {first}")
+external("llvm") routine set_byte_at[N](array: Array[Byte, N], index: U64, value: U8) -> Array[Byte, N]
 
 ### Returns the element at `index` from an aggregate value.
 ### Like `byte_at`, this helper materializes the aggregate in temporary storage

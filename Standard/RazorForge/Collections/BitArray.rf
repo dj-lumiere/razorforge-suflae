@@ -37,6 +37,21 @@ record BitArray[N]
 needs N is U64
   pass
 
+### Reads the byte at `index` from a `BitArray[N]`'s packed storage.
+### :param array: The bit array to read from.
+### :param index: The zero-based byte position.
+### :returns: The byte stored at `index`.
+@llvm_ir("{result} = alloca [{(N+7)//8} x i8]\nstore [{(N+7)//8} x i8] {array}, ptr {prev}\n{result} = getelementptr [{(N+7)//8} x i8], ptr {prev}, i32 0, i64 {index}\n{result} = load i8, ptr {prev}")
+external("llvm") routine byte_at_bits[N](array: BitArray[N], index: U64) -> U8 needs N is U64
+
+### Writes `value` into the byte at `index` of a `BitArray[N]`'s packed storage.
+### :param array: The bit array to update.
+### :param index: The zero-based byte position.
+### :param value: The byte to store.
+### :returns: A copy of `array` with the byte at `index` replaced by `value`.
+@llvm_ir("{result} = alloca [{(N+7)//8} x i8]\nstore [{(N+7)//8} x i8] {array}, ptr {prev}\n{result} = getelementptr [{(N+7)//8} x i8], ptr {prev}, i32 0, i64 {index}\nstore i8 {value}, ptr {prev}\n{result} = load [{(N+7)//8} x i8], ptr {first}")
+external("llvm") routine set_byte_at_bits[N](array: BitArray[N], index: U64, value: U8) -> BitArray[N] needs N is U64
+
 # ============================================================================
 # Query Operations
 # ============================================================================
@@ -69,7 +84,7 @@ routine BitArray[N].$getitem!(index: U64) -> Bool
   # Access bit at index within packed bytes
   var byte_idx = index // 8u64
   var bit_off = U8(index % 8u64)
-  var byte_val = byte_at[BitArray[N]](me,byte_idx)
+  var byte_val = byte_at_bits[N](me,byte_idx)
   return (byte_val & (1u8 << bit_off)) != 0u8
 
 ### Returns the bit addressed from the back of the array.
@@ -100,11 +115,11 @@ routine BitArray[N].with_set(index: U64, value: Bool) -> BitArray[N]
   # Modify the bit in the copy
   var byte_idx = unsigned_div[U64](index, 8u64)
   var bit_off = U8(unsigned_rem[U64](index, 8u64))
-  var byte_val = byte_at[BitArray[N]](result,byte_idx)
+  var byte_val = byte_at_bits[N](result,byte_idx)
   if value
-    result = set_byte_at[BitArray[N]](result,byte_idx, byte_val | (1u8 << bit_off))
+    result = set_byte_at_bits[N](result,byte_idx, byte_val | (1u8 << bit_off))
   else
-    result = set_byte_at[BitArray[N]](result,byte_idx, byte_val & ~(1u8 << bit_off))
+    result = set_byte_at_bits[N](result,byte_idx, byte_val & ~(1u8 << bit_off))
   return result
 
 ### Returns a new `BitArray` identical to this one but with the bit at `index` toggled.
