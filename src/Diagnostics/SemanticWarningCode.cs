@@ -118,9 +118,6 @@ public enum SemanticWarningCode
     /// <summary>Calling .grasp() on @initonly record — the record is frozen after construction.</summary>
     HijackOnInitOnly = 210,
 
-    /// <summary>Task[T] result is not awaited — potential fire-and-forget bug.</summary>
-    UnusedTaskResult = 215,
-
     // ═══════════════════════════════════════════════════════════════════════════
     // PATTERN MATCHING WARNINGS (RF-W250 - RF-W299)
     // ═══════════════════════════════════════════════════════════════════════════

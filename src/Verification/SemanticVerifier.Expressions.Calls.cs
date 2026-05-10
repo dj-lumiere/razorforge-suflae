@@ -11,22 +11,6 @@ using TypeSymbol = TypeInfo;
 
 public sealed partial class SemanticVerifier
 {
-    private TypeSymbol WrapAsyncRoutineReturnType(RoutineInfo routine, TypeSymbol returnType)
-    {
-        if (!routine.IsAsync)
-        {
-            return returnType;
-        }
-
-        TypeSymbol? taskDef = LookupTypeWithImports(name: "Task");
-        if (taskDef is { IsGenericDefinition: true })
-        {
-            return _registry.GetOrCreateResolution(genericDef: taskDef, typeArguments: [returnType]);
-        }
-
-        return returnType;
-    }
-
     private TypeSymbol AnalyzeCallExpression(CallExpression call)
     {
         switch (call.Callee)
@@ -323,7 +307,7 @@ public sealed partial class SemanticVerifier
                     TypeSymbol returnType = routine.ReturnType ??
                                             _registry.LookupType(name: "Blank") ??
                                             ErrorTypeInfo.Instance;
-                    return WrapAsyncRoutineReturnType(routine: routine, returnType: returnType);
+                    return returnType;
                 }
 
                 // Could be a type creator
@@ -571,7 +555,7 @@ public sealed partial class SemanticVerifier
                     TypeSymbol returnType = routine.ReturnType ??
                                             _registry.LookupType(name: "Blank") ??
                                             ErrorTypeInfo.Instance;
-                    return WrapAsyncRoutineReturnType(routine: routine, returnType: returnType);
+                    return returnType;
                 }
 
                 break;
@@ -1011,7 +995,7 @@ public sealed partial class SemanticVerifier
                     TypeSymbol returnType = callReturnType ??
                                             _registry.LookupType(name: "Blank") ??
                                             ErrorTypeInfo.Instance;
-                    return WrapAsyncRoutineReturnType(routine: method, returnType: returnType);
+                    return returnType;
                 }
 
                 // #78: Method-chain constructor — "42".S32!() → S32.$create!(from: "42")

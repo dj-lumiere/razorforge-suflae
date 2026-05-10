@@ -705,22 +705,10 @@ public sealed partial class SemanticVerifier
                 _ => "routine"
             };
 
-            // #30: Specific warning for unused Task[T] results
-            string baseReturnName = GetBaseTypeName(typeName: exprType.Name);
-            if (baseReturnName == "Task")
-            {
-                ReportWarning(code: SemanticWarningCode.UnusedTaskResult,
-                    message: $"Task result from '{routineName}()' is not awaited. " +
-                             "Use 'waitfor' to await the result, or 'discard' to explicitly ignore it.",
-                    location: call.Location);
-            }
-            else
-            {
-                ReportWarning(code: SemanticWarningCode.UnusedRoutineReturnValue,
-                    message: $"Return value of '{routineName}()' ({exprType.Name}) is unused. " +
-                             "Use 'discard' to explicitly ignore the return value, or assign it to a variable.",
-                    location: call.Location);
-            }
+            ReportWarning(code: SemanticWarningCode.UnusedRoutineReturnValue,
+                message: $"Return value of '{routineName}()' ({exprType.Name}) is unused. " +
+                         "Use 'discard' to explicitly ignore the return value, or assign it to a variable.",
+                location: call.Location);
         }
     }
 
