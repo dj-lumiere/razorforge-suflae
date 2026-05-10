@@ -2,6 +2,7 @@ using Compiler.Postprocessing.Passes;
 using Compiler.Instantiation;
 using Compiler.Resolution;
 using SyntaxTree;
+using TypeModel.Types;
 
 namespace Compiler.Desugaring.Passes;
 
@@ -364,6 +365,22 @@ internal sealed class GenericCallLoweringPass
     }
 
     /// <summary>
+    /// Returns true when <paramref name="type"/> is a record/entity with no member variables —
+    /// so a zero-arg <see cref="CreatorExpression"/> over it is structurally valid (a bare
+    /// zero-init of the type's storage). Returns false for null and for types that carry
+    /// fields needing initialization.
+    /// </summary>
+    private static bool HasZeroMemberVariables(TypeInfo? type)
+    {
+        return type switch
+        {
+            RecordTypeInfo r => r.MemberVariables.Count == 0,
+            EntityTypeInfo e => e.MemberVariables.Count == 0,
+            _ => false
+        };
+    }
+
+    /// <summary>
     /// Tries to lower a <see cref="GenericMethodCallExpression"/> to a plain
     /// <see cref="CallExpression"/>. Returns <c>null</c> if the node cannot be safely lowered.
     /// </summary>
@@ -376,10 +393,21 @@ internal sealed class GenericCallLoweringPass
         // SA finds no matching $create overload (e.g. List[T](data:..., count:..., capacity:...))
         // because this is a raw field-initialization form, not a regular routine call.
         // Lower to CreatorExpression so codegen's EmitConstructorCall handles it.
+        // Also covers zero-arg construction of zero-field records and const-generic record
+        // resolutions (e.g. BitArray[8](), Array[S64, 4]()) — SA marks these as type
+        // constructions via ConstructedType/LoweringKind=TypeConstructor but never finds a
+        // matching $create() to bind ResolvedRoutine. Without lowering they'd survive as
+        // GMCEs and trip the IllegalBackendResidualNode check.
+        //
+        // Zero-arg construction of a type that has fields (e.g. Deque[S64]()) is NOT lowered
+        // here — the type relies on a real $create() overload that SA failed to bind, and
+        // forging an empty CreatorExpression would just re-issue the bug as S455
+        // (missing field). Leave that case to the SA fix path.
         if (gmc.Object is IdentifierExpression literalId && literalId.Name == gmc.MethodName
             && gmc.ResolvedRoutine == null
             && _registry.LookupType(name: gmc.MethodName) != null
-            && gmc.Arguments.Count > 0)
+            && (gmc.Arguments.Count > 0
+                || HasZeroMemberVariables(type: gmc.ConstructedType)))
         {
             // Accept either fully named args (record-style field init) or fully positional
             // (constructor call form like Hijacked[T](me) from synthesized wrapper bodies).
