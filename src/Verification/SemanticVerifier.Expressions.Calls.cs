@@ -1024,15 +1024,18 @@ public sealed partial class SemanticVerifier
                 TypeSymbol? targetType = LookupTypeWithImports(name: potentialTypeName);
                 if (targetType != null)
                 {
-                    // Look up the creator on the target type, using overload resolution
-                    // to match the object type (e.g., Text → S32.$create!(from_text: Text))
+                    // Look up the creator on the target type, using method-overload resolution
+                    // to match the object type (e.g., Text → S32.$create!(from_text: Text)).
                     // Note: parser strips '!' from routine names — IsFailable is a separate flag.
                     // Always look up "$create" and check IsFailable on the result.
-                    string creatorFullName = $"{targetType.FullName}.$create";
+                    // $create is owner-scoped, so LookupMethodOverload (not LookupRoutineOverload)
+                    // is the right entry point — the latter only indexes free functions.
                     RoutineInfo? creator =
-                        _registry.LookupRoutineOverload(baseName: creatorFullName,
+                        _registry.LookupMethodOverload(type: targetType,
+                            methodName: "$create",
                             argTypes: [objectType]);
                     // Fall back to default overload if no match by arg type
+                    string creatorFullName = $"{targetType.FullName}.$create";
                     creator ??= _registry.LookupRoutine(fullName: creatorFullName);
 
                     if (creator != null)

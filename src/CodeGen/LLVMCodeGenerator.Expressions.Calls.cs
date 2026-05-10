@@ -557,10 +557,17 @@ public partial class LlvmCodeGenerator
                         targetType: targetType);
                 }
 
-                string creatorName = $"{conversionTypeName}.$create";
                 var argTypes2 = new List<TypeInfo> { receiverType };
+                // $create is owner-scoped; LookupRoutineOverload only indexes free functions,
+                // so use LookupMethodOverload to honor the receiver-type overload signature
+                // (otherwise Text.S32!() resolves to S32.$create(from: S8), the first overload).
                 RoutineInfo? creator =
-                    _registry.LookupRoutineOverload(baseName: creatorName, argTypes: argTypes2);
+                    _registry.LookupMethodOverload(type: targetType,
+                        methodName: "$create",
+                        argTypes: argTypes2);
+                string creatorName = $"{conversionTypeName}.$create";
+                creator ??= _registry.LookupRoutineOverload(baseName: creatorName,
+                    argTypes: argTypes2);
                 if (creator != null)
                 {
                     // Non-generic path

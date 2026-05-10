@@ -461,6 +461,23 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         {
             if (m.Name == "$create" && m.Parameters.Count == 0) return m;
         }
+        // Method-chain constructor: text.S32!() lowers to S32.$create(receiver). The call
+        // has zero positional arguments but the member-receiver is the conversion source.
+        // Match the $create overload whose single parameter accepts the receiver type so
+        // reachability marks the failable Text overload (not the first-registered S8 one).
+        if (ce.Callee is MemberExpression chainMember)
+        {
+            TypeInfo? receiverType = chainMember.Object.ResolvedType
+                ?? InferExpressionType(e: chainMember.Object);
+            if (receiverType != null)
+            {
+                foreach (RoutineInfo m in ctx.Registry.GetMethodsForType(type: ct))
+                {
+                    if (m.Name != "$create" || m.Parameters.Count != 1) continue;
+                    if (m.Parameters[index: 0].Type?.Name == receiverType.Name) return m;
+                }
+            }
+        }
         // Fallback: codegen mangles by FullName regardless of registration.
         _live.Add(item: $"{ct.FullName}.$create");
         return null;
