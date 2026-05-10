@@ -121,7 +121,7 @@ public sealed partial class SemanticVerifier
 
         // Try to look up as variable first
         VariableInfo? varInfo = _registry.LookupVariable(name: id.Name);
-        // Try current module prefix for presets (e.g., "MY_CONST" → "MyModule.MY_CONST")
+        // Try current module prefix for presets (e.g., "MY_CONST" -> "MyModule.MY_CONST")
         if (varInfo == null && _currentModuleName != null && !id.Name.Contains(value: '.'))
         {
             varInfo = _registry.LookupVariable(name: $"{_currentModuleName}.{id.Name}");
@@ -154,12 +154,12 @@ public sealed partial class SemanticVerifier
         }
 
         // Try to look up as routine (function reference)
-        // Strip '!' suffix for failable routine references (e.g., "stop!" → "stop")
+        // Strip '!' suffix for failable routine references (e.g., "stop!" -> "stop")
         string routineLookupName = id.Name.EndsWith(value: '!')
             ? id.Name[..^1]
             : id.Name;
         RoutineInfo? routine = _registry.LookupRoutine(fullName: routineLookupName);
-        // Try current module prefix (e.g., "infinite_loop" → "HelloWorld.infinite_loop")
+        // Try current module prefix (e.g., "infinite_loop" -> "HelloWorld.infinite_loop")
         if (routine == null && _currentModuleName != null &&
             !routineLookupName.Contains(value: '.'))
         {
@@ -195,7 +195,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Analyzes binary expressions that remain as BinaryExpression nodes after parsing.
     /// Note: Most arithmetic, comparison, and bitwise operators are desugared to method calls
-    /// in the parser (e.g., a + b → a.$add(b)). This method only handles operators that
+    /// in the parser (e.g., a + b -> a.$add(b)). This method only handles operators that
     /// are NOT desugared:
     /// - Assignment (=)
     /// - Logical operators (and, or) — require short-circuit evaluation
@@ -313,7 +313,7 @@ public sealed partial class SemanticVerifier
                              "requires a 'danger' block or '@dangerous' routine.",
                     location: binary.Location);
                 return ErrorTypeInfo.Instance;
-            // Flags combination: A and B → bitwise OR (combines flags)
+            // Flags combination: A and B -> bitwise OR (combines flags)
             case BinaryOperator.And when leftType is FlagsTypeInfo &&
                                          leftType.Name == rightType.Name:
                 return leftType;
@@ -414,7 +414,7 @@ public sealed partial class SemanticVerifier
 
         TypeSymbol paramType = method.Parameters[index: 0].Type;
 
-        // Substitute Me → leftType for protocol-sourced methods
+        // Substitute Me -> leftType for protocol-sourced methods
         if (paramType is ProtocolSelfTypeInfo)
         {
             paramType = leftType;
@@ -641,7 +641,7 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// Analyzes a compound assignment expression (e.g., a += b).
-    /// Dispatch order: (0) verify target is var, (1) try in-place wired ($iadd) → Blank,
+    /// Dispatch order: (0) verify target is var, (1) try in-place wired ($iadd) -> Blank,
     /// (2) fallback to create-and-assign ($add), (3) error if neither exists.
     /// </summary>
     private TypeSymbol AnalyzeCompoundAssignment(CompoundAssignmentExpression compound)

@@ -19,7 +19,7 @@ public sealed partial class SemanticVerifier
             case IdentifierExpression id:
             {
                 bool isFailableCall = id.Name.EndsWith(value: '!');
-                // Strip '!' suffix for failable calls (e.g., "stop!" → "stop")
+                // Strip '!' suffix for failable calls (e.g., "stop!" -> "stop")
                 string callName = isFailableCall
                     ? id.Name[..^1]
                     : id.Name;
@@ -56,7 +56,7 @@ public sealed partial class SemanticVerifier
 
                 RoutineInfo? routine = _registry.LookupRoutine(fullName: callName,
                     isFailable: isFailableCall);
-                // Try current module prefix (e.g., "infinite_loop" → "HelloWorld.infinite_loop")
+                // Try current module prefix (e.g., "infinite_loop" -> "HelloWorld.infinite_loop")
                 if (routine == null && _currentModuleName != null && !callName.Contains(value: '.'))
                 {
                     routine = _registry.LookupRoutine(fullName: $"{_currentModuleName}.{callName}",
@@ -64,7 +64,7 @@ public sealed partial class SemanticVerifier
                 }
 
                 // Explicit type arguments on a generic routine call — monomorphize immediately so
-                // that ResolvedType is concrete (e.g., signed_div[S32](...) → ReturnType = S32, not T).
+                // that ResolvedType is concrete (e.g., signed_div[S32](...) -> ReturnType = S32, not T).
                 if (routine is { IsGenericDefinition: true } &&
                     call.TypeArguments is { Count: > 0 } routineExplicitTypeArgs &&
                     routine.GenericParameters?.Count == routineExplicitTypeArgs.Count)
@@ -204,7 +204,7 @@ public sealed partial class SemanticVerifier
                 }
 
                 // Variadic fallback: if resolved routine is non-variadic but has too many args,
-                // try a variadic generic overload (e.g., show("a","b","c") → show[T](values...: T))
+                // try a variadic generic overload (e.g., show("a","b","c") -> show[T](values...: T))
                 if (routine != null && !routine.IsVariadic &&
                     call.Arguments.Count > routine.Parameters.Count)
                 {
@@ -326,8 +326,8 @@ public sealed partial class SemanticVerifier
                     }
 
                     // C95: Try $create overload match first
-                    // e.g., BitList(capacity: 32u64) → BitList.$create(capacity: U64)
-                    // e.g., BitList(32u64) → BitList.$create(capacity: U64) instead of collection literal
+                    // e.g., BitList(capacity: 32u64) -> BitList.$create(capacity: U64)
+                    // e.g., BitList(32u64) -> BitList.$create(capacity: U64) instead of collection literal
                     if (call.Arguments.Count > 0)
                     {
                         RoutineInfo? creator = _registry.LookupMethodOverload(type: type,
@@ -963,13 +963,13 @@ public sealed partial class SemanticVerifier
                     {
                         var substitutions = new Dictionary<string, TypeSymbol>();
 
-                        // GenericParameterTypeInfo owner → map param name to receiver type
+                        // GenericParameterTypeInfo owner -> map param name to receiver type
                         if (method.OwnerType is GenericParameterTypeInfo genParamOwner)
                         {
                             substitutions[key: genParamOwner.Name] = dispatchType;
                         }
 
-                        // Protocol owner → map protocol generic params to receiver's type args
+                        // Protocol owner -> map protocol generic params to receiver's type args
                         if (method.OwnerType is ProtocolTypeInfo protoOwner &&
                             dispatchType is { IsGenericResolution: true, TypeArguments: not null })
                         {
@@ -998,7 +998,7 @@ public sealed partial class SemanticVerifier
                     return returnType;
                 }
 
-                // #78: Method-chain constructor — "42".S32!() → S32.$create!(from: "42")
+                // #78: Method-chain constructor — "42".S32!() -> S32.$create!(from: "42")
                 string propName = member.PropertyName;
                 bool isFailable = propName.EndsWith(value: '!');
                 string potentialTypeName = isFailable
@@ -1009,7 +1009,7 @@ public sealed partial class SemanticVerifier
                 if (targetType != null)
                 {
                     // Look up the creator on the target type, using method-overload resolution
-                    // to match the object type (e.g., Text → S32.$create!(from_text: Text)).
+                    // to match the object type (e.g., Text -> S32.$create!(from_text: Text)).
                     // Note: parser strips '!' from routine names — IsFailable is a separate flag.
                     // Always look up "$create" and check IsFailable on the result.
                     // $create is owner-scoped, so LookupMethodOverload (not LookupRoutineOverload)
@@ -1196,7 +1196,7 @@ public sealed partial class SemanticVerifier
             return DispatchStrategy.Buildtime;
         }
 
-        // All same concrete type → buildtime; mixed → runtime
+        // All same concrete type -> buildtime; mixed -> runtime
         TypeSymbol firstType = varargsArgTypes[index: 0];
         bool allSame = varargsArgTypes.All(predicate: t => t.Name == firstType.Name);
 

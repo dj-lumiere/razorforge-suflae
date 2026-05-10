@@ -25,7 +25,7 @@ public sealed partial class SemanticVerifier
             return ExtractFromIsPattern(isPat: isPat);
         }
 
-        // Handle desugared unless: Not(x is None) → if Not(condition) { ... }
+        // Handle desugared unless: Not(x is None) -> if Not(condition) { ... }
         if (condition is UnaryExpression
             {
                 Operator: UnaryOperator.Not, Operand: IsPatternExpression innerIsPat
@@ -89,13 +89,13 @@ public sealed partial class SemanticVerifier
 
         if (isPat.IsNegated)
         {
-            // "x isnot None" → then branch gets the narrowed type
+            // "x isnot None" -> then branch gets the narrowed type
             return new NarrowingInfo(VariableName: id.Name,
                 ThenBranchType: narrowedType,
                 ElseBranchType: null);
         }
 
-        // "x is None" → else branch gets the narrowed type
+        // "x is None" -> else branch gets the narrowed type
         return new NarrowingInfo(VariableName: id.Name,
             ThenBranchType: null,
             ElseBranchType: narrowedType);
@@ -138,13 +138,13 @@ public sealed partial class SemanticVerifier
 
         return baseName switch
         {
-            // Maybe<T>: eliminate None → T
+            // Maybe<T>: eliminate None -> T
             "Maybe" when eliminateNone => valueType,
 
-            // Result<T>: eliminate Crashable → T
+            // Result<T>: eliminate Crashable -> T
             "Result" when eliminateCrashable => valueType,
 
-            // Lookup<T>: must eliminate both absent (Blank) and Crashable → T
+            // Lookup<T>: must eliminate both absent (Blank) and Crashable -> T
             "Lookup" when eliminateBlank && eliminateCrashable => valueType,
 
             // Partial elimination on Lookup is not sufficient

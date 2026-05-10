@@ -51,7 +51,7 @@ public sealed class CrashableTypeInfo : TypeInfo
 
     /// <summary>
     /// Converts a CamelCase type name to a sentence-cased crash title.
-    /// Examples: NetworkError → "Network error", VerificationFailedError → "Verification failed error"
+    /// Examples: NetworkError -> "Network error", VerificationFailedError -> "Verification failed error"
     /// </summary>
     public static string SynthesizeCrashTitle(string typeName)
     {

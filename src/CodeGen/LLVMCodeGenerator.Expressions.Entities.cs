@@ -474,7 +474,7 @@ public partial class LlvmCodeGenerator
     private string EmitRecordMemberVariableRead(StringBuilder sb, string recordValue,
         RecordTypeInfo record, string memberVariableName)
     {
-        // Hijacked[T] (@llvm("ptr")): .address → ptrtoint ptr to i64
+        // Hijacked[T] (@llvm("ptr")): .address -> ptrtoint ptr to i64
         if (record is { HasDirectBackendType: true, LlvmType: "ptr" } &&
             memberVariableName == "address")
         {

@@ -178,7 +178,7 @@ public sealed partial class StdlibLoader
         }
 
         // Pass 1e: Re-resolve protocol method return types that failed in pass 1a.1 due to
-        // forward references (e.g., Crashable.crash_message() → Text where Text was not yet
+        // forward references (e.g., Crashable.crash_message() -> Text where Text was not yet
         // registered when protocols were first processed in pass 1a.1).
         foreach ((Program program, string _, string _) in _corePrograms)
         {
@@ -528,7 +528,7 @@ public sealed partial class StdlibLoader
 
         string typeName = typeExpr.Name;
 
-        // Generic parameter name (T, K, V) → placeholder for substitution
+        // Generic parameter name (T, K, V) -> placeholder for substitution
         if (genericParams != null && genericParams.Contains(value: typeName))
         {
             return new GenericParameterTypeInfo(name: typeName);
@@ -556,7 +556,7 @@ public sealed partial class StdlibLoader
             }
         }
 
-        // Routine type: Routine[(T, T), Bool] → RoutineTypeInfo
+        // Routine type: Routine[(T, T), Bool] -> RoutineTypeInfo
         if (typeName == "Routine" && typeExpr.GenericArguments?.Count == 2)
         {
             TypeExpression paramTupleExpr = typeExpr.GenericArguments[index: 0];

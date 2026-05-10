@@ -271,7 +271,7 @@ public partial class LlvmCodeGenerator
             if (firstResult != null)
                 substituted = substituted.Replace(oldValue: "{first}", newValue: firstResult);
 
-            // {T}, {From}, {To}, etc. — named generic parameters → LLVM types
+            // {T}, {From}, {To}, etc. — named generic parameters -> LLVM types
             IReadOnlyList<string>? genericParameters =
                 method.GenericParameters ?? method.GenericDefinition?.GenericParameters;
             if (genericParameters != null)
@@ -292,7 +292,7 @@ public partial class LlvmCodeGenerator
                 }
             }
 
-            // {paramName} → emitted arg value (positional by parameter list order)
+            // {paramName} -> emitted arg value (positional by parameter list order)
             for (int i = 0; i < method.Parameters.Count && i < args.Count; i++)
             {
                 string paramName = method.Parameters[index: i].Name;

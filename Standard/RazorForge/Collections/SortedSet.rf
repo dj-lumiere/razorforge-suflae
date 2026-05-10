@@ -530,9 +530,9 @@ routine SortedSet[T].remove(value: T) -> Bool
 # remove a key from it, it can lose one key and still satisfy the minimum.
 #
 # Three cases when the value is found at an internal node:
-#   2a  left child has spare keys  → replace with in-order predecessor.
-#   2b  right child has spare keys → replace with in-order successor.
-#   2c  both children at minimum   → merge them, then recurse.
+#   2a  left child has spare keys  -> replace with in-order predecessor.
+#   2b  right child has spare keys -> replace with in-order successor.
+#   2c  both children at minimum   -> merge them, then recurse.
 #
 # Descent case: fix_child guarantees the target child has spare keys.
 # ============================================================================

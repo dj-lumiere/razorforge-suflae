@@ -402,7 +402,7 @@ public class RecordTypeInfo : TypeInfo
                           .ToList();
 
         // Route through the ambient TypeRegistry so entity-type specializations
-        // (e.g. Maybe[Text] → { Hijacked[T] } layout) are picked up.
+        // (e.g. Maybe[Text] -> { Hijacked[T] } layout) are picked up.
         TypeRegistry? registry = TypeRegistry.Ambient;
 
         // Get the generic definition and create resolved instance with new args

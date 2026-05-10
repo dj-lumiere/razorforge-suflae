@@ -48,7 +48,6 @@ internal sealed class AutoWiredRegistrationPass
         TypeSymbol? listFieldInfoType = null;
         TypeSymbol? listProtocolInfoType = null;
         TypeSymbol? listRoutineInfoType = null;
-        TypeSymbol? dictTextDataType = null;
         if (builderServiceImported)
         {
             TypeSymbol? fieldInfoType = _registry.LookupType(name: "FieldInfo");
@@ -65,12 +64,6 @@ internal sealed class AutoWiredRegistrationPass
             listRoutineInfoType = listDef != null && routineInfoType != null
                 ? _registry.GetOrCreateResolution(genericDef: listDef,
                     typeArguments: [routineInfoType])
-                : null;
-
-            TypeSymbol? dictDef = _registry.LookupType(name: "Dict");
-            dictTextDataType = dictDef != null && textType != null && dataType != null
-                ? _registry.GetOrCreateResolution(genericDef: dictDef,
-                    typeArguments: [textType, dataType])
                 : null;
         }
 
@@ -104,7 +97,6 @@ internal sealed class AutoWiredRegistrationPass
                 listFieldInfoType: listFieldInfoType,
                 listProtocolInfoType: listProtocolInfoType,
                 listRoutineInfoType: listRoutineInfoType,
-                dictTextDataType: dictTextDataType,
                 byteSizeType: byteSizeType);
 
             switch (type.Category)
@@ -438,7 +430,6 @@ internal sealed class AutoWiredRegistrationPass
             listFieldInfoType: listFieldInfoType,
             listProtocolInfoType: listProtocolInfoType,
             listRoutineInfoType: listRoutineInfoType,
-            dictTextDataType: dictTextDataType,
             byteSizeType: byteSizeType);
         if (textType != null)
         {

@@ -67,7 +67,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// Type declarations bucketed by kind and sorted lexicographically within each bucket.
-    /// Emitted in category order: record → choice → variant → entity → crashable.
+    /// Emitted in category order: record -> choice -> variant -> entity -> crashable.
     /// Key = mangled LLVM type name; value = full declaration text (struct line + comment line).
     /// </summary>
     private readonly SortedDictionary<string, string> _typeDeclarationsRecord = new();
@@ -163,11 +163,11 @@ public partial class LlvmCodeGenerator
     /// <summary>Tracks alloca names already emitted for the current function to prevent duplicates.</summary>
     private readonly HashSet<string> _emittedAllocaNames = [];
 
-    /// <summary>Type parameter substitution map for generic monomorphization (e.g., "T" → Character).</summary>
+    /// <summary>Type parameter substitution map for generic monomorphization (e.g., "T" -> Character).</summary>
     private Dictionary<string, TypeInfo>? _typeSubstitutions;
 
     /// <summary>
-    /// Pending runtime dispatch stubs: mangled name → info needed to generate forwarding stub.
+    /// Pending runtime dispatch stubs: mangled name -> info needed to generate forwarding stub.
     /// Populated by EmitMemberRoutineCall when a call targets a protocol-typed receiver.
     /// </summary>
     private readonly Dictionary<string, RuntimeDispatchInfo> _pendingRuntimeDispatches = new();
@@ -184,7 +184,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// Maps local variable names that were bound via "when is Protocol x" pattern matching
-    /// to their type_id alloca name (e.g., "err" → "%err.typeid.addr").
+    /// to their type_id alloca name (e.g., "err" -> "%err.typeid.addr").
     /// Used by EmitMemberRoutineCall to pass the type_id for runtime runtime dispatch.
     /// </summary>
     private readonly Dictionary<string, string> _protocolTypeIdAllocas = new();
@@ -539,7 +539,7 @@ public partial class LlvmCodeGenerator
             }
         }
 
-        // Generate variant types (tagged unions → tag + payload record)
+        // Generate variant types (tagged unions -> tag + payload record)
         foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Variant))
         {
             if (type is VariantTypeInfo { IsGenericDefinition: false } variant)
@@ -569,7 +569,7 @@ public partial class LlvmCodeGenerator
         }
 
         // Types annotated @llvm("...") always map to a fixed LLVM type regardless of type
-        // arguments — treat as concrete (e.g. Hijacked[DictEntry[K,V]] → ptr is valid LLVM IR).
+        // arguments — treat as concrete (e.g. Hijacked[DictEntry[K,V]] -> ptr is valid LLVM IR).
         if (type is RecordTypeInfo { HasDirectBackendType: true })
         {
             return false;
@@ -1218,7 +1218,7 @@ public partial class LlvmCodeGenerator
         output.AppendLine(handler: $"target triple = \"{_targetTriple}\"");
         output.AppendLine();
 
-        // Type declarations — record → choice → variant → entity → crashable, each sorted by name
+        // Type declarations — record -> choice -> variant -> entity -> crashable, each sorted by name
         bool anyTypes = _typeDeclarationsRecord.Count > 0 || _typeDeclarationsVariant.Count > 0 ||
                         _typeDeclarationsEntity.Count > 0 || _typeDeclarationsCrashable.Count > 0;
         if (anyTypes)

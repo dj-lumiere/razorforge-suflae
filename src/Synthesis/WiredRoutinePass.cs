@@ -130,7 +130,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         // GetAllRoutines() filters out generic-definition owner types to prevent T/K,V placeholders
         // in LLVM. However, BuilderService routines on generic defs return only fixed literals or
         // empty collections — they never reference the generic parameters. GMP needs these bodies
-        // to emit the generic-def LLVM function (e.g. @Collections.BTreeDictNode.all_member_variables)
+        // to emit the generic-def LLVM function (e.g. @Collections.BTreeDictNode.member_variable_count)
         // so that wrapper forwarders for Hijacked[BTreeDictNode] have a valid callee.
         RunForGenericDefBuilderServiceRoutines(textType: textType, u64Type: u64Type,
             s64Type: s64Type, boolType: boolType, typeKindType: typeKindType,
@@ -269,7 +269,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         TypeInfo textType, TypeInfo boolType, TypeInfo? s32Type)
     {
         // Numeric $create bodies for @llvm-typed primitive records.
-        // S64.$create(from: Choice) → sign_extend; U64.$create(from: Flags) → reinterpret_bits.
+        // S64.$create(from: Choice) -> sign_extend; U64.$create(from: Flags) -> reinterpret_bits.
         // Must be checked before the HasDirectBackendType guard because these live on S64/U64.
         if (routine.Name == "$create" && routine.Parameters.Count == 1)
         {
@@ -413,7 +413,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 break;
             }
 
-            // Text.$create(from: T) → return from.$represent()
+            // Text.$create(from: T) -> return from.$represent()
             case "$create" when entity.Name == "Text" && routine.Parameters.Count == 1:
             {
                 TypeInfo paramType = routine.Parameters[index: 0].Type;
@@ -508,7 +508,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 break;
 
             case "$create!":
-                // Text → ChoiceType conversion is not implementable at the RF level;
+                // Text -> ChoiceType conversion is not implementable at the RF level;
                 // this always crashes. The body is unreachable in well-typed programs.
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildBreachStatement(logicBreachedErrorType: logicBreachedErrorType);
@@ -575,7 +575,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             { ResolvedType = ownerType };
         var youRef = new IdentifierExpression(Name: "you", Location: _synthLoc)
             { ResolvedType = ownerType };
-        // Choice: BinaryOperator.Is → EmitChoiceIs → icmp eq i32 (no $eq recursion).
+        // Choice: BinaryOperator.Is -> EmitChoiceIs -> icmp eq i32 (no $eq recursion).
         // Flags: BinaryOperator.Equal stays — OperatorLoweringPass skips it for flags,
         // and codegen emits icmp eq i64 via the flags-specific handler.
         BinaryOperator op = isChoice ? BinaryOperator.Is : BinaryOperator.Equal;
@@ -1946,28 +1946,6 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                         ElementType: null,
                         Location: _synthLoc)
                         { ResolvedType = listOwnedFieldInfo },
-                    Location: _synthLoc);
-                return true;
-            }
-
-            case "all_member_variables" or "open_member_variables"
-                when owner is RecordTypeInfo or EntityTypeInfo or CrashableTypeInfo:
-            {
-                TypeInfo? dataType = ctx.Registry.LookupType(name: "Data");
-                TypeInfo? ownedDef = ctx.Registry.LookupType(name: "Owned");
-                TypeInfo? dictDef = ctx.Registry.LookupType(name: "Dict");
-                if (dataType == null || ownedDef == null || dictDef == null) return false;
-                TypeInfo ownedText = ctx.Registry.GetOrCreateResolution(
-                    genericDef: ownedDef, typeArguments: [textType]);
-                TypeInfo dictType = ctx.Registry.GetOrCreateResolution(
-                    genericDef: dictDef, typeArguments: [ownedText, dataType]);
-                ctx.VariantBodies[key: routine.RegistryKey] = new ReturnStatement(
-                    Value: new DictLiteralExpression(
-                        Pairs: [],
-                        KeyType: null,
-                        ValueType: null,
-                        Location: _synthLoc)
-                        { ResolvedType = dictType },
                     Location: _synthLoc);
                 return true;
             }

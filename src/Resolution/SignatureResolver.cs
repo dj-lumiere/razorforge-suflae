@@ -166,7 +166,7 @@ internal sealed class SignatureResolver
                     location: param.Location);
             }
 
-            // Protocol-as-type desugaring: routine foo(x: Displayable) → routine foo[T obeys Displayable](x: T)
+            // Protocol-as-type desugaring: routine foo(x: Displayable) -> routine foo[T obeys Displayable](x: T)
             if (paramType is ProtocolTypeInfo)
             {
                 // Generate implicit generic parameter name
@@ -369,7 +369,7 @@ internal sealed class SignatureResolver
     private void ValidateMethodAgainstProtocol(RoutineInfo typeMethod,
         ProtocolMethodInfo protoMethod, ProtocolTypeInfo protocol, SourceLocation? location)
     {
-        // Build substitution map for generic protocols (e.g., Supplier[S32]: T → S32)
+        // Build substitution map for generic protocols (e.g., Supplier[S32]: T -> S32)
         Dictionary<string, string>? substitution = null;
         if (protocol.TypeArguments is { Count: > 0 })
         {

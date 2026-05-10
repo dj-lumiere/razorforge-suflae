@@ -26,8 +26,6 @@ public static class BuilderInfoProvider
         "generic_args",
         "member_variable_count",
         "member_variable_info",
-        "all_member_variables",
-        "open_member_variables",
         "protocols",
         "protocol_info",
         "routine_names",
@@ -82,7 +80,7 @@ public static class BuilderInfoProvider
         TypeRegistry registry, TypeSymbol? textType, TypeSymbol? boolType,
         TypeSymbol? u64Type, TypeSymbol? s64Type, TypeSymbol? listTextType,
         TypeSymbol? listFieldInfoType, TypeSymbol? listProtocolInfoType,
-        TypeSymbol? listRoutineInfoType, TypeSymbol? dictTextDataType,
+        TypeSymbol? listRoutineInfoType,
         TypeSymbol? byteSizeType = null)
     {
         // Text-returning routines
@@ -211,21 +209,6 @@ public static class BuilderInfoProvider
             MaybeRegister(owner: type,
                 name: "routine_info",
                 returnType: listRoutineInfoType,
-                existingMethods: existingMethods,
-                registry: registry);
-        }
-
-        // Dict[Text, Data]-returning routines
-        if (dictTextDataType != null)
-        {
-            MaybeRegister(owner: type,
-                name: "all_member_variables",
-                returnType: dictTextDataType,
-                existingMethods: existingMethods,
-                registry: registry);
-            MaybeRegister(owner: type,
-                name: "open_member_variables",
-                returnType: dictTextDataType,
                 existingMethods: existingMethods,
                 registry: registry);
         }

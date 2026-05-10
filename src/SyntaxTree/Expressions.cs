@@ -373,7 +373,7 @@ public record CallExpression(
     /// <summary>
     /// Method-level type arguments, set by <c>GenericCallLoweringPass</c> when lowering a
     /// <c>GenericMethodCallExpression</c> that has explicit type parameters at the call site
-    /// (e.g., <c>buf.read![U8](offset)</c> → <c>TypeArguments = [U8]</c>).
+    /// (e.g., <c>buf.read![U8](offset)</c> -> <c>TypeArguments = [U8]</c>).
     /// Null for calls with no method-level type args.
     /// </summary>
     public IReadOnlyList<TypeExpression>? TypeArguments { get; set; }
@@ -568,7 +568,7 @@ public record IndexExpression(Expression Object, Expression Index, SourceLocatio
     /// When this IndexExpression is the target of an assignment, set by OperatorLoweringPass
     /// to the method-generic-resolved <c>$setitem</c>/<c>$setitem!</c> routine. Codegen uses
     /// this in place of a fresh registry lookup so method-level generics (e.g.
-    /// <c>BitList.$setitem![I]</c> → <c>BitList.$setitem![S64]</c>) dispatch to the
+    /// <c>BitList.$setitem![I]</c> -> <c>BitList.$setitem![S64]</c>) dispatch to the
     /// monomorphized entry.
     /// </summary>
     public RoutineInfo? ResolvedSetItem { get; set; }
@@ -957,7 +957,7 @@ public record GenericMemberExpression(
 public record TypeIdExpression(TypeExpression Type, SourceLocation Location)
     : Expression(Location: Location)
 {
- 
+
     /// <inheritdoc/>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor) =>
         visitor.VisitTypeIdExpression(node: this);
@@ -966,7 +966,7 @@ public record TypeIdExpression(TypeExpression Type, SourceLocation Location)
 /// <summary>
 /// Expression that extracts the payload from a Result/Lookup carrier and reinterprets it
 /// as a specific concrete type.
-/// Codegen emits: GEP field 1 → load i64 → inttoptr to ConcreteType*.
+/// Codegen emits: GEP field 1 -> load i64 -> inttoptr to ConcreteType*.
 /// </summary>
 /// <param name="Carrier">The Result/Lookup carrier expression</param>
 /// <param name="ConcreteType">The concrete type to cast the payload to</param>
@@ -976,7 +976,7 @@ public record CarrierPayloadExpression(
     TypeExpression ConcreteType,
     SourceLocation Location) : Expression(Location: Location)
 {
- 
+
     /// <inheritdoc/>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor) =>
         visitor.VisitCarrierPayloadExpression(node: this);

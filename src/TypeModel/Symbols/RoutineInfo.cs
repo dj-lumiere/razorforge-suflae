@@ -405,7 +405,7 @@ public sealed class RoutineInfo
             return substituted;
         }
 
-        // Substitute inside routine types (e.g., Routine[(T, T), Bool] → Routine[(S64, S64), Bool])
+        // Substitute inside routine types (e.g., Routine[(T, T), Bool] -> Routine[(S64, S64), Bool])
         if (type is RoutineTypeInfo routineType)
         {
             var substitutedParams = routineType.ParameterTypes
@@ -439,7 +439,7 @@ public sealed class RoutineInfo
                               .ToList();
 
             // Route through the ambient TypeRegistry so entity-type specializations
-            // (e.g. Maybe[Text] → { Hijacked[T] } layout) are picked up instead of
+            // (e.g. Maybe[Text] -> { Hijacked[T] } layout) are picked up instead of
             // blindly using the primary generic definition's layout.
             TypeRegistry? registry = TypeRegistry.Ambient;
 
@@ -467,7 +467,7 @@ public sealed class RoutineInfo
 
             // WrapperTypeInfo (Retained[T], Shared[T], etc.) — if the registry has a RecordTypeInfo
             // for the same base name, prefer that so the concrete type stays RecordTypeInfo everywhere.
-            // This avoids the WrapperTypeInfo → "ptr" codegen mapping mismatch when the actual LLVM
+            // This avoids the WrapperTypeInfo -> "ptr" codegen mapping mismatch when the actual LLVM
             // function definition uses the struct layout from the RecordTypeInfo.
             if (type is WrapperTypeInfo && registry != null)
             {

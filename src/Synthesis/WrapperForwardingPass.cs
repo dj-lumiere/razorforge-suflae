@@ -19,7 +19,7 @@ namespace Compiler.Synthesis;
 ///     var raw = Hijacked[T](me)
 ///     return raw.extract().method(arg1: arg1, ...)
 ///
-/// where T is the wrapper's generic parameter.  When monomorphized with T→List[Byte],
+/// where T is the wrapper's generic parameter.  When monomorphized with T->List[Byte],
 /// the body's Hijacked[T] becomes Hijacked[List[Byte]], and expression types resolve
 /// transitively through raw.extract() to the concrete inner type.
 ///
@@ -94,7 +94,7 @@ internal sealed class WrapperForwardingPass
         // Operators/hashing/display: invoked from generic stdlib container
         // bodies after monomorphization, so they bypass SA's lazy synthesis
         // path. Wrappers do not define these themselves — they transparently
-        // forward to inner T (e.g. Owned[Text].$eq → Text.$eq).
+        // forward to inner T (e.g. Owned[Text].$eq -> Text.$eq).
         "$eq",
         "$ne",
         "$cmp",

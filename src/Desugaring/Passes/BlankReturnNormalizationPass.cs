@@ -6,9 +6,9 @@ namespace Compiler.Desugaring.Passes;
 /// D-AST-0: Normalizes null return types and bare return statements.
 /// <list type="bullet">
 ///   <item><see cref="RoutineDeclaration"/> with <c>ReturnType == null</c> (no <c>-&gt;</c> written)
-///         → <c>ReturnType = TypeExpression("Blank")</c>.</item>
+///         -> <c>ReturnType = TypeExpression("Blank")</c>.</item>
 ///   <item><see cref="ReturnStatement"/> with <c>Value == null</c> (bare <c>return</c>)
-///         → <c>Value = IdentifierExpression("Blank")</c>.</item>
+///         -> <c>Value = IdentifierExpression("Blank")</c>.</item>
 /// </list>
 /// After this pass, <c>null</c> in either position is a genuine unresolved error.
 /// Runs as the very first pass in <see cref="DesugaringPipeline.Run"/>.

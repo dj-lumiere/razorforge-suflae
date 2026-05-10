@@ -208,7 +208,7 @@ public sealed partial class TypeRegistry
     private readonly Dictionary<string, List<RoutineInfo>> _routineOverloads = new();
 
     /// <summary>
-    /// Lazy cache for bare-name type lookups (e.g., "List" → Collections.List).
+    /// Lazy cache for bare-name type lookups (e.g., "List" -> Collections.List).
     /// Populated on first miss in <see cref="LookupType"/> to amortize the O(N) scan.
     /// </summary>
     private readonly Dictionary<string, TypeInfo> _typesByShortName = new();
@@ -874,7 +874,7 @@ public sealed partial class TypeRegistry
                     return value;
                 }
                 // Generic definition keys end with "[T]" or "[T, U]" — strip params and retry.
-                // e.g., "Core.Hijacked[T]" → strip to "Core.Hijacked" → ends with ".Hijacked" ✓
+                // e.g., "Core.Hijacked[T]" -> strip to "Core.Hijacked" -> ends with ".Hijacked" ✓
                 if (key.Contains(value: '['))
                 {
                     string keyBase = key[..key.IndexOf(value: '[')];

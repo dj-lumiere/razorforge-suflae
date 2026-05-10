@@ -47,7 +47,7 @@ public sealed class EntityTypeInfo : TypeInfo
     [ThreadStatic]
     private static HashSet<string>? _creatingInstances;
 
-    /// Maps resolvedName → the partially-built EntityTypeInfo for that name, so recursive
+    /// Maps resolvedName -> the partially-built EntityTypeInfo for that name, so recursive
     /// self-references in member types return the same object rather than an empty shell.
     /// This ensures BTreeListNode[T].children has a List whose element type IS the outer
     /// BTreeListNode[T] instance, not a zero-member placeholder.

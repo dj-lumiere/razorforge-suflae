@@ -287,7 +287,7 @@ public sealed partial class SemanticVerifier
                     }
                 }
 
-                // Return type is a generic resolution (e.g., Hijacked[T] → Hijacked[U8])
+                // Return type is a generic resolution (e.g., Hijacked[T] -> Hijacked[U8])
                 if (returnType.IsGenericResolution && returnType.TypeArguments != null &&
                     routine.GenericParameters != null)
                 {

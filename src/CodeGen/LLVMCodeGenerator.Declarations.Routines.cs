@@ -156,7 +156,7 @@ public partial class LlvmCodeGenerator
                 }
                 else
                 {
-                    // No dot — try short name fallback (e.g., "show" → finds "IO.show")
+                    // No dot — try short name fallback (e.g., "show" -> finds "IO.show")
                     routineInfo = _registry.LookupRoutineByName(name: baseName);
                 }
             }
@@ -473,7 +473,7 @@ public partial class LlvmCodeGenerator
             // Top-level: Module.Name (BaseName preserves the old FullName format)
             string fullName = SanitizeLlvmName(name: routine.BaseName);
 
-            // Generic instance: append type arguments (e.g., IO.show → IO.show#S64)
+            // Generic instance: append type arguments (e.g., IO.show -> IO.show#S64)
             if (routine.TypeArguments is { Count: > 0 })
             {
                 string typeArgSuffix = string.Join(separator: ",",

@@ -148,7 +148,7 @@ public sealed partial class SemanticVerifier
             }
         }
 
-        // Choice case member access: Color.RED → ChoiceTypeInfo
+        // Choice case member access: Color.RED -> ChoiceTypeInfo
         if (lookupType is ChoiceTypeInfo choice)
         {
             ChoiceCaseInfo? caseInfo =
@@ -161,7 +161,7 @@ public sealed partial class SemanticVerifier
             // Fall through to method lookup — choice types can have methods
         }
 
-        // Flags member access: Permissions.READ → FlagsTypeInfo
+        // Flags member access: Permissions.READ -> FlagsTypeInfo
         if (lookupType is FlagsTypeInfo flags)
         {
             FlagsMemberInfo? memberInfo =
@@ -175,7 +175,7 @@ public sealed partial class SemanticVerifier
         }
 
         // Could be a method reference - use LookupMethod which handles generic resolutions
-        // Strip '!' suffix from failable method calls (e.g., invalidate!() → invalidate)
+        // Strip '!' suffix from failable method calls (e.g., invalidate!() -> invalidate)
         // The parser stores '!' in PropertyName, but routine declarations strip it (IsFailable = true)
         string lookupName = member.PropertyName.EndsWith(value: '!')
             ? member.PropertyName[..^1]
@@ -203,13 +203,13 @@ public sealed partial class SemanticVerifier
             {
                 var substitutions = new Dictionary<string, TypeSymbol>();
 
-                // GenericParameterTypeInfo owner → map param name to receiver type
+                // GenericParameterTypeInfo owner -> map param name to receiver type
                 if (method.OwnerType is GenericParameterTypeInfo genParamOwner)
                 {
                     substitutions[key: genParamOwner.Name] = lookupType;
                 }
 
-                // Protocol owner → map protocol generic params to receiver's type args
+                // Protocol owner -> map protocol generic params to receiver's type args
                 if (method.OwnerType is ProtocolTypeInfo protoOwner &&
                     lookupType is { IsGenericResolution: true, TypeArguments: not null })
                 {

@@ -1560,7 +1560,7 @@ internal partial class Program
             return 1;
         }
 
-        // Compile .ll → .exe using clang (clang uses -Ox flag style, not opt's -passes= form)
+        // Compile .ll -> .exe using clang (clang uses -Ox flag style, not opt's -passes= form)
         string clangOptLevel = $"-{optPipelineLevel}";
         // Preserve frame pointers in debug/release for accurate platform stack unwinding.
         // release-time/release-space omit frame pointers for maximum performance.

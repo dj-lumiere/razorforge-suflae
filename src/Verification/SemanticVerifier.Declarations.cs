@@ -426,7 +426,7 @@ public sealed partial class SemanticVerifier
 
             kind = RoutineKind.MemberRoutine;
 
-            // Always strip generic params first (e.g., "Stack[T]" → "Stack") to look up
+            // Always strip generic params first (e.g., "Stack[T]" -> "Stack") to look up
             // the generic definition, not a resolution cache entry.
             string lookupName = typeName.Contains(value: '[')
                 ? typeName[..typeName.IndexOf(value: '[')]

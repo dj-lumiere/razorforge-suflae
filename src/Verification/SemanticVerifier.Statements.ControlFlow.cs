@@ -520,7 +520,7 @@ public sealed partial class SemanticVerifier
         // All using targets (tokens and resources alike) require $enter/$exit
         if (_registry.Language == Language.RazorForge)
         {
-            // LookupMethod handles generic type fallback (e.g., Viewed[Point].$enter → Viewed.$enter)
+            // LookupMethod handles generic type fallback (e.g., Viewed[Point].$enter -> Viewed.$enter)
             RoutineInfo? enterMethod =
                 _registry.LookupMethod(type: resourceType, methodName: "$enter");
             RoutineInfo? exitMethod =

@@ -147,7 +147,7 @@ internal static class GenericAstRewriter
                 }
             }
 
-            // Generic definition used as a concrete type (e.g., owner type List[T] where T → S64).
+            // Generic definition used as a concrete type (e.g., owner type List[T] where T -> S64).
             // This arises when SA annotates `me.ResolvedType = List[T]` (the generic def) and the
             // rewriter encounters it while building a concrete body. Substitute all params from
             // TypeSubs and look up the concrete resolution so downstream scanners see the right owner.
@@ -884,7 +884,7 @@ internal static class GenericAstRewriter
 
             // Const-generic identifiers (e.g. N in Array[T, N]) have ResolvedType=null in the
             // generic body because SA doesn't run on stdlib bodies before Phase 4.  After GMP
-            // substitutes N → ConstGenericValueTypeInfo("63"), annotate the rewritten identifier
+            // substitutes N -> ConstGenericValueTypeInfo("63"), annotate the rewritten identifier
             // so CallOverloadResolutionPass can resolve operator calls like N.$sub!(1u64).
             if (resolvedType == null &&
                 result is IdentifierExpression cgIdent &&

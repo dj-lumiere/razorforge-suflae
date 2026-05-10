@@ -34,7 +34,7 @@ public sealed class ErrorHandlingGenerator
 
     /// <summary>
     /// Generates a variant name for an original routine.
-    /// Strips the leading '$' from wired routine names so that "$next" → "try_next" (not "try_$next").
+    /// Strips the leading '$' from wired routine names so that "$next" -> "try_next" (not "try_$next").
     /// </summary>
     /// <param name="prefix">The variant prefix (try, check, lookup).</param>
     /// <param name="original">The original routine.</param>
@@ -205,8 +205,8 @@ public sealed class ErrorHandlingGenerator
 
     /// <summary>
     /// Generates the try_ variant (returns Maybe&lt;T&gt;).
-    /// throw → return None
-    /// absent → return None
+    /// throw -> return None
+    /// absent -> return None
     /// </summary>
     /// <param name="original">The original routine.</param>
     /// <returns>The try_ variant routine info.</returns>
@@ -216,7 +216,7 @@ public sealed class ErrorHandlingGenerator
             throw new InvalidOperationException(message: "Blank type not registered");
         TypeInfo returnType = original.ReturnType ?? blankType;
 
-        // try_x on a Blank-returning routine → returns Bool (true=success, false=absent/throw)
+        // try_x on a Blank-returning routine -> returns Bool (true=success, false=absent/throw)
         // Maybe[Blank] = { i1, void } is not valid LLVM, so Bool is used directly.
         if (returnType.Name == "Blank")
         {
@@ -279,7 +279,7 @@ public sealed class ErrorHandlingGenerator
 
     /// <summary>
     /// Generates the check_ variant (returns Result&lt;T&gt;).
-    /// throw → return error
+    /// throw -> return error
     /// </summary>
     /// <param name="original">The original routine.</param>
     /// <returns>The check_ variant routine info.</returns>
@@ -322,8 +322,8 @@ public sealed class ErrorHandlingGenerator
 
     /// <summary>
     /// Generates the lookup_ variant (returns Lookup&lt;T&gt;).
-    /// throw → return error
-    /// absent → return None
+    /// throw -> return error
+    /// absent -> return None
     /// </summary>
     /// <param name="original">The original routine.</param>
     /// <returns>The lookup_ variant routine info.</returns>
@@ -343,7 +343,7 @@ public sealed class ErrorHandlingGenerator
                 genericDef: resultDef,
                 typeArguments: [blankType]);
 
-            // Degenerated: Lookup[Blank] → Result[Blank], and the API name becomes check_ not lookup_
+            // Degenerated: Lookup[Blank] -> Result[Blank], and the API name becomes check_ not lookup_
             return new RoutineInfo(name: GenerateVariantName(prefix: "check", original: original))
             {
                 Kind = original.Kind,

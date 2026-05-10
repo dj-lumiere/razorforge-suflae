@@ -200,7 +200,7 @@ public static class ManifestLoader
 
     /// <summary>
     /// Scans all .rf and .sf files under <paramref name="projectDir"/> and builds a
-    /// map of module name → file path by reading module declarations.
+    /// map of module name -> file path by reading module declarations.
     /// </summary>
     private static Dictionary<string, string> BuildModuleIndex(string projectDir)
     {

@@ -125,7 +125,7 @@ internal sealed class TypeResolver
             return _sa._registry.GetOrCreateTupleType(elementTypes: elementTypes);
         }
 
-        // Handle Routine type: Routine[(T, T), Bool] → RoutineTypeInfo
+        // Handle Routine type: Routine[(T, T), Bool] -> RoutineTypeInfo
         if (typeExpr is { Name: "Routine", GenericArguments.Count: 2 })
         {
             TypeExpression paramTupleExpr = typeExpr.GenericArguments[index: 0];

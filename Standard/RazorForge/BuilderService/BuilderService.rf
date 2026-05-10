@@ -345,20 +345,6 @@ routine T.member_variable_info() -> List[Owned[FieldInfo]]
 @innate
 routine T.var_name() -> Text
 
-### Returns field metadata for all member variables.
-### Open, posted, and secret members are all included in the result.
-### :returns: A dict mapping field names to their values, including all visibility levels.
-@readonly
-@innate
-routine T.all_member_variables() -> Dict[Owned[Text], Data]
-
-### Returns field metadata for publicly readable member variables only.
-### Secret members are excluded from this result.
-### :returns: A dict mapping field names to their values, excluding secret members.
-@readonly
-@innate
-routine T.open_member_variables() -> Dict[Owned[Text], Data]
-
 # ============================================================================
 # Standalone platform and build constants
 # ============================================================================

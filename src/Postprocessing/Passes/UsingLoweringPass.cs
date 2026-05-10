@@ -152,7 +152,7 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
 
     private Statement LowerUsing(UsingStatement u)
     {
-        // Lower body first → nested usings expand bottom-up.
+        // Lower body first -> nested usings expand bottom-up.
         Statement loweredBody = LowerStatement(u.Body);
 
         TypeInfo? resourceType = u.Resource.ResolvedType;

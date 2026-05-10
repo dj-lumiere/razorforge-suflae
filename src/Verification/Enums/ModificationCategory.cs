@@ -8,12 +8,12 @@ namespace Verification.Enums;
 /// The builder automatically infers modification categories using three-phase analysis:
 ///
 /// Phase 1 (Direct Analysis):
-///   - If method writes to any member variable of me → Writable
-///   - If method calls .grasp() on me member variables → Writable
+///   - If method writes to any member variable of me -> Writable
+///   - If method calls .grasp() on me member variables -> Writable
 ///
 /// Phase 2 (Call Graph Propagation):
-///   - If method calls a Writable method on me → Writable
-///   - If method calls a Migratable method on me → Migratable
+///   - If method calls a Writable method on me -> Writable
+///   - If method calls a Migratable method on me -> Migratable
 ///   - Repeat until fixpoint (no changes)
 ///
 /// Phase 3 (Token Checking):

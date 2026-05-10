@@ -111,9 +111,9 @@ public sealed class ModuleDependencyGraph
         List<string>? cycle = FindCycleFrom(startModule: toModule, targetModule: fromModule);
         if (cycle != null)
         {
-            // Build cycle path string: A → B → C → A
+            // Build cycle path string: A -> B -> C -> A
             cycle.Add(item: fromModule); // Complete the cycle
-            string cyclePath = string.Join(separator: " → ", values: cycle);
+            string cyclePath = string.Join(separator: " -> ", values: cycle);
 
             _errors.Add(item: new SemanticError(Code: SemanticDiagnosticCode.CircularImport,
                 Message: $"Circular import detected: {cyclePath}",

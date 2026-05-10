@@ -249,7 +249,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// auto-generated $represent / $diagnose) that ReachabilityPass cannot trace because the
     /// owner type (ListEmitter[Byte], etc.) is created post-pass during GMP body rewriting.
     /// Restricted to iteration-related names — broader sets cascade into derived-op chains
-    /// ($ne→$eq, $notcontains→$contains) where the "missing companion" is the actual culprit.
+    /// ($ne->$eq, $notcontains->$contains) where the "missing companion" is the actual culprit.
     private static readonly HashSet<string> _gateBypassNames = new(StringComparer.Ordinal)
     {
         "try_next",
@@ -310,7 +310,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 if (astDecl == null)
                 {
                     // Check if the generic definition has a synthesized body in VariantBodies.
-                    // ProcessConcreteType→BuildBody checks genMethod.RegistryKey (the generic def key),
+                    // ProcessConcreteType->BuildBody checks genMethod.RegistryKey (the generic def key),
                     // but this path only checked resolvedRoutine.RegistryKey (the concrete key).
                     // Example: List[T].$eq body is stored under "Core.List[T].$eq#Core.List[T]",
                     // but resolvedRoutine.RegistryKey is "Core.List[Core.Byte].$eq#Core.List[Core.Byte]".
@@ -335,7 +335,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                     // Two-level generic wrapper forwarder: the generic-def body is stored under
                     // GenericDefinition.GenericDefinition (the Owned[T] forwarder), not under
                     // GenericDefinition (the Owned[Text] forwarder with method-level generic I).
-                    // typeSubs already contains both T→Text (from owner) and I→U64 (from TypeArguments).
+                    // typeSubs already contains both T->Text (from owner) and I->U64 (from TypeArguments).
                     string? genDefGenDefKey = resolvedRoutine.GenericDefinition.GenericDefinition?.RegistryKey;
                     if (genDefGenDefKey != null &&
                         resolvedRoutine.GenericDefinition.WrapperForwarderInnerMethod != null &&
@@ -403,14 +403,14 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     }
 
     /// <summary>
-    /// Emits generic-definition variant bodies for BuilderService routines (e.g. all_member_variables,
+    /// Emits generic-definition variant bodies for BuilderService routines (e.g. member_variable_count,
     /// type_name, is_generic) directly for the generic def owner. These bodies are safe to emit without
     /// type substitution because they return fixed literals and never reference the generic type parameter.
     ///
-    /// Wrapper forwarders (e.g. Hijacked[T].all_member_variables) call the inner type's method as
-    /// T.method(). When T is a generic def (e.g. BTreeDictNode[K,V]), the LLVM callee name is the
-    /// generic def's mangled name (e.g. Collections.BTreeDictNode.all_member_variables). This pass
-    /// ensures that name has a definition so the linker does not fail.
+    /// Wrapper forwarders (e.g. Hijacked[T].type_name) call the inner type's method as T.method().
+    /// When T is a generic def (e.g. BTreeDictNode[K,V]), the LLVM callee name is the generic def's
+    /// mangled name (e.g. Collections.BTreeDictNode.type_name). This pass ensures that name has a
+    /// definition so the linker does not fail.
     /// </summary>
     private void EmitGenericDefBuilderServiceBodies()
     {
@@ -901,8 +901,8 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                      i++)
                 {
                     string paramName = ownerGenericDef.GenericParameters[index: i];
-                    // Don't overwrite a universal-owner mapping (e.g. T→BTreeListNode[Byte] from
-                    // case 1) with the owner's own type argument (e.g. T→Byte from BTreeListNode[T]).
+                    // Don't overwrite a universal-owner mapping (e.g. T->BTreeListNode[Byte] from
+                    // case 1) with the owner's own type argument (e.g. T->Byte from BTreeListNode[T]).
                     // These are different uses of the same name T: the method's universal-owner T
                     // refers to the whole owner type, not to the owner's element type.
                     if (!typeSubs.ContainsKey(key: paramName))
@@ -920,11 +920,11 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 TypeInfo pVal = methodTypeArgs[index: i];
                 if (typeSubs.TryGetValue(key: pName, value: out TypeInfo? existingOwnerValue))
                 {
-                    // Name collision: the owner already maps pName → some type.
+                    // Name collision: the owner already maps pName -> some type.
                     // When existingOwnerValue is a generic definition (TypeArguments=null),
                     // SubstituteType cannot recurse into it and returns it unchanged.
                     // Explicitly instantiate the generic def with pVal so we get a concrete type
-                    // (e.g. T→BTreeListNode[T] + method T→BuildMode → T→BTreeListNode[BuildMode]).
+                    // (e.g. T->BTreeListNode[T] + method T->BuildMode -> T->BTreeListNode[BuildMode]).
                     TypeInfo newVal;
                     if (existingOwnerValue.IsGenericDefinition &&
                         existingOwnerValue.GenericParameters is { Count: > 0 } innerParams &&
@@ -1036,7 +1036,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             if (!subs.TryGetValue(key: c.ParameterName, value: out TypeInfo? actual)) continue;
             bool ok = c.ConstraintType switch
             {
-                ConstraintKind.ValueType     => actual is RecordTypeInfo,
+                ConstraintKind.ValueType     => IsRecordLike(actual),
                 ConstraintKind.ReferenceType => actual is EntityTypeInfo,
                 ConstraintKind.ChoiceType    => actual is ChoiceTypeInfo,
                 ConstraintKind.FlagsType     => actual is FlagsTypeInfo,
@@ -1059,7 +1059,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         string? typeName = c.ConstraintTypes is { Count: > 0 } ? c.ConstraintTypes[0].Name : null;
         return typeName switch
         {
-            "RecordType"  => actual is RecordTypeInfo,
+            "RecordType"  => IsRecordLike(actual),
             "EntityType"  => actual is EntityTypeInfo,
             "ChoiceType"  => actual is ChoiceTypeInfo,
             "FlagsType"   => actual is FlagsTypeInfo,
@@ -1068,6 +1068,12 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             _             => true
         };
     }
+
+    /// Wrappers (Owned, Retained, Hijacked, ...) are declared with `record` syntax and behave as
+    /// record-category types for constraint purposes; they are tracked as WrapperTypeInfo for layout
+    /// reasons but a `needs T is RecordType` constraint must still accept them.
+    private static bool IsRecordLike(TypeInfo type) =>
+        type is RecordTypeInfo || type is WrapperTypeInfo;
 
     /// <summary>Wraps a pre-built body statement in a minimal shell RoutineDeclaration.</summary>
     private static RoutineDeclaration WrapInShellDecl(

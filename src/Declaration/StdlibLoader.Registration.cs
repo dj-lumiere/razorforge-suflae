@@ -46,7 +46,7 @@ public sealed partial class StdlibLoader
     /// This is pass 1a — protocols must be registered before other types so 'obeys' clauses can resolve.
     /// Uses two passes: first registers protocol type shells (names + generic params), then fills in
     /// method signatures. This ensures forward references between protocols resolve correctly
-    /// (e.g., Iterable[T].$iter() → Iterator[T] where Iterator is another protocol).
+    /// (e.g., Iterable[T].$iter() -> Iterator[T] where Iterator is another protocol).
     /// </summary>
     private static void RegisterProgramProtocols(TypeRegistry registry, Program program,
         string moduleName)
@@ -328,9 +328,7 @@ public sealed partial class StdlibLoader
         {
             "protocol_info",
             "routine_info",
-            "member_variable_info",
-            "all_member_variables",
-            "open_member_variables"
+            "member_variable_info"
         };
 
     private static bool ShouldSkipBuilderServiceRoutineDecl(RoutineDeclaration routine,
@@ -559,12 +557,12 @@ public sealed partial class StdlibLoader
 
                 if (isGenericDef)
                 {
-                    // Generic definition: List[T] → owner is List
+                    // Generic definition: List[T] -> owner is List
                     ownerType = baseDef;
                 }
                 else
                 {
-                    // Concrete specialization: List[Byte] → owner is List[Byte]
+                    // Concrete specialization: List[Byte] -> owner is List[Byte]
                     ownerType = registry.LookupType(name: typeName) ?? baseDef;
                 }
             }
@@ -804,7 +802,7 @@ public sealed partial class StdlibLoader
         if (isEntitySpecialization)
         {
             // This is the entity-type specialization of a constrained generic
-            // (e.g. Maybe[T] needs T is EntityType → { Hijacked[T] } layout).
+            // (e.g. Maybe[T] needs T is EntityType -> { Hijacked[T] } layout).
             // Register it so GetOrCreateResolution can select it for entity type arguments.
             registry.RegisterEntitySpecialization(type: typeInfo);
         }
@@ -1145,7 +1143,7 @@ public sealed partial class StdlibLoader
 
     /// <summary>
     /// Re-resolves protocol method return types that failed to resolve during the initial pass
-    /// due to forward references (e.g., Crashable.crash_message() → Text where Text was not
+    /// due to forward references (e.g., Crashable.crash_message() -> Text where Text was not
     /// yet registered when protocols were first processed).
     /// Analogous to ResolveProgramMemberVariables for record/entity member variables.
     /// </summary>

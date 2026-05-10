@@ -332,8 +332,8 @@ public static class BinaryOperatorExtensions
                 BinaryOperator.LogicalRightShift => "$lshr",
 
                 // Membership (note: operands are reversed in desugaring)
-                // x in coll → coll.$contains(x)
-                // x notin coll → coll.$notcontains(x)
+                // x in coll -> coll.$contains(x)
+                // x notin coll -> coll.$notcontains(x)
                 BinaryOperator.In => "$contains",
                 BinaryOperator.NotIn => "$notcontains",
 

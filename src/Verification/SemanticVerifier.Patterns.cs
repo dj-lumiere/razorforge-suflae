@@ -642,7 +642,7 @@ public sealed partial class SemanticVerifier
         {
             string name = typePat.Type.Name;
 
-            // Qualified: Direction.NORTH → extract "NORTH"
+            // Qualified: Direction.NORTH -> extract "NORTH"
             if (name.Contains(value: '.'))
             {
                 return name[(name.LastIndexOf(value: '.') + 1)..];
@@ -665,7 +665,7 @@ public sealed partial class SemanticVerifier
     {
         string name = typePat.Type.Name;
 
-        // Qualified form: Direction.NORTH → extract "NORTH" if prefix matches choice name
+        // Qualified form: Direction.NORTH -> extract "NORTH" if prefix matches choice name
         if (name.Contains(value: '.'))
         {
             int dotIndex = name.LastIndexOf(value: '.');
@@ -680,7 +680,7 @@ public sealed partial class SemanticVerifier
             return null;
         }
 
-        // Shorthand form: NORTH → match directly against choice cases
+        // Shorthand form: NORTH -> match directly against choice cases
         if (choice.Cases.Any(predicate: c => c.Name == name))
         {
             return name;
@@ -732,7 +732,7 @@ public sealed partial class SemanticVerifier
             {
                 string name = typePat.Type.Name;
 
-                // Dotted form: "Value.S64" → extract "S64"
+                // Dotted form: "Value.S64" -> extract "S64"
                 if (name.StartsWith(value: typeName + ".",
                         comparisonType: StringComparison.Ordinal))
                 {

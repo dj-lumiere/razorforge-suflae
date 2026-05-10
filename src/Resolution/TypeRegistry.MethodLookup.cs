@@ -145,8 +145,8 @@ public sealed partial class TypeRegistry
         }
 
         // Try matching generic overloads by reconstructing the generic parameter pattern.
-        // e.g., arg SortedSet[S64] → its generic def is SortedSet with GenericParameters ["T"]
-        //        → try key "List.$create#SortedSet[T]" which matches the registered generic overload.
+        // e.g., arg SortedSet[S64] -> its generic def is SortedSet with GenericParameters ["T"]
+        //        -> try key "List.$create#SortedSet[T]" which matches the registered generic overload.
         foreach (TypeInfo argType in argTypes)
         {
             if (!argType.IsGenericResolution)
@@ -709,12 +709,12 @@ public sealed partial class TypeRegistry
     /// <summary>
     /// Synthesizes a complete RoutineInfo from a ProtocolMethodInfo, including parameters,
     /// modification category, storage, and all other metadata. Substitutes generic type
-    /// parameters for instantiated generic protocols (e.g., Iterator[S64]: T → S64).
+    /// parameters for instantiated generic protocols (e.g., Iterator[S64]: T -> S64).
     /// </summary>
     private RoutineInfo SynthesizeProtocolMethod(ProtocolTypeInfo proto,
         ProtocolMethodInfo protoMethod, TypeInfo ownerType)
     {
-        // Build substitution map for generic protocols (e.g., Iterator[S64]: T → S64)
+        // Build substitution map for generic protocols (e.g., Iterator[S64]: T -> S64)
         Dictionary<string, TypeInfo>? substitution = null;
         if (proto.TypeArguments is { Count: > 0 })
         {
@@ -744,7 +744,7 @@ public sealed partial class TypeRegistry
         if (resolvedReturn is ProtocolSelfTypeInfo)
             resolvedReturn = ownerType;
 
-        // Convert ProtocolMethodInfo.ParameterTypes → ParameterInfo list
+        // Convert ProtocolMethodInfo.ParameterTypes -> ParameterInfo list
         var parameters = new List<ParameterInfo>();
         for (int i = 0; i < protoMethod.ParameterTypes.Count; i++)
         {
@@ -782,7 +782,7 @@ public sealed partial class TypeRegistry
 
     /// <summary>
     /// Substitutes the owner type's generic type parameters into a method's signature.
-    /// For example, List[S32].$add(item: T) → List[S32].$add(item: S32).
+    /// For example, List[S32].$add(item: T) -> List[S32].$add(item: S32).
     /// </summary>
     private RoutineInfo SubstituteMethodForOwner(RoutineInfo method, TypeInfo resolvedOwner)
     {
@@ -921,7 +921,7 @@ public sealed partial class TypeRegistry
                     AsyncStatus = method.AsyncStatus,
                     OriginalName = method.OriginalName,
                     // Propagate method-level generic parameters from the concrete inner method so
-                    // OperatorLoweringPass can monomorphize (e.g. Owned[Text].$getitem![I] → [U64]).
+                    // OperatorLoweringPass can monomorphize (e.g. Owned[Text].$getitem![I] -> [U64]).
                     GenericParameters = concreteInnerMethod.GenericParameters ?? method.GenericParameters,
                     GenericConstraints = concreteInnerMethod.GenericConstraints ?? method.GenericConstraints,
                 };
@@ -1012,6 +1012,17 @@ public sealed partial class TypeRegistry
         };
         return CacheResolvedOwnerMethod(resolvedMethod: resolvedOwnerMethod);
     }
+
+    /// <summary>
+    /// Public entry to register a fully-resolved RoutineInfo into the resolutions cache,
+    /// keyed by <see cref="RoutineInfo.RegistryKey"/>. Returns the cached instance if one
+    /// already exists for that key; otherwise inserts and returns <paramref name="resolvedMethod"/>.
+    /// Used by reachability/instantiation when it constructs concrete routine clones (e.g.
+    /// substituting method-level TypeArguments after owner monomorphization) that need to be
+    /// visible to <c>GenericMonomorphizationPass</c> via <see cref="GetAllRoutineResolutions"/>.
+    /// </summary>
+    public RoutineInfo RegisterRoutineResolution(RoutineInfo resolvedMethod)
+        => CacheResolvedOwnerMethod(resolvedMethod: resolvedMethod);
 
     private RoutineInfo CacheResolvedOwnerMethod(RoutineInfo resolvedMethod)
     {
@@ -1133,7 +1144,7 @@ public sealed partial class TypeRegistry
         //   BuilderServiceInliningPass folds to literals; they have no body and must never reach codegen.
         // - Routines on generic-definition owner types: bodies are synthesised per concrete instance;
         //   emitting them for the definition produces [T]/[K,V] placeholders in LLVM.
-        // - Routines on Blank owners: Blank → LLVM void, illegal as a parameter type.
+        // - Routines on Blank owners: Blank -> LLVM void, illegal as a parameter type.
         // - Routines on non-live concrete generic owner types: phantom instantiations.
         return all.Where(r =>
                       !r.Annotations.Contains(value: "innate") &&
@@ -1244,7 +1255,7 @@ public sealed partial class TypeRegistry
 
     /// <summary>
     /// Recursively substitutes generic type parameters in a type.
-    /// Handles both direct parameters (T → S64) and composite types (Iterator[T] → Iterator[S64]).
+    /// Handles both direct parameters (T -> S64) and composite types (Iterator[T] -> Iterator[S64]).
     /// </summary>
     private TypeInfo SubstituteTypeInProtocol(TypeInfo type,
         Dictionary<string, TypeInfo> substitution)

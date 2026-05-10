@@ -70,7 +70,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// AST call sites. To prevent the GMP gate from stripping bodies that have downstream callers
     /// in synthesized code, force every wired routine on every live concrete type into the live set.
     /// Sibling expansion in <see cref="ExpandSyntheticSiblings"/> then handles wrapper transparency
-    /// (e.g. Owned[Text].$represent → Text.$represent).
+    /// (e.g. Owned[Text].$represent -> Text.$represent).
     /// </summary>
     private void SeedWiredRoutinesOnLiveTypes()
     {
@@ -87,7 +87,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     }
 
     // Closed set of overloadable wired routines per RazorForge-Wiki/docs/Operators.md
-    // (operator → wired-routine table). Operator-lowering may leave ResolvedRoutine = null on
+    // (operator -> wired-routine table). Operator-lowering may leave ResolvedRoutine = null on
     // stdlib bodies whose receivers lack ResolvedType (e.g. CStr.$create's UTF-8 encoder uses
     // cp & 0x3F, cp >> 6) — seeding these names per live owner backstops that.
     // Excluded: $create/$destroy (driven by CreatorExpression / scope), and $getitem!/$setitem!
@@ -120,7 +120,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // In-place shift
         "$iashl", "$iashr", "$ilshl", "$ilshr",
         // Unwrap (Maybe / Result / Lookup)
-        "$unwrap", "$unwrap_or",
+        "$unwrap", "$unwrap!", "$unwrap_or",
     };
 
     private void BuildAstIndices()
@@ -298,7 +298,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             // (e.g. Tuple[S8, Bool].$hash, generated record/entity $eq/$cmp/$hash). Walk that
             // body directly so its calls (S8.$hash, Bool.$hash, ...) reach the live set.
             // Without this, synthesized routines are leaf nodes in the BFS and their callees
-            // never become live → linker errors.
+            // never become live -> linker errors.
             //
             // For concrete generic instantiations (e.g. Range[U64].$iter), the synthesized body
             // is keyed under the generic-def routine (Range[T].$iter). Fall back to that key and
@@ -776,7 +776,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// <summary>
     /// Substitutes the generic-def callee owner+typeArgs through the calling frame's typeSubs
     /// to yield a concrete callee. E.g. callee = <c>List[T].insertion_sort</c>, frame subs
-    /// {T → Owned[Text]} → <c>List[Owned[Text]].insertion_sort</c>.
+    /// {T -> Owned[Text]} -> <c>List[Owned[Text]].insertion_sort</c>.
     /// </summary>
     private RoutineInfo SubstituteRoutine(RoutineInfo routine, Dictionary<string, TypeInfo> typeSubs)
     {
@@ -844,8 +844,10 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
 
         TypeInfo owner = routine.OwnerType;
 
-        // Owner like ListEmitter[T] — stored as a resolution where TypeArguments contains
-        // GenericParameterTypeInfo. Substitute the params to get a concrete owner.
+        // Owner like ListEmitter[T] or Hijacked[BTreeSetNode[T]] — stored as a resolution whose
+        // TypeArguments contain GenericParameterTypeInfo, possibly nested inside another generic
+        // resolution. Substitute the params (recursively, via RoutineInfo.SubstituteType) to get
+        // a concrete owner.
         if (owner.TypeArguments is { Count: > 0 } ownerTArgs
             && ownerTArgs.Any(predicate: t => t is GenericParameterTypeInfo))
         {
@@ -879,7 +881,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                         genericDef: ownerGenDef, typeArguments: substArgs);
                     _liveOwnerTypes.Add(item: concreteOwner);
                     RoutineInfo? resolved = ctx.Registry.LookupMethod(type: concreteOwner, methodName: routine.Name);
-                    if (resolved != null) return resolved;
+                    if (resolved != null) return TransferSubstitutedTypeArguments(input: routine, resolved: resolved, typeSubs: typeSubs);
                     // Fallback: synthesized routine, mark substituted RegistryKey live
                     var synthSubs = new Dictionary<string, TypeInfo>(comparer: StringComparer.Ordinal);
                     IReadOnlyList<string>? defParams = ownerGenDef.GenericParameters;
@@ -893,11 +895,13 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 }
             }
         }
-        // If owner is itself a generic param T and frame has T → ConcreteType, substitute.
+        // If owner is itself a generic param T and frame has T -> ConcreteType, substitute.
         if (owner is GenericParameterTypeInfo gp && typeSubs.TryGetValue(key: gp.Name, value: out TypeInfo? concrete))
         {
             RoutineInfo? resolved = ctx.Registry.LookupMethod(type: concrete, methodName: routine.Name);
-            return resolved ?? routine;
+            return resolved != null
+                ? TransferSubstitutedTypeArguments(input: routine, resolved: resolved, typeSubs: typeSubs)
+                : routine;
         }
         // If owner is a generic def (e.g. List[T]) referencing T from the frame, build the
         // concrete instantiation List[ConcreteT] and look up the method on it.
@@ -921,7 +925,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                     genericDef: owner, typeArguments: concreteArgs);
                 _liveOwnerTypes.Add(item: concreteOwner);
                 RoutineInfo? resolved = ctx.Registry.LookupMethod(type: concreteOwner, methodName: routine.Name);
-                if (resolved != null) return resolved;
+                if (resolved != null) return TransferSubstitutedTypeArguments(input: routine, resolved: resolved, typeSubs: typeSubs);
                 // Synthesized routines (try_next, $represent, $diagnose, wrapper forwarders) live
                 // only on the generic-def. Manually mark the substituted RegistryKey live so the
                 // codegen Phase B/C gates emit the concrete-form symbol that callers reference.
@@ -930,6 +934,107 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             }
         }
         return routine;
+    }
+
+    private static bool ContainsAnyGenericParameter(TypeInfo type)
+    {
+        if (type is GenericParameterTypeInfo) return true;
+        if (type.TypeArguments is { Count: > 0 } args)
+        {
+            foreach (TypeInfo a in args)
+                if (ContainsAnyGenericParameter(type: a)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Propagates the substituted method-level <see cref="RoutineInfo.TypeArguments"/> from the
+    /// caller's input routine (post-typeSubs) onto the routine returned by
+    /// <c>LookupMethod</c>(concreteOwner). The lookup path goes through
+    /// <c>SubstituteMethodForOwner</c>, which preserves <c>method.TypeArguments</c> from the
+    /// registered def — that is null/empty for stdlib defs, so the resulting RegistryKey omits
+    /// the method-level type args (e.g. <c>Hijacked[S64].recast_as</c> instead of
+    /// <c>Hijacked[S64].recast_as[S64]</c>). Without this fix, definition emission and call-site
+    /// references diverge -> linker error.
+    ///
+    /// We take the input routine's TypeArguments (which carry the SA-resolved method-level
+    /// bindings), substitute them through <paramref name="typeSubs"/>, and graft them onto
+    /// <paramref name="resolved"/> as a fresh clone. Returns <paramref name="resolved"/>
+    /// unchanged when there is nothing to graft or when substitution leaves a generic parameter
+    /// behind.
+    /// </summary>
+    private RoutineInfo TransferSubstitutedTypeArguments(RoutineInfo input,
+        RoutineInfo resolved, Dictionary<string, TypeInfo> typeSubs)
+    {
+        if (input.TypeArguments is not { Count: > 0 } tArgs) return resolved;
+
+        var newArgs = new List<TypeInfo>(capacity: tArgs.Count);
+        foreach (TypeInfo t in tArgs)
+        {
+            TypeInfo subbed = RoutineInfo.SubstituteType(type: t, substitution: typeSubs);
+            if (ContainsAnyGenericParameter(type: subbed)) return resolved; // partial — bail
+            newArgs.Add(item: subbed);
+        }
+
+        // Already aligned (e.g. resolved.TypeArguments was already set the same way).
+        if (resolved.TypeArguments is { Count: > 0 } existing
+            && existing.Count == newArgs.Count
+            && existing.Zip(newArgs, (a, b) => a.FullName == b.FullName).All(x => x))
+        {
+            return resolved;
+        }
+
+        var clone = new RoutineInfo(name: resolved.Name)
+        {
+            Kind = resolved.Kind,
+            OwnerType = resolved.OwnerType,
+            Parameters = resolved.Parameters,
+            ReturnType = resolved.ReturnType,
+            IsFailable = resolved.IsFailable,
+            DeclaredModification = resolved.DeclaredModification,
+            ModificationCategory = resolved.ModificationCategory,
+            GenericParameters = resolved.GenericParameters,
+            GenericConstraints = resolved.GenericConstraints,
+            Visibility = resolved.Visibility,
+            Location = resolved.Location,
+            Module = resolved.Module,
+            ModulePath = resolved.ModulePath,
+            Annotations = resolved.Annotations,
+            CallingConvention = resolved.CallingConvention,
+            IsVariadic = resolved.IsVariadic,
+            IsDangerous = resolved.IsDangerous,
+            IsSynthesized = resolved.IsSynthesized,
+            TypeArguments = newArgs,
+            // Point GenericDefinition at `resolved` itself (the SubstituteMethodForOwner result):
+            // its GenericParameters are already filtered to method-level only ([U] for
+            // Hijacked[T].recast_as[U]) and its OwnerType is the concrete owner. That alignment
+            // is what GenericMonomorphizationPass.BuildResolvedRoutineTypeSubstitutions expects
+            // when zipping methodParams against methodTypeArgs.
+            GenericDefinition = resolved,
+            WrapperForwarderInnerMethod = resolved.WrapperForwarderInnerMethod,
+            WrapperForwarderInnerGenericDef = resolved.WrapperForwarderInnerGenericDef,
+            Storage = resolved.Storage,
+            AsyncStatus = resolved.AsyncStatus,
+            OriginalName = resolved.OriginalName,
+            HasThrow = resolved.HasThrow,
+            HasAbsent = resolved.HasAbsent,
+            HasFailableCalls = resolved.HasFailableCalls,
+            ThrowableTypes = resolved.ThrowableTypes,
+        };
+        // Register so GenericMonomorphizationPass.ProcessResolvedMethodGenericRoutines
+        // (which iterates Registry.GetAllRoutineResolutions()) can build a body for this key.
+        return ctx.Registry.RegisterRoutineResolution(resolvedMethod: clone);
+    }
+
+    private static bool ContainsSubstitutableParameter(TypeInfo type, Dictionary<string, TypeInfo> typeSubs)
+    {
+        if (type is GenericParameterTypeInfo gp) return typeSubs.ContainsKey(key: gp.Name);
+        if (type.TypeArguments is { Count: > 0 } args)
+        {
+            foreach (TypeInfo a in args)
+                if (ContainsSubstitutableParameter(type: a, typeSubs: typeSubs)) return true;
+        }
+        return false;
     }
 
     private static string ComputeConcreteRegistryKey(RoutineInfo routine, TypeInfo concreteOwner, Dictionary<string, TypeInfo> subs)

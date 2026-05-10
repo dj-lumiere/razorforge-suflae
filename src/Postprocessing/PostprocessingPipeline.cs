@@ -26,7 +26,7 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
         // calls it synthesizes are visible and can be classified before reaching codegen.
         new CallOverloadResolutionPass(ctx).Run(program);
         // PatternLowering before ExpressionLowering: PLP introduces UnaryExpression(Not)
-        // when lowering WhenStatement → IfStatement chains; ELP must see those new nodes.
+        // when lowering WhenStatement -> IfStatement chains; ELP must see those new nodes.
         // OLP runs after ELP so chained comparisons are already split into BinaryExpressions.
         new PatternLoweringPass(ctx).Run(program);
         new ExpressionLoweringPass(ctx).Run(program);

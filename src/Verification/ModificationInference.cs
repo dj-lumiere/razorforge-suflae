@@ -11,12 +11,12 @@ namespace Verification;
 /// Implements the three-phase algorithm from the wiki:
 ///
 /// Phase 1 (Direct Analysis):
-///   - If method writes to any member variable of me → mark as Writable
-///   - If method calls .grasp() on me member variables → mark as Writable
+///   - If method writes to any member variable of me -> mark as Writable
+///   - If method calls .grasp() on me member variables -> mark as Writable
 ///
 /// Phase 2 (Call Graph Propagation):
-///   - If method calls a Writable method on me → mark as Writable
-///   - If method calls a Migratable method on me → mark as Migratable
+///   - If method calls a Writable method on me -> mark as Writable
+///   - If method calls a Migratable method on me -> mark as Migratable
 ///   - Repeat until fixpoint (no changes)
 ///
 /// Phase 3 (Token Checking):

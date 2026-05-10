@@ -125,7 +125,7 @@ public sealed partial class SemanticVerifier
         int totalParams = parameters.Count;
 
         // Phase 1: Validate named argument ordering and build parameter bindings.
-        // Each entry maps parameter index → argument expression.
+        // Each entry maps parameter index -> argument expression.
         bool seenNamed = false;
         var boundParams = new Dictionary<int, Expression>();
         int positionalIndex = 0;
@@ -414,7 +414,7 @@ public sealed partial class SemanticVerifier
             return true;
 
         // Entity, record, or wrapper type is implicitly assignable to Maybe[SameType].
-        // Covers: entity fields, RC wrappers (Retained[T], Tracked[T] → Maybe[Retained[T]]).
+        // Covers: entity fields, RC wrappers (Retained[T], Tracked[T] -> Maybe[Retained[T]]).
         if ((source.Category == TypeCategory.Entity || source.Category == TypeCategory.Record ||
              source.Category == TypeCategory.Wrapper) &&
             IsMaybeType(type: target) && target.TypeArguments is { Count: 1 })
@@ -425,22 +425,52 @@ public sealed partial class SemanticVerifier
                 source.FullName == typeArg.Name ||
                 source.Name == typeArg.FullName)
                 return true;
-            // Raw entity E → Maybe[Owned[E]]: rvalue entity auto-wraps into Owned, then carrier.
+            // Raw entity E -> Maybe[Owned[E]]: rvalue entity auto-wraps into Owned, then carrier.
+            // Owned[T] is declared as `record Owned[T]` in stdlib, so it surfaces as
+            // RecordTypeInfo (not WrapperTypeInfo) at runtime — match by name + arity instead
+            // of pattern-matching the runtime kind.
             if (source.Category == TypeCategory.Entity &&
-                typeArg is WrapperTypeInfo { Name: "Owned" } ownedInner &&
-                (source.Name == ownedInner.InnerType.Name ||
-                 source.FullName == ownedInner.InnerType.FullName))
+                IsOwnedOf(type: typeArg, out TypeSymbol? ownedInnerOfMaybe) &&
+                (source.Name == ownedInnerOfMaybe.Name ||
+                 source.FullName == ownedInnerOfMaybe.FullName))
                 return true;
         }
 
-        // Raw entity E (rvalue) → Owned[E]: a freshly produced entity transfers ownership.
+        // Raw entity E (rvalue) -> Owned[E]: a freshly produced entity transfers ownership.
         if (source.Category == TypeCategory.Entity &&
-            target is WrapperTypeInfo { Name: "Owned" } ownedTgt &&
-            (source.Name == ownedTgt.InnerType.Name ||
-             source.FullName == ownedTgt.InnerType.FullName))
+            IsOwnedOf(type: target, out TypeSymbol? ownedInnerOfTarget) &&
+            (source.Name == ownedInnerOfTarget.Name ||
+             source.FullName == ownedInnerOfTarget.FullName))
             return true;
 
         // No implicit conversions - all type conversions must be explicit via creator syntax
+        return false;
+    }
+
+    /// <summary>
+    /// Returns true when <paramref name="type"/> represents <c>Owned[X]</c> for some inner type
+    /// <c>X</c>, regardless of whether the runtime kind is <see cref="WrapperTypeInfo"/>
+    /// (legacy) or <see cref="RecordTypeInfo"/> (current — <c>Owned</c> is declared as
+    /// <c>record Owned[T]</c> in the stdlib, so most resolutions arrive as records). Resolutions
+    /// of generic records carry their parameterized form in <see cref="TypeSymbol.Name"/>
+    /// (e.g. <c>"Owned[Core.Text]"</c>), so we strip the bracket suffix before comparing.
+    /// </summary>
+    private static bool IsOwnedOf(TypeSymbol type, out TypeSymbol inner)
+    {
+        if (type is WrapperTypeInfo { Name: "Owned" } wrapped)
+        {
+            inner = wrapped.InnerType;
+            return true;
+        }
+
+        if (GetBaseTypeName(typeName: type.Name) == "Owned" &&
+            type.TypeArguments is { Count: 1 } args)
+        {
+            inner = args[index: 0];
+            return true;
+        }
+
+        inner = null!;
         return false;
     }
 
@@ -935,7 +965,7 @@ public sealed partial class SemanticVerifier
         // Strategy 2: Look for $iter method to get element type from Iterator[T] return type
         RoutineInfo? seqMethod2 = _registry.LookupRoutine(fullName: $"{iterableType.Name}.$iter");
 
-        // Generic fallback: Range[S64].$iter → Range.$iter via LookupMethod
+        // Generic fallback: Range[S64].$iter -> Range.$iter via LookupMethod
         if (seqMethod2 == null)
         {
             seqMethod2 = _registry.LookupMethod(type: iterableType, methodName: "$iter");
@@ -943,7 +973,7 @@ public sealed partial class SemanticVerifier
 
         if (seqMethod2?.ReturnType?.TypeArguments is { Count: > 0 })
         {
-            // Resolve generic type args: if return type arg is T and iterableType is Range[S64], resolve T → S64
+            // Resolve generic type args: if return type arg is T and iterableType is Range[S64], resolve T -> S64
             TypeInfo returnTypeArg = seqMethod2.ReturnType.TypeArguments[index: 0];
             if (returnTypeArg is GenericParameterTypeInfo && iterableType is
                     { IsGenericResolution: true, TypeArguments: not null })

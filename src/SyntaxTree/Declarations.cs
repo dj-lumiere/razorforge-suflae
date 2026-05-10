@@ -305,7 +305,7 @@ public record FlagsDeclaration(
 /// <summary>
 /// Crashable type declaration — a throwable error entity.
 /// Always heap-allocated. Must provide crash_message() -> Text.
-/// crash_title() is synthesized from the type name (CamelCase → sentence case).
+/// crash_title() is synthesized from the type name (CamelCase -> sentence case).
 /// Automatically conforms to the Crashable protocol.
 /// </summary>
 /// <param name="Name">Crashable type identifier name</param>
@@ -482,13 +482,13 @@ public enum AsyncStatus
 
     /// <summary>
     /// Compiler-generated lookup_ variant: wraps a failable routine to return Lookup[T].
-    /// throw → error carrier, absent → zeroinitializer, return → success carrier.
+    /// throw -> error carrier, absent -> zeroinitializer, return -> success carrier.
     /// </summary>
     LookupVariant,
 
     /// <summary>
     /// Compiler-generated check_ variant: wraps a failable routine to return Result[Blank].
-    /// throw → error carrier, absent/return → success zeroinitializer (Blank).
+    /// throw -> error carrier, absent/return -> success zeroinitializer (Blank).
     /// </summary>
     CheckVariant,
 
@@ -500,7 +500,7 @@ public enum AsyncStatus
 
     /// <summary>
     /// Compiler-generated try_ variant for non-Blank failable routines.
-    /// Returns Maybe[T] carrier: absent/throw → zeroinitializer (None), return value → present.
+    /// Returns Maybe[T] carrier: absent/throw -> zeroinitializer (None), return value -> present.
     /// RoutineInfo.ReturnType is the full Maybe[T] type; codegen uses GetLLVMType directly.
     /// </summary>
     TryVariant
