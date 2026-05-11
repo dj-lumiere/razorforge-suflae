@@ -190,8 +190,12 @@ routine Array[T, N].$diagnose() -> Text
 ### Returns true when both arrays contain equal elements in the same order.
 ### :param you: The other array to compare against.
 ### :returns: `true` if every corresponding pair of elements is equal.
+### :note: Requires `T` to obey `Equatable`. Arrays of non-equatable element types
+###        (e.g. `Owned[U]` where `U` is not equatable) do not get an `$eq`
+###        operator — `==` on such arrays is a build error.
 @readonly
 routine Array[T, N].$eq(you: Array[T, N]) -> Bool
+needs T obeys Equatable
   for i in 0u64 til N
     if me[i] != you[i]
       return false
