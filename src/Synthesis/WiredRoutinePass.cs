@@ -324,15 +324,9 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 break;
             }
 
-            case "$copy":
-            {
-                // $copy for generic definitions cannot correctly decide whether to call $copy()
-                // on generic-param-typed fields. Leave them to the IR fallback.
-                if (record.IsGenericDefinition) break;
-                ctx.VariantBodies[key: routine.RegistryKey] =
-                    BuildCopyBody(record: record);
-                break;
-            }
+            // `$copy` synthesis removed: records are either trivially copyable (bitwise store)
+            // or non-copyable (must reconstruct with explicit verbs). See
+            // RazorForge-Wiki/docs/Records.md#copy-semantics.
 
             case "$represent":
                 // Generic definitions allowed: monomorphization substitutes type params.
@@ -514,51 +508,6 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     BuildBreachStatement(logicBreachedErrorType: logicBreachedErrorType);
                 break;
         }
-    }
-
-    //  $copy
-
-    /// <summary>
-    /// Builds the body: <c>return TypeName(field1: me.field1[.$copy()], ...)</c>.
-    /// Record-typed fields call <c>$copy()</c> recursively; primitives are copied by value.
-    /// </summary>
-    private static Statement BuildCopyBody(RecordTypeInfo record)
-    {
-        var args = new List<(string Name, Expression Value)>(capacity: record.MemberVariables.Count);
-
-        foreach (MemberVariableInfo field in record.MemberVariables)
-        {
-            var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
-                { ResolvedType = record };
-            Expression fieldAccess = new MemberExpression(
-                Object: meRef,
-                PropertyName: field.Name,
-                Location: _synthLoc) { ResolvedType = field.Type };
-
-            // For record-typed fields, call $copy() to handle RC wrappers correctly.
-            // Exception: @llvm-annotated records (HasDirectBackendType = true) are LLVM
-            // scalars ??plain value copy is correct; no $copy routine is generated for them.
-            // For intrinsics, choices, flags, and everything else, plain value copy is correct.
-            Expression fieldValue = field.Type is RecordTypeInfo { HasDirectBackendType: false }
-                ? new CallExpression(
-                    Callee: new MemberExpression(
-                        Object: fieldAccess,
-                        PropertyName: "$copy",
-                        Location: _synthLoc) { ResolvedType = field.Type },
-                    Arguments: [],
-                    Location: _synthLoc) { ResolvedType = field.Type }
-                : fieldAccess;
-
-            args.Add((field.Name, fieldValue));
-        }
-
-        var creator = new CreatorExpression(
-            TypeName: record.Name,
-            TypeArguments: null,
-            MemberVariables: args,
-            Location: _synthLoc) { ResolvedType = record };
-
-        return new ReturnStatement(Value: creator, Location: _synthLoc);
     }
 
     //  $eq

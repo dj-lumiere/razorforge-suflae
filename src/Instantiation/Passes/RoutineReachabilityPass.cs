@@ -865,9 +865,12 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // Owner like ListEmitter[T] or Hijacked[BTreeSetNode[T]] — stored as a resolution whose
         // TypeArguments contain GenericParameterTypeInfo, possibly nested inside another generic
         // resolution. Substitute the params (recursively, via RoutineInfo.SubstituteType) to get
-        // a concrete owner.
+        // a concrete owner. The `ContainsAnyGenericParameter` check is needed for two-level
+        // wrappers like `Hijacked[BTreeListNode[T]]` — the immediate arg `BTreeListNode[T]` is
+        // an EntityTypeInfo (not a bare param), so a shallow `Any(t is GenericParameterTypeInfo)`
+        // misses them and leaves `Hijacked[BTreeListNode[T]]` un-monomorphised.
         if (owner.TypeArguments is { Count: > 0 } ownerTArgs
-            && ownerTArgs.Any(predicate: t => t is GenericParameterTypeInfo))
+            && ownerTArgs.Any(predicate: ContainsAnyGenericParameter))
         {
             TypeInfo? ownerGenDef = owner switch
             {
@@ -882,16 +885,11 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 bool allOk = true;
                 foreach (TypeInfo arg in ownerTArgs)
                 {
-                    if (arg is GenericParameterTypeInfo paramArg)
-                    {
-                        if (typeSubs.TryGetValue(key: paramArg.Name, value: out TypeInfo? sub))
-                            substArgs.Add(item: sub);
-                        else { allOk = false; break; }
-                    }
-                    else
-                    {
-                        substArgs.Add(item: arg);
-                    }
+                    // Recursive substitution: handles `BTreeListNode[T]` -> `BTreeListNode[S64]`
+                    // as well as the bare `T` case. `SubstituteType` walks nested type args.
+                    TypeInfo substituted = RoutineInfo.SubstituteType(type: arg, substitution: typeSubs);
+                    if (ContainsAnyGenericParameter(type: substituted)) { allOk = false; break; }
+                    substArgs.Add(item: substituted);
                 }
                 if (allOk)
                 {
@@ -1011,8 +1009,15 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             IsFailable = resolved.IsFailable,
             DeclaredModification = resolved.DeclaredModification,
             ModificationCategory = resolved.ModificationCategory,
-            GenericParameters = resolved.GenericParameters,
-            GenericConstraints = resolved.GenericConstraints,
+            // Clear method-level generic parameters: `newArgs` carries the fully-substituted
+            // method-level type arguments, so this routine is no longer a generic definition.
+            // Leaving `GenericParameters` populated produces a routine with BOTH a non-empty
+            // `GenericParameters` and a non-empty `TypeArguments` — its `RegistryKey` collides
+            // with what codegen's `GetOrCreateRoutineResolution` will compute later, so the
+            // cache hands back this polluted entry and codegen's `IsGenericDefinition` check
+            // still trips ("Explicit method generic call ... reached LLVM codegen unresolved").
+            GenericParameters = null,
+            GenericConstraints = null,
             Visibility = resolved.Visibility,
             Location = resolved.Location,
             Module = resolved.Module,

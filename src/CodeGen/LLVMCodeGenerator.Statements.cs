@@ -421,16 +421,9 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private void ConsumeTransferredLocalOwnership(Expression expr)
     {
-        // RecordCopyLoweringPass wraps borrowed-reference values in $copy(); peel it first.
-        Expression effectiveExpr = expr is CallExpression
-        {
-            Callee: MemberExpression { PropertyName: "$copy", Object: var copyInner },
-            Arguments: { Count: 0 }
-        }
-            ? copyInner
-            : expr;
-
-        string? sourceName = effectiveExpr switch
+        // `$copy` synthesis is gone — borrowed-reference values reach here as bare
+        // identifiers / member accesses or wrapped in `steal`. Both are handled below.
+        string? sourceName = expr switch
         {
             StealExpression
             {
@@ -447,7 +440,7 @@ public partial class LlvmCodeGenerator
 
         _localEntityVars.RemoveAll(match: e => e.Name == sourceName);
 
-        if (effectiveExpr is StealExpression)
+        if (expr is StealExpression)
         {
             _localRetainedVars.RemoveAll(match: e => e.Name == sourceName);
         }

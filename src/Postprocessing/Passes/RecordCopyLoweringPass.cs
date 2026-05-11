@@ -240,8 +240,11 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
     // Core lowering
 
     /// <summary>
-    /// Applies steal-stripping and <c>$copy()</c> injection to a single expression
-    /// in an ownership-transfer position (initializer, assignment RHS, return value).
+    /// Applies steal-stripping to a single expression in an ownership-transfer position.
+    /// Implicit `$copy()` injection has been removed — trivially-copyable records emit a
+    /// bitwise store at codegen time, and non-trivially-copyable records are rejected by
+    /// SA (see <c>SemanticDiagnosticCode.ImplicitWrapperCopy</c>). This pass now exists
+    /// solely to preserve <see cref="StealExpression"/> markers for later codegen.
     /// </summary>
     private static Expression LowerOwnership(Expression expr)
     {
@@ -249,24 +252,10 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         if (expr is StealExpression steal)
             return steal;
 
-        // $copy() injection: only for borrowed-reference expressions of record type.
-        // Direct-backend-type records (S64, U32, Bool, etc.) map to LLVM primitives and
-        // are copied by value at the IR level -> no $copy() needed or generated.
-        if (IsBorrowedReference(expr: expr) &&
-            expr.ResolvedType is RecordTypeInfo { HasDirectBackendType: false })
-            return MakeCopyCall(source: expr);
-
         // For complex expressions in ownership positions (calls, constructors, etc.),
-        // strip steal from any nested argument positions without injecting $copy().
+        // strip steal from any nested argument positions.
         return StripStealFromExpr(expr: expr);
     }
-
-    /// <summary>
-    /// Returns true for expressions that read an existing value without taking ownership.
-    /// These need <c>$copy()</c> when assigned to a new binding.
-    /// </summary>
-    private static bool IsBorrowedReference(Expression expr) =>
-        expr is IdentifierExpression or MemberExpression;
 
     /// <summary>
     /// Recursively lowers nested expressions without erasing explicit <see cref="StealExpression"/>
@@ -310,24 +299,5 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             default:
                 return expr;
         }
-    }
-
-    /// <summary>
-    /// Wraps <paramref name="source"/> in a <c>source.$copy()</c> call expression.
-    /// </summary>
-    private static Expression MakeCopyCall(Expression source)
-    {
-        var callee = new MemberExpression(
-            Object: source,
-            PropertyName: "$copy",
-            Location: _loc) { ResolvedType = source.ResolvedType };
-
-        CallLoweringKind kind = source.ResolvedType is GenericParameterTypeInfo or ProtocolTypeInfo
-            ? CallLoweringKind.RuntimeDispatch
-            : CallLoweringKind.DirectMemberRoutine;
-        return new CallExpression(
-            Callee: callee,
-            Arguments: [],
-            Location: _loc) { ResolvedType = source.ResolvedType, LoweringKind = kind };
     }
 }

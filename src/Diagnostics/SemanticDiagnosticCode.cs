@@ -393,6 +393,12 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Entity cannot be directly assigned from another variable. Must use .share() or steal.</summary>
     BareEntityAssignment = 413,
+    /// <summary>
+    /// Implicit copy of a value whose type contains a non-trivially-copyable wrapper
+    /// (`Owned[T]`, `Retained[T]`, `Tracked[T]`, ...). Each ownership wrapper has its
+    /// own verb (`steal` / `.retain()` / `.track()`) that must appear at every copy site.
+    /// </summary>
+    ImplicitWrapperCopy = 420,
 
     /// <summary>Variant type cannot be stored in member variables.</summary>
     VariantMemberVariableNotAllowed = 414,

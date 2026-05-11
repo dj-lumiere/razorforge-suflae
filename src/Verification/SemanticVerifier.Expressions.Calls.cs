@@ -781,6 +781,29 @@ public sealed partial class SemanticVerifier
                     // P1: Store fully resolved RoutineInfo (with owner-level generic substitution)
                     call.ResolvedRoutine = method;
 
+                    // Move-on-consume: `a.retain()` / `a.track()` on an `Owned[T]` receiver
+                    // transfers ownership into the RC handle; the source variable is dead after.
+                    // `.retain()` on an already-RC handle (Retained / Shared / ...) is a refcount
+                    // bump that leaves the source intact, so we only mark deadref for Owned sources.
+                    // `Owned[T]` is declared as a `record` in stdlib (not WrapperTypeInfo), so we
+                    // check the base name rather than the runtime category.
+                    // Move-on-consume: `a.retain()` / `a.track()` transfers ownership into a
+                    // new RC handle when the receiver is a raw entity (the canonical fresh
+                    // form) or an `Owned[T]`. After the call the source name is dead — any
+                    // later use is a hard error (UseAfterSteal). `.retain()` on an existing
+                    // RC handle (`Retained[T]`, `Shared[T]`, ...) is a refcount bump and the
+                    // source remains valid.
+                    if (member.PropertyName is "retain" or "track" &&
+                        member.Object is IdentifierExpression consumedId)
+                    {
+                        string baseName = GetBaseTypeName(typeName: objectType.Name);
+                        bool consumesSource = baseName == "Owned" || objectType is EntityTypeInfo;
+                        if (consumesSource)
+                        {
+                            _deadrefVariables.Add(item: consumedId.Name);
+                        }
+                    }
+
                     // C29: Dispatch inference for varargs calls
                     call.ResolvedDispatch = InferDispatchStrategy(routine: method, call: call);
                     if (call.ResolvedDispatch == DispatchStrategy.Runtime &&

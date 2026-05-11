@@ -248,6 +248,14 @@ public sealed partial class SemanticVerifier
         string baseName = GetBaseTypeName(typeName: type.Name);
         if (NonTriviallyCopyableWrappers.ContainsKey(key: baseName))
         {
+            // A wrapper without concrete type arguments is the generic definition itself —
+            // encountered when SA walks a generic-def body. The actual concrete instantiations
+            // are re-analysed via monomorphisation, so suppressing the warning here avoids
+            // duplicate / placeholder-shaped diagnostics on stdlib internals.
+            if (type.TypeArguments is not { Count: > 0 })
+            {
+                return true;
+            }
             return false;
         }
 

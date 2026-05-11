@@ -65,9 +65,6 @@ public sealed partial class SemanticVerifier
         // Hashing
         "$hash",
 
-        // Copy
-        "$copy",
-
         // In-place compound assignment operators
         "$iadd", "$isub", "$imul", "$itruediv", "$ifloordiv", "$imod",
         "$ipow",

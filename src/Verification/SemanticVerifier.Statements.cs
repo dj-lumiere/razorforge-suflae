@@ -643,7 +643,7 @@ public sealed partial class SemanticVerifier
                 string fieldNote = hint.Value.Path == "<value>"
                     ? $"type '{varType.Name}' is a '{hint.Value.Wrapper}[…]' wrapper"
                     : $"field '{hint.Value.Path}' of type '{hint.Value.Wrapper}[…]'";
-                ReportWarning(code: SemanticWarningCode.ImplicitWrapperCopy,
+                ReportError(code: SemanticDiagnosticCode.ImplicitWrapperCopy,
                     message:
                     $"Implicit copy of '{varDecl.Name}': {fieldNote} requires an explicit copy verb. " +
                     $"Spell out '{verb}' at the copy site, or reconstruct the record with each field's verb.",
