@@ -154,6 +154,24 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
+    /// Emits a call to <c>@_rf_trace_update_loc</c> with the call site's source line/col baked
+    /// in as constants. This refreshes the topmost shadow-stack frame so a subsequent throw
+    /// produces a stack trace pointing at the actual call site within the enclosing routine
+    /// rather than the routine's declaration line. Skips when trace emission is disabled or
+    /// when the location is unset (synthesized AST nodes).
+    /// </summary>
+    private void EmitTraceLocUpdate(StringBuilder sb, SourceLocation? location)
+    {
+        if (!_traceCurrentRoutine) return;
+        if (location == null) return;
+        int line = location.Line;
+        int col = location.Column;
+        if (line <= 0 && col <= 0) return;
+        EmitLine(sb: sb,
+            line: $"  call void @_rf_trace_update_loc(i32 {line}, i32 {col})");
+    }
+
+    /// <summary>
     /// Generates code for a function/method call.
     /// Handles both standalone function calls and method calls on objects.
     /// </summary>
@@ -167,6 +185,8 @@ public partial class LlvmCodeGenerator
             EmitLine(sb: sb, line: "  unreachable");
             return "undef";
         }
+
+        EmitTraceLocUpdate(sb: sb, location: call.Location);
 
         return call.Callee switch
         {

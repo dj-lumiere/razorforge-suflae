@@ -1330,6 +1330,38 @@ public partial class LlvmCodeGenerator
             output.AppendLine(value: "  ret void");
             output.AppendLine(value: "}");
             output.AppendLine();
+            // update-loc helper — overwrites the line/col of the current (topmost) frame.
+            // Codegen emits a call to this before each call expression so the stack trace
+            // reflects the source line where the call originates, not just the enclosing
+            // routine's declaration line. Skip when depth == 0 (no current frame yet —
+            // happens during the entry routine's own setup before its trace_push fires).
+            output.AppendLine(
+                value:
+                "define private void @_rf_trace_update_loc(i32 %ln, i32 %col) alwaysinline {");
+            output.AppendLine(value: "entry:");
+            output.AppendLine(value: "  %d = load i32, ptr @_rf_trace_depth");
+            output.AppendLine(value: "  %has = icmp ugt i32 %d, 0");
+            output.AppendLine(value: "  br i1 %has, label %do_update, label %skip");
+            output.AppendLine(value: "do_update:");
+            output.AppendLine(value: "  %top = sub i32 %d, 1");
+            output.AppendLine(value: "  %top32 = and i32 %top, 31");
+            output.AppendLine(value: "  %top64 = zext i32 %top32 to i64");
+            output.AppendLine(
+                value:
+                "  %slot = getelementptr inbounds [32 x { ptr, ptr, i32, i32 }], ptr @_rf_trace_stack, i64 0, i64 %top64");
+            output.AppendLine(
+                value:
+                "  %p2 = getelementptr inbounds { ptr, ptr, i32, i32 }, ptr %slot, i32 0, i32 2");
+            output.AppendLine(value: "  store i32 %ln, ptr %p2");
+            output.AppendLine(
+                value:
+                "  %p3 = getelementptr inbounds { ptr, ptr, i32, i32 }, ptr %slot, i32 0, i32 3");
+            output.AppendLine(value: "  store i32 %col, ptr %p3");
+            output.AppendLine(value: "  br label %skip");
+            output.AppendLine(value: "skip:");
+            output.AppendLine(value: "  ret void");
+            output.AppendLine(value: "}");
+            output.AppendLine();
             // printer helper — passes exe TLS data to the DLL
             output.AppendLine(value: "declare void @rf_print_shadow_stack_data(ptr, i32)");
             output.AppendLine(value: "define private void @_rf_print_trace_stack() {");
