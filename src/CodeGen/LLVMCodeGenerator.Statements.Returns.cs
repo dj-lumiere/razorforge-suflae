@@ -590,6 +590,12 @@ public partial class LlvmCodeGenerator
         TypeInfo absentRetType = _currentEmittingRoutine!.ReturnType!;
         string absentCarrierType = GetLlvmType(type: absentRetType);
         EmitRcRecordCleanup(sb: sb);
+        // Balance the routine-entry trace_push. Missing this leaks a frame on the shadow stack
+        // every time a `try_X` variant returns absent (which happens at every for-loop exit).
+        // Subsequent `_rf_trace_update_loc` calls in the caller then update the leaked frame's
+        // slot instead of the caller's, corrupting the stack trace.
+        if (_traceCurrentRoutine)
+            EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
         EmitLine(sb: sb, line: $"  ret {absentCarrierType} zeroinitializer");
     }
 
