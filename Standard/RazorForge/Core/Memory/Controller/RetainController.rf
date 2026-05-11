@@ -69,5 +69,5 @@ dangerous routine RetainController[T].borrow_data() -> Hijacked[T]
 
 ### Destroys the managed entity. Call only when strong count reaches zero.
 dangerous routine RetainController[T].drop_data()
-  me.data.invalidate!()
+  me.data.invalidate()
   return

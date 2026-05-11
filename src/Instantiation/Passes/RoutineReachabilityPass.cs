@@ -83,6 +83,25 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 RoutineInfo? routine = ctx.Registry.LookupMethod(type: type, methodName: wiredName);
                 if (routine != null) EnqueueCallee(callee: routine);
             }
+
+            // RC wrappers (Owned/Retained/Tracked) have `release` called implicitly by codegen
+            // at scope exit — no user-visible call expression for reachability to walk. Seed it
+            // here so the body gets monomorphized for each concrete wrapper instance.
+            string ownerBase = type switch
+            {
+                RecordTypeInfo { GenericDefinition: { } d } => d.Name,
+                EntityTypeInfo { GenericDefinition: { } d } => d.Name,
+                WrapperTypeInfo w => w.Name,
+                _ => type.Name.Contains('[') ? type.Name[..type.Name.IndexOf('[')] : type.Name
+            };
+            // Only Retained/Tracked need release seeded — Owned's $destroy currently exposes
+            // a separate codegen bug (Hijacked[T].invalidate! resolution); seeding $destroy here
+            // breaks files that previously worked. Re-enable once that path is fixed.
+            if (ownerBase is "Retained" or "Tracked")
+            {
+                RoutineInfo? release = ctx.Registry.LookupMethod(type: type, methodName: "release");
+                if (release != null) EnqueueCallee(callee: release);
+            }
         }
     }
 
@@ -365,6 +384,18 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // so GMP emits them and codegen can resolve the symbol.
         bool isFirstSeen = _live.Add(item: callee.RegistryKey);
         if (callee.OwnerType is { } liveOwner) _liveOwnerTypes.Add(item: liveOwner);
+
+        // Return type of an RC wrapper (Owned/Retained/Tracked) becomes a live owner: codegen
+        // will emit implicit `release`/`$destroy` calls on the returned value at scope exit.
+        // Without this, e.g. `var vt = retained.track()` produces a `Tracked[Node]` value whose
+        // destructor is never made reachable, because no method on `Tracked[Node]` is called
+        // explicitly in user code.
+        if (callee.ReturnType is { } retType
+            && GetCollectionBaseNameForReachability(retType) is "Owned" or "Retained" or "Tracked")
+        {
+            _liveOwnerTypes.Add(item: retType);
+        }
+
         if (isFirstSeen)
         {
             ExpandSyntheticSiblings(callee: callee);
@@ -389,6 +420,17 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 {
                     subs[key: gParams[index: i]] = typeArgs[index: i];
                 }
+            }
+
+            // Universal method instance: `T.foo()` substituted to `Bytes.foo()` keeps the original
+            // universal method (owner = GenericParameterTypeInfo("T")) as GenericDefinition. The
+            // body's own `me.bar()` calls have ResolvedRoutine.OwnerType = T (still generic),
+            // so SubstituteRoutine needs `T → concrete owner` in typeSubs to resolve them.
+            // Without this, calls like `me.get_address()` inside `T.hijack()` never produce a
+            // `Bytes.get_address` live key when this frame runs on `Bytes.hijack`.
+            if (callee.GenericDefinition?.OwnerType is GenericParameterTypeInfo universalParam)
+            {
+                subs[key: universalParam.Name] = owner;
             }
         }
 
@@ -598,7 +640,15 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         if (ce.Callee is not MemberExpression member) return null;
         TypeInfo? receiverType = member.Object.ResolvedType ?? InferExpressionType(e: member.Object);
         if (receiverType == null) return null;
-        return ctx.Registry.LookupMethod(type: receiverType, methodName: member.PropertyName);
+        // PropertyName may carry a trailing `!` (failable call syntax). LookupMethod's name
+        // comparison runs against RoutineInfo.Name, which is stored *without* the `!` (the
+        // parser strips it and tracks failability separately — see TypeRegistry.MethodLookup.cs:236).
+        // Pass isFailable explicitly so a `!`-suffixed property hits the failable variant.
+        string baseName = member.PropertyName.EndsWith(value: '!')
+            ? member.PropertyName[..^1]
+            : member.PropertyName;
+        bool? isFailable = member.PropertyName.EndsWith(value: '!') ? true : null;
+        return ctx.Registry.LookupMethod(type: receiverType, methodName: baseName, isFailable: isFailable);
     }
 
     /// <summary>
@@ -841,6 +891,17 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             return MatchOverload(decls: c, callee: callee);
         if (_userByName.TryGetValue(key: concreteKey, value: out List<RoutineDeclaration>? cu))
             return MatchOverload(decls: cu, callee: callee);
+
+        // Universal-method instance: callee was produced by SubstituteMethodForOwner from a
+        // routine whose receiver is a bare generic parameter (e.g. `T.hijack()` substituted to
+        // `Bytes.hijack`). The AST decl lives under the universal-method form, keyed as
+        // `{T-param-name}.{method-name}` (e.g. "T.hijack").
+        if (callee.GenericDefinition?.OwnerType is GenericParameterTypeInfo universalParam)
+        {
+            string universalKey = $"{universalParam.Name}.{callee.Name}";
+            if (_stdlibByName.TryGetValue(key: universalKey, value: out List<RoutineDeclaration>? uMethod))
+                return MatchOverload(decls: uMethod, callee: callee);
+        }
         return null;
     }
 
@@ -923,26 +984,21 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                     }
                 }
             }
-            // Case B: SA produced a "resolved" instance whose TypeArguments are still
-            // GenericParameterTypeInfo (e.g. hijacked_from[T] where T comes from the enclosing
-            // List[T]). Substitute those through the frame.
+            // Case B: SA produced a "resolved" instance whose TypeArguments contain unresolved
+            // generic parameters — either bare (e.g. `hijacked_from[T]` where T comes from the
+            // enclosing `List[T]`) OR nested inside another generic type (e.g.
+            // `hijacked_from[RetainController[T]]` inside `Tracked[T].release`). Substitute
+            // recursively via SubstituteIncludingGenericDef so both shapes work.
             if (routine.TypeArguments is { Count: > 0 } tArgs
-                && tArgs.Any(predicate: t => t is GenericParameterTypeInfo))
+                && tArgs.Any(predicate: ContainsAnyGenericParameter))
             {
                 var substArgs = new List<TypeInfo>(capacity: tArgs.Count);
                 bool allOk = true;
                 foreach (TypeInfo a in tArgs)
                 {
-                    if (a is GenericParameterTypeInfo gpa)
-                    {
-                        if (typeSubs.TryGetValue(key: gpa.Name, value: out TypeInfo? sub))
-                            substArgs.Add(item: sub);
-                        else { allOk = false; break; }
-                    }
-                    else
-                    {
-                        substArgs.Add(item: a);
-                    }
+                    TypeInfo subbed = SubstituteIncludingGenericDef(type: a, typeSubs: typeSubs);
+                    if (ContainsAnyGenericParameter(type: subbed)) { allOk = false; break; }
+                    substArgs.Add(item: subbed);
                 }
                 if (allOk)
                 {
@@ -981,9 +1037,12 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 bool allOk = true;
                 foreach (TypeInfo arg in ownerTArgs)
                 {
-                    // Recursive substitution: handles `BTreeListNode[T]` -> `BTreeListNode[S64]`
-                    // as well as the bare `T` case. `SubstituteType` walks nested type args.
-                    TypeInfo substituted = RoutineInfo.SubstituteType(type: arg, substitution: typeSubs);
+                    // Recursive substitution: handles `BTreeListNode[T]` -> `BTreeListNode[S64]`,
+                    // the bare `T` case, AND the bare-generic-def case (e.g. SA-emitted
+                    // `Hijacked[BTreeListNode]` whose inner `BTreeListNode` is the generic-def
+                    // itself rather than `BTreeListNode[T]`). `SubstituteIncludingGenericDef`
+                    // adds the generic-def → instance step that plain SubstituteType skips.
+                    TypeInfo substituted = SubstituteIncludingGenericDef(type: arg, typeSubs: typeSubs);
                     if (ContainsAnyGenericParameter(type: substituted)) { allOk = false; break; }
                     substArgs.Add(item: substituted);
                 }
@@ -1051,12 +1110,51 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     private static bool ContainsAnyGenericParameter(TypeInfo type)
     {
         if (type is GenericParameterTypeInfo) return true;
+        // Bare generic-def appearing as a nested type argument (e.g. SA emitting
+        // `Hijacked[BTreeListNode]` instead of `Hijacked[BTreeListNode[T]]` on the
+        // ResolvedRoutine for a method-generic call). The generic-def itself is
+        // "uninstantiated" relative to the enclosing routine's typeSubs and needs the
+        // same substitution treatment a `T` argument would.
+        if (type.IsGenericDefinition && type.GenericParameters is { Count: > 0 }) return true;
         if (type.TypeArguments is { Count: > 0 } args)
         {
             foreach (TypeInfo a in args)
                 if (ContainsAnyGenericParameter(type: a)) return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// Substitutes <paramref name="type"/> with <paramref name="typeSubs"/>, also handling the
+    /// case where <paramref name="type"/> is a bare generic definition whose own
+    /// <see cref="TypeInfo.GenericParameters"/> can be filled from the substitution map. Plain
+    /// <see cref="RoutineInfo.SubstituteType"/> only substitutes by matching <c>type.Name</c>
+    /// against substitution keys (good for bare params) or recursing into existing TypeArguments,
+    /// so it leaves bare generic-defs alone.
+    /// </summary>
+    private TypeInfo SubstituteIncludingGenericDef(TypeInfo type, Dictionary<string, TypeInfo> typeSubs)
+    {
+        if (type.IsGenericDefinition
+            && type.GenericParameters is { Count: > 0 } gParams)
+        {
+            var concreteArgs = new List<TypeInfo>(capacity: gParams.Count);
+            bool allOk = true;
+            foreach (string p in gParams)
+            {
+                if (typeSubs.TryGetValue(key: p, value: out TypeInfo? sub))
+                {
+                    // Recurse: sub may itself need further substitution (rare but possible
+                    // when typeSubs maps to types involving generic params).
+                    concreteArgs.Add(item: SubstituteIncludingGenericDef(type: sub, typeSubs: typeSubs));
+                }
+                else { allOk = false; break; }
+            }
+            if (allOk)
+            {
+                return ctx.Registry.GetOrCreateResolution(genericDef: type, typeArguments: concreteArgs);
+            }
+        }
+        return RoutineInfo.SubstituteType(type: type, substitution: typeSubs);
     }
 
     /// <summary>
