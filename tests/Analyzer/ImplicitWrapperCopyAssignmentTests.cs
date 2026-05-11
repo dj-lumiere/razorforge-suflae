@@ -1,0 +1,78 @@
+using Verification.Results;
+
+namespace RazorForge.Tests.Analyzer;
+
+using static TestHelpers;
+
+/// <summary>
+/// Tests for the S420 ImplicitWrapperCopy rule on plain assignments (`b = a` outside
+/// of `var` declarations). Mirrors the var-decl rule: borrowed-reference RHS of a
+/// non-trivially-copyable type requires the explicit verb at the copy site.
+/// </summary>
+public class ImplicitWrapperCopyAssignmentTests
+{
+    /// <summary>`b = a` where `a: Retained[T]` is rejected.</summary>
+    [Fact]
+    public void Analyze_Assignment_BareRetainedCopy_IsError()
+    {
+        string source = """
+                        entity Node
+                          value: S64
+
+                        routine start()
+                          var a = Node(value: 1)
+                          var ra = a.retain()
+                          var rb = ra.retain()
+                          rb = ra
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy &&
+                e.Message.Contains(value: "in assignment",
+                    comparisonType: StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>`b = a.retain()` at the assignment site is accepted.</summary>
+    [Fact]
+    public void Analyze_Assignment_ExplicitRetain_IsAccepted()
+    {
+        string source = """
+                        entity Node
+                          value: S64
+
+                        routine start()
+                          var a = Node(value: 1)
+                          var ra = a.retain()
+                          var rb = ra.retain()
+                          rb = ra.retain()
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
+    }
+
+    /// <summary>Assignment of a trivially-copyable record copies bitwise — no error.</summary>
+    [Fact]
+    public void Analyze_Assignment_TriviallyCopyableRecord_IsAccepted()
+    {
+        string source = """
+                        record Point
+                          x: S64
+                          y: S64
+
+                        routine start()
+                          var p1 = Point(x: 1, y: 2)
+                          var p2 = Point(x: 3, y: 4)
+                          p2 = p1
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
+    }
+}
