@@ -932,6 +932,25 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                         typeSubs[paramName] = ownerType.TypeArguments[index: i];
                 }
             }
+
+            // Wrapper forwarder over a generic inner type: the forwarder's parameters and body
+            // reference the inner type's generic parameters (e.g. `Owned[BTreeDictNode[K,V]]`'s
+            // synthesized `entries_add_last(k: K, v: V)` carries `K, V` from BTreeDictNode, not
+            // from Owned). The outer ownerGenericDef.GenericParameters only knows Owned's `T`
+            // — propagate the inner type's K, V substitutions too so the body rewriter can
+            // resolve them when monomorphizing per concrete inner type.
+            if (resolvedRoutine.WrapperForwarderInnerGenericDef is { GenericParameters: { Count: > 0 } } innerGenDef
+                && ownerType.TypeArguments[index: 0] is { TypeArguments: { Count: > 0 } } innerInstance)
+            {
+                for (int i = 0;
+                     i < innerGenDef.GenericParameters.Count && i < innerInstance.TypeArguments.Count;
+                     i++)
+                {
+                    string innerParamName = innerGenDef.GenericParameters[index: i];
+                    if (!typeSubs.ContainsKey(key: innerParamName))
+                        typeSubs[innerParamName] = innerInstance.TypeArguments[index: i];
+                }
+            }
         }
 
         if (resolvedRoutine.GenericDefinition?.GenericParameters is { Count: > 0 } methodParams &&

@@ -258,6 +258,31 @@ internal sealed class WrapperForwardingPass
                 isFailable: isFailable);
         }
 
+        // Filter out owner-level generics from the inner method's GenericParameters.
+        // `BTreeSetNode[T].keys_add_last(value: T)` registers a RoutineInfo whose
+        // GenericParameters carries `T` (the owner-level param) — propagating that onto the
+        // forwarder makes the forwarder look method-generic in T, so GMP later mangles it as
+        // `Owned[BTreeSetNode[S64]].keys_add_last[S64]` while codegen call sites use the
+        // un-suffixed `Owned[BTreeSetNode[S64]].keys_add_last`. Strip owner-level params so
+        // only true method-level generics (e.g. `Hijacked[T].recast_as[U]` -> `[U]`) survive.
+        IReadOnlyList<string>? innerOwnerParams = innerLookupType.GenericParameters;
+        IReadOnlyList<string>? filteredGenericParams = innerMethod.GenericParameters;
+        if (filteredGenericParams is { Count: > 0 } && innerOwnerParams is { Count: > 0 })
+        {
+            filteredGenericParams = filteredGenericParams
+                .Where(predicate: gp => !innerOwnerParams.Contains(value: gp))
+                .ToList();
+            if (filteredGenericParams.Count == 0) filteredGenericParams = null;
+        }
+        IReadOnlyList<GenericConstraintDeclaration>? filteredConstraints = innerMethod.GenericConstraints;
+        if (filteredConstraints is { Count: > 0 } && innerOwnerParams is { Count: > 0 })
+        {
+            filteredConstraints = filteredConstraints
+                .Where(predicate: c => !innerOwnerParams.Contains(value: c.ParameterName))
+                .ToList();
+            if (filteredConstraints.Count == 0) filteredConstraints = null;
+        }
+
         var forwarder = new RoutineInfo(name: innerMethod.Name)
         {
             Kind = RoutineKind.MemberRoutine,
@@ -274,10 +299,8 @@ internal sealed class WrapperForwardingPass
             IsSynthesized = true,
             WrapperForwarderInnerMethod = innerMethod,
             WrapperForwarderInnerGenericDef = innerLookupType,
-            // Propagate method-level generic parameters so OperatorLoweringPass can
-            // monomorphize per concrete index type (e.g. Owned[Text].$getitem![U64]).
-            GenericParameters = innerMethod.GenericParameters,
-            GenericConstraints = innerMethod.GenericConstraints,
+            GenericParameters = filteredGenericParams,
+            GenericConstraints = filteredConstraints,
         };
 
         // RC record wrappers (Retained[T], Tracked[T]) are structs with a `data: Hijacked[T]`

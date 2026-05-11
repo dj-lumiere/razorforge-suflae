@@ -368,6 +368,108 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         if (routine != null) EnqueueCallee(callee: routine);
     }
 
+    /// <summary>
+    /// Picks the overload of <paramref name="methodName"/> on <paramref name="owner"/> matching
+    /// both arity and failability. <see cref="TypeRegistry.LookupMethod"/> uses first-match by
+    /// name and doesn't disambiguate when a type has multiple overloads with the same name but
+    /// different parameter shapes (e.g. <c>get_by_rank!(U64)</c> vs <c>get_by_rank(node, rank)</c>).
+    /// </summary>
+    private RoutineInfo? LookupMethodMatchingSignature(TypeInfo owner, string methodName,
+        int paramCount, bool isFailable)
+    {
+        // First try the owner's own registered methods (rare — most generics route via genDef).
+        foreach (RoutineInfo m in ctx.Registry.GetMethodsForType(type: owner))
+        {
+            if (m.Name == methodName
+                && m.Parameters.Count == paramCount
+                && m.IsFailable == isFailable)
+                return m;
+        }
+        // Fall back to the generic-def's methods. Methods on `SortedDict[K,V]` are registered
+        // under the def, not the concrete `SortedDict[S64,S64]` resolution. We need to manually
+        // substitute the def-level overload onto the concrete owner so the resulting routine has
+        // the correct owner AND the correct parameter signature. Don't delegate to LookupMethod
+        // — its FirstOrDefault picks the wrong overload when multiple have the same name + same
+        // failability (e.g. `$create()` vs `$create(key: SecureHashKey)`, both non-failable).
+        TypeInfo? genDef = owner switch
+        {
+            EntityTypeInfo { GenericDefinition: { } d } => d,
+            RecordTypeInfo { GenericDefinition: { } d } => d,
+            _ => null
+        };
+        if (genDef != null)
+        {
+            foreach (RoutineInfo m in ctx.Registry.GetMethodsForType(type: genDef))
+            {
+                if (m.Name == methodName
+                    && m.Parameters.Count == paramCount
+                    && m.IsFailable == isFailable)
+                {
+                    // Manually substitute m's owner to the concrete `owner`. Build typeSubs from
+                    // genDef.GenericParameters → owner.TypeArguments, then apply to params/return.
+                    return BuildOwnerSubstitutedRoutine(genericMethod: m, concreteOwner: owner,
+                        genDef: genDef);
+                }
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Produces a concrete-owner-substituted clone of a generic-def method, parallel to
+    /// <see cref="TypeRegistry.SubstituteMethodForOwner"/> but invoked from reachability with
+    /// an already-selected overload (so we don't go back through LookupMethod's first-match
+    /// heuristic).
+    /// </summary>
+    private RoutineInfo BuildOwnerSubstitutedRoutine(RoutineInfo genericMethod,
+        TypeInfo concreteOwner, TypeInfo genDef)
+    {
+        var subs = new Dictionary<string, TypeInfo>(comparer: StringComparer.Ordinal);
+        IReadOnlyList<string>? gParams = genDef.GenericParameters;
+        IReadOnlyList<TypeInfo>? typeArgs = concreteOwner.TypeArguments;
+        if (gParams != null && typeArgs != null)
+        {
+            for (int i = 0; i < gParams.Count && i < typeArgs.Count; i++)
+                subs[key: gParams[index: i]] = typeArgs[index: i];
+        }
+        var substParams = genericMethod.Parameters
+            .Select(selector: p => RoutineInfo.SubstituteParameterType(param: p, substitution: subs))
+            .ToList();
+        TypeInfo? substReturn = genericMethod.ReturnType != null
+            ? RoutineInfo.SubstituteType(type: genericMethod.ReturnType, substitution: subs)
+            : null;
+        var clone = new RoutineInfo(name: genericMethod.Name)
+        {
+            Kind = genericMethod.Kind,
+            OwnerType = concreteOwner,
+            Parameters = substParams,
+            ReturnType = substReturn,
+            IsFailable = genericMethod.IsFailable,
+            DeclaredModification = genericMethod.DeclaredModification,
+            ModificationCategory = genericMethod.ModificationCategory,
+            GenericParameters = genericMethod.GenericParameters?
+                .Where(predicate: gp => !subs.ContainsKey(key: gp))
+                .ToList() is { Count: > 0 } mp ? mp : null,
+            GenericConstraints = genericMethod.GenericConstraints,
+            Visibility = genericMethod.Visibility,
+            Location = genericMethod.Location,
+            Module = genericMethod.Module,
+            ModulePath = genericMethod.ModulePath,
+            Annotations = genericMethod.Annotations,
+            CallingConvention = genericMethod.CallingConvention,
+            IsVariadic = genericMethod.IsVariadic,
+            IsDangerous = genericMethod.IsDangerous,
+            IsSynthesized = genericMethod.IsSynthesized,
+            GenericDefinition = genericMethod.GenericDefinition ?? genericMethod,
+            WrapperForwarderInnerMethod = genericMethod.WrapperForwarderInnerMethod,
+            WrapperForwarderInnerGenericDef = genericMethod.WrapperForwarderInnerGenericDef,
+            Storage = genericMethod.Storage,
+            AsyncStatus = genericMethod.AsyncStatus,
+            OriginalName = genericMethod.OriginalName,
+        };
+        return ctx.Registry.RegisterRoutineResolution(resolvedMethod: clone);
+    }
+
     private static string GetCollectionBaseNameForReachability(TypeInfo type)
     {
         return type switch
@@ -454,6 +556,39 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 RoutineInfo? genericDefRoutine = ResolveGenericDefRoutine(callee: callee);
                 if (genericDefRoutine != null)
                     ctx.VariantBodies.TryGetValue(key: genericDefRoutine.RegistryKey, out synthBody);
+
+                // Fallback for try_/check_/lookup_ variants: ErrorHandlingVariantPass keys the
+                // synthesized body by `variant.Routine.RegistryKey`, which depends on the
+                // owner's generic-def shape AND the variant's signature. The lookup above can
+                // miss when the variant body wasn't keyed under the generic-def form we
+                // reconstructed. Use `callee.OriginalName` to find the underlying failable
+                // routine (`$next!`) and walk its body from `ctx.RoutineBodies` — the variant
+                // body is just a transformed copy of the same statements, so the calls it
+                // makes are identical.
+                if (synthBody == null && callee.OriginalName is { } origName)
+                {
+                    RoutineInfo? original = ctx.Registry.LookupMethod(
+                        type: callee.OwnerType!, methodName: origName, isFailable: true);
+                    if (original != null)
+                        ctx.RoutineBodies.TryGetValue(key: original.RegistryKey, out synthBody);
+                    // Also try the generic-def owner form for monomorphized callees.
+                    if (synthBody == null && callee.OwnerType is { } cOwner)
+                    {
+                        TypeInfo? genericOwner = cOwner switch
+                        {
+                            EntityTypeInfo { GenericDefinition: { } d } => d,
+                            RecordTypeInfo { GenericDefinition: { } d } => d,
+                            _ => null
+                        };
+                        if (genericOwner != null)
+                        {
+                            RoutineInfo? originalOnGenDef = ctx.Registry.LookupMethod(
+                                type: genericOwner, methodName: origName, isFailable: true);
+                            if (originalOnGenDef != null)
+                                ctx.RoutineBodies.TryGetValue(key: originalOnGenDef.RegistryKey, out synthBody);
+                        }
+                    }
+                }
             }
             if (synthBody != null)
             {
@@ -558,11 +693,13 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // first-registered one and misses the no-arg variant when callers use it.
         int argCount = cre.MemberVariables.Count;
         bool found = false;
+        RoutineInfo? matched = null;
         foreach (RoutineInfo m in ctx.Registry.GetMethodsForType(type: ct))
         {
             if (m.Name == "$create" && m.Parameters.Count == argCount)
             {
                 EnqueueCallee(callee: m);
+                if (matched == null) matched = m;
                 found = true;
             }
         }
@@ -579,6 +716,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 if (m.Name == "$create" && m.Parameters.Count == argCount)
                 {
                     EnqueueCallee(callee: m);
+                    if (matched == null) matched = m;
                     found = true;
                 }
             }
@@ -589,7 +727,11 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             // <Type>.$create even when no explicit RoutineInfo exists.
             _live.Add(item: $"{ct.FullName}.$create");
         }
-        return ctx.Registry.LookupMethod(type: ct, methodName: "$create");
+        // Return the matched overload (by arg count) rather than the first $create from
+        // LookupMethod. Without this, callers like `SecureDict[K,V](key: ...)` resolve to the
+        // no-arg `$create()` overload after the substitution chain — the 1-arg
+        // `$create(key: SecureHashKey)` body never gets monomorphized for the concrete owner.
+        return matched ?? ctx.Registry.LookupMethod(type: ct, methodName: "$create");
     }
 
     /// <summary>
@@ -648,6 +790,26 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             ? member.PropertyName[..^1]
             : member.PropertyName;
         bool? isFailable = member.PropertyName.EndsWith(value: '!') ? true : null;
+
+        // Disambiguate overloads by parameter count when multiple routines share the name (e.g.
+        // `SortedDict[K,V].get_by_rank!(i: U64)` vs `SortedDict[K,V].get_by_rank(node, rank)`).
+        // `LookupMethod` returns the first match — wrong for non-failable 2-arg calls if the
+        // failable 1-arg variant was registered first.
+        if (isFailable != true)
+        {
+            int argCount = ce.Arguments.Count;
+            RoutineInfo? byCount = null;
+            foreach (RoutineInfo m in ctx.Registry.GetMethodsForType(type: receiverType))
+            {
+                if (m.Name != baseName) continue;
+                if (m.Parameters.Count != argCount) continue;
+                if (isFailable != null && m.IsFailable != isFailable) continue;
+                byCount = m;
+                break;
+            }
+            if (byCount != null) return byCount;
+        }
+
         return ctx.Registry.LookupMethod(type: receiverType, methodName: baseName, isFailable: isFailable);
     }
 
@@ -1051,7 +1213,16 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                     TypeInfo concreteOwner = ctx.Registry.GetOrCreateResolution(
                         genericDef: ownerGenDef, typeArguments: substArgs);
                     _liveOwnerTypes.Add(item: concreteOwner);
-                    RoutineInfo? resolved = ctx.Registry.LookupMethod(type: concreteOwner, methodName: routine.Name);
+                    // Use param-count + failability to disambiguate overloads — LookupMethod's
+                    // first-match heuristic picks the wrong overload when the routine name has
+                    // both failable and non-failable variants (e.g. SortedDict.get_by_rank!(U64)
+                    // vs SortedDict.get_by_rank(BTreeDictNode, U64)). Without this, reach marks
+                    // the failable 1-arg version live while codegen call sites need the
+                    // non-failable 2-arg version.
+                    RoutineInfo? resolved = LookupMethodMatchingSignature(
+                        owner: concreteOwner, methodName: routine.Name,
+                        paramCount: routine.Parameters.Count, isFailable: routine.IsFailable)
+                        ?? ctx.Registry.LookupMethod(type: concreteOwner, methodName: routine.Name);
                     if (resolved != null) return TransferSubstitutedTypeArguments(input: routine, resolved: resolved, typeSubs: typeSubs);
                     // Fallback: synthesized routine, mark substituted RegistryKey live
                     var synthSubs = new Dictionary<string, TypeInfo>(comparer: StringComparer.Ordinal);
@@ -1177,6 +1348,28 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         RoutineInfo resolved, Dictionary<string, TypeInfo> typeSubs)
     {
         if (input.TypeArguments is not { Count: > 0 } tArgs) return resolved;
+
+        // SA's parser collects every bare identifier from a routine signature into
+        // RoutineDeclaration.GenericParameters — including owner-level params like the `T` in
+        // `routine SortedList[T].get_by_rank(...)`. They appear in both the registered routine's
+        // GenericParameters AND TypeArguments. After owner monomorphization (T → S64), this fix
+        // would mistakenly clone the routine with `TypeArguments=[S64]`, producing a mangled
+        // symbol `SortedList[S64].get_by_rank[S64]` that codegen call sites never reference.
+        // Detect owner-leak: if every name in the def's GenericParameters also appears in the
+        // owner's GenericParameters, the def has no true method-level generics — skip transfer.
+        IReadOnlyList<string>? defParams = (input.GenericDefinition ?? input).GenericParameters;
+        IReadOnlyList<string>? ownerParams = input.OwnerType switch
+        {
+            EntityTypeInfo { GenericDefinition: { } d } => d.GenericParameters ?? input.OwnerType.GenericParameters,
+            RecordTypeInfo { GenericDefinition: { } d } => d.GenericParameters ?? input.OwnerType.GenericParameters,
+            { } o => o.GenericParameters,
+            _ => null
+        };
+        if (defParams is { Count: > 0 } && ownerParams is { Count: > 0 }
+            && defParams.All(predicate: ownerParams.Contains))
+        {
+            return resolved;
+        }
 
         var newArgs = new List<TypeInfo>(capacity: tArgs.Count);
         foreach (TypeInfo t in tArgs)
