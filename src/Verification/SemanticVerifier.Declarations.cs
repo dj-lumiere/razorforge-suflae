@@ -293,6 +293,19 @@ public sealed partial class SemanticVerifier
             BackendType = ExtractLlvmAnnotation(annotations: record.Annotations)
         };
 
+        // @llvm("typename") IS the layout — fields would be silently discarded by codegen.
+        // Permit `pass` bodies and bodies with only non-field declarations (e.g. comments / nested
+        // routines via inline blocks). Reject any VariableDeclaration in Members.
+        if (typeInfo.BackendType != null && record.Members.OfType<VariableDeclaration>().Any())
+        {
+            ReportError(code: SemanticDiagnosticCode.LlvmAnnotatedRecordMustHavePassBody,
+                message:
+                $"Record '{record.Name}' is annotated @llvm(\"{typeInfo.BackendType}\") but " +
+                "declares member variables. The annotation fully dictates the LLVM representation; " +
+                "fields would be silently discarded. Use a `pass` body.",
+                location: record.Location);
+        }
+
         TryRegisterType(type: typeInfo, location: record.Location);
     }
 
@@ -640,6 +653,97 @@ public sealed partial class SemanticVerifier
                 ValidateProtocolMethods(type: type, protocol: protoInfo);
             }
         }
+
+        ValidateMarkerProtocolMembership(type: type, implementedProtocols: implementedProtocols);
+    }
+
+    /// <summary>
+    /// Closed allowlist of stdlib wrappers permitted to declare <c>obeys Referring[T]</c> or
+    /// <c>obeys Controlling[T]</c> (directly or transitively). Marker protocols type-erase in
+    /// codegen — bodies of routines with marker-protocol params call T's methods on the raw ptr,
+    /// so every obeyer must share T's ptr layout. Enforcing this via a closed list (not a
+    /// heuristic like @llvm("ptr")) blocks user-defined obeyers with extra fields / non-ptr
+    /// representation that would silently misread the layout at runtime.
+    /// </summary>
+    /// <remarks>
+    /// 6 active today + 4 deferred (v0.2+ concurrency wrappers). Entity T's auto-conformance to
+    /// <c>Referring[T]</c>/<c>Controlling[T]</c> is recorded in <c>_implicitProtocolConformances</c>
+    /// and never reaches this list-based check.
+    /// </remarks>
+    private static readonly HashSet<string> _markerProtocolBlessedWrappers = new(comparer: StringComparer.Ordinal)
+    {
+        "Owned", "Retained", "Viewed", "Grasped", "Hijacked", "Tracked",
+        // Deferred concurrency wrappers (planned for v0.2+):
+        "Shared", "Marked", "Inspected", "Claimed",
+    };
+
+    private static readonly HashSet<string> _markerProtocolNames = new(comparer: StringComparer.Ordinal)
+    {
+        "Referring", "Controlling",
+    };
+
+    /// <summary>
+    /// Enforces the closed allowlist for marker-protocol (<c>Referring</c>/<c>Controlling</c>)
+    /// obeyance. See <see cref="_markerProtocolBlessedWrappers"/> for rationale.
+    /// </summary>
+    private void ValidateMarkerProtocolMembership(TypeSymbol type, IReadOnlyList<TypeSymbol> implementedProtocols)
+    {
+        // Resolve the base name of the obeyer for membership lookup. Generic instances carry
+        // names like "Owned[T]" / "Owned[S64]"; the allowlist keys on the generic-def name.
+        string obeyerBaseName = type switch
+        {
+            RecordTypeInfo { GenericDefinition: { } def } => def.Name,
+            EntityTypeInfo { GenericDefinition: { } def } => def.Name,
+            _ => GetBaseTypeName(typeName: type.Name)
+        };
+
+        // Skip — this obeyer is blessed. (Wrappers in the closed set may declare obeys freely.)
+        if (_markerProtocolBlessedWrappers.Contains(item: obeyerBaseName))
+        {
+            return;
+        }
+
+        foreach (TypeSymbol protocol in implementedProtocols)
+        {
+            if (protocol is not ProtocolTypeInfo protoInfo)
+                continue;
+
+            // Implicit conformances (entity-T auto for Referring/Controlling) bypass —
+            // those are SA-synthesized, not user-written, and are sound by construction.
+            if (_implicitProtocolConformances.Contains(item: (type.FullName, protoInfo.Name)))
+                continue;
+
+            if (!IsMarkerProtocolTransitive(protoInfo))
+                continue;
+
+            ReportError(code: SemanticDiagnosticCode.MarkerProtocolLayoutViolation,
+                message:
+                $"Type '{type.Name}' declares 'obeys {protoInfo.Name}' but only stdlib wrappers " +
+                $"({string.Join(separator: ", ", values: _markerProtocolBlessedWrappers.OrderBy(keySelector: n => n))}) " +
+                "may obey marker protocols Referring[T]/Controlling[T]. Marker-protocol parameters " +
+                "type-erase to T's ptr layout in codegen; obeyers with different layouts would " +
+                "produce undefined behavior.",
+                location: type.Location ?? new SourceLocation(FileName: "",
+                    Line: 0,
+                    Column: 0,
+                    Position: 0));
+        }
+    }
+
+    private bool IsMarkerProtocolTransitive(ProtocolTypeInfo protoInfo)
+    {
+        string baseName = GetBaseTypeName(typeName: protoInfo.GenericDefinition?.Name ?? protoInfo.Name);
+        if (_markerProtocolNames.Contains(item: baseName))
+            return true;
+
+        // Check parents (Controlling[T] obeys Referring[T] — flagging a type declaring obeys
+        // Controlling[T] also catches the transitive Referring case).
+        foreach (string marker in _markerProtocolNames)
+        {
+            if (CheckParentProtocols(proto: protoInfo, targetName: marker))
+                return true;
+        }
+        return false;
     }
 
     /// <summary>

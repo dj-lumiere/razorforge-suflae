@@ -681,6 +681,18 @@ public enum SemanticDiagnosticCode
 
     InvalidAnnotation = 706,
 
+    /// <summary>Type declares 'obeys Referring[T]' or 'obeys Controlling[T]' but is not in the
+    /// stdlib closed allowlist (Owned/Retained/Viewed/Grasped/Hijacked/Tracked + deferred concurrency
+    /// wrappers + entity-T auto-conformance). Marker-protocol obeyers type-erase to ptr layout, so
+    /// the allowlist is the soundness fence preventing user types with incompatible layouts from
+    /// being passed where the routine body assumes T's ptr representation.</summary>
+    MarkerProtocolLayoutViolation = 707,
+
+    /// <summary>A record annotated with @llvm("typename") declares member variables. The
+    /// annotation IS the LLVM layout; user-declared fields are silently discarded by codegen,
+    /// producing unsound representations. Body must be `pass` (or empty).</summary>
+    LlvmAnnotatedRecordMustHavePassBody = 708,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ERROR HANDLING ERRORS (RF-S750 - RF-S799)
     // ═══════════════════════════════════════════════════════════════════════════

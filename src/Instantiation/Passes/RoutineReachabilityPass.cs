@@ -126,8 +126,11 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         "$unwrap", "$unwrap!", "$unwrap_or",
         // Indexing — failable variants are the canonical form (every container ships them).
         // Without these, `Dict[K,V].$getitem!` and friends slip past liveness when the index
-        // syntax was lowered before reachability scanned the body.
-        "$getitem!", "$setitem!",
+        // syntax was lowered before reachability scanned the body. The parser strips trailing
+        // '!' and tracks failability separately on the RoutineInfo, so these names use the
+        // bare form to match what LookupMethod compares against (m.Name == "$getitem", not
+        // "$getitem!"). See TypeRegistry.MethodLookup.cs:236.
+        "$getitem", "$setitem",
     };
 
     private void BuildAstIndices()
@@ -220,6 +223,11 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 EnqueueThrowCrashMessage(throwStmt: throwStmt, typeSubs: frame.TypeSubs);
                 continue;
             }
+            if (node is ListLiteralExpression or SetLiteralExpression or DictLiteralExpression or IndexExpression)
+            {
+                EnqueueImplicitLoweringCallees(node: node, typeSubs: frame.TypeSubs);
+                continue;
+            }
             RoutineInfo? resolved = node switch
             {
                 CallExpression ce => ce.ResolvedRoutine ?? ResolveNoArgConstructor(ce: ce) ?? ResolveCallStyleConstructor(ce: ce) ?? ResolveMemberCall(ce: ce),
@@ -250,6 +258,11 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                     EnqueueThrowCrashMessage(throwStmt: throwStmt, typeSubs: frame.TypeSubs);
                     continue;
                 }
+                if (node is ListLiteralExpression or SetLiteralExpression or DictLiteralExpression or IndexExpression)
+                {
+                    EnqueueImplicitLoweringCallees(node: node, typeSubs: frame.TypeSubs);
+                    continue;
+                }
                 RoutineInfo? resolved = node switch
                 {
                     CallExpression ce => ce.ResolvedRoutine ?? ResolveNoArgConstructor(ce: ce) ?? ResolveCallStyleConstructor(ce: ce) ?? ResolveMemberCall(ce: ce),
@@ -261,6 +274,89 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 EnqueueCallee(callee: SubstituteRoutine(routine: resolved, typeSubs: frame.TypeSubs));
             }
         }
+    }
+
+    /// <summary>
+    /// Resolves and enqueues the implicit method callees that Phase 7 lowering will introduce
+    /// for collection literals and index-access expressions. Reachability runs BEFORE Phase 7
+    /// (ExpressionLoweringPass / OperatorLoweringPass), so without this hook the resulting
+    /// add_last / add / $getitem! / $setitem! calls would be unreachable and GMP would skip
+    /// emitting their bodies — producing linker errors at the lowered call sites.
+    /// </summary>
+    private void EnqueueImplicitLoweringCallees(object node, Dictionary<string, TypeInfo> typeSubs)
+    {
+        TypeInfo? rawType = node switch
+        {
+            ListLiteralExpression l => l.ResolvedType,
+            SetLiteralExpression s => s.ResolvedType,
+            DictLiteralExpression d => d.ResolvedType,
+            IndexExpression ix => ix.Object.ResolvedType,
+            _ => null
+        };
+        if (rawType == null) return;
+
+        // Substitute generic parameters from the enclosing frame so List[T] inside a List[T]
+        // routine becomes the concrete instantiation (e.g. List[S64]) when typeSubs has T → S64.
+        TypeInfo concreteType = RoutineInfo.SubstituteType(type: rawType, substitution: typeSubs);
+
+        // Unwrap Owned/Retained/Tracked — these are RecordTypeInfo (declared `record Owned[T]`),
+        // NOT WrapperTypeInfo. Match by base name + TypeArguments[0] so we get the inner
+        // collection type the lowering will actually call methods on.
+        TypeInfo collectionType = concreteType;
+        while (collectionType.TypeArguments is { Count: 1 } args
+               && GetCollectionBaseNameForReachability(collectionType) is "Owned" or "Retained" or "Tracked")
+        {
+            collectionType = args[0];
+        }
+
+        switch (node)
+        {
+            case ListLiteralExpression:
+            {
+                string baseName = GetCollectionBaseNameForReachability(collectionType);
+                // Array/BitArray are pure inline IR — no add method synthesized.
+                if (baseName is "Array" or "BitArray") return;
+                // List/Deque/BitList → add_last; everything else → add (mirrors
+                // ExpressionLoweringPass.LowerListLiteral).
+                string addMethod = baseName is "List" or "Deque" or "BitList" ? "add_last" : "add";
+                EnqueueMethodIfPresent(owner: collectionType, methodName: addMethod);
+                EnqueueMethodIfPresent(owner: collectionType, methodName: "$create");
+                break;
+            }
+            case SetLiteralExpression:
+                EnqueueMethodIfPresent(owner: collectionType, methodName: "add");
+                EnqueueMethodIfPresent(owner: collectionType, methodName: "$create");
+                break;
+            case DictLiteralExpression:
+                EnqueueMethodIfPresent(owner: collectionType, methodName: "add");
+                EnqueueMethodIfPresent(owner: collectionType, methodName: "$create");
+                break;
+            case IndexExpression:
+                // Both read ($getitem) and write ($setitem) — IndexExpression's role is determined
+                // by parent context (assignment target or not). Enqueue both; if either is absent
+                // on this type, LookupMethod returns null and EnqueueMethodIfPresent is a no-op.
+                // Names use the bare form (no '!') — parser strips the failable suffix and
+                // tracks failability on RoutineInfo separately. See TypeRegistry.MethodLookup.cs:236.
+                EnqueueMethodIfPresent(owner: collectionType, methodName: "$getitem");
+                EnqueueMethodIfPresent(owner: collectionType, methodName: "$setitem");
+                break;
+        }
+    }
+
+    private void EnqueueMethodIfPresent(TypeInfo owner, string methodName)
+    {
+        RoutineInfo? routine = ctx.Registry.LookupMethod(type: owner, methodName: methodName);
+        if (routine != null) EnqueueCallee(callee: routine);
+    }
+
+    private static string GetCollectionBaseNameForReachability(TypeInfo type)
+    {
+        return type switch
+        {
+            EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition.Name,
+            RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition.Name,
+            _ => type.Name.Contains('[') ? type.Name[..type.Name.IndexOf('[')] : type.Name
+        };
     }
 
     private void EnqueueCallee(RoutineInfo callee)
@@ -1122,7 +1218,13 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     private static void CollectCalls(object? node, List<object> sink)
     {
         if (node == null) return;
-        if (node is CallExpression || node is GenericMethodCallExpression || node is CreatorExpression || node is ThrowStatement) sink.Add(item: node);
+        // Collection-literal and index-access nodes are lowered into method calls
+        // (add_last/add/$getitem!/$setitem!) in Phase 7 — AFTER this pass runs.
+        // Collect them here so ProcessFrame can synthesize the equivalent call edges.
+        if (node is CallExpression || node is GenericMethodCallExpression || node is CreatorExpression
+            || node is ThrowStatement
+            || node is ListLiteralExpression || node is SetLiteralExpression
+            || node is DictLiteralExpression || node is IndexExpression) sink.Add(item: node);
 
         Type t = node.GetType();
         if (t.IsPrimitive || node is string || t.IsEnum) return;
