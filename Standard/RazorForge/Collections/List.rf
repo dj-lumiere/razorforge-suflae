@@ -81,7 +81,7 @@ needs T is Copyable
     var data = hijacked_from[T](ptr)
     var i = 0u64
     while i < count
-      data.offset(t_size *% i).inject(fill_value.copy())
+      data.offset(t_size *% i).inject(fill_value)
       i = i +% 1u64
     return List[T](
       data: data,

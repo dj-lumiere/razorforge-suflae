@@ -208,4 +208,145 @@ public sealed partial class SemanticVerifier
         "Grasped", // Cannot pass same Grasped token twice
         "Claimed" // Cannot pass same Claimed token twice
     ];
+
+    /// <summary>
+    /// Wrapper types that require an explicit verb at every copy site instead of being
+    /// implicitly assignable. The dictionary value is the verb the user must write.
+    /// `Hijacked[T]` is excluded because it is a raw pointer and copies bitwise.
+    /// See <c>RazorForge-Wiki/docs/Records.md#copy-semantics</c>.
+    /// </summary>
+    private static readonly Dictionary<string, string> NonTriviallyCopyableWrappers =
+        new(StringComparer.Ordinal)
+        {
+            ["Owned"] = "steal a",
+            ["Retained"] = "a.retain()",
+            ["Tracked"] = "a.track()",
+            ["Shared"] = "a.share()",
+            ["Marked"] = "a.mark()",
+            ["Viewed"] = "(none — scoped, can't escape)",
+            ["Grasped"] = "(none — scoped, can't escape)",
+            ["Inspected"] = "(none — scoped, can't escape)",
+            ["Claimed"] = "(none — scoped, can't escape)",
+        };
+
+    /// <summary>
+    /// Returns true when the type can be copied with a bitwise <c>store</c> with no
+    /// observable side-effects (no reference-count bump, no ownership transfer, no
+    /// scoped-token escape). Used by the implicit-copy diagnostic in
+    /// <see cref="SemanticVerifier.AnalyzeVariableDeclaration"/> and assignment analysis.
+    /// </summary>
+    /// <param name="type">Type to classify.</param>
+    /// <param name="visited">Cycle guard for self-referential record definitions.</param>
+    private bool IsTriviallyCopyable(TypeSymbol type, HashSet<string>? visited = null)
+    {
+        if (type is ErrorTypeInfo or GenericParameterTypeInfo || type.IsBlank)
+        {
+            // Unknown / void types — be permissive so we do not double-report.
+            return true;
+        }
+
+        string baseName = GetBaseTypeName(typeName: type.Name);
+        if (NonTriviallyCopyableWrappers.ContainsKey(key: baseName))
+        {
+            return false;
+        }
+
+        // Hijacked[T], primitives, @llvm("...") records — trivially copyable bitwise.
+        if (type is RecordTypeInfo record)
+        {
+            // Generic-definition records (no concrete type args) have no member type info worth
+            // walking — treat as trivially copyable. Concrete instances re-enter via the member
+            // walk below.
+            if (record.IsGenericDefinition && record.TypeArguments is not { Count: > 0 })
+            {
+                return true;
+            }
+
+            // Cycle guard: a record that recursively contains itself (only possible through a
+            // wrapper / entity field) would loop here without it.
+            visited ??= new HashSet<string>(StringComparer.Ordinal);
+            if (!visited.Add(item: record.FullName))
+            {
+                return true;
+            }
+
+            foreach (MemberVariableInfo member in record.MemberVariables)
+            {
+                if (!IsTriviallyCopyable(type: member.Type, visited: visited))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // Tuples — anonymous records; mirror the per-field walk.
+        if (type is TupleTypeInfo tuple)
+        {
+            visited ??= new HashSet<string>(StringComparer.Ordinal);
+            if (!visited.Add(item: tuple.FullName))
+            {
+                return true;
+            }
+            foreach (TypeInfo element in tuple.ElementTypes)
+            {
+                if (!IsTriviallyCopyable(type: element, visited: visited))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // Entities (raw `T`) cannot appear in copy positions — separate diagnostics catch them.
+        // Anything we did not recognise falls back to trivially copyable so this pass does not
+        // become noisy during the Phase 1 rollout.
+        return true;
+    }
+
+    /// <summary>
+    /// Locates the first non-trivially-copyable wrapper inside a type's field tree.
+    /// Used to format the hint message for the implicit-copy diagnostic.
+    /// Returns null when the type itself is trivially copyable.
+    /// </summary>
+    /// <param name="type">Type to classify.</param>
+    /// <returns>The offending wrapper's base name (e.g. <c>"Retained"</c>) and the path
+    /// of field names leading to it, or null when no offender exists.</returns>
+    private (string Wrapper, string Path)? FindNonTriviallyCopyableWrapper(TypeSymbol type)
+    {
+        return FindCore(type: type, prefix: "", visited: new HashSet<string>(StringComparer.Ordinal));
+
+        (string, string)? FindCore(TypeSymbol type, string prefix, HashSet<string> visited)
+        {
+            string baseName = GetBaseTypeName(typeName: type.Name);
+            if (NonTriviallyCopyableWrappers.ContainsKey(key: baseName))
+            {
+                return (baseName, prefix.Length == 0 ? "<value>" : prefix);
+            }
+            if (type is RecordTypeInfo record &&
+                !(record.IsGenericDefinition && record.TypeArguments is not { Count: > 0 }))
+            {
+                if (!visited.Add(item: record.FullName))
+                    return null;
+                foreach (MemberVariableInfo member in record.MemberVariables)
+                {
+                    string childPath = prefix.Length == 0 ? member.Name : $"{prefix}.{member.Name}";
+                    var found = FindCore(type: member.Type, prefix: childPath, visited: visited);
+                    if (found != null) return found;
+                }
+            }
+            else if (type is TupleTypeInfo tuple)
+            {
+                if (!visited.Add(item: tuple.FullName))
+                    return null;
+                for (int i = 0; i < tuple.ElementTypes.Count; i++)
+                {
+                    string childPath = prefix.Length == 0 ? $".{i}" : $"{prefix}.{i}";
+                    var found = FindCore(type: tuple.ElementTypes[index: i], prefix: childPath, visited: visited);
+                    if (found != null) return found;
+                }
+            }
+            return null;
+        }
+    }
 }

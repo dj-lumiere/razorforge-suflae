@@ -627,6 +627,30 @@ public sealed partial class SemanticVerifier
                 location: varDecl.Location);
         }
 
+        // Phase 1: warn when the initializer is a "borrowed reference" (identifier or member
+        // access chain) and the source type is not trivially copyable. Reference-count bumps,
+        // ownership transfers, and weak-handle clones must each appear at the copy site as an
+        // explicit verb. See RazorForge-Wiki/docs/Records.md#copy-semantics. Promoted to a
+        // hard error once stdlib migration completes (Phase 2).
+        if (_registry.Language == Language.RazorForge &&
+            varDecl.Initializer is IdentifierExpression or MemberExpression &&
+            !IsTriviallyCopyable(type: varType))
+        {
+            var hint = FindNonTriviallyCopyableWrapper(type: varType);
+            if (hint != null)
+            {
+                string verb = NonTriviallyCopyableWrappers[key: hint.Value.Wrapper];
+                string fieldNote = hint.Value.Path == "<value>"
+                    ? $"type '{varType.Name}' is a '{hint.Value.Wrapper}[…]' wrapper"
+                    : $"field '{hint.Value.Path}' of type '{hint.Value.Wrapper}[…]'";
+                ReportWarning(code: SemanticWarningCode.ImplicitWrapperCopy,
+                    message:
+                    $"Implicit copy of '{varDecl.Name}': {fieldNote} requires an explicit copy verb. " +
+                    $"Spell out '{verb}' at the copy site, or reconstruct the record with each field's verb.",
+                    location: varDecl.Location);
+            }
+        }
+
         // #57: The 'global' keyword is only valid for entity types, unless @thread_local is present
         // (thread-local globals may hold value types for per-thread state like counters).
         bool isThreadLocalAnnotated = varDecl.Annotations?.Any(a => a == "thread_local") == true;

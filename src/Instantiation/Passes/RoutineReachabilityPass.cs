@@ -124,6 +124,10 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         "$iashl", "$iashr", "$ilshl", "$ilshr",
         // Unwrap (Maybe / Result / Lookup)
         "$unwrap", "$unwrap!", "$unwrap_or",
+        // Indexing — failable variants are the canonical form (every container ships them).
+        // Without these, `Dict[K,V].$getitem!` and friends slip past liveness when the index
+        // syntax was lowered before reachability scanned the body.
+        "$getitem!", "$setitem!",
     };
 
     private void BuildAstIndices()

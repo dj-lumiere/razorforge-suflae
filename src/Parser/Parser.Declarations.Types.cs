@@ -667,6 +667,21 @@ public partial class Parser
                 methodIsCommon = true;
             }
 
+            // Optional `dangerous` qualifier — marks the protocol method as requiring a `danger!`
+            // block at the call site (mirrors the impl-side `dangerous routine` syntax).
+            bool methodIsDangerous = false;
+            if (Match(type: TokenType.Dangerous))
+            {
+                methodIsDangerous = true;
+            }
+
+            // Allow either qualifier order: `dangerous common routine` is just as valid as
+            // `common dangerous routine`.
+            if (!methodIsCommon && Match(type: TokenType.Common))
+            {
+                methodIsCommon = true;
+            }
+
             // Parse routine signature
             if (Match(type: TokenType.Routine))
             {
@@ -742,6 +757,10 @@ public partial class Parser
                 if (methodIsCommon)
                 {
                     methodAnnotations.Add(item: "common");
+                }
+                if (methodIsDangerous)
+                {
+                    methodAnnotations.Add(item: "dangerous");
                 }
 
                 methods.Add(item: new RoutineSignature(Name: methodName,

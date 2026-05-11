@@ -605,6 +605,27 @@ public sealed partial class SemanticVerifier
                 location: location);
         }
 
+        // Phase 1: warn when the RHS is a borrowed reference and the type is not trivially
+        // copyable. See AnalyzeVariableDeclaration for the same rule applied to var initializers.
+        if (_registry.Language == Language.RazorForge &&
+            value is IdentifierExpression or MemberExpression &&
+            !IsTriviallyCopyable(type: valueType))
+        {
+            var hint = FindNonTriviallyCopyableWrapper(type: valueType);
+            if (hint != null)
+            {
+                string verb = NonTriviallyCopyableWrappers[key: hint.Value.Wrapper];
+                string fieldNote = hint.Value.Path == "<value>"
+                    ? $"value of type '{valueType.Name}' is a '{hint.Value.Wrapper}[…]' wrapper"
+                    : $"field '{hint.Value.Path}' of type '{hint.Value.Wrapper}[…]'";
+                ReportWarning(code: SemanticWarningCode.ImplicitWrapperCopy,
+                    message:
+                    $"Implicit copy in assignment: {fieldNote} requires an explicit copy verb. " +
+                    $"Spell out '{verb}' at the copy site, or reconstruct the record with each field's verb.",
+                    location: location);
+            }
+        }
+
         // Check type compatibility
         if (!IsAssignableTo(source: valueType, target: targetType))
         {

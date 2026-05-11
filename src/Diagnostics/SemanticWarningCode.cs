@@ -175,6 +175,16 @@ public enum SemanticWarningCode
     /// <summary>Nested Data wrapping (Data(Data(x))) should be flattened.</summary>
     NestedDataWrapping = 360,
 
+    /// <summary>
+    /// Implicit copy of a value whose type contains a non-trivially-copyable wrapper
+    /// (`Owned[T]`, `Retained[T]`, `Tracked[T]`, ...). Each ownership wrapper has its
+    /// own verb (`steal` / `.retain()` / `.track()`) that must appear at every copy site
+    /// so reference-count bumps and ownership transfers are visible in the source.
+    /// Currently emitted as a warning during Phase 1 rollout; will be promoted to a
+    /// hard error once stdlib call sites are migrated.
+    /// </summary>
+    ImplicitWrapperCopy = 361,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // INTERNAL/DEBUG WARNINGS (RF-W400 - RF-W449)
     // ═══════════════════════════════════════════════════════════════════════════

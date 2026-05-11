@@ -331,6 +331,31 @@ public sealed partial class SemanticVerifier
                     $"Argument '{param.Name}' of '{routine.Name}': cannot convert '{argType.Name}' to '{paramType.Name}'.",
                     location: argExpr.Location);
             }
+
+            // Phase 1: warn when a borrowed reference is passed where the parameter type is not
+            // trivially copyable. Mirrors the var-decl / assignment rule — the same explicit
+            // verb (steal / .retain() / .track()) must appear at the call site.
+            Expression argValue = argExpr is NamedArgumentExpression namedArg
+                ? namedArg.Value
+                : argExpr;
+            if (_registry.Language == Language.RazorForge &&
+                argValue is IdentifierExpression or MemberExpression &&
+                !IsTriviallyCopyable(type: argType))
+            {
+                var hint = FindNonTriviallyCopyableWrapper(type: argType);
+                if (hint != null)
+                {
+                    string verb = NonTriviallyCopyableWrappers[key: hint.Value.Wrapper];
+                    string fieldNote = hint.Value.Path == "<value>"
+                        ? $"argument of type '{argType.Name}' is a '{hint.Value.Wrapper}[…]' wrapper"
+                        : $"field '{hint.Value.Path}' of type '{hint.Value.Wrapper}[…]'";
+                    ReportWarning(code: SemanticWarningCode.ImplicitWrapperCopy,
+                        message:
+                        $"Implicit copy in call to '{routine.Name}': {fieldNote} requires an explicit copy verb. " +
+                        $"Spell out '{verb}' at the call site, or reconstruct the record with each field's verb.",
+                        location: argExpr.Location);
+                }
+            }
         }
     }
 
