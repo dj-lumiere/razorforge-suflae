@@ -608,7 +608,14 @@ routine S16.signum() -> S16
 # ============================================================================
 
 routine S16.$represent() -> Text
-  return S32(me).$represent()
+  if me == 0s16
+    return "0"
+  if me > 0s16
+    return U16(me).$represent()
+  # Use reinterpret_bits (not U16(me)) — U16.$create!(S16) throws on negative inputs,
+  # and we need the raw bit pattern so the two's-complement negation `0u16 -% bits`
+  # yields |me| (works correctly even for S16.MIN, whose absolute value overflows S16).
+  return "-" + (0u16 -% reinterpret_bits[S16, U16](me)).$represent()
 
 routine S16.$diagnose() -> Text
   return "S16(" + me.$represent() + ")"

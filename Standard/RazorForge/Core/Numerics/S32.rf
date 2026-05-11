@@ -632,7 +632,10 @@ routine S32.$represent() -> Text
     return "0"
   if me > 0s32
     return U32(me).$represent()
-  return "-" + U32(0u32 -% U32(me)).$represent()
+  # Use reinterpret_bits (not U32(me)) — U32.$create!(S32) throws on negative inputs,
+  # and we need the raw bit pattern so the two's-complement negation `0u32 -% bits`
+  # yields |me| (works correctly even for S32.MIN, whose absolute value overflows S32).
+  return "-" + (0u32 -% reinterpret_bits[S32, U32](me)).$represent()
 
 routine S32.$diagnose() -> Text
   return "S32(" + me.$represent() + ")"
