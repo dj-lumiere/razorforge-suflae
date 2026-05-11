@@ -553,6 +553,17 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             if (genDef != null && !ReferenceEquals(objA: genDef, objB: ct))
                 match = PickOverload(methods: ctx.Registry.GetMethodsForType(type: genDef));
         }
+
+        // Direct named-field construction has no `$create` routine — codegen synthesizes a struct
+        // literal in `EmitRecordConstruction`. Without a routine to enqueue, reachability would
+        // never mark the constructed type as a live owner, blocking `SeedWiredRoutinesOnLiveTypes`
+        // from seeding its derived operators ($ne/$lt/...). Add the type to the live-owner set
+        // directly when we recognise this construction pattern. Affects user records like Point
+        // that obey Equatable/Comparable and rely on synthesised $ne/$lt/$le/$gt/$ge bodies.
+        if (match == null && ct is RecordTypeInfo or EntityTypeInfo)
+        {
+            _liveOwnerTypes.Add(item: ct);
+        }
         return match;
     }
 

@@ -149,6 +149,7 @@ public partial class LlvmCodeGenerator
         _localRetainedVars = [];
 
     /// <summary>Set of already-generated function definitions to avoid duplicates.</summary>
+    // TODO: this should be routine info, not string.
     private readonly HashSet<string> _generatedRoutineDefs = [];
 
     /// <summary>The return type of the current function being generated.</summary>
@@ -862,6 +863,20 @@ public partial class LlvmCodeGenerator
                                     return sb.ToString();
                                 }
 
+                                // Wrapper / generic TypeInfo.Name omits type arguments (e.g. a
+                                // Hijacked[Byte] parameter exposes Type.Name = "Hijacked"), so we
+                                // must rebuild "Name[arg1,arg2,...]" before comparing — otherwise
+                                // overload disambiguation can't distinguish Hijacked[Byte] from
+                                // Hijacked[Character] and silently falls through to a wrong overload.
+                                static string CandidateTypeName(TypeInfo t)
+                                {
+                                    if (t.TypeArguments is { Count: > 0 } typeArgs && !t.Name.Contains(value: '['))
+                                    {
+                                        return $"{t.Name}[{string.Join(separator: ",", values: typeArgs.Select(selector: a => a.Name))}]";
+                                    }
+                                    return t.Name;
+                                }
+
                                 RoutineInfo? match = candidates.FirstOrDefault(predicate: c =>
                                 {
                                     if (c.Parameters.Count != astParamTypeNames.Count)
@@ -870,7 +885,7 @@ public partial class LlvmCodeGenerator
                                     for (int i = 0; i < astParamTypeNames.Count; i++)
                                     {
                                         string candName =
-                                            NormalizeTypeName(n: c.Parameters[index: i].Type.Name);
+                                            NormalizeTypeName(n: CandidateTypeName(c.Parameters[index: i].Type));
                                         string astName =
                                             NormalizeTypeName(n: astParamTypeNames[index: i]);
                                         if (candName == astName) continue;
@@ -1342,9 +1357,12 @@ public partial class LlvmCodeGenerator
             output.Append(value: _functionDefinitions);
         }
 
-        // Emit main() entry point that calls the module's start() routine
+        // Emit main() entry point that calls the module's start() / start!() routine.
+        // Failable entry points have the symbol decorated with `!`, so we accept both forms.
         string? startFunc = _generatedRoutineDefs.FirstOrDefault(predicate: f =>
-            f == "start" || f.EndsWith(value: ".start") || f.EndsWith(value: ".start\""));
+            f == "start" || f == "start!" ||
+            f.EndsWith(value: ".start") || f.EndsWith(value: ".start!") ||
+            f.EndsWith(value: ".start\"") || f.EndsWith(value: ".start!\""));
         if (startFunc != null)
         {
             // Select trace mode: 2=shadow (debug+release), 1=platform (hardware faults only), 0=none (release-time/space)

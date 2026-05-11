@@ -657,6 +657,16 @@ public partial class Parser
             {
             }
 
+            // Optional `common` storage-class qualifier — type-level (static) protocol method,
+            // e.g. `common routine Me.identity() -> V`. Strips down to a regular `routine` parse
+            // afterwards, with the `common` flag pushed into the annotations list so downstream
+            // resolution (TypeBodyResolver) can promote it to `IsInstanceMethod = false`.
+            bool methodIsCommon = false;
+            if (Match(type: TokenType.Common))
+            {
+                methodIsCommon = true;
+            }
+
             // Parse routine signature
             if (Match(type: TokenType.Routine))
             {
@@ -727,6 +737,11 @@ public partial class Parser
                 if (Match(type: TokenType.Arrow))
                 {
                     returnType = ParseType();
+                }
+
+                if (methodIsCommon)
+                {
+                    methodAnnotations.Add(item: "common");
                 }
 
                 methods.Add(item: new RoutineSignature(Name: methodName,

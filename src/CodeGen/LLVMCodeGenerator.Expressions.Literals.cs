@@ -94,8 +94,8 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// Emits a Bytes literal (b"...") as a constant Bytes entity.
-    /// Bytes is entity { bytes: List[Byte] } where List is entity { data: ptr, count: U64, capacity: U64 }
-    /// and Byte is an i8. Returns a pointer to the Bytes struct.
+    /// Bytes is `entity Bytes { data: Hijacked[Byte], count: U64 }` — LLVM layout `{ ptr, i64 }`.
+    /// Returns a pointer to the Bytes struct.
     /// </summary>
     private string EmitBytesLiteral(StringBuilder sb, string value)
     {
@@ -111,7 +111,7 @@ public partial class LlvmCodeGenerator
 
         int count = bytes.Count;
 
-        // Layer 1: raw byte data array [N x i8]
+        // Raw byte data array [N x i8]
         string dataName = $"@.bytes.data.{idx}";
         string byteValues =
             string.Join(separator: ", ", values: bytes.Select(selector: b => $"i8 {b}"));
@@ -126,15 +126,12 @@ public partial class LlvmCodeGenerator
                 line: $"{dataName} = private unnamed_addr constant [0 x i8] zeroinitializer");
         }
 
-        // Layer 2: List[Byte] struct { ptr data, i64 count, i64 capacity }
-        string listName = $"@.bytes.list.{idx}";
+        // Bytes entity literal — must mirror the runtime layout `{ ptr, i64 }`.
+        // An older revision built a `List[Byte]`-shaped {ptr,i64,i64} indirection wrapped in a
+        // single-field {ptr} entity. That broke any code that read `count` off the entity
+        // directly: GEP at field 1 landed past the single-pointer literal and returned garbage.
         EmitLine(sb: _globalDeclarations,
-            line:
-            $"{listName} = private unnamed_addr constant {{ ptr, i64, i64 }} {{ ptr {dataName}, i64 {count}, i64 {count} }}");
-
-        // Layer 3: Bytes entity struct { ptr bytes }
-        EmitLine(sb: _globalDeclarations,
-            line: $"{constName} = private unnamed_addr constant {{ ptr }} {{ ptr {listName} }}");
+            line: $"{constName} = private unnamed_addr constant {{ ptr, i64 }} {{ ptr {dataName}, i64 {count} }}");
 
         return constName;
     }

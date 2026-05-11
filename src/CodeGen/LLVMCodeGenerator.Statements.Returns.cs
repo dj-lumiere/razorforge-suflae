@@ -450,18 +450,16 @@ public partial class LlvmCodeGenerator
             EmitLine(sb: sb,
                 line: $"  {textPtr} = call ptr @{mangledCrash}({llvmReceiverType} {errorVal})");
 
-            string lettersPtr = NextTemp();
-            EmitLine(sb: sb, line: $"  {lettersPtr} = load ptr, ptr {textPtr}");
-            string dataField = NextTemp();
-            EmitLine(sb: sb,
-                line:
-                $"  {dataField} = getelementptr {{ptr, i64, i64}}, ptr {lettersPtr}, i32 0, i32 0");
+            // Text is `entity Text { data: Hijacked[Character], count: U64 }` — LLVM `{ ptr, i64 }`.
+            // Load `data` (field 0) for the codepoint buffer and `count` (field 1) for the length.
+            // A prior revision pretended Text wrapped a `List[Letter]` struct and chased an extra
+            // pointer hop through {ptr,i64,i64} — that read codepoint bytes as a list header and
+            // produced garbage that the rf_crash loop then iterated as an OOB read.
             dataPtr = NextTemp();
-            EmitLine(sb: sb, line: $"  {dataPtr} = load ptr, ptr {dataField}");
+            EmitLine(sb: sb, line: $"  {dataPtr} = load ptr, ptr {textPtr}");
             string countField = NextTemp();
             EmitLine(sb: sb,
-                line:
-                $"  {countField} = getelementptr {{ptr, i64, i64}}, ptr {lettersPtr}, i32 0, i32 1");
+                line: $"  {countField} = getelementptr {{ptr, i64}}, ptr {textPtr}, i32 0, i32 1");
             msgLen = NextTemp();
             EmitLine(sb: sb, line: $"  {msgLen} = load i64, ptr {countField}");
         }

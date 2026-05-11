@@ -806,7 +806,11 @@ public partial class LlvmCodeGenerator
             reboundCreator ??= _registry.LookupRoutineOverload(
                 baseName: $"{returnType.Name}.$create",
                 argTypes: argTypes);
-            if (reboundCreator != null)
+            // Only accept the rebound when its arity matches the call. The fallback path inside
+            // LookupRoutineOverload returns the first-registered overload (often the zero-arg
+            // $create) when nothing matches the arg types, which would otherwise clobber SA's
+            // correct overload resolution and emit a call to the wrong symbol.
+            if (reboundCreator != null && reboundCreator.Parameters.Count == argTypes.Count)
             {
                 return reboundCreator;
             }

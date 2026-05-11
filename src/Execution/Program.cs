@@ -81,7 +81,7 @@ internal partial class Program
             case "build":
             {
                 (string? entryFile, string? projectRoot, string? outputFile2,
-                    RfBuildMode buildMode2, bool dumpAst2, bool saTiming2) = ResolveEntryFile(args: args, needsOutputArg: true);
+                    RfBuildMode buildMode2, bool dumpAst2, bool saTiming2, bool requireStart2) = ResolveEntryFile(args: args, needsOutputArg: true);
                 if (entryFile == null)
                 {
                     return 1;
@@ -92,13 +92,14 @@ internal partial class Program
                     projectRoot: projectRoot,
                     buildMode: buildMode2,
                     dumpAst: dumpAst2,
-                    saTiming: saTiming2);
+                    saTiming: saTiming2,
+                    requireStartRoutine: requireStart2);
             }
 
             case "buildandrun":
             {
                 (string? entryFile, string? projectRoot, _,
-                    RfBuildMode buildMode3, bool dumpAst3, bool saTiming3) = ResolveEntryFile(args: args, needsOutputArg: false);
+                    RfBuildMode buildMode3, bool dumpAst3, bool saTiming3, bool requireStart3) = ResolveEntryFile(args: args, needsOutputArg: false);
                 if (entryFile == null)
                 {
                     return 1;
@@ -109,7 +110,8 @@ internal partial class Program
                     buildMode: buildMode3,
                     dumpAst: dumpAst3,
                     saTiming: saTiming3,
-                    cleanNativeRuntime: false);
+                    cleanNativeRuntime: false,
+                    requireStartRoutine: requireStart3);
             }
 
             case "cleanbuildandrun":
@@ -128,7 +130,7 @@ internal partial class Program
                 // Stage 2: running inside the freshly-built compiler. Do a clean native
                 // runtime rebuild and then the normal buildandrun.
                 (string? entryFile, string? projectRoot, _,
-                    RfBuildMode buildMode4, bool dumpAst4, bool saTiming4) = ResolveEntryFile(args: args, needsOutputArg: false);
+                    RfBuildMode buildMode4, bool dumpAst4, bool saTiming4, bool requireStart4) = ResolveEntryFile(args: args, needsOutputArg: false);
                 if (entryFile == null)
                 {
                     return 1;
@@ -139,12 +141,13 @@ internal partial class Program
                     buildMode: buildMode4,
                     dumpAst: dumpAst4,
                     saTiming: saTiming4,
-                    cleanNativeRuntime: true);
+                    cleanNativeRuntime: true,
+                    requireStartRoutine: requireStart4);
             }
 
             case "check":
             {
-                (string? entryFile, string? projectRoot, _, _, _, _) =
+                (string? entryFile, string? projectRoot, _, _, _, _, _) =
                     ResolveEntryFile(args: args, needsOutputArg: false);
                 if (entryFile == null)
                 {
@@ -184,7 +187,7 @@ internal partial class Program
     /// Returns (entryFile, projectRoot, outputFile, buildMode, dumpAst, saTiming); entryFile is null on error.
     /// </summary>
     private static (string? EntryFile, string? ProjectRoot, string? OutputFile,
-        RfBuildMode BuildMode, bool DumpAst, bool SaTiming) ResolveEntryFile(string[] args, bool needsOutputArg)
+        RfBuildMode BuildMode, bool DumpAst, bool SaTiming, bool RequireStartRoutine) ResolveEntryFile(string[] args, bool needsOutputArg)
     {
         // args[0] is the command name (build/buildandrun/check)
         string? targetName = null;
@@ -228,12 +231,14 @@ internal partial class Program
             if (!File.Exists(path: explicitEntry))
             {
                 Console.WriteLine(value: $"Error: File '{explicitEntry}' not found.");
-                return (null, null, null, RfBuildMode.Debug, false, false);
+                return (null, null, null, RfBuildMode.Debug, false, false, false);
             }
 
             string projectRoot =
                 Path.GetDirectoryName(path: Path.GetFullPath(path: explicitEntry)) ?? ".";
-            return (explicitEntry, projectRoot, outputFile, RfBuildMode.Debug, false, false);
+            // Bare .rf source given without manifest — assume an executable build so codegen
+            // knows to synthesize @main and SA can require a 'start' routine.
+            return (explicitEntry, projectRoot, outputFile, RfBuildMode.Debug, false, false, true);
         }
 
         // No explicit entry (or .toml manifest given) — load manifest
@@ -256,7 +261,7 @@ internal partial class Program
                     value: "Either provide an entry file or create a razorforge.toml manifest.");
             }
 
-            return (null, null, null, RfBuildMode.Debug, false, false);
+            return (null, null, null, RfBuildMode.Debug, false, false, false);
         }
 
         try
@@ -278,13 +283,16 @@ internal partial class Program
             Console.WriteLine(value: $"Using manifest: {manifestPath}");
             Console.WriteLine(value: $"Target: {target.Name} ({target.Type}, {target.Mode})");
 
-            return (target.Entry, manifest.ManifestDirectory, outputFile, buildMode, target.DumpAst, target.SaTiming);
+            bool requireStartRoutine = string.Equals(a: target.Type,
+                b: "executable",
+                comparisonType: StringComparison.OrdinalIgnoreCase);
+            return (target.Entry, manifest.ManifestDirectory, outputFile, buildMode, target.DumpAst, target.SaTiming, requireStartRoutine);
         }
         catch (Exception ex)
         {
             Console.WriteLine(
                 value: $"Error loading {ManifestLoader.ManifestFileName}: {ex.Message}");
-            return (null, null, null, RfBuildMode.Debug, false, false);
+            return (null, null, null, RfBuildMode.Debug, false, false, false);
         }
     }
 
@@ -1102,7 +1110,7 @@ internal partial class Program
     /// </summary>
     private static int BuildMultiFile(string entryFile, string? outputFile,
         string? projectRoot = null, RfBuildMode buildMode = RfBuildMode.Debug,
-        bool dumpAst = false, bool saTiming = false)
+        bool dumpAst = false, bool saTiming = false, bool requireStartRoutine = true)
     {
         if (!File.Exists(path: entryFile))
         {
@@ -1245,6 +1253,30 @@ internal partial class Program
                 foreach (SemanticWarning warning in result.Warnings)
                 {
                     Console.WriteLine(value: $"  {warning.FormattedMessage}");
+                }
+            }
+
+            // Executable targets must declare a `start` or `start!` routine in one of the
+            // user programs (stdlib doesn't count). Without it codegen would skip @main
+            // synthesis and the link step would surface "subsystem must be defined" — make
+            // it a hard build error here so the cause is obvious.
+            if (requireStartRoutine)
+            {
+                var userFilePaths = orderedFiles.Select(selector: f => f.FilePath)
+                    .ToHashSet(comparer: StringComparer.OrdinalIgnoreCase);
+                bool hasStartRoutine = result.Registry.GetAllRoutines().Any(predicate: r =>
+                    r.OwnerType == null &&
+                    (r.Name == "start" || r.BaseName.EndsWith(value: ".start")) &&
+                    r.Location != null && userFilePaths.Contains(item: r.Location.FileName));
+                if (!hasStartRoutine)
+                {
+                    Console.WriteLine();
+                    Console.WriteLine(
+                        value:
+                        "Error: executable target has no 'start' routine. " +
+                        "Add 'routine start()' or 'routine start!()' to the entry module, " +
+                        "or set the target type to 'library' in razorforge.toml.");
+                    return 1;
                 }
             }
 
@@ -1468,7 +1500,7 @@ internal partial class Program
     /// </summary>
     private static int BuildAndRun(string entryFile, string? projectRoot = null,
         RfBuildMode buildMode = RfBuildMode.Debug, bool dumpAst = false, bool saTiming = false,
-        bool cleanNativeRuntime = false)
+        bool cleanNativeRuntime = false, bool requireStartRoutine = true)
     {
         // Remove stale per-target outputs before rebuilding.
         string llFile = Path.ChangeExtension(path: entryFile, extension: ".ll");
@@ -1482,7 +1514,8 @@ internal partial class Program
             projectRoot: projectRoot,
             buildMode: buildMode,
             dumpAst: dumpAst,
-            saTiming: saTiming);
+            saTiming: saTiming,
+            requireStartRoutine: requireStartRoutine);
         if (buildResult != 0)
         {
             return buildResult;

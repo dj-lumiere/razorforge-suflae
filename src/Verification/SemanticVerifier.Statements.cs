@@ -292,13 +292,15 @@ public sealed partial class SemanticVerifier
         // null is a transient "not yet inferred" state — after body analysis it must be resolved.
         routineInfo.ReturnType ??= _registry.LookupType(name: "Blank");
 
-        // Validate that non-void routines return on all paths (#144)
-        if (routineInfo.ReturnType is { IsBlank: false } &&
-            !StatementAlwaysTerminates(statement: routine.Body))
+        // Validate that all routines terminate explicitly on every path (#144).
+        // Blank-returning routines still require an explicit `return` — implicit fall-off
+        // is rejected so control-flow analysis remains uniform across return types.
+        if (!StatementAlwaysTerminates(statement: routine.Body))
         {
             ReportError(code: SemanticDiagnosticCode.MissingReturn,
-                message:
-                $"Routine '{routine.Name}' has return type '{routineInfo.ReturnType.Name}' but not all code paths return a value.",
+                message: routineInfo.ReturnType is { IsBlank: false }
+                    ? $"Routine '{routine.Name}' has return type '{routineInfo.ReturnType.Name}' but not all code paths return a value."
+                    : $"Routine '{routine.Name}' does not terminate on all paths. Add an explicit 'return' at the end.",
                 location: routine.Location);
         }
 

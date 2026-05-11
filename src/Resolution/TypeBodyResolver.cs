@@ -358,9 +358,13 @@ internal sealed class TypeBodyResolver
                 ? sig.Name[..^1]
                 : sig.Name;
 
-            // Check if this is an instance method (has "Me." prefix)
-            // Protocol methods: "Me.methodName" = instance, "methodName" = type-level
-            bool isInstanceMethod = fullName.StartsWith(value: "Me.");
+            // Check if this is an instance method (has "Me." prefix).
+            // Protocol methods: "Me.methodName" = instance, "methodName" = type-level.
+            // The `common` qualifier overrides this — `common routine Me.identity()` is a
+            // type-level method even with the `Me.` prefix, matching the impl-side syntax
+            // `common routine NumericSumAdd[T].identity() -> T`.
+            bool isCommonMethod = sig.Annotations?.Contains(item: "common") == true;
+            bool isInstanceMethod = fullName.StartsWith(value: "Me.") && !isCommonMethod;
             string methodName = isInstanceMethod
                 ? fullName[3..]
                 : fullName;
