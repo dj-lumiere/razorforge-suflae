@@ -177,7 +177,7 @@ routine F128.$neg() -> F128
 ### Returns infinity or NaN on overflow or zero divisor, following raw IEEE 754 semantics.
 ### :param you: The divisor.
 ### :returns: The quadruple-precision quotient, possibly infinity or NaN.
-routine F128.$truediv_unchecked(you: F128) -> F128
+dangerous routine F128.$truediv_unchecked(you: F128) -> F128
   return float_div_fast[F128](me, you)
 
 # ============================================================================

@@ -183,7 +183,7 @@ routine F16.$neg() -> F16
 ### Returns infinity or NaN on overflow or zero divisor, following raw IEEE 754 semantics.
 ### :param you: The divisor.
 ### :returns: The half-precision quotient, possibly infinity or NaN.
-routine F16.$truediv_unchecked(you: F16) -> F16
+dangerous routine F16.$truediv_unchecked(you: F16) -> F16
   return float_div_fast[F16](me, you)
 
 # ============================================================================

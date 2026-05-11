@@ -130,7 +130,8 @@ public sealed partial class SemanticVerifier
                                 InferGenericTypeArguments(genericRoutine: generic,
                                     arguments: call.Arguments);
                             routine = inferred != null
-                                ? generic.CreateInstance(typeArguments: inferred)
+                                ? _registry.GetOrCreateRoutineResolution(
+                                    genericDef: generic, typeArguments: inferred)
                                 : generic;
                             call.ResolvedRoutine = routine;
                         }
@@ -194,8 +195,14 @@ public sealed partial class SemanticVerifier
                                 IReadOnlyList<TypeInfo>? inferred =
                                     InferGenericTypeArguments(genericRoutine: generic,
                                         arguments: call.Arguments);
+                                // Use GetOrCreateRoutineResolution so the monomorphisation lands
+                                // in `_routineResolutions`. CreateInstance alone produced a stray
+                                // instance that codegen mangled to `show(Point)` but
+                                // ProcessResolvedMethodGenericRoutines never picked up — no body
+                                // emitted, link errors followed.
                                 routine = inferred != null
-                                    ? generic.CreateInstance(typeArguments: inferred)
+                                    ? _registry.GetOrCreateRoutineResolution(
+                                        genericDef: generic, typeArguments: inferred)
                                     : generic;
                                 call.ResolvedRoutine = routine;
                             }
@@ -216,7 +223,8 @@ public sealed partial class SemanticVerifier
                             InferGenericTypeArguments(genericRoutine: variadicGeneric,
                                 arguments: call.Arguments);
                         routine = inferred != null
-                            ? variadicGeneric.CreateInstance(typeArguments: inferred)
+                            ? _registry.GetOrCreateRoutineResolution(
+                                genericDef: variadicGeneric, typeArguments: inferred)
                             : variadicGeneric;
                         call.ResolvedRoutine = routine;
                     }
@@ -475,7 +483,8 @@ public sealed partial class SemanticVerifier
                                     InferGenericTypeArguments(genericRoutine: genericImport,
                                         arguments: call.Arguments);
                                 routine = inferredImport != null
-                                    ? genericImport.CreateInstance(typeArguments: inferredImport)
+                                    ? _registry.GetOrCreateRoutineResolution(
+                                        genericDef: genericImport, typeArguments: inferredImport)
                                     : genericImport;
                                 call.ResolvedRoutine = routine;
                             }
@@ -495,7 +504,8 @@ public sealed partial class SemanticVerifier
                             InferGenericTypeArguments(genericRoutine: variadicGeneric,
                                 arguments: call.Arguments);
                         routine = inferred != null
-                            ? variadicGeneric.CreateInstance(typeArguments: inferred)
+                            ? _registry.GetOrCreateRoutineResolution(
+                                genericDef: variadicGeneric, typeArguments: inferred)
                             : variadicGeneric;
                         call.ResolvedRoutine = routine;
                     }

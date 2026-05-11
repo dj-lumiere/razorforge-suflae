@@ -1,0 +1,13 @@
+module Core
+
+### Represents the protocol for unchecked floating division.
+### `UncheckedTrueDivisible` is for floating-style numeric types whose division
+### surface lowers to LLVM `fdiv fast`. Producing `NaN` or `±inf` is undefined
+### behavior; the caller must prove the operation stays finite and non-NaN.
+protocol UncheckedTrueDivisible
+  ### Returns the unchecked quotient of this value and `you`.
+  ### Division by zero or any NaN-producing operation is undefined behavior.
+  ### :param you: The divisor.
+  ### :returns: The resulting `Me` value.
+  @readonly
+  dangerous routine Me.$truediv_unchecked(you: Me) -> Me

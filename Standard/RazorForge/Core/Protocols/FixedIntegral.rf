@@ -2,7 +2,7 @@ module Core
 
 ### Represents the aggregate protocol for bounded fixed-width integers.
 ### `FixedIntegral` combines exact integer operators with bitwise behavior and
-### the alternate wrapping and clamping arithmetic surfaces expected from
-### machine-sized integer types.
-protocol FixedIntegral obeys Integral, Invertible, WrappingArithmetic, ClampingArithmetic
+### the alternate wrapping, clamping, and unchecked arithmetic surfaces expected
+### from machine-sized integer types.
+protocol FixedIntegral obeys Integral, Invertible, WrappingArithmetic, ClampingArithmetic, UncheckedArithmetic, UncheckedFloorDivisible
   pass

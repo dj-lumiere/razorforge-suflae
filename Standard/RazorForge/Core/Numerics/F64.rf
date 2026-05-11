@@ -191,7 +191,7 @@ routine F64.$neg() -> F64
 ### Returns infinity or NaN on overflow or zero divisor, following raw IEEE 754 semantics.
 ### :param you: The divisor.
 ### :returns: The double-precision quotient, possibly infinity or NaN.
-routine F64.$truediv_unchecked(you: F64) -> F64
+dangerous routine F64.$truediv_unchecked(you: F64) -> F64
   return float_div_fast[F64](me, you)
 
 # ============================================================================

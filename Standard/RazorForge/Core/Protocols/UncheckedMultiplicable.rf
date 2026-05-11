@@ -1,0 +1,14 @@
+module Core
+
+### Represents the protocol for unchecked multiplication.
+### `UncheckedMultiplicable` is for types whose multiplication surface deliberately
+### skips the overflow check. The operation maps to LLVM `mul nsw`/`nuw`, so
+### overflow is undefined behavior.
+protocol UncheckedMultiplicable
+  ### Returns the unchecked product of this value and `you`.
+  ### Overflow is undefined behavior; the caller must prove the operation stays
+  ### in range.
+  ### :param you: The other factor.
+  ### :returns: The resulting `Me` value.
+  @readonly
+  dangerous routine Me.$mul_unchecked(you: Me) -> Me

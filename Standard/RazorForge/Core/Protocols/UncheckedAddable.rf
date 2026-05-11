@@ -1,0 +1,13 @@
+module Core
+
+### Represents the protocol for unchecked addition.
+### `UncheckedAddable` is for types whose addition surface deliberately skips the
+### overflow check. Overflow is **undefined behavior** — the operation maps to
+### LLVM `add nsw`/`nuw`, which lets the optimizer assume overflow never occurs.
+protocol UncheckedAddable
+  ### Returns the unchecked sum of this value and `you`.
+  ### Overflow is undefined behavior; the caller must prove it cannot occur.
+  ### :param you: The other value to add.
+  ### :returns: The resulting `Me` value.
+  @readonly
+  dangerous routine Me.$add_unchecked(you: Me) -> Me

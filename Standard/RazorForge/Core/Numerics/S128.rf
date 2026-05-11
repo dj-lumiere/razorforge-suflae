@@ -255,25 +255,25 @@ routine S128.$mul_wrap(you: S128) -> S128
 ### Returns `me + you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The sum, assuming no overflow.
-routine S128.$add_unchecked(you: S128) -> S128
+dangerous routine S128.$add_unchecked(you: S128) -> S128
   return signed_add_exact[S128](me, you)
 
 ### Returns `me - you` with undefined behavior on overflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, assuming no overflow.
-routine S128.$sub_unchecked(you: S128) -> S128
+dangerous routine S128.$sub_unchecked(you: S128) -> S128
   return signed_sub_exact[S128](me, you)
 
 ### Returns `me * you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The product, assuming no overflow.
-routine S128.$mul_unchecked(you: S128) -> S128
+dangerous routine S128.$mul_unchecked(you: S128) -> S128
   return signed_mul_exact[S128](me, you)
 
 ### Returns `me // you` (floor division) with undefined behavior if `you == 0` or overflow.
 ### :param you: The divisor.
 ### :returns: The floor quotient, assuming `you != 0` and no overflow.
-routine S128.$floordiv_unchecked(you: S128) -> S128
+dangerous routine S128.$floordiv_unchecked(you: S128) -> S128
   var quotient = signed_div[S128](me, you)
   var remainder = signed_rem[S128](me, you)
   if remainder < 0_s128
@@ -285,7 +285,7 @@ routine S128.$floordiv_unchecked(you: S128) -> S128
 ### Returns `me % you` (floor modulo) with undefined behavior if `you == 0`.
 ### :param you: The divisor.
 ### :returns: The floor modulo, assuming `you != 0`.
-routine S128.$mod_unchecked(you: S128) -> S128
+dangerous routine S128.$mod_unchecked(you: S128) -> S128
   var remainder = signed_rem[S128](me, you)
   if remainder < 0_s128
     if you > 0_s128

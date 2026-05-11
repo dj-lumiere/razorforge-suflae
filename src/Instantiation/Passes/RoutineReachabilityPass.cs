@@ -107,6 +107,9 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         "$add", "$sub", "$mul", "$truediv", "$floordiv", "$mod", "$pow", "$neg",
         // Arithmetic — wrapping
         "$add_wrap", "$sub_wrap", "$mul_wrap", "$pow_wrap",
+        // Arithmetic — unchecked (undefined behavior on overflow / div-by-zero)
+        "$add_unchecked", "$sub_unchecked", "$mul_unchecked",
+        "$truediv_unchecked", "$floordiv_unchecked", "$mod_unchecked", "$pow_unchecked",
         // Arithmetic — clamping
         "$add_clamp", "$sub_clamp", "$mul_clamp", "$truediv_clamp", "$pow_clamp",
         // Bitwise

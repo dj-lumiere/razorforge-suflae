@@ -246,31 +246,31 @@ routine U64.$mul_wrap(you: U64) -> U64
 ### Returns `me + you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The sum.
-routine U64.$add_unchecked(you: U64) -> U64
+dangerous routine U64.$add_unchecked(you: U64) -> U64
   return unsigned_add_exact[U64](me, you)
 
 ### Returns `me - you` with undefined behavior on underflow.
 ### :param you: The value to subtract.
 ### :returns: The difference.
-routine U64.$sub_unchecked(you: U64) -> U64
+dangerous routine U64.$sub_unchecked(you: U64) -> U64
   return unsigned_sub_exact[U64](me, you)
 
 ### Returns `me * you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The product.
-routine U64.$mul_unchecked(you: U64) -> U64
+dangerous routine U64.$mul_unchecked(you: U64) -> U64
   return unsigned_mul_exact[U64](me, you)
 
 ### Returns `me // you` with undefined behavior if `you` is zero.
 ### :param you: The divisor.
 ### :returns: The quotient.
-routine U64.$floordiv_unchecked(you: U64) -> U64
+dangerous routine U64.$floordiv_unchecked(you: U64) -> U64
   return unsigned_div[U64](me, you)
 
 ### Returns `me % you` with undefined behavior if `you` is zero.
 ### :param you: The divisor.
 ### :returns: The remainder.
-routine U64.$mod_unchecked(you: U64) -> U64
+dangerous routine U64.$mod_unchecked(you: U64) -> U64
   return unsigned_rem[U64](me, you)
 
 # ============================================================================

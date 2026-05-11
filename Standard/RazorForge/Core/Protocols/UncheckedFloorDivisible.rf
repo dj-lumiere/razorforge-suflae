@@ -1,0 +1,22 @@
+module Core
+
+### Represents the protocol for unchecked Euclidean quotient and remainder.
+### `UncheckedFloorDivisible` is for integer-like types whose division surface
+### deliberately skips both the divide-by-zero check **and** the
+### `MIN_VALUE // -1` overflow check that the standard `$floordiv` / `$mod`
+### routines enforce. Lowers to LLVM `sdiv` / `udiv` / `srem` / `urem`. Any
+### division by zero or overflowing quotient is undefined behavior.
+protocol UncheckedFloorDivisible
+  ### Returns the unchecked floor quotient of this value and `you`.
+  ### Division by zero or `MIN_VALUE // -1` is undefined behavior.
+  ### :param you: The divisor.
+  ### :returns: The resulting `Me` value.
+  @readonly
+  dangerous routine Me.$floordiv_unchecked(you: Me) -> Me
+
+  ### Returns the unchecked remainder after floor division.
+  ### Division by zero or `MIN_VALUE % -1` is undefined behavior.
+  ### :param you: The divisor.
+  ### :returns: The resulting `Me` value.
+  @readonly
+  dangerous routine Me.$mod_unchecked(you: Me) -> Me

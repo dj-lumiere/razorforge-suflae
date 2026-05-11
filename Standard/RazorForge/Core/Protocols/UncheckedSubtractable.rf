@@ -1,0 +1,15 @@
+module Core
+
+### Represents the protocol for unchecked subtraction.
+### `UncheckedSubtractable` is for types whose subtraction surface deliberately
+### skips the overflow / underflow check. The operation maps to LLVM
+### `sub nsw`/`nuw`, which lets the optimizer assume underflow never occurs;
+### violations are undefined behavior.
+protocol UncheckedSubtractable
+  ### Returns the unchecked difference of this value and `you`.
+  ### Underflow / overflow are undefined behavior; the caller must prove the
+  ### operation stays in range.
+  ### :param you: The value to subtract.
+  ### :returns: The resulting `Me` value.
+  @readonly
+  dangerous routine Me.$sub_unchecked(you: Me) -> Me

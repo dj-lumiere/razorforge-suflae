@@ -269,25 +269,25 @@ routine S16.$mul_wrap(you: S16) -> S16
 ### Returns `me + you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The sum, assuming no overflow.
-routine S16.$add_unchecked(you: S16) -> S16
+dangerous routine S16.$add_unchecked(you: S16) -> S16
   return signed_add_exact[S16](me, you)
 
 ### Returns `me - you` with undefined behavior on overflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, assuming no overflow.
-routine S16.$sub_unchecked(you: S16) -> S16
+dangerous routine S16.$sub_unchecked(you: S16) -> S16
   return signed_sub_exact[S16](me, you)
 
 ### Returns `me * you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The product, assuming no overflow.
-routine S16.$mul_unchecked(you: S16) -> S16
+dangerous routine S16.$mul_unchecked(you: S16) -> S16
   return signed_mul_exact[S16](me, you)
 
 ### Returns `me // you` (floor division) with undefined behavior if `you == 0` or overflow.
 ### :param you: The divisor.
 ### :returns: The floor quotient, assuming `you != 0` and no overflow.
-routine S16.$floordiv_unchecked(you: S16) -> S16
+dangerous routine S16.$floordiv_unchecked(you: S16) -> S16
   var quotient = signed_div[S16](me, you)
   var remainder = signed_rem[S16](me, you)
   if remainder < 0_s16
@@ -299,7 +299,7 @@ routine S16.$floordiv_unchecked(you: S16) -> S16
 ### Returns `me % you` (floor modulo) with undefined behavior if `you == 0`.
 ### :param you: The divisor.
 ### :returns: The floor modulo, assuming `you != 0`.
-routine S16.$mod_unchecked(you: S16) -> S16
+dangerous routine S16.$mod_unchecked(you: S16) -> S16
   var remainder = signed_rem[S16](me, you)
   if remainder < 0_s16
     if you > 0_s16

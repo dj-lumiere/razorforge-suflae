@@ -258,31 +258,31 @@ routine U32.$mul_wrap(you: U32) -> U32
 ### Returns `me + you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The sum, assuming no overflow.
-routine U32.$add_unchecked(you: U32) -> U32
+dangerous routine U32.$add_unchecked(you: U32) -> U32
   return unsigned_add_exact[U32](me, you)
 
 ### Returns `me - you` with undefined behavior on underflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, assuming no underflow.
-routine U32.$sub_unchecked(you: U32) -> U32
+dangerous routine U32.$sub_unchecked(you: U32) -> U32
   return unsigned_sub_exact[U32](me, you)
 
 ### Returns `me * you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The product, assuming no overflow.
-routine U32.$mul_unchecked(you: U32) -> U32
+dangerous routine U32.$mul_unchecked(you: U32) -> U32
   return unsigned_mul_exact[U32](me, you)
 
 ### Returns `me // you` with undefined behavior if `you == 0`.
 ### :param you: The divisor.
 ### :returns: The quotient, assuming `you != 0`.
-routine U32.$floordiv_unchecked(you: U32) -> U32
+dangerous routine U32.$floordiv_unchecked(you: U32) -> U32
   return unsigned_div[U32](me, you)
 
 ### Returns `me % you` with undefined behavior if `you == 0`.
 ### :param you: The divisor.
 ### :returns: The remainder, assuming `you != 0`.
-routine U32.$mod_unchecked(you: U32) -> U32
+dangerous routine U32.$mod_unchecked(you: U32) -> U32
   return unsigned_rem[U32](me, you)
 
 # ============================================================================

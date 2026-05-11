@@ -184,7 +184,7 @@ routine F32.$neg() -> F32
 ### Returns infinity or NaN on overflow or zero divisor, following raw IEEE 754 semantics.
 ### :param you: The divisor.
 ### :returns: The single-precision quotient, possibly infinity or NaN.
-routine F32.$truediv_unchecked(you: F32) -> F32
+dangerous routine F32.$truediv_unchecked(you: F32) -> F32
   return float_div_fast[F32](me, you)
 
 # ============================================================================
