@@ -233,6 +233,12 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 && !IsWiredRoutineName(genMethod.Name))
                 continue;
 
+            // Capability gate: skip wired comparison/containment/hashing routines whose
+            // generic-def constraint (e.g. `needs T obeys Equatable`) is not satisfied by
+            // this concrete owner. See RoutineApplicableToConcreteOwner.
+            if (!RoutineApplicableToConcreteOwner(routine: concreteInfo, owner: concreteType))
+                continue;
+
             MonomorphizedBody? body = BuildBody(
                 genMethod: genMethod,
                 concreteInfo: concreteInfo,
@@ -256,6 +262,17 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     };
 
     private static bool IsWiredRoutineName(string name) => _gateBypassNames.Contains(name);
+
+    /// <summary>
+    /// Returns false when this concrete instantiation does not actually have the wired
+    /// routine. Example: `Array[T, N].$eq` is declared `needs T obeys Equatable` — for
+    /// `T = Owned[X]` (not equatable), the routine does not exist on this owner. Body
+    /// emission must skip it so derived companions (`$ne`, `$notcontains`) don't reference
+    /// a missing symbol downstream in codegen. The actual protocol-to-wired-routine map
+    /// lives in <see cref="TypeRegistry"/> (single source of truth).
+    /// </summary>
+    private bool RoutineApplicableToConcreteOwner(RoutineInfo routine, TypeInfo owner)
+        => ctx.Registry.TypeHasWiredRoutine(type: owner, wiredName: routine.Name);
 
     private void ProcessResolvedMethodGenericRoutines()
     {
@@ -288,6 +305,12 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 if (ctx.LiveRoutineKeys.Count > 0
                     && !ctx.LiveRoutineKeys.Contains(item: resolvedRoutine.RegistryKey)
                     && !IsWiredRoutineName(resolvedRoutine.Name))
+                {
+                    continue;
+                }
+
+                if (resolvedRoutine.OwnerType is { } resolvedOwner
+                    && !RoutineApplicableToConcreteOwner(routine: resolvedRoutine, owner: resolvedOwner))
                 {
                     continue;
                 }

@@ -128,6 +128,13 @@ internal sealed class DerivedOperatorPass
             IsFailable = false,
             DeclaredModification = ModificationCategory.Readonly,
             ModificationCategory = ModificationCategory.Readonly,
+            // Inherit `$eq`'s generic-parameter constraints so `$ne` is only available
+            // for the same instantiations as `$eq`. Without this, Array[T,N].$ne is
+            // unconditionally derivable even when $eq requires `T obeys Equatable`,
+            // and the synthesized `$ne` body references a non-existent `$eq` at link
+            // time for instantiations that fail the constraint (e.g. Array[Owned[X],N]).
+            GenericParameters = eqMethod.GenericParameters,
+            GenericConstraints = eqMethod.GenericConstraints,
             Visibility = eqMethod.Visibility,
             Location = eqMethod.Location,
             Module = eqMethod.Module,
@@ -179,6 +186,10 @@ internal sealed class DerivedOperatorPass
             IsFailable = false,
             DeclaredModification = ModificationCategory.Readonly,
             ModificationCategory = ModificationCategory.Readonly,
+            // Inherit `$contains`'s constraints so `$notcontains` is only available for
+            // the same instantiations.
+            GenericParameters = containsMethod.GenericParameters,
+            GenericConstraints = containsMethod.GenericConstraints,
             Visibility = containsMethod.Visibility,
             Location = containsMethod.Location,
             Module = containsMethod.Module,
@@ -249,6 +260,10 @@ internal sealed class DerivedOperatorPass
                 IsFailable = false,
                 DeclaredModification = ModificationCategory.Readonly,
                 ModificationCategory = ModificationCategory.Readonly,
+                // Inherit `$cmp`'s constraints so `$lt/$le/$gt/$ge` are only available for
+                // the same instantiations.
+                GenericParameters = cmpMethod.GenericParameters,
+                GenericConstraints = cmpMethod.GenericConstraints,
                 Visibility = cmpMethod.Visibility,
                 Location = cmpMethod.Location,
                 Module = cmpMethod.Module,

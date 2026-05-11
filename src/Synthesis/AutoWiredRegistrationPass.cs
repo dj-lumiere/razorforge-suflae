@@ -1,4 +1,5 @@
 using Compiler.Resolution;
+using SyntaxTree;
 using Verification;
 using Verification.Enums;
 using TypeModel.Enums;
@@ -148,7 +149,18 @@ internal sealed class AutoWiredRegistrationPass
                     break;
 
                 case TypeCategory.Entity:
-                    if (boolType != null && ObeysProtocol(type: type, protocolName: "Equatable"))
+                    // Only synthesize `$eq` when every member field's type also has an
+                    // accessible `$eq`. Otherwise the auto-derived body would emit calls
+                    // like `me.children == you.children` for non-equatable element types
+                    // (e.g. `Array[Owned[T], 64]`), and the cascade dead-ends at link time.
+                    // Entities that genuinely need equality but hold non-equatable fields
+                    // should declare `$eq` explicitly with the right semantics.
+                    // Only synthesize `$eq` when every member field's type also has an
+                    // accessible `$eq`. Otherwise the auto-derived body would emit calls
+                    // like `me.children == you.children` for non-equatable element types
+                    // (e.g. `Array[Owned[T], 64]`), and the cascade dead-ends at link time.
+                    if (boolType != null && ObeysProtocol(type: type, protocolName: "Equatable") &&
+                        AllFieldsHaveEquality(type: type))
                     {
                         MaybeRegisterWiredWithParam(owner: type,
                             name: "$eq",
@@ -585,6 +597,102 @@ internal sealed class AutoWiredRegistrationPass
     /// Used to gate auto-derivation of <c>$eq</c> / <c>$hash</c> on records, entities,
     /// choices, and flags — these are now opt-in rather than universal.
     /// </summary>
+    /// <summary>
+    /// Returns true when every member-variable type on <paramref name="type"/> supports `$eq`
+    /// — either it obeys `Equatable`, has an explicit `$eq` method, or is a primitive /
+    /// `@llvm("...")`-backed record (whose equality is a built-in instruction). Used to gate
+    /// auto-derivation of `$eq` so entities holding non-equatable fields (e.g. `Array[Owned[T], N]`)
+    /// don't get a synthesised body whose recursion dead-ends at link time.
+    /// </summary>
+    private bool AllFieldsHaveEquality(TypeSymbol type)
+    {
+        IReadOnlyList<MemberVariableInfo>? members = type switch
+        {
+            RecordTypeInfo r => r.MemberVariables,
+            EntityTypeInfo e => e.MemberVariables,
+            _ => null
+        };
+        if (members == null) return true;
+
+        foreach (MemberVariableInfo m in members)
+        {
+            if (!TypeHasEquality(type: m.Type)) return false;
+        }
+        return true;
+    }
+
+    private bool TypeHasEquality(TypeSymbol type)
+    {
+        return TypeHasEquality(type: type, seen: new HashSet<string>(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// Recursive check for whether <paramref name="type"/> supports `$eq`. Handles three layers:
+    /// (1) primitives / `@llvm` records — built-in IR equality;
+    /// (2) explicit `$eq` method or obeys `Equatable` — registered conformance;
+    /// (3) generic resolution like `Array[T, N]` — looks up the generic def's `$eq` method
+    /// and recursively verifies every `T obeys Equatable` constraint against the substituted
+    /// type args. Without (3), `Array[Owned[X], 64]` passes the check (because `Array.$eq` exists
+    /// on the generic def) even though the body's recursion into `Owned[X].$ne` link-errors.
+    /// </summary>
+    private bool TypeHasEquality(TypeSymbol type, HashSet<string> seen)
+    {
+        // Treat generic parameters and error / blank types as permissive (the constraint
+        // either narrows them later or they're already a no-op).
+        if (type is GenericParameterTypeInfo or ErrorTypeInfo || type.IsBlank) return true;
+
+        // @llvm-backed records (numeric primitives, Bool, Character, Byte, Hijacked[T])
+        // get equality from the underlying IR instruction.
+        if (type is RecordTypeInfo { HasDirectBackendType: true }) return true;
+
+        // Cycle guard — recursive record / entity types must not loop here.
+        if (!seen.Add(item: type.FullName)) return true;
+
+        // For a generic resolution, the generic def's `$eq` method may carry
+        // `T obeys Equatable` constraints. Each such constraint must hold for the
+        // corresponding type argument.
+        TypeSymbol? genericDef = type switch
+        {
+            RecordTypeInfo r => r.GenericDefinition,
+            EntityTypeInfo e => e.GenericDefinition,
+            _ => null
+        };
+        if (genericDef != null && type.TypeArguments is { Count: > 0 } typeArgs &&
+            genericDef.GenericParameters is { Count: > 0 } gParams &&
+            gParams.Count == typeArgs.Count)
+        {
+            RoutineInfo? defEq = _registry.LookupMethod(type: genericDef, methodName: "$eq");
+            if (defEq != null && defEq.GenericConstraints is { } constraints)
+            {
+                foreach (GenericConstraintDeclaration c in constraints)
+                {
+                    if (c.ConstraintType != ConstraintKind.Obeys ||
+                        c.ConstraintTypes is not { Count: > 0 }) continue;
+                    int idx = -1;
+                    for (int i = 0; i < gParams.Count; i++)
+                    {
+                        if (gParams[index: i] == c.ParameterName) { idx = i; break; }
+                    }
+                    if (idx < 0) continue;
+                    TypeSymbol argType = typeArgs[index: idx];
+                    foreach (TypeExpression protoExpr in c.ConstraintTypes)
+                    {
+                        if (protoExpr.Name == "Equatable" && !TypeHasEquality(type: argType, seen: seen))
+                            return false;
+                    }
+                }
+            }
+        }
+
+        // Explicit `$eq` method on the type (either user-defined or already auto-derived).
+        if (_registry.LookupMethod(type: type, methodName: "$eq") != null) return true;
+
+        // Type declares obeys Equatable — we expect a `$eq` will eventually be synthesised.
+        if (ObeysProtocol(type: type, protocolName: "Equatable")) return true;
+
+        return false;
+    }
+
     private bool ObeysProtocol(TypeSymbol type, string protocolName)
     {
         IReadOnlyList<TypeSymbol>? implemented = type switch
