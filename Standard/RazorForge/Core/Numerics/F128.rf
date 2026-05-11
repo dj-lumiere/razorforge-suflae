@@ -136,7 +136,7 @@ routine F128.$create(from: D128) -> F128
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F128` value.
 routine F128.$add!(you: F128) -> F128
-  var result = float_add[F128](me, you)
+  var result = float_add[F128](a: me, b: you)
   if not result.is_finite()
     throw NumericOverflowError(description: f"F128 addition produced non-finite result: {me} + {you}")
   return result
@@ -145,7 +145,7 @@ routine F128.$add!(you: F128) -> F128
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F128` value.
 routine F128.$sub!(you: F128) -> F128
-  var result = float_sub[F128](me, you)
+  var result = float_sub[F128](a: me, b: you)
   if not result.is_finite()
     throw NumericOverflowError(description: f"F128 subtraction produced non-finite result: {me} - {you}")
   return result
@@ -154,7 +154,7 @@ routine F128.$sub!(you: F128) -> F128
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F128` value.
 routine F128.$mul!(you: F128) -> F128
-  var result = float_mul[F128](me, you)
+  var result = float_mul[F128](a: me, b: you)
   if not result.is_finite()
     throw NumericOverflowError(description: f"F128 multiplication produced non-finite result: {me} * {you}")
   return result
@@ -163,7 +163,7 @@ routine F128.$mul!(you: F128) -> F128
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F128` value.
 routine F128.$truediv!(you: F128) -> F128
-  var result = float_div[F128](me, you)
+  var result = float_div[F128](a: me, b: you)
   if not result.is_finite()
     throw NumericOverflowError(description: f"F128 division produced non-finite result: {me} / {you}")
   return result
@@ -178,7 +178,7 @@ routine F128.$neg() -> F128
 ### :param you: The divisor.
 ### :returns: The quadruple-precision quotient, possibly infinity or NaN.
 dangerous routine F128.$truediv_unchecked(you: F128) -> F128
-  return float_div_fast[F128](me, you)
+  return float_div_fast[F128](a: me, b: you)
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)
@@ -188,15 +188,15 @@ dangerous routine F128.$truediv_unchecked(you: F128) -> F128
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine F128.$eq(you: F128) -> Bool
-  return float_eq[F128](me, you)
+  return float_eq[F128](a: me, b: you)
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine F128.$cmp(you: F128) -> ComparisonSign
-  if float_lt[F128](me, you)
+  if float_lt[F128](a: me, b: you)
     return ME_SMALL
-  if float_gt[F128](me, you)
+  if float_gt[F128](a: me, b: you)
     return ME_LARGE
   return SAME
 
@@ -463,7 +463,7 @@ routine F128.is_nan() -> Bool
   var hi = int_truncate[U128, U64](bits >>> 64u32)
   var lo = int_truncate[U128, U64](bits)
   var exponent = bit_and[U64](shift_right_unsigned[U64](hi, 48_u32), 0x7FFF_u64)
-  var hi_mantissa = bit_and[U64](hi, 0x0000_FFFF_FFFF_FFFF_u64)
+  var hi_mantissa = bit_and[U64](a: hi, b: 0x0000_FFFF_FFFF_FFFF_u64)
   return exponent == 0x7FFF_u64 and (hi_mantissa != 0_u64 or lo != 0_u64)
 
 ### Returns `true` when this value encodes positive or negative infinity.
@@ -475,7 +475,7 @@ routine F128.is_infinite() -> Bool
   var hi = int_truncate[U128, U64](bits >>> 64u32)
   var lo = int_truncate[U128, U64](bits)
   var exponent = bit_and[U64](shift_right_unsigned[U64](hi, 48_u32), 0x7FFF_u64)
-  var hi_mantissa = bit_and[U64](hi, 0x0000_FFFF_FFFF_FFFF_u64)
+  var hi_mantissa = bit_and[U64](a: hi, b: 0x0000_FFFF_FFFF_FFFF_u64)
   return exponent == 0x7FFF_u64 and hi_mantissa == 0_u64 and lo == 0_u64
 
 ### Returns `true` when this value is neither NaN nor infinity.
@@ -504,7 +504,7 @@ routine F128.is_subnormal() -> Bool
 ### :param you: The addend.
 ### :returns: The sum, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
 routine F128.$add_clamp(you: F128) -> F128
-  var result = float_add[F128](me, you)
+  var result = float_add[F128](a: me, b: you)
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else float_neg[F128](F128_MAX)
   return result
@@ -513,7 +513,7 @@ routine F128.$add_clamp(you: F128) -> F128
 ### :param you: The value to subtract.
 ### :returns: The difference, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
 routine F128.$sub_clamp(you: F128) -> F128
-  var result = float_sub[F128](me, you)
+  var result = float_sub[F128](a: me, b: you)
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else float_neg[F128](F128_MAX)
   return result
@@ -522,7 +522,7 @@ routine F128.$sub_clamp(you: F128) -> F128
 ### :param you: The multiplier.
 ### :returns: The product, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
 routine F128.$mul_clamp(you: F128) -> F128
-  var result = float_mul[F128](me, you)
+  var result = float_mul[F128](a: me, b: you)
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else float_neg[F128](F128_MAX)
   return result
@@ -531,7 +531,7 @@ routine F128.$mul_clamp(you: F128) -> F128
 ### :param you: The divisor.
 ### :returns: The quotient, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
 routine F128.$truediv_clamp(you: F128) -> F128
-  var result = float_div[F128](me, you)
+  var result = float_div[F128](a: me, b: you)
   if result.is_infinite()
     return if result.is_positive() then F128_MAX else float_neg[F128](F128_MAX)
   return result
@@ -598,7 +598,7 @@ routine F128.hash() -> U64
   if bits == shift_left[U128](zero_extend[U64, U128](0x8000000000000000_u64), 64_u128)
     lo = 0_u64
     hi = 0_u64
-  return bit_xor[U64](lo, mul[U64](hi, 1099511628211_u64))
+  return bit_xor[U64](lo, mul[U64](a: hi, b: 1099511628211_u64))
 
 # ============================================================================
 # Text Representation and Parsing

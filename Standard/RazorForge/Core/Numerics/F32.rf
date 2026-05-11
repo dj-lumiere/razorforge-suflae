@@ -140,7 +140,7 @@ routine F32.$create(from: D128) -> F32
 ### :returns: The single-precision sum.
 ### :throws: {NumericOverflowError} if the result is infinity or NaN.
 routine F32.$add!(you: F32) -> F32
-  var result = float_add[F32](me, you)
+  var result = float_add[F32](a: me, b: you)
   if not result.is_finite()
     throw NumericOverflowError(description: f"F32 addition produced non-finite result: {me} + {you}")
   return result
@@ -150,7 +150,7 @@ routine F32.$add!(you: F32) -> F32
 ### :returns: The single-precision difference.
 ### :throws: {NumericOverflowError} if the result is infinity or NaN.
 routine F32.$sub!(you: F32) -> F32
-  var result = float_sub[F32](me, you)
+  var result = float_sub[F32](a: me, b: you)
   if not result.is_finite()
     throw NumericOverflowError(description: f"F32 subtraction produced non-finite result: {me} - {you}")
   return result
@@ -160,7 +160,7 @@ routine F32.$sub!(you: F32) -> F32
 ### :returns: The single-precision product.
 ### :throws: {NumericOverflowError} if the result is infinity or NaN.
 routine F32.$mul!(you: F32) -> F32
-  var result = float_mul[F32](me, you)
+  var result = float_mul[F32](a: me, b: you)
   if not result.is_finite()
     throw NumericOverflowError(description: f"F32 multiplication produced non-finite result: {me} * {you}")
   return result
@@ -170,7 +170,7 @@ routine F32.$mul!(you: F32) -> F32
 ### :returns: The single-precision quotient.
 ### :throws: {NumericOverflowError} if the result is infinity or NaN (including division by zero).
 routine F32.$truediv!(you: F32) -> F32
-  var result = float_div[F32](me, you)
+  var result = float_div[F32](a: me, b: you)
   if not result.is_finite()
     throw NumericOverflowError(description: f"F32 division produced non-finite result: {me} / {you}")
   return result
@@ -185,7 +185,7 @@ routine F32.$neg() -> F32
 ### :param you: The divisor.
 ### :returns: The single-precision quotient, possibly infinity or NaN.
 dangerous routine F32.$truediv_unchecked(you: F32) -> F32
-  return float_div_fast[F32](me, you)
+  return float_div_fast[F32](a: me, b: you)
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)
@@ -195,15 +195,15 @@ dangerous routine F32.$truediv_unchecked(you: F32) -> F32
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine F32.$eq(you: F32) -> Bool
-  return float_eq[F32](me, you)
+  return float_eq[F32](a: me, b: you)
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine F32.$cmp(you: F32) -> ComparisonSign
-  if float_lt[F32](me, you)
+  if float_lt[F32](a: me, b: you)
     return ME_SMALL
-  if float_gt[F32](me, you)
+  if float_gt[F32](a: me, b: you)
     return ME_LARGE
   return SAME
 
@@ -329,16 +329,16 @@ routine F32.is_zero() -> Bool
 ### :returns: Whether the bit pattern represents a not-a-number payload.
 routine F32.is_nan() -> Bool
   var bits = me.to_bits()
-  var exponent = bit_and[U32](bits, 0x7F800000_u32)
-  var mantissa = bit_and[U32](bits, 0x007FFFFF_u32)
+  var exponent = bit_and[U32](a: bits, b: 0x7F800000_u32)
+  var mantissa = bit_and[U32](a: bits, b: 0x007FFFFF_u32)
   return exponent == 0x7F800000_u32 and mantissa != 0_u32
 
 ### Returns `true` when this value encodes positive or negative infinity.
 ### :returns: Whether the bit pattern represents an infinity.
 routine F32.is_infinite() -> Bool
   var bits = me.to_bits()
-  var exponent = bit_and[U32](bits, 0x7F800000_u32)
-  var mantissa = bit_and[U32](bits, 0x007FFFFF_u32)
+  var exponent = bit_and[U32](a: bits, b: 0x7F800000_u32)
+  var mantissa = bit_and[U32](a: bits, b: 0x007FFFFF_u32)
   return exponent == 0x7F800000_u32 and mantissa == 0_u32
 
 ### Returns `true` when this value is neither NaN nor infinity.

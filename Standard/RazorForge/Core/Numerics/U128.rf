@@ -203,7 +203,7 @@ routine U128.$mul!(you: U128) -> U128
 routine U128.$floordiv!(you: U128) -> U128
   if you == 0
     throw DivisionByZeroError()
-  return unsigned_div[U128](me, you)
+  return unsigned_div[U128](a: me, b: you)
 
 ### Returns `me % you` (integer remainder).
 ### :param you: The divisor.
@@ -211,7 +211,7 @@ routine U128.$floordiv!(you: U128) -> U128
 routine U128.$mod!(you: U128) -> U128
   if you == 0_u128
     throw DivisionByZeroError()
-  return unsigned_rem[U128](me, you)
+  return unsigned_rem[U128](a: me, b: you)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -221,19 +221,19 @@ routine U128.$mod!(you: U128) -> U128
 ### :param you: The right operand.
 ### :returns: The sum modulo 2¹²⁸.
 routine U128.$add_wrap(you: U128) -> U128
-  return add[U128](me, you)
+  return add[U128](a: me, b: you)
 
 ### Returns `(me - you) mod 2¹²⁸` without underflow check.
 ### :param you: The value to subtract.
 ### :returns: The difference modulo 2¹²⁸.
 routine U128.$sub_wrap(you: U128) -> U128
-  return sub[U128](me, you)
+  return sub[U128](a: me, b: you)
 
 ### Returns `(me * you) mod 2¹²⁸` without overflow check.
 ### :param you: The right operand.
 ### :returns: The product modulo 2¹²⁸.
 routine U128.$mul_wrap(you: U128) -> U128
-  return mul[U128](me, you)
+  return mul[U128](a: me, b: you)
 
 # ============================================================================
 # Unchecked Arithmetic (+!, -!, *!, //!, %!)
@@ -243,31 +243,31 @@ routine U128.$mul_wrap(you: U128) -> U128
 ### :param you: The right operand.
 ### :returns: The sum, assuming no overflow.
 dangerous routine U128.$add_unchecked(you: U128) -> U128
-  return unsigned_add_exact[U128](me, you)
+  return unsigned_add_exact[U128](a: me, b: you)
 
 ### Returns `me - you` with undefined behavior on underflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, assuming no underflow.
 dangerous routine U128.$sub_unchecked(you: U128) -> U128
-  return unsigned_sub_exact[U128](me, you)
+  return unsigned_sub_exact[U128](a: me, b: you)
 
 ### Returns `me * you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The product, assuming no overflow.
 dangerous routine U128.$mul_unchecked(you: U128) -> U128
-  return unsigned_mul_exact[U128](me, you)
+  return unsigned_mul_exact[U128](a: me, b: you)
 
 ### Returns `me // you` with undefined behavior if `you == 0`.
 ### :param you: The divisor.
 ### :returns: The quotient, assuming `you != 0`.
 dangerous routine U128.$floordiv_unchecked(you: U128) -> U128
-  return unsigned_div[U128](me, you)
+  return unsigned_div[U128](a: me, b: you)
 
 ### Returns `me % you` with undefined behavior if `you == 0`.
 ### :param you: The divisor.
 ### :returns: The remainder, assuming `you != 0`.
 dangerous routine U128.$mod_unchecked(you: U128) -> U128
-  return unsigned_rem[U128](me, you)
+  return unsigned_rem[U128](a: me, b: you)
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
@@ -277,13 +277,13 @@ dangerous routine U128.$mod_unchecked(you: U128) -> U128
 ### :param you: The right operand.
 ### :returns: The sum, or `U128_MAX` if it would overflow.
 routine U128.$add_clamp(you: U128) -> U128
-  return unsigned_add_sat[U128](me, you)
+  return unsigned_add_sat[U128](a: me, b: you)
 
 ### Returns `me - you`, clamped to `U128_MIN` on underflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, or `0` if it would go below `U128_MIN`.
 routine U128.$sub_clamp(you: U128) -> U128
-  return unsigned_sub_sat[U128](me, you)
+  return unsigned_sub_sat[U128](a: me, b: you)
 
 ### Returns `me * you`, clamped to `U128_MAX` on overflow.
 ### Uses a division-based overflow check since no 256-bit type is available.
@@ -291,10 +291,10 @@ routine U128.$sub_clamp(you: U128) -> U128
 ### :returns: The product, or `U128_MAX` if it would overflow.
 routine U128.$mul_clamp(you: U128) -> U128
   # Can't widen to 256-bit, use division-based overflow check
-  if int_eq[U128](me, 0_u128) or int_eq[U128](you, 0_u128)
+  if int_eq[U128](a: me, b: 0_u128) or int_eq[U128](a: you, b: 0_u128)
     return 0_u128
-  var result = mul[U128](me, you)
-  if int_ne[U128](unsigned_div[U128](result, me), you)
+  var result = mul[U128](a: me, b: you)
+  if int_ne[U128](unsigned_div[U128](a: result, b: me), you)
     return U128_MAX
   return result
 
@@ -379,24 +379,24 @@ routine U128.$pow_clamp!(exp: U128) -> U128
 ### :param you: The right operand.
 ### :returns: `me & you`.
 routine U128.$bitand(you: U128) -> U128
-  return bit_and[U128](me, you)
+  return bit_and[U128](a: me, b: you)
 
 ### Returns the bitwise OR of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me | you`.
 routine U128.$bitor(you: U128) -> U128
-  return bit_or[U128](me, you)
+  return bit_or[U128](a: me, b: you)
 
 ### Returns the bitwise XOR of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me ^ you`.
 routine U128.$bitxor(you: U128) -> U128
-  return bit_xor[U128](me, you)
+  return bit_xor[U128](a: me, b: you)
 
 ### Returns the bitwise complement of this value.
 ### :returns: `~me` — each bit flipped.
 routine U128.$bitnot() -> U128
-  return bit_xor[U128](me, -1)
+  return bit_xor[U128](a: me, b: -1)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)
@@ -435,7 +435,7 @@ routine U128.$lshr(bits: U32) -> U128
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`; `false` otherwise.
 routine U128.$eq(you: U128) -> Bool
-  return int_eq[U128](me, you)
+  return int_eq[U128](a: me, b: you)
 
 ### Compares this value with `you`, returning the ordering relationship.
 ### :param you: The value to compare against.
@@ -531,8 +531,8 @@ routine U128.is_zero() -> Bool
 ### Returns `true` if this value is divisible by 2.
 ### :returns: `true` if the least-significant bit is 0.
 routine U128.is_even() -> Bool
-  var result = bit_and[U128](me, 1_u128)
-  return int_eq[U128](result, 0_u128)
+  var result = bit_and[U128](a: me, b: 1_u128)
+  return int_eq[U128](a: result, b: 0_u128)
 
 ### Returns `true` if this value is not divisible by 2.
 ### :returns: `true` if the least-significant bit is 1.
@@ -560,8 +560,8 @@ routine U128.$represent() -> Text
   var digits = List[Character]()
   var remaining = me
   while remaining > 0u128
-    var digit = U8(unsigned_rem[U128](remaining, 10u128))
-    remaining = unsigned_div[U128](remaining, 10u128)
+    var digit = U8(unsigned_rem[U128](a: remaining, b: 10u128))
+    remaining = unsigned_div[U128](a: remaining, b: 10u128)
     digits.add_first(Character(0x0030u32 + U32(digit)))
   return Text(from_list: digits)
 

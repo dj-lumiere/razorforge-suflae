@@ -213,7 +213,7 @@ routine U8.$mul!(you: U8) -> U8
 routine U8.$floordiv!(you: U8) -> U8
   if you == 0
     throw DivisionByZeroError()
-  return unsigned_div[U8](me, you)
+  return unsigned_div[U8](a: me, b: you)
 
 ### Returns `me % you` (integer remainder).
 ### :param you: The divisor.
@@ -221,7 +221,7 @@ routine U8.$floordiv!(you: U8) -> U8
 routine U8.$mod!(you: U8) -> U8
   if you == 0_u8
     throw DivisionByZeroError()
-  return unsigned_rem[U8](me, you)
+  return unsigned_rem[U8](a: me, b: you)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -231,19 +231,19 @@ routine U8.$mod!(you: U8) -> U8
 ### :param you: The right operand.
 ### :returns: The sum modulo 256.
 routine U8.$add_wrap(you: U8) -> U8
-  return add[U8](me, you)
+  return add[U8](a: me, b: you)
 
 ### Returns `(me - you) mod 256` without underflow check.
 ### :param you: The value to subtract.
 ### :returns: The difference modulo 256.
 routine U8.$sub_wrap(you: U8) -> U8
-  return sub[U8](me, you)
+  return sub[U8](a: me, b: you)
 
 ### Returns `(me * you) mod 256` without overflow check.
 ### :param you: The right operand.
 ### :returns: The product modulo 256.
 routine U8.$mul_wrap(you: U8) -> U8
-  return mul[U8](me, you)
+  return mul[U8](a: me, b: you)
 
 # ============================================================================
 # Unchecked Arithmetic (+!, -!, *!, //!, %!)
@@ -253,31 +253,31 @@ routine U8.$mul_wrap(you: U8) -> U8
 ### :param you: The right operand.
 ### :returns: The sum, assuming no overflow.
 dangerous routine U8.$add_unchecked(you: U8) -> U8
-  return unsigned_add_exact[U8](me, you)
+  return unsigned_add_exact[U8](a: me, b: you)
 
 ### Returns `me - you` with undefined behavior on underflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, assuming no underflow.
 dangerous routine U8.$sub_unchecked(you: U8) -> U8
-  return unsigned_sub_exact[U8](me, you)
+  return unsigned_sub_exact[U8](a: me, b: you)
 
 ### Returns `me * you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The product, assuming no overflow.
 dangerous routine U8.$mul_unchecked(you: U8) -> U8
-  return unsigned_mul_exact[U8](me, you)
+  return unsigned_mul_exact[U8](a: me, b: you)
 
 ### Returns `me // you` with undefined behavior if `you == 0`.
 ### :param you: The divisor.
 ### :returns: The quotient, assuming `you != 0`.
 dangerous routine U8.$floordiv_unchecked(you: U8) -> U8
-  return unsigned_div[U8](me, you)
+  return unsigned_div[U8](a: me, b: you)
 
 ### Returns `me % you` with undefined behavior if `you == 0`.
 ### :param you: The divisor.
 ### :returns: The remainder, assuming `you != 0`.
 dangerous routine U8.$mod_unchecked(you: U8) -> U8
-  return unsigned_rem[U8](me, you)
+  return unsigned_rem[U8](a: me, b: you)
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
@@ -287,13 +287,13 @@ dangerous routine U8.$mod_unchecked(you: U8) -> U8
 ### :param you: The right operand.
 ### :returns: The sum, or `255` if it would exceed `U8_MAX`.
 routine U8.$add_clamp(you: U8) -> U8
-  return unsigned_add_sat[U8](me, you)
+  return unsigned_add_sat[U8](a: me, b: you)
 
 ### Returns `me - you`, clamped to `U8_MIN` on underflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, or `0` if it would go below `U8_MIN`.
 routine U8.$sub_clamp(you: U8) -> U8
-  return unsigned_sub_sat[U8](me, you)
+  return unsigned_sub_sat[U8](a: me, b: you)
 
 ### Returns `me * you`, clamped to `U8_MAX` on overflow.
 ### :param you: The right operand.
@@ -385,24 +385,24 @@ routine U8.$pow_clamp!(exp: U8) -> U8
 ### :param you: The right operand.
 ### :returns: `me & you`.
 routine U8.$bitand(you: U8) -> U8
-  return bit_and[U8](me, you)
+  return bit_and[U8](a: me, b: you)
 
 ### Returns the bitwise OR of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me | you`.
 routine U8.$bitor(you: U8) -> U8
-  return bit_or[U8](me, you)
+  return bit_or[U8](a: me, b: you)
 
 ### Returns the bitwise XOR of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me ^ you`.
 routine U8.$bitxor(you: U8) -> U8
-  return bit_xor[U8](me, you)
+  return bit_xor[U8](a: me, b: you)
 
 ### Returns the bitwise complement of this value.
 ### :returns: `~me` — each bit flipped.
 routine U8.$bitnot() -> U8
-  return bit_xor[U8](me, -1)
+  return bit_xor[U8](a: me, b: -1)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)
@@ -441,7 +441,7 @@ routine U8.$lshr(bits: U32) -> U8
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`; `false` otherwise.
 routine U8.$eq(you: U8) -> Bool
-  return int_eq[U8](me, you)
+  return int_eq[U8](a: me, b: you)
 
 ### Compares this value with `you`, returning the ordering relationship.
 ### :param you: The value to compare against.
@@ -570,7 +570,7 @@ routine F64(from: U8) -> F64
 ### :param from: The `U8` value to convert.
 ### :returns: `true` if `from != 0`.
 routine Bool(from: U8) -> Bool
-  return int_ne[U8](from, 0_u8)
+  return int_ne[U8](a: from, b: 0_u8)
 
 # ============================================================================
 # Utility Methods
@@ -584,8 +584,8 @@ routine U8.is_zero() -> Bool
 ### Returns `true` if this value is divisible by 2.
 ### :returns: `true` if the least-significant bit is 0.
 routine U8.is_even() -> Bool
-  var result = bit_and[U8](me, 1_u8)
-  return int_eq[U8](result, 0_u8)
+  var result = bit_and[U8](a: me, b: 1_u8)
+  return int_eq[U8](a: result, b: 0_u8)
 
 ### Returns `true` if this value is not divisible by 2.
 ### :returns: `true` if the least-significant bit is 1.

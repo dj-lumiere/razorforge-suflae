@@ -147,7 +147,7 @@ routine F64.$create(from: D128) -> F64
 ### :returns: The double-precision sum.
 ### :throws: {NumericOverflowError} if the result is infinity or NaN.
 routine F64.$add!(you: F64) -> F64
-  var result = float_add[F64](me, you)
+  var result = float_add[F64](a: me, b: you)
   if not result.is_finite()
     throw NumericOverflowError(description: f"F64 addition produced non-finite result: {me} + {you}")
   return result
@@ -157,7 +157,7 @@ routine F64.$add!(you: F64) -> F64
 ### :returns: The double-precision difference.
 ### :throws: {NumericOverflowError} if the result is infinity or NaN.
 routine F64.$sub!(you: F64) -> F64
-  var result = float_sub[F64](me, you)
+  var result = float_sub[F64](a: me, b: you)
   if not result.is_finite()
     throw NumericOverflowError(description: f"F64 subtraction produced non-finite result: {me} - {you}")
   return result
@@ -167,7 +167,7 @@ routine F64.$sub!(you: F64) -> F64
 ### :returns: The double-precision product.
 ### :throws: {NumericOverflowError} if the result is infinity or NaN.
 routine F64.$mul!(you: F64) -> F64
-  var result = float_mul[F64](me, you)
+  var result = float_mul[F64](a: me, b: you)
   if not result.is_finite()
     throw NumericOverflowError(description: f"F64 multiplication produced non-finite result: {me} * {you}")
   return result
@@ -177,7 +177,7 @@ routine F64.$mul!(you: F64) -> F64
 ### :returns: The double-precision quotient.
 ### :throws: {NumericOverflowError} if the result is infinity or NaN (including division by zero).
 routine F64.$truediv!(you: F64) -> F64
-  var result = float_div[F64](me, you)
+  var result = float_div[F64](a: me, b: you)
   if not result.is_finite()
     throw NumericOverflowError(description: f"F64 division produced non-finite result: {me} / {you}")
   return result
@@ -192,7 +192,7 @@ routine F64.$neg() -> F64
 ### :param you: The divisor.
 ### :returns: The double-precision quotient, possibly infinity or NaN.
 dangerous routine F64.$truediv_unchecked(you: F64) -> F64
-  return float_div_fast[F64](me, you)
+  return float_div_fast[F64](a: me, b: you)
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)
@@ -202,15 +202,15 @@ dangerous routine F64.$truediv_unchecked(you: F64) -> F64
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`; `false` if either operand is NaN.
 routine F64.$eq(you: F64) -> Bool
-  return float_eq[F64](me, you)
+  return float_eq[F64](a: me, b: you)
 
 ### Compares this value with `you` under IEEE 754 ordered comparison.
 ### :param you: The value to compare against.
 ### :returns: `ME_SMALL`, `ME_LARGE`, or `SAME`.
 routine F64.$cmp(you: F64) -> ComparisonSign
-  if float_lt[F64](me, you)
+  if float_lt[F64](a: me, b: you)
     return ME_SMALL
-  if float_gt[F64](me, you)
+  if float_gt[F64](a: me, b: you)
     return ME_LARGE
   return SAME
 
@@ -342,16 +342,16 @@ routine F64.is_finite() -> Bool
 ### :returns: Whether the bit pattern represents a not-a-number payload.
 routine F64.is_nan() -> Bool
   var bits = me.to_bits()
-  var exponent = bit_and[U64](bits, 0x7FF0000000000000_u64)
-  var mantissa = bit_and[U64](bits, 0x000FFFFFFFFFFFFF_u64)
+  var exponent = bit_and[U64](a: bits, b: 0x7FF0000000000000_u64)
+  var mantissa = bit_and[U64](a: bits, b: 0x000FFFFFFFFFFFFF_u64)
   return exponent == 0x7FF0000000000000_u64 and mantissa != 0_u64
 
 ### Returns `true` when this value encodes positive or negative infinity.
 ### :returns: Whether the bit pattern represents an infinity.
 routine F64.is_infinite() -> Bool
   var bits = me.to_bits()
-  var exponent = bit_and[U64](bits, 0x7FF0000000000000_u64)
-  var mantissa = bit_and[U64](bits, 0x000FFFFFFFFFFFFF_u64)
+  var exponent = bit_and[U64](a: bits, b: 0x7FF0000000000000_u64)
+  var mantissa = bit_and[U64](a: bits, b: 0x000FFFFFFFFFFFFF_u64)
   return exponent == 0x7FF0000000000000_u64 and mantissa == 0_u64
 
 ### Returns the sign of this value as `-1.0`, `0.0`, or `1.0`.

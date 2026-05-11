@@ -219,7 +219,7 @@ routine U32.$mul(you: U32) -> U32
 routine U32.$floordiv!(you: U32) -> U32
   if you == 0
     throw DivisionByZeroError()
-  return unsigned_div[U32](me, you)
+  return unsigned_div[U32](a: me, b: you)
 
 ### Returns `me % you` (integer remainder).
 ### :param you: The divisor.
@@ -227,7 +227,7 @@ routine U32.$floordiv!(you: U32) -> U32
 routine U32.$mod!(you: U32) -> U32
   if you == 0_u32
     throw DivisionByZeroError()
-  return unsigned_rem[U32](me, you)
+  return unsigned_rem[U32](a: me, b: you)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -237,19 +237,19 @@ routine U32.$mod!(you: U32) -> U32
 ### :param you: The right operand.
 ### :returns: The sum modulo 4294967296.
 routine U32.$add_wrap(you: U32) -> U32
-  return add[U32](me, you)
+  return add[U32](a: me, b: you)
 
 ### Returns `(me - you) mod 2³²` without underflow check.
 ### :param you: The value to subtract.
 ### :returns: The difference modulo 4294967296.
 routine U32.$sub_wrap(you: U32) -> U32
-  return sub[U32](me, you)
+  return sub[U32](a: me, b: you)
 
 ### Returns `(me * you) mod 2³²` without overflow check.
 ### :param you: The right operand.
 ### :returns: The product modulo 4294967296.
 routine U32.$mul_wrap(you: U32) -> U32
-  return mul[U32](me, you)
+  return mul[U32](a: me, b: you)
 
 # ============================================================================
 # Unchecked Arithmetic (+!, -!, *!, //!, %!)
@@ -259,31 +259,31 @@ routine U32.$mul_wrap(you: U32) -> U32
 ### :param you: The right operand.
 ### :returns: The sum, assuming no overflow.
 dangerous routine U32.$add_unchecked(you: U32) -> U32
-  return unsigned_add_exact[U32](me, you)
+  return unsigned_add_exact[U32](a: me, b: you)
 
 ### Returns `me - you` with undefined behavior on underflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, assuming no underflow.
 dangerous routine U32.$sub_unchecked(you: U32) -> U32
-  return unsigned_sub_exact[U32](me, you)
+  return unsigned_sub_exact[U32](a: me, b: you)
 
 ### Returns `me * you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The product, assuming no overflow.
 dangerous routine U32.$mul_unchecked(you: U32) -> U32
-  return unsigned_mul_exact[U32](me, you)
+  return unsigned_mul_exact[U32](a: me, b: you)
 
 ### Returns `me // you` with undefined behavior if `you == 0`.
 ### :param you: The divisor.
 ### :returns: The quotient, assuming `you != 0`.
 dangerous routine U32.$floordiv_unchecked(you: U32) -> U32
-  return unsigned_div[U32](me, you)
+  return unsigned_div[U32](a: me, b: you)
 
 ### Returns `me % you` with undefined behavior if `you == 0`.
 ### :param you: The divisor.
 ### :returns: The remainder, assuming `you != 0`.
 dangerous routine U32.$mod_unchecked(you: U32) -> U32
-  return unsigned_rem[U32](me, you)
+  return unsigned_rem[U32](a: me, b: you)
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
@@ -293,13 +293,13 @@ dangerous routine U32.$mod_unchecked(you: U32) -> U32
 ### :param you: The right operand.
 ### :returns: The sum, or `4294967295` if it would exceed `U32_MAX`.
 routine U32.$add_clamp(you: U32) -> U32
-  return unsigned_add_sat[U32](me, you)
+  return unsigned_add_sat[U32](a: me, b: you)
 
 ### Returns `me - you`, clamped to `U32_MIN` on underflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, or `0` if it would go below `U32_MIN`.
 routine U32.$sub_clamp(you: U32) -> U32
-  return unsigned_sub_sat[U32](me, you)
+  return unsigned_sub_sat[U32](a: me, b: you)
 
 ### Returns `me * you`, clamped to `U32_MAX` on overflow.
 ### :param you: The right operand.
@@ -391,24 +391,24 @@ routine U32.$pow_clamp!(exp: U32) -> U32
 ### :param you: The right operand.
 ### :returns: `me & you`.
 routine U32.$bitand(you: U32) -> U32
-  return bit_and[U32](me, you)
+  return bit_and[U32](a: me, b: you)
 
 ### Returns the bitwise OR of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me | you`.
 routine U32.$bitor(you: U32) -> U32
-  return bit_or[U32](me, you)
+  return bit_or[U32](a: me, b: you)
 
 ### Returns the bitwise XOR of this value and `you`.
 ### :param you: The right operand.
 ### :returns: `me ^ you`.
 routine U32.$bitxor(you: U32) -> U32
-  return bit_xor[U32](me, you)
+  return bit_xor[U32](a: me, b: you)
 
 ### Returns the bitwise complement of this value.
 ### :returns: `~me` — each bit flipped.
 routine U32.$bitnot() -> U32
-  return bit_xor[U32](me, -1)
+  return bit_xor[U32](a: me, b: -1)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)
@@ -447,7 +447,7 @@ routine U32.$lshr(bits: U32) -> U32
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`; `false` otherwise.
 routine U32.$eq(you: U32) -> Bool
-  return int_eq[U32](me, you)
+  return int_eq[U32](a: me, b: you)
 
 ### Compares this value with `you`, returning the ordering relationship.
 ### :param you: The value to compare against.
@@ -543,8 +543,8 @@ routine U32.is_zero() -> Bool
 ### Returns `true` if this value is divisible by 2.
 ### :returns: `true` if the least-significant bit is 0.
 routine U32.is_even() -> Bool
-  var result = bit_and[U32](me, 1_u32)
-  return int_eq[U32](result, 0_u32)
+  var result = bit_and[U32](a: me, b: 1_u32)
+  return int_eq[U32](a: result, b: 0_u32)
 
 ### Returns `true` if this value is not divisible by 2.
 ### :returns: `true` if the least-significant bit is 1.
@@ -561,8 +561,8 @@ routine U32.$represent() -> Text
   var digits = List[Character]()
   var remaining = me
   while remaining > 0u32
-    var digit = U8(unsigned_rem[U32](remaining, 10u32))
-    remaining = unsigned_div[U32](remaining, 10u32)
+    var digit = U8(unsigned_rem[U32](a: remaining, b: 10u32))
+    remaining = unsigned_div[U32](a: remaining, b: 10u32)
     digits.add_first(Character(0x0030u32 + U32(digit)))
   return Text(from_list: digits)
 

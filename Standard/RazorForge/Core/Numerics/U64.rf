@@ -206,7 +206,7 @@ routine U64.$mul(you: U64) -> U64
 routine U64.$floordiv!(you: U64) -> U64
   if you == 0
     throw DivisionByZeroError()
-  return unsigned_div[U64](me, you)
+  return unsigned_div[U64](a: me, b: you)
 
 ### Returns `me % you`, throwing if `you` is zero.
 ### :param you: The divisor.
@@ -215,7 +215,7 @@ routine U64.$floordiv!(you: U64) -> U64
 routine U64.$mod!(you: U64) -> U64
   if you == 0
     throw DivisionByZeroError()
-  return unsigned_rem[U64](me, you)
+  return unsigned_rem[U64](a: me, b: you)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -225,19 +225,19 @@ routine U64.$mod!(you: U64) -> U64
 ### :param you: The right operand.
 ### :returns: The wrapped sum.
 routine U64.$add_wrap(you: U64) -> U64
-  return add[U64](me, you)
+  return add[U64](a: me, b: you)
 
 ### Returns `(me - you) mod 2⁶⁴` without underflow check.
 ### :param you: The value to subtract.
 ### :returns: The wrapped difference.
 routine U64.$sub_wrap(you: U64) -> U64
-  return sub[U64](me, you)
+  return sub[U64](a: me, b: you)
 
 ### Returns `(me * you) mod 2⁶⁴` without overflow check.
 ### :param you: The right operand.
 ### :returns: The wrapped product.
 routine U64.$mul_wrap(you: U64) -> U64
-  return mul[U64](me, you)
+  return mul[U64](a: me, b: you)
 
 # ============================================================================
 # Unchecked Arithmetic (+!, -!, *!, //!, %!)
@@ -247,31 +247,31 @@ routine U64.$mul_wrap(you: U64) -> U64
 ### :param you: The right operand.
 ### :returns: The sum.
 dangerous routine U64.$add_unchecked(you: U64) -> U64
-  return unsigned_add_exact[U64](me, you)
+  return unsigned_add_exact[U64](a: me, b: you)
 
 ### Returns `me - you` with undefined behavior on underflow.
 ### :param you: The value to subtract.
 ### :returns: The difference.
 dangerous routine U64.$sub_unchecked(you: U64) -> U64
-  return unsigned_sub_exact[U64](me, you)
+  return unsigned_sub_exact[U64](a: me, b: you)
 
 ### Returns `me * you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The product.
 dangerous routine U64.$mul_unchecked(you: U64) -> U64
-  return unsigned_mul_exact[U64](me, you)
+  return unsigned_mul_exact[U64](a: me, b: you)
 
 ### Returns `me // you` with undefined behavior if `you` is zero.
 ### :param you: The divisor.
 ### :returns: The quotient.
 dangerous routine U64.$floordiv_unchecked(you: U64) -> U64
-  return unsigned_div[U64](me, you)
+  return unsigned_div[U64](a: me, b: you)
 
 ### Returns `me % you` with undefined behavior if `you` is zero.
 ### :param you: The divisor.
 ### :returns: The remainder.
 dangerous routine U64.$mod_unchecked(you: U64) -> U64
-  return unsigned_rem[U64](me, you)
+  return unsigned_rem[U64](a: me, b: you)
 
 # ============================================================================
 # Clamping Arithmetic (+^, -^, *^)
@@ -281,13 +281,13 @@ dangerous routine U64.$mod_unchecked(you: U64) -> U64
 ### :param you: The right operand.
 ### :returns: The sum, or `U64_MAX` if it would overflow.
 routine U64.$add_clamp(you: U64) -> U64
-  return unsigned_add_sat[U64](me, you)
+  return unsigned_add_sat[U64](a: me, b: you)
 
 ### Returns `me - you`, clamped to `U64_MIN` on underflow.
 ### :param you: The value to subtract.
 ### :returns: The difference, or `0` if it would underflow.
 routine U64.$sub_clamp(you: U64) -> U64
-  return unsigned_sub_sat[U64](me, you)
+  return unsigned_sub_sat[U64](a: me, b: you)
 
 ### Returns `me * you`, clamped to `U64_MAX` on overflow.
 ### :param you: The right operand.
@@ -380,24 +380,24 @@ routine U64.$pow_clamp!(exp: U64) -> U64
 ### :param you: The right operand.
 ### :returns: The bitwise intersection.
 routine U64.$bitand(you: U64) -> U64
-  return bit_and[U64](me, you)
+  return bit_and[U64](a: me, b: you)
 
 ### Returns `me | you` (bitwise OR).
 ### :param you: The right operand.
 ### :returns: The bitwise union.
 routine U64.$bitor(you: U64) -> U64
-  return bit_or[U64](me, you)
+  return bit_or[U64](a: me, b: you)
 
 ### Returns `me ^ you` (bitwise XOR).
 ### :param you: The right operand.
 ### :returns: The bitwise exclusive-or.
 routine U64.$bitxor(you: U64) -> U64
-  return bit_xor[U64](me, you)
+  return bit_xor[U64](a: me, b: you)
 
 ### Returns `~me` (bitwise NOT).
 ### :returns: The bitwise complement.
 routine U64.$bitnot() -> U64
-  return bit_xor[U64](me, -1)
+  return bit_xor[U64](a: me, b: -1)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)
@@ -436,7 +436,7 @@ routine U64.$lshr(bits: U32) -> U64
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`.
 routine U64.$eq(you: U64) -> Bool
-  return int_eq[U64](me, you)
+  return int_eq[U64](a: me, b: you)
 
 ### Returns the ordering relationship between this value and `you`.
 ### :param you: The value to compare against.
@@ -526,7 +526,7 @@ routine U64.is_power_of_two() -> Bool
 routine U64.rotate_left(bits: U32) -> U64
   var left = shift_left[U64](me, bits)
   var right = shift_right_unsigned[U64](me, 64_u32 -% bits)
-  return bit_or[U64](left, right)
+  return bit_or[U64](a: left, b: right)
 
 ### Returns this value rotated right by `bits` positions.
 ### :param bits: The number of bit positions to rotate.
@@ -534,7 +534,7 @@ routine U64.rotate_left(bits: U32) -> U64
 routine U64.rotate_right(bits: U32) -> U64
   var right = shift_right_unsigned[U64](me, bits)
   var left = shift_left[U64](me, 64_u32 -% bits)
-  return bit_or[U64](right, left)
+  return bit_or[U64](a: right, b: left)
 
 # ============================================================================
 # Utility Methods
@@ -548,8 +548,8 @@ routine U64.is_zero() -> Bool
 ### Returns true if this value is even.
 ### :returns: `true` when the least significant bit is clear.
 routine U64.is_even() -> Bool
-  var result = bit_and[U64](me, 1_u64)
-  return int_eq[U64](result, 0_u64)
+  var result = bit_and[U64](a: me, b: 1_u64)
+  return int_eq[U64](a: result, b: 0_u64)
 
 ### Returns true if this value is odd.
 ### :returns: `true` when the least significant bit is set.
@@ -571,8 +571,8 @@ routine U64.$represent() -> Text
   var digits = List[Character]()
   var remaining = me
   while remaining > 0u64
-    var digit = U8(unsigned_rem[U64](remaining, 10u64))
-    remaining = unsigned_div[U64](remaining, 10u64)
+    var digit = U8(unsigned_rem[U64](a: remaining, b: 10u64))
+    remaining = unsigned_div[U64](a: remaining, b: 10u64)
     digits.add_first(Character(0x0030u32 + U32(digit)))
   return Text(from_list: digits)
 

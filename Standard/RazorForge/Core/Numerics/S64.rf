@@ -207,8 +207,8 @@ routine S64.$floordiv!(you: S64) -> S64
     throw DivisionByZeroError()
   if me == S64_MIN and you == -1_s64
     throw IntegerOverflowError()
-  var quotient = signed_div[S64](me, you)
-  var remainder = signed_rem[S64](me, you)
+  var quotient = signed_div[S64](a: me, b: you)
+  var remainder = signed_rem[S64](a: me, b: you)
   if remainder < 0_s64
     if you > 0_s64
       return quotient - 1_s64
@@ -222,7 +222,7 @@ routine S64.$floordiv!(you: S64) -> S64
 routine S64.$mod!(you: S64) -> S64
   if you == 0
     throw DivisionByZeroError()
-  var remainder = signed_rem[S64](me, you)
+  var remainder = signed_rem[S64](a: me, b: you)
   if remainder < 0_s64
     if you > 0_s64
       return remainder + you
@@ -234,7 +234,7 @@ routine S64.$mod!(you: S64) -> S64
 routine S64.$neg!() -> S64
   if me == -9223372036854775808_s64
     throw IntegerOverflowError()
-  return sub[S64](0_s64, me)
+  return sub[S64](a: 0_s64, b: me)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
@@ -244,19 +244,19 @@ routine S64.$neg!() -> S64
 ### :param you: The right operand.
 ### :returns: The wrapped sum.
 routine S64.$add_wrap(you: S64) -> S64
-  return add[S64](me, you)
+  return add[S64](a: me, b: you)
 
 ### Returns `(me - you) mod 2⁶⁴` in two's complement, without overflow check.
 ### :param you: The value to subtract.
 ### :returns: The wrapped difference.
 routine S64.$sub_wrap(you: S64) -> S64
-  return sub[S64](me, you)
+  return sub[S64](a: me, b: you)
 
 ### Returns `(me * you) mod 2⁶⁴` in two's complement, without overflow check.
 ### :param you: The right operand.
 ### :returns: The wrapped product.
 routine S64.$mul_wrap(you: S64) -> S64
-  return mul[S64](me, you)
+  return mul[S64](a: me, b: you)
 
 # ============================================================================
 # Unchecked Arithmetic (+!, -!, *!, //!, %!)
@@ -266,26 +266,26 @@ routine S64.$mul_wrap(you: S64) -> S64
 ### :param you: The right operand.
 ### :returns: The sum.
 dangerous routine S64.$add_unchecked(you: S64) -> S64
-  return signed_add_exact[S64](me, you)
+  return signed_add_exact[S64](a: me, b: you)
 
 ### Returns `me - you` with undefined behavior on overflow.
 ### :param you: The value to subtract.
 ### :returns: The difference.
 dangerous routine S64.$sub_unchecked(you: S64) -> S64
-  return signed_sub_exact[S64](me, you)
+  return signed_sub_exact[S64](a: me, b: you)
 
 ### Returns `me * you` with undefined behavior on overflow.
 ### :param you: The right operand.
 ### :returns: The product.
 dangerous routine S64.$mul_unchecked(you: S64) -> S64
-  return signed_mul_exact[S64](me, you)
+  return signed_mul_exact[S64](a: me, b: you)
 
 ### Returns `me // you` (floor division) with undefined behavior if `you` is zero.
 ### :param you: The divisor.
 ### :returns: The floor quotient.
 dangerous routine S64.$floordiv_unchecked(you: S64) -> S64
-  var quotient = signed_div[S64](me, you)
-  var remainder = signed_rem[S64](me, you)
+  var quotient = signed_div[S64](a: me, b: you)
+  var remainder = signed_rem[S64](a: me, b: you)
   if remainder < 0_s64
     if you > 0_s64
       return quotient - 1_s64
@@ -296,7 +296,7 @@ dangerous routine S64.$floordiv_unchecked(you: S64) -> S64
 ### :param you: The divisor.
 ### :returns: The floor remainder.
 dangerous routine S64.$mod_unchecked(you: S64) -> S64
-  var remainder = signed_rem[S64](me, you)
+  var remainder = signed_rem[S64](a: me, b: you)
   if remainder < 0_s64
     if you > 0_s64
       return remainder + you
@@ -311,13 +311,13 @@ dangerous routine S64.$mod_unchecked(you: S64) -> S64
 ### :param you: The right operand.
 ### :returns: The clamped sum.
 routine S64.$add_clamp(you: S64) -> S64
-  return signed_add_sat[S64](me, you)
+  return signed_add_sat[S64](a: me, b: you)
 
 ### Returns `me - you`, clamped to `[S64_MIN, S64_MAX]` on overflow.
 ### :param you: The value to subtract.
 ### :returns: The clamped difference.
 routine S64.$sub_clamp(you: S64) -> S64
-  return signed_sub_sat[S64](me, you)
+  return signed_sub_sat[S64](a: me, b: you)
 
 ### Returns `me * you`, clamped to `[S64_MIN, S64_MAX]` on overflow.
 ### :param you: The right operand.
@@ -419,24 +419,24 @@ routine S64.$pow_clamp!(exp: S64) -> S64
 ### :param you: The right operand.
 ### :returns: The bitwise intersection.
 routine S64.$bitand(you: S64) -> S64
-  return bit_and[S64](me, you)
+  return bit_and[S64](a: me, b: you)
 
 ### Returns `me | you` (bitwise OR).
 ### :param you: The right operand.
 ### :returns: The bitwise union.
 routine S64.$bitor(you: S64) -> S64
-  return bit_or[S64](me, you)
+  return bit_or[S64](a: me, b: you)
 
 ### Returns `me ^ you` (bitwise XOR).
 ### :param you: The right operand.
 ### :returns: The bitwise exclusive-or.
 routine S64.$bitxor(you: S64) -> S64
-  return bit_xor[S64](me, you)
+  return bit_xor[S64](a: me, b: you)
 
 ### Returns `~me` (bitwise NOT).
 ### :returns: The bitwise complement.
 routine S64.$bitnot() -> S64
-  return bit_xor[S64](me, -1)
+  return bit_xor[S64](a: me, b: -1)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)
@@ -474,7 +474,7 @@ routine S64.$lshr(bits: U32) -> S64
 ### :param you: The value to compare against.
 ### :returns: `true` if `me == you`.
 routine S64.$eq(you: S64) -> Bool
-  return int_eq[S64](me, you)
+  return int_eq[S64](a: me, b: you)
 
 ### Returns the ordering relationship between this value and `you`.
 ### :param you: The value to compare against.
@@ -586,8 +586,8 @@ routine S64.is_zero() -> Bool
 ### Returns true if this value is even.
 ### :returns: `true` when the least significant bit is clear.
 routine S64.is_even() -> Bool
-  var result = bit_and[S64](me, 1_s64)
-  return int_eq[S64](result, 0_s64)
+  var result = bit_and[S64](a: me, b: 1_s64)
+  return int_eq[S64](a: result, b: 0_s64)
 
 ### Returns true if this value is odd.
 ### :returns: `true` when the least significant bit is set.
@@ -607,9 +607,9 @@ routine S64.signum() -> S64
 ### :returns: `true` if `me > 0 and (me & (me - 1)) == 0`.
 routine S64.is_power_of_two() -> Bool
   var is_pos = signed_gt[S64](me, 0_s64)
-  var minus_one = sub[S64](me, 1_s64)
-  var anded = bit_and[S64](me, minus_one)
-  var is_zero = int_eq[S64](anded, 0_s64)
+  var minus_one = sub[S64](a: me, b: 1_s64)
+  var anded = bit_and[S64](a: me, b: minus_one)
+  var is_zero = int_eq[S64](a: anded, b: 0_s64)
   return is_pos and is_zero
 
 # ============================================================================
