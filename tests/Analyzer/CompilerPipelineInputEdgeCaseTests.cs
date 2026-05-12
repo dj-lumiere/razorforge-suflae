@@ -136,10 +136,19 @@ public class CompilerPipelineInputEdgeCaseTests
     /// <summary>
     /// Verifies that deeply nested valid source survives analyzer and codegen.
     /// </summary>
-    [Fact]
-    public void Codegen_DeeplyNestedSource_GeneratesRoutineDefinition()
+    /// <remarks>
+    /// Capped at 30s. Build 886 ran 1h 35m before failing — a 36-line source (32 nested
+    /// `if true` blocks) should never need more than a fraction of a second. A timeout here
+    /// surfaces algorithmic regressions in seconds instead of bleeding CI throughput.
+    /// Repro source mirrored at <c>playground/deeply_nested_repro.rf</c>.
+    /// </remarks>
+    [Fact(Timeout = 30_000)]
+    public async Task Codegen_DeeplyNestedSource_GeneratesRoutineDefinition()
     {
-        string llvmIr = GenerateIr(source: CreateDeeplyNestedSource(nestingDepth: 32));
+        // Wrapped in Task.Run so xUnit's Timeout attribute can actually abort runaway work.
+        // Without async, Timeout in xUnit 2.x silently has no effect on sync test bodies.
+        string llvmIr = await Task.Run(function: () =>
+            GenerateIr(source: CreateDeeplyNestedSource(nestingDepth: 32)));
 
         Assert.Contains(expectedSubstring: "define void @test()", actualString: llvmIr);
     }
