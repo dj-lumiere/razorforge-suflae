@@ -68,11 +68,10 @@ public sealed class BackendRepresentationPass
     /// Enumerates child syntax nodes through public record properties so new AST node shapes are visited automatically.
     /// </summary>
     /// <remarks>
-    /// Yields each distinct child reference at most once per node. AST records may expose the
-    /// same child via multiple alias properties (e.g. <see cref="IfStatement.ThenStatement"/>
-    /// and the compatibility alias <c>ThenBranch</c> that returns the same value). Without
-    /// dedupe each level of nested <c>if</c> would double the visit count, producing 2^depth
-    /// work — a 32-level nest sends this pass past 4 billion calls.
+    /// Filters out known AST alias properties (e.g. <c>IfStatement.ThenBranch</c> which returns
+    /// <c>ThenStatement</c>). Without the filter, nested <c>if</c> nodes would be visited twice
+    /// per level, producing 2^depth work. Reference-equality dedupe was tried first but breaks
+    /// when synthesized monomorphic bodies legitimately share child instances.
     /// </remarks>
     private static IEnumerable<ISyntaxTreeNode> EnumerateChildren(ISyntaxTreeNode node)
     {
@@ -81,10 +80,10 @@ public sealed class BackendRepresentationPass
                 .Where(predicate: property =>
                     property.Name != nameof(ISyntaxTreeNode.Location) &&
                     property.CanRead &&
-                    property.GetIndexParameters().Length == 0)
+                    property.GetIndexParameters().Length == 0 &&
+                    !IsAstAliasProperty(ownerType: type, propertyName: property.Name))
                 .ToArray());
 
-        var seen = new HashSet<ISyntaxTreeNode>(comparer: ReferenceEqualityComparer.Instance);
         foreach (PropertyInfo property in properties)
         {
             object? value = property.GetValue(obj: node);
@@ -94,12 +93,12 @@ public sealed class BackendRepresentationPass
                 case string:
                     continue;
                 case ISyntaxTreeNode childNode:
-                    if (seen.Add(item: childNode)) yield return childNode;
+                    yield return childNode;
                     continue;
                 case IEnumerable sequence:
                     foreach (object? item in sequence)
                     {
-                        if (item is ISyntaxTreeNode child && seen.Add(item: child))
+                        if (item is ISyntaxTreeNode child)
                         {
                             yield return child;
                         }
@@ -108,5 +107,11 @@ public sealed class BackendRepresentationPass
                     continue;
             }
         }
+    }
+
+    private static bool IsAstAliasProperty(Type ownerType, string propertyName)
+    {
+        return (ownerType.Name == "IfStatement" && (propertyName == "ThenBranch" || propertyName == "ElseBranch"))
+            || (ownerType.Name == "ReturnStatement" && propertyName == "Expression");
     }
 }

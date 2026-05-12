@@ -239,10 +239,8 @@ public sealed class BackendEntryValidator
     /// Enumerates child syntax nodes through public record properties so validation follows new AST shapes by default.
     /// </summary>
     /// <remarks>
-    /// Dedupe each distinct child reference per node — AST records can expose the same child via
-    /// multiple alias properties (e.g. <c>IfStatement.ThenStatement</c> and the compatibility
-    /// alias <c>ThenBranch</c>). Without dedupe, deeply nested constructs would be visited
-    /// 2^depth times.
+    /// Filters out known AST alias properties (<c>IfStatement.ThenBranch</c> / <c>ElseBranch</c>,
+    /// <c>ReturnStatement.Expression</c>) so nested constructs aren't visited 2^depth times.
     /// </remarks>
     private static IEnumerable<ISyntaxTreeNode> EnumerateChildren(ISyntaxTreeNode node)
     {
@@ -251,10 +249,10 @@ public sealed class BackendEntryValidator
                 .Where(predicate: property =>
                     property.Name != nameof(ISyntaxTreeNode.Location) &&
                     property.CanRead &&
-                    property.GetIndexParameters().Length == 0)
+                    property.GetIndexParameters().Length == 0 &&
+                    !IsAstAliasProperty(ownerType: type, propertyName: property.Name))
                 .ToArray());
 
-        var seen = new HashSet<ISyntaxTreeNode>(comparer: ReferenceEqualityComparer.Instance);
         foreach (PropertyInfo property in properties)
         {
             object? value = property.GetValue(obj: node);
@@ -264,17 +262,23 @@ public sealed class BackendEntryValidator
                 case string:
                     continue;
                 case ISyntaxTreeNode childNode:
-                    if (seen.Add(item: childNode)) yield return childNode;
+                    yield return childNode;
                     continue;
                 case IEnumerable sequence:
                     foreach (object? item in sequence)
                     {
-                        if (item is ISyntaxTreeNode child && seen.Add(item: child))
+                        if (item is ISyntaxTreeNode child)
                             yield return child;
                     }
 
                     continue;
             }
         }
+    }
+
+    private static bool IsAstAliasProperty(Type ownerType, string propertyName)
+    {
+        return (ownerType.Name == "IfStatement" && (propertyName == "ThenBranch" || propertyName == "ElseBranch"))
+            || (ownerType.Name == "ReturnStatement" && propertyName == "Expression");
     }
 }

@@ -937,15 +937,6 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// </summary>
     private void CollectLocalVarTypes(object? node, Dictionary<string, TypeInfo> map)
     {
-        // Dedupe child references to neutralise AST alias properties like
-        // IfStatement.ThenBranch (= ThenStatement). See CollectCalls for the same fix.
-        CollectLocalVarTypesRec(node: node, map: map,
-            seen: new HashSet<object>(comparer: System.Collections.Generic.ReferenceEqualityComparer.Instance));
-    }
-
-    private void CollectLocalVarTypesRec(object? node, Dictionary<string, TypeInfo> map,
-        HashSet<object> seen)
-    {
         if (node == null) return;
         if (node is VariableDeclaration vd)
         {
@@ -960,11 +951,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         if (node is IEnumerable e2 && node is not string)
         {
             foreach (object? item in e2)
-            {
-                if (item == null) continue;
-                if (!seen.Add(item: item)) continue;
-                CollectLocalVarTypesRec(node: item, map: map, seen: seen);
-            }
+                if (item != null) CollectLocalVarTypes(node: item, map: map);
             return;
         }
 
@@ -972,22 +959,16 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             bindingAttr: System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
         {
             if (prop.GetIndexParameters().Length > 0) continue;
+            if (IsAstAliasProperty(ownerType: nt, propertyName: prop.Name)) continue;
             object? val;
             try { val = prop.GetValue(obj: node); } catch { continue; }
             if (val == null) continue;
             if (val is Expression || val is Statement || val is SyntaxTree.Declaration)
-            {
-                if (!seen.Add(item: val)) continue;
-                CollectLocalVarTypesRec(node: val, map: map, seen: seen);
-            }
+                CollectLocalVarTypes(node: val, map: map);
             else if (val is IEnumerable list && val is not string)
             {
                 foreach (object? item in list)
-                {
-                    if (item == null) continue;
-                    if (!seen.Add(item: item)) continue;
-                    CollectLocalVarTypesRec(node: item, map: map, seen: seen);
-                }
+                    if (item != null) CollectLocalVarTypes(node: item, map: map);
             }
         }
     }
@@ -1526,16 +1507,21 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         }
     }
 
-    private static void CollectCalls(object? node, List<object> sink)
+    /// <summary>
+    /// Property-name aliases on AST records that re-expose another property's value.
+    /// These must be skipped by reflection-based walkers, otherwise each nested occurrence
+    /// of the host node is walked twice — at depth N the deepest child is visited 2^N times.
+    /// Reference-equality dedupe is unsafe here because synthesized monomorphic bodies can
+    /// legitimately share child instances; name-based filtering only suppresses the known
+    /// alias definitions in `SyntaxTree/Statements.cs`.
+    /// </summary>
+    private static bool IsAstAliasProperty(Type ownerType, string propertyName)
     {
-        // Reflection-walk dedupes child references per-node to avoid AST alias properties
-        // (e.g. IfStatement.ThenBranch which returns IfStatement.ThenStatement) doubling
-        // every recursion. Without dedupe, depth-N nesting gets visited 2^N times — a
-        // 32-level nest pegs CPU for an hour. With dedupe it's linear in AST size.
-        CollectCallsRec(node: node, sink: sink, seen: new HashSet<object>(comparer: System.Collections.Generic.ReferenceEqualityComparer.Instance));
+        return (ownerType.Name == "IfStatement" && (propertyName == "ThenBranch" || propertyName == "ElseBranch"))
+            || (ownerType.Name == "ReturnStatement" && propertyName == "Expression");
     }
 
-    private static void CollectCallsRec(object? node, List<object> sink, HashSet<object> seen)
+    private static void CollectCalls(object? node, List<object> sink)
     {
         if (node == null) return;
         // Collection-literal and index-access nodes are lowered into method calls
@@ -1554,7 +1540,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         {
             for (int i = 0; i < tuple.Length; i++)
             {
-                CollectCallsRec(node: tuple[i], sink: sink, seen: seen);
+                CollectCalls(node: tuple[i], sink: sink);
             }
             return;
         }
@@ -1563,6 +1549,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             bindingAttr: System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
         {
             if (prop.GetIndexParameters().Length > 0) continue;
+            if (IsAstAliasProperty(ownerType: t, propertyName: prop.Name)) continue;
             object? value;
             try { value = prop.GetValue(obj: node); }
             catch { continue; }
@@ -1570,8 +1557,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
 
             if (value is Expression || value is Statement || value is SyntaxTree.Declaration)
             {
-                if (!seen.Add(item: value)) continue;
-                CollectCallsRec(node: value, sink: sink, seen: seen);
+                CollectCalls(node: value, sink: sink);
             }
             else if (value is IEnumerable enumerable && value is not string)
             {
@@ -1580,8 +1566,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                     if (item == null) continue;
                     if (item is Expression || item is Statement || item is SyntaxTree.Declaration)
                     {
-                        if (!seen.Add(item: item)) continue;
-                        CollectCallsRec(node: item, sink: sink, seen: seen);
+                        CollectCalls(node: item, sink: sink);
                     }
                     else
                     {
@@ -1590,14 +1575,14 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                         Type it = item.GetType();
                         if (!it.IsPrimitive && item is not string && !it.IsEnum)
                         {
-                            CollectCallsRec(node: item, sink: sink, seen: seen);
+                            CollectCalls(node: item, sink: sink);
                         }
                     }
                 }
             }
             else if (value is System.Runtime.CompilerServices.ITuple)
             {
-                CollectCallsRec(node: value, sink: sink, seen: seen);
+                CollectCalls(node: value, sink: sink);
             }
         }
     }
