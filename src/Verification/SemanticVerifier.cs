@@ -292,12 +292,27 @@ public sealed partial class SemanticVerifier
         _importedModules.Clear();
         _importedSymbolNames.Clear();
 
+        bool saTiming = SaTiming;
+        var swPhase = Stopwatch.StartNew();
+        void Mark(string label)
+        {
+            if (!saTiming) return;
+            swPhase.Stop();
+            Console.Error.WriteLine(value: $"[SA] {label}: {swPhase.ElapsedMilliseconds} ms");
+            swPhase.Restart();
+        }
+
         RunPhase1Declaration(program: program);
+        Mark(label: "Phase 1 Declaration");
         CaptureCurrentImportStateSnapshot(filePath: _currentFilePath);
         RunPhase2Resolution(program: program);
+        Mark(label: "Phase 2 Resolution");
         RunPhase3Synthesis(program: program);
+        Mark(label: "Phase 3 Synthesis");
         RunPhase3Desugaring(program: program);
+        Mark(label: "Phase 3 Desugaring");
         RunPhase5Verification(program: program);
+        Mark(label: "Phase 5 Verification");
         // Register user program before global desugaring so GenericMonomorphizationPass can
         // search user-program ASTs for generic routine bodies (like FindInStdlib does for stdlib).
         _registry.RegisterUserProgram(program: program,
@@ -307,11 +322,17 @@ public sealed partial class SemanticVerifier
         if (!SaOnly)
         {
             CollectStdlibBodiesForVariantGeneration();
+            Mark(label: "CollectStdlibBodies");
             RunPhase4GlobalDesugaring();
+            Mark(label: "Phase 4 GlobalDesugaring");
             RunPhase6Instantiation();
+            Mark(label: "Phase 6 Instantiation");
             RunPhase7Postprocessing(program: program);
+            Mark(label: "Phase 7 Postprocessing");
             RunPhase5bPostDesugarChecks();
+            Mark(label: "Phase 5b PostDesugarChecks");
             FinalizeReturnTypes();
+            Mark(label: "FinalizeReturnTypes");
         }
 
         // Merge synthesized operator bodies and pre-transformed variant bodies

@@ -67,6 +67,13 @@ public sealed class BackendRepresentationPass
     /// <summary>
     /// Enumerates child syntax nodes through public record properties so new AST node shapes are visited automatically.
     /// </summary>
+    /// <remarks>
+    /// Yields each distinct child reference at most once per node. AST records may expose the
+    /// same child via multiple alias properties (e.g. <see cref="IfStatement.ThenStatement"/>
+    /// and the compatibility alias <c>ThenBranch</c> that returns the same value). Without
+    /// dedupe each level of nested <c>if</c> would double the visit count, producing 2^depth
+    /// work — a 32-level nest sends this pass past 4 billion calls.
+    /// </remarks>
     private static IEnumerable<ISyntaxTreeNode> EnumerateChildren(ISyntaxTreeNode node)
     {
         PropertyInfo[] properties = ChildPropertyCache.GetOrAdd(node.GetType(), static type =>
@@ -77,6 +84,7 @@ public sealed class BackendRepresentationPass
                     property.GetIndexParameters().Length == 0)
                 .ToArray());
 
+        var seen = new HashSet<ISyntaxTreeNode>(comparer: ReferenceEqualityComparer.Instance);
         foreach (PropertyInfo property in properties)
         {
             object? value = property.GetValue(obj: node);
@@ -86,12 +94,12 @@ public sealed class BackendRepresentationPass
                 case string:
                     continue;
                 case ISyntaxTreeNode childNode:
-                    yield return childNode;
+                    if (seen.Add(item: childNode)) yield return childNode;
                     continue;
                 case IEnumerable sequence:
                     foreach (object? item in sequence)
                     {
-                        if (item is ISyntaxTreeNode child)
+                        if (item is ISyntaxTreeNode child && seen.Add(item: child))
                         {
                             yield return child;
                         }

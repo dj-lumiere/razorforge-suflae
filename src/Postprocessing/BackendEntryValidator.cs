@@ -238,6 +238,12 @@ public sealed class BackendEntryValidator
     /// <summary>
     /// Enumerates child syntax nodes through public record properties so validation follows new AST shapes by default.
     /// </summary>
+    /// <remarks>
+    /// Dedupe each distinct child reference per node — AST records can expose the same child via
+    /// multiple alias properties (e.g. <c>IfStatement.ThenStatement</c> and the compatibility
+    /// alias <c>ThenBranch</c>). Without dedupe, deeply nested constructs would be visited
+    /// 2^depth times.
+    /// </remarks>
     private static IEnumerable<ISyntaxTreeNode> EnumerateChildren(ISyntaxTreeNode node)
     {
         PropertyInfo[] properties = ChildPropertyCache.GetOrAdd(node.GetType(), static type =>
@@ -248,6 +254,7 @@ public sealed class BackendEntryValidator
                     property.GetIndexParameters().Length == 0)
                 .ToArray());
 
+        var seen = new HashSet<ISyntaxTreeNode>(comparer: ReferenceEqualityComparer.Instance);
         foreach (PropertyInfo property in properties)
         {
             object? value = property.GetValue(obj: node);
@@ -257,12 +264,12 @@ public sealed class BackendEntryValidator
                 case string:
                     continue;
                 case ISyntaxTreeNode childNode:
-                    yield return childNode;
+                    if (seen.Add(item: childNode)) yield return childNode;
                     continue;
                 case IEnumerable sequence:
                     foreach (object? item in sequence)
                     {
-                        if (item is ISyntaxTreeNode child)
+                        if (item is ISyntaxTreeNode child && seen.Add(item: child))
                             yield return child;
                     }
 

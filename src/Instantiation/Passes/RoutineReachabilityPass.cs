@@ -937,6 +937,15 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// </summary>
     private void CollectLocalVarTypes(object? node, Dictionary<string, TypeInfo> map)
     {
+        // Dedupe child references to neutralise AST alias properties like
+        // IfStatement.ThenBranch (= ThenStatement). See CollectCalls for the same fix.
+        CollectLocalVarTypesRec(node: node, map: map,
+            seen: new HashSet<object>(comparer: System.Collections.Generic.ReferenceEqualityComparer.Instance));
+    }
+
+    private void CollectLocalVarTypesRec(object? node, Dictionary<string, TypeInfo> map,
+        HashSet<object> seen)
+    {
         if (node == null) return;
         if (node is VariableDeclaration vd)
         {
@@ -951,7 +960,11 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         if (node is IEnumerable e2 && node is not string)
         {
             foreach (object? item in e2)
-                if (item != null) CollectLocalVarTypes(node: item, map: map);
+            {
+                if (item == null) continue;
+                if (!seen.Add(item: item)) continue;
+                CollectLocalVarTypesRec(node: item, map: map, seen: seen);
+            }
             return;
         }
 
@@ -963,11 +976,18 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             try { val = prop.GetValue(obj: node); } catch { continue; }
             if (val == null) continue;
             if (val is Expression || val is Statement || val is SyntaxTree.Declaration)
-                CollectLocalVarTypes(node: val, map: map);
+            {
+                if (!seen.Add(item: val)) continue;
+                CollectLocalVarTypesRec(node: val, map: map, seen: seen);
+            }
             else if (val is IEnumerable list && val is not string)
             {
                 foreach (object? item in list)
-                    if (item != null) CollectLocalVarTypes(node: item, map: map);
+                {
+                    if (item == null) continue;
+                    if (!seen.Add(item: item)) continue;
+                    CollectLocalVarTypesRec(node: item, map: map, seen: seen);
+                }
             }
         }
     }
@@ -1508,6 +1528,15 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
 
     private static void CollectCalls(object? node, List<object> sink)
     {
+        // Reflection-walk dedupes child references per-node to avoid AST alias properties
+        // (e.g. IfStatement.ThenBranch which returns IfStatement.ThenStatement) doubling
+        // every recursion. Without dedupe, depth-N nesting gets visited 2^N times — a
+        // 32-level nest pegs CPU for an hour. With dedupe it's linear in AST size.
+        CollectCallsRec(node: node, sink: sink, seen: new HashSet<object>(comparer: System.Collections.Generic.ReferenceEqualityComparer.Instance));
+    }
+
+    private static void CollectCallsRec(object? node, List<object> sink, HashSet<object> seen)
+    {
         if (node == null) return;
         // Collection-literal and index-access nodes are lowered into method calls
         // (add_last/add/$getitem!/$setitem!) in Phase 7 — AFTER this pass runs.
@@ -1525,7 +1554,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         {
             for (int i = 0; i < tuple.Length; i++)
             {
-                CollectCalls(node: tuple[i], sink: sink);
+                CollectCallsRec(node: tuple[i], sink: sink, seen: seen);
             }
             return;
         }
@@ -1541,7 +1570,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
 
             if (value is Expression || value is Statement || value is SyntaxTree.Declaration)
             {
-                CollectCalls(node: value, sink: sink);
+                if (!seen.Add(item: value)) continue;
+                CollectCallsRec(node: value, sink: sink, seen: seen);
             }
             else if (value is IEnumerable enumerable && value is not string)
             {
@@ -1550,7 +1580,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                     if (item == null) continue;
                     if (item is Expression || item is Statement || item is SyntaxTree.Declaration)
                     {
-                        CollectCalls(node: item, sink: sink);
+                        if (!seen.Add(item: item)) continue;
+                        CollectCallsRec(node: item, sink: sink, seen: seen);
                     }
                     else
                     {
@@ -1559,14 +1590,14 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                         Type it = item.GetType();
                         if (!it.IsPrimitive && item is not string && !it.IsEnum)
                         {
-                            CollectCalls(node: item, sink: sink);
+                            CollectCallsRec(node: item, sink: sink, seen: seen);
                         }
                     }
                 }
             }
             else if (value is System.Runtime.CompilerServices.ITuple)
             {
-                CollectCalls(node: value, sink: sink);
+                CollectCallsRec(node: value, sink: sink, seen: seen);
             }
         }
     }

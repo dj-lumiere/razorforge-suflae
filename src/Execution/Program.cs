@@ -589,7 +589,7 @@ internal partial class Program
     /// Returns 0 on success or 1 if any stage fails.
     /// </summary>
     private static int GenerateCode(string sourceFile, string? outputFile,
-        RfBuildMode buildMode = RfBuildMode.Debug)
+        RfBuildMode buildMode = RfBuildMode.Debug, bool saTiming = false)
     {
         if (!File.Exists(path: sourceFile))
         {
@@ -631,7 +631,7 @@ internal partial class Program
 
             var target = TargetConfig.ForCurrentHost();
             var analyzer = new SemanticVerifier(language: language,
-                target: target, buildMode: buildMode);
+                target: target, buildMode: buildMode) { SaTiming = saTiming };
             AnalysisResult result = analyzer.Analyze(program: ast);
 
             Console.WriteLine(
@@ -678,7 +678,7 @@ internal partial class Program
                 instantiatedGenericBodies: result.InstantiatedGenericBodies,
                 pendingRuntimeDispatches: result.PendingRuntimeDispatches,
                 liveRoutineKeys: result.LiveRoutineKeys,
-                liveOwnerTypeNames: result.LiveOwnerTypeNames);
+                liveOwnerTypeNames: result.LiveOwnerTypeNames) { Timing = saTiming };
             string llvmIr = generator.Generate();
 
             // Output
@@ -1306,7 +1306,7 @@ internal partial class Program
                 instantiatedGenericBodies: result.InstantiatedGenericBodies,
                 pendingRuntimeDispatches: result.PendingRuntimeDispatches,
                 liveRoutineKeys: result.LiveRoutineKeys,
-                liveOwnerTypeNames: result.LiveOwnerTypeNames);
+                liveOwnerTypeNames: result.LiveOwnerTypeNames) { Timing = saTiming };
             string llvmIr = generator.Generate();
 
             // Output

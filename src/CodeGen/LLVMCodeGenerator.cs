@@ -390,25 +390,48 @@ public partial class LlvmCodeGenerator
     /// Generates LLVM IR for the entire program.
     /// </summary>
     /// <returns>The generated LLVM IR as a string.</returns>
+    /// <summary>
+    /// When true, prints per-phase wall-clock timings to stderr. Set externally before calling
+    /// <see cref="Generate"/>. Mirrors the <c>sa-timing</c> manifest flag for codegen visibility.
+    /// </summary>
+    public bool Timing { get; set; }
+
     public string Generate()
     {
+        bool timing = Timing;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        void Mark(string label)
+        {
+            if (!timing) return;
+            sw.Stop();
+            Console.Error.WriteLine(value: $"[CG] {label}: {sw.ElapsedMilliseconds} ms");
+            sw.Restart();
+        }
+
         // Phase 1: Generate all type declarations
         GenerateTypeDeclarations();
+        Mark(label: "Phase 1 TypeDeclarations");
 
         // Phase 1b: Emit module-level global variable slots
         GenerateGlobalVariableDeclarations();
+        Mark(label: "Phase 1b GlobalVariables");
 
         // Phase 2: Generate function declarations (signatures)
         GenerateRoutineDeclarations();
+        Mark(label: "Phase 2 RoutineDeclarations");
 
         // Phase 3: Generate function definitions (bodies)
         GenerateRoutineDefinitions();
+        Mark(label: "Phase 3 RoutineDefinitions");
 
         // Phase 4: Generate runtime support (if needed)
         GenerateRuntimeSupport();
+        Mark(label: "Phase 4 RuntimeSupport");
 
         // Combine all sections
-        return BuildOutput();
+        string output = BuildOutput();
+        Mark(label: "BuildOutput");
+        return output;
     }
 
     #endregion
