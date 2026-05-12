@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using Compiler.CodeGen;
 using Compiler.Declaration;
 using Compiler.Diagnostics;
@@ -25,6 +26,14 @@ internal partial class Program
     public static int Main(string[] args)
     {
         RuntimeShadowLoader.Install();
+
+        // Make the build driver byte-faithful for UTF-8. RF child processes write UTF-8 and
+        // we forward their stdout/stderr to ours; if Console encodings default to the
+        // system ACP (Korean CP949, Western CP1252, ...), every non-ASCII byte gets
+        // rewritten as `?` somewhere in the read/write chain. Forcing UTF-8 on both input
+        // and output makes the pipe a passthrough.
+        Console.OutputEncoding = Encoding.UTF8;
+        Console.InputEncoding = Encoding.UTF8;
 
         if (args.Length == 0)
         {
@@ -1717,7 +1726,15 @@ internal partial class Program
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            RedirectStandardInput = stdinIsPiped
+            RedirectStandardInput = stdinIsPiped,
+            // RF programs write UTF-8 (rf_runtime_init sets SetConsoleOutputCP(65001) on
+            // Windows and stdlib paths encode every Text via UTF-8). Without these explicit
+            // encodings, .NET's StreamReader defaults to the parent's Console.OutputEncoding
+            // (system ACP — CP949 / CP1252 / etc. depending on locale) and rewrites every
+            // non-ACP byte as `?`, garbling all non-ASCII output (Korean, emoji, accented
+            // Latin, …). Setting these to UTF-8 makes the readers byte-faithful.
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8
         };
 
         try

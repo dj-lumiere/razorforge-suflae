@@ -417,10 +417,51 @@ public partial class LlvmCodeGenerator
             BinaryOperator.IsNot => EmitChoiceIs(sb: sb, binary: binary, cmpOp: "ne"),
             BinaryOperator.Obeys => EmitCompileTimeConstant(value: "true"),
             BinaryOperator.Disobeys => EmitCompileTimeConstant(value: "false"),
+            // Flags types intentionally bypass method-call lowering for bitwise ops to avoid
+            // infinite recursion in synthesized $bitor/$bitand bodies. They reach codegen
+            // unlowered and are emitted as direct LLVM bitwise instructions on the underlying
+            // integer representation. See OperatorLoweringPass.cs (around the FlagsTypeInfo
+            // skip) for the symmetric end.
+            BinaryOperator.BitwiseOr when GetExpressionType(expr: binary.Left) is FlagsTypeInfo
+                => EmitFlagsBitwiseOp(sb: sb, binary: binary, llvmOp: "or"),
+            BinaryOperator.BitwiseAnd when GetExpressionType(expr: binary.Left) is FlagsTypeInfo
+                => EmitFlagsBitwiseOp(sb: sb, binary: binary, llvmOp: "and"),
+            BinaryOperator.BitwiseXor when GetExpressionType(expr: binary.Left) is FlagsTypeInfo
+                => EmitFlagsBitwiseOp(sb: sb, binary: binary, llvmOp: "xor"),
+            // Same skip-list as the bitwise ops above — Flags $eq/$ne bodies use `me == you` /
+            // `me != you` (BinaryExpression(Equal/NotEqual)) and OperatorLoweringPass leaves
+            // them unlowered for Flags to avoid infinite recursion. Codegen emits a direct
+            // `icmp eq/ne` on the underlying integer.
+            BinaryOperator.Equal when GetExpressionType(expr: binary.Left) is FlagsTypeInfo
+                => EmitFlagsCmpOp(sb: sb, binary: binary, cmpKind: "eq"),
+            BinaryOperator.NotEqual when GetExpressionType(expr: binary.Left) is FlagsTypeInfo
+                => EmitFlagsCmpOp(sb: sb, binary: binary, cmpKind: "ne"),
             _ => throw new InvalidOperationException(
                 $"BinaryExpression({binary.Operator}) must be lowered to a wired call before codegen " +
                 $"(left={binary.Left.GetType().Name}, loc={binary.Location})")
         };
+    }
+
+    private string EmitFlagsBitwiseOp(StringBuilder sb, BinaryExpression binary, string llvmOp)
+    {
+        string left = EmitExpression(sb: sb, expr: binary.Left);
+        string right = EmitExpression(sb: sb, expr: binary.Right);
+        TypeInfo? flagsType = GetExpressionType(expr: binary.Left);
+        string llvmType = flagsType != null ? GetLlvmType(type: flagsType) : "i64";
+        string result = NextTemp();
+        EmitLine(sb: sb, line: $"  {result} = {llvmOp} {llvmType} {left}, {right}");
+        return result;
+    }
+
+    private string EmitFlagsCmpOp(StringBuilder sb, BinaryExpression binary, string cmpKind)
+    {
+        string left = EmitExpression(sb: sb, expr: binary.Left);
+        string right = EmitExpression(sb: sb, expr: binary.Right);
+        TypeInfo? flagsType = GetExpressionType(expr: binary.Left);
+        string llvmType = flagsType != null ? GetLlvmType(type: flagsType) : "i64";
+        string result = NextTemp();
+        EmitLine(sb: sb, line: $"  {result} = icmp {cmpKind} {llvmType} {left}, {right}");
+        return result;
     }
 
     /// <summary>

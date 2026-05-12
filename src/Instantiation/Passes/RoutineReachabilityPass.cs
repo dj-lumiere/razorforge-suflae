@@ -247,6 +247,11 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 EnqueueImplicitLoweringCallees(node: node, typeSubs: frame.TypeSubs);
                 continue;
             }
+            if (node is InsertedTextExpression inserted)
+            {
+                EnqueueFStringCallees(inserted: inserted, typeSubs: frame.TypeSubs);
+                continue;
+            }
             RoutineInfo? resolved = node switch
             {
                 CallExpression ce => ce.ResolvedRoutine ?? ResolveNoArgConstructor(ce: ce) ?? ResolveCallStyleConstructor(ce: ce) ?? ResolveMemberCall(ce: ce),
@@ -366,6 +371,32 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     {
         RoutineInfo? routine = ctx.Registry.LookupMethod(type: owner, methodName: methodName);
         if (routine != null) EnqueueCallee(callee: routine);
+    }
+
+    /// <summary>
+    /// f-string parts get lowered to `<expr>.$represent()` / `<expr>.$diagnose()` calls by
+    /// FStringLoweringPass in Phase 7. Reachability runs in Phase 6 — before that lowering —
+    /// so the calls don't exist yet for the worklist to follow. Seed them here so synthesized
+    /// $represent/$diagnose bodies on the interpolated expressions' types make it into the
+    /// live set. Without this, codegen emits a call to the symbol but skips emitting the
+    /// definition (gated by the live set), producing a link-time undefined symbol.
+    /// </summary>
+    private void EnqueueFStringCallees(InsertedTextExpression inserted,
+        Dictionary<string, TypeInfo> typeSubs)
+    {
+        foreach (InsertedTextPart part in inserted.Parts)
+        {
+            if (part is not ExpressionPart ep) continue;
+            TypeInfo? rawType = ep.Expression.ResolvedType ?? InferExpressionType(e: ep.Expression);
+            if (rawType == null) continue;
+            TypeInfo concreteType = RoutineInfo.SubstituteType(type: rawType, substitution: typeSubs);
+            // `?` format spec → $diagnose, otherwise $represent. FStringLoweringPass also
+            // emits a $add chain — Text.$add is on a concrete type already and gets walked
+            // through the resulting call expressions in subsequent frames.
+            bool isDiagnose = ep.FormatSpec is "?";
+            EnqueueMethodIfPresent(owner: concreteType,
+                methodName: isDiagnose ? "$diagnose" : "$represent");
+        }
     }
 
     /// <summary>
@@ -1530,7 +1561,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         if (node is CallExpression || node is GenericMethodCallExpression || node is CreatorExpression
             || node is ThrowStatement
             || node is ListLiteralExpression || node is SetLiteralExpression
-            || node is DictLiteralExpression || node is IndexExpression) sink.Add(item: node);
+            || node is DictLiteralExpression || node is IndexExpression
+            || node is InsertedTextExpression) sink.Add(item: node);
 
         Type t = node.GetType();
         if (t.IsPrimitive || node is string || t.IsEnum) return;
