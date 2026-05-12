@@ -883,7 +883,19 @@ public sealed partial class SemanticVerifier
                 if (IsCarrierType(type: operandType) &&
                     operandType.TypeArguments is { Count: > 0 })
                 {
-                    return operandType.TypeArguments[index: 0];
+                    TypeSymbol inner = operandType.TypeArguments[index: 0];
+                    // `Maybe[Owned[T]]!!` yields `Grasped[T]` — Owned is unique, so the unwrap
+                    // is an exclusive scope-bound borrow, not a copy. Same LLVM repr (ptr), but
+                    // typed as Grasped so the destructor scheduler skips it.
+                    if (IsMaybeType(type: operandType) &&
+                        IsOwnedOf(type: inner, out TypeSymbol ownedInner))
+                    {
+                        return _registry.GetOrCreateWrapperType(
+                            wrapperName: "Grasped",
+                            innerType: ownedInner,
+                            isReadOnly: false);
+                    }
+                    return inner;
                 }
 
                 // User type — look up $unwrap method

@@ -194,6 +194,12 @@ public partial class LlvmCodeGenerator
             // Only track when initialized via constructor (actual heap allocation)
             case EntityTypeInfo when IsEntityConstructorCall(expr: varDecl.Initializer):
                 _localEntityVars.Add(item: (varDecl.Name, $"%{uniqueName}.addr"));
+                // Zero-init the alloca in the entry block: if the declaration sits inside a
+                // conditional that doesn't execute on the active path, the alloca still exists
+                // and the function-level cleanup walks it. Without zero-init the load returns
+                // uninitialized stack memory → rf_invalidate frees a garbage pointer → heap
+                // corruption. rf_invalidate is null-safe so zero-init makes the cleanup a no-op.
+                EmitLine(sb: _currentRoutineEntryAllocas, line: $"  store ptr null, ptr {varPtr}");
                 break;
             // Track record variables with RC wrapper fields for retain/release
             case RecordTypeInfo { HasRCFields: true } rcRecord:
@@ -423,7 +429,10 @@ public partial class LlvmCodeGenerator
     {
         // `$copy` synthesis is gone — borrowed-reference values reach here as bare
         // identifiers / member accesses or wrapped in `steal`. Both are handled below.
-        string? sourceName = expr switch
+        // Named arguments wrap their value (`value: steal new_node` → NamedArgumentExpression);
+        // peek through the wrapper to reach the underlying identifier.
+        Expression unwrapped = expr is NamedArgumentExpression named ? named.Value : expr;
+        string? sourceName = unwrapped switch
         {
             StealExpression
             {

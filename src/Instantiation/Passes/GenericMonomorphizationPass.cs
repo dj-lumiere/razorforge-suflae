@@ -942,13 +942,22 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             if (resolvedRoutine.WrapperForwarderInnerGenericDef is { GenericParameters: { Count: > 0 } } innerGenDef
                 && ownerType.TypeArguments[index: 0] is { TypeArguments: { Count: > 0 } } innerInstance)
             {
+                // Apply the same name-collision rename WrapperForwardingPass uses. When an
+                // inner-T name also appears in the wrapper's GenericParameters, the forwarder's
+                // parameter types reference the inner-T under the sentinel `__rfwd_T__`. We must
+                // register the inner-instance mapping under the same sentinel so the renamed
+                // parameter types resolve to the correct concrete inner element type.
+                IReadOnlyList<string>? wrapperParams = ownerGenericDef?.GenericParameters;
                 for (int i = 0;
                      i < innerGenDef.GenericParameters.Count && i < innerInstance.TypeArguments.Count;
                      i++)
                 {
                     string innerParamName = innerGenDef.GenericParameters[index: i];
-                    if (!typeSubs.ContainsKey(key: innerParamName))
-                        typeSubs[innerParamName] = innerInstance.TypeArguments[index: i];
+                    bool collides = wrapperParams is { Count: > 0 } &&
+                        wrapperParams.Contains(value: innerParamName);
+                    string keyName = collides ? $"__rfwd_{innerParamName}__" : innerParamName;
+                    if (!typeSubs.ContainsKey(key: keyName))
+                        typeSubs[keyName] = innerInstance.TypeArguments[index: i];
                 }
             }
         }

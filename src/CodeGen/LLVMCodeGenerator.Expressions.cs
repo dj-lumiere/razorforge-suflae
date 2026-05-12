@@ -452,6 +452,11 @@ public partial class LlvmCodeGenerator
                 {
                     _localRetainedVars.RemoveAll(match: e => e.Name == srcRcName);
                 }
+                // Ownership transfer: `me.field = local` (post-steal-strip) or `me.field = local`
+                // hands the local's heap allocation to the field. Without removing the local
+                // from _localEntityVars, the function-exit cleanup would re-free the pointer
+                // that now lives in the field → double-free at scope exit.
+                ConsumeTransferredLocalOwnership(expr: binary.Right);
 
                 break;
             }

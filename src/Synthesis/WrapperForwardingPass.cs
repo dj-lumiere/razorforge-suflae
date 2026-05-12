@@ -283,12 +283,49 @@ internal sealed class WrapperForwardingPass
             if (filteredConstraints.Count == 0) filteredConstraints = null;
         }
 
+        // Resolve name collisions between the wrapper's generic params and the inner method's
+        // owner-level generic params (both commonly use `T`). The forwarder's signature carries
+        // the inner method's parameter types verbatim, which reference inner-T by name. Without
+        // distinct names, GMP's typeSubs dict gets a single key `T` mapping to the wrapper's
+        // inner instance (e.g. `T -> BTreeSetNode[S64]`) and never registers `inner-T -> S64`.
+        // Result: a value-of-T parameter codegens as ptr instead of i64 → ABI mismatch.
+        //
+        // Rename colliding inner names to sentinels in the forwarder's params and return type.
+        // BuildResolvedRoutineTypeSubstitutions applies the same rename to look up the
+        // inner-instance substitution under the sentinel name.
+        Dictionary<string, TypeInfo>? innerRename = null;
+        if (innerOwnerParams is { Count: > 0 } &&
+            wrapperDef.GenericParameters is { Count: > 0 } wrapperParams)
+        {
+            foreach (string ip in innerOwnerParams)
+            {
+                if (!wrapperParams.Contains(value: ip)) continue;
+                innerRename ??= new Dictionary<string, TypeInfo>();
+                innerRename[ip] = new GenericParameterTypeInfo(name: $"__rfwd_{ip}__");
+            }
+        }
+
+        IReadOnlyList<ParameterInfo> forwarderParameters = innerMethod.Parameters;
+        TypeSymbol? forwarderReturnType = innerMethod.ReturnType;
+        if (innerRename is { Count: > 0 })
+        {
+            forwarderParameters = innerMethod.Parameters
+                .Select(selector: p => p.WithSubstitutedType(
+                    newType: RoutineInfo.SubstituteType(type: p.Type, substitution: innerRename)))
+                .ToList();
+            if (forwarderReturnType != null)
+            {
+                forwarderReturnType = RoutineInfo.SubstituteType(
+                    type: forwarderReturnType, substitution: innerRename);
+            }
+        }
+
         var forwarder = new RoutineInfo(name: innerMethod.Name)
         {
             Kind = RoutineKind.MemberRoutine,
             OwnerType = wrapperDef,
-            Parameters = innerMethod.Parameters,
-            ReturnType = innerMethod.ReturnType,
+            Parameters = forwarderParameters,
+            ReturnType = forwarderReturnType,
             IsFailable = innerMethod.IsFailable,
             DeclaredModification = innerMethod.DeclaredModification,
             ModificationCategory = innerMethod.ModificationCategory,
