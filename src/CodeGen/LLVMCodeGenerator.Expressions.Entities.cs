@@ -298,6 +298,43 @@ public partial class LlvmCodeGenerator
         TryGetTransparentProtocolTarget(type: targetType, targetType: out TypeInfo? lookupType);
         targetType = lookupType ?? targetType;
 
+        // Wrapper-of-record field read: Grasped[Record], Viewed[Record], etc. The wrapper is
+        // `@llvm("ptr")` and the pointer addresses a record value. GEP at the field index and
+        // load. Mirrors the symmetric write handler in EmitMemberVariableAssignment.
+        if (targetType is RecordTypeInfo wrapperRecOfRec &&
+            GetGenericBaseName(type: wrapperRecOfRec) is { } wrapRecBaseName &&
+            WrapperTypeNames.Contains(item: wrapRecBaseName) &&
+            wrapperRecOfRec.HasDirectBackendType &&
+            wrapperRecOfRec.TypeArguments is { Count: > 0 } &&
+            wrapperRecOfRec.TypeArguments[index: 0] is RecordTypeInfo innerRecord &&
+            !wrapperRecOfRec.MemberVariables.Any(predicate: mv => mv.Name == propertyName))
+        {
+            int fieldIndex = -1;
+            MemberVariableInfo? fieldInfo = null;
+            for (int i = 0; i < innerRecord.MemberVariables.Count; i++)
+            {
+                if (innerRecord.MemberVariables[index: i].Name == propertyName)
+                {
+                    fieldIndex = i;
+                    fieldInfo = innerRecord.MemberVariables[index: i];
+                    break;
+                }
+            }
+            if (fieldIndex >= 0 && fieldInfo != null)
+            {
+                string innerRecordTypeName = GetRecordTypeName(record: innerRecord);
+                string fieldPtr = NextTemp();
+                EmitLine(sb: sb,
+                    line: $"  {fieldPtr} = getelementptr {innerRecordTypeName}, ptr {target}, i32 0, i32 {fieldIndex}");
+                string loaded = NextTemp();
+                EmitLine(sb: sb,
+                    line: $"  {loaded} = load {GetLlvmType(type: fieldInfo.Type)}, ptr {fieldPtr}");
+                return loaded;
+            }
+            // Field not on inner record — fall through to entity branch below in case the
+            // wrapper has a method forwarder for this name.
+        }
+
         // Wrapper type forwarding: Viewed[T], Grasped[T], etc.
         // These are records wrapping a Hijacked[T] (ptr) — forward member access to the inner entity type
         if (targetType is RecordTypeInfo wrapperRecord &&

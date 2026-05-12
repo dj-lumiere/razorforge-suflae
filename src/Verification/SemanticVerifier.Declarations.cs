@@ -33,7 +33,10 @@ public sealed partial class SemanticVerifier
                 {
                     ReportError(code: SemanticDiagnosticCode.ImportPositionViolation,
                         message:
-                        $"Import '{import.ModulePath}' must appear before other declarations.",
+                        $"Import '{import.ModulePath}' is misplaced. " +
+                        "Move all 'import' statements to the top of the file, " +
+                        "immediately after the 'module' declaration and before any other declaration. " +
+                        "RazorForge enforces top-of-file imports for uniform structure across modules.",
                         location: import.Location);
                 }
             }

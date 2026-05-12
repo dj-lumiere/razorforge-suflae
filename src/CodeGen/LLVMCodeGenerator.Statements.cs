@@ -533,6 +533,44 @@ public partial class LlvmCodeGenerator
                 value: value,
                 valueType: valueType);
         }
+        // Wrapper-of-record field write: Grasped[Record] etc. The wrapper is `@llvm("ptr")`
+        // and the pointer addresses a record value in memory. GEP into the record at the
+        // field index and store. (Record-inner branch must come before the entity-inner one
+        // since RecordTypeInfo and EntityTypeInfo are distinct AST nodes.)
+        else if (targetType is RecordTypeInfo wrapperRecOfRec &&
+                 GetGenericBaseName(type: wrapperRecOfRec) is { } wrapRecBaseName &&
+                 WrapperTypeNames.Contains(item: wrapRecBaseName) &&
+                 wrapperRecOfRec.HasDirectBackendType &&
+                 wrapperRecOfRec.TypeArguments is { Count: > 0 } &&
+                 wrapperRecOfRec.TypeArguments[index: 0] is RecordTypeInfo innerRecord &&
+                 !wrapperRecOfRec.MemberVariables.Any(predicate: mv => mv.Name == member.PropertyName))
+        {
+            int fieldIndex = -1;
+            MemberVariableInfo? fieldInfo = null;
+            for (int i = 0; i < innerRecord.MemberVariables.Count; i++)
+            {
+                if (innerRecord.MemberVariables[index: i].Name == member.PropertyName)
+                {
+                    fieldIndex = i;
+                    fieldInfo = innerRecord.MemberVariables[index: i];
+                    break;
+                }
+            }
+
+            if (fieldIndex < 0 || fieldInfo == null)
+            {
+                throw new InvalidOperationException(
+                    message:
+                    $"Member '{member.PropertyName}' not found on inner record '{innerRecord.Name}'");
+            }
+
+            string innerRecordTypeName = GetRecordTypeName(record: innerRecord);
+            string fieldPtr = NextTemp();
+            EmitLine(sb: sb,
+                line: $"  {fieldPtr} = getelementptr {innerRecordTypeName}, ptr {target}, i32 0, i32 {fieldIndex}");
+            EmitLine(sb: sb,
+                line: $"  store {GetLlvmType(type: fieldInfo.Type)} {value}, ptr {fieldPtr}");
+        }
         // Wrapper type forwarding: Grasped[T], Claimed[T], etc. -> write through to inner entity
         else if (targetType is RecordTypeInfo wrapperRecord &&
                  GetGenericBaseName(type: wrapperRecord) is { } wrapBaseName &&
