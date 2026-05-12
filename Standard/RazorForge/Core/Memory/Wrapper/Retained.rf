@@ -83,7 +83,7 @@ routine Retained[T].weak_count() -> S32
 routine Retained[T].$represent() -> Text
   danger!
     var ctrl = Hijacked[RetainController[T]](me).reveal()
-    return ctrl.borrow_data().extract().$represent()
+    return ctrl.borrow_data().reveal().$represent()
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
@@ -94,4 +94,4 @@ routine Retained[T].$diagnose() -> Text
     var rc = ctrl.strong_count()
     var weak = ctrl.weak_count()
     var addr = ctrl.borrow_data().get_address()
-    return me.type_name() + "(holding: " + rc.$represent() + ", observing: " + weak.$represent() + ", addr: " + addr.$represent() + ", " + ctrl.borrow_data().extract().$diagnose() + ")"
+    return me.type_name() + "(holding: " + rc.$represent() + ", observing: " + weak.$represent() + ", addr: " + addr.$represent() + ", " + ctrl.borrow_data().reveal().$diagnose() + ")"

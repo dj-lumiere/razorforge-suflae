@@ -60,6 +60,15 @@ public sealed class BackendEntryValidator
             return errors;
         }
 
+        // @innate routines are compiler-intrinsic stubs (e.g. `T.type_name`, `T.var_name`,
+        // `page_size`). They are declared without a body in source — codegen and SA already
+        // skip them. Monomorphizations inherit the empty body legitimately, so they must not
+        // trigger MissingMonomorphizedBody.
+        if (body.Info.Annotations.Contains(value: "innate"))
+        {
+            return errors;
+        }
+
         if (!body.IsSynthesized &&
             !body.Info.IsSynthesized &&
             body.Ast.Body is BlockStatement { Statements.Count: 0 })

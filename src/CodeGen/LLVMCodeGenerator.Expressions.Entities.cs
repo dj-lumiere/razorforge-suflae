@@ -310,7 +310,32 @@ public partial class LlvmCodeGenerator
             // For @llvm("ptr") wrappers, the value IS the pointer directly
             // For struct wrappers, extract the inner Hijacked[T] (ptr) from field 0
             string innerPtr;
-            if (wrapperRecord.HasDirectBackendType)
+            // Retained[T] / Tracked[T] are `@llvm("ptr")` but the pointer targets a
+            // RetainController[T] struct, NOT the entity directly. The entity ptr lives in the
+            // controller's `data` field. Reading the wrapped entity's field requires
+            // dereferencing the controller first; otherwise `ra.value` reads
+            // controller.strong_count (offset 0) instead of the actual field.
+            if (wrapperRecord.HasDirectBackendType &&
+                (wrapBaseName == "Retained" || wrapBaseName == "Tracked"))
+            {
+                TypeInfo? controllerType = _registry.LookupType(
+                    name: $"RetainController[{innerEntity.FullName}]")
+                    ?? _registry.LookupType(name: $"Core.RetainController[{innerEntity.FullName}]");
+                if (controllerType is EntityTypeInfo controllerEntity)
+                {
+                    innerPtr = EmitEntityMemberVariableRead(sb: sb,
+                        entityPtr: target,
+                        entity: controllerEntity,
+                        memberVariableName: "data");
+                }
+                else
+                {
+                    // Controller type not yet emitted — fall back to direct (still wrong but
+                    // avoids a null reference; SA should have ensured the controller exists).
+                    innerPtr = target;
+                }
+            }
+            else if (wrapperRecord.HasDirectBackendType)
             {
                 innerPtr = target;
             }
