@@ -29,6 +29,14 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     // ResolveCallStyleConstructor to recover receiver types in stdlib bodies where SA didn't
     // populate ResolvedType on identifier expressions.
     private Dictionary<string, TypeInfo> _localTypes = new(comparer: StringComparer.Ordinal);
+
+    /// <summary>
+    /// Generic-parameter substitutions active for the currently-processing frame. Used by
+    /// <see cref="ResolveMemberCall"/> when a call's receiver type is a generic param
+    /// (e.g. `value: T` inside the body of `show[T=S16]`): we look up the method on the
+    /// concrete substituted type, not the bare generic param.
+    /// </summary>
+    private Dictionary<string, TypeInfo> _currentFrameSubs = new(comparer: StringComparer.Ordinal);
     private TypeInfo? _meType;
 
     private readonly record struct Frame(RoutineInfo Routine, RoutineDeclaration Decl,
@@ -227,6 +235,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // Set up per-frame inference scope: parameter types + receiver type for `me`.
         _localTypes = BuildLocalTypes(decl: frame.Decl, typeSubs: frame.TypeSubs);
         _meType = frame.Routine.OwnerType;
+        _currentFrameSubs = frame.TypeSubs;
 
         // Walk the body and collect every CallExpression / GenericMethodCallExpression.
         var calls = new List<object>();
@@ -536,6 +545,25 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
 
         // Compute substitution map for the callee from owner-type generics.
         var subs = new Dictionary<string, TypeInfo>(comparer: StringComparer.Ordinal);
+
+        // Free generic functions (e.g. `show[T]`) carry their type arguments on the
+        // RoutineInfo when instantiated by SubstituteRoutine. Their body references the
+        // generic params as receiver/argument types — e.g. `show[T]`'s body has
+        // `value.$represent()` where value: T. Without `T → ConcreteType` in the frame's
+        // TypeSubs, the body walker can't resolve `T.$represent` to `ConcreteType.$represent`,
+        // leaving the concrete method out of the live set. Codegen then emits a call to it
+        // but never the definition → linker error.
+        if (callee.OwnerType == null && callee.GenericDefinition is { } freeGenDef
+            && freeGenDef.GenericParameters is { Count: > 0 } freeParams
+            && callee.TypeArguments is { Count: > 0 } freeArgs
+            && freeParams.Count == freeArgs.Count)
+        {
+            for (int i = 0; i < freeParams.Count; i++)
+            {
+                subs[key: freeParams[index: i]] = freeArgs[index: i];
+            }
+        }
+
         if (callee.OwnerType is { } owner)
         {
             TypeInfo? genDef = owner switch
@@ -700,6 +728,34 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 RoutineInfo? diag = ctx.Registry.LookupMethod(type: owner, methodName: "$diagnose");
                 if (diag != null) EnqueueCallee(callee: diag);
             }
+        }
+
+        // (4) Free generic function (no owner) with type arguments — e.g. `show[T]`
+        // monomorphised to `show[S16]`. Its body references `value.$represent()` where
+        // `value: T`; after substitution to S16 the call needs `S16.$represent` live.
+        // Reachability's body walker can't resolve `T.$represent` to the concrete form
+        // (no such method on the bare generic param), so seed each type-argument's
+        // display routines here instead. Mirrors rule (2) but keyed on type-arguments
+        // instead of the owner type.
+        //
+        // FIXME: this is a heuristic workaround, not a real fix. The proper fix is to
+        // teach reachability to resolve `value.$represent()` on a generic-param receiver
+        // by substituting through the frame's TypeSubs (groundwork added via
+        // _currentFrameSubs in ResolveMemberCall, but the CallExpression for
+        // `value.$represent()` doesn't even appear in CollectCalls' output — something
+        // between stdlib parsing and Phase 6 strips it). Until that's localised, this
+        // rule keeps `show[T]`-style display chains linker-clean. Narrowed to display
+        // routines on type-arguments to keep the false-positive surface tiny.
+        if (callee.OwnerType == null && callee.TypeArguments is { Count: > 0 } typeArgs)
+        {
+            foreach (TypeInfo arg in typeArgs)
+            {
+                if (arg is GenericParameterTypeInfo) continue;
+                RoutineInfo? argRep = ctx.Registry.LookupMethod(type: arg, methodName: "$represent");
+                if (argRep != null) EnqueueCallee(callee: argRep);
+                RoutineInfo? argDiag = ctx.Registry.LookupMethod(type: arg, methodName: "$diagnose");
+                if (argDiag != null) EnqueueCallee(callee: argDiag);
+            }
 
             // (3) Wrapper transparency: forward to inner T's same-named method.
             if (owner is WrapperTypeInfo wrapper && wrapper.InnerType != null)
@@ -813,6 +869,18 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         if (ce.Callee is not MemberExpression member) return null;
         TypeInfo? receiverType = member.Object.ResolvedType ?? InferExpressionType(e: member.Object);
         if (receiverType == null) return null;
+
+        // When the receiver's resolved type is a generic param and the active frame has
+        // a concrete substitution for it (e.g. `value: T` inside `show[T=S16]`'s body),
+        // resolve the method on the concrete substituted type. Otherwise the lookup
+        // returns null (no method on the bare `T`) and the call drops out of reachability,
+        // leaving codegen with an undefined symbol when it later emits the monomorphised
+        // call site.
+        if (receiverType is GenericParameterTypeInfo genericReceiver
+            && _currentFrameSubs.TryGetValue(key: genericReceiver.Name, value: out TypeInfo? substituted))
+        {
+            receiverType = substituted;
+        }
         // PropertyName may carry a trailing `!` (failable call syntax). LookupMethod's name
         // comparison runs against RoutineInfo.Name, which is stored *without* the `!` (the
         // parser strips it and tracks failability separately — see TypeRegistry.MethodLookup.cs:236).
