@@ -67,6 +67,85 @@ public partial class LlvmCodeGenerator
             llvmTypeArgs: llvmTypeArgs, args: argValues);
     }
 
+    /// <summary>
+    /// Resolves remaining `{expr}` template holes whose contents are arithmetic expressions
+    /// over const generic params (e.g. `{(N+7)//8}` for BitArray byte count). Called after
+    /// the simpler `{paramName}` substitutions, so anything that's still wrapped in braces
+    /// and contains a known param-name token is treated as an arithmetic expression.
+    /// </summary>
+    private static string ResolveArithmeticHoles(string template, RoutineInfo method,
+        IReadOnlyList<string> llvmTypeArgs)
+    {
+        if (!template.Contains(value: '{')) return template;
+
+        IReadOnlyList<string>? genericParameters =
+            method.GenericParameters ?? method.GenericDefinition?.GenericParameters;
+        if (genericParameters is not { Count: > 0 }) return template;
+
+        // Build map of param name → numeric value. Prefer the routine's resolved
+        // TypeArguments (so ConstGenericValueTypeInfo.Value is exact); fall back to parsing
+        // llvmTypeArgs strings for direct numeric overrides.
+        var paramValues = new Dictionary<string, long>(comparer: StringComparer.Ordinal);
+        IReadOnlyList<TypeInfo>? routineTypeArgs = method.TypeArguments;
+        for (int i = 0; i < genericParameters.Count; i++)
+        {
+            if (routineTypeArgs is { } rta && i < rta.Count
+                && rta[index: i] is ConstGenericValueTypeInfo constVal)
+            {
+                paramValues[key: genericParameters[index: i]] = constVal.Value;
+                continue;
+            }
+            if (i < llvmTypeArgs.Count
+                && long.TryParse(s: llvmTypeArgs[index: i], result: out long v))
+            {
+                paramValues[key: genericParameters[index: i]] = v;
+            }
+        }
+        if (paramValues.Count == 0) return template;
+
+        var sb = new StringBuilder(capacity: template.Length);
+        int pos = 0;
+        while (pos < template.Length)
+        {
+            int open = template.IndexOf(value: '{', startIndex: pos);
+            if (open < 0)
+            {
+                sb.Append(value: template, startIndex: pos, count: template.Length - pos);
+                break;
+            }
+            sb.Append(value: template, startIndex: pos, count: open - pos);
+            int close = template.IndexOf(value: '}', startIndex: open + 1);
+            if (close < 0)
+            {
+                sb.Append(value: template, startIndex: open, count: template.Length - open);
+                break;
+            }
+            string hole = template[(open + 1)..close];
+            // Only evaluate when the hole references at least one known param. This guards
+            // against non-arithmetic holes (LLVM doesn't actually use unmatched `{...}`,
+            // but be conservative).
+            if (paramValues.Keys.Any(predicate: p => hole.Contains(value: p)))
+            {
+                try
+                {
+                    long val = RecordTypeInfo.EvaluateConstExprPublic(expr: hole,
+                        paramValues: paramValues);
+                    sb.Append(value: val);
+                }
+                catch
+                {
+                    sb.Append(value: template, startIndex: open, count: close - open + 1);
+                }
+            }
+            else
+            {
+                sb.Append(value: template, startIndex: open, count: close - open + 1);
+            }
+            pos = close + 1;
+        }
+        return sb.ToString();
+    }
+
     private List<string> InferLlvmIntrinsicTypeArguments(RoutineInfo routine,
         IReadOnlyList<Expression> arguments, TypeInfo? resolvedReturnType)
     {
@@ -299,6 +378,13 @@ public partial class LlvmCodeGenerator
                 substituted = substituted.Replace(oldValue: $"{{{paramName}}}",
                     newValue: args[index: i]);
             }
+
+            // Arithmetic holes over const generic params: {(N+7)//8}, {N*2}, etc.
+            // BackendType templates (resolved in RecordTypeInfo.CreateInstance) handle these
+            // already; @llvm_ir templates need the same support so e.g. BitArray[N]'s
+            // byte_at_bits intrinsic emits `[1 x i8]` for N=8 instead of `[{(N+7)//8} x i8]`.
+            substituted = ResolveArithmeticHoles(template: substituted, method: method,
+                llvmTypeArgs: llvmTypeArgs);
 
             substituted = FixIntPtrBitcast(line: substituted);
 

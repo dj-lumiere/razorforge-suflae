@@ -245,6 +245,13 @@ public class RecordTypeInfo : TypeInfo
     /// Evaluates a simple arithmetic expression with const generic parameter values.
     /// Supports: integer literals, parameter references, +, -, *, // (integer division), parentheses.
     /// </summary>
+    /// <summary>
+    /// Evaluates a simple arithmetic expression with const generic parameter values.
+    /// Supports: integer literals, parameter references, +, -, *, // (integer division), parentheses.
+    /// </summary>
+    internal static long EvaluateConstExprPublic(string expr, Dictionary<string, long> paramValues)
+        => EvaluateConstExpr(expr: expr, paramValues: paramValues);
+
     private static long EvaluateConstExpr(string expr, Dictionary<string, long> paramValues)
     {
         int pos = 0;
