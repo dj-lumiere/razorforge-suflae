@@ -577,7 +577,7 @@ record BytesUtf8View obeys Iterable[Character]
   secret bytes: Hijacked[Bytes]
 
 ### Represents the iterator backing {BytesUtf8View}.
-record BytesUtf8Iterator
+entity BytesUtf8Iterator
   ### Raw pointer to the underlying `Bytes` entity. Caller guarantees lifetime.
   secret bytes: Hijacked[Bytes]
   ### Stores the index.
@@ -590,7 +590,7 @@ record BytesUtf8LossyView obeys Iterable[Character]
   secret bytes: Hijacked[Bytes]
 
 ### Represents the iterator backing {BytesUtf8LossyView}.
-record BytesUtf8LossyIterator
+entity BytesUtf8LossyIterator
   ### Raw pointer to the underlying `Bytes` entity. Caller guarantees lifetime.
   secret bytes: Hijacked[Bytes]
   ### Stores the index.
@@ -635,7 +635,7 @@ routine BytesUtf8LossyView.$iter() -> BytesUtf8LossyIterator
 ### :throws: {MalformedUtf8Error} on the first ill-formed subsequence.
 routine BytesUtf8Iterator.$next!() -> Character
   danger!
-    var bref = me.bytes.extract()
+    var bref = me.bytes.reveal()
     if me.index >= bref.count
       absent
 
@@ -690,7 +690,7 @@ routine BytesUtf8Iterator.$next!() -> Character
 ### :absent: Returns absent when iteration is exhausted.
 routine BytesUtf8LossyIterator.$next!() -> Character
   danger!
-    var bref = me.bytes.extract()
+    var bref = me.bytes.reveal()
     if me.index >= bref.count
       absent
 

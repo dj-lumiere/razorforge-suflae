@@ -596,16 +596,19 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
 
             case TypePattern tp when IsMaybeEntity(subjectType):
             {
-                // Maybe[T entity]: non-null check via is_none(), binding via .value.extract()
+                // `is None` on Maybe[T entity] tests `is_none()`; other TypePatterns test
+                // `not is_none()`. Parser emits `is None` as TypePattern with Type.Name == "None".
                 TypeInfo innerType = subjectType!.TypeArguments![0];
                 Expression isNone = MakeIsNoneCall(subject: subject, subjectType: subjectType, loc: loc);
-                Expression cond = new UnaryExpression(
-                    Operator: UnaryOperator.Not,
-                    Operand: isNone,
-                    Location: loc)
-                {
-                    ResolvedType = boolType
-                };
+                Expression cond = tp.Type.Name == "None"
+                    ? isNone
+                    : new UnaryExpression(
+                        Operator: UnaryOperator.Not,
+                        Operand: isNone,
+                        Location: loc)
+                    {
+                        ResolvedType = boolType
+                    };
                 Statement? binding = tp.VariableName != null
                     ? MakeBinding(
                         name: tp.VariableName,
@@ -618,9 +621,12 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
 
             case TypePattern tp when IsMaybeRecord(subjectType):
             {
-                // Maybe[T record] presence check, optional binding to .value.
+                // `is None` on Maybe[T record] tests absence (`not present`); other TypePatterns
+                // test presence. Parser emits `is None` as TypePattern with Type.Name == "None".
                 TypeInfo? innerType = subjectType!.TypeArguments![0];
-                Expression cond = MakePresentAccess(subject: subject, loc: loc);
+                Expression cond = tp.Type.Name == "None"
+                    ? MakeNotPresent(subject: subject, loc: loc, boolType: boolType)
+                    : MakePresentAccess(subject: subject, loc: loc);
                 Statement? binding = tp.VariableName != null
                     ? MakeBinding(
                         name: tp.VariableName,
