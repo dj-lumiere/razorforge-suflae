@@ -1070,8 +1070,22 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     {
         var parts = new List<InsertedTextPart>();
 
-        string typePart = diagnose ? ownerType.FullName : ownerType.Name;
-        parts.Add(new TextPart(Text: typePart + "(", Location: _synthLoc));
+        // Emit `me.type_name()` (or `me.full_type_name()` for diagnose) so per-instance
+        // monomorphization produces the correct generic-args-included name (e.g.
+        // "List[Core.S64]"). Baking ownerType.Name/FullName here freezes the generic-def
+        // name ("List") and the type-args are lost in monomorphized bodies.
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+            { ResolvedType = ownerType };
+        var typeNameCall = new CallExpression(
+            Callee: new MemberExpression(
+                Object: meRef,
+                PropertyName: diagnose ? "full_type_name" : "type_name",
+                Location: _synthLoc) { ResolvedType = textType },
+            Arguments: [],
+            Location: _synthLoc) { ResolvedType = textType };
+        parts.Add(new ExpressionPart(
+            Expression: typeNameCall, FormatSpec: null, Location: _synthLoc));
+        parts.Add(new TextPart(Text: "(", Location: _synthLoc));
 
         IEnumerable<MemberVariableInfo> visibleFields = diagnose
             ? fields

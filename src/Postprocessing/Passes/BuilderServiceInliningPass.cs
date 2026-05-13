@@ -727,12 +727,19 @@ internal sealed class BuilderServiceInliningPass
                 return MakeLiteralU64(TypeIdHelper.ComputeTypeId(type.FullName), _u64Type, loc);
 
             case "type_name" when _textType != null:
+            {
+                // Defer when receiver is still a generic definition (no type subs available):
+                // GenericMonomorphizationPass will fold per concrete instance later, producing
+                // the correct "List[Core.S64]" form. Folding here would bake the bare "List".
+                if (type.IsGenericDefinition && _currentTypeSubs == null) return null;
                 return MakeLiteralText(GetShortTypeName(type), _textType, loc);
+            }
 
             case "module_name" when _textType != null:
                 return MakeLiteralText(type.Module ?? "", _textType, loc);
 
             case "full_type_name" when _textType != null:
+                if (type.IsGenericDefinition && _currentTypeSubs == null) return null;
                 return MakeLiteralText(GetFullTypeName(type), _textType, loc);
 
             case "member_variable_count" when _s64Type != null:
