@@ -1645,8 +1645,15 @@ internal partial class Program
         // default cap (~20). lld-link uses /errorlimit:N; ld.lld has no equivalent cap.
         string linkerErrorLimitFlag =
             OperatingSystem.IsWindows() ? " -Wl,/errorlimit:0" : "";
+        // Windows' Application Information Service heuristically requests UAC elevation for
+        // .exe filenames containing words like "install", "update", "setup", "patch",
+        // "test_dispatch"… without checking the binary itself. Embed a manifest declaring
+        // `requestedExecutionLevel=asInvoker` so playground tests can run without elevation.
+        string manifestUacFlag = OperatingSystem.IsWindows()
+            ? " -Wl,\"/MANIFESTUAC:level='asInvoker' uiAccess='false'\" -Wl,/MANIFEST:EMBED"
+            : "";
         string clangArgs =
-            $"{clangOptLevel}{framePointerFlag}{lldFlag} -o \"{exeFile}\" \"{optFile}\" -L\"{runtimeLibDir}\" -lrazorforge_runtime{compilerRtArg}{windowsThreadingLibs}{linkerErrorLimitFlag}";
+            $"{clangOptLevel}{framePointerFlag}{lldFlag} -o \"{exeFile}\" \"{optFile}\" -L\"{runtimeLibDir}\" -lrazorforge_runtime{compilerRtArg}{windowsThreadingLibs}{linkerErrorLimitFlag}{manifestUacFlag}";
 
         var clangPsi = new ProcessStartInfo
         {
