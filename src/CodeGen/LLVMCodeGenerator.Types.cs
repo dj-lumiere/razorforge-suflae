@@ -32,6 +32,15 @@ public partial class LlvmCodeGenerator
             return sub;
         }
 
+        // Wrapper-forwarder rename fallback: the disambiguated param carries the original
+        // inner-T name in `ForwarderOriginalName`. The substitution map is keyed by that
+        // original name (see BuildResolvedRoutineTypeSubstitutions + WrapperForwardingPass).
+        if (type is GenericParameterTypeInfo { ForwarderOriginalName: { } originalInnerName }
+            && _typeSubstitutions.TryGetValue(key: originalInnerName, value: out TypeInfo? renamed))
+        {
+            return renamed;
+        }
+
         // Parameterized types with unresolved args (e.g., DictEntry[K, V] -> DictEntry[S64, Text])
         if (type.TypeArguments is { Count: > 0 })
         {

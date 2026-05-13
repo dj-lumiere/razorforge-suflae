@@ -290,9 +290,11 @@ internal sealed class WrapperForwardingPass
         // inner instance (e.g. `T -> BTreeSetNode[S64]`) and never registers `inner-T -> S64`.
         // Result: a value-of-T parameter codegens as ptr instead of i64 → ABI mismatch.
         //
-        // Rename colliding inner names to sentinels in the forwarder's params and return type.
-        // BuildResolvedRoutineTypeSubstitutions applies the same rename to look up the
-        // inner-instance substitution under the sentinel name.
+        // Rename colliding inner names so the forwarder's param/return types reference a
+        // disambiguated GenericParameterTypeInfo with a `ForwarderOriginalName` marker.
+        // Substitution sites (GenericAstRewriter.ResolveType, codegen's ResolveTypeSubstitution,
+        // BuildResolvedRoutineTypeSubstitutions) check that property to recover the original
+        // inner-param name — this avoids string-matching a `__rfwd_T__` sentinel everywhere.
         Dictionary<string, TypeInfo>? innerRename = null;
         if (innerOwnerParams is { Count: > 0 } &&
             wrapperDef.GenericParameters is { Count: > 0 } wrapperParams)
@@ -301,7 +303,12 @@ internal sealed class WrapperForwardingPass
             {
                 if (!wrapperParams.Contains(value: ip)) continue;
                 innerRename ??= new Dictionary<string, TypeInfo>();
-                innerRename[ip] = new GenericParameterTypeInfo(name: $"__rfwd_{ip}__");
+                // The Name still has to be unique vs the wrapper's own param so dict-keyed
+                // lookups don't collide; the structural marker is `ForwarderOriginalName`.
+                innerRename[ip] = new GenericParameterTypeInfo(name: $"__rfwd_{ip}__")
+                {
+                    ForwarderOriginalName = ip
+                };
             }
         }
 

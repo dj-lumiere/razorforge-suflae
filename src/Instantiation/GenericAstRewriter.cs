@@ -109,9 +109,17 @@ internal static class GenericAstRewriter
                 return null;
 
             // Direct generic parameter substitution: T ??S64
-            if (original is GenericParameterTypeInfo gp &&
-                TypeSubs.TryGetValue(key: gp.Name, value: out TypeInfo? direct))
-                return direct;
+            if (original is GenericParameterTypeInfo gp)
+            {
+                if (TypeSubs.TryGetValue(key: gp.Name, value: out TypeInfo? direct))
+                    return direct;
+                // Wrapper-forwarder rename fallback: the param carries the original inner-T
+                // name as a structural marker (`ForwarderOriginalName`). At monomorphization
+                // time the binding lives under that name, not under the disambiguated `Name`.
+                if (gp.ForwarderOriginalName is { } originalInnerName
+                    && TypeSubs.TryGetValue(key: originalInnerName, value: out TypeInfo? renamed))
+                    return renamed;
+            }
 
             // Generic resolution with substitutable type arguments: List[T] ??List[S64]
             if (original is { IsGenericResolution: true, TypeArguments: not null })
