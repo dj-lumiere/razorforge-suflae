@@ -240,13 +240,18 @@ public partial class LlvmCodeGenerator
                 continue;
             }
 
+            // Only count an implementer as "in-progress" if THIS call actually triggered new
+            // state (a fresh declaration). Without this gate, count stays > 0 forever for
+            // implementers whose bodies will never be emitted (unreachable Crashable types
+            // declared on demand), and ShouldDeferRuntimeDispatchStub never returns false →
+            // the dispatch stub never gets generated and the linker reports it as undefined.
+            // Newly-declared implementers still get their type prepared via Ensure*.
             if (!_generatedRoutines.Contains(item: candidateName))
             {
                 GenerateRoutineDeclaration(routine: concreteMethod);
+                EnsureRuntimeDispatchConcreteTypeReady(concreteType: concreteType);
+                count++;
             }
-
-            EnsureRuntimeDispatchConcreteTypeReady(concreteType: concreteType);
-            count++;
         }
 
         return count;

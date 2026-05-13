@@ -288,28 +288,36 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
 
         // Pre-scan: determine if the else arm on a carrier is narrowed to the inner type.
         // An else arm is narrowed when ALL non-T alternatives are covered by prior clauses.
+        // The wildcard `is Crashable [e]` (TypePattern with Type.Name == "Crashable") covers
+        // every crashable type — parser produces this directly, NOT CrashablePattern, so
+        // CrashableExpansionPass leaves it alone.
+        static bool CoversAllCrashables(WhenClause c) =>
+            c.Pattern is TypePattern { Type.Name: "Crashable" };
         bool isElseNarrowed = false;
         if (IsResultOrLookup(subjectType) && subjectType!.TypeArguments?.Count > 0)
         {
-            bool seenBlank = loweredClauses.Any(
-                c => c.Pattern is TypePattern { Type.Name: "Blank" });
             int totalCrashable = ctx.Registry.GetAllTypes().OfType<CrashableTypeInfo>().Count();
             int seenCrashablePatterns = loweredClauses.Count(
                 c => c.Pattern is TypePattern tp2 && tp2.Type.ResolvedType is CrashableTypeInfo);
-            isElseNarrowed = seenBlank && seenCrashablePatterns >= totalCrashable;
+            bool crashableCovered = loweredClauses.Any(CoversAllCrashables)
+                || seenCrashablePatterns >= totalCrashable;
+            // Lookup has a Blank state; Result does not. Result narrows on crashable coverage
+            // alone; Lookup additionally requires the Blank arm.
+            if (IsResultType(subjectType))
+            {
+                isElseNarrowed = crashableCovered;
+            }
+            else
+            {
+                bool seenBlank = loweredClauses.Any(
+                    c => c.Pattern is TypePattern { Type.Name: "Blank" });
+                isElseNarrowed = seenBlank && crashableCovered;
+            }
         }
         else if (IsMaybeRecord(subjectType) || IsMaybeEntity(subjectType))
         {
             isElseNarrowed = loweredClauses.Any(c => c.Pattern is NonePattern
                 || c.Pattern is TypePattern { Type.Name: "None" });
-        }
-        else if (IsResultType(subjectType) && subjectType!.TypeArguments?.Count > 0)
-        {
-            // Result[T]: else narrowed when all Crashable types are handled (no Blank in Result).
-            int totalCrashable = ctx.Registry.GetAllTypes().OfType<CrashableTypeInfo>().Count();
-            int seenCrashablePatterns = loweredClauses.Count(
-                c => c.Pattern is TypePattern tp2 && tp2.Type.ResolvedType is CrashableTypeInfo);
-            isElseNarrowed = seenCrashablePatterns >= totalCrashable;
         }
 
         // Build if/else chain via right-fold (last clause to first).

@@ -79,15 +79,35 @@ public sealed class RuntimeDispatchRegistrationPass(TypeRegistry registry)
                 break;
             case IfStatement ifs:
                 ScanExpression(ifs.Condition);
-                ScanStatement(ifs.ThenBranch);
-                if (ifs.ElseBranch != null) ScanStatement(ifs.ElseBranch);
+                ScanStatement(ifs.ThenStatement);
+                if (ifs.ElseStatement != null) ScanStatement(ifs.ElseStatement);
+                break;
+            case WhileStatement ws:
+                ScanExpression(ws.Condition);
+                ScanStatement(ws.Body);
+                if (ws.ElseBranch != null) ScanStatement(ws.ElseBranch);
+                break;
+            case ForStatement fs:
+                ScanExpression(fs.Iterable);
+                ScanStatement(fs.Body);
+                if (fs.ElseBranch != null) ScanStatement(fs.ElseBranch);
                 break;
             case LoopStatement loop:
                 ScanStatement(loop.Body);
                 break;
-            case WhenStatement ws:
-                ScanExpression(ws.Expression);
-                foreach (WhenClause clause in ws.Clauses) ScanStatement(clause.Body);
+            case WhenStatement wn:
+                ScanExpression(wn.Expression);
+                foreach (WhenClause clause in wn.Clauses) ScanStatement(clause.Body);
+                break;
+            case UsingStatement us:
+                ScanExpression(us.Resource);
+                ScanStatement(us.Body);
+                break;
+            case DangerStatement ds:
+                ScanStatement(ds.Body);
+                break;
+            case ThrowStatement ts:
+                if (ts.Error != null) ScanExpression(ts.Error);
                 break;
             case DiscardStatement discard:
                 ScanExpression(discard.Expression);
@@ -127,6 +147,45 @@ public sealed class RuntimeDispatchRegistrationPass(TypeRegistry registry)
             case IndexExpression idx:
                 ScanExpression(idx.Object);
                 ScanExpression(idx.Index);
+                break;
+            case ConditionalExpression cond:
+                ScanExpression(cond.Condition);
+                ScanExpression(cond.TrueExpression);
+                ScanExpression(cond.FalseExpression);
+                break;
+            case InsertedTextExpression ins:
+                // f-string parts: each ExpressionPart may contain user calls like
+                // `f"... {err.crash_message()} ..."` that need their protocol calls
+                // registered for dispatch-stub emission. TextPart is a literal segment
+                // with no embedded expressions.
+                foreach (InsertedTextPart part in ins.Parts)
+                {
+                    if (part is ExpressionPart ep)
+                        ScanExpression(ep.Expression);
+                }
+                break;
+            case ListLiteralExpression list:
+                foreach (Expression elem in list.Elements) ScanExpression(elem);
+                break;
+            case SetLiteralExpression set:
+                foreach (Expression elem in set.Elements) ScanExpression(elem);
+                break;
+            case DictLiteralExpression dict:
+                foreach ((Expression key, Expression value) in dict.Pairs)
+                {
+                    ScanExpression(key);
+                    ScanExpression(value);
+                }
+                break;
+            case TupleLiteralExpression tuple:
+                foreach (Expression elem in tuple.Elements) ScanExpression(elem);
+                break;
+            case CreatorExpression creator:
+                foreach ((_, Expression value) in creator.MemberVariables)
+                    ScanExpression(value);
+                break;
+            case StealExpression steal:
+                ScanExpression(steal.Operand);
                 break;
         }
     }
