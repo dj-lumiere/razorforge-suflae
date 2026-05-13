@@ -286,7 +286,25 @@ public partial class LlvmCodeGenerator
 
         try
         {
-            GenerateRoutineBody(sb: bodyBuilder, body: routine.Body, routine: routineInfo);
+            // Stub routines (no AST body — e.g. BuilderService.page_size() declared without a
+            // body) get their synthesized body from WiredRoutinePass via _synthesizedBodies.
+            // Without this, codegen falls through GenerateRoutineBody on a null AST and emits
+            // an empty function returning zero/null — every page_size() call returns 0,
+            // every target_os() returns null ptr, and `show(f"target_os: {os}")` AVs in
+            // CStr.$create(from: null).
+            Statement effectiveBody = routine.Body;
+            // Stub routines (declared without a body, like BuilderService.page_size()) get
+            // their synthesized body from WiredRoutinePass via _synthesizedBodies. The parser
+            // produces an empty BlockStatement for missing bodies, so check both null and empty.
+            bool isStubBody = effectiveBody is null
+                || (effectiveBody is BlockStatement bs && bs.Statements.Count == 0);
+            if (isStubBody
+                && _synthesizedBodies.TryGetValue(key: routineInfo.RegistryKey,
+                    value: out Statement? synthStub))
+            {
+                effectiveBody = synthStub;
+            }
+            GenerateRoutineBody(sb: bodyBuilder, body: effectiveBody, routine: routineInfo);
             _functionDefinitions.Append(value: _currentRoutineEntryAllocas);
             _functionDefinitions.Append(value: bodyBuilder);
         }
