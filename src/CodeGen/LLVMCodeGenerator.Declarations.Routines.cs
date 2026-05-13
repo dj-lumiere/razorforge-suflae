@@ -685,6 +685,12 @@ public partial class LlvmCodeGenerator
             "i1" => "false",
             "half" or "float" or "double" or "fp128" => "0.0",
             "ptr" => "null",
+            // Aggregate types ([N x T] arrays, {...} structs, %"Named" struct types) require
+            // `zeroinitializer`, not the integer literal `0`. Without this, BitArray[N]() and
+            // similar no-arg constructors emit `store [1 x i8] 0, ...` which opt rejects with
+            // "integer constant must have integer type".
+            _ when llvmType.Length > 0 &&
+                   (llvmType[0] == '[' || llvmType[0] == '{' || llvmType[0] == '%') => "zeroinitializer",
             _ => "0"
         };
     }
