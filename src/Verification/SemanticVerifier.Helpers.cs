@@ -360,6 +360,71 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
+    /// Rewrites `show(x)` / `alert(x)` arguments in-place when `x` is a copy-restricted
+    /// wrapper (Owned, Retained, Tracked, ...). Each such argument becomes `x.$represent()`
+    /// (for show) or `x.$diagnose()` (for alert). The display protocols guarantee `@readonly`,
+    /// so the method call is a borrow — `x` is not consumed. The resulting `Text` matches
+    /// the `show(value: Referring[Text])` / `alert(value: Referring[Text])` overload
+    /// (value-record, no copy verb), so subsequent overload resolution picks that branch
+    /// instead of the generic `show[T]` / `alert[T]` that would trigger S420.
+    /// </summary>
+    /// <remarks>
+    /// Must run BEFORE overload resolution — rewriting after a routine has been bound to
+    /// `show[T=Owned[...]]` leaves the call with a Text arg but mismatched callee, producing
+    /// garbled output at runtime (the wrong function is called).
+    ///
+    /// Narrow scope (phase 1): only `show` and `alert` are eligible. Other `@readonly`
+    /// routines are not rewritten — they don't have a canonical readonly accessor.
+    /// </remarks>
+    private void RewriteDisplayRoutineWrapperArgs(string callName,
+        IList<Expression> arguments)
+    {
+        bool isShow = callName == "show";
+        bool isAlert = callName == "alert";
+        if (!isShow && !isAlert) return;
+
+        for (int i = 0; i < arguments.Count; i++)
+        {
+            Expression slot = arguments[index: i];
+            Expression innerExpr = slot is NamedArgumentExpression named
+                ? named.Value
+                : slot;
+
+            // Type-probe before overload resolution. AnalyzeExpression is idempotent for
+            // most expression kinds (the result is cached on `.ResolvedType`). Literals
+            // re-analyze cheaply.
+            TypeSymbol argType = AnalyzeExpression(expression: innerExpr);
+            if (argType.Category == TypeCategory.Error) continue;
+
+            // Rewrite for args that don't match the bare-Text/Bytes overloads:
+            //   - copy-restricted wrappers (Owned, Retained, Tracked, …) — `IsTriviallyCopyable`
+            //     returns false; we need the rewrite to avoid S420.
+            //   - raw entities (List[T], Set[T], Dict[K,V]) — `IsTriviallyCopyable` returns
+            //     true (fallback), but the generic `alert[T]` / `show[T]` monomorphization
+            //     copies the entity ptr by value, which corrupts. Rewriting to `arg.$diagnose()`
+            //     extracts a Text and uses the cleaner `Referring[Text]` overload instead.
+            bool isEntity = argType is EntityTypeInfo;
+            if (!isEntity && IsTriviallyCopyable(type: argType)) continue;
+
+            string methodName = isAlert ? "$diagnose" : "$represent";
+            var memberAccess = new MemberExpression(
+                Object: innerExpr,
+                PropertyName: methodName,
+                Location: innerExpr.Location);
+            var displayCall = new CallExpression(
+                Callee: memberAccess,
+                Arguments: [],
+                Location: innerExpr.Location);
+            // ResolvedType is left null — overload resolution will analyze the new
+            // CallExpression and pick the Text-typed alert/show overload accordingly.
+
+            arguments[index: i] = slot is NamedArgumentExpression na
+                ? na with { Value = displayCall }
+                : displayCall;
+        }
+    }
+
+    /// <summary>
     /// Returns true if the expression can appear on the left-hand side of an assignment.
     /// Valid assignment targets are identifiers, member accesses, and index expressions.
     /// </summary>

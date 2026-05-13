@@ -536,6 +536,22 @@ public sealed partial class SemanticVerifier
         {
             // Type inference from initializer
             varType = AnalyzeExpression(expression: varDecl.Initializer);
+
+            // Collection literals analyze to the bare entity type (List[T] / Set[T] / Dict[K,V]),
+            // which can't be stored bare per the entity-ownership rule (S413). At binding sites,
+            // wrap the inferred type in Owned so the variable holds a destructable handle.
+            // This mirrors the binding-vs-rvalue distinction: `alert([1,2,3])` keeps the bare
+            // entity (and prints List-shaped output), while `var a = [1,2,3]; alert(a)` makes
+            // a Owned (and prints the Owned envelope).
+            if (_registry.Language == Language.RazorForge
+                && varDecl.Initializer is ListLiteralExpression
+                    or SetLiteralExpression or DictLiteralExpression
+                && varType is EntityTypeInfo)
+            {
+                varType = _registry.GetOrCreateWrapperType(wrapperName: "Owned",
+                    innerType: varType,
+                    isReadOnly: false);
+            }
         }
         else
         {

@@ -54,6 +54,19 @@ public sealed partial class SemanticVerifier
                     return ErrorTypeInfo.Instance;
                 }
 
+                // Display-routine desugaring (phase 1): `show(x)` / `alert(x)` where x is a
+                // copy-restricted wrapper becomes `show(x.$represent())` / `alert(x.$diagnose())`
+                // BEFORE overload resolution. The rewrite turns the call into a Text-typed
+                // argument, so overload resolution picks the `show(value: Referring[Text])`
+                // / `alert(value: Referring[Text])` overload instead of the generic-T variant
+                // that would either trigger S420 (implicit copy of the wrapper) or — worse —
+                // bind to the wrong overload and emit a garbage call at runtime.
+                if (_registry.Language == Language.RazorForge)
+                {
+                    RewriteDisplayRoutineWrapperArgs(callName: callName,
+                        arguments: call.Arguments);
+                }
+
                 RoutineInfo? routine = _registry.LookupRoutine(fullName: callName,
                     isFailable: isFailableCall);
                 // Try current module prefix (e.g., "infinite_loop" -> "HelloWorld.infinite_loop")

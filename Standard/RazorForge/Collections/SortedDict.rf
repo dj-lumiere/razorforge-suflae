@@ -796,10 +796,11 @@ routine SortedDict[K, V].get_or_from_node(node: BTreeDictNode[K, V], key: K, def
 routine SortedDict[K, V].min!() -> DictEntry[K, V]
   if me.is_empty()
     absent
-  var node = me.root!!
-  while not node.is_leaf
-    node = node.children_get(0u64)
-  return DictEntry[K, V](key: node.key_get(0u64), value: node.value_get(0u64))
+  danger!
+    var node = Hijacked[BTreeDictNode[K, V]](me.root!!).reveal()
+    while not node.is_leaf
+      node = node.children_get(0u64)
+    return DictEntry[K, V](key: node.key_get(0u64), value: node.value_get(0u64))
 
 ### Returns the entry with the largest key.
 ### :returns: A {DictEntry[K, V]} with the maximum key and its associated value.
@@ -808,11 +809,12 @@ routine SortedDict[K, V].min!() -> DictEntry[K, V]
 routine SortedDict[K, V].max!() -> DictEntry[K, V]
   if me.is_empty()
     absent
-  var node = me.root!!
-  while not node.is_leaf
-    node = node.children_get(node.children_count() -% 1u64)
-  var last = node.keys_count() -% 1u64
-  return DictEntry[K, V](key: node.key_get(last), value: node.value_get(last))
+  danger!
+    var node = Hijacked[BTreeDictNode[K, V]](me.root!!).reveal()
+    while not node.is_leaf
+      node = node.children_get(node.children_count() -% 1u64)
+    var last = node.keys_count() -% 1u64
+    return DictEntry[K, V](key: node.key_get(last), value: node.value_get(last))
 
 ### Returns the entry with the smallest key. Alias for {SortedDict[K, V].min!()}.
 ### :returns: The first (minimum-key) entry.

@@ -861,10 +861,11 @@ routine SortedSet[T].range_collect(node: BTreeSetNode[T], min_val: T, max_val: T
 routine SortedSet[T].min!() -> T
   if me.is_empty()
     absent
-  var node = me.root!!
-  while not node.is_leaf
-    node = node.children_get(0u64)
-  return node.keys_get(0u64)
+  danger!
+    var node = Hijacked[BTreeSetNode[T]](me.root!!).reveal()
+    while not node.is_leaf
+      node = node.children_get(0u64)
+    return node.keys_get(0u64)
 
 ### Returns the largest value currently stored in the set.
 ### :returns: The maximum element.
@@ -873,10 +874,11 @@ routine SortedSet[T].min!() -> T
 routine SortedSet[T].max!() -> T
   if me.is_empty()
     absent
-  var node = me.root!!
-  while not node.is_leaf
-    node = node.children_get(node.children_count() -% 1u64)
-  return node.keys_get(node.keys_count() -% 1u64)
+  danger!
+    var node = Hijacked[BTreeSetNode[T]](me.root!!).reveal()
+    while not node.is_leaf
+      node = node.children_get(node.children_count() -% 1u64)
+    return node.keys_get(node.keys_count() -% 1u64)
 
 ### Returns the first (smallest) element in the set; equivalent to `min!()`.
 ### :returns: The minimum element.

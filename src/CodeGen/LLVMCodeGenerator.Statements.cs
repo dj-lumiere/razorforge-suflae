@@ -84,8 +84,8 @@ public partial class LlvmCodeGenerator
                 EmitThrow(sb: sb, throwStmt: throwStmt);
                 return true; // Throw terminates the block
 
-            case AbsentStatement:
-                EmitAbsent(sb: sb);
+            case AbsentStatement absentStmt:
+                EmitAbsent(sb: sb, absentStmt: absentStmt);
                 return true; // Absent terminates the block
 
             case VariantReturnStatement variantRet:

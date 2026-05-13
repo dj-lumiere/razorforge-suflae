@@ -576,13 +576,44 @@ public partial class LlvmCodeGenerator
         return addrInt2;
     }
 
-    private void EmitAbsent(StringBuilder sb)
+    private void EmitAbsent(StringBuilder sb, AbsentStatement absentStmt)
     {
         if (_currentRoutineIsFailable)
         {
+            // The original failable routine (not a try_/check_/lookup_ variant) treats `absent`
+            // as a runtime crash with `AbsentValueError`. Use the same rf_crash shape as
+            // EmitThrow so the error message + location aren't blank in the trace.
+            // type name + filename go through @rf_crash as cstr (i64 = byte-data pointer + length).
+            // The message goes as a UTF-32 codepoint buffer (Text data layout), so we load
+            // field 0 (codepoint ptr) and field 1 (codepoint count) from a Text-formatted
+            // string constant — same shape EmitThrow extracts from crash_message().
+            const string typeName = "AbsentValueError";
+            string message =
+                $"Routine '{_currentEmittingRoutine?.BaseName ?? "<unknown>"}' signaled absent.";
+            string typeCStr = EmitCStringConstant(value: typeName);
+            string fileCStr = EmitCStringConstant(value: absentStmt.Location.FileName);
+            string msgTextPtr = EmitStringLiteral(sb: _functionDefinitions, value: message);
+
+            string typeNameAsInt = NextTemp();
+            EmitLine(sb: sb, line: $"  {typeNameAsInt} = ptrtoint ptr {typeCStr} to i64");
+            string fileAsInt = NextTemp();
+            EmitLine(sb: sb, line: $"  {fileAsInt} = ptrtoint ptr {fileCStr} to i64");
+            // Extract codepoint buffer + count from the Text-shaped global.
+            string msgDataPtr = NextTemp();
+            EmitLine(sb: sb, line: $"  {msgDataPtr} = load ptr, ptr {msgTextPtr}");
+            string msgCountField = NextTemp();
+            EmitLine(sb: sb,
+                line:
+                $"  {msgCountField} = getelementptr {{ptr, i64}}, ptr {msgTextPtr}, i32 0, i32 1");
+            string msgCount = NextTemp();
+            EmitLine(sb: sb, line: $"  {msgCount} = load i64, ptr {msgCountField}");
+            string msgAsInt = NextTemp();
+            EmitLine(sb: sb, line: $"  {msgAsInt} = ptrtoint ptr {msgDataPtr} to i64");
+
             EmitRcRecordCleanup(sb: sb);
             EmitLine(sb: sb,
-                line: "  call void @rf_crash(i64 0, i64 0, i64 0, i64 0, i32 0, i32 0, i64 0, i64 0)");
+                line:
+                $"  call void @rf_crash(i64 {typeNameAsInt}, i64 {typeName.Length}, i64 {fileAsInt}, i64 {absentStmt.Location.FileName.Length}, i32 {absentStmt.Location.Line}, i32 {absentStmt.Location.Column}, i64 {msgAsInt}, i64 {msgCount})");
             EmitLine(sb: sb, line: "  unreachable");
             return;
         }

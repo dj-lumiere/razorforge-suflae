@@ -22,8 +22,25 @@ public sealed partial class SemanticVerifier
         return current;
     }
 
-    private TypeSymbol WrapOwnedCollectionLiteralType(TypeSymbol type)
+    /// <summary>
+    /// Wraps an entity-typed collection literal in <c>Owned[…]</c> when used in a binding
+    /// position (var declaration, field initializer, assignment target). For rvalue
+    /// positions (function-call args, expression results), the literal stays as the bare
+    /// entity — the caller takes responsibility for its lifetime, and display routines
+    /// (`show`/`alert`) see the inner type so `alert([1,2,3])` prints
+    /// <c>List(count: 3, …)</c> instead of <c>Owned(addr: …, List(…))</c>.
+    ///
+    /// `wrapForBinding` controls the behavior: literal-analysis sites that pass `false`
+    /// (default — rvalue context) get the bare entity; var-decl / field-init sites pass
+    /// `true` so the result is Owned-wrapped and can satisfy the entity-ownership rule
+    /// (S413). Switching between contexts is purely a type-annotation thing — codegen
+    /// emits the same `List.$create + add_last` sequence either way; the Owned wrapper is
+    /// `@llvm("ptr")` and shares the entity's pointer.
+    /// </summary>
+    private TypeSymbol WrapOwnedCollectionLiteralType(TypeSymbol type,
+        bool wrapForBinding = false)
     {
+        if (!wrapForBinding) return type;
         return type is EntityTypeInfo
             ? _registry.GetOrCreateWrapperType(wrapperName: "Owned",
                 innerType: type,
