@@ -251,7 +251,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 EnqueueThrowCrashMessage(throwStmt: throwStmt, typeSubs: frame.TypeSubs);
                 continue;
             }
-            if (node is ListLiteralExpression or SetLiteralExpression or DictLiteralExpression or IndexExpression)
+            if (node is ListLiteralExpression or SetLiteralExpression or DictLiteralExpression or IndexExpression or UsingStatement)
             {
                 EnqueueImplicitLoweringCallees(node: node, typeSubs: frame.TypeSubs);
                 continue;
@@ -291,7 +291,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                     EnqueueThrowCrashMessage(throwStmt: throwStmt, typeSubs: frame.TypeSubs);
                     continue;
                 }
-                if (node is ListLiteralExpression or SetLiteralExpression or DictLiteralExpression or IndexExpression)
+                if (node is ListLiteralExpression or SetLiteralExpression or DictLiteralExpression or IndexExpression or UsingStatement)
                 {
                     EnqueueImplicitLoweringCallees(node: node, typeSubs: frame.TypeSubs);
                     continue;
@@ -324,6 +324,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             SetLiteralExpression s => s.ResolvedType,
             DictLiteralExpression d => d.ResolvedType,
             IndexExpression ix => ix.Object.ResolvedType,
+            UsingStatement u => u.Resource.ResolvedType,
             _ => null
         };
         if (rawType == null) return;
@@ -372,6 +373,15 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 // tracks failability on RoutineInfo separately. See TypeRegistry.MethodLookup.cs:236.
                 EnqueueMethodIfPresent(owner: collectionType, methodName: "$getitem");
                 EnqueueMethodIfPresent(owner: collectionType, methodName: "$setitem");
+                break;
+            case UsingStatement:
+                // `using r.view() as v` lowers (in Phase 7 — after this pass) to
+                // `__uf.$enter()` ... `__uf.$exit()`. Seed both on the resource type so they
+                // make it into the live set; codegen later emits calls to the same symbols.
+                // Either method may be absent on a given resource type — EnqueueMethodIfPresent
+                // is a no-op when LookupMethod returns null.
+                EnqueueMethodIfPresent(owner: collectionType, methodName: "$enter");
+                EnqueueMethodIfPresent(owner: collectionType, methodName: "$exit");
                 break;
         }
     }
@@ -654,24 +664,39 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 string synthVisitKey = $"{callee.RegistryKey}|{string.Join(separator: ",", values: subs.Select(selector: kv => $"{kv.Key}={kv.Value.FullName}"))}";
                 if (_visited.Add(item: synthVisitKey))
                 {
-                    var synthCalls = new List<object>();
-                    CollectCalls(node: synthBody, sink: synthCalls);
-                    foreach (object node in synthCalls)
+                    // Stash and restore _currentFrameSubs so ResolveMemberCall can substitute
+                    // generic-param receivers (e.g. `inner.keys_add_last` where inner: T) for
+                    // wrapper-forwarder bodies. Without this, ResolveMemberCall sees the bare
+                    // GenericParameterTypeInfo("T") and returns null, dropping the inner call
+                    // from reachability — leaves the inner method's monomorphization unseeded
+                    // even though codegen later emits a call to the (correctly-mangled) symbol.
+                    Dictionary<string, TypeInfo> savedSubs = _currentFrameSubs;
+                    _currentFrameSubs = subs;
+                    try
                     {
-                        if (node is ThrowStatement throwStmt)
+                        var synthCalls = new List<object>();
+                        CollectCalls(node: synthBody, sink: synthCalls);
+                        foreach (object node in synthCalls)
                         {
-                            EnqueueThrowCrashMessage(throwStmt: throwStmt, typeSubs: subs);
-                            continue;
+                            if (node is ThrowStatement throwStmt)
+                            {
+                                EnqueueThrowCrashMessage(throwStmt: throwStmt, typeSubs: subs);
+                                continue;
+                            }
+                            RoutineInfo? resolved = node switch
+                            {
+                                CallExpression ce => ce.ResolvedRoutine ?? ResolveNoArgConstructor(ce: ce) ?? ResolveCallStyleConstructor(ce: ce) ?? ResolveMemberCall(ce: ce),
+                                GenericMethodCallExpression gce => gce.ResolvedRoutine,
+                                CreatorExpression cre => ResolveCreatorRoutine(cre: cre),
+                                _ => null
+                            };
+                            if (resolved == null) continue;
+                            EnqueueCallee(callee: SubstituteRoutine(routine: resolved, typeSubs: subs));
                         }
-                        RoutineInfo? resolved = node switch
-                        {
-                            CallExpression ce => ce.ResolvedRoutine ?? ResolveNoArgConstructor(ce: ce) ?? ResolveCallStyleConstructor(ce: ce) ?? ResolveMemberCall(ce: ce),
-                            GenericMethodCallExpression gce => gce.ResolvedRoutine,
-                            CreatorExpression cre => ResolveCreatorRoutine(cre: cre),
-                            _ => null
-                        };
-                        if (resolved == null) continue;
-                        EnqueueCallee(callee: SubstituteRoutine(routine: resolved, typeSubs: subs));
+                    }
+                    finally
+                    {
+                        _currentFrameSubs = savedSubs;
                     }
                 }
             }
@@ -1630,7 +1655,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             || node is ThrowStatement
             || node is ListLiteralExpression || node is SetLiteralExpression
             || node is DictLiteralExpression || node is IndexExpression
-            || node is InsertedTextExpression) sink.Add(item: node);
+            || node is InsertedTextExpression
+            || node is UsingStatement) sink.Add(item: node);
 
         Type t = node.GetType();
         if (t.IsPrimitive || node is string || t.IsEnum) return;

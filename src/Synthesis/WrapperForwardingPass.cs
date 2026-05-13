@@ -442,7 +442,12 @@ internal sealed class WrapperForwardingPass
                 Arguments: forwardedArgs,
                 Location: _synthLoc)
             {
-                ResolvedRoutine = innerMethod,
+                // ResolvedRoutine intentionally left null: this forwarder is generated once
+                // per wrapperDef and reused across all inner T. Baking innerMethod here would
+                // freeze the call to whichever inner type was resolved first (e.g. binding
+                // to BTreeListNode.keys_add_last forever, even when monomorphized for
+                // Grasped[BTreeSetNode[S64]]). Leaving it null lets RoutineReachabilityPass
+                // re-resolve the call from the substituted receiver type at monomorphization.
                 ResolvedType = innerMethod.ReturnType
             };
             Statement callStmt = hasReturnValue
@@ -505,7 +510,8 @@ internal sealed class WrapperForwardingPass
                 Arguments: forwardedArgs,
                 Location: _synthLoc)
             {
-                ResolvedRoutine = innerMethod,
+                // ResolvedRoutine intentionally left null — see the record-struct branch above
+                // for the full reasoning. Same issue applies to pointer wrappers.
                 ResolvedType = innerMethod.ReturnType
             };
             Statement callStmt = hasReturnValue
