@@ -1228,6 +1228,15 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 return MatchOverload(decls: gd, callee: callee);
             if (_stdlibByName.TryGetValue(key: genericKey, value: out List<RoutineDeclaration>? gd2))
                 return MatchOverload(decls: gd2, callee: callee);
+            // User-defined generic methods (e.g. `LinkedList[T].add_last` in playground code)
+            // are keyed under the gendef shape in _userByName, NOT under the monomorphised
+            // concrete-owner key. Without this lookup, FindDecl returns null for every
+            // user-generic instantiation, so its body is never walked and calls inside it
+            // (e.g. `node.retain()`) never reach the live set.
+            if (_userByName.TryGetValue(key: shortKey, value: out List<RoutineDeclaration>? gdu))
+                return MatchOverload(decls: gdu, callee: callee);
+            if (_userByName.TryGetValue(key: genericKey, value: out List<RoutineDeclaration>? gdu2))
+                return MatchOverload(decls: gdu2, callee: callee);
         }
         // Concrete owner: e.g. "S32.$add" or "Bytes.split".
         string concreteKey = $"{owner.Name}.{callee.Name}";
