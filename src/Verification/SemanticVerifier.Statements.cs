@@ -551,6 +551,10 @@ public sealed partial class SemanticVerifier
                 varType = _registry.GetOrCreateWrapperType(wrapperName: "Owned",
                     innerType: varType,
                     isReadOnly: false);
+                // Keep the literal's ResolvedType aligned with the binding's varType so downstream
+                // codegen and tests asserting `initializer.ResolvedType` see the Owned wrapper too
+                // (otherwise the literal alone reports the bare inner entity).
+                varDecl.Initializer.ResolvedType = varType;
             }
         }
         else
@@ -607,6 +611,24 @@ public sealed partial class SemanticVerifier
                 message:
                 $"Cannot directly assign entity of type '{varType.Name}' to variable '{varDecl.Name}'. " +
                 "Use '.share()' for shared ownership or 'steal' for ownership transfer.",
+                location: varDecl.Location);
+        }
+
+        // RazorForge: bare entity-type var bindings are prohibited regardless of initializer
+        // form. Collection literals (`{1: ...}`) and explicit constructors (`SortedDict[…](...)`)
+        // both produce entity values whose lifetime must be carried by an ownership wrapper. The
+        // ownership wrappers themselves (`Owned`/`Retained`/`Tracked`) are RecordTypeInfo so they
+        // don't hit this check.
+        if (_registry.Language == Language.RazorForge
+            && varDecl is { Type: not null, Initializer: not null }
+            && varType is EntityTypeInfo entityVarType
+            && varDecl.Initializer is not IdentifierExpression)
+        {
+            ReportError(code: SemanticDiagnosticCode.BareEntityAssignment,
+                message:
+                $"Variable '{varDecl.Name}' of bare entity type '{entityVarType.Name}' is not allowed. " +
+                $"Wrap as 'Owned[{entityVarType.Name}]', 'Retained[{entityVarType.Name}]', or " +
+                $"'Tracked[{entityVarType.Name}]'.",
                 location: varDecl.Location);
         }
 

@@ -14,9 +14,27 @@ public sealed partial class SemanticVerifier
     private static TypeSymbol UnwrapCollectionLiteralExpectedType(TypeSymbol type)
     {
         TypeSymbol current = type;
-        while (current is WrapperTypeInfo wrapper)
+        while (true)
         {
-            current = wrapper.InnerType;
+            if (current is WrapperTypeInfo wrapper)
+            {
+                current = wrapper.InnerType;
+                continue;
+            }
+            // Owned[T] / Retained[T] / Tracked[T] are declared as `record` in stdlib so they
+            // surface as RecordTypeInfo, not WrapperTypeInfo. Their single TypeArgument is the
+            // wrapped collection type — unwrap so the literal can resolve its base name
+            // (PriorityQueue, SortedSet, etc.) from the expected type even when LHS is
+            // `Owned[SortedSet[S64]]` etc. Use base-name extraction since instantiated record
+            // types have Name like "Owned[Foo]", not bare "Owned".
+            if (current is RecordTypeInfo recRT
+                && recRT.TypeArguments is { Count: 1 } recArgs
+                && GetTypeBaseName(recRT) is "Owned" or "Retained" or "Tracked")
+            {
+                current = recArgs[0];
+                continue;
+            }
+            break;
         }
 
         return current;

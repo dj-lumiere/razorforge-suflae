@@ -22,7 +22,7 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items: List[S64] = []
+                          var items: Owned[List[S64]] = []
                           return
                         """;
 
@@ -55,7 +55,7 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items: Set[S64] = {}
+                          var items: Owned[Set[S64]] = {}
                           return
                         """;
 
@@ -88,7 +88,7 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items: Dict[S64, Text] = {:}
+                          var items: Owned[Dict[S64, Owned[Text]]] = {:}
                           return
                         """;
 
@@ -152,7 +152,7 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items: Deque[S64] = [1, 2, 3]
+                          var items: Owned[Deque[S64]] = [1, 2, 3]
                           return
                         """;
 
@@ -168,7 +168,7 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items: SortedList[S64] = [3, 1, 2]
+                          var items: Owned[SortedList[S64]] = [3, 1, 2]
                           return
                         """;
 
@@ -184,7 +184,7 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items: SortedSet[S64] = {3, 1, 2}
+                          var items: Owned[SortedSet[S64]] = {3, 1, 2}
                           return
                         """;
 
@@ -200,7 +200,7 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items: SortedDict[S32, S32] = {3: 30, 1: 10, 2: 20}
+                          var items: Owned[SortedDict[S32, S32]] = {3: 30, 1: 10, 2: 20}
                           return
                         """;
 
@@ -216,7 +216,7 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items: PriorityQueue[S64, Text] = {1: "high", 10: "low"}
+                          var items: Owned[PriorityQueue[S64, Owned[Text]]] = {1: "high", 10: "low"}
                           return
                         """;
 
