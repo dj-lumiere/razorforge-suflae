@@ -1,4 +1,5 @@
 using Compiler.Desugaring;
+using Compiler.Instantiation;
 using Compiler.Synthesis;
 using SyntaxTree;
 using TypeModel.Symbols;
@@ -958,6 +959,31 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
             Statement lowered = LowerStatement(body);
             if (!ReferenceEquals(lowered, body))
                 ctx.VariantBodies[key] = lowered;
+        }
+    }
+
+    /// <summary>
+    /// Lowers operator expressions in instantiated generic routine bodies.
+    /// Phase 6's <c>GenericMonomorphizationPass</c> populates <c>InstantiatedGenericBodies</c>
+    /// AFTER the Phase 7 RunGlobal sweep has finished, so those bodies miss the regular
+    /// per-program operator-lowering pass. Without this method, `me.size = me.size + 1_u64`
+    /// inside a monomorphized routine reaches codegen as a bare <c>BinaryExpression(Add)</c>
+    /// and trips the "must be lowered to a wired call" guard.
+    /// Caller passes the map directly (PostprocessingContext doesn't hold it).
+    /// </summary>
+    public void RunOnInstantiatedGenericBodies(
+        Dictionary<string, MonomorphizedBody> instantiatedGenericBodies)
+    {
+        foreach (string key in instantiatedGenericBodies.Keys.ToList())
+        {
+            MonomorphizedBody entry = instantiatedGenericBodies[key];
+            if (entry.IsSynthesized) continue; // pure-synthesized: no AST to walk
+            Statement lowered = LowerStatement(entry.Ast.Body);
+            if (!ReferenceEquals(lowered, entry.Ast.Body))
+                instantiatedGenericBodies[key] = entry with
+                {
+                    Ast = entry.Ast with { Body = lowered }
+                };
         }
     }
 

@@ -41,6 +41,18 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
         new GenericMonomorphizationPass(ctx: adapter).RunGlobal();
         new GenericCallLoweringPass(ctx: adapter).RunOnInstantiatedGenericBodies();
         new BuilderServiceInliningPass(ctx: adapter).RunOnInstantiatedGenericBodies();
+        // Operator lowering for instantiated bodies: GMP's clones inherit unlowered
+        // BinaryExpression/UnaryExpression nodes from the generic-def AST (the Phase 7
+        // RunGlobal sweep finished before GMP populated the InstantiatedGenericBodies
+        // map). Without this, `me.size = me.size + 1_u64` in a monomorphized routine
+        // reaches codegen as a raw `BinaryExpression(Add)` and trips the codegen guard.
+        var postCtx = new Compiler.Postprocessing.PostprocessingContext(
+            registry: ctx.Registry,
+            variantBodies: ctx.VariantBodies,
+            target: ctx.Target,
+            buildMode: ctx.BuildMode);
+        new Compiler.Postprocessing.Passes.OperatorLoweringPass(ctx: postCtx)
+            .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
 
         ctx.VariantBodies.Clear();
         foreach ((string key, Statement body) in adapter.VariantBodies)

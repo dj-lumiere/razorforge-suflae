@@ -1,4 +1,5 @@
 using Compiler.Declaration;
+using Compiler.Synthesis;
 using SyntaxTree;
 using TypeModel.Enums;
 using TypeModel.Symbols;

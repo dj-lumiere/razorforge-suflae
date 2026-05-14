@@ -1,3 +1,5 @@
+using Compiler.Desugaring.Passes;
+using Compiler.Instantiation;
 using Compiler.Resolution;
 using SyntaxTree;
 using TypeModel.Symbols;

@@ -231,15 +231,26 @@ public partial class LlvmCodeGenerator
         if (type == null) return;
         if (!visited.Add(item: type.FullName)) return;
 
+        // Skip not-yet-concrete generic resolutions. A `ListNode[T]` resolution (where T is
+        // still `GenericParameterTypeInfo`) has IsGenericDefinition=false but its type
+        // arguments include an unbound parameter; emitting its layout would force `T`
+        // through GetLlvmType and crash. The same filter applies in GenerateTypeDeclarations
+        // for top-level emission — replicate it here so it also gates recursive descent
+        // into nested field types of monomorphized parents.
+        bool hasUnboundTypeArg =
+            type.TypeArguments is { Count: > 0 } args
+            && args.Any(predicate: ContainsGenericParameter);
+
         switch (type)
         {
-            case EntityTypeInfo { IsGenericDefinition: false } nestedEntity:
+            case EntityTypeInfo { IsGenericDefinition: false } nestedEntity
+                when !hasUnboundTypeArg:
                 GenerateEntityType(entity: nestedEntity);
                 break;
             case RecordTypeInfo
             {
                 IsGenericDefinition: false, HasDirectBackendType: false
-            } nestedRecord:
+            } nestedRecord when !hasUnboundTypeArg:
                 GenerateRecordType(record: nestedRecord);
                 break;
         }
