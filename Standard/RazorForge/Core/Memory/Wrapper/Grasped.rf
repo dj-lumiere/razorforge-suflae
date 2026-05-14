@@ -42,7 +42,7 @@ routine Grasped[T].$exit()
 routine Grasped[T].$represent() -> Text
   danger!
     var hijacked = Hijacked[T](me)
-    return hijacked.extract().$represent()
+    return hijacked.reveal().$represent()
 
 ### Returns the diagnostic form of the grasped entity.
 ### :returns: The resulting `Text` value.
@@ -50,4 +50,4 @@ routine Grasped[T].$represent() -> Text
 routine Grasped[T].$diagnose() -> Text
   danger!
     var hijacked = Hijacked[T](me)
-    return me.type_name() + "(" + hijacked.extract().$diagnose() + ")"
+    return me.type_name() + "(" + hijacked.reveal().$diagnose() + ")"

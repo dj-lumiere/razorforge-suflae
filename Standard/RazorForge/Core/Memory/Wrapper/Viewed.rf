@@ -42,7 +42,7 @@ routine Viewed[T].$exit()
 routine Viewed[T].$represent() -> Text
   danger!
     var hijacked = Hijacked[T](me)
-    return hijacked.extract().$represent()
+    return hijacked.reveal().$represent()
 
 ### Returns the diagnostic form of the viewed entity.
 ### :returns: The resulting `Text` value.
@@ -50,4 +50,4 @@ routine Viewed[T].$represent() -> Text
 routine Viewed[T].$diagnose() -> Text
   danger!
     var hijacked = Hijacked[T](me)
-    return me.type_name() + "(" + hijacked.extract().$diagnose() + ")"
+    return me.type_name() + "(" + hijacked.reveal().$diagnose() + ")"

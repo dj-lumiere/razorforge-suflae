@@ -354,16 +354,16 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 // ExpressionLoweringPass.LowerListLiteral).
                 string addMethod = baseName is "List" or "Deque" or "BitList" ? "add_last" : "add";
                 EnqueueMethodIfPresent(owner: collectionType, methodName: addMethod);
-                EnqueueMethodIfPresent(owner: collectionType, methodName: "$create");
+                EnqueueZeroArgCreateIfPresent(owner: collectionType);
                 break;
             }
             case SetLiteralExpression:
                 EnqueueMethodIfPresent(owner: collectionType, methodName: "add");
-                EnqueueMethodIfPresent(owner: collectionType, methodName: "$create");
+                EnqueueZeroArgCreateIfPresent(owner: collectionType);
                 break;
             case DictLiteralExpression:
                 EnqueueMethodIfPresent(owner: collectionType, methodName: "add");
-                EnqueueMethodIfPresent(owner: collectionType, methodName: "$create");
+                EnqueueZeroArgCreateIfPresent(owner: collectionType);
                 break;
             case IndexExpression:
                 // Both read ($getitem) and write ($setitem) — IndexExpression's role is determined
@@ -390,6 +390,47 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     {
         RoutineInfo? routine = ctx.Registry.LookupMethod(type: owner, methodName: methodName);
         if (routine != null) EnqueueCallee(callee: routine);
+    }
+
+    /// <summary>
+    /// Enqueue the zero-arg <c>$create()</c> overload specifically. Types with multiple
+    /// <c>$create</c> overloads (List, Set, Dict have 2-3 each) can have LookupMethod
+    /// pick the wrong one; the literal-lowering path always calls the no-arg form.
+    /// Also seeds the mangled-name fallback so codegen's mangled call can resolve.
+    /// </summary>
+    private void EnqueueZeroArgCreateIfPresent(TypeInfo owner)
+    {
+        // Prefer LookupMethod's substituted routine for generic owners. Only accept it when
+        // its arity matches (LookupMethod is first-match and may return $create(capacity)).
+        RoutineInfo? routine = ctx.Registry.LookupMethod(type: owner, methodName: "$create");
+        if (routine != null && routine.Parameters.Count == 0)
+        {
+            EnqueueCallee(callee: routine);
+            return;
+        }
+
+        // Find the no-arg overload on the generic def and substitute for the concrete owner so
+        // GMP can monomorphize correctly. Without SubstituteMethodForOwner the callee carries the
+        // generic-def's owner ({List[T]}) and EnqueueCallee can't build a {T → S64} sub map.
+        TypeInfo? genDef = owner switch
+        {
+            EntityTypeInfo { GenericDefinition: { } d } => d,
+            RecordTypeInfo { GenericDefinition: { } d } => d,
+            _ => null
+        };
+        if (genDef != null && !ReferenceEquals(objA: genDef, objB: owner))
+        {
+            foreach (RoutineInfo m in ctx.Registry.GetMethodsForType(type: genDef))
+            {
+                if (m.Name == "$create" && m.Parameters.Count == 0)
+                {
+                    RoutineInfo substituted = ctx.Registry.SubstituteMethodForOwner(
+                        method: m, resolvedOwner: owner);
+                    EnqueueCallee(callee: substituted);
+                    return;
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -683,6 +724,15 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                                 EnqueueThrowCrashMessage(throwStmt: throwStmt, typeSubs: subs);
                                 continue;
                             }
+                            // Collection literals in synthesized bodies (e.g. MakeListReturn for
+                            // BuilderService.protocols) need the same implicit add/$create seeding
+                            // as user-code literals; otherwise the literal's $create body never
+                            // gets monomorphized and codegen emits a call to an undefined symbol.
+                            if (node is ListLiteralExpression or SetLiteralExpression or DictLiteralExpression or IndexExpression or UsingStatement)
+                            {
+                                EnqueueImplicitLoweringCallees(node: node, typeSubs: subs);
+                                continue;
+                            }
                             RoutineInfo? resolved = node switch
                             {
                                 CallExpression ce => ce.ResolvedRoutine ?? ResolveNoArgConstructor(ce: ce) ?? ResolveCallStyleConstructor(ce: ce) ?? ResolveMemberCall(ce: ce),
@@ -827,8 +877,14 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             {
                 if (m.Name == "$create" && m.Parameters.Count == argCount)
                 {
-                    EnqueueCallee(callee: m);
-                    if (matched == null) matched = m;
+                    // Substitute generic params onto the concrete owner so GMP can monomorphize.
+                    // Without this, EnqueueCallee gets a routine with OwnerType = generic-def and
+                    // can't build a {T → concrete} substitution map — body never emitted.
+                    RoutineInfo substituted = ct.IsGenericResolution
+                        ? ctx.Registry.SubstituteMethodForOwner(method: m, resolvedOwner: ct)
+                        : m;
+                    EnqueueCallee(callee: substituted);
+                    if (matched == null) matched = substituted;
                     found = true;
                 }
             }

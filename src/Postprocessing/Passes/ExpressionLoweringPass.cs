@@ -1116,7 +1116,11 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             TypeName: baseName,
             TypeArguments: typeArgs,
             MemberVariables: [],
-            Location: loc) { ResolvedType = collectionType };
+            Location: loc)
+        {
+            ResolvedType = collectionType,
+            ConstructedType = collectionType,
+        };
     }
 
     private Statement MakeCollectionAddCall(Expression receiver, TypeInfo receiverType,

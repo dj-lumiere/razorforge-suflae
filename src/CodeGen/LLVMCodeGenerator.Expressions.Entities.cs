@@ -91,6 +91,15 @@ public partial class LlvmCodeGenerator
     private string EmitEntityConstruction(StringBuilder sb, EntityTypeInfo entity,
         CreatorExpression expr)
     {
+        // Empty creator (e.g. `Set[T]()` from collection-literal lowering) must route through
+        // the type's no-arg `$create()` overload — entities like Set/Dict allocate heap buffers
+        // (ctrl/slot arrays) inside $create that a raw rf_allocate_dynamic + zero-init would skip,
+        // leaving the entity in an invalid state that crashes on the first method call.
+        if (expr.MemberVariables.Count == 0)
+        {
+            return EmitCollectionCreate(sb: sb, resolvedType: entity, typeName: entity.Name);
+        }
+
         // Evaluate all member variable value expressions first
         var memberVariableValues = new List<string>();
         foreach ((string _, Expression fieldExpr) in expr.MemberVariables)
