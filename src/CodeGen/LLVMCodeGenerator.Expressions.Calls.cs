@@ -1104,6 +1104,19 @@ public partial class LlvmCodeGenerator
     private (string Receiver, TypeInfo? ReceiverType) ResolveMemberRoutineCallReceiver(StringBuilder sb,
         MemberExpression member)
     {
+        // Const-generic value receiver: `N.$represent()` where N is bound to a literal (e.g. 4
+        // for `Array[S64, 4]`). Without this check, the typewise-receiver branch below treats N
+        // as a type identifier and synthesizes a zero receiver — `Array.$diagnose` then prints
+        // `count: 0` instead of the actual N. Substitute the const value before falling through.
+        if (member.Object is IdentifierExpression constId
+            && !_localVariables.ContainsKey(key: constId.Name)
+            && _typeSubstitutions != null
+            && _typeSubstitutions.TryGetValue(key: constId.Name, value: out TypeInfo? subType)
+            && subType is ConstGenericValueTypeInfo constVal)
+        {
+            return (constVal.Value.ToString(), ResolveConstGenericUnderlyingType(constVal: constVal));
+        }
+
         if (member.Object is IdentifierExpression typeId &&
             !_localVariables.ContainsKey(key: typeId.Name))
         {
