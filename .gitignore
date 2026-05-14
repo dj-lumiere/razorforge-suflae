@@ -82,3 +82,4 @@ old
 /NuGet.Offline.Config
 /.dotnet-cli/.dotnet/
 /.sonarqube
+/benchmarks/
