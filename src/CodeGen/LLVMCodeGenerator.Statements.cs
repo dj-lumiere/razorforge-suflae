@@ -293,8 +293,20 @@ public partial class LlvmCodeGenerator
         else if (varDecl.Initializer != null)
             varType = GetExpressionType(expr: varDecl.Initializer);
 
-        if (varDecl.Initializer is CallExpression genericCallInit &&
-            (varType == null || GetLlvmType(type: varType) == "ptr"))
+        // Fall back to the call's explicit generic-return-type resolution only when the
+        // inferred varType is null or unresolved-generic. The earlier "ptr-typed" heuristic
+        // was too loose — for `var x = entity.retain()`, the initializer's ResolvedType is
+        // the fully-substituted `Retained[Entity[S64]]`, but the underlying routine's
+        // declared ReturnType is the universal-method-baked `Retained[Entity]` (with the
+        // inner type-arg lost). TryResolveExplicitGenericCallReturnType reads
+        // `routine.ReturnType` directly and would overwrite our correct varType with the
+        // bare form. Only re-resolve when the existing varType is missing or still has
+        // unresolved generic parameters.
+        bool varTypeIsUnresolved = varType is null
+            || varType is ErrorTypeInfo
+            || varType is GenericParameterTypeInfo
+            || ContainsGenericParameter(varType);
+        if (varDecl.Initializer is CallExpression genericCallInit && varTypeIsUnresolved)
         {
             TypeInfo? explicitGenericReturn =
                 TryResolveExplicitGenericCallReturnType(call: genericCallInit);
