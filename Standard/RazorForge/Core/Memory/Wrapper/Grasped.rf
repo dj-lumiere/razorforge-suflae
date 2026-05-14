@@ -12,7 +12,11 @@ record Grasped[T] obeys Controlling[T]
 
 ### Produces a temporary unmanaged mutable view of `me`.
 ### :returns: The resulting `Grasped[T]` value.
+### :note: Entity-only. Records are value-typed — `me` would be a by-value copy, so mutating
+###        through the returned `Grasped[T]` would write to a stack temporary rather than the
+###        caller's storage. Use `entity` for borrowed mutation.
 routine T.grasp() -> Grasped[T]
+needs T is EntityType
   danger!
     return Grasped[T](me.hijack())
 

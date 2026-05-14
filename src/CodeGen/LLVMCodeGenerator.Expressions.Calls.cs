@@ -483,6 +483,33 @@ public partial class LlvmCodeGenerator
             return EmitSynthesizedStringLiteral(value: varName);
         }
 
+        // Intercept `record.get_address()` -> emit `ptrtoint ptr %<receiver-lvalue> to i64`
+        // directly, using the caller's lvalue address rather than the body's broken
+        // struct->ptr bitcast (records' `me` is a by-value copy whose address lives in the
+        // callee's frame). Supported receiver forms:
+        //   - identifier x                  -> %x.addr
+        //   - member chain obj.field[.f...] -> GEP into the root lvalue, chained per field
+        // Entity receivers fall through to the regular call path — `me` for entities is
+        // already a ptr, so the stdlib body works. Index access (arr[i].get_address()) is
+        // deferred to post-v0.0.1a (requires per-collection `$getitem_addr`).
+        if (member.PropertyName == "get_address" && arguments.Count == 0)
+        {
+            TypeInfo? receiverTypeForIntercept = GetExpressionType(expr: member.Object);
+            // Intercept only for struct-typed records — records that ARE pointer-shaped
+            // (@llvm("ptr") records like CPtr, Hijacked[T], Viewed[T], Grasped[T]) have
+            // their own working bodies that return the wrapped pointer value, not the
+            // storage address of the wrapper itself.
+            if (receiverTypeForIntercept is RecordTypeInfo recordReceiver
+                && !recordReceiver.HasDirectBackendType)
+            {
+                string lvaluePtr = EmitLvalueAddress(sb: sb, expr: member.Object);
+                string addrTemp = NextTemp();
+                EmitLine(sb: sb,
+                    line: $"  {addrTemp} = ptrtoint ptr {lvaluePtr} to i64");
+                return addrTemp;
+            }
+        }
+
         (string receiver, TypeInfo? receiverType) = ResolveMemberRoutineCallReceiver(sb: sb,
             member: member);
 
@@ -1143,6 +1170,99 @@ public partial class LlvmCodeGenerator
         string emittedReceiver = EmitExpression(sb: sb, expr: member.Object);
         TypeInfo? receiverType = GetExpressionType(expr: member.Object);
         return (emittedReceiver, receiverType);
+    }
+
+    /// <summary>
+    /// Computes a pointer to the storage of an lvalue expression — used by the
+    /// `record.get_address()` intercept. Recurses through member-access chains; the root
+    /// must be a named local/parameter (its alloca name resolves to <c>%name.addr</c>).
+    /// Field walks emit one <c>getelementptr</c> per hop. Entity-rooted field chains use
+    /// the entity ptr (already a pointer) as the GEP base; record-rooted chains use the
+    /// root alloca's address.
+    /// </summary>
+    private string EmitLvalueAddress(StringBuilder sb, Expression expr)
+    {
+        switch (expr)
+        {
+            case IdentifierExpression id:
+            {
+                if (!_localVariables.ContainsKey(key: id.Name))
+                {
+                    throw new InvalidOperationException(
+                        message:
+                        $"Cannot take address of '{id.Name}' — not a local variable or " +
+                        $"parameter. Bind it to a `var` first.");
+                }
+                string llvmName =
+                    _localVarLlvmNames.TryGetValue(key: id.Name, value: out string? unique)
+                        ? unique
+                        : id.Name;
+                return $"%{llvmName}.addr";
+            }
+            case MemberExpression member:
+            {
+                TypeInfo? parentType = GetExpressionType(expr: member.Object);
+                if (parentType == null)
+                {
+                    throw new InvalidOperationException(
+                        message:
+                        $"Cannot determine type of parent expression for '.{member.PropertyName}' " +
+                        "in address-of chain.");
+                }
+
+                // For entity parents, the parent's *value* is already a ptr to the entity
+                // struct. For record parents, recurse to get the parent's storage address.
+                string basePtr;
+                IReadOnlyList<MemberVariableInfo>? memberVars;
+                string parentLlvmType;
+                switch (parentType)
+                {
+                    case EntityTypeInfo entityParent:
+                        basePtr = EmitExpression(sb: sb, expr: member.Object);
+                        memberVars = entityParent.MemberVariables;
+                        parentLlvmType = GetEntityTypeName(entity: entityParent);
+                        break;
+                    case RecordTypeInfo recordParent:
+                        basePtr = EmitLvalueAddress(sb: sb, expr: member.Object);
+                        memberVars = recordParent.MemberVariables;
+                        parentLlvmType = GetRecordTypeName(record: recordParent);
+                        break;
+                    default:
+                        throw new InvalidOperationException(
+                            message:
+                            $"Cannot take address of '.{member.PropertyName}' on a " +
+                            $"'{parentType.Name}' (only entity or record parents are supported).");
+                }
+
+                int fieldIndex = -1;
+                for (int i = 0; i < memberVars.Count; i++)
+                {
+                    if (memberVars[index: i].Name == member.PropertyName)
+                    {
+                        fieldIndex = i;
+                        break;
+                    }
+                }
+                if (fieldIndex < 0)
+                {
+                    throw new InvalidOperationException(
+                        message:
+                        $"Cannot take address of '.{member.PropertyName}' — no such field " +
+                        $"on '{parentType.Name}'.");
+                }
+
+                string fieldPtr = NextTemp();
+                EmitLine(sb: sb,
+                    line: $"  {fieldPtr} = getelementptr {parentLlvmType}, ptr {basePtr}, i32 0, i32 {fieldIndex}");
+                return fieldPtr;
+            }
+            default:
+                throw new InvalidOperationException(
+                    message:
+                    $"Cannot take address of expression form '{expr.GetType().Name}'. " +
+                    "Address-of is supported on named locals and field-access chains; " +
+                    "index access (`arr[i].get_address()`) is deferred to post-v0.0.1a.");
+        }
     }
 
     /// <summary>

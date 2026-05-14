@@ -6,7 +6,7 @@ module Numerics
 ### :see: {Decimal}, {Complex}, {Numeric-Types}
 entity Integer obeys Integral, Divisible, Negatable, Ordered
   ### Stores the native big-integer handle managed by the runtime.
-  secret handle: BigIntHandle
+  secret handle: CPtr
 
 # ============================================================================
 # Lifecycle Management

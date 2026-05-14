@@ -300,6 +300,35 @@ public partial class LlvmCodeGenerator
     /// LLVM rejects bitcast between integer and pointer types. The reinterpret_bits intrinsic
     /// template emits `bitcast {From} {value} to {To}`, which is invalid when one side is `ptr`
     /// and the other is `iN`. Rewrite those cases to use `inttoptr` / `ptrtoint`.
+    /// <summary>
+    /// Detects `%result = bitcast %Record.Foo %val to ptr` (struct -> ptr) which LLVM
+    /// rejects, and returns the parts needed to rewrite as `alloca + store` so the result
+    /// name aliases a fresh stack slot of the same kind (ptr). Returns null for any line
+    /// that isn't a struct -> ptr bitcast.
+    /// </summary>
+    private static (string StructType, string Value, string ResultName)?
+        TryDetectStructToPtrBitcast(string line)
+    {
+        int eqIdx = line.IndexOf(value: " = bitcast ", comparisonType: StringComparison.Ordinal);
+        if (eqIdx < 0) return null;
+        string resultName = line.Substring(startIndex: 0, length: eqIdx);
+        int valueStart = eqIdx + " = bitcast ".Length;
+        int toIdx = line.IndexOf(value: " to ", startIndex: valueStart,
+            comparisonType: StringComparison.Ordinal);
+        if (toIdx < 0) return null;
+        string operand = line.Substring(startIndex: valueStart, length: toIdx - valueStart);
+        // operand is "<Type> <Value>", split on first space.
+        int sep = operand.IndexOf(value: ' ');
+        if (sep < 0) return null;
+        string fromType = operand.Substring(startIndex: 0, length: sep);
+        string val = operand.Substring(startIndex: sep + 1);
+        string toType = line.Substring(startIndex: toIdx + 4).Trim();
+        if (toType != "ptr") return null;
+        // Struct types in our IR are named %"Record.X" or %"Entity.X" or anonymous %Record.X.
+        if (!fromType.StartsWith(value: '%')) return null;
+        return (fromType, val, resultName);
+    }
+
     private static string FixIntPtrBitcast(string line)
     {
         const string marker = "= bitcast ";
@@ -387,6 +416,31 @@ public partial class LlvmCodeGenerator
                 llvmTypeArgs: llvmTypeArgs);
 
             substituted = FixIntPtrBitcast(line: substituted);
+
+            // `bitcast %Record.Foo %val to ptr` is illegal in LLVM (struct -> ptr bitcasts
+            // are forbidden). Routines like the universal `T.get_address()` use
+            // `reinterpret_bits[T, Hijacked[T]](me)` and would emit this for record T.
+            // Real callers of `record.get_address()` are intercepted at the call site
+            // (see EmitMemberRoutineCall) so the body's address is never observed in
+            // practice — but the body still has to compile. Materialize the struct into a
+            // fresh alloca and use that pointer instead: same kind (ptr), valid IR, and
+            // the dead-code body has a well-defined (callee-local, immediately-dropped)
+            // address. Emits three IR lines instead of one for this specific case.
+            (string structType, string val, string resultName)? rewritten =
+                TryDetectStructToPtrBitcast(line: substituted);
+            if (rewritten.HasValue)
+            {
+                var (structType2, val2, resultName2) = rewritten.Value;
+                EmitLine(sb: sb, line: $"  {resultName2} = alloca {structType2}");
+                EmitLine(sb: sb, line: $"  store {structType2} {val2}, ptr {resultName2}");
+                if (hasResult)
+                {
+                    firstResult ??= currentResult;
+                    prevResult = currentResult;
+                    lastResult = currentResult;
+                }
+                continue;
+            }
 
             EmitLine(sb: sb, line: $"  {substituted}");
 

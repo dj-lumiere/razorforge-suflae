@@ -7,7 +7,7 @@ preset DECIMAL_DEFAULT_PRECISION: S32 = 50
 ### :see: {Integer}, {Complex}, {Numeric-Types}
 entity Decimal obeys Numeric, Ordered
   ### Stores the native decimal handle managed by the runtime.
-  secret handle: BigDecHandle
+  secret handle: CPtr
 
 # ============================================================================
 # Lifecycle Management

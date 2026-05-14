@@ -766,140 +766,140 @@ external("C") routine rf_console_ask_bytes(count: U64) -> Hijacked[Byte]
 # ============================================================================
 
 ### Allocates and initializes a new arbitrary-precision integer handle.
-### :returns: A live `BigIntHandle` ready for use with the bigint runtime.
-external("C") routine rf_bigint_new() -> BigIntHandle
+### :returns: A live `CPtr` ready for use with the bigint runtime.
+external("C") routine rf_bigint_new() -> CPtr
 ### Releases the storage owned by an arbitrary-precision integer handle.
 ### :param handle: The bigint handle to destroy.
-external("C") routine rf_bigint_clear(handle: BigIntHandle)
+external("C") routine rf_bigint_clear(handle: CPtr)
 ### Copies the value stored in `src` into `dest`.
 ### :param dest: The destination bigint handle.
 ### :param src: The source bigint handle.
-external("C") routine rf_bigint_copy(dest: BigIntHandle, src: BigIntHandle)
+external("C") routine rf_bigint_copy(dest: CPtr, src: CPtr)
 
 ### Replaces a bigint handle with the signed 64-bit value `value`.
 ### :param handle: The bigint handle to update.
 ### :param value: The signed integer value to assign.
-external("C") routine rf_bigint_set_i64(handle: BigIntHandle, value: S64)
+external("C") routine rf_bigint_set_i64(handle: CPtr, value: S64)
 ### Replaces a bigint handle with the unsigned 64-bit value `value`.
 ### :param handle: The bigint handle to update.
 ### :param value: The unsigned integer value to assign.
-external("C") routine rf_bigint_set_u64(handle: BigIntHandle, value: U64)
+external("C") routine rf_bigint_set_u64(handle: CPtr, value: U64)
 ### Parses `str` in the requested radix and stores the result in `handle`.
 ### :param handle: The bigint handle to update.
 ### :param str: The null-terminated integer text to parse.
 ### :param radix: The numeric base used to interpret the digits.
 ### :returns: A runtime status code indicating parse success or failure.
-external("C") routine rf_bigint_set_str(handle: BigIntHandle, str: CStr, radix: S32) -> S32
+external("C") routine rf_bigint_set_str(handle: CPtr, str: CStr, radix: S32) -> S32
 
 ### Converts a bigint handle to `S64`.
 ### :param handle: The bigint handle to read.
 ### :returns: The converted `S64` value.
-external("C") routine rf_bigint_get_i64(handle: BigIntHandle) -> S64
+external("C") routine rf_bigint_get_i64(handle: CPtr) -> S64
 ### Converts a bigint handle to `U64`.
 ### :param handle: The bigint handle to read.
 ### :returns: The converted `U64` value.
-external("C") routine rf_bigint_get_u64(handle: BigIntHandle) -> U64
+external("C") routine rf_bigint_get_u64(handle: CPtr) -> U64
 ### Formats a bigint handle as a null-terminated string in the requested radix.
 ### :param handle: The bigint handle to render.
 ### :param radix: The numeric base to use for formatting.
 ### :returns: A pointer to the formatted C string.
-external("C") routine rf_bigint_get_str(handle: BigIntHandle, radix: S32) -> CStr
+external("C") routine rf_bigint_get_str(handle: CPtr, radix: S32) -> CStr
 
 ### Stores the sum of `a` and `b` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The left-hand operand.
 ### :param b: The right-hand operand.
-external("C") routine rf_bigint_add(result: BigIntHandle, a: BigIntHandle, b: BigIntHandle)
+external("C") routine rf_bigint_add(result: CPtr, a: CPtr, b: CPtr)
 ### Stores the difference `a - b` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The left-hand operand.
 ### :param b: The right-hand operand.
-external("C") routine rf_bigint_sub(result: BigIntHandle, a: BigIntHandle, b: BigIntHandle)
+external("C") routine rf_bigint_sub(result: CPtr, a: CPtr, b: CPtr)
 ### Stores the product of `a` and `b` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The left-hand operand.
 ### :param b: The right-hand operand.
-external("C") routine rf_bigint_mul(result: BigIntHandle, a: BigIntHandle, b: BigIntHandle)
+external("C") routine rf_bigint_mul(result: CPtr, a: CPtr, b: CPtr)
 ### Divides `a` by `b` and writes both quotient and remainder.
 ### :param quotient: The destination handle for the quotient.
 ### :param remainder: The destination handle for the remainder.
 ### :param a: The dividend.
 ### :param b: The divisor.
-external("C") routine rf_bigint_div(quotient: BigIntHandle, remainder: BigIntHandle, a: BigIntHandle, b: BigIntHandle)
+external("C") routine rf_bigint_div(quotient: CPtr, remainder: CPtr, a: CPtr, b: CPtr)
 ### Stores the remainder of `a mod b` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The dividend.
 ### :param b: The divisor.
-external("C") routine rf_bigint_mod(result: BigIntHandle, a: BigIntHandle, b: BigIntHandle)
+external("C") routine rf_bigint_mod(result: CPtr, a: CPtr, b: CPtr)
 ### Stores the arithmetic negation of `a` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The source operand.
-external("C") routine rf_bigint_neg(result: BigIntHandle, a: BigIntHandle)
+external("C") routine rf_bigint_neg(result: CPtr, a: CPtr)
 
 ### Compares two bigint handles numerically.
 ### :param a: The left-hand operand.
 ### :param b: The right-hand operand.
 ### :returns: A negative, zero, or positive comparison result.
-external("C") routine rf_bigint_cmp(a: BigIntHandle, b: BigIntHandle) -> S32
+external("C") routine rf_bigint_cmp(a: CPtr, b: CPtr) -> S32
 
 ### Stores the bitwise AND of `a` and `b` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The left-hand operand.
 ### :param b: The right-hand operand.
-external("C") routine rf_bigint_and(result: BigIntHandle, a: BigIntHandle, b: BigIntHandle)
+external("C") routine rf_bigint_and(result: CPtr, a: CPtr, b: CPtr)
 ### Stores the bitwise OR of `a` and `b` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The left-hand operand.
 ### :param b: The right-hand operand.
-external("C") routine rf_bigint_or(result: BigIntHandle, a: BigIntHandle, b: BigIntHandle)
+external("C") routine rf_bigint_or(result: CPtr, a: CPtr, b: CPtr)
 ### Stores the bitwise XOR of `a` and `b` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The left-hand operand.
 ### :param b: The right-hand operand.
-external("C") routine rf_bigint_xor(result: BigIntHandle, a: BigIntHandle, b: BigIntHandle)
+external("C") routine rf_bigint_xor(result: CPtr, a: CPtr, b: CPtr)
 ### Stores `a` shifted left by `bits` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The source operand.
 ### :param bits: The shift amount in bits.
-external("C") routine rf_bigint_shl(result: BigIntHandle, a: BigIntHandle, bits: S32)
+external("C") routine rf_bigint_shl(result: CPtr, a: CPtr, bits: S32)
 ### Stores `a` shifted right by `bits` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The source operand.
 ### :param bits: The shift amount in bits.
-external("C") routine rf_bigint_shr(result: BigIntHandle, a: BigIntHandle, bits: S32)
+external("C") routine rf_bigint_shr(result: CPtr, a: CPtr, bits: S32)
 
 ### Stores the absolute value of `a` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The source operand.
-external("C") routine rf_bigint_abs(result: BigIntHandle, a: BigIntHandle)
+external("C") routine rf_bigint_abs(result: CPtr, a: CPtr)
 ### Raises `base` to the unsigned exponent `exp` and stores the result.
 ### :param result: The destination bigint handle.
 ### :param base: The base value.
 ### :param exp: The exponent value.
-external("C") routine rf_bigint_pow(result: BigIntHandle, base: BigIntHandle, exp: U32)
+external("C") routine rf_bigint_pow(result: CPtr, base: CPtr, exp: U32)
 ### Stores the integer square root of `a` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The source operand.
-external("C") routine rf_bigint_sqrt(result: BigIntHandle, a: BigIntHandle)
+external("C") routine rf_bigint_sqrt(result: CPtr, a: CPtr)
 ### Stores the greatest common divisor of `a` and `b` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The left-hand operand.
 ### :param b: The right-hand operand.
-external("C") routine rf_bigint_gcd(result: BigIntHandle, a: BigIntHandle, b: BigIntHandle)
+external("C") routine rf_bigint_gcd(result: CPtr, a: CPtr, b: CPtr)
 ### Stores the least common multiple of `a` and `b` into `result`.
 ### :param result: The destination bigint handle.
 ### :param a: The left-hand operand.
 ### :param b: The right-hand operand.
-external("C") routine rf_bigint_lcm(result: BigIntHandle, a: BigIntHandle, b: BigIntHandle)
+external("C") routine rf_bigint_lcm(result: CPtr, a: CPtr, b: CPtr)
 
 ### Returns whether the bigint handle currently stores zero.
 ### :param handle: The bigint handle to inspect.
 ### :returns: A non-zero runtime truth value when the number is zero.
-external("C") routine rf_bigint_is_zero(handle: BigIntHandle) -> S32
+external("C") routine rf_bigint_is_zero(handle: CPtr) -> S32
 ### Returns whether the bigint handle currently stores a negative value.
 ### :param handle: The bigint handle to inspect.
 ### :returns: A non-zero runtime truth value when the number is negative.
-external("C") routine rf_bigint_is_neg(handle: BigIntHandle) -> S32
+external("C") routine rf_bigint_is_neg(handle: CPtr) -> S32
 
 # ============================================================================
 # Decimal (Arbitrary Precision) - MAPM Library
@@ -907,189 +907,189 @@ external("C") routine rf_bigint_is_neg(handle: BigIntHandle) -> S32
 # ============================================================================
 
 ### Allocates and initializes a new arbitrary-precision decimal handle.
-### :returns: A live `BigDecHandle` ready for use with the big-decimal runtime.
-external("C") routine rf_bigdec_new() -> BigDecHandle
+### :returns: A live `CPtr` ready for use with the big-decimal runtime.
+external("C") routine rf_bigdec_new() -> CPtr
 ### Releases the storage owned by an arbitrary-precision decimal handle.
 ### :param handle: The decimal handle to destroy.
-external("C") routine rf_bigdec_free(handle: BigDecHandle)
+external("C") routine rf_bigdec_free(handle: CPtr)
 ### Creates a duplicate decimal handle with the same numeric value as `src`.
 ### :param src: The source decimal handle.
 ### :returns: A newly allocated copy of `src`.
-external("C") routine rf_bigdec_copy(src: BigDecHandle) -> BigDecHandle
+external("C") routine rf_bigdec_copy(src: CPtr) -> CPtr
 
 ### Replaces a decimal handle with the signed 64-bit value `value`.
 ### :param handle: The decimal handle to update.
 ### :param value: The signed integer value to assign.
-external("C") routine rf_bigdec_set_i64(handle: BigDecHandle, value: S64)
+external("C") routine rf_bigdec_set_i64(handle: CPtr, value: S64)
 ### Replaces a decimal handle with the binary floating-point value `value`.
 ### :param handle: The decimal handle to update.
 ### :param value: The `F64` value to assign.
-external("C") routine rf_bigdec_set_f64(handle: BigDecHandle, value: F64)
+external("C") routine rf_bigdec_set_f64(handle: CPtr, value: F64)
 ### Parses a decimal string and stores the result in `handle`.
 ### :param handle: The decimal handle to update.
 ### :param str: The null-terminated decimal text to parse.
-external("C") routine rf_bigdec_set_str(handle: BigDecHandle, str: CStr)
+external("C") routine rf_bigdec_set_str(handle: CPtr, str: CStr)
 
 ### Converts a decimal handle to `S64`.
 ### :param handle: The decimal handle to read.
 ### :returns: The converted `S64` value.
-external("C") routine rf_bigdec_get_i64(handle: BigDecHandle) -> S64
+external("C") routine rf_bigdec_get_i64(handle: CPtr) -> S64
 ### Converts a decimal handle to `F64`.
 ### :param handle: The decimal handle to read.
 ### :returns: The converted `F64` value.
-external("C") routine rf_bigdec_get_f64(handle: BigDecHandle) -> F64
+external("C") routine rf_bigdec_get_f64(handle: CPtr) -> F64
 ### Formats a decimal handle as a null-terminated string.
 ### :param handle: The decimal handle to render.
 ### :param decimal_places: The number of decimal places to include in the output.
 ### :returns: A pointer to the formatted C string.
-external("C") routine rf_bigdec_get_str(handle: BigDecHandle, decimal_places: S32) -> CStr
+external("C") routine rf_bigdec_get_str(handle: CPtr, decimal_places: S32) -> CStr
 
 ### Stores the sum of `a` and `b` into `result`.
 ### :param result: The destination decimal handle.
 ### :param a: The left-hand operand.
 ### :param b: The right-hand operand.
-external("C") routine rf_bigdec_add(result: BigDecHandle, a: BigDecHandle, b: BigDecHandle)
+external("C") routine rf_bigdec_add(result: CPtr, a: CPtr, b: CPtr)
 ### Stores the difference `a - b` into `result`.
 ### :param result: The destination decimal handle.
 ### :param a: The left-hand operand.
 ### :param b: The right-hand operand.
-external("C") routine rf_bigdec_sub(result: BigDecHandle, a: BigDecHandle, b: BigDecHandle)
+external("C") routine rf_bigdec_sub(result: CPtr, a: CPtr, b: CPtr)
 ### Stores the product of `a` and `b` into `result`.
 ### :param result: The destination decimal handle.
 ### :param a: The left-hand operand.
 ### :param b: The right-hand operand.
-external("C") routine rf_bigdec_mul(result: BigDecHandle, a: BigDecHandle, b: BigDecHandle)
+external("C") routine rf_bigdec_mul(result: CPtr, a: CPtr, b: CPtr)
 ### Divides `a` by `b` and stores the quotient at the requested decimal precision.
 ### :param result: The destination decimal handle.
 ### :param precision: The working precision used by the runtime.
 ### :param a: The dividend.
 ### :param b: The divisor.
-external("C") routine rf_bigdec_div(result: BigDecHandle, precision: S32, a: BigDecHandle, b: BigDecHandle)
+external("C") routine rf_bigdec_div(result: CPtr, precision: S32, a: CPtr, b: CPtr)
 ### Stores the arithmetic negation of `a` into `result`.
 ### :param result: The destination decimal handle.
 ### :param a: The source operand.
-external("C") routine rf_bigdec_neg(result: BigDecHandle, a: BigDecHandle)
+external("C") routine rf_bigdec_neg(result: CPtr, a: CPtr)
 
 ### Compares two arbitrary-precision decimal handles numerically.
 ### :param a: The left-hand operand.
 ### :param b: The right-hand operand.
 ### :returns: A negative, zero, or positive comparison result.
-external("C") routine rf_bigdec_cmp(a: BigDecHandle, b: BigDecHandle) -> S32
+external("C") routine rf_bigdec_cmp(a: CPtr, b: CPtr) -> S32
 
 ### Stores the absolute value of `a` into `result`.
 ### :param result: The destination decimal handle.
 ### :param a: The source operand.
-external("C") routine rf_bigdec_abs(result: BigDecHandle, a: BigDecHandle)
+external("C") routine rf_bigdec_abs(result: CPtr, a: CPtr)
 ### Stores the square root of `a` into `result` using the requested precision.
 ### :param result: The destination decimal handle.
 ### :param precision: The working precision used by the runtime.
 ### :param a: The source operand.
-external("C") routine rf_bigdec_sqrt(result: BigDecHandle, precision: S32, a: BigDecHandle)
+external("C") routine rf_bigdec_sqrt(result: CPtr, precision: S32, a: CPtr)
 ### Raises `base` to `exp` and stores the result with the requested precision.
 ### :param result: The destination decimal handle.
 ### :param precision: The working precision used by the runtime.
 ### :param base: The base value.
 ### :param exp: The exponent value.
-external("C") routine rf_bigdec_pow(result: BigDecHandle, precision: S32, base: BigDecHandle, exp: BigDecHandle)
+external("C") routine rf_bigdec_pow(result: CPtr, precision: S32, base: CPtr, exp: CPtr)
 ### Stores `e` raised to `a` into `result`.
 ### :param result: The destination decimal handle.
 ### :param precision: The working precision used by the runtime.
 ### :param a: The source operand.
-external("C") routine rf_bigdec_exp(result: BigDecHandle, precision: S32, a: BigDecHandle)
+external("C") routine rf_bigdec_exp(result: CPtr, precision: S32, a: CPtr)
 ### Stores the natural logarithm of `a` into `result`.
 ### :param result: The destination decimal handle.
 ### :param precision: The working precision used by the runtime.
 ### :param a: The source operand.
-external("C") routine rf_bigdec_log(result: BigDecHandle, precision: S32, a: BigDecHandle)
+external("C") routine rf_bigdec_log(result: CPtr, precision: S32, a: CPtr)
 ### Stores the base-10 logarithm of `a` into `result`.
 ### :param result: The destination decimal handle.
 ### :param precision: The working precision used by the runtime.
 ### :param a: The source operand.
-external("C") routine rf_bigdec_log10(result: BigDecHandle, precision: S32, a: BigDecHandle)
+external("C") routine rf_bigdec_log10(result: CPtr, precision: S32, a: CPtr)
 
 ### Stores the sine of `a` into `result`.
 ### :param result: The destination decimal handle.
 ### :param precision: The working precision used by the runtime.
 ### :param a: The source operand.
-external("C") routine rf_bigdec_sin(result: BigDecHandle, precision: S32, a: BigDecHandle)
+external("C") routine rf_bigdec_sin(result: CPtr, precision: S32, a: CPtr)
 ### Stores the cosine of `a` into `result`.
 ### :param result: The destination decimal handle.
 ### :param precision: The working precision used by the runtime.
 ### :param a: The source operand.
-external("C") routine rf_bigdec_cos(result: BigDecHandle, precision: S32, a: BigDecHandle)
+external("C") routine rf_bigdec_cos(result: CPtr, precision: S32, a: CPtr)
 ### Stores the tangent of `a` into `result`.
 ### :param result: The destination decimal handle.
 ### :param precision: The working precision used by the runtime.
 ### :param a: The source operand.
-external("C") routine rf_bigdec_tan(result: BigDecHandle, precision: S32, a: BigDecHandle)
+external("C") routine rf_bigdec_tan(result: CPtr, precision: S32, a: CPtr)
 ### Stores the inverse sine of `a` into `result`.
 ### :param result: The destination decimal handle.
 ### :param precision: The working precision used by the runtime.
 ### :param a: The source operand.
-external("C") routine rf_bigdec_asin(result: BigDecHandle, precision: S32, a: BigDecHandle)
+external("C") routine rf_bigdec_asin(result: CPtr, precision: S32, a: CPtr)
 ### Stores the inverse cosine of `a` into `result`.
 ### :param result: The destination decimal handle.
 ### :param precision: The working precision used by the runtime.
 ### :param a: The source operand.
-external("C") routine rf_bigdec_acos(result: BigDecHandle, precision: S32, a: BigDecHandle)
+external("C") routine rf_bigdec_acos(result: CPtr, precision: S32, a: CPtr)
 ### Stores the inverse tangent of `a` into `result`.
 ### :param result: The destination decimal handle.
 ### :param precision: The working precision used by the runtime.
 ### :param a: The source operand.
-external("C") routine rf_bigdec_atan(result: BigDecHandle, precision: S32, a: BigDecHandle)
+external("C") routine rf_bigdec_atan(result: CPtr, precision: S32, a: CPtr)
 
 ### Stores the hyperbolic sine of `a` into `result`.
 ### :param result: The destination decimal handle.
 ### :param precision: The working precision used by the runtime.
 ### :param a: The source operand.
-external("C") routine rf_bigdec_sinh(result: BigDecHandle, precision: S32, a: BigDecHandle)
+external("C") routine rf_bigdec_sinh(result: CPtr, precision: S32, a: CPtr)
 ### Stores the hyperbolic cosine of `a` into `result`.
 ### :param result: The destination decimal handle.
 ### :param precision: The working precision used by the runtime.
 ### :param a: The source operand.
-external("C") routine rf_bigdec_cosh(result: BigDecHandle, precision: S32, a: BigDecHandle)
+external("C") routine rf_bigdec_cosh(result: CPtr, precision: S32, a: CPtr)
 ### Stores the hyperbolic tangent of `a` into `result`.
 ### :param result: The destination decimal handle.
 ### :param precision: The working precision used by the runtime.
 ### :param a: The source operand.
-external("C") routine rf_bigdec_tanh(result: BigDecHandle, precision: S32, a: BigDecHandle)
+external("C") routine rf_bigdec_tanh(result: CPtr, precision: S32, a: CPtr)
 
 ### Stores the ceiling of `a` into `result`.
 ### :param result: The destination decimal handle.
 ### :param a: The source operand.
-external("C") routine rf_bigdec_ceil(result: BigDecHandle, a: BigDecHandle)
+external("C") routine rf_bigdec_ceil(result: CPtr, a: CPtr)
 ### Stores the floor of `a` into `result`.
 ### :param result: The destination decimal handle.
 ### :param a: The source operand.
-external("C") routine rf_bigdec_floor(result: BigDecHandle, a: BigDecHandle)
+external("C") routine rf_bigdec_floor(result: CPtr, a: CPtr)
 ### Rounds `a` to the requested number of decimal places and stores the result.
 ### :param result: The destination decimal handle.
 ### :param decimal_places: The number of decimal places to preserve.
 ### :param a: The source operand.
-external("C") routine rf_bigdec_round(result: BigDecHandle, decimal_places: S32, a: BigDecHandle)
+external("C") routine rf_bigdec_round(result: CPtr, decimal_places: S32, a: CPtr)
 ### Truncates `a` to the requested number of decimal places and stores the result.
 ### :param result: The destination decimal handle.
 ### :param decimal_places: The number of decimal places to preserve.
 ### :param a: The source operand.
-external("C") routine rf_bigdec_trunc(result: BigDecHandle, decimal_places: S32, a: BigDecHandle)
+external("C") routine rf_bigdec_trunc(result: CPtr, decimal_places: S32, a: CPtr)
 
 ### Returns whether the decimal handle currently stores zero.
 ### :param handle: The decimal handle to inspect.
 ### :returns: A non-zero runtime truth value when the number is zero.
-external("C") routine rf_bigdec_is_zero(handle: BigDecHandle) -> S32
+external("C") routine rf_bigdec_is_zero(handle: CPtr) -> S32
 ### Returns whether the decimal handle currently stores a negative value.
 ### :param handle: The decimal handle to inspect.
 ### :returns: A non-zero runtime truth value when the number is negative.
-external("C") routine rf_bigdec_is_neg(handle: BigDecHandle) -> S32
+external("C") routine rf_bigdec_is_neg(handle: CPtr) -> S32
 
 ### Stores the mathematical constant pi at the requested precision.
 ### :param result: The destination decimal handle.
 ### :param precision: The working precision used by the runtime.
-external("C") routine rf_bigdec_pi(result: BigDecHandle, precision: S32)
+external("C") routine rf_bigdec_pi(result: CPtr, precision: S32)
 ### Stores the mathematical constant e at the requested precision.
 ### :param result: The destination decimal handle.
 ### :param precision: The working precision used by the runtime.
-external("C") routine rf_bigdec_e(result: BigDecHandle, precision: S32)
+external("C") routine rf_bigdec_e(result: CPtr, precision: S32)
 
 # ============================================================================
 # Text Parsing (CStr -> primitive values)

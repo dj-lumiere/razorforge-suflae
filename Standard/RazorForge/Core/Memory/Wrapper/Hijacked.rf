@@ -19,6 +19,10 @@ dangerous routine Hijacked[T].get_address() -> Address
 
 ### Returns the raw address of a bare value when it is reinterpreted as a pointer slot.
 ### :returns: The address of this value viewed as a pointer-sized slot.
+### :note: For records, the receiver must be an lvalue (a named binding or field path) — the
+###        compiler intercepts the call at the call site and emits the address of the caller's
+###        storage directly. Calling on an rvalue (`make_rec().get_address()`) is a build
+###        error. For entities, the receiver value (already a ptr) is reinterpreted.
 @readonly
 dangerous routine T.get_address() -> Address
   return pointer_to_int[T, Address](reinterpret_bits[T, Hijacked[T]](me))
@@ -31,6 +35,12 @@ dangerous routine Hijacked[T].$create(from: Address) -> Hijacked[T]
 
 ### Produces an unmanaged pointer alias of `me`.
 ### :returns: An unmanaged pointer alias of this value.
+### :note: For entities and `@llvm("ptr")` records (`Retained[T]`, `Tracked[T]`, `CPtr`, etc.)
+###        the receiver's value is already a pointer and the body works as written. For
+###        struct-shaped records, `me.get_address()` is intercepted at the call site to use
+###        the caller's lvalue storage (see `T.get_address()`); the receiver must therefore
+###        be a named lvalue (local/parameter or field chain), and `hijack()` produces a
+###        pointer to the caller's storage.
 @readonly
 dangerous routine T.hijack() -> Hijacked[T]
   return Hijacked[T](me.get_address())
