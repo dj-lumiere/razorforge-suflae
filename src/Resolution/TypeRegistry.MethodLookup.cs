@@ -1038,8 +1038,15 @@ public sealed partial class TypeRegistry
 
     private RoutineInfo CacheResolvedOwnerMethod(RoutineInfo resolvedMethod)
     {
+        // A universal method substituted onto a generic-def owner (e.g. `Node.retain()`) produces
+        // the same RegistryKey as one substituted onto a concrete instantiation (`Node[T_param].retain()`)
+        // because GetTypeIdentity collapses both to "Module.Name[Param]". Caching the first form
+        // would then return wrongly-substituted return types (Retained[Node] instead of
+        // Retained[Node[T_param]]) for subsequent lookups on the resolution. Only honor the cache
+        // when the owner type is referentially the same.
         if (_routineResolutions.TryGetValue(key: resolvedMethod.RegistryKey,
-                value: out RoutineInfo? cached))
+                value: out RoutineInfo? cached)
+            && ReferenceEquals(objA: cached.OwnerType, objB: resolvedMethod.OwnerType))
         {
             return cached;
         }
@@ -1129,8 +1136,18 @@ public sealed partial class TypeRegistry
             return true;
         }
 
-        if (target is ProtocolTypeInfo)
+        if (target is ProtocolTypeInfo targetProto)
         {
+            // For generic-protocol targets (e.g. Referring[Bytes]), require the type-argument
+            // to match the source. Without this check, ANY type matches ANY generic protocol —
+            // CStr.$create(Referring[Bytes]) "accepts" a Text arg, beating
+            // CStr.$create(Referring[Text]) by source order and producing garbled output
+            // when SA emits a call to the wrong overload.
+            if (targetProto.TypeArguments is { Count: 1 } pTypeArgs)
+            {
+                return pTypeArgs[0].Name == source.Name
+                    || pTypeArgs[0].FullName == source.FullName;
+            }
             return true;
         }
 

@@ -447,7 +447,17 @@ public partial class LlvmCodeGenerator
         if (resolvedRoutine.Parameters.Count == 0) return true;
         TypeInfo? paramType = resolvedRoutine.Parameters[index: 0].Type;
         if (paramType == null) return false;
-        return paramType.FullName != argType.FullName;
+        if (paramType.FullName == argType.FullName) return false;
+        // Referring[X] (protocol) / Possessed[X] / ... reference wrappers accept X as the
+        // underlying value. The routine body does a real conversion (e.g.
+        // CStr.$create(from: Referring[Text]) UTF-8-encodes a Text entity); inlining the
+        // construction as a pointer reinterpret would skip that and pass the entity bytes
+        // straight to rf_console_show — garbling. Check both wrapper and protocol shapes
+        // since Referring[T] is a `protocol Referring[T]` (ProtocolTypeInfo), not a record.
+        if (paramType.TypeArguments is { Count: 1 } pTypeArgs
+            && pTypeArgs[0].FullName == argType.FullName)
+            return false;
+        return true;
     }
 
     /// <summary>

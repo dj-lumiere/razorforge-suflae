@@ -127,7 +127,7 @@ public partial class LlvmCodeGenerator
             EmitCollectionCreate(sb: sb, resolvedType: resolvedType, typeName: typeName);
 
         string addMemberRoutineName;
-        bool isMapType = baseName is "Dict" or "SortedDict";
+        bool isMapType = baseName is "Dict" or "SortedDict" or "SecureDict";
         bool isSequenceType = baseName is "List" or "Deque" or "BitList";
         addMemberRoutineName = isSequenceType ? "add_last" : "add";
 
@@ -174,7 +174,7 @@ public partial class LlvmCodeGenerator
 
                 if (!_generatedRoutines.Contains(item: mangledAdd))
                 {
-                    string retType = baseName is "Set" or "SortedSet" ? "i1" : "void";
+                    string retType = baseName is "Set" or "SortedSet" or "SecureSet" ? "i1" : "void";
                     _rfRoutineDeclarations[key: mangledAdd] =
                         $"declare {retType} @{mangledAdd}(ptr, {elemLlvm})";
                     _generatedRoutines.Add(item: mangledAdd);

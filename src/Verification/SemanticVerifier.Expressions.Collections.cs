@@ -183,7 +183,7 @@ public sealed partial class SemanticVerifier
             ? GetTypeBaseName(type: collectionExpectedType)
             : null;
         if (collectionExpectedType is { IsGenericResolution: true, TypeArguments.Count: 1 } &&
-            expectedBaseName is "Set" or "SortedSet")
+            expectedBaseName is "Set" or "SortedSet" or "SecureSet")
         {
             expectedElementType = collectionExpectedType.TypeArguments![index: 0];
         }
@@ -219,7 +219,7 @@ public sealed partial class SemanticVerifier
             AnalyzeExpression(expression: elem, expectedType: expectedElementType ?? elementType);
         }
 
-        if (expectedType != null && expectedBaseName is "Set" or "SortedSet")
+        if (expectedType != null && expectedBaseName is "Set" or "SortedSet" or "SecureSet")
         {
             return expectedType;
         }
@@ -249,7 +249,7 @@ public sealed partial class SemanticVerifier
             ? GetTypeBaseName(type: collectionExpectedType)
             : null;
         if (collectionExpectedType is { IsGenericResolution: true, TypeArguments.Count: 2 } &&
-            expectedBaseName is "Dict" or "SortedDict" or "PriorityQueue")
+            expectedBaseName is "Dict" or "SortedDict" or "PriorityQueue" or "SecureDict")
         {
             expectedKeyType = collectionExpectedType.TypeArguments![index: 0];
             expectedValueType = collectionExpectedType.TypeArguments![index: 1];
@@ -295,7 +295,7 @@ public sealed partial class SemanticVerifier
         }
 
         if (expectedType != null &&
-            expectedBaseName is "Dict" or "SortedDict" or "PriorityQueue")
+            expectedBaseName is "Dict" or "SortedDict" or "PriorityQueue" or "SecureDict")
         {
             return expectedType;
         }
