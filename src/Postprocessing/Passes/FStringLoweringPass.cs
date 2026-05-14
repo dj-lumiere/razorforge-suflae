@@ -1,3 +1,4 @@
+using Compiler.Instantiation;
 using Compiler.Lexer;
 using SyntaxTree;
 using TypeModel.Types;
@@ -62,6 +63,30 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
             Statement lowered = LowerStatement(body);
             if (!ReferenceEquals(lowered, body))
                 ctx.VariantBodies[key] = lowered;
+        }
+    }
+
+    /// <summary>
+    /// Lowers f-strings in instantiated generic routine bodies. Phase 6's
+    /// <c>GenericMonomorphizationPass</c> populates <c>InstantiatedGenericBodies</c> AFTER
+    /// the Phase 7 RunGlobal sweep has finished, so monomorphized $represent/$diagnose bodies
+    /// keep their raw <see cref="InsertedTextExpression"/> nodes and trip the codegen guard
+    /// ("Expression type not implemented: InsertedTextExpression"). Mirrors
+    /// <c>OperatorLoweringPass.RunOnInstantiatedGenericBodies</c>.
+    /// </summary>
+    public void RunOnInstantiatedGenericBodies(
+        Dictionary<string, MonomorphizedBody> instantiatedGenericBodies)
+    {
+        foreach (string key in instantiatedGenericBodies.Keys.ToList())
+        {
+            MonomorphizedBody entry = instantiatedGenericBodies[key];
+            if (entry.IsSynthesized) continue;
+            Statement lowered = LowerStatement(entry.Ast.Body);
+            if (!ReferenceEquals(lowered, entry.Ast.Body))
+                instantiatedGenericBodies[key] = entry with
+                {
+                    Ast = entry.Ast with { Body = lowered }
+                };
         }
     }
 

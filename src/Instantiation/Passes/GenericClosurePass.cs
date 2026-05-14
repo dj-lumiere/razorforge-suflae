@@ -51,6 +51,11 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
             variantBodies: ctx.VariantBodies,
             target: ctx.Target,
             buildMode: ctx.BuildMode);
+        // FStringLoweringPass runs BEFORE OperatorLoweringPass (per the per-file pipeline order);
+        // monomorphized $represent/$diagnose bodies need f-strings lowered to $represent/$diagnose
+        // method calls + Text.$add before operator lowering can fold the `+` chain.
+        new Compiler.Postprocessing.Passes.FStringLoweringPass(ctx: postCtx)
+            .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
         new Compiler.Postprocessing.Passes.OperatorLoweringPass(ctx: postCtx)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
 
