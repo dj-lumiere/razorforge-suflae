@@ -996,10 +996,14 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     /// </summary>
     private (List<Statement> Hoisted, Expression Expr) LowerSetLiteral(SetLiteralExpression set)
     {
-        TypeInfo? setType = set.ResolvedType;
+        TypeInfo? resolvedType = set.ResolvedType;
         SourceLocation loc = set.Location;
-        if (setType == null) return ([], set);
+        if (resolvedType == null) return ([], set);
 
+        // Unwrap Owned/Retained/Tracked so the temp var holds the inner collection (Set/SortedSet/
+        // SecureSet/...) instead of the wrapper. Without this, MakeCollectionAddCall resolves
+        // `.add` against Owned[…] (which has no add) and codegen throws "no resolved method".
+        TypeInfo setType = UnwrapOwnershipWrapper(resolvedType) ?? resolvedType;
         string baseName = GetCollectionBaseName(setType) ?? "Set";
         string tempName = NextTempName("lit");
         var hoisted = new List<Statement>();
@@ -1014,7 +1018,10 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             hoisted.Add(MakeCollectionAddCall(colRef, setType, "add", [lowered], loc));
         }
 
-        return (hoisted, colRef);
+        Expression result = !ReferenceEquals(resolvedType, setType)
+            ? new IdentifierExpression(Name: tempName, Location: loc) { ResolvedType = resolvedType }
+            : colRef;
+        return (hoisted, result);
     }
 
     /// <summary>
@@ -1023,10 +1030,12 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     /// </summary>
     private (List<Statement> Hoisted, Expression Expr) LowerDictLiteral(DictLiteralExpression dict)
     {
-        TypeInfo? dictType = dict.ResolvedType;
+        TypeInfo? resolvedType = dict.ResolvedType;
         SourceLocation loc = dict.Location;
-        if (dictType == null) return ([], dict);
+        if (resolvedType == null) return ([], dict);
 
+        // Unwrap Owned/Retained/Tracked — see LowerSetLiteral for the rationale.
+        TypeInfo dictType = UnwrapOwnershipWrapper(resolvedType) ?? resolvedType;
         string baseName = GetCollectionBaseName(dictType) ?? "Dict";
         string tempName = NextTempName("lit");
         var hoisted = new List<Statement>();
@@ -1050,7 +1059,10 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             hoisted.Add(MakeCollectionAddCall(colRef, dictType, "add", args, loc));
         }
 
-        return (hoisted, colRef);
+        Expression result = !ReferenceEquals(resolvedType, dictType)
+            ? new IdentifierExpression(Name: tempName, Location: loc) { ResolvedType = resolvedType }
+            : colRef;
+        return (hoisted, result);
     }
 
     /// <summary>
@@ -1091,6 +1103,17 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     {
         if (type is WrapperTypeInfo { Name: "Owned" or "Retained" or "Tracked" } w)
             return w.InnerType;
+        // Owned[T] / Retained[T] / Tracked[T] are declared as `record Owned[T]` in stdlib, so
+        // they surface as RecordTypeInfo, not WrapperTypeInfo. Match by base name + single
+        // TypeArgument and return the inner collection so downstream lowering sees the actual
+        // base (BitList, SortedSet, …) instead of the Owned envelope.
+        if (type is RecordTypeInfo rec
+            && rec.TypeArguments is { Count: 1 } recArgs
+            && (rec.GenericDefinition?.Name is "Owned" or "Retained" or "Tracked"
+                || GetCollectionBaseName(rec) is "Owned" or "Retained" or "Tracked"))
+        {
+            return recArgs[0];
+        }
         return null;
     }
 

@@ -551,9 +551,11 @@ public sealed partial class SemanticVerifier
                 varType = _registry.GetOrCreateWrapperType(wrapperName: "Owned",
                     innerType: varType,
                     isReadOnly: false);
-                // Keep the literal's ResolvedType aligned with the binding's varType so downstream
-                // codegen and tests asserting `initializer.ResolvedType` see the Owned wrapper too
-                // (otherwise the literal alone reports the bare inner entity).
+                // Mirror the wrap onto the literal's ResolvedType so the literal itself describes
+                // the Owned-wrapped type at the binding site. Downstream lowering (LowerListLiteral
+                // / LowerSetLiteral / LowerDictLiteral) calls UnwrapOwnershipWrapper to recover the
+                // bare collection type for `.add` / `.add_last` resolution, so this doesn't break
+                // codegen.
                 varDecl.Initializer.ResolvedType = varType;
             }
         }
