@@ -150,8 +150,17 @@ internal static class GenericAstRewriter
                         _ => null
                     };
                     if (genericBase != null)
+                    {
+                        // Prefer cached resolution if already created — else CREATE one via
+                        // GetOrCreateResolution so nested-generic args (e.g. Retained[ListNode[T]]
+                        // with T → S64 producing Retained[ListNode[S64]]) actually get registered.
+                        // TryGetResolution alone falls back to `original` if the registry hasn't
+                        // seen the combination, leaving the inner type-arg substitution lost.
                         return Registry.TryGetResolution(genericDef: genericBase,
-                            typeArguments: newArgs) ?? original;
+                                   typeArguments: newArgs)
+                            ?? Registry.GetOrCreateResolution(genericDef: genericBase,
+                                   typeArguments: newArgs);
+                    }
                 }
             }
 

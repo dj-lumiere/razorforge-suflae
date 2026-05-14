@@ -23,10 +23,17 @@ public partial class LlvmCodeGenerator
         string subject = EmitExpression(sb: sb, expr: whenStmt.Expression);
         TypeInfo? subjectType = GetExpressionType(expr: whenStmt.Expression);
 
-        // Variant types are struct values; GEP needs a pointer -> spill to a temp alloca.
-        if (subjectType is VariantTypeInfo)
+        // Variant types and carrier records (Maybe/Result/Lookup) are struct values
+        // (`%Record.Maybe[...] = type { i1, ptr }` etc.); GEP needs a pointer base.
+        // Spill the loaded struct value into a temp alloca so the pattern-match code
+        // (EmitPatternMatch / EmitCarrierElsePatternExtract / EmitLoadVariantOrCarrierTag)
+        // can `getelementptr` field 0 / field 1 against a real ptr.
+        bool needsSpill = subjectType is VariantTypeInfo
+            || (subjectType is RecordTypeInfo carrierRec
+                && GetCarrierBaseName(type: carrierRec) is "Maybe" or "Result" or "Lookup");
+        if (needsSpill)
         {
-            string llvmType = GetLlvmType(type: subjectType);
+            string llvmType = GetLlvmType(type: subjectType!);
             string spillAddr = NextTemp();
             EmitLine(sb: sb, line: $"  {spillAddr} = alloca {llvmType}");
             EmitLine(sb: sb, line: $"  store {llvmType} {subject}, ptr {spillAddr}");
