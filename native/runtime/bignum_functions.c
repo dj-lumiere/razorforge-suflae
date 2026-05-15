@@ -412,226 +412,84 @@ int rf_bigint_lcm(rf_bigint* result, rf_bigint* a, rf_bigint* b)
 #endif // HAVE_LIBTOMMATH
 
 // ============================================================================
-// MAPM wrappers for arbitrary precision decimals
+// rf_bigdec_* — arbitrary-precision decimal, decNumber-backed.
+//
+// Each rf_bigdecimal is a heap-allocated `decNumber` with capacity for
+// DECNUMDIGITS digits (set below). Operations route through decNumber's
+// arbitrary-precision API with a thread-shared default context.
+//
+// Coverage today: lifecycle + set/get + comparison + arithmetic + sqrt + pow
+// + exp + log/log10 + rounding. Trigonometric / hyperbolic / pi / e are
+// NOT included — decNumber doesn't provide them and MPFR's LGPL dynamic-
+// linking requirement is incompatible with shipping a single self-contained
+// razorforge_runtime. Hand-rolled Taylor series on top of decNumber is the
+// natural path when Suflae actually needs them.
 // ============================================================================
 
-#ifdef HAVE_MAPM
-#include <m_apm.h>
+// IMPORTANT: this file uses a much higher DECNUMDIGITS than decimal_functions.c
+// (which uses 34 for D32/D64/D128). Don't pass `decNumber*` between the two
+// translation units — the struct shape differs.
+#undef DECNUMDIGITS
+#define DECNUMDIGITS 1000
 
-rf_bigdecimal rf_bigdec_new(void)
-{
-    return m_apm_init();
-}
+#ifdef HAVE_DECNUMBER
+#include <decNumber.h>
+#include <decContext.h>
 
-void rf_bigdec_free(rf_bigdecimal a)
-{
-    m_apm_free((M_APM)a);
-}
+#include <stdio.h>
 
-rf_bigdecimal rf_bigdec_copy(rf_bigdecimal a)
+static decContext* get_bigdec_ctx(void)
 {
-    M_APM result = m_apm_init();
-    m_apm_copy(result, (M_APM)a);
-    return result;
-}
-
-void rf_bigdec_set_i64(rf_bigdecimal a, int64_t val)
-{
-    char buf[32];
-    snprintf(buf, sizeof(buf), "%lld", (long long)val);
-    m_apm_set_string((M_APM)a, buf);
-}
-
-void rf_bigdec_set_f64(rf_bigdecimal a, double val)
-{
-    m_apm_set_double((M_APM)a, val);
-}
-
-void rf_bigdec_set_str(rf_bigdecimal a, const char* str)
-{
-    m_apm_set_string((M_APM)a, (char*)str);
-}
-
-int64_t rf_bigdec_get_i64(rf_bigdecimal a)
-{
-    char* str = rf_bigdec_get_str(a, 0);
-    int64_t result = strtoll(str, NULL, 10);
-    free(str);
-    return result;
-}
-
-double rf_bigdec_get_f64(rf_bigdecimal a)
-{
-    char buf[64];
-    m_apm_to_string(buf, 15, (M_APM)a);
-    return atof(buf);
-}
-
-char* rf_bigdec_get_str(rf_bigdecimal a, int decimal_places)
-{
-    int places = decimal_places > 0 ? decimal_places : m_apm_significant_digits((M_APM)a);
-    char* str = (char*)malloc(places + 32);
-    if (str)
+    static decContext ctx;
+    static int inited = 0;
+    if (!inited)
     {
-        m_apm_to_string(str, places, (M_APM)a);
+        // DEC_INIT_DECIMAL128 starts with extended=1 + clamp=1, which is
+        // required by decNumberLog/Log10/Exp/Power/SquareRoot/ToIntegralValue
+        // (advanced math is gated on extended mode). DEC_INIT_BASE leaves
+        // extended=0 and these functions silently no-op.
+        decContextDefault(&ctx, DEC_INIT_DECIMAL128);
+        ctx.digits = DECNUMDIGITS;
+        // emax/emin must stay ≤ DEC_MAX_MATH (999999) — exceeding it makes
+        // decNumberLog/Log10/Exp/Power/ToIntegralValue return NaN via
+        // decCheckMath's DEC_Invalid_context flag. 999999 is the hard cap.
+        ctx.emax = 999999;
+        ctx.emin = -999999;
+        ctx.round = DEC_ROUND_HALF_EVEN;
+        ctx.traps = 0;
+        ctx.clamp = 0;
+        inited = 1;
     }
-    return str;
+    return &ctx;
 }
 
-void rf_bigdec_add(rf_bigdecimal result, rf_bigdecimal a, rf_bigdecimal b)
+// -- precision control --------------------------------------------------------
+
+// Updates the global working precision (digits) used by all rf_bigdec_* ops
+// that don't take an explicit `precision` parameter. Clamped to [1, DECNUMDIGITS]
+// and to DEC_MAX_MATH (decNumber's hard cap for math functions).
+void rf_bigdec_set_precision(int digits)
 {
-    m_apm_add((M_APM)result, (M_APM)a, (M_APM)b);
+    decContext* ctx = get_bigdec_ctx();
+    if (digits < 1) digits = 1;
+    if (digits > DECNUMDIGITS) digits = DECNUMDIGITS;
+    if (digits > 999999) digits = 999999;  // DEC_MAX_MATH cap
+    ctx->digits = digits;
 }
 
-void rf_bigdec_sub(rf_bigdecimal result, rf_bigdecimal a, rf_bigdecimal b)
+// Reads the current global working precision.
+int rf_bigdec_get_precision(void)
 {
-    m_apm_subtract((M_APM)result, (M_APM)a, (M_APM)b);
+    return get_bigdec_ctx()->digits;
 }
 
-void rf_bigdec_mul(rf_bigdecimal result, rf_bigdecimal a, rf_bigdecimal b)
-{
-    m_apm_multiply((M_APM)result, (M_APM)a, (M_APM)b);
-}
-
-void rf_bigdec_div(rf_bigdecimal result, int precision, rf_bigdecimal a, rf_bigdecimal b)
-{
-    m_apm_divide((M_APM)result, precision, (M_APM)a, (M_APM)b);
-}
-
-void rf_bigdec_neg(rf_bigdecimal result, rf_bigdecimal a)
-{
-    m_apm_negate((M_APM)result, (M_APM)a);
-}
-
-void rf_bigdec_abs(rf_bigdecimal result, rf_bigdecimal a)
-{
-    m_apm_absolute_value((M_APM)result, (M_APM)a);
-}
-
-int rf_bigdec_cmp(rf_bigdecimal a, rf_bigdecimal b)
-{
-    return m_apm_compare((M_APM)a, (M_APM)b);
-}
-
-int rf_bigdec_is_zero(rf_bigdecimal a)
-{
-    return m_apm_sign((M_APM)a) == 0;
-}
-
-int rf_bigdec_is_neg(rf_bigdecimal a)
-{
-    return m_apm_sign((M_APM)a) < 0;
-}
-
-void rf_bigdec_sqrt(rf_bigdecimal result, int precision, rf_bigdecimal a)
-{
-    m_apm_sqrt((M_APM)result, precision, (M_APM)a);
-}
-
-void rf_bigdec_pow(rf_bigdecimal result, int precision, rf_bigdecimal base, rf_bigdecimal exp)
-{
-    m_apm_pow((M_APM)result, precision, (M_APM)base, (M_APM)exp);
-}
-
-void rf_bigdec_exp(rf_bigdecimal result, int precision, rf_bigdecimal a)
-{
-    m_apm_exp((M_APM)result, precision, (M_APM)a);
-}
-
-void rf_bigdec_log(rf_bigdecimal result, int precision, rf_bigdecimal a)
-{
-    m_apm_log((M_APM)result, precision, (M_APM)a);
-}
-
-void rf_bigdec_log10(rf_bigdecimal result, int precision, rf_bigdecimal a)
-{
-    m_apm_log10((M_APM)result, precision, (M_APM)a);
-}
-
-void rf_bigdec_sin(rf_bigdecimal result, int precision, rf_bigdecimal a)
-{
-    m_apm_sin((M_APM)result, precision, (M_APM)a);
-}
-
-void rf_bigdec_cos(rf_bigdecimal result, int precision, rf_bigdecimal a)
-{
-    m_apm_cos((M_APM)result, precision, (M_APM)a);
-}
-
-void rf_bigdec_tan(rf_bigdecimal result, int precision, rf_bigdecimal a)
-{
-    m_apm_tan((M_APM)result, precision, (M_APM)a);
-}
-
-void rf_bigdec_asin(rf_bigdecimal result, int precision, rf_bigdecimal a)
-{
-    m_apm_asin((M_APM)result, precision, (M_APM)a);
-}
-
-void rf_bigdec_acos(rf_bigdecimal result, int precision, rf_bigdecimal a)
-{
-    m_apm_acos((M_APM)result, precision, (M_APM)a);
-}
-
-void rf_bigdec_atan(rf_bigdecimal result, int precision, rf_bigdecimal a)
-{
-    m_apm_atan((M_APM)result, precision, (M_APM)a);
-}
-
-void rf_bigdec_sinh(rf_bigdecimal result, int precision, rf_bigdecimal a)
-{
-    m_apm_sinh((M_APM)result, precision, (M_APM)a);
-}
-
-void rf_bigdec_cosh(rf_bigdecimal result, int precision, rf_bigdecimal a)
-{
-    m_apm_cosh((M_APM)result, precision, (M_APM)a);
-}
-
-void rf_bigdec_tanh(rf_bigdecimal result, int precision, rf_bigdecimal a)
-{
-    m_apm_tanh((M_APM)result, precision, (M_APM)a);
-}
-
-void rf_bigdec_ceil(rf_bigdecimal result, rf_bigdecimal a)
-{
-    m_apm_ceil((M_APM)result, (M_APM)a);
-}
-
-void rf_bigdec_floor(rf_bigdecimal result, rf_bigdecimal a)
-{
-    m_apm_floor((M_APM)result, (M_APM)a);
-}
-
-void rf_bigdec_round(rf_bigdecimal result, int decimal_places, rf_bigdecimal a)
-{
-    m_apm_round((M_APM)result, decimal_places, (M_APM)a);
-}
-
-void rf_bigdec_trunc(rf_bigdecimal result, int decimal_places, rf_bigdecimal a)
-{
-    // MAPM doesn't have a direct truncate, use integer part
-    m_apm_integer_divide((M_APM)result, (M_APM)a, MM_One);
-}
-
-void rf_bigdec_pi(rf_bigdecimal result, int precision)
-{
-    m_apm_copy((M_APM)result, MM_PI);
-}
-
-void rf_bigdec_e(rf_bigdecimal result, int precision)
-{
-    m_apm_copy((M_APM)result, MM_E);
-}
-
-#else
-// Stub implementations when MAPM is not available
+// -- lifecycle ----------------------------------------------------------------
 
 rf_bigdecimal rf_bigdec_new(void)
 {
-    double* p = (double*)malloc(sizeof(double));
-    if (p) *p = 0.0;
-    return p;
+    decNumber* n = (decNumber*)malloc(sizeof(decNumber));
+    if (n) decNumberZero(n);
+    return n;
 }
 
 void rf_bigdec_free(rf_bigdecimal a)
@@ -641,212 +499,247 @@ void rf_bigdec_free(rf_bigdecimal a)
 
 rf_bigdecimal rf_bigdec_copy(rf_bigdecimal a)
 {
-    double* p = (double*)malloc(sizeof(double));
-    if (p && a) *p = *(double*)a;
-    return p;
+    decNumber* result = (decNumber*)malloc(sizeof(decNumber));
+    if (result && a) decNumberCopy(result, (decNumber*)a);
+    else if (result) decNumberZero(result);
+    return result;
 }
 
-void rf_bigdec_set_i64(rf_bigdecimal a, int64_t val)
+// -- set ----------------------------------------------------------------------
+
+void rf_bigdec_set_s64(rf_bigdecimal a, int64_t val)
 {
-    if (a) *(double*)a = (double)val;
+    if (!a) return;
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%lld", (long long)val);
+    decNumberFromString((decNumber*)a, buf, get_bigdec_ctx());
 }
 
 void rf_bigdec_set_f64(rf_bigdecimal a, double val)
 {
-    if (a) *(double*)a = val;
+    if (!a) return;
+    // 17 digits is the round-trip precision for IEEE 754 binary64.
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%.17g", val);
+    decNumberFromString((decNumber*)a, buf, get_bigdec_ctx());
 }
 
 void rf_bigdec_set_str(rf_bigdecimal a, const char* str)
 {
-    if (a) *(double*)a = atof(str);
+    if (!a || !str) return;
+    decNumberFromString((decNumber*)a, str, get_bigdec_ctx());
 }
 
-int64_t rf_bigdec_get_i64(rf_bigdecimal a)
+// -- get ----------------------------------------------------------------------
+
+char* rf_bigdec_get_str(rf_bigdecimal a, int decimal_places)
 {
-    return a ? (int64_t) * (double*)a : 0;
+    if (!a) return NULL;
+    // Caller frees. Allocate generously — decNumber's worst-case string length
+    // is DECNUMDIGITS + 14 (sign, exponent, decimal point, sentinel).
+    size_t cap = DECNUMDIGITS + 32;
+    char* buf = (char*)malloc(cap);
+    if (!buf) return NULL;
+
+    if (decimal_places < 0)
+    {
+        // Free-form output — let decNumber pick exponent format.
+        decNumberToString((decNumber*)a, buf);
+    }
+    else
+    {
+        // Rescale to the requested number of fractional digits before
+        // printing. decNumberRescale requires a decNumber holding the target
+        // exponent (which is -decimal_places).
+        decNumber target;
+        decNumber exp;
+        decNumberZero(&exp);
+        char expbuf[16];
+        snprintf(expbuf, sizeof(expbuf), "%d", -decimal_places);
+        decNumberFromString(&exp, expbuf, get_bigdec_ctx());
+        decNumberRescale(&target, (decNumber*)a, &exp, get_bigdec_ctx());
+        decNumberToString(&target, buf);
+    }
+    return buf;
+}
+
+int64_t rf_bigdec_get_s64(rf_bigdecimal a)
+{
+    if (!a) return 0;
+    char* s = rf_bigdec_get_str(a, 0);
+    if (!s) return 0;
+    int64_t r = (int64_t)strtoll(s, NULL, 10);
+    free(s);
+    return r;
 }
 
 double rf_bigdec_get_f64(rf_bigdecimal a)
 {
-    return a ? *(double*)a : 0.0;
+    if (!a) return 0.0;
+    char* s = rf_bigdec_get_str(a, -1);
+    if (!s) return 0.0;
+    double r = strtod(s, NULL);
+    free(s);
+    return r;
 }
 
-char* rf_bigdec_get_str(rf_bigdecimal a, int decimal_places)
-{
-    char* str = (char*)malloc(64);
-    if (str && a)
-    {
-        snprintf(str, 64, "%.*g", decimal_places > 0 ? decimal_places : 15, *(double*)a);
-    }
-    return str;
-}
-
-void rf_bigdec_add(rf_bigdecimal result, rf_bigdecimal a, rf_bigdecimal b)
-{
-    if (result && a && b) *(double*)result = *(double*)a + *(double*)b;
-}
-
-void rf_bigdec_sub(rf_bigdecimal result, rf_bigdecimal a, rf_bigdecimal b)
-{
-    if (result && a && b) *(double*)result = *(double*)a - *(double*)b;
-}
-
-void rf_bigdec_mul(rf_bigdecimal result, rf_bigdecimal a, rf_bigdecimal b)
-{
-    if (result && a && b) *(double*)result = *(double*)a * *(double*)b;
-}
-
-void rf_bigdec_div(rf_bigdecimal result, int precision, rf_bigdecimal a, rf_bigdecimal b)
-{
-    (void)precision;
-    if (result && a && b) *(double*)result = *(double*)a / *(double*)b;
-}
-
-void rf_bigdec_neg(rf_bigdecimal result, rf_bigdecimal a)
-{
-    if (result && a) *(double*)result = -*(double*)a;
-}
-
-void rf_bigdec_abs(rf_bigdecimal result, rf_bigdecimal a)
-{
-    if (result && a) *(double*)result = fabs(*(double*)a);
-}
+// -- comparison ---------------------------------------------------------------
 
 int rf_bigdec_cmp(rf_bigdecimal a, rf_bigdecimal b)
 {
     if (!a || !b) return 0;
-    double av = *(double*)a, bv = *(double*)b;
-    if (av < bv) return -1;
-    if (av > bv) return 1;
-    return 0;
+    decNumber r;
+    decNumberCompare(&r, (decNumber*)a, (decNumber*)b, get_bigdec_ctx());
+    if (decNumberIsZero(&r)) return 0;
+    if (decNumberIsNegative(&r)) return -1;
+    return 1;
 }
 
 int rf_bigdec_is_zero(rf_bigdecimal a)
 {
-    return a ? (*(double*)a == 0.0) : 1;
+    return a ? (decNumberIsZero((decNumber*)a) ? 1 : 0) : 1;
 }
 
 int rf_bigdec_is_neg(rf_bigdecimal a)
 {
-    return a ? (*(double*)a < 0.0) : 0;
+    return a ? (decNumberIsNegative((decNumber*)a) ? 1 : 0) : 0;
+}
+
+// -- arithmetic ---------------------------------------------------------------
+
+void rf_bigdec_add(rf_bigdecimal result, rf_bigdecimal a, rf_bigdecimal b)
+{
+    if (!result || !a || !b) return;
+    decNumberAdd((decNumber*)result, (decNumber*)a, (decNumber*)b, get_bigdec_ctx());
+}
+
+void rf_bigdec_sub(rf_bigdecimal result, rf_bigdecimal a, rf_bigdecimal b)
+{
+    if (!result || !a || !b) return;
+    decNumberSubtract((decNumber*)result, (decNumber*)a, (decNumber*)b, get_bigdec_ctx());
+}
+
+void rf_bigdec_mul(rf_bigdecimal result, rf_bigdecimal a, rf_bigdecimal b)
+{
+    if (!result || !a || !b) return;
+    decNumberMultiply((decNumber*)result, (decNumber*)a, (decNumber*)b, get_bigdec_ctx());
+}
+
+void rf_bigdec_div(rf_bigdecimal result, int precision, rf_bigdecimal a, rf_bigdecimal b)
+{
+    if (!result || !a || !b) return;
+    decContext* ctx = get_bigdec_ctx();
+    int saved = ctx->digits;
+    if (precision > 0 && precision <= DECNUMDIGITS) ctx->digits = precision;
+    decNumberDivide((decNumber*)result, (decNumber*)a, (decNumber*)b, ctx);
+    ctx->digits = saved;
+}
+
+void rf_bigdec_neg(rf_bigdecimal result, rf_bigdecimal a)
+{
+    if (!result || !a) return;
+    decNumberMinus((decNumber*)result, (decNumber*)a, get_bigdec_ctx());
+}
+
+void rf_bigdec_abs(rf_bigdecimal result, rf_bigdecimal a)
+{
+    if (!result || !a) return;
+    decNumberAbs((decNumber*)result, (decNumber*)a, get_bigdec_ctx());
+}
+
+// -- math (sqrt/pow/exp/log/log10) -------------------------------------------
+
+typedef decNumber* (*bigdec_unary_op)(decNumber*, const decNumber*, decContext*);
+
+static void with_precision(int precision, bigdec_unary_op op,
+                           decNumber* result, const decNumber* a)
+{
+    decContext* ctx = get_bigdec_ctx();
+    int saved = ctx->digits;
+    if (precision > 0 && precision <= DECNUMDIGITS) ctx->digits = precision;
+    op(result, a, ctx);
+    ctx->digits = saved;
 }
 
 void rf_bigdec_sqrt(rf_bigdecimal result, int precision, rf_bigdecimal a)
 {
-    (void)precision;
-    if (result && a) *(double*)result = sqrt(*(double*)a);
+    if (!result || !a) return;
+    with_precision(precision, decNumberSquareRoot, (decNumber*)result, (decNumber*)a);
 }
 
 void rf_bigdec_pow(rf_bigdecimal result, int precision, rf_bigdecimal base, rf_bigdecimal exp)
 {
-    (void)precision;
-    if (result && base && exp) *(double*)result = pow(*(double*)base, *(double*)exp);
+    if (!result || !base || !exp) return;
+    decContext* ctx = get_bigdec_ctx();
+    int saved = ctx->digits;
+    if (precision > 0 && precision <= DECNUMDIGITS) ctx->digits = precision;
+    decNumberPower((decNumber*)result, (decNumber*)base, (decNumber*)exp, ctx);
+    ctx->digits = saved;
 }
 
 void rf_bigdec_exp(rf_bigdecimal result, int precision, rf_bigdecimal a)
 {
-    (void)precision;
-    if (result && a) *(double*)result = exp(*(double*)a);
+    if (!result || !a) return;
+    with_precision(precision, decNumberExp, (decNumber*)result, (decNumber*)a);
 }
 
 void rf_bigdec_log(rf_bigdecimal result, int precision, rf_bigdecimal a)
 {
-    (void)precision;
-    if (result && a) *(double*)result = log(*(double*)a);
+    if (!result || !a) return;
+    with_precision(precision, decNumberLn, (decNumber*)result, (decNumber*)a);
 }
 
 void rf_bigdec_log10(rf_bigdecimal result, int precision, rf_bigdecimal a)
 {
-    (void)precision;
-    if (result && a) *(double*)result = log10(*(double*)a);
+    if (!result || !a) return;
+    with_precision(precision, decNumberLog10, (decNumber*)result, (decNumber*)a);
 }
 
-void rf_bigdec_sin(rf_bigdecimal result, int precision, rf_bigdecimal a)
-{
-    (void)precision;
-    if (result && a) *(double*)result = sin(*(double*)a);
-}
-
-void rf_bigdec_cos(rf_bigdecimal result, int precision, rf_bigdecimal a)
-{
-    (void)precision;
-    if (result && a) *(double*)result = cos(*(double*)a);
-}
-
-void rf_bigdec_tan(rf_bigdecimal result, int precision, rf_bigdecimal a)
-{
-    (void)precision;
-    if (result && a) *(double*)result = tan(*(double*)a);
-}
-
-void rf_bigdec_asin(rf_bigdecimal result, int precision, rf_bigdecimal a)
-{
-    (void)precision;
-    if (result && a) *(double*)result = asin(*(double*)a);
-}
-
-void rf_bigdec_acos(rf_bigdecimal result, int precision, rf_bigdecimal a)
-{
-    (void)precision;
-    if (result && a) *(double*)result = acos(*(double*)a);
-}
-
-void rf_bigdec_atan(rf_bigdecimal result, int precision, rf_bigdecimal a)
-{
-    (void)precision;
-    if (result && a) *(double*)result = atan(*(double*)a);
-}
-
-void rf_bigdec_sinh(rf_bigdecimal result, int precision, rf_bigdecimal a)
-{
-    (void)precision;
-    if (result && a) *(double*)result = sinh(*(double*)a);
-}
-
-void rf_bigdec_cosh(rf_bigdecimal result, int precision, rf_bigdecimal a)
-{
-    (void)precision;
-    if (result && a) *(double*)result = cosh(*(double*)a);
-}
-
-void rf_bigdec_tanh(rf_bigdecimal result, int precision, rf_bigdecimal a)
-{
-    (void)precision;
-    if (result && a) *(double*)result = tanh(*(double*)a);
-}
+// -- rounding -----------------------------------------------------------------
 
 void rf_bigdec_ceil(rf_bigdecimal result, rf_bigdecimal a)
 {
-    if (result && a) *(double*)result = ceil(*(double*)a);
+    if (!result || !a) return;
+    decContext* ctx = get_bigdec_ctx();
+    enum rounding saved = ctx->round;
+    ctx->round = DEC_ROUND_CEILING;
+    decNumberToIntegralValue((decNumber*)result, (decNumber*)a, ctx);
+    ctx->round = saved;
 }
 
 void rf_bigdec_floor(rf_bigdecimal result, rf_bigdecimal a)
 {
-    if (result && a) *(double*)result = floor(*(double*)a);
+    if (!result || !a) return;
+    decContext* ctx = get_bigdec_ctx();
+    enum rounding saved = ctx->round;
+    ctx->round = DEC_ROUND_FLOOR;
+    decNumberToIntegralValue((decNumber*)result, (decNumber*)a, ctx);
+    ctx->round = saved;
 }
 
 void rf_bigdec_round(rf_bigdecimal result, int decimal_places, rf_bigdecimal a)
 {
-    (void)decimal_places;
-    if (result && a) *(double*)result = round(*(double*)a);
+    if (!result || !a) return;
+    decContext* ctx = get_bigdec_ctx();
+    decNumber target;
+    char expbuf[16];
+    snprintf(expbuf, sizeof(expbuf), "%d", -decimal_places);
+    decNumberFromString(&target, expbuf, ctx);
+    decNumberRescale((decNumber*)result, (decNumber*)a, &target, ctx);
 }
 
 void rf_bigdec_trunc(rf_bigdecimal result, int decimal_places, rf_bigdecimal a)
 {
-    (void)decimal_places;
-    if (result && a) *(double*)result = trunc(*(double*)a);
+    if (!result || !a) return;
+    decContext* ctx = get_bigdec_ctx();
+    enum rounding saved = ctx->round;
+    ctx->round = DEC_ROUND_DOWN;
+    decNumber target;
+    char expbuf[16];
+    snprintf(expbuf, sizeof(expbuf), "%d", -decimal_places);
+    decNumberFromString(&target, expbuf, ctx);
+    decNumberRescale((decNumber*)result, (decNumber*)a, &target, ctx);
+    ctx->round = saved;
 }
 
-void rf_bigdec_pi(rf_bigdecimal result, int precision)
-{
-    (void)precision;
-    if (result) *(double*)result = 3.14159265358979323846;
-}
-
-void rf_bigdec_e(rf_bigdecimal result, int precision)
-{
-    (void)precision;
-    if (result) *(double*)result = 2.71828182845904523536;
-}
-
-#endif // HAVE_MAPM
+#endif // HAVE_DECNUMBER

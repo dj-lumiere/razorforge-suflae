@@ -152,7 +152,7 @@ uint64_t rf_d128_to_d64(uint64_t x_low, uint64_t x_high);
 // Basic operations that don't require float128 emulation
 // NOTE: Transcendental functions (sin, cos, exp, log, etc.) require Intel's
 // float128 emulation code which needs their full build system.
-// For transcendental decimal math, use rf_bigdec_* (MAPM) functions instead.
+// For transcendental decimal math, use rf_bigdec_* functions instead.
 // ============================================================================
 
 uint32_t rf_d32_sqrt(uint32_t x);
@@ -354,13 +354,17 @@ int rf_bigint_gcd(rf_bigint* result, rf_bigint* a, rf_bigint* b);
 int rf_bigint_lcm(rf_bigint* result, rf_bigint* a, rf_bigint* b);
 
 // ============================================================================
-// MAPM - Mike's Arbitrary Precision Math Library
-// https://github.com/LuaDist/mapm (Freeware)
+// Arbitrary precision decimal (rf_bigdecimal)
+// Backed by decNumber (the same library that provides D32/D64/D128 above).
 // ============================================================================
 
-// Forward declaration for MAPM's M_APM type
-// When using MAPM, include <m_apm.h> directly
-typedef void* rf_bigdecimal; // Opaque pointer to M_APM
+// Opaque handle for an arbitrary-precision decimal value.
+typedef void* rf_bigdecimal;
+
+// Precision control (global working precision for ops without an explicit
+// per-call precision argument). Clamped to [1, DECNUMDIGITS] and DEC_MAX_MATH.
+void rf_bigdec_set_precision(int digits);
+int rf_bigdec_get_precision(void);
 
 // Lifecycle management
 rf_bigdecimal rf_bigdec_new(void);
@@ -397,26 +401,16 @@ void rf_bigdec_exp(rf_bigdecimal result, int precision, rf_bigdecimal a);
 void rf_bigdec_log(rf_bigdecimal result, int precision, rf_bigdecimal a);
 void rf_bigdec_log10(rf_bigdecimal result, int precision, rf_bigdecimal a);
 
-// Trigonometric functions (with precision parameter)
-void rf_bigdec_sin(rf_bigdecimal result, int precision, rf_bigdecimal a);
-void rf_bigdec_cos(rf_bigdecimal result, int precision, rf_bigdecimal a);
-void rf_bigdec_tan(rf_bigdecimal result, int precision, rf_bigdecimal a);
-void rf_bigdec_asin(rf_bigdecimal result, int precision, rf_bigdecimal a);
-void rf_bigdec_acos(rf_bigdecimal result, int precision, rf_bigdecimal a);
-void rf_bigdec_atan(rf_bigdecimal result, int precision, rf_bigdecimal a);
-void rf_bigdec_sinh(rf_bigdecimal result, int precision, rf_bigdecimal a);
-void rf_bigdec_cosh(rf_bigdecimal result, int precision, rf_bigdecimal a);
-void rf_bigdec_tanh(rf_bigdecimal result, int precision, rf_bigdecimal a);
+// Trigonometric, hyperbolic, and transcendental constants (pi, e) are NOT
+// provided — decNumber has no built-in trig/hyperbolic, and we don't ship an
+// MPFR dependency (LGPL conflict). Deferred to a later version once Suflae
+// needs them; until then, use F64/F128 for trig and accept the precision cost.
 
 // Rounding
 void rf_bigdec_ceil(rf_bigdecimal result, rf_bigdecimal a);
 void rf_bigdec_floor(rf_bigdecimal result, rf_bigdecimal a);
 void rf_bigdec_round(rf_bigdecimal result, int decimal_places, rf_bigdecimal a);
 void rf_bigdec_trunc(rf_bigdecimal result, int decimal_places, rf_bigdecimal a);
-
-// Constants
-void rf_bigdec_pi(rf_bigdecimal result, int precision);
-void rf_bigdec_e(rf_bigdecimal result, int precision);
 
 // ============================================================================
 // cmath-compliant math functions for binary floating point types
