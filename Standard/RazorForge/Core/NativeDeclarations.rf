@@ -902,9 +902,17 @@ external("C") routine rf_bigint_is_zero(handle: CPtr) -> S32
 external("C") routine rf_bigint_is_neg(handle: CPtr) -> S32
 
 # ============================================================================
-# Decimal (Arbitrary Precision) - MAPM Library
-# All functions use opaque handles to M_APM structures
+# Decimal (Arbitrary Precision) - decNumber library
+# All functions use opaque handles to decNumber structures.
 # ============================================================================
+
+### Sets the global working precision (digits) for operations that don't take
+### an explicit per-call precision argument. Clamped to a safe range internally.
+### :param digits: The desired number of decimal digits.
+external("C") routine rf_bigdec_set_precision(digits: S32)
+### Reads the current global working precision in digits.
+### :returns: The current default precision used by add/sub/mul/etc.
+external("C") routine rf_bigdec_get_precision() -> S32
 
 ### Allocates and initializes a new arbitrary-precision decimal handle.
 ### :returns: A live `CPtr` ready for use with the big-decimal runtime.
@@ -920,7 +928,7 @@ external("C") routine rf_bigdec_copy(src: CPtr) -> CPtr
 ### Replaces a decimal handle with the signed 64-bit value `value`.
 ### :param handle: The decimal handle to update.
 ### :param value: The signed integer value to assign.
-external("C") routine rf_bigdec_set_i64(handle: CPtr, value: S64)
+external("C") routine rf_bigdec_set_s64(handle: CPtr, value: S64)
 ### Replaces a decimal handle with the binary floating-point value `value`.
 ### :param handle: The decimal handle to update.
 ### :param value: The `F64` value to assign.
@@ -933,7 +941,7 @@ external("C") routine rf_bigdec_set_str(handle: CPtr, str: CStr)
 ### Converts a decimal handle to `S64`.
 ### :param handle: The decimal handle to read.
 ### :returns: The converted `S64` value.
-external("C") routine rf_bigdec_get_i64(handle: CPtr) -> S64
+external("C") routine rf_bigdec_get_s64(handle: CPtr) -> S64
 ### Converts a decimal handle to `F64`.
 ### :param handle: The decimal handle to read.
 ### :returns: The converted `F64` value.

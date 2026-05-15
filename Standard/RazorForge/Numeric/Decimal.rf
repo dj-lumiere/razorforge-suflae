@@ -10,6 +10,29 @@ entity Decimal obeys Numeric, Ordered
   secret handle: CPtr
 
 # ============================================================================
+# Precision control (global)
+# ============================================================================
+
+### Sets the global working precision (decimal digits) for operations that
+### don't take an explicit per-call precision argument: add/sub/mul/cmp/abs/neg
+### and the default-precision form of comparisons. Per-call `precision`
+### arguments on `div`/`sqrt`/`pow`/`exp`/`log`/`log10` override this default.
+###
+### The value is clamped to a safe range internally; passing too-large or
+### too-small numbers is silently corrected rather than rejected.
+###
+### :param digits: The desired number of decimal digits.
+### :note: Call once in `start()` to configure the whole program's behavior.
+routine Decimal.set_precision(digits: S32)
+  rf_bigdec_set_precision(digits)
+  return
+
+### Returns the current global working precision (decimal digits).
+### :returns: The current default precision used by add/sub/mul/etc.
+routine Decimal.get_precision() -> S32
+  return rf_bigdec_get_precision()
+
+# ============================================================================
 # Lifecycle Management
 # ============================================================================
 
@@ -17,7 +40,7 @@ entity Decimal obeys Numeric, Ordered
 ### :returns: The resulting `Decimal` value.
 routine Decimal.$create() -> Decimal
   var dec = Decimal(handle: rf_bigdec_new())
-  rf_bigdec_set_i64(dec.handle, 0)
+  rf_bigdec_set_s64(dec.handle, 0)
   return dec
 
 ### Creates a decimal from a signed 64-bit integer.
@@ -27,7 +50,7 @@ routine Decimal.$create() -> Decimal
 ### :returns: The resulting `Decimal` value.
 routine Decimal.$create(value: S64) -> Decimal
   var dec = Decimal(handle: rf_bigdec_new())
-  rf_bigdec_set_i64(dec.handle, value)
+  rf_bigdec_set_s64(dec.handle, value)
   return dec
 
 ### Creates a decimal from a 64-bit floating-point value.
@@ -392,7 +415,7 @@ routine Decimal.signum() -> S32
 ### :param from: The source value to convert.
 ### :returns: The resulting `S64` value.
 routine S64.$create(from: Decimal) -> S64
-  return rf_bigdec_get_i64(from.handle)
+  return rf_bigdec_get_s64(from.handle)
 
 ### Converts this decimal to `F64`.
 ### This may round because the target uses binary floating-point representation.
