@@ -1,0 +1,30 @@
+module Tests/Stdlib/BytesMethodsApi
+import IO/Console
+
+# Bytes manipulation — direct indexing, slicing, comparison, iteration.
+routine start()
+  var b = "hello".bytes()
+  show(f"count: {b.count()}")
+  show(f"is_empty: {b.is_empty()}")
+
+  # Indexing (each byte is U8)
+  show(f"b[0]: {b[0_u64]}")  # 'h' = 104
+  show(f"b[1]: {b[1_u64]}")  # 'e' = 101
+  show(f"b[4]: {b[4_u64]}")  # 'o' = 111
+
+  # Equality
+  show(f"hello.bytes == hello.bytes: {"hello".bytes() == "hello".bytes()}")
+  show(f"hello.bytes == world.bytes: {"hello".bytes() == "world".bytes()}")
+
+  # Iteration over bytes
+  var sum: U64 = 0_u64
+  for byte in b
+    sum = sum + U64(from: byte)
+  show(f"byte sum: {sum}")
+
+  # Multi-byte UTF-8 (Korean) — byte count > codepoint count
+  var k = "한".bytes()
+  show(f"한 byte count: {k.count()}")
+
+  show("DONE")
+  return

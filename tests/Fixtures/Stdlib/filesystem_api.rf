@@ -1,0 +1,22 @@
+module Tests/Stdlib/FilesystemApi
+import IO/Console
+import IO/FileSystem
+
+# Exercises hermetic path-string operations only — no actual disk I/O so the
+# fixture is deterministic and parallel-safe. Disk-touching tests (create/
+# read/write/delete) belong in a separate gated fixture.
+routine start()
+  # join_path
+  show(f"join: {join_path(a: "foo", b: "bar")}")
+
+  # parent / name / stem / extension
+  show(f"parent: {parent_path(path: "/x/y/z.txt".view())}")
+  show(f"file_name: {file_name(path: "/x/y/z.txt".view())}")
+  show(f"file_stem: {file_stem(path: "/x/y/z.txt".view())}")
+  show(f"extension: {extension(path: "/x/y/z.txt".view())}")
+
+  show(f"file_stem no ext: {file_stem(path: "plain".view())}")
+  show(f"extension no ext: {extension(path: "plain".view())}")
+
+  show("DONE")
+  return

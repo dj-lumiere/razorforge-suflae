@@ -1,0 +1,38 @@
+module Tests/Stdlib/BuilderServiceApi
+import IO/Console
+import BuilderService
+
+record Point
+  x: S64
+  y: S64
+
+entity Counter
+  value: S64
+
+routine Counter.$create(value: S64) -> Counter
+  return Counter(value: value)
+
+routine start()
+  # Primitive reflection
+  var n: S64 = 42
+  show(f"S64 type_name: {n.type_name()}")
+  show(f"S64 is_generic: {n.is_generic()}")
+
+  # Record reflection
+  var p = Point(x: 1, y: 2)
+  show(f"Point type_name: {p.type_name()}")
+  show(f"Point full_type_name: {p.full_type_name()}")
+  show(f"Point member_variable_count: {p.member_variable_count()}")
+  show(f"Point is_generic: {p.is_generic()}")
+
+  # Entity reflection
+  var c = Counter(value: 99)
+  show(f"Counter type_name: {c.type_name()}")
+  show(f"Counter member_variable_count: {c.member_variable_count()}")
+
+  # Generic instance
+  var list: List[S64] = [1, 2, 3]
+  show(f"List[S64] type_name: {list.type_name()}")
+
+  show("DONE")
+  return

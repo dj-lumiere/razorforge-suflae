@@ -1,0 +1,30 @@
+module Tests/Stdlib/BitArrayApi
+import IO/Console
+import Collections
+
+# Fixed-size bit array BitArray[N] — N bits, dense packing.
+routine start()
+  var ba = BitArray[8]()
+  show(f"new ba: {ba}")
+  show(f"count: {ba.count()}")
+  show(f"is_empty: {ba.is_empty()}")
+
+  ba[0] = true
+  ba[2] = true
+  ba[7] = true
+
+  show(f"after setting 0,2,7: {ba}")
+  show(f"ba[0]: {ba[0]}")
+  show(f"ba[1]: {ba[1]}")
+  show(f"ba[2]: {ba[2]}")
+  show(f"ba[7]: {ba[7]}")
+
+  # Equality
+  var bb = BitArray[8]()
+  bb[0] = true
+  bb[2] = true
+  bb[7] = true
+  show(f"ba == bb: {ba == bb}")
+
+  show("DONE")
+  return

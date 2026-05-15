@@ -1,0 +1,31 @@
+module Tests/Stdlib/LateInitUninitApi
+import IO/Console
+
+# `lateinit var` defers initialization; `= uninit` is an explicit uninitialized
+# binding. Both must be written before being read.
+
+routine compute(use_path_a: Bool) -> S64
+  lateinit var result: S64
+  if use_path_a
+    result = 100
+  else
+    result = 200
+  return result
+
+routine maybe_init(flag: Bool) -> S64
+  var x: S64 = uninit
+  if flag
+    x = 42
+  else
+    x = -1
+  return x
+
+routine start()
+  show(f"compute(true): {compute(use_path_a: true)}")
+  show(f"compute(false): {compute(use_path_a: false)}")
+
+  show(f"maybe_init(true): {maybe_init(flag: true)}")
+  show(f"maybe_init(false): {maybe_init(flag: false)}")
+
+  show("DONE")
+  return

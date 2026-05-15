@@ -1,0 +1,41 @@
+module Tests/Stdlib/FloatMathApi
+import IO/Console
+
+# Float math: sqrt/pow/log/exp/trig, rounding, classification, clamping.
+routine start()
+  show(f"sqrt(2): {(2.0_f64).sqrt()}")
+  show(f"sqrt(16): {(16.0_f64).sqrt()}")
+  show(f"pow(2, 10): {(2.0_f64).pow(exp: 10.0_f64)}")
+  show(f"exp(0): {(0.0_f64).exp()}")
+  show(f"exp(1): {(1.0_f64).exp()}")
+  show(f"log(e): {(1.0_f64).exp().log()}")
+  show(f"log10(1000): {(1000.0_f64).log10()}")
+
+  # Trig (radians)
+  show(f"sin(0): {(0.0_f64).sin()}")
+  show(f"cos(0): {(0.0_f64).cos()}")
+
+  # Rounding
+  show(f"floor(3.7): {(3.7_f64).floor()}")
+  show(f"ceil(3.2): {(3.2_f64).ceil()}")
+  show(f"round(3.5): {(3.5_f64).round()}")
+  show(f"round(3.4): {(3.4_f64).round()}")
+
+  # Min/max/clamp
+  show(f"min(3.0, 7.0): {(3.0_f64).min(you: 7.0_f64)}")
+  show(f"max(3.0, 7.0): {(3.0_f64).max(you: 7.0_f64)}")
+  show(f"clamp(5, 1..10): {(5.0_f64).clamp(min_val: 1.0_f64, max_val: 10.0_f64)}")
+  show(f"clamp(-1, 0..10): {(-1.0_f64).clamp(min_val: 0.0_f64, max_val: 10.0_f64)}")
+  show(f"clamp(100, 0..10): {(100.0_f64).clamp(min_val: 0.0_f64, max_val: 10.0_f64)}")
+
+  # Classification
+  show(f"is_positive(1.0): {(1.0_f64).is_positive()}")
+  show(f"is_negative(-1.0): {(-1.0_f64).is_negative()}")
+  show(f"is_zero(0.0): {(0.0_f64).is_zero()}")
+  show(f"is_finite(1.0): {(1.0_f64).is_finite()}")
+  show(f"is_finite(inf): {F64.infinity().is_finite()}")
+  show(f"signum(-5.0): {(-5.0_f64).signum()}")
+  show(f"signum(5.0): {(5.0_f64).signum()}")
+
+  show("DONE")
+  return

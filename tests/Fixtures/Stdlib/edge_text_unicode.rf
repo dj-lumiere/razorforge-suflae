@@ -1,0 +1,37 @@
+module Tests/Stdlib/EdgeTextUnicode
+import IO/Console
+
+# Text/Bytes edge cases: empty, multi-byte UTF-8, surrogate-pair characters.
+routine start()
+  # Empty
+  var empty = ""
+  show(f"empty count: {empty.count()}")
+  show(f"empty is_empty: {empty.is_empty()}")
+  show(f"empty bytes count: {empty.bytes().count()}")
+
+  # ASCII
+  var ascii = "hello"
+  show(f"ascii count: {ascii.count()}")
+  show(f"ascii bytes count: {ascii.bytes().count()}")
+
+  # Multi-byte UTF-8 (Korean)
+  var kor = "한글"
+  show(f"kor count: {kor.count()}")
+  show(f"kor bytes count: {kor.bytes().count()}")
+
+  # Mixed scripts
+  var mix = "abc한글xyz"
+  show(f"mix count: {mix.count()}")
+  show(f"mix bytes count: {mix.bytes().count()}")
+
+  # Concatenation preserves byte content
+  var head = "한"
+  var tail = "글"
+  show(f"concat == kor: {(head + tail) == kor}")
+
+  # contains across multi-byte boundaries
+  show(f"mix contains '한글': {mix.contains(value: "한글")}")
+  show(f"mix contains '한x': {mix.contains(value: "한x")}")
+
+  show("DONE")
+  return

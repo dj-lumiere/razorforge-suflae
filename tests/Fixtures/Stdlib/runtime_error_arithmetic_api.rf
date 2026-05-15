@@ -1,0 +1,36 @@
+module Tests/Stdlib/RuntimeErrorArithmeticApi
+import IO/Console
+
+# Runtime arithmetic errors caught via the stdlib `try_*` family
+# (`try_add`/`try_sub`/`try_mul`/`try_pow` etc.) and `try_*` on division/abs.
+
+routine start()
+  # --- Checked overflow ---
+  show(f"try_add S64_MAX + 1: {try_add(a: S64_MAX, b: 1_s64)}")
+  show(f"try_add S64_MAX + 0: {try_add(a: S64_MAX, b: 0_s64)}")
+  show(f"try_sub S64_MIN - 1: {try_sub(a: S64_MIN, b: 1_s64)}")
+  show(f"try_mul S64_MAX * 2: {try_mul(a: S64_MAX, b: 2_s64)}")
+  show(f"try_mul S64_MAX * 1: {try_mul(a: S64_MAX, b: 1_s64)}")
+  show(f"try_pow 2 ** 62: {try_pow(a: 2_s64, b: 62_s64)}")
+  show(f"try_pow 2 ** 63: {try_pow(a: 2_s64, b: 63_s64)}")
+
+  # --- U64 unsigned underflow ---
+  show(f"try_sub 0u64 - 1: {try_sub(a: 0_u64, b: 1_u64)}")
+  show(f"try_sub 5u64 - 3: {try_sub(a: 5_u64, b: 3_u64)}")
+
+  # --- Division: by zero throws ---
+  show(f"try_div 10 / 0: {try_div(a: 10_s64, b: 0_s64)}")
+  show(f"try_div 10 / 2: {try_div(a: 10_s64, b: 2_s64)}")
+  show(f"try_mod 10 % 0: {try_mod(a: 10_s64, b: 0_s64)}")
+  show(f"try_mod 10 % 3: {try_mod(a: 10_s64, b: 3_s64)}")
+
+  # --- Unary -: S64_MIN.neg() overflows ---
+  show(f"try_neg S64_MIN: {try_neg(a: S64_MIN)}")
+  show(f"try_neg 5: {try_neg(a: 5_s64)}")
+
+  # --- abs on S64_MIN ---
+  show(f"try_abs S64_MIN: {(S64_MIN).try_abs()}")
+  show(f"try_abs -5: {(-5_s64).try_abs()}")
+
+  show("DONE")
+  return

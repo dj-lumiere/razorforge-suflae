@@ -1,0 +1,37 @@
+module Tests/Stdlib/LoopControlApi
+import IO/Console
+
+# `break` and `continue` in for/while/loop blocks.
+routine start()
+  show("--- continue in for ---")
+  for x in 1 to 5
+    if x == 3
+      continue
+    show(f"  for x={x}")
+
+  show("--- break in for ---")
+  for x in 1 to 10
+    if x > 4
+      break
+    show(f"  for x={x}")
+
+  show("--- continue + break in while ---")
+  var i = 0_s64
+  while i < 10_s64
+    i = i + 1_s64
+    if i == 4
+      continue
+    if i > 6
+      break
+    show(f"  while i={i}")
+
+  show("--- loop with break ---")
+  var n = 0_s64
+  loop
+    n = n + 1
+    if n >= 3
+      break
+  show(f"after loop, n={n}")
+
+  show("DONE")
+  return

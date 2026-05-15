@@ -1,0 +1,37 @@
+module Tests/Stdlib/OwnedApi
+import IO/Console
+
+entity Counter
+  value: S64
+
+routine Counter.$create(value: S64) -> Counter
+  return Counter(value: value)
+
+routine Counter.bump(by: S64)
+  me.value = me.value + by
+  return
+
+routine start()
+  var c = Counter(value: 10)
+  show(f"c type: {c.type_name()}")
+  show(f"c value: {c.value}")
+
+  c.bump(by: 5)
+  show(f"after bump(5): {c.value}")
+
+  # view (read-only borrow)
+  var v = c.view()
+  show(f"view type: {v.type_name()}")
+  show(f"view value: {v.value}")
+
+  # grasp (mutable borrow)
+  using c.grasp() as g
+    g.bump(by: 100)
+  show(f"after grasp().bump(100): {c.value}")
+
+  # represent / diagnose
+  show(f"c represent: {c}")
+  show(f"c diagnose: {c:?}")
+
+  show("DONE")
+  return

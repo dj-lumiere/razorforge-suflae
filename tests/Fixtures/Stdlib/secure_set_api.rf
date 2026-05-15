@@ -1,0 +1,33 @@
+module Tests/Stdlib/SecureSetApi
+import IO/Console
+import Collections.SecureSet
+
+# SecureSet iteration order isn't deterministic (and is keyed with SipHash for
+# adversarial inputs) — probe deterministic queries only.
+routine start()
+  var s = SecureSet[S64]()
+  show(f"new size: {s.count()}")
+  show(f"is_empty (new): {s.is_empty()}")
+
+  discard s.add(value: 10)
+  discard s.add(value: 20)
+  discard s.add(value: 30)
+  discard s.add(value: 20)  # duplicate, no-op
+  show(f"size after add 10/20/30/20: {s.count()}")
+
+  show(f"contains 20: {s.contains(value: 20)}")
+  show(f"contains 99: {s.contains(value: 99)}")
+
+  discard s.remove(value: 10)
+  show(f"size after remove(10): {s.count()}")
+  show(f"contains 10: {s.contains(value: 10)}")
+
+  # Sort iteration for deterministic output
+  var collected = []
+  for x in s
+    collected.add_last(value: x)
+  collected.sort()
+  show(f"sorted contents: {collected}")
+
+  show("DONE")
+  return

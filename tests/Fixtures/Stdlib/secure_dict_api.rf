@@ -1,0 +1,32 @@
+module Tests/Stdlib/SecureDictApi
+import IO/Console
+import Collections.SecureDict
+
+# SecureDict iteration order isn't deterministic — probe specific keys only.
+routine start()
+  var d = SecureDict[S64, S64]()
+  show(f"new size: {d.count()}")
+
+  discard d.add(key: 1, value: 10)
+  discard d.add(key: 2, value: 20)
+  discard d.add(key: 3, value: 30)
+  show(f"size: {d.count()}")
+
+  show(f"d[1]: {d[1]}")
+  show(f"d[2]: {d[2]}")
+  show(f"d[3]: {d[3]}")
+
+  show(f"contains_key 2: {d.contains_key(key: 2)}")
+  show(f"contains_key 99: {d.contains_key(key: 99)}")
+
+  # Overwrite
+  discard d.add(key: 1, value: 100)
+  show(f"d[1] after overwrite: {d[1]}")
+
+  # Remove
+  discard d.remove(key: 2)
+  show(f"size after remove(2): {d.count()}")
+  show(f"contains_key 2 after remove: {d.contains_key(key: 2)}")
+
+  show("DONE")
+  return

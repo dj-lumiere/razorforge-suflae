@@ -1,0 +1,38 @@
+module Tests/Stdlib/FStringFormatSpecsApi
+import IO/Console
+
+# Exercises the four f-string format specs:
+#   {x}    -> $represent()
+#   {x:?}  -> $diagnose()
+#   {x:=}  -> "name=" + $represent()
+#   {x:=?} -> "name=" + $diagnose()
+record Point
+  x: S64
+  y: S64
+
+routine start()
+  var n: S64 = 42
+  var t: Text = "hello"
+  var b: Bool = true
+  var p = Point(x: 3, y: 4)
+
+  # Primitive: represent vs diagnose
+  show(f"{n}")
+  show(f"{n:?}")
+  show(f"{t}")
+  show(f"{t:?}")
+  show(f"{b}")
+  show(f"{b:?}")
+
+  # Record: represent vs diagnose
+  show(f"{p}")
+  show(f"{p:?}")
+
+  # `=` prefix forms — useful for debug-style print
+  show(f"{n:=}")
+  show(f"{n:=?}")
+  show(f"{p:=}")
+  show(f"{p:=?}")
+
+  show("DONE")
+  return

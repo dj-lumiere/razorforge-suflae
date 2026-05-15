@@ -1,0 +1,32 @@
+module Tests/Stdlib/DictApi
+import IO/Console
+
+# Dict iteration order isn't deterministic — probe specific keys only.
+routine start()
+  var d = {"one": 1, "two": 2, "three": 3}
+  show(f"size: {d.count()}")
+  show(f"contains_key 'two': {d.contains_key(key: "two")}")
+  show(f"contains_key 'four': {d.contains_key(key: "four")}")
+
+  # get by key (deterministic)
+  show(f"d['one']: {d["one"]}")
+  show(f"d['three']: {d["three"]}")
+
+  # add / overwrite
+  discard d.add(key: "four", value: 4)
+  show(f"size after add four: {d.count()}")
+  show(f"d['four']: {d["four"]}")
+
+  discard d.add(key: "one", value: 100)   # overwrite
+  show(f"d['one'] after overwrite: {d["one"]}")
+
+  # remove
+  discard d.remove(key: "two")
+  show(f"size after remove two: {d.count()}")
+  show(f"contains_key 'two' after remove: {d.contains_key(key: "two")}")
+
+  # is_empty
+  show(f"is_empty: {d.is_empty()}")
+
+  show("DONE")
+  return

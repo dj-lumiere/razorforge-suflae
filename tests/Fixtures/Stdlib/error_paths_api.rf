@@ -1,0 +1,55 @@
+module Tests/Stdlib/ErrorPathsApi
+import IO/Console
+import Core/Errors/Common
+import Core/Errors/DivisionByZeroError
+
+# Each common stdlib crashable should be constructible, expose crash_title /
+# crash_message, and be catchable via `when` on a check_/try_ variant.
+
+routine guard_div!(a: S64, b: S64) -> S64
+  if b == 0
+    throw DivisionByZeroError()
+  return a // b
+
+routine guard_input!(n: S64) -> S64
+  if n < 0
+    throw VerificationFailedError()
+  return n
+
+routine start()
+  # AbsentValueError
+  var av = AbsentValueError()
+  show(f"AbsentValueError title: {av.crash_title()}")
+  show(f"AbsentValueError msg: {av.crash_message()}")
+
+  # UserTerminationError
+  var ut = UserTerminationError()
+  show(f"UserTerminationError title: {ut.crash_title()}")
+
+  # VerificationFailedError
+  var vf = VerificationFailedError()
+  show(f"VerificationFailedError title: {vf.crash_title()}")
+
+  # LogicBreachedError
+  var lb = LogicBreachedError()
+  show(f"LogicBreachedError title: {lb.crash_title()}")
+
+  # DivisionByZeroError caught via check_ variant
+  var r_ok = check_guard_div(a: 10, b: 2)
+  var r_err = check_guard_div(a: 10, b: 0)
+
+  when r_ok
+    is DivisionByZeroError => show("  unreachable")
+    else v                  => show(f"  div ok: {v}")
+  when r_err
+    is DivisionByZeroError e => show(f"  caught: {e.crash_title()}")
+    else v                    => show(f"  div ok: {v}")
+
+  # VerificationFailedError caught
+  var r_neg = check_guard_input(n: -5)
+  when r_neg
+    is VerificationFailedError e => show(f"  caught: {e.crash_title()}")
+    else v                        => show(f"  unreachable: {v}")
+
+  show("DONE")
+  return

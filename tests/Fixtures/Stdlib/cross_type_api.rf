@@ -1,0 +1,41 @@
+module Tests/Stdlib/CrossTypeApi
+import IO/Console
+import Collections
+
+# Composite types — collections of collections, carriers of records with fields,
+# Result wrapping a record, Maybe wrapping a List, etc.
+# Reminder: every entity slot in a collection type-param needs an explicit Owned[T].
+record Person
+  name: Owned[Text]
+  age: S64
+
+routine start()
+  # Dict[Owned[Text], Owned[List[S64]]] — both key (Text) AND value (List, also
+  # an entity) need Owned wrap.
+  var grades = Dict[Owned[Text], Owned[List[S64]]]()
+  discard grades.add(key: "alice", value: [90, 85, 92])
+  discard grades.add(key: "bob", value: [70, 75, 80])
+
+  show(f"size: {grades.count()}")
+  show(f"alice grades count: {grades["alice"].count()}")
+  show(f"bob grades count: {grades["bob"].count()}")
+  show(f"alice[0]: {grades["alice"][0]}")
+  show(f"bob[2]: {grades["bob"][2]}")
+
+  # List of records (records hold Owned[Text] field). Person is a record (value
+  # semantics) so no Owned wrap on List[Person].
+  var people: List[Person] = []
+  people.add_last(value: Person(name: "alice", age: 30))
+  people.add_last(value: Person(name: "bob", age: 25))
+  show(f"people count: {people.count()}")
+  show(f"people[0].age: {people[0].age}")
+  show(f"people[1].age: {people[1].age}")
+
+  # Tuple of mixed types — Tuple is a record, holds entities via Owned wrap
+  var t = (42_s64, "hello", [1_s64, 2_s64, 3_s64])
+  show(f"t.f0: {t.f0}")
+  show(f"t.f1: {t.f1}")
+  show(f"t.f2 count: {t.f2.count()}")
+
+  show("DONE")
+  return

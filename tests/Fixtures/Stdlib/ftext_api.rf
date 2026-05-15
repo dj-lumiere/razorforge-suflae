@@ -1,0 +1,34 @@
+module Tests/Stdlib/FTextApi
+import IO/Console
+
+# F-string formatting — covers the {value} / {value:?} forms and conversion paths.
+routine start()
+  var n: S64 = 42
+  var f: F64 = 3.14_f64
+  var b: Bool = true
+  var t: Text = "hello"
+
+  # Basic interpolation
+  show(f"int: {n}")
+  show(f"float: {f}")
+  show(f"bool: {b}")
+  show(f"text: {t}")
+
+  # Diagnose form
+  show(f"int diag: {n:?}")
+  show(f"text diag: {t:?}")
+
+  # Mixed
+  show(f"mix: {n} + {f} = {S64(from: f) + n}")
+
+  # Nested expressions
+  show(f"calc: {2 + 3}")
+  show(f"call: {"hi".count()}")
+
+  # Concatenation vs interpolation produces same result
+  var c1 = "prefix:" + t
+  var c2 = f"prefix:{t}"
+  show(f"concat == interp: {c1 == c2}")
+
+  show("DONE")
+  return

@@ -1,0 +1,27 @@
+module Tests/Stdlib/TupleApi
+import IO/Console
+
+routine start()
+  var t = (1, "hello", true)
+  show(f"t: {t}")
+  show(f"t (diagnose): {t:?}")
+
+  # field access
+  show(f"t.f0: {t.f0}")
+  show(f"t.f1: {t.f1}")
+  show(f"t.f2: {t.f2}")
+
+  # Destructuring (value-copy semantics)
+  var (a, b, c) = t
+  show(f"a: {a}")
+  show(f"b: {b}")
+  show(f"c: {c}")
+
+  # Equality (record semantics)
+  var t2 = (1, "hello", true)
+  show(f"t == t2: {t == t2}")
+  var t3 = (1, "hello", false)
+  show(f"t == t3: {t == t3}")
+
+  show("DONE")
+  return

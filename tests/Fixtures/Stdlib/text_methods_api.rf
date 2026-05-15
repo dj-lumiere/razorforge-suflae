@@ -1,0 +1,51 @@
+module Tests/Stdlib/TextMethodsApi
+import IO/Console
+
+# Text manipulation surface — case, trim, split/join, replace, slicing, repeat.
+routine start()
+  var s = "  Hello, World  "
+  show(f"upper: '{s.to_uppercase()}'")
+  show(f"lower: '{s.to_lowercase()}'")
+  show(f"trim: '{s.trim()}'")
+  show(f"trim_start: '{s.trim_start()}'")
+  show(f"trim_end: '{s.trim_end()}'")
+
+  # Replace
+  show(f"replace: '{"a-b-c".replace(old: "-", new: "_")}'")
+
+  # Prefix/suffix
+  show(f"remove_prefix: '{"prefix_value".remove_prefix(prefix: "prefix_")}'")
+  show(f"remove_suffix: '{"value.txt".remove_suffix(suffix: ".txt")}'")
+
+  # Repeat
+  show(f"repeat: '{"ab".repeat(times: 3_u64)}'")
+
+  # Reverse (codepoint-level)
+  show(f"reverse 'abcd': '{"abcd".reverse()}'")
+
+  # Padding
+  show(f"pad_start: '{"42".pad_start(width: 5_u64, fill: '0')}'")
+  show(f"pad_end: '{"x".pad_end(width: 4_u64, fill: '.')}'")
+
+  # Split / join (join lives on Iterable: parts.join(separator: sep))
+  var parts = "a,b,c,d".split(separator: ',')
+  show(f"split count: {parts.count()}")
+  for p in parts
+    show(f"  part: {p}")
+  show(f"join: '{parts.join(separator: "-glue-")}'")
+
+  # Lines
+  var multi = "line one\nline two\nline three"
+  for l in multi.lines()
+    show(f"  line: {l}")
+
+  # Slicing uses range form
+  show(f"slice [0 til 5]: '{"hello world"[0_u64 til 5_u64]}'")
+  show(f"slice [6 til 11]: '{"hello world"[6_u64 til 11_u64]}'")
+  show(f"slice [0 to 4]: '{"hello world"[0_u64 to 4_u64]}'")
+
+  # Find
+  show(f"find 'world' in 'hello world': {"hello world".find!(other: "world")}")
+
+  show("DONE")
+  return

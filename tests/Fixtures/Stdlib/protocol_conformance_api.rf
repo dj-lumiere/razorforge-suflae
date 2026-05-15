@@ -1,0 +1,43 @@
+module Tests/Stdlib/ProtocolConformanceApi
+import IO/Console
+
+# User-defined protocol + record conformance via `obeys`.
+protocol Greetable
+  routine Me.greet() -> Text
+
+record Cat obeys Greetable
+  name: Text
+
+routine Cat.greet() -> Text
+  return "Meow, I am " + me.name
+
+record Dog obeys Greetable
+  name: Text
+
+routine Dog.greet() -> Text
+  return "Woof, I am " + me.name
+
+# Generic free function constrained by the protocol.
+routine introduce[T](thing: T) -> Text
+needs T obeys Greetable
+  return thing.greet()
+
+routine start()
+  var c = Cat(name: "Whiskers")
+  var d = Dog(name: "Rex")
+
+  show(c.greet())
+  show(d.greet())
+
+  # Protocol-constrained generic
+  show(introduce(thing: c))
+  show(introduce(thing: d))
+
+  # Conformance check via auto-derived Equatable on records
+  var c2 = Cat(name: "Whiskers")
+  show(f"c == c2: {c == c2}")
+  var c3 = Cat(name: "Felix")
+  show(f"c == c3: {c == c3}")
+
+  show("DONE")
+  return

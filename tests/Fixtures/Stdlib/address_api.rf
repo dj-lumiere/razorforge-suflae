@@ -1,0 +1,26 @@
+module Tests/Stdlib/AddressApi
+import IO/Console
+
+# Address: integer-valued pointer-sized address with wrap-arithmetic.
+routine start()
+  var a = Address(from: 0x1000_u64)
+  var b = Address(from: 0x2000_u64)
+
+  show(f"a: {a}")
+  show(f"b: {b}")
+
+  # Arithmetic (wrap)
+  show(f"a + b: {a + b}")
+  show(f"b - a: {b - a}")
+  show(f"a * b: {a * b}")
+  show(f"b // a: {b // a}")
+
+  # Comparison
+  show(f"a == a: {a == a}")
+  show(f"a < b: {a < b}")
+  show(f"a > b: {a > b}")
+  show(f"max(a, b): {a.max(you: b)}")
+  show(f"min(a, b): {a.min(you: b)}")
+
+  show("DONE")
+  return

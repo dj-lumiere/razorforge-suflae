@@ -1,0 +1,38 @@
+module Tests/Stdlib/RuntimeErrorCollectionsApi
+import IO/Console
+import IterTools
+
+# Each collection failure mode caught via the auto-generated `try_*` method
+# on the failable accessor / mutator. No custom wrapper routines — every
+# `try_` call is on a wired/stdlib API name.
+
+routine start()
+  var l: List[S64] = [10, 20, 30]
+  var empty: List[S64] = []
+
+  # --- List: remove_last on empty ---
+  show(f"l remove_last (has data): {l.try_remove_last()}")
+  show(f"empty remove_last: {empty.try_remove_last()}")
+
+  # --- List: remove_first on empty ---
+  show(f"l remove_first: {l.try_remove_first()}")
+  show(f"empty remove_first: {empty.try_remove_first()}")
+
+  # --- List: remove_at out-of-bounds ---
+  var l2: List[S64] = [1, 2, 3, 4]
+  show(f"l2 remove_at(1): {l2.try_remove_at(index: 1_u64)}")
+  show(f"l2 remove_at(99): {l2.try_remove_at(index: 99_u64)}")
+
+  # --- List: first / last on empty via Iterable terminal ---
+  show(f"l first: {l.try_first()}")
+  show(f"empty first: {empty.try_first()}")
+  show(f"empty last: {empty.try_last()}")
+
+  # --- Set: remove returns Bool already (not failable), invariants ---
+  var s: Set[S64] = {1, 2, 3}
+  show(f"remove existing 1: {s.remove(value: 1_s64)}")
+  show(f"remove non-existing 99: {s.remove(value: 99_s64)}")
+  show(f"size after: {s.count()}")
+
+  show("DONE")
+  return

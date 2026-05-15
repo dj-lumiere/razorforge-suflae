@@ -1,0 +1,34 @@
+module Tests/Stdlib/CharacterApi
+import IO/Console
+
+# Character: Unicode codepoint + classification/conversion methods.
+routine start()
+  var c = 'A'
+  show(f"c: {c}")
+  show(f"codepoint: {c.codepoint()}")
+  show(f"to_lowercase: {c.to_lowercase()}")
+  show(f"to_uppercase 'a': {'a'.to_uppercase()}")
+
+  # Classification
+  show(f"'A' is_alphabetic: {'A'.is_alphabetic()}")
+  show(f"'1' is_numeric: {'1'.is_numeric()}")
+  show(f"'1' is_digit: {'1'.is_digit()}")
+  show(f"'a' is_lowercase: {'a'.is_lowercase()}")
+  show(f"'A' is_uppercase: {'A'.is_uppercase()}")
+  show(f"' ' is_whitespace: {' '.is_whitespace()}")
+  show(f"'a' is_ascii: {'a'.is_ascii()}")
+
+  # Multi-byte
+  show(f"'한' is_ascii: {'한'.is_ascii()}")
+  show(f"'한' codepoint: {'한'.codepoint()}")
+  show(f"'한' is_cjk: {'한'.is_cjk()}")
+
+  # Digit value
+  show(f"'7' digit_value: {'7'.digit_value()}")
+
+  # Equality / ordering
+  show(f"'a' < 'b': {'a' < 'b'}")
+  show(f"'a' == 'a': {'a' == 'a'}")
+
+  show("DONE")
+  return

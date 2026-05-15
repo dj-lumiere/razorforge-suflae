@@ -1,0 +1,41 @@
+module Tests/Stdlib/IterToolsMoreApi
+import IO/Console
+import IterTools
+
+# IterTools coverage round 2 — select_many, min_by/max_by, exclude, count(predicate),
+# first_or_default, last_or_default.
+routine start()
+  var src: List[S64] = [1, 2, 3, 4, 5]
+
+  # select_many — flatten by mapping each element to a sub-sequence
+  var fanned = src.select_many[S64](transform: x => (1 to x).List()).List()
+  show(f"select_many 1..x: {fanned}")
+
+  # min_by / max_by — select key
+  var words: List[Owned[Text]] = ["pear", "fig", "banana", "kiwi"]
+  show(f"min by length: {words.min_by[U64](selector: w => w.count())}")
+  show(f"max by length: {words.max_by[U64](selector: w => w.count())}")
+
+  # exclude — set-style difference
+  var a: List[S64] = [1, 2, 3, 4, 5]
+  var b: List[S64] = [2, 4]
+  show(f"exclude: {a.exclude(other: b).List()}")
+
+  # get_count(predicate)
+  show(f"count > 3: {src.get_count(predicate: x => x > 3_s64)}")
+  show(f"count even: {src.get_count(predicate: x => x % 2 == 0)}")
+
+  # first_or_default / last_or_default
+  var empty: List[S64] = []
+  show(f"first_or_default empty: {empty.first_or_default(default: -1_s64)}")
+  show(f"first_or_default src: {src.first_or_default(default: -1_s64)}")
+  show(f"last_or_default empty: {empty.last_or_default(default: -1_s64)}")
+  show(f"last_or_default src: {src.last_or_default(default: -1_s64)}")
+
+  # accumulate as fold
+  var product = src.accumulate[S64](start: 1_s64,
+                                    combiner: (acc, x) => acc * x)
+  show(f"product 1..5: {product}")
+
+  show("DONE")
+  return

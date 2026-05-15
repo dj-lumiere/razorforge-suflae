@@ -1,0 +1,31 @@
+module Tests/Stdlib/HashableApi
+import IO/Console
+
+# Records auto-derive Equatable/Hashable on `open`+`posted` fields. We can't observe
+# raw hash bytes (xxHash64 implementation detail), but we can check the invariants:
+#   * equal values have equal hashes
+#   * unequal values typically differ (probabilistic, but ours are simple)
+# and that Set/Dict keyed by records work end-to-end (covered elsewhere).
+
+record Point
+  x: S64
+  y: S64
+
+routine start()
+  var p = Point(x: 1, y: 2)
+  var q = Point(x: 1, y: 2)
+  var r = Point(x: 3, y: 4)
+
+  show(f"p == q: {p == q}")
+  show(f"p == r: {p == r}")
+  show(f"p.$hash() == q.$hash(): {p.$hash() == q.$hash()}")
+  show(f"p.$hash() == r.$hash(): {p.$hash() == r.$hash()}")
+
+  # Records can be used as Dict/Set keys
+  var s = {p}
+  show(f"set contains p: {s.contains(value: p)}")
+  show(f"set contains q (equal to p): {s.contains(value: q)}")
+  show(f"set contains r: {s.contains(value: r)}")
+
+  show("DONE")
+  return

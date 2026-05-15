@@ -1,0 +1,35 @@
+module Tests/Stdlib/LifecycleOwnedApi
+import IO/Console
+
+# Verifies $destroy fires on scope exit. Side-effecting destructor prints a marker;
+# the recorded order of prints proves lifetime semantics.
+
+entity Tracer
+  tag: S64
+
+routine Tracer.$create(tag: S64) -> Tracer
+  show(f"  create({tag})")
+  return Tracer(tag: tag)
+
+routine Tracer.$destroy()
+  show(f"  destroy({me.tag})")
+  return
+
+routine inner()
+  show(" inner enter")
+  var a = Tracer(tag: 10)
+  var b = Tracer(tag: 11)
+  show(" inner body")
+  return
+  # a, b destroyed at function exit (reverse-creation order expected)
+
+routine start()
+  show("--- inner() ---")
+  inner()
+  show("--- after inner() ---")
+
+  var keep = Tracer(tag: 1)
+  show("--- start body ---")
+  # keep destroyed at start() exit, after the final show
+  show("DONE")
+  return
