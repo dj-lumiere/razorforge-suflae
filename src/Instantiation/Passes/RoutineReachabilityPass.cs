@@ -65,7 +65,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         foreach (string key in _live) ctx.LiveRoutineKeys.Add(item: key);
         foreach (TypeInfo owner in _liveOwnerTypes) ctx.LiveOwnerTypeNames.Add(item: owner.FullName);
 
-        string dumpPath = System.Environment.GetEnvironmentVariable(variable: "RF_REACHABILITY_DUMP");
+        string? dumpPath = System.Environment.GetEnvironmentVariable(variable: "RF_REACHABILITY_DUMP");
         if (!string.IsNullOrEmpty(value: dumpPath))
         {
             var lines = new List<string> { "=== LIVE ROUTINES ===" };
@@ -429,7 +429,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 if (m.Name == "$create" && m.Parameters.Count == 0)
                 {
                     RoutineInfo substituted = ctx.Registry.SubstituteMethodForOwner(
-                        method: m, resolvedOwner: owner);
+                        method: m, resolvedOwner: owner)!;
                     EnqueueCallee(callee: substituted);
                     return;
                 }
@@ -438,7 +438,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     }
 
     /// <summary>
-    /// f-string parts get lowered to `<expr>.$represent()` / `<expr>.$diagnose()` calls by
+    /// f-string parts get lowered to `&lt;expr&gt;.$represent()` / `&lt;expr&gt;.$diagnose()` calls by
     /// FStringLoweringPass in Phase 7. Reachability runs in Phase 6 — before that lowering —
     /// so the calls don't exist yet for the worklist to follow. Seed them here so synthesized
     /// $represent/$diagnose bodies on the interpolated expressions' types make it into the
@@ -885,7 +885,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                     // Without this, EnqueueCallee gets a routine with OwnerType = generic-def and
                     // can't build a {T → concrete} substitution map — body never emitted.
                     RoutineInfo substituted = ct.IsGenericResolution
-                        ? ctx.Registry.SubstituteMethodForOwner(method: m, resolvedOwner: ct)
+                        ? ctx.Registry.SubstituteMethodForOwner(method: m, resolvedOwner: ct)!
                         : m;
                     EnqueueCallee(callee: substituted);
                     if (matched == null) matched = substituted;

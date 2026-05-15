@@ -17,7 +17,7 @@ namespace Compiler.Postprocessing.Passes;
 /// <para>Transformations:</para>
 /// <list type="bullet">
 ///   <item><see cref="IndexExpression"/> (<c>obj[i]</c>) ??
-///         <c>obj.$getitem!(i)</c> ??failable method call.</item>
+///         <c>obj.$getitem!(i)</c> -> failable method call.</item>
 ///   <item><see cref="SliceExpression"/> (<c>obj[a..b]</c>) ??
 ///         <c>obj.$getslice(from: a, to: b)</c>.</item>
 ///   <item><see cref="GenericMemberExpression"/> (<c>obj.field[i]</c>, parser quirk) ??
@@ -26,7 +26,7 @@ namespace Compiler.Postprocessing.Passes;
 ///         <c>left.$method(you: right)</c>. Membership operators reverse operands:
 ///         <c>x in coll</c> ??<c>coll.$contains(x)</c>.</item>
 ///   <item><see cref="UnaryExpression"/> with <c>!!</c> (<see cref="UnaryOperator.ForceUnwrap"/>) ??
-///         <c>operand.$unwrap()</c> ??always lowered, even in stdlib bodies (which bypass
+///         <c>operand.$unwrap()</c> -> always lowered, even in stdlib bodies (which bypass
 ///         <see cref="ExpressionLoweringPass"/>).</item>
 ///   <item><see cref="UnaryExpression"/> with a wired method (<c>-</c>, <c>~</c>) ??
 ///         <c>operand.$neg()</c> / <c>operand.$bitnot()</c> when the method is resolved.</item>
@@ -256,9 +256,9 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
     /// Lowers the INTERIOR of an assignment target while preserving the outermost
     /// node type so <c>EmitBinaryAssign</c> can still dispatch on it:
     /// <list type="bullet">
-    ///   <item><c>MemberExpression(obj, prop)</c> ??lower <c>obj</c>; keep outer MemberExpression.</item>
-    ///   <item><c>IndexExpression(coll, idx)</c>  ??lower <c>coll</c> and <c>idx</c>; keep outer IndexExpression.</item>
-    ///   <item><c>IdentifierExpression</c>         ??unchanged.</item>
+    ///   <item><c>MemberExpression(obj, prop)</c> -> lower <c>obj</c>; keep outer MemberExpression.</item>
+    ///   <item><c>IndexExpression(coll, idx)</c>  -> lower <c>coll</c> and <c>idx</c>; keep outer IndexExpression.</item>
+    ///   <item><c>IdentifierExpression</c>         -> unchanged.</item>
     /// </list>
     /// This is needed because assignment targets like <c>node!!.field = v</c> or
     /// <c>coll[expr!!] = v</c> have <c>!!</c> (ForceUnwrap) nested inside the target,
@@ -320,14 +320,14 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
     {
         switch (expr)
         {
-            // IndexExpression ??obj.$getitem!(idx)
+            // IndexExpression -> obj.$getitem!(idx)
             case IndexExpression idx:
             {
                 Expression loweredObj = LowerExpression(idx.Object);
                 Expression loweredIdx = LowerExpression(idx.Index);
 
                 // Determine failable suffix: look up $getitem on the target type.
-                // Default to "!" (failable) ??all stdlib collections use failable $getitem!.
+                // Default to "!" (failable) -> all stdlib collections use failable $getitem!.
                 string propertyName = "$getitem!";
                 RoutineInfo? resolvedGetItem = null;
                 TypeInfo? targetType = idx.Object.ResolvedType;
@@ -372,7 +372,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 };
             }
 
-            //  SliceExpression ??obj.$getslice(from: a, to: b)
+            //  SliceExpression -> obj.$getslice(from: a, to: b)
             case SliceExpression slice:
             {
                 Expression loweredObj = LowerExpression(slice.Object);
@@ -438,7 +438,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 };
             }
 
-            //  GenericMemberExpression ??member + index ??$getitem!
+            //  GenericMemberExpression -> member + index ??$getitem!
             // Parser quirk: obj.field[i] is parsed as GenericMemberExpression(obj, "field", [i]).
             // TypeArguments are index expressions in disguise; lower to IndexExpression then recurse.
             case GenericMemberExpression gme when gme.TypeArguments.Count > 0:
@@ -468,13 +468,13 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     ResolvedType = gme.ResolvedType
                 };
 
-                // Recurse ??IndexExpression case above converts to $getitem! call.
+                // Recurse -> IndexExpression case above converts to $getitem! call.
                 return LowerExpression(indexExpr);
             }
 
             case GenericMemberExpression gme:
             {
-                // No type arguments ??plain member access; just lower the object.
+                // No type arguments -> plain member access; just lower the object.
                 Expression loweredObj = LowerExpression(gme.Object);
                 return ReferenceEquals(loweredObj, gme.Object)
                     ? expr
@@ -487,7 +487,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     };
             }
 
-            //  ChainedComparisonExpression ??AND-chain of pairwise comparisons
+            //  ChainedComparisonExpression -> AND-chain of pairwise comparisons
             // e.g. a < b < c ??(a < b) and (b < c)
             // Middle operands may be evaluated twice; acceptable here since chained
             // comparisons in stdlib bodies use trivially pure expressions (identifiers/literals).
@@ -529,7 +529,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 return LowerExpression(result);
             }
 
-            //  BinaryExpression ??receiver.$method(you: arg)
+            //  BinaryExpression -> receiver.$method(you: arg)
             // Operators with GetMethodName() == null (And, Or, Is, Identical, But, ...)
             // are not overloadable and stay as BinaryExpression for codegen.
 
@@ -542,9 +542,9 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     // For Assign: lower the right side, and lower the INTERIOR of the left side
                     // (e.g., the Object of a MemberExpression, or the Object/Index of an
                     // IndexExpression).  The outermost left-side node must stay as-is so that
-                    // EmitBinaryAssign can dispatch on its type (MemberExpression ??field write,
+                    // EmitBinaryAssign can dispatch on its type (MemberExpression -> field write,
                     // IndexExpression ??$setitem!).  Lowering the entire left would convert
-                    // IndexExpression ??CallExpression($getitem!), breaking setitem dispatch.
+                    // IndexExpression -> CallExpression($getitem!), breaking setitem dispatch.
                     if (bin.Operator == BinaryOperator.Assign)
                     {
                         Expression rhs = LowerExpression(bin.Right);
@@ -564,7 +564,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 Expression left = LowerExpression(bin.Left);
                 Expression right = LowerExpression(bin.Right);
 
-                // Membership operators reverse receiver/argument: x in coll ??coll.$contains(x)
+                // Membership operators reverse receiver/argument: x in coll -> coll.$contains(x)
                 bool isReversed = bin.Operator is BinaryOperator.In or BinaryOperator.NotIn;
                 Expression receiver = isReversed ? right : left;
                 Expression argument = isReversed ? left : right;
@@ -612,14 +612,14 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                         right: argType,
                         out TypeInfo? commonType))
                 {
-                    receiver = WrapNumericOperand(expr: receiver, targetType: commonType);
-                    argument = WrapNumericOperand(expr: argument, targetType: commonType);
+                    receiver = WrapNumericOperand(expr: receiver, targetType: commonType!);
+                    argument = WrapNumericOperand(expr: argument, targetType: commonType!);
                     receiverType = commonType;
                     argType = commonType;
-                    resolvedMethod = ctx.Registry.LookupMethodOverload(type: commonType,
+                    resolvedMethod = ctx.Registry.LookupMethodOverload(type: commonType!,
                         methodName: methodName,
-                        argTypes: [commonType]) ??
-                                     ctx.Registry.LookupMethod(type: commonType,
+                        argTypes: [commonType!]) ??
+                                     ctx.Registry.LookupMethod(type: commonType!,
                                          methodName: methodName);
                 }
 
@@ -640,7 +640,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     }
                 }
 
-                // Flags types have no $bitand/$bitor/$bitnot/$eq/$ne method bodies ??codegen handles
+                // Flags types have no $bitand/$bitor/$bitnot/$eq/$ne method bodies -> codegen handles
                 // them as direct LLVM instructions (bitwise or icmp eq/ne on the underlying i64).
                 // Skip method-call lowering so the BinaryExpression stays and codegen emits the
                 // instruction directly, avoiding infinite recursion in the generated $eq/$ne body.
@@ -655,13 +655,13 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 // Choice $eq/$ne bodies use BinaryOperator.Is (not Equal), so they never reach
                 // this point. No skip needed for choice types.
 
-                // Always lower to a method call ??even when the method isn't in the registry
+                // Always lower to a method call -> even when the method isn't in the registry
                 // (e.g., stdlib bodies where ResolvedType is null).  When ResolvedRoutine is null,
                 // codegen's EmitMethodCall resolves the method at emission time using the receiver's
                 // LLVM-inferred type; it will also retry with isFailable:null to find $add! etc.
                 string callName = resolvedMethod != null
                     ? (resolvedMethod.IsFailable ? methodName + "!" : methodName)
-                    : methodName;   // no suffix when method unknown ??EmitMethodCall will find it
+                    : methodName;   // no suffix when method unknown -> EmitMethodCall will find it
                 string paramName = resolvedMethod?.Parameters.Count > 0
                     ? resolvedMethod.Parameters[0].Name
                     : "you";
@@ -684,8 +684,8 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 { ResolvedType = bin.ResolvedType, ResolvedRoutine = resolvedMethod, LoweringKind = lk };
             }
 
-            //  ForceUnwrap (!!) ??operand.$unwrap()
-            // Always lower to a CallExpression ??never fall back to UnaryExpression.
+            //  ForceUnwrap (!!) -> operand.$unwrap()
+            // Always lower to a CallExpression -> never fall back to UnaryExpression.
             // This runs for both user code (where ExpressionLoweringPass has already
             // run but no longer handles ForceUnwrap) and stdlib bodies (which bypass
             // ExpressionLoweringPass).  ResolvedType may be null for stdlib bodies;
@@ -721,8 +721,8 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 };
             }
 
-            //  UnaryExpression ??operand.$method()
-            // Not, Steal ??no wired method, stay as UnaryExpression.
+            //  UnaryExpression -> operand.$method()
+            // Not, Steal -> no wired method, stay as UnaryExpression.
 
             case UnaryExpression unary:
             {
@@ -738,7 +738,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
 
                 TypeInfo? operandType = operand.ResolvedType;
 
-                // Flags types have no $bitnot method body ??codegen handles it via EmitBitwiseNot.
+                // Flags types have no $bitnot method body -> codegen handles it via EmitBitwiseNot.
                 // Skip method-call lowering so the UnaryExpression passes through unchanged.
                 if (operandType is FlagsTypeInfo
                     && methodName == "$bitnot")
@@ -757,7 +757,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                         methodName: methodName);
                 }
 
-                // Always lower to a method call ??even when method isn't resolved
+                // Always lower to a method call -> even when method isn't resolved
                 // (e.g., stdlib bodies with no ResolvedType on operands).
                 string callName = resolvedUnaryMethod != null
                     ? (resolvedUnaryMethod.IsFailable ? methodName + "!" : methodName)

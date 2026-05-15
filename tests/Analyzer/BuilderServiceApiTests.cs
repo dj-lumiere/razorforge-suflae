@@ -6,13 +6,13 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// Full API tests for BuilderService ??verifies every per-type routine, standalone routine,
+/// Full API tests for BuilderService -> verifies every per-type routine, standalone routine,
 /// and platform/build info routine resolves correctly with 'import BuilderService'.
 /// Also verifies import-gating for each category and that wired routines are unaffected.
 /// </summary>
 public class BuilderServiceApiTests
 {
-    #region Per-Type Routines ??Records
+    #region Per-Type Routines -> Records
     /// <summary>
     /// Verifies that the test validates type name available.
     /// </summary>
@@ -276,7 +276,7 @@ public class BuilderServiceApiTests
 
     #endregion
 
-    #region Per-Type Routines ??Entities
+    #region Per-Type Routines -> Entities
     /// <summary>
     /// Verifies that the test validates type name available.
     /// </summary>
@@ -337,7 +337,7 @@ public class BuilderServiceApiTests
 
     #endregion
 
-    #region Per-Type Routines ??Choices
+    #region Per-Type Routines -> Choices
     /// <summary>
     /// Verifies that the test validates type name available.
     /// </summary>
@@ -383,12 +383,8 @@ public class BuilderServiceApiTests
 
     #endregion
 
-    #region Per-Type Routines ??Import Gating (every routine without import)
-    /// <summary>
-    /// <summary>
-    /// Verifies that validates w it ho ut im po rt and reports the expected error.
-    /// </summary>
-    /// </summary>
+    #region Per-Type Routines -> Import Gating (every routine without import)
+    /// <summary>Verifies that the routine without import reports the expected error.</summary>
 
     [Theory]
     [InlineData("type_name")]
@@ -421,11 +417,7 @@ public class BuilderServiceApiTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
-    /// <summary>
-    /// <summary>
-    /// Verifies that validates w it hi mp or t without unexpected diagnostics.
-    /// </summary>
-    /// </summary>
+    /// <summary>Verifies that the routine with import produces no unexpected diagnostics.</summary>
 
     [Theory]
     [InlineData("type_name")]
@@ -464,11 +456,7 @@ public class BuilderServiceApiTests
     #endregion
 
     #region Standalone Routines ??Source Location
-    /// <summary>
-    /// <summary>
-    /// Verifies that validates w it ho ut im po rt and reports the expected error.
-    /// </summary>
-    /// </summary>
+    /// <summary>Verifies that the routine without import reports the expected error.</summary>
 
     [Theory]
     [InlineData("source_file")]
@@ -492,11 +480,7 @@ public class BuilderServiceApiTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
-    /// <summary>
-    /// <summary>
-    /// Verifies that validates w it hi mp or t without unexpected diagnostics.
-    /// </summary>
-    /// </summary>
+    /// <summary>Verifies that the routine with import produces no unexpected diagnostics.</summary>
 
     [Theory]
     [InlineData("source_file")]
@@ -526,11 +510,7 @@ public class BuilderServiceApiTests
     #endregion
 
     #region Standalone Routines ??Platform/Build Info
-    /// <summary>
-    /// <summary>
-    /// Verifies that validates w it ho ut im po rt and reports the expected error.
-    /// </summary>
-    /// </summary>
+    /// <summary>Verifies that the routine without import reports the expected error.</summary>
 
     [Theory]
     [InlineData("target_os")]
@@ -553,11 +533,7 @@ public class BuilderServiceApiTests
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BuilderServiceImportRequired);
     }
-    /// <summary>
-    /// <summary>
-    /// Verifies that validates w it hi mp or t without unexpected diagnostics.
-    /// </summary>
-    /// </summary>
+    /// <summary>Verifies that the routine with import produces no unexpected diagnostics.</summary>
 
     [Theory]
     [InlineData("target_os")]
@@ -591,12 +567,12 @@ public class BuilderServiceApiTests
     /// </summary>
 
     [Theory]
-    [InlineData("$represent", """var s = f"{p}" """)]
-    [InlineData("$diagnose", """var s = f"{p:?}" """)]
-    [InlineData("$eq", "var eq = p == q")]
-    [InlineData("$ne", "var ne = p != q")]
-    [InlineData("$hash", """var h = {p}""")]
-    public void WiredRoutine_WithoutImport_NoError(string description, string usage)
+    [InlineData("""var s = f"{p}" """)]
+    [InlineData("""var s = f"{p:?}" """)]
+    [InlineData("var eq = p == q")]
+    [InlineData("var ne = p != q")]
+    [InlineData("""var h = {p}""")]
+    public void WiredRoutine_WithoutImport_NoError(string usage)
     {
         string source = $$"""
                           record Point

@@ -5,64 +5,34 @@ namespace TypeModel.Reprs;
 /// </summary>
 public enum PointerFlavor
 {
-    /// <summary>
-    /// Represents N on e.
-    /// </summary>
+    /// <summary>Not a pointer (non-pointer scalar).</summary>
     None,
-    /// <summary>
-    /// Represents E nt it y.
-    /// </summary>
+    /// <summary>Heap entity pointer.</summary>
     Entity,
-    /// <summary>
-    /// Represents P ro to co l.
-    /// </summary>
+    /// <summary>Protocol witness/vtable pointer.</summary>
     Protocol,
-    /// <summary>
-    /// Represents R ou ti ne.
-    /// </summary>
+    /// <summary>Function pointer.</summary>
     Routine,
-    /// <summary>
-    /// Represents V ie we d.
-    /// </summary>
+    /// <summary>Viewing borrow (Viewed[T]).</summary>
     Viewed,
-    /// <summary>
-    /// Represents G ra sp ed.
-    /// </summary>
+    /// <summary>Grasped borrow (Grasped[T]).</summary>
     Grasped,
-    /// <summary>
-    /// Represents I ns pe ct ed.
-    /// </summary>
+    /// <summary>Inspected borrow (read-only, internal use).</summary>
     Inspected,
-    /// <summary>
-    /// Represents C la im ed.
-    /// </summary>
+    /// <summary>Claimed borrow (exclusive, internal use).</summary>
     Claimed,
-    /// <summary>
-    /// Represents R et ai ne d.
-    /// </summary>
+    /// <summary>Reference-counted shared pointer (Retained[T]).</summary>
     Retained,
-    /// <summary>
-    /// Represents T ra ck ed.
-    /// </summary>
+    /// <summary>Tracked ownership pointer (Tracked[T]).</summary>
     Tracked,
-    /// <summary>
-    /// Represents S ha re d.
-    /// </summary>
+    /// <summary>Shared ownership pointer (deferred concurrency use).</summary>
     Shared,
-    /// <summary>
-    /// Represents M ar ke d.
-    /// </summary>
+    /// <summary>Marked wrapper pointer (marker-protocol conformance).</summary>
     Marked,
-    /// <summary>
-    /// Represents H ij ac ke d.
-    /// </summary>
+    /// <summary>Unsafe hijack borrow (Hijacked[T]).</summary>
     Hijacked,
-    /// <summary>
-    /// Represents O wn ed.
-    /// </summary>
+    /// <summary>Unique ownership pointer (Owned[T]).</summary>
     Owned,
-    /// <summary>
-    /// Represents R aw.
-    /// </summary>
+    /// <summary>Untyped raw pointer (CPtr / Address).</summary>
     Raw
 }

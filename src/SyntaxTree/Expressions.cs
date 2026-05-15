@@ -51,6 +51,7 @@ public abstract record Expression(SourceLocation Location) : SyntaxTreeNode(Loca
 /// Expression representing constant literal values embedded in source code.
 /// Includes all primitive types: integers, floats, strings, characters, and booleans.
 /// </summary>
+/// <param name="Value">The raw literal value parsed from source.</param>
 /// <param name="LiteralType">Token type indicating the specific literal format used</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
@@ -65,7 +66,6 @@ public abstract record Expression(SourceLocation Location) : SyntaxTreeNode(Loca
 /// <item>ByteSize: b, kb, kib, mb, mib, gb, gib</item>
 /// </list>
 /// </remarks>
-/// <param name="Value">The V al ue.</param>
 public record LiteralExpression(object Value, TokenType LiteralType, SourceLocation Location)
     : Expression(Location: Location)
 {
@@ -79,7 +79,6 @@ public record LiteralExpression(object Value, TokenType LiteralType, SourceLocat
 /// <summary>
 /// Abstract base for parts of an inserted text expression (f-string).
 /// </summary>
-/// <param name="Location">The L oc at io n.</param>
 public abstract record InsertedTextPart(SourceLocation Location);
 
 /// <summary>
@@ -98,9 +97,6 @@ public record ExpressionPart(Expression Expression, string? FormatSpec, SourceLo
 /// Expression representing an f-string with text insertion: f"Hello, {name}!"
 /// Contains a list of text and expression parts.
 /// </summary>
-/// <param name="Parts">The P ar ts.</param>
-/// <param name="IsRaw">The I sR aw.</param>
-/// <param name="Location">The L oc at io n.</param>
 public record InsertedTextExpression(
     List<InsertedTextPart> Parts,
     bool IsRaw,
@@ -235,7 +231,7 @@ public record IdentifierExpression(string Name, SourceLocation Location)
 /// <param name="Target">The assignment target (must be a modifiable variable, member variable, or index)</param>
 /// <param name="Operator">The base binary operator (Add, Subtract, etc. — not Assign)</param>
 /// <param name="Location">Source location information</param>
-/// <param name="Value">The V al ue.</param>
+/// <param name="Value">The right-hand side value expression</param>
 public sealed record CompoundAssignmentExpression(
     Expression Target,
     BinaryOperator Operator,
@@ -385,6 +381,7 @@ public record CallExpression(
 /// Allows specifying argument name explicitly: func(name: value)
 /// </summary>
 /// <param name="Name">The parameter name</param>
+/// <param name="Value">The argument value expression.</param>
 /// <param name="Location">Source location information</param>
 /// <remarks>
 /// Named arguments support:
@@ -395,7 +392,6 @@ public record CallExpression(
 /// <item>Optional parameter selection: connect(host: "localhost", port: 8080)</item>
 /// </list>
 /// </remarks>
-/// <param name="Value">The V al ue.</param>
 public record NamedArgumentExpression(string Name, Expression Value, SourceLocation Location)
     : Expression(Location: Location)
 {
@@ -412,7 +408,7 @@ public record NamedArgumentExpression(string Name, Expression Value, SourceLocat
 /// </summary>
 /// <param name="Key">The key expression</param>
 /// <param name="Location">Source location information</param>
-/// <param name="Value">The V al ue.</param>
+/// <param name="Value">The value expression</param>
 public record DictEntryLiteralExpression(Expression Key, Expression Value, SourceLocation Location)
     : Expression(Location: Location)
 {
@@ -640,7 +636,7 @@ public record ConditionalExpression(
 /// <item>Scoped variable declarations that contribute to a result</item>
 /// </list>
 /// </remarks>
-/// <param name="Value">The V al ue.</param>
+/// <param name="Value">The final expression whose result the block evaluates to</param>
 public record BlockExpression(Expression Value, SourceLocation Location)
     : Expression(Location: Location)
 {

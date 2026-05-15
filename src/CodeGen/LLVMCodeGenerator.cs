@@ -32,7 +32,7 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Concrete generic method bodies from <see cref="Instantiation.Passes.GenericMonomorphizationPass"/>,
     /// keyed by <see cref="TypeModel.Symbols.RoutineInfo.RegistryKey"/>.
-    /// <see cref="EmitFromInstantiatedGenericBodies"/> iterates this map and emits any body whose
+    /// Phase B emission iterates this map and emits any body whose
     /// mangled name has been declared in <see cref="_generatedRoutines"/>.
     /// </summary>
     private IReadOnlyDictionary<string, MonomorphizedBody> _instantiatedGenericBodies =
@@ -232,6 +232,8 @@ public partial class LlvmCodeGenerator
     /// <param name="pendingRuntimeDispatches">The pending runtime dispatches.</param>
     /// <param name="instantiatedGenericBodies">The instantiated generic bodies.</param>
     /// <param name="synthesizedBodies">The synthesized bodies.</param>
+    /// <param name="liveRoutineKeys">Reachable routine keys from RoutineReachabilityPass; empty disables filtering.</param>
+    /// <param name="liveOwnerTypeNames">Live owner type full-names from RoutineReachabilityPass; empty disables filtering.</param>
     public LlvmCodeGenerator(Program program, TypeRegistry registry,
         IReadOnlyList<(Program Program, string FilePath, string Module)>? stdlibPrograms = null,
         TargetConfig? target = null, RfBuildMode buildMode = RfBuildMode.Debug,
@@ -265,6 +267,8 @@ public partial class LlvmCodeGenerator
     /// <param name="pendingRuntimeDispatches">The pending runtime dispatches.</param>
     /// <param name="instantiatedGenericBodies">The instantiated generic bodies.</param>
     /// <param name="synthesizedBodies">The synthesized bodies.</param>
+    /// <param name="liveRoutineKeys">Reachable routine keys from RoutineReachabilityPass; empty disables filtering.</param>
+    /// <param name="liveOwnerTypeNames">Live owner type full-names from RoutineReachabilityPass; empty disables filtering.</param>
     public LlvmCodeGenerator(
         IReadOnlyList<(Program Program, string FilePath, string Module)> userPrograms,
         TypeRegistry registry,
@@ -399,6 +403,7 @@ public partial class LlvmCodeGenerator
     /// </summary>
     public bool Timing { get; set; }
 
+    /// <summary>Generates LLVM IR for all user programs and returns it as a string.</summary>
     public string Generate()
     {
         bool timing = Timing;

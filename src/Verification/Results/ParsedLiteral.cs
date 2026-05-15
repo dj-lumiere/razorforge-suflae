@@ -7,7 +7,6 @@ namespace Verification.Results;
 /// Represents a parsed numeric literal value ready for code generation.
 /// Used for types that require native library parsing (f128, d32, d64, d128, Integer, Decimal).
 /// </summary>
-/// <param name="Location">The L oc at io n.</param>
 public abstract record ParsedLiteral(SourceLocation Location);
 
 /// <summary>
@@ -83,12 +82,6 @@ public sealed record ParsedInteger(SourceLocation Location, byte[] Limbs, int Si
 /// Parsed arbitrary-precision Decimal value.
 /// Contains the string representation for native code generation.
 /// </summary>
-/// <param name="Location">The L oc at io n.</param>
-/// <param name="StringValue">The S tr in gV al ue.</param>
-/// <param name="Sign">The S ig n.</param>
-/// <param name="Exponent">The E xp on en t.</param>
-/// <param name="SignificantDigits">The S ig ni fi ca nt Di gi ts.</param>
-/// <param name="IsInteger">The I sI nt eg er.</param>
 public sealed record ParsedDecimal(
     SourceLocation Location,
     string StringValue,
@@ -224,11 +217,6 @@ public sealed record ParsedJ128(SourceLocation Location, ulong Lo, ulong Hi)
 /// Parsed imaginary component for Jn (arbitrary-precision Decimal-based complex).
 /// Uses the same representation as ParsedDecimal.
 /// </summary>
-/// <param name="Location">The L oc at io n.</param>
-/// <param name="StringValue">The S tr in gV al ue.</param>
-/// <param name="Sign">The S ig n.</param>
-/// <param name="Exponent">The E xp on en t.</param>
-/// <param name="SignificantDigits">The S ig ni fi ca nt Di gi ts.</param>
 public sealed record ParsedJn(
     SourceLocation Location,
     string StringValue,

@@ -725,16 +725,6 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Yields all active generic constraints for the named parameter from the current routine
-    /// and its owner type.
-    /// </summary>
-    /// <summary>
-    /// Returns true if the named generic parameter has a `is &lt;TypeName&gt;` const-generic
-    /// constraint matching <paramref name="otherTypeName"/>. Note: ConstraintKind.ConstGeneric is
-    /// also used for `is EntityType`/`is RecordType` etc., which don't represent value types —
-    /// callers handle those via Category checks first.
-    /// </summary>
-    /// <summary>
     /// Returns true if the protocol (or any protocol it transitively obeys) declares a method
     /// matching the given name. e.g. <c>Comparable</c> obeys <c>Equatable</c>, so
     /// <c>$eq</c> is reachable through <c>Comparable</c>.
@@ -754,6 +744,12 @@ public sealed partial class SemanticVerifier
         return false;
     }
 
+    /// <summary>
+    /// Returns true if the named generic parameter has a `is &lt;TypeName&gt;` const-generic
+    /// constraint matching <paramref name="otherTypeName"/>. Note: ConstraintKind.ConstGeneric is
+    /// also used for `is EntityType`/`is RecordType` etc., which don't represent value types —
+    /// callers handle those via Category checks first.
+    /// </summary>
     private bool ConstGenericMatches(string paramName, string otherTypeName)
     {
         foreach (GenericConstraintDeclaration c in ActiveConstraintsFor(paramName: paramName))
@@ -766,6 +762,10 @@ public sealed partial class SemanticVerifier
         return false;
     }
 
+    /// <summary>
+    /// Yields all active generic constraints for the named parameter from the current routine
+    /// and its owner type.
+    /// </summary>
     private IEnumerable<GenericConstraintDeclaration> ActiveConstraintsFor(string paramName)
     {
         if (_currentRoutine?.GenericConstraints != null)

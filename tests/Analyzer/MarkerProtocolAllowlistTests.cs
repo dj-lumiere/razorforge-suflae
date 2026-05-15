@@ -16,6 +16,7 @@ public class MarkerProtocolAllowlistTests
 {
     #region S707 — MarkerProtocolLayoutViolation
 
+    /// <summary>Verifies user-defined record obeying Referring[T] reports S707.</summary>
     [Fact]
     public void UserRecord_ObeysReferring_ReportsS707()
     {
@@ -33,6 +34,7 @@ public class MarkerProtocolAllowlistTests
             filter: e => e.Code == SemanticDiagnosticCode.MarkerProtocolLayoutViolation);
     }
 
+    /// <summary>Verifies user-defined record obeying Controlling[T] reports S707.</summary>
     [Fact]
     public void UserRecord_ObeysControlling_ReportsS707()
     {
@@ -51,6 +53,7 @@ public class MarkerProtocolAllowlistTests
             filter: e => e.Code == SemanticDiagnosticCode.MarkerProtocolLayoutViolation);
     }
 
+    /// <summary>Verifies blessed stdlib wrappers (Owned, Retained, etc.) do not trigger S707.</summary>
     [Fact]
     public void StdlibWrapper_ObeysControlling_NoS707()
     {
@@ -68,6 +71,7 @@ public class MarkerProtocolAllowlistTests
             filter: e => e.Code == SemanticDiagnosticCode.MarkerProtocolLayoutViolation);
     }
 
+    /// <summary>Verifies implicit entity conformance to Referring[T] does not trigger S707.</summary>
     [Fact]
     public void UserEntity_AutoConformanceToReferring_NoS707()
     {
@@ -89,6 +93,7 @@ public class MarkerProtocolAllowlistTests
 
     #region S708 — LlvmAnnotatedRecordMustHavePassBody
 
+    /// <summary>Verifies @llvm-annotated record with fields reports S708.</summary>
     [Fact]
     public void LlvmAnnotatedRecord_WithFields_ReportsS708()
     {
@@ -106,6 +111,7 @@ public class MarkerProtocolAllowlistTests
             filter: e => e.Code == SemanticDiagnosticCode.LlvmAnnotatedRecordMustHavePassBody);
     }
 
+    /// <summary>Verifies @llvm-annotated record with pass body does not trigger S708.</summary>
     [Fact]
     public void LlvmAnnotatedRecord_PassBody_NoS708()
     {
@@ -123,6 +129,7 @@ public class MarkerProtocolAllowlistTests
             filter: e => e.Code == SemanticDiagnosticCode.LlvmAnnotatedRecordMustHavePassBody);
     }
 
+    /// <summary>Verifies non-@llvm record with fields does not trigger S708.</summary>
     [Fact]
     public void NonLlvmAnnotatedRecord_WithFields_NoS708()
     {

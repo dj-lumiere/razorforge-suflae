@@ -9,7 +9,9 @@ namespace Compiler.Postprocessing.Passes;
 /// Future Phase 7 pass: lower block-expression result flow (`becomes`) into explicit
 /// temporaries and assignments after verification is complete.
 /// </summary>
-internal sealed class BecomesLoweringPass(PostprocessingContext ctx)
+#pragma warning disable CS9113
+internal sealed class BecomesLoweringPass(PostprocessingContext _)
+#pragma warning restore CS9113
 {
     public void Run(Program program)
     {

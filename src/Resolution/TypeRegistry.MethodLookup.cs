@@ -817,7 +817,7 @@ public sealed partial class TypeRegistry
     /// Substitutes the owner type's generic type parameters into a method's signature.
     /// For example, List[S32].$add(item: T) -> List[S32].$add(item: S32).
     /// </summary>
-    internal RoutineInfo SubstituteMethodForOwner(RoutineInfo method, TypeInfo resolvedOwner)
+    internal RoutineInfo? SubstituteMethodForOwner(RoutineInfo method, TypeInfo resolvedOwner)
     {
         if (method.OwnerType is GenericParameterTypeInfo universalOwner)
         {
@@ -1128,7 +1128,7 @@ public sealed partial class TypeRegistry
         if (_universalMethods.TryGetValue(key: methodName, value: out RoutineInfo? universalMethod))
         {
             candidates.Add(item: SubstituteMethodForOwner(method: universalMethod,
-                resolvedOwner: type));
+                resolvedOwner: type)!);
         }
 
         IReadOnlyList<TypeInfo>? protocols = type switch

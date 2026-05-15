@@ -69,7 +69,7 @@ public sealed class InstantiationContext
     public HashSet<string> LiveRoutineKeys { get; } = new(comparer: StringComparer.Ordinal);
 
     /// <summary>
-    /// Strategy-B live owner-type set: <see cref="TypeInfo.FullName"/> values for concrete owner
+    /// Strategy-B live owner-type set: <c>TypeInfo.FullName</c> values for concrete owner
     /// types whose routines were reached by the entry-point BFS. GMP gates
     /// <c>ProcessConcreteType</c> on membership so unreachable concrete instances
     /// (e.g. <c>Array[BuildMode, 63]</c>, <c>BTreeListNode[Text]</c>) don't get monomorphized at all.

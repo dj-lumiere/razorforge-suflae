@@ -613,7 +613,7 @@ public record TypePattern(
 /// Pattern that matches when a value is NOT a specific type.
 /// Used for negated type checking in when clauses: when value { isnot Text => ... }
 /// </summary>
-/// <param name="Type">The type to check against (negated ??matches if NOT this type)</param>
+/// <param name="Type">The type to check against (negated -> matches if NOT this type)</param>
 /// <param name="Location">Source location information</param>
 public record NegatedTypePattern(TypeExpression Type, SourceLocation Location)
     : Pattern(Location: Location);
@@ -893,7 +893,7 @@ public record VariantReturnStatement(
     SourceLocation Location
 ) : Statement(Location: Location)
 {
- 
+
     /// <inheritdoc/>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor) => visitor.VisitVariantReturnStatement(node: this);
 }
@@ -913,10 +913,6 @@ public record VariantReturnStatement(
 ///   # file is automatically closed at block exit
 /// </code>
 /// </remarks>
-/// <param name="Resource">The R es ou rc e.</param>
-/// <param name="Name">The N am e.</param>
-/// <param name="Body">The B od y.</param>
-/// <param name="Location">The L oc at io n.</param>
 public record UsingStatement(
     Expression Resource,
     string Name,

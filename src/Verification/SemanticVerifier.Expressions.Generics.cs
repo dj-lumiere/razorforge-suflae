@@ -79,7 +79,7 @@ public sealed partial class SemanticVerifier
                         creator.ReturnType is null or { IsGenericDefinition: true } ||
                         creator.ReturnType.TypeArguments?.Any(
                             predicate: t => t is GenericParameterTypeInfo) == true;
-                    return returnTypeIsGenericOrUnresolved ? resolvedType : creator.ReturnType;
+                    return returnTypeIsGenericOrUnresolved ? resolvedType : creator.ReturnType!;
                 }
             }
 

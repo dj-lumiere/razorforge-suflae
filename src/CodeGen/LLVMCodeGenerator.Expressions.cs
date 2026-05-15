@@ -105,7 +105,7 @@ public partial class LlvmCodeGenerator
                 routineType: routineType,
                 routine: out RoutineInfo? routine))
         {
-            return $"@{MangleRoutineName(routine)}";
+            return $"@{MangleRoutineName(routine!)}";
         }
 
         // Look up the variable in local variables first

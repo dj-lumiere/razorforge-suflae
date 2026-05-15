@@ -115,7 +115,7 @@ public sealed partial class SemanticVerifier
             }
 
             // Get a string representation of the expression for uniqueness checking
-            string exprKey = GetExpressionKey(expression: arg);
+            string? exprKey = GetExpressionKey(expression: arg);
             if (string.IsNullOrEmpty(value: exprKey))
             {
                 continue;

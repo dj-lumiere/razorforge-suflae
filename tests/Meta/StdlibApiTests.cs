@@ -18,6 +18,7 @@ public sealed class StdlibApiTests
     private static readonly string FixturesDir = Path.Combine(RepoRoot, "tests", "Fixtures", "Stdlib");
     private static readonly string ProjectFile = Path.Combine(RepoRoot, "RazorForge.csproj");
 
+    /// <summary>Enumerates .rf fixture files from the Stdlib fixtures directory.</summary>
     public static IEnumerable<object[]> Fixtures()
     {
         if (!Directory.Exists(FixturesDir)) yield break;
@@ -27,6 +28,7 @@ public sealed class StdlibApiTests
         }
     }
 
+    /// <summary>Verifies that a stdlib fixture's output matches its expected snapshot file.</summary>
     [Theory]
     [MemberData(nameof(Fixtures))]
     public void Fixture_OutputMatchesExpected(string fixtureName)

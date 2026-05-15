@@ -18,7 +18,7 @@ namespace Compiler.Postprocessing.Passes;
 ///   <item><c>crashable</c> ??<c>entity</c> declaration with the <c>Crashable</c> protocol added to its protocol list.</item>
 /// </list>
 ///
-/// <para>The TypeRegistry is intentionally left unchanged ??codegen continues using
+/// <para>The TypeRegistry is intentionally left unchanged -> codegen continues using
 /// <c>ChoiceTypeInfo</c>, <c>FlagsTypeInfo</c>, etc. for LLVM emission. This pass
 /// only transforms the AST declarations as groundwork for <see cref="WiredRoutinePass"/>
 /// (Step 4), which will generate <c>$represent</c>/<c>$diagnose</c> bodies that
@@ -29,7 +29,9 @@ namespace Compiler.Postprocessing.Passes;
 /// to <c>_protocolTypeIdAllocas</c> (LLVM alloca addresses for runtime protocol dispatch on bound
 /// error variables) — IR-specific state with no AST equivalent.</para>
 /// </summary>
-internal sealed class StructuralLoweringPass(PostprocessingContext ctx)
+#pragma warning disable CS9113
+internal sealed class StructuralLoweringPass(PostprocessingContext _)
+#pragma warning restore CS9113
 {
     public void Run(Program program)
     {
@@ -48,7 +50,7 @@ internal sealed class StructuralLoweringPass(PostprocessingContext ctx)
     }
 
     /// <summary>
-    /// choice Name { ... } ??record Name with secret _underlying: S64 backing field
+    /// choice Name { ... } -> record Name with secret _underlying: S64 backing field
     /// plus all choice methods carried over as members.
     /// </summary>
     private static RecordDeclaration LowerChoice(ChoiceDeclaration choice)
@@ -76,7 +78,7 @@ internal sealed class StructuralLoweringPass(PostprocessingContext ctx)
     }
 
     /// <summary>
-    /// flags Name { ... } ??record Name with secret _bits: U64 backing field.
+    /// flags Name { ... } -> record Name with secret _bits: U64 backing field.
     /// </summary>
     private static RecordDeclaration LowerFlags(FlagsDeclaration flags)
     {
@@ -100,7 +102,7 @@ internal sealed class StructuralLoweringPass(PostprocessingContext ctx)
     }
 
     /// <summary>
-    /// variant Name[T] { ... } ??record Name[T] with secret _type_id: U64 and secret _payload: Address.
+    /// variant Name[T] { ... } -> record Name[T] with secret _type_id: U64 and secret _payload: Address.
     /// Generic parameters and constraints are preserved.
     /// </summary>
     private static RecordDeclaration LowerVariant(VariantDeclaration variant)
@@ -136,7 +138,7 @@ internal sealed class StructuralLoweringPass(PostprocessingContext ctx)
     }
 
     /// <summary>
-    /// crashable Name { ... } ??entity Name obeys Crashable { ... }
+    /// crashable Name { ... } -> entity Name obeys Crashable { ... }
     /// Members are carried over unchanged.
     /// </summary>
     private static EntityDeclaration LowerCrashable(CrashableDeclaration crashable)

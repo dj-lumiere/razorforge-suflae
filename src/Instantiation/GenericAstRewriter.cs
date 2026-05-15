@@ -20,7 +20,7 @@ internal static class GenericAstRewriter
 {
     /// <summary>
     /// Rewrites a generic routine declaration by substituting all type parameter references
-    /// with concrete type names. Returns a deep clone ??the original is not modified.
+    /// with concrete type names. Returns a deep clone -> the original is not modified.
     /// <para>
     /// When <paramref name="typeSubs"/> and <paramref name="registry"/> are provided, the
     /// rewriter also sets <see cref="Expression.ResolvedType"/> on every cloned expression
@@ -95,7 +95,7 @@ internal static class GenericAstRewriter
 
         /// <summary>
         /// Map of parameter name to substituted TypeInfo for the routine being rewritten.
-        /// Populated by <see cref="Rewrite"/> and the public <see cref="RewriteStatement"/>
+        /// Populated by <see cref="Rewrite"/> and the public <c>RewriteStatement</c>
         /// overloads that accept a routine. Used to backfill <c>IdentifierExpression.ResolvedType</c>
         /// when SA failed to annotate a parameter reference (e.g. <c>you.address()</c> in
         /// <c>Hijacked[T].$cmp</c>'s generic-def body).
@@ -111,7 +111,7 @@ internal static class GenericAstRewriter
             if (original == null || TypeSubs == null || Registry == null)
                 return null;
 
-            // Direct generic parameter substitution: T ??S64
+            // Direct generic parameter substitution: T -> S64
             if (original is GenericParameterTypeInfo gp)
             {
                 if (TypeSubs.TryGetValue(key: gp.Name, value: out TypeInfo? direct))
@@ -124,7 +124,7 @@ internal static class GenericAstRewriter
                     return renamed;
             }
 
-            // Generic resolution with substitutable type arguments: List[T] ??List[S64]
+            // Generic resolution with substitutable type arguments: List[T] -> List[S64]
             if (original is { IsGenericResolution: true, TypeArguments: not null })
             {
                 bool anyChanged = false;
@@ -186,7 +186,7 @@ internal static class GenericAstRewriter
                     return Registry.TryGetResolution(genericDef: original, typeArguments: typeArgs);
             }
 
-            // WrapperTypeInfo (Hijacked[T] ??Hijacked[S64], or Hijacked[S64] ??stays): always
+            // WrapperTypeInfo (Hijacked[T] -> Hijacked[S64], or Hijacked[S64] -> stays): always
             // resolve to the real RecordTypeInfo so LLVM mangled names use "Core.Hijacked[S64]"
             // (from RecordTypeInfo.FullName) rather than "Hijacked[Core.S64]" (WrapperTypeInfo
             // with Module=null). The WrapperTypeInfo.FullName appends inner.FullName which includes
@@ -506,8 +506,8 @@ internal static class GenericAstRewriter
                 return TryInstantiateRoutine(routine: candidate) ?? candidate;
             }
 
-            RoutineInfo? routine = Registry.LookupRoutineOverload(baseName: callName,
-                argTypes: callArgTypes);
+            RoutineInfo? routine = Registry!.LookupRoutineOverload(baseName: callName,
+                argTypes: callArgTypes!);
             if (routine != null && routine.IsFailable == isFailable)
             {
                 return InstantiateFreeRoutine(candidate: routine);
@@ -698,12 +698,12 @@ internal static class GenericAstRewriter
                 Pattern = RewritePattern(pattern: ipe.Pattern, ctx: ctx)
             },
 
-            // Fold T.BS_ROUTINE() ??compile-time literal during monomorphization.
-            // After substituting T ??Byte (or S64 etc.), the identifier is now a concrete
+            // Fold T.BS_ROUTINE() -> compile-time literal during monomorphization.
+            // After substituting T -> Byte (or S64 etc.), the identifier is now a concrete
             // type name. BuilderServiceInliningPass handles the static/concrete cases:
             // this fold handles the residual case where the receiver name still matches a
             // type-param string substitution (e.g., the receiver is IdentifierExpression("T")
-            // and stringSubs["T"] = "Core.Byte" ??the name hasn't been rewritten yet when
+            // and stringSubs["T"] = "Core.Byte" -> the name hasn't been rewritten yet when
             // the switch arm fires).
             CallExpression { Callee: MemberExpression { PropertyName: var bsName } bsCallee,
                 Arguments: { Count: 0 } } bsCall
@@ -889,10 +889,10 @@ internal static class GenericAstRewriter
 
             IdentifierExpression identifier => identifier with { },
 
-            // Leaf nodes ??no children to rewrite
+            // Leaf nodes -> no children to rewrite
             LiteralExpression => expr,
 
-            _ => expr // Unknown expression type ??return as-is
+            _ => expr // Unknown expression type -> return as-is
         };
 
         // Annotate the cloned expression's ResolvedType with the substituted concrete type.

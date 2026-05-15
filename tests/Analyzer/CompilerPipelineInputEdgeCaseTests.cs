@@ -145,7 +145,7 @@ public class CompilerPipelineInputEdgeCaseTests
     /// Repro source mirrored at <c>playground/deeply_nested_repro.rf</c>.
     /// </remarks>
     [Fact(Timeout = 30_000)]
-    public async Task Codegen_DeeplyNestedSource_GeneratesRoutineDefinition()
+    public async Task Codegen_DeeplyNestedSource_GeneratesRoutineDefinitionAsync()
     {
         // Wrapped in Task.Run so xUnit's Timeout attribute can actually abort runaway work.
         // Without async, Timeout in xUnit 2.x silently has no effect on sync test bodies.

@@ -896,7 +896,7 @@ internal sealed class TypeResolver
                 TryBuildConstGenericFromLiteral(literal: literal,
                     declaredType: preset.Type,
                     value: out ConstGenericValueTypeInfo? constValue):
-                return constValue;
+                return constValue!;
 
             case IdentifierExpression id:
             {

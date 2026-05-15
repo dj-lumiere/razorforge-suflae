@@ -32,9 +32,7 @@ public sealed class ChoiceTypeInfo : RecordTypeInfo
     /// <summary>The underlying integer type for this choice. Defaults to S32.</summary>
     public TypeInfo? UnderlyingType { get; init; }
 
-    /// <summary>
-    /// Initializes a new instance of the C ho ic eT yp eI nf o class.
-    /// </summary>
+    /// <summary>Creates a new choice type with the given name and default i32 backend type.</summary>
     public ChoiceTypeInfo(string name) : base(name: name)
     {
         BackendType = "i32";

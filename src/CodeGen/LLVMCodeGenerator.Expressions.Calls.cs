@@ -552,7 +552,7 @@ public partial class LlvmCodeGenerator
         // the first concrete type argument T. Both representations are ptr in LLVM, so no cast needed.
         if (receiverType is ProtocolTypeInfo { Methods.Count: 0, TypeArguments.Count: > 0 } transparentProto)
         {
-            receiverType = transparentProto.TypeArguments[index: 0];
+            receiverType = transparentProto.TypeArguments![index: 0]!;
         }
 
         bool isFailableMethodCall = member.PropertyName.EndsWith(value: '!');
@@ -602,7 +602,7 @@ public partial class LlvmCodeGenerator
                 // so use LookupMethodOverload to honor the receiver-type overload signature
                 // (otherwise Text.S32!() resolves to S32.$create(from: S8), the first overload).
                 RoutineInfo? creator =
-                    _registry.LookupMethodOverload(type: targetType,
+                    _registry.LookupMethodOverload(type: targetType!,
                         methodName: "$create",
                         argTypes: argTypes2);
                 string creatorName = $"{conversionTypeName}.$create";
@@ -740,7 +740,7 @@ public partial class LlvmCodeGenerator
                     inferred.ContainsKey(key: gp) &&
                     inferred[key: gp] is not ErrorTypeInfo and not GenericParameterTypeInfo))
             {
-                var orderedArgs = genericMethodForInference.GenericParameters
+                var orderedArgs = genericMethodForInference.GenericParameters!
                     .Select(selector: gp => inferred[key: gp])
                     .ToList();
                 method = _registry.GetOrCreateRoutineResolution(genericDef: genericMethodForInference,

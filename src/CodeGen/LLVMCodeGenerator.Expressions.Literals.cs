@@ -10,12 +10,9 @@ using TypeModel.Types;
 
 namespace Compiler.CodeGen;
 
-/// <summary>
-/// Expression code generation for literals and scalar literal helpers.
-/// </summary>
 // TODO: This should be on the AST level with constructor.
 /// <summary>
-/// Coordinates LLVM code generator behavior for this compiler phase.
+/// Expression code generation for literals and scalar literal helpers.
 /// </summary>
 public partial class LlvmCodeGenerator
 {

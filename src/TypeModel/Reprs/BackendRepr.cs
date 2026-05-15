@@ -6,14 +6,14 @@ namespace TypeModel.Reprs;
 /// Concrete backend representation metadata attached before codegen entry.
 /// Separates semantic type identity from ABI/storage identity.
 /// </summary>
-/// <param name="Kind">The K in d.</param>
-/// <param name="SourceType">The S ou rc eT yp e.</param>
-/// <param name="LlvmAbiType">The L lv mA bi Ty pe.</param>
-/// <param name="PointerFlavor">The P oi nt er Fl av or.</param>
-/// <param name="PointeeType">The P oi nt ee Ty pe.</param>
-/// <param name="AggregateLayoutKey">The A gg re ga te La yo ut Ke y.</param>
-/// <param name="IsPassedIndirectly">The I sP as se dI nd ir ec tl y.</param>
-/// <param name="IsTransparent">The I sT ra ns pa re nt.</param>
+/// <param name="Kind">Broad backend category (primitive, entity ref, aggregate, etc.).</param>
+/// <param name="SourceType">The semantic type this representation lowers from.</param>
+/// <param name="LlvmAbiType">LLVM ABI type string (e.g. "i64", "ptr", "%Record.Foo").</param>
+/// <param name="PointerFlavor">If pointer-like, what kind of pointer (raw, RC, entity, etc.).</param>
+/// <param name="PointeeType">If pointer-like, the type pointed at.</param>
+/// <param name="AggregateLayoutKey">Stable key used to dedupe aggregate layouts in codegen.</param>
+/// <param name="IsTransparent">True when this repr forwards storage to its inner type without a wrapper.</param>
+/// <param name="IsPassedIndirectly">True when ABI requires passing this value by hidden pointer.</param>
 public sealed record BackendRepr(
     BackendReprKind Kind,
     TypeInfo SourceType,
@@ -24,9 +24,7 @@ public sealed record BackendRepr(
     bool IsTransparent = false,
     bool IsPassedIndirectly = false)
 {
-    /// <summary>
-    /// Gets I sP oi nt er Li ke.
-    /// </summary>
+    /// <summary>True when <see cref="Kind"/> is one of the pointer-shaped backend reprs.</summary>
     public bool IsPointerLike =>
         Kind is BackendReprKind.EntityRef or BackendReprKind.ProtocolRef or
             BackendReprKind.WrapperRef or BackendReprKind.RoutineRef or BackendReprKind.RawPtr;

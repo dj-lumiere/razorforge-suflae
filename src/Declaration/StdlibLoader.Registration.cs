@@ -1065,7 +1065,6 @@ public sealed partial class StdlibLoader
 
         // Build members list: None = tag 0, others sequential from 1
         var members = new List<VariantMemberInfo>();
-        bool hasNone = false;
         int tag = 0;
 
         // First pass: find None
@@ -1073,7 +1072,6 @@ public sealed partial class StdlibLoader
         {
             if (memberDecl.Type.Name == "None")
             {
-                hasNone = true;
                 members.Add(item: VariantMemberInfo.CreateNone(tagValue: 0, location: null));
                 tag = 1;
                 break;

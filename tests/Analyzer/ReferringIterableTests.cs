@@ -16,6 +16,7 @@ public class ReferringIterableTests
 {
     #region S152 — ReferenceTypeConstraintViolation should NOT fire on protocols
 
+    /// <summary>Verifies Referring[Iterable[T]] parameter does not trigger S152.</summary>
     [Fact]
     public void Referring_Iterable_AsParameter_NoS152()
     {
@@ -35,6 +36,7 @@ public class ReferringIterableTests
             filter: e => e.Code == SemanticDiagnosticCode.ReferenceTypeConstraintViolation);
     }
 
+    /// <summary>Verifies Controlling[Iterable[T]] parameter does not trigger S152.</summary>
     [Fact]
     public void Controlling_Iterable_AsParameter_NoS152()
     {
@@ -55,6 +57,7 @@ public class ReferringIterableTests
 
     #region S205 — TypeNotIterable should NOT fire on Referring[Iterable[T]]
 
+    /// <summary>Verifies for-loop over Referring[Iterable[T]] does not trigger S205.</summary>
     [Fact]
     public void ForLoop_Over_Referring_Iterable_NoS205()
     {
@@ -76,6 +79,7 @@ public class ReferringIterableTests
             filter: e => e.Code == SemanticDiagnosticCode.TypeNotIterable);
     }
 
+    /// <summary>Verifies for-loop over bare Iterable[T] does not trigger S205.</summary>
     [Fact]
     public void ForLoop_Over_Bare_Iterable_NoS205()
     {

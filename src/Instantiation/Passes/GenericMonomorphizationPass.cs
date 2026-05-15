@@ -23,10 +23,10 @@ namespace Compiler.Instantiation.Passes;
 /// and generates <see cref="MonomorphizedBody"/> entries for each of the generic
 /// definition's methods.  Bodies are sourced from three places:
 /// <list type="bullet">
-///   <item><see cref="DesugaringContext.VariantBodies"/> ??WiredRoutinePass-generated
+///   <item><see cref="DesugaringContext.VariantBodies"/> -> WiredRoutinePass-generated
 ///         bodies (<c>$represent</c>, <c>$diagnose</c>) and ErrorHandlingVariantPass
 ///         bodies (<c>try_next</c>, etc.).</item>
-///   <item><c>Registry.StdlibPrograms</c> and <c>Registry.UserPrograms</c> AST declarations ??source bodies.</item>
+///   <item><c>Registry.StdlibPrograms</c> and <c>Registry.UserPrograms</c> AST declarations -> source bodies.</item>
 /// </list>
 /// Pure-synthesized methods (<see cref="RoutineInfo.IsSynthesized"/> = true with no
 /// body anywhere) are skipped here; their AST bodies are produced by
@@ -44,7 +44,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
 {
     // Routine-declaration index
 
-    // Key: routine name (e.g. "List[T].$getitem") ??list of matching declarations.
+    // Key: routine name (e.g. "List[T].$getitem") -> list of matching declarations.
     // Built once in RunGlobal() before the fixed-point loop.
     private Dictionary<string, List<RoutineDeclaration>> _routineIndex = new();
 
@@ -790,7 +790,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
 
         // WrapperTypeInfo (e.g., Hijacked[T] or Hijacked[Core.Byte]) must always be resolved
         // to the real RecordTypeInfo so LookupMethod and LLVM mangled names work correctly.
-        // Use TryGetResolution (lookup-only) ??GMP must not grow AllConcreteGenericInstances.
+        // Use TryGetResolution (lookup-only) -> GMP must not grow AllConcreteGenericInstances.
         // Any unresolved generic parameter left in a RoutineInfo should not reach codegen —
         // GenericAstRewriter resolves expression ResolvedType before codegen entry.
         if (type is WrapperTypeInfo wrapper)
@@ -1010,7 +1010,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// Searches all stdlib and user program ASTs for a routine declaration matching the given name.
     /// Uses a pre-built index for O(1) name lookup.
     /// When <paramref name="typeSubs"/> is provided, routines whose generic constraints are not
-    /// satisfied by the concrete type arguments are skipped ??this prevents the record-layout
+    /// satisfied by the concrete type arguments are skipped -> this prevents the record-layout
     /// overload of e.g. <c>Maybe[T]</c> from being selected when T is an entity type.
     /// </summary>
     private RoutineDeclaration? FindInStdlib(string genericAstName, int expectedParamCount = -1,

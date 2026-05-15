@@ -5,36 +5,20 @@ namespace TypeModel.Reprs;
 /// </summary>
 public enum BackendReprKind
 {
-    /// <summary>
-    /// Represents V oi d.
-    /// </summary>
+    /// <summary>No value (void / absent return).</summary>
     Void,
-    /// <summary>
-    /// Represents S ca la r.
-    /// </summary>
+    /// <summary>Primitive scalar value (integer, float, bool, etc.).</summary>
     Scalar,
-    /// <summary>
-    /// Represents A gg re ga te.
-    /// </summary>
+    /// <summary>Inline struct/record laid out as an LLVM aggregate.</summary>
     Aggregate,
-    /// <summary>
-    /// Represents E nt it yR ef.
-    /// </summary>
+    /// <summary>Heap-allocated entity passed by pointer.</summary>
     EntityRef,
-    /// <summary>
-    /// Represents P ro to co lR ef.
-    /// </summary>
+    /// <summary>Protocol witness pointer (fat pointer or vtable ref).</summary>
     ProtocolRef,
-    /// <summary>
-    /// Represents W ra pp er Re f.
-    /// </summary>
+    /// <summary>RC wrapper pointer (Owned/Retained/Viewed/etc.).</summary>
     WrapperRef,
-    /// <summary>
-    /// Represents R ou ti ne Re f.
-    /// </summary>
+    /// <summary>Function pointer (routine reference).</summary>
     RoutineRef,
-    /// <summary>
-    /// Represents R aw Pt r.
-    /// </summary>
+    /// <summary>Untyped raw pointer (CPtr / Address).</summary>
     RawPtr
 }

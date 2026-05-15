@@ -9,6 +9,7 @@ namespace RazorForge.Tests.Meta;
 /// </summary>
 public sealed class StdlibValidationTests
 {
+    /// <summary>Verifies that all RazorForge stdlib bodies pass semantic analysis.</summary>
     [Fact]
     public void RazorForge_Stdlib_Validates()
     {
@@ -17,6 +18,7 @@ public sealed class StdlibValidationTests
         Assert.Empty(errors);
     }
 
+    /// <summary>Verifies that all Suflae stdlib bodies pass semantic analysis.</summary>
     [Fact]
     public void Suflae_Stdlib_Validates()
     {

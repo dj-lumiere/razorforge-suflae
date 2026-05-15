@@ -18,31 +18,49 @@ partial class TypeRegistry
     /// </summary>
     public sealed class StdlibSnapshot
     {
+        /// <summary>The language (RazorForge or Suflae) this snapshot was built for.</summary>
         public Language Language { get; init; }
 
         // Type storage
+        /// <summary>All registered types keyed by full name.</summary>
         public Dictionary<string, TypeInfo> Types { get; init; } = null!;
+        /// <summary>Generic-resolution cache keyed by instantiated full name.</summary>
         public Dictionary<string, TypeInfo> Resolutions { get; init; } = null!;
+        /// <summary>Wrapper-type resolution cache (Owned/Retained/etc.) keyed by full name.</summary>
         public Dictionary<string, WrapperTypeInfo> WrapperResolutions { get; init; } = null!;
+        /// <summary>Entity specializations keyed by full name.</summary>
         public Dictionary<string, TypeInfo> EntitySpecializations { get; init; } = null!;
+        /// <summary>Types indexed by short (unqualified) name for import resolution.</summary>
         public Dictionary<string, TypeInfo> TypesByShortName { get; init; } = null!;
 
         // Routine storage — list-valued dicts need copied lists (not shared) so tests can extend them
+        /// <summary>All routines keyed by RegistryKey.</summary>
         public Dictionary<string, RoutineInfo> Routines { get; init; } = null!;
+        /// <summary>Routines keyed by qualified name.</summary>
         public Dictionary<string, RoutineInfo> RoutinesByQualifiedName { get; init; } = null!;
+        /// <summary>Routines grouped by owner type full name.</summary>
         public Dictionary<string, List<RoutineInfo>> RoutinesByOwner { get; init; } = null!;
+        /// <summary>Universal methods (generic-parameter owner) keyed by method name.</summary>
         public Dictionary<string, RoutineInfo> UniversalMethods { get; init; } = null!;
+        /// <summary>Resolved routine instances (concrete-owner substitutions) keyed by RegistryKey.</summary>
         public Dictionary<string, RoutineInfo> RoutineResolutions { get; init; } = null!;
+        /// <summary>Generic free functions grouped by base name.</summary>
         public Dictionary<string, List<RoutineInfo>> GenericFreeFunctions { get; init; } = null!;
+        /// <summary>Routines keyed by (name, isFailable) for fast lookup.</summary>
         public Dictionary<(string Name, bool IsFailable), RoutineInfo> RoutinesByNameAndFailability { get; init; } = null!;
+        /// <summary>Overload groups keyed by base routine name.</summary>
         public Dictionary<string, List<RoutineInfo>> RoutineOverloads { get; init; } = null!;
 
         // Preset storage
+        /// <summary>Preset variables keyed by short name.</summary>
         public Dictionary<string, VariableInfo> Presets { get; init; } = null!;
+        /// <summary>Preset variables keyed by qualified name.</summary>
         public Dictionary<string, VariableInfo> PresetsByQualifiedName { get; init; } = null!;
 
         // Module tracking
+        /// <summary>Set of module paths already loaded into the registry.</summary>
         public HashSet<string> LoadedModules { get; init; } = null!;
+        /// <summary>Module alias → qualified module name map.</summary>
         public Dictionary<string, string> ModuleNames { get; init; } = null!;
 
         /// <summary>Root path for on-demand module loading (e.g. import BuilderService).</summary>

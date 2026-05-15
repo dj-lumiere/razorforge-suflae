@@ -102,7 +102,7 @@ public sealed class BackendEntryValidator
     private static void Walk(ISyntaxTreeNode node, List<SemanticError> errors, TypeRegistry registry)
     {
         if (TryCreateResidualError(node: node, registry: registry, out SemanticError? error))
-            errors.Add(item: error);
+            errors.Add(item: error!);
 
         foreach (ISyntaxTreeNode child in EnumerateChildren(node: node))
             Walk(node: child, errors: errors, registry: registry);

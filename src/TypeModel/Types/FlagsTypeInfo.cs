@@ -25,9 +25,7 @@ public sealed class FlagsTypeInfo : RecordTypeInfo
         init => base.ImplementedProtocols = value;
     }
 
-    /// <summary>
-    /// Initializes a new instance of the F la gs Ty pe In fo class.
-    /// </summary>
+    /// <summary>Creates a new flags type with the given name and default i64 backend type.</summary>
     public FlagsTypeInfo(string name) : base(name: name)
     {
         BackendType = "i64";

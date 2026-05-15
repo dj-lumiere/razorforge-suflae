@@ -792,7 +792,7 @@ public sealed partial class SemanticVerifier
                     message:
                     $"Cannot override innate routine '{protocol.Name}.{requiredMethod.Name}'. " +
                     "Innate routines are compiler-provided and cannot be overridden.",
-                    location: typeMethod.Location);
+                    location: typeMethod.Location ?? new SourceLocation("", 0, 0, 0));
             }
             else if (typeMethod != null)
             {
@@ -805,7 +805,7 @@ public sealed partial class SemanticVerifier
                         message:
                         $"Protocol '{protocol.Name}' requires '{requiredMethod.Name}' to be @readonly, " +
                         $"but implementation on '{type.Name}' is @{typeMethod.ModificationCategory.ToString().ToLowerInvariant()}.",
-                        location: typeMethod.Location);
+                        location: typeMethod.Location ?? new SourceLocation("", 0, 0, 0));
                 }
                 // Entity + writable protocol method -> impl must be @migratable
                 else if (type.Category == TypeCategory.Entity &&
@@ -816,7 +816,7 @@ public sealed partial class SemanticVerifier
                         message:
                         $"Protocol '{protocol.Name}' requires '{requiredMethod.Name}' to be writable, " +
                         $"but entity '{type.Name}' implementation must be @migratable.",
-                        location: typeMethod.Location);
+                        location: typeMethod.Location ?? new SourceLocation("", 0, 0, 0));
                 }
             }
         }
@@ -859,7 +859,7 @@ public sealed partial class SemanticVerifier
                     message:
                     $"Type parameter '{constraint.ParameterName}' in constraint is not declared. " +
                     $"Declared type parameters: {(typeParameters?.Count > 0 ? string.Join(separator: ", ", values: typeParameters) : "none")}.",
-                    location: constraint.Location ?? location);
+                    location: constraint.Location ?? location ?? new SourceLocation("", 0, 0, 0));
             }
         }
     }

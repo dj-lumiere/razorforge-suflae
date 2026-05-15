@@ -131,6 +131,7 @@ public sealed class BigDecRuntimeTests
         public void Dispose() { if (Handle != 0) rf_bigdec_free(Handle); }
     }
 
+    /// <summary>Verifies that allocating and freeing a BigDec handle does not crash.</summary>
     [Fact]
     public void New_And_Free_DoesNotCrash()
     {
@@ -139,6 +140,7 @@ public sealed class BigDecRuntimeTests
         rf_bigdec_free(a);
     }
 
+    /// <summary>Verifies an S64 value survives a set/get round-trip through BigDec.</summary>
     [Fact]
     public void Set_S64_RoundTrip()
     {
@@ -147,6 +149,7 @@ public sealed class BigDecRuntimeTests
         Assert.Equal(42, rf_bigdec_get_s64(a.Handle));
     }
 
+    /// <summary>Verifies an F64 value survives a set/get round-trip through BigDec.</summary>
     [Fact]
     public void Set_F64_RoundTrip()
     {
@@ -155,6 +158,7 @@ public sealed class BigDecRuntimeTests
         Assert.Equal(3.14159, rf_bigdec_get_f64(a.Handle), precision: 5);
     }
 
+    /// <summary>Verifies BigDec preserves precision beyond F64 when loaded from a string.</summary>
     [Fact]
     public void Set_Str_Preserves_Precision_Beyond_F64()
     {
@@ -164,6 +168,7 @@ public sealed class BigDecRuntimeTests
         Assert.Contains("3.141592653589793238462643", roundtrip);
     }
 
+    /// <summary>Verifies add, subtract, and multiply operations produce correct results.</summary>
     [Fact]
     public void Add_Sub_Mul()
     {
@@ -181,6 +186,7 @@ public sealed class BigDecRuntimeTests
         Assert.Equal(2300, rf_bigdec_get_s64(r.Handle));
     }
 
+    /// <summary>Verifies exact decimal division (1/4 = 0.25) with no precision loss.</summary>
     [Fact]
     public void Div_Exact_Decimal()
     {
@@ -192,6 +198,7 @@ public sealed class BigDecRuntimeTests
         Assert.Equal("0.25", GetStr(r.Handle));
     }
 
+    /// <summary>Verifies recurring division (1/3) is rounded to the specified precision.</summary>
     [Fact]
     public void Div_Recurring_Honours_Precision()
     {
@@ -204,6 +211,7 @@ public sealed class BigDecRuntimeTests
         Assert.StartsWith("0.3333333333", s);
     }
 
+    /// <summary>Verifies negate and absolute-value operations produce correct results.</summary>
     [Fact]
     public void Neg_And_Abs()
     {
@@ -217,6 +225,7 @@ public sealed class BigDecRuntimeTests
         Assert.Equal(5, rf_bigdec_get_s64(r.Handle));
     }
 
+    /// <summary>Verifies compare, is_zero, and is_neg predicates return correct values.</summary>
     [Fact]
     public void Cmp_IsZero_IsNeg()
     {
@@ -236,6 +245,7 @@ public sealed class BigDecRuntimeTests
         Assert.Equal(0, rf_bigdec_is_neg(seven.Handle));
     }
 
+    /// <summary>Verifies square root of a perfect square returns the exact integer result.</summary>
     [Fact]
     public void Sqrt_Exact()
     {
@@ -245,6 +255,7 @@ public sealed class BigDecRuntimeTests
         Assert.Equal(12, rf_bigdec_get_s64(r.Handle));
     }
 
+    /// <summary>Verifies integer exponentiation (2^10 = 1024) produces the correct result.</summary>
     [Fact]
     public void Pow_Integer_Exponent()
     {
@@ -255,6 +266,7 @@ public sealed class BigDecRuntimeTests
         Assert.Equal(1024, rf_bigdec_get_s64(r.Handle));
     }
 
+    /// <summary>Verifies that ln(exp(1)) round-trips back to 1 within the expected precision.</summary>
     [Fact]
     public void Exp_Log_Roundtrip()
     {
@@ -270,6 +282,7 @@ public sealed class BigDecRuntimeTests
         Assert.Equal(1.0, recovered, precision: 10);
     }
 
+    /// <summary>Verifies log10(1000) returns exactly 3.</summary>
     [Fact]
     public void Log10_Of_1000()
     {
@@ -279,6 +292,7 @@ public sealed class BigDecRuntimeTests
         Assert.Equal(3.0, rf_bigdec_get_f64(r.Handle), precision: 10);
     }
 
+    /// <summary>Verifies ceiling and floor rounding for positive and negative values.</summary>
     [Fact]
     public void Ceil_Floor()
     {
@@ -299,6 +313,7 @@ public sealed class BigDecRuntimeTests
         Assert.Equal(-4, rf_bigdec_get_s64(r.Handle));
     }
 
+    /// <summary>Verifies rounding to a specified number of decimal places.</summary>
     [Fact]
     public void Round_To_DecimalPlaces()
     {
@@ -311,6 +326,7 @@ public sealed class BigDecRuntimeTests
         Assert.Equal("3.1416", GetStr(r.Handle));
     }
 
+    /// <summary>Verifies truncation towards zero for positive and negative values.</summary>
     [Fact]
     public void Trunc_Towards_Zero()
     {
@@ -324,6 +340,7 @@ public sealed class BigDecRuntimeTests
         Assert.Equal("-3", GetStr(r.Handle));
     }
 
+    /// <summary>Verifies that a copied BigDec is independent of the original.</summary>
     [Fact]
     public void Copy_Is_Independent()
     {
@@ -343,6 +360,7 @@ public sealed class BigDecRuntimeTests
         }
     }
 
+    /// <summary>Verifies the global precision setting survives a get/set round-trip.</summary>
     [Fact]
     public void Precision_GetSet_RoundTrip()
     {
@@ -360,6 +378,7 @@ public sealed class BigDecRuntimeTests
         }
     }
 
+    /// <summary>Verifies out-of-range precision values are clamped to the safe [1, 1000] range.</summary>
     [Fact]
     public void Precision_Clamped_To_Safe_Range()
     {
@@ -384,6 +403,7 @@ public sealed class BigDecRuntimeTests
         }
     }
 
+    /// <summary>Verifies the global precision setting controls the number of digits produced by division.</summary>
     [Fact]
     public void Precision_Affects_Default_Div()
     {

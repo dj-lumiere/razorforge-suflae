@@ -15,7 +15,7 @@ namespace Compiler.Postprocessing.Passes;
 /// per registered crashable type.
 ///
 /// <para>
-/// Input:  <c>is Crashable e => body</c> ??matches any error in the carrier.<br/>
+/// Input:  <c>is Crashable e => body</c> -> matches any error in the carrier.<br/>
 /// Output: <c>is ParseError e => body</c>, <c>is NetworkError e => body</c>, ??
 ///         (one clause per <see cref="CrashableTypeInfo"/> registered in the type registry)
 /// </para>
@@ -179,7 +179,7 @@ internal sealed class CrashableExpansionPass(PostprocessingContext ctx)
         IReadOnlyList<CrashableTypeInfo> crashableTypes)
     {
         // Only expand carrier-type subjects (Result/Lookup).
-        // Subject-less when (Expression == null) is never a carrier ??just recurse.
+        // Subject-less when (Expression == null) is never a carrier -> just recurse.
         if (when.Expression == null || !IsResultOrLookup(type: when.Expression.ResolvedType))
         {
             // Still recurse into clause bodies for nested whens.

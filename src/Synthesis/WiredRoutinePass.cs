@@ -44,9 +44,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     private static readonly SourceLocation _synthLoc =
         new(FileName: "", Line: 0, Column: 0, Position: 0);
 
-    /// <summary>
-    /// R un Gl ob al.
-    /// </summary>
+    /// <summary>Synthesizes and registers all wired routines for the current program.</summary>
     public void RunGlobal()
     {
         TypeInfo? textType = ctx.Registry.LookupType(name: "Text");

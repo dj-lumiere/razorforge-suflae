@@ -133,9 +133,13 @@ public sealed partial class TypeRegistry
         return HasCapability(type: type, protocol: entry.Protocol, wiredName: entry.WiredName);
     }
 
+    /// <summary>Returns true if the type implements <c>Equatable</c> ($eq).</summary>
     public bool TypeHasEquality(TypeInfo type) => TypeHasWiredRoutine(type: type, wiredName: "$eq");
+    /// <summary>Returns true if the type implements <c>Containable</c> ($contains).</summary>
     public bool TypeHasContainment(TypeInfo type) => TypeHasWiredRoutine(type: type, wiredName: "$contains");
+    /// <summary>Returns true if the type implements <c>Hashable</c> ($hash).</summary>
     public bool TypeHasHashing(TypeInfo type) => TypeHasWiredRoutine(type: type, wiredName: "$hash");
+    /// <summary>Returns true if the type implements <c>Comparable</c> ($cmp).</summary>
     public bool TypeHasComparison(TypeInfo type) => TypeHasWiredRoutine(type: type, wiredName: "$cmp");
 
     private bool HasCapability(TypeInfo type, string protocol, string wiredName)

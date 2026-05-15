@@ -72,6 +72,8 @@ public record GenericConstraintDeclaration(
 /// <param name="Visibility">Access control modifier (public, published, internal, private)</param>
 /// <param name="Location">Source location information</param>
 /// <param name="Storage">Storage class for the declared variable.</param>
+/// <param name="Annotations">Optional annotation markers applied to the declaration.</param>
+/// <param name="IsLateInit">Whether the variable is initialized lazily after declaration.</param>
 /// <remarks>
 /// Variable declarations support various patterns:
 /// <list type="bullet">
@@ -89,7 +91,6 @@ public record GenericConstraintDeclaration(
 /// <item>private - read/write within file</item>
 /// </list>
 /// </remarks>
-/// <param name="Annotations">The A nn ot at io ns.</param>
 public record VariableDeclaration(
     string Name,
     TypeExpression? Type,
@@ -572,6 +573,7 @@ public record RoutineSignature(
 /// <param name="OldName">Original identifier name to alias</param>
 /// <param name="NewName">New identifier name to use</param>
 /// <param name="Location">Source location information</param>
+/// <param name="Annotations">Optional annotation markers applied to the declaration.</param>
 /// <remarks>
 /// Redefinition enables:
 /// <list type="bullet">

@@ -40,7 +40,7 @@ public sealed class VariantTypeInfo : TypeInfo
     {
         foreach (VariantMemberInfo member in Members)
         {
-            if (member.Type.Name == type.Name)
+            if (member.Type?.Name == type.Name)
             {
                 return member;
             }

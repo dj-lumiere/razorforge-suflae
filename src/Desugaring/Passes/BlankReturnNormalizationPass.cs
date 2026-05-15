@@ -16,7 +16,9 @@ namespace Compiler.Desugaring.Passes;
 /// Does NOT touch <see cref="ExternalDeclaration"/> (null ReturnType = void in C interop)
 /// or <see cref="VariantReturnStatement"/> (null Value = FromAbsent, semantically meaningful).
 /// </summary>
-internal sealed class BlankReturnNormalizationPass(DesugaringContext ctx)
+#pragma warning disable CS9113
+internal sealed class BlankReturnNormalizationPass(DesugaringContext _)
+#pragma warning restore CS9113
 {
     public void Run(Program program)
     {

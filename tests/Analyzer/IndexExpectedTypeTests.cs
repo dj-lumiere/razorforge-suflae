@@ -15,6 +15,7 @@ using static TestHelpers;
 /// </summary>
 public class IndexExpectedTypeTests
 {
+    /// <summary>Verifies integer literals retype to the U64 indexer parameter type.</summary>
     [Fact]
     public void IndexLiteral_RetypesToGetitemParamType_U64()
     {
@@ -38,6 +39,7 @@ public class IndexExpectedTypeTests
         Assert.Equal(expected: "Core.U64", actual: indexType!.FullName);
     }
 
+    /// <summary>Verifies integer literals retype to the U32 indexer parameter type.</summary>
     [Fact]
     public void IndexLiteral_RetypesToGetitemParamType_U32()
     {
@@ -61,6 +63,7 @@ public class IndexExpectedTypeTests
         Assert.Equal(expected: "Core.U32", actual: indexType!.FullName);
     }
 
+    /// <summary>Verifies that an integer literal overflowing the U8 indexer range reports a compile error.</summary>
     [Fact]
     public void IndexLiteralOverflow_OnU8Indexer_ReportsError()
     {

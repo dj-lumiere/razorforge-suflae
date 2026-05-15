@@ -758,7 +758,7 @@ public sealed partial class SemanticVerifier
             moduleNameSnapshots[key: filePath] = _currentModuleName;
             CaptureCurrentImportStateSnapshot(filePath: filePath);
         }
-        Mark(label: "Phase 1 ??Declarations");
+        Mark(label: "Phase 1 -> Declarations");
 
         // Phase 2: Resolve type bodies across ALL files (members can reference types from other files)
         foreach ((Program program, string filePath) in files)
@@ -772,19 +772,19 @@ public sealed partial class SemanticVerifier
             _signatureResolver.ResolveAndRegisterPendingRoutines(filterFilePath: filePath);
             _signatureResolver.ResolveExternalSignatures(program: program);
         }
-        Mark(label: "Phase 2 ??Type/signature resolution");
+        Mark(label: "Phase 2 -> Type/signature resolution");
 
         // Phase 2 global: once, registry-only -> no per-file import scoping needed
         _conformanceAnalyzer.ApplyImplicitMarkerConformance();
-        Mark(label: "Phase 2 global ??implicit marker conformance");
+        Mark(label: "Phase 2 global -> implicit marker conformance");
 
         // Phase 3 global: synthesized routines, derived operators, protocol validation
         AutoRegisterWiredRoutines();
-        Mark(label: "Phase 3 global ??AutoRegisterWiredRoutines");
+        Mark(label: "Phase 3 global -> AutoRegisterWiredRoutines");
         GenerateDerivedOperators();
-        Mark(label: "Phase 3 global ??GenerateDerivedOperators");
+        Mark(label: "Phase 3 global -> GenerateDerivedOperators");
         ValidateProtocolImplementations();
-        Mark(label: "Phase 3 global ??ValidateProtocolImplementations");
+        Mark(label: "Phase 3 global -> ValidateProtocolImplementations");
 
         // Phase 3 per-file: pre-register error handling variants before Phase 5 body analysis
         foreach ((Program program, string filePath) in files)
@@ -796,13 +796,13 @@ public sealed partial class SemanticVerifier
 
             PreRegisterUserVariants(program: program);
         }
-        Mark(label: "Phase 3 per-file ??PreRegisterUserVariants");
+        Mark(label: "Phase 3 per-file -> PreRegisterUserVariants");
 
         // Phase 3 global: pre-register stdlib failable method variants (try_next, try_recover, etc.)
         // Must run before Phase 5 user body analysis and before Phase 3 per-file desugaring
         // (ControlFlowLoweringPass generates try_next calls that Phase 5 must resolve).
         PreRegisterStdlibVariants();
-        Mark(label: "Phase 3 global ??PreRegisterStdlibVariants");
+        Mark(label: "Phase 3 global -> PreRegisterStdlibVariants");
 
         // Phase 3 per-file: syntax-only lowering (no type info needed; runs before SA annotates types)
         foreach ((Program program, string filePath) in files)
@@ -814,7 +814,7 @@ public sealed partial class SemanticVerifier
 
             RunPhase3Desugaring(program: program);
         }
-        Mark(label: "Phase 3 per-file ??syntax-only desugaring");
+        Mark(label: "Phase 3 per-file -> syntax-only desugaring");
 
         // Phase 5: Analyze bodies per file (expressions need correct import scoping)
         foreach ((Program program, string filePath) in files)
@@ -826,22 +826,22 @@ public sealed partial class SemanticVerifier
 
             AnalyzeBodies(program: program);
         }
-        Mark(label: "Phase 5 per-file ??AnalyzeBodies (user)");
+        Mark(label: "Phase 5 per-file -> AnalyzeBodies (user)");
 
         // Phase 5 global: synthesized body analysis, modification inference
         AnalyzeSynthesizedBodies();
-        Mark(label: "Phase 5 global ??AnalyzeSynthesizedBodies");
+        Mark(label: "Phase 5 global -> AnalyzeSynthesizedBodies");
         // M-0: Annotate stdlib expression types so desugaring passes can lower stdlib bodies
         // uniformly (OperatorLoweringPass, ExpressionLoweringPass, etc.).
         // Stdlib errors are suppressed from user-visible output -> use 'validate-stdlib' to surface them.
         int errorsBeforeStdlib = _errors.Count;
         AnalyzeStdlibBodies();
-        Mark(label: "Phase 5 global ??AnalyzeStdlibBodies");
+        Mark(label: "Phase 5 global -> AnalyzeStdlibBodies");
         if (_errors.Count > errorsBeforeStdlib)
             _errors.RemoveRange(index: errorsBeforeStdlib,
                 count: _errors.Count - errorsBeforeStdlib);
         EagerSynthesizeAllWrapperForwarders();
-        Mark(label: "Phase 5 global ??EagerSynthesizeAllWrapperForwarders");
+        Mark(label: "Phase 5 global -> EagerSynthesizeAllWrapperForwarders");
 
         // If SA produced errors in user code, skip desugaring. Lowering passes over a broken
         // AST produce garbage types and can drive GenericMonomorphizationPass's fixed-point loop
@@ -870,17 +870,17 @@ public sealed partial class SemanticVerifier
         // WiredRoutinePass and GMP only operate on live types, preventing phantom instantiations
         // (e.g. BTreeListNode[Blank]) from reaching codegen.
         new TypeLivenessPass(registry: _registry).Run();
-        Mark(label: "Phase 5.5 global ??TypeLivenessPass");
+        Mark(label: "Phase 5.5 global -> TypeLivenessPass");
 
         if (!SaOnly)
         {
             // Phase 4 global: error handling variants + future global passes (runs once)
             CollectStdlibBodiesForVariantGeneration();
-            Mark(label: "Phase 4 global ??CollectStdlibBodiesForVariantGeneration");
+            Mark(label: "Phase 4 global -> CollectStdlibBodiesForVariantGeneration");
             RunPhase4GlobalDesugaring();
-            Mark(label: "Phase 4 global ??RunPhase4GlobalDesugaring");
+            Mark(label: "Phase 4 global -> RunPhase4GlobalDesugaring");
             RunPhase6Instantiation();
-            Mark(label: "Phase 6 ??RunPhase6Instantiation (monomorphization)");
+            Mark(label: "Phase 6 -> RunPhase6Instantiation (monomorphization)");
 
             // Phase 7 per-file: type-aware lowering on verified, type-annotated AST
             foreach ((Program program, string filePath) in files)
@@ -892,12 +892,12 @@ public sealed partial class SemanticVerifier
 
                 RunPhase7Postprocessing(program: program);
             }
-            Mark(label: "Phase 7 per-file ??type-aware postprocessing");
+            Mark(label: "Phase 7 per-file -> type-aware postprocessing");
 
             RunPhase5bPostDesugarChecks();
-            Mark(label: "Phase 5b ??PostDesugarChecks");
+            Mark(label: "Phase 5b -> PostDesugarChecks");
             FinalizeReturnTypes();
-            Mark(label: "Phase 5b ??FinalizeReturnTypes");
+            Mark(label: "Phase 5b -> FinalizeReturnTypes");
         }
 
         // Merge synthesized operator bodies and pre-transformed variant bodies

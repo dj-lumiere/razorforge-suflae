@@ -677,7 +677,7 @@ public partial class LlvmCodeGenerator
     {
         if (type is ProtocolTypeInfo { Methods.Count: 0, TypeArguments: { Count: > 0 } } proto)
         {
-            targetType = proto.TypeArguments[index: 0];
+            targetType = proto.TypeArguments![index: 0]!;
             return;
         }
 

@@ -1680,11 +1680,15 @@ internal partial class Program
 
             // Read stdout/stderr concurrently to avoid pipe-buffer deadlock when clang/lld
             // emits a lot of output (e.g. many LNK2019 errors on a ~60k-line IR).
-            Task<string> stdoutTask = clangProcess.StandardOutput.ReadToEndAsync();
-            Task<string> stderrTask = clangProcess.StandardError.ReadToEndAsync();
+            string clangStdout = "";
+            string clangStderr = "";
+            var stdoutThread = new Thread(() => clangStdout = clangProcess.StandardOutput.ReadToEnd());
+            var stderrThread = new Thread(() => clangStderr = clangProcess.StandardError.ReadToEnd());
+            stdoutThread.Start();
+            stderrThread.Start();
             clangProcess.WaitForExit();
-            string clangStdout = stdoutTask.GetAwaiter().GetResult();
-            string clangStderr = stderrTask.GetAwaiter().GetResult();
+            stdoutThread.Join();
+            stderrThread.Join();
 
             if (clangProcess.ExitCode != 0)
             {

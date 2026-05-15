@@ -1447,7 +1447,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             // Build type arguments from the concrete substitutions.
             var genericDef = recordType.GenericDefinition;
             typeArgs = [];
-            foreach (string paramName in genericDef.GenericParameters)
+            foreach (string paramName in genericDef.GenericParameters ?? [])
             {
                 TypeInfo? argType = recordType.MemberVariables
                     .Select(f => f.Type)

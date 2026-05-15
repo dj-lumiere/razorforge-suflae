@@ -21,8 +21,8 @@ using TypeSymbol = TypeInfo;
 /// - absent statement: signals "not found" without error
 ///
 /// Variant generation rules:
-/// - Only absent: try_ (returns T? ??None on absent)
-/// - Only throw: try_ (returns T? ??None on throw) + check_ (returns Result&lt;T&gt;)
+/// - Only absent: try_ (returns T? -> None on absent)
+/// - Only throw: try_ (returns T? -> None on throw) + check_ (returns Result&lt;T&gt;)
 /// - Both throw and absent: try_ + lookup_ (returns Lookup&lt;T&gt;)
 ///
 /// The actual variant generation is delegated to <see cref="ErrorHandlingVariantPass"/>
@@ -54,7 +54,7 @@ public sealed partial class SemanticVerifier
     /// Phase 2.8: Pre-register error handling variant stubs for user-defined failable routines.
     /// Called before Phase 5 body analysis so that try_/check_/lookup_ variants are in scope
     /// when user code calls them from within the same module.
-    /// Uses AST-level throw/absent detection ??no full semantic analysis required.
+    /// Uses AST-level throw/absent detection -> no full semantic analysis required.
     /// </summary>
     internal void PreRegisterUserVariants(Program program)
     {
@@ -69,7 +69,7 @@ public sealed partial class SemanticVerifier
                 continue;
             }
 
-            // Quick AST scan ??skip routines with no throw/absent nodes
+            // Quick AST scan -> skip routines with no throw/absent nodes
             if (!generator.BodyHasThrowOrAbsent(body: routineDecl.Body))
             {
                 continue;
@@ -181,7 +181,7 @@ public sealed partial class SemanticVerifier
                 if (node is not RoutineDeclaration decl || !decl.IsFailable || decl.Body == null)
                     continue;
 
-                // Only member routines ??standalone routines don't need $next variants
+                // Only member routines -> standalone routines don't need $next variants
                 if (!decl.Name.Contains('.'))
                     continue;
 

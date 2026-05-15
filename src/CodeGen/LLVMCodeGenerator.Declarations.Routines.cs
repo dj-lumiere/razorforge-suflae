@@ -308,7 +308,10 @@ public partial class LlvmCodeGenerator
             {
                 effectiveBody = synthStub;
             }
-            GenerateRoutineBody(sb: bodyBuilder, body: effectiveBody, routine: routineInfo);
+            if (effectiveBody != null)
+            {
+                GenerateRoutineBody(sb: bodyBuilder, body: effectiveBody, routine: routineInfo);
+            }
             _functionDefinitions.Append(value: _currentRoutineEntryAllocas);
             _functionDefinitions.Append(value: bodyBuilder);
         }

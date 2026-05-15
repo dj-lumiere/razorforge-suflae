@@ -365,7 +365,7 @@ internal sealed class SignatureResolver
             ValidateMethodAgainstProtocol(typeMethod: routineInfo,
                 protoMethod: protoMethod,
                 protocol: protocol,
-                location: location);
+                location: location ?? new SourceLocation("", 0, 0, 0));
         }
     }
 
@@ -407,7 +407,7 @@ internal sealed class SignatureResolver
             _sa.ReportError(code: SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
                 message:
                 $"Method '{typeMethod.Name}' should be {expected} to match protocol '{protocol.Name}', but is {actual}.",
-                location: location);
+                location: location ?? new SourceLocation("", 0, 0, 0));
             return;
         }
 
@@ -426,7 +426,7 @@ internal sealed class SignatureResolver
             _sa.ReportError(code: SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
                 message:
                 $"Method '{typeMethod.Name}' has {actualParamCount} parameter(s) but protocol '{protocol.Name}' expects {expectedParamCount}.",
-                location: location);
+                location: location ?? new SourceLocation("", 0, 0, 0));
             return;
         }
 
@@ -449,7 +449,7 @@ internal sealed class SignatureResolver
                     _sa.ReportError(code: SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
                         message:
                         $"Parameter '{protoMethod.ParameterNames[index: i]}' of '{typeMethod.Name}' has type '{actualType.Name}' but protocol '{protocol.Name}' expects '{typeMethod.OwnerType.Name}' (Me).",
-                        location: location);
+                        location: location ?? new SourceLocation("", 0, 0, 0));
                 }
             }
             else
@@ -464,7 +464,7 @@ internal sealed class SignatureResolver
                     _sa.ReportError(code: SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
                         message:
                         $"Parameter '{protoMethod.ParameterNames[index: i]}' of '{typeMethod.Name}' has type '{actualType.Name}' but protocol '{protocol.Name}' expects '{expectedName}'.",
-                        location: location);
+                        location: location ?? new SourceLocation("", 0, 0, 0));
                 }
             }
         }
@@ -485,7 +485,7 @@ internal sealed class SignatureResolver
                     _sa.ReportError(code: SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
                         message:
                         $"Method '{typeMethod.Name}' returns '{actualReturn.Name}' but protocol '{protocol.Name}' expects '{typeMethod.OwnerType.Name}' (Me).",
-                        location: location);
+                        location: location ?? new SourceLocation("", 0, 0, 0));
                 }
             }
             else
@@ -500,7 +500,7 @@ internal sealed class SignatureResolver
                     _sa.ReportError(code: SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
                         message:
                         $"Method '{typeMethod.Name}' returns '{actualReturn.Name}' but protocol '{protocol.Name}' expects '{expectedReturnName}'.",
-                        location: location);
+                        location: location ?? new SourceLocation("", 0, 0, 0));
                 }
             }
         }
@@ -588,7 +588,7 @@ internal sealed class SignatureResolver
                 message:
                 $"Type '{currentOwnerType.Name}' defines '{routineInfo.Name}' but does not follow {protocolText}. " +
                 $"Add the matching 'obeys' protocol to the type declaration.",
-                location: location);
+                location: location ?? new SourceLocation("", 0, 0, 0));
         }
     }
 

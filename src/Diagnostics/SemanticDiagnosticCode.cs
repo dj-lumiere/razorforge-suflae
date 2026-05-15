@@ -679,6 +679,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot override an @innate protocol routine.</summary>
     InnateOverrideNotAllowed = 705,
 
+    /// <summary>An annotation was used in an invalid context or with invalid arguments.</summary>
     InvalidAnnotation = 706,
 
     /// <summary>Type declares 'obeys Referring[T]' or 'obeys Controlling[T]' but is not in the

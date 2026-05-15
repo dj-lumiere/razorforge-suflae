@@ -172,7 +172,7 @@ internal sealed class TypeBodyResolver
 
                 // Create member variable info
                 var memberVariableInfo =
-                    new MemberVariableInfo(name: memberVariable.Name, type: memberVariableType)
+                    new MemberVariableInfo(name: memberVariable.Name, type: memberVariableType ?? ErrorTypeInfo.Instance)
                     {
                         Visibility = memberVariable.Visibility,
                         Index = memberVariableIndex++,
@@ -465,7 +465,6 @@ internal sealed class TypeBodyResolver
         // Resolve each member type and build VariantMemberInfo list
         var members = new List<VariantMemberInfo>();
         var seenTypeNames = new HashSet<string>();
-        int nextTag = 0;
         bool hasNone = false;
 
         foreach (VariantMember member in variant.Members)

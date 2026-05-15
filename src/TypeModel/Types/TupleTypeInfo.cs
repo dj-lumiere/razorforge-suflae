@@ -36,9 +36,7 @@ public sealed class TupleTypeInfo : RecordTypeInfo
         _ => false
     };
 
-    /// <summary>
-    /// Initializes a new instance of the T up le Ty pe In fo class.
-    /// </summary>
+    /// <summary>Creates a tuple type whose element types are the supplied list.</summary>
     public TupleTypeInfo(IReadOnlyList<TypeInfo> elementTypes) : base(
         name: BuildName(elementTypes: elementTypes))
     {

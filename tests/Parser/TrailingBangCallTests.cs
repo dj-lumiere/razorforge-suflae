@@ -10,6 +10,7 @@ using static TestHelpers;
 /// </summary>
 public class TrailingBangCallTests
 {
+    /// <summary>Verifies that trailing bang on a method call (method(args)!) produces a parse error.</summary>
     [Fact]
     public void Parse_TrailingBang_OnMethodCall_IsParseError()
     {
@@ -25,6 +26,7 @@ public class TrailingBangCallTests
         AssertParseError(source: source);
     }
 
+    /// <summary>Verifies that trailing bang on a constructor call (Type(from: x)!) produces a parse error.</summary>
     [Fact]
     public void Parse_TrailingBang_OnConstructor_IsParseError()
     {
@@ -38,6 +40,7 @@ public class TrailingBangCallTests
         AssertParseError(source: source);
     }
 
+    /// <summary>Verifies that trailing bang inside an if-expression produces a parse error.</summary>
     [Fact]
     public void Parse_TrailingBang_InsideIfExpression_IsParseError()
     {
@@ -51,6 +54,7 @@ public class TrailingBangCallTests
         AssertParseError(source: source);
     }
 
+    /// <summary>Verifies that f-string interpolation containing named-argument calls parses correctly.</summary>
     [Fact]
     public void Parse_FStringInterpolation_With_NamedArgCall_OK()
     {
@@ -71,6 +75,7 @@ public class TrailingBangCallTests
         Parse(source: source);
     }
 
+    /// <summary>Verifies that the correct method!(args) form with bang in the name parses without error.</summary>
     [Fact]
     public void Parse_BangInMethodName_OK()
     {

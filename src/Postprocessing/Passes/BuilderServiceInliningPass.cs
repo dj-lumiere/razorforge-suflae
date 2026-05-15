@@ -17,9 +17,9 @@ namespace Compiler.Postprocessing.Passes;
 ///
 /// <para>Runs in three contexts:</para>
 /// <list type="number">
-///   <item>Per-program pass (<see cref="Run"/>) ??handles non-generic user and stdlib bodies.</item>
-///   <item>VariantBodies sweep (<see cref="RunOnVariantBodies"/>) ??after <c>WiredRoutinePass</c>.</item>
-///   <item>Instantiated generic bodies sweep (<see cref="RunOnInstantiatedGenericBodies"/>) ??after
+///   <item>Per-program pass (<see cref="Run"/>) -> handles non-generic user and stdlib bodies.</item>
+///   <item>VariantBodies sweep (<see cref="RunOnVariantBodies"/>) -> after <c>WiredRoutinePass</c>.</item>
+///   <item>Instantiated generic bodies sweep (<see cref="RunOnInstantiatedGenericBodies"/>) -> after
 ///         <c>GenericMonomorphizationPass</c>.</item>
 /// </list>
 ///
@@ -98,7 +98,7 @@ internal sealed class BuilderServiceInliningPass
     private TypeInfo? _byteSizeType;
 
     // Set per-body in RunOnInstantiatedGenericBodies so that
-    // ResolveReceiverType can resolve unbound generic params (e.g. T ??Core.Byte).
+    // ResolveReceiverType can resolve unbound generic params (e.g. T -> Core.Byte).
     private Dictionary<string, TypeInfo>? _currentTypeSubs;
 
     //  Public entry points
@@ -659,8 +659,8 @@ internal sealed class BuilderServiceInliningPass
         if (receiver.ResolvedType is { } rt && rt is not GenericParameterTypeInfo)
             return rt;
 
-        // 1b. ResolvedType is a generic param ??look it up in the current body's TypeSubs
-        //     (e.g. T in List[T].$getitem! body with TypeSubs {T ??Core.Byte, I ??Core.S64}).
+        // 1b. ResolvedType is a generic param -> look it up in the current body's TypeSubs
+        //     (e.g. T in List[T].$getitem! body with TypeSubs {T -> Core.Byte, I -> Core.S64}).
         if (receiver.ResolvedType is GenericParameterTypeInfo gp
             && _currentTypeSubs != null
             && _currentTypeSubs.TryGetValue(gp.Name, out TypeInfo? subFromSubs))
@@ -867,7 +867,7 @@ internal sealed class BuilderServiceInliningPass
 
     /// <summary>
     /// Returns the byte size of <paramref name="type"/> as seen by collection pointer arithmetic.
-    /// Mirrors <c>WiredRoutinePass.CalculateDataSizeForType</c> ??keep in sync.
+    /// Mirrors <c>WiredRoutinePass.CalculateDataSizeForType</c> -> keep in sync.
     /// </summary>
     internal static ulong CalculateDataSizeForType(TypeInfo type) => type switch
     {
@@ -882,7 +882,7 @@ internal sealed class BuilderServiceInliningPass
 
     /// <summary>
     /// Returns the byte size of an LLVM scalar type string from an <c>@llvm("...")</c> annotation.
-    /// Mirrors <c>WiredRoutinePass.LlvmBackendTypeSize</c> ??keep in sync.
+    /// Mirrors <c>WiredRoutinePass.LlvmBackendTypeSize</c> -> keep in sync.
     /// </summary>
     private static ulong LlvmBackendTypeSize(string llvmType) => llvmType.Trim() switch
     {
