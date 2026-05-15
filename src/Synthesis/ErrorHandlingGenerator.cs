@@ -1,5 +1,6 @@
 using Compiler.Resolution;
 using SyntaxTree;
+using TypeModel.Enums;
 using TypeModel.Symbols;
 using TypeModel.Types;
 
@@ -247,11 +248,13 @@ public sealed class ErrorHandlingGenerator
             };
         }
 
+        TypeInfo carrierInner = WrapBareEntityForCarrier(type: returnType);
+
         TypeInfo maybeDef = _registry.LookupType(name: "Maybe") ??
             throw new InvalidOperationException(message: "Maybe type not registered");
         TypeInfo maybeType = _registry.GetOrCreateResolution(
             genericDef: maybeDef,
-            typeArguments: [returnType]);
+            typeArguments: [carrierInner]);
 
         return new
             RoutineInfo(name: GenerateVariantName(prefix: "try", original: original))
@@ -290,11 +293,13 @@ public sealed class ErrorHandlingGenerator
             _registry.LookupType(name: "Blank") ??
             throw new InvalidOperationException(message: "Blank type not registered");
 
+        TypeInfo carrierInner = WrapBareEntityForCarrier(type: innerType);
+
         TypeInfo resultDef = _registry.LookupType(name: "Result") ??
             throw new InvalidOperationException(message: "Result type not registered");
         TypeInfo resultType = _registry.GetOrCreateResolution(
             genericDef: resultDef,
-            typeArguments: [innerType]);
+            typeArguments: [carrierInner]);
 
         return new
             RoutineInfo(name: GenerateVariantName(prefix: "check", original: original))
@@ -367,11 +372,13 @@ public sealed class ErrorHandlingGenerator
             };
         }
 
+        TypeInfo carrierInner = WrapBareEntityForCarrier(type: returnType);
+
         TypeInfo lookupDef = _registry.LookupType(name: "Lookup") ??
             throw new InvalidOperationException(message: "Lookup type not registered");
         TypeInfo lookupType = _registry.GetOrCreateResolution(
             genericDef: lookupDef,
-            typeArguments: [returnType]);
+            typeArguments: [carrierInner]);
 
         return new
             RoutineInfo(name: GenerateVariantName(prefix: "lookup", original: original))
@@ -395,5 +402,28 @@ public sealed class ErrorHandlingGenerator
                 Storage = original.Storage,
                 OriginalName = original.Name
             };
+    }
+
+    /// <summary>
+    /// Auto-wraps a bare entity return type into <c>Owned[T]</c> so the carrier
+    /// (<c>Maybe[T]</c>/<c>Result[T]</c>/<c>Lookup[T]</c>) satisfies its
+    /// <c>needs T is RecordType</c> constraint. The carrier owns the wrapped
+    /// value, so unique-ownership <c>Owned[T]</c> is the natural shape. Record,
+    /// already-wrapped, and other types pass through unchanged.
+    /// </summary>
+    private TypeInfo WrapBareEntityForCarrier(TypeInfo type)
+    {
+        if (type.Category != TypeCategory.Entity)
+        {
+            return type;
+        }
+        TypeInfo? ownedDef = _registry.LookupType(name: "Owned");
+        if (ownedDef == null)
+        {
+            return type;
+        }
+        return _registry.GetOrCreateResolution(
+            genericDef: ownedDef,
+            typeArguments: [type]);
     }
 }

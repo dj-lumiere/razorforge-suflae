@@ -102,13 +102,15 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// Reports S953 BareEntityInCarrierType when a failable routine's return type is a bare
-    /// entity or crashable. Returns true if rejected (caller should skip variant generation).
+    /// crashable. Bare entity returns auto-wrap to Owned[T] in the carrier (handled by
+    /// ErrorHandlingGenerator.WrapBareEntityForCarrier) so they don't need rejection.
+    /// Returns true if rejected (caller should skip variant generation).
     /// </summary>
     private bool RejectFailableEntityReturn(RoutineInfo routineInfo, RoutineDeclaration decl)
     {
         TypeSymbol? ret = routineInfo.ReturnType;
         if (ret == null) return false;
-        if (ret.Category is not (TypeCategory.Entity or TypeCategory.Crashable)) return false;
+        if (ret.Category != TypeCategory.Crashable) return false;
 
         string inner = ret.Name;
         string hint = $"Wrap the return as 'Maybe[Retained[{inner}]]'/'Result[Retained[{inner}]]' " +
@@ -116,7 +118,7 @@ public sealed partial class SemanticVerifier
                       $"a record type instead.";
         ReportError(code: SemanticDiagnosticCode.BareEntityInCarrierType,
             message:
-            $"Failable routine '{decl.Name}' returns bare entity '{inner}'; its auto-generated " +
+            $"Failable routine '{decl.Name}' returns bare crashable '{inner}'; its auto-generated " +
             $"try_/check_/lookup_ variant would build 'Maybe[{inner}]' (or similar carrier) which " +
             $"violates 'needs T is RecordType'. {hint}",
             location: decl.Location);

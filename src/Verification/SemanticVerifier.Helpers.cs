@@ -980,6 +980,29 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private TypeSymbol GetIterableElementType(TypeSymbol iterableType, SourceLocation location)
     {
+        // Marker-protocol unwrap: `Referring[X]` / `Controlling[X]` are transparent
+        // pass-throughs to X. If iterating one, dispatch to X's Iterable conformance.
+        if (TryGetTransparentProtocolTarget(type: iterableType,
+            targetType: out TypeSymbol unwrapped))
+        {
+            iterableType = unwrapped;
+        }
+
+        // Protocol-typed receiver: if the static type IS `Iterable[T]` (or a
+        // protocol that obeys Iterable), trust the dispatch and take the
+        // element type from the type-arg. Any concrete value bound will
+        // implement Iterable structurally.
+        if (iterableType is ProtocolTypeInfo iproto)
+        {
+            string baseName = iproto.GenericDefinition?.Name ?? iproto.Name;
+            int br = baseName.IndexOf(value: '[');
+            if (br >= 0) baseName = baseName[..br];
+            if (baseName == "Iterable" && iproto.TypeArguments is { Count: > 0 })
+            {
+                return iproto.TypeArguments[index: 0];
+            }
+        }
+
         // Type must follow the Iterable protocol
         bool obeysIterable = ImplementsProtocol(type: iterableType, protocolName: "Iterable");
 
