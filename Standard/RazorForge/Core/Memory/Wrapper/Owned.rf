@@ -35,6 +35,7 @@ dangerous routine Owned[T].from_raw(raw: Hijacked[T]) -> Owned[T]
 
 ### Returns the heap address of the owned allocation.
 ### :returns: The raw heap address of the allocation backing this owned value.
+@readonly
 dangerous routine Owned[T].get_address() -> Address
   var raw = Hijacked[T](me)
   return raw.get_address()

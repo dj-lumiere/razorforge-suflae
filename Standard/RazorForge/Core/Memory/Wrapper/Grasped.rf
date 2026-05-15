@@ -20,6 +20,15 @@ needs T is EntityType
   danger!
     return Grasped[T](me.hijack())
 
+### Produces a temporary unmanaged mutable view of the entity owned by `me`.
+### Avoids double-wrapping: `Owned[T].grasp()` returns `Grasped[T]`, not `Grasped[Owned[T]]`.
+### `Owned[T]` is structurally a `ptr` to T's storage, so this is a pointer alias only.
+### :returns: The resulting `Grasped[T]` value.
+routine Owned[T].grasp() -> Grasped[T]
+needs T is EntityType
+  danger!
+    return Grasped[T](Hijacked[T](me))
+
 # NOTE: No creators, no manual methods - all operations handled by compiler
 # The address member variable is managed internally by the `.grasp()` implementation
 # Users should NEVER create Grasped[T] values directly

@@ -167,7 +167,11 @@ internal sealed class SignatureResolver
             }
 
             // Protocol-as-type desugaring: routine foo(x: Displayable) -> routine foo[T obeys Displayable](x: T)
-            if (paramType is ProtocolTypeInfo)
+            // Exception: marker protocols Referring[T]/Controlling[T] use transparent dispatch
+            // (see TryGetTransparentProtocolTarget). Desugaring them into __TN strips the inner T,
+            // breaking member lookup like `scores.count()` / `for s in scores` on the parameter.
+            if (paramType is ProtocolTypeInfo paramProto &&
+                !IsTransparentMarkerProtocol(paramProto))
             {
                 // Generate implicit generic parameter name
                 string implicitGenericName = $"__T{implicitGenericCounter++}";
@@ -693,5 +697,15 @@ internal sealed class SignatureResolver
         return genericIndex >= 0
             ? typeName[..genericIndex]
             : typeName;
+    }
+
+    private static bool IsTransparentMarkerProtocol(ProtocolTypeInfo proto)
+    {
+        if (proto.TypeArguments is not { Count: 1 })
+        {
+            return false;
+        }
+        string baseName = GetBaseTypeName(typeName: proto.GenericDefinition?.Name ?? proto.Name);
+        return baseName is "Referring" or "Controlling";
     }
 }
