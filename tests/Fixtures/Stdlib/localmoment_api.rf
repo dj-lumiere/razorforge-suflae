@@ -25,5 +25,16 @@ routine start()
                                      offset: plus9)
   show(f"lm_jp == lm (same instant, different zone): {lm_jp.to_moment() == lm.to_moment()}")
 
+  # LocalMoment ± Duration → LocalMoment
+  var one_hour = Duration.from_hours(h: 1_s64)
+  var lm_plus = lm + one_hour
+  var lm_minus = lm - one_hour
+  show(f"lm + 1h hour: {lm_plus.hour()}")
+  show(f"lm - 1h hour: {lm_minus.hour()}")
+
+  # LocalMoment − LocalMoment → Duration
+  var dist = lm_plus - lm
+  show(f"(lm + 1h) - lm: {dist}")
+
   show("DONE")
   return

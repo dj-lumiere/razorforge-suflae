@@ -10,7 +10,7 @@ using static TestHelpers;
 /// <c>Controlling[T]</c>, and for iterating over such a parameter via a
 /// transparent-protocol unwrap. Regression coverage for the
 /// <c>List[T].add_range(other: Referring[Iterable[T]])</c> shape introduced
-/// alongside the FastIO API.
+/// alongside the BytesIO API.
 /// </summary>
 public class ReferringIterableTests
 {

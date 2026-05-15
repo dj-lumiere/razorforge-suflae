@@ -1,0 +1,26 @@
+parse '42': 42
+parse '-42': -42
+parse '+42': 42
+parse '0': 0
+parse '1234567890': 1234567890
+parse '   42': 42
+parse '\t-7': -7
+parse '42abc' (stops at 'a'): 42
+parse '42 99' (stops at ' '): 42
+try empty: None
+try 'abc': None
+try '+': None
+try '   ': None
+streaming sum: 40
+format 0: \x30
+format 42: \x34\x32
+format -42: \x2D\x34\x32
+format S64_MIN: \x2D\x39\x32\x32\x33\x33\x37\x32\x30\x33\x36\x38\x35\x34\x37\x37\x35\x38\x30\x38
+format S64_MAX: \x39\x32\x32\x33\x33\x37\x32\x30\x33\x36\x38\x35\x34\x37\x37\x35\x38\x30\x37
+U64 parse '42': 42
+U64 parse '+42': 42
+U64 try '-42' (must fail): None
+U64 format 0: \x30
+U64 format U64_MAX: \x31\x38\x34\x34\x36\x37\x34\x34\x30\x37\x33\x37\x30\x39\x35\x35\x31\x36\x31\x35
+S64 round-trip [-100..100]: true
+DONE

@@ -1,0 +1,9 @@
+new size: 0
+is_empty (new): true
+size after add 10/20/30/20: 3
+contains 20: true
+contains 99: false
+size after remove(10): 2
+contains 10: false
+sorted contents: [20, 30]
+DONE

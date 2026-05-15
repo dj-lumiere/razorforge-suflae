@@ -1,0 +1,6 @@
+v type: Core.Viewed[Tests/Stdlib/ViewedGraspedApi.Box]
+v.value via forward: 7
+after grasp.set(42): 42
+v2 type: Core.Viewed[Tests/Stdlib/ViewedGraspedApi.Box]
+v2.value: 100
+DONE

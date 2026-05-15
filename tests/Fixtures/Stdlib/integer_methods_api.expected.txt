@@ -1,0 +1,18 @@
+5 is_positive: true
+-5 is_negative: true
+0 is_zero: true
+4 is_even: true
+5 is_odd: true
+8 is_power_of_two: true
+6 is_power_of_two: false
+signum(-7): -1
+signum(0): 0
+signum(7): 1
+count_ones(0b1101): 3
+count_zeros(0b0000): 64
+leading_zeros(1): 63
+trailing_zeros(8): 3
+parse '12345': 12345
+parse '-42': -42
+parse 'abc': None
+DONE

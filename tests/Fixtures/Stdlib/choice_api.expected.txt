@@ -1,0 +1,9 @@
+c: RED
+c (diagnose): Tests/Stdlib/ChoiceApi.Color(id=0, RED)
+c == RED: true
+c == GREEN: false
+c != BLUE: true
+  matched RED
+s: OK
+s == OK: true
+DONE

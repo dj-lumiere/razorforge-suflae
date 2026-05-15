@@ -9,4 +9,7 @@ t (month): 11
 epoch < m: true
 m == m: true
 m != epoch: true
+m + 1h hour: 13
+m - 1h hour: 11
+(m + 1h) - m: 1h
 DONE

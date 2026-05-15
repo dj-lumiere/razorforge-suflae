@@ -1,0 +1,11 @@
+t: Tuple(1, hello, true)
+t (diagnose): Tuple[Core.S64, Core.Text, Core.Bool](1, hello, true)
+t.item0: 1
+t.item1: hello
+t.item2: true
+a: 1
+b: hello
+c: true
+t == t2: true
+t == t3: false
+DONE

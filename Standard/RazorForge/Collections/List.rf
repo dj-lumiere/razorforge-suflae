@@ -143,7 +143,7 @@ routine List[T].add_last(value: T)
 ### :see: {List[T].add_last}, {T.to_digit_bytes}
 ###
 ### NOTE: Stub signature — implementation pending. Tracking:
-###       memory/fast_io_api_plan.md (v0.1.0 first additions).
+###       memory/bytes_io_api_plan.md (v0.1.0 first additions).
 @migratable
 routine List[T].add_range(other: Referring[Iterable[T]])
   # TODO(fast-io): hoist capacity-reserve when `other` exposes a known count.

@@ -1,0 +1,8 @@
+ok type: Result[S64]
+ok: 10
+err: BadInputError
+err diagnose: Tests/Stdlib/CrashableApi.BadInputError
+  caught BadInputError
+AbsentValueError.crash_title(): AbsentValueError
+AbsentValueError.crash_message(): Attempted to use an absent value.
+DONE

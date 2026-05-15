@@ -1,6 +1,6 @@
 b type: Bytes
 b size: 5
-b[0]: 104
-b[4]: 111
+b[0]: \x68
+b[4]: \x6F
 empty bytes is_empty: true
 DONE

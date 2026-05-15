@@ -1,0 +1,11 @@
+int: 42
+float: 3.14
+bool: true
+text: hello
+int diag: 42
+text diag: hello
+mix: 42 + 3.14 = 45
+calc: 5
+call: 2
+concat == interp: true
+DONE

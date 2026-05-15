@@ -1,0 +1,9 @@
+c type: Core.Owned[Tests/Stdlib/OwnedApi.Counter]
+c value: 10
+after bump(5): 15
+view type: Core.Viewed[Tests/Stdlib/OwnedApi.Counter]
+view value: 15
+after grasp().bump(100): 115
+c represent: Counter(115)
+c diagnose: Tests/Stdlib/OwnedApi.Counter(value: 115)
+DONE
