@@ -1,3 +1,4 @@
+using System.Linq;
 using Compiler.Desugaring.Passes;
 using Compiler.Synthesis;
 using SyntaxTree;

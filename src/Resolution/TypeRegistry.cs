@@ -1,3 +1,7 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using Compiler.Declaration;
 using Compiler.Synthesis;
 using SyntaxTree;

@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using System.Text;
 using Compiler.Diagnostics;
 

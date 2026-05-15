@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Verification.Enums;
 using SyntaxTree;
 using TypeModel.Enums;

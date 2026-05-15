@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using TypeModel.Enums;
 using TypeModel.Symbols;
 

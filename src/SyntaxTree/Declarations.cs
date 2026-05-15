@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace SyntaxTree;
 
 #region Base Declaration Types

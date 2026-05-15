@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using Compiler.Resolution;
 using Compiler.Targeting;
 using Microsoft.Win32;

@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using Compiler.Desugaring;
 using Compiler.Instantiation;
 using SyntaxTree;

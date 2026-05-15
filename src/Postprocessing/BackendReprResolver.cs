@@ -1,3 +1,4 @@
+using System.Linq;
 using Compiler.Resolution;
 using Compiler.Targeting;
 using TypeModel.Reprs;

@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using Compiler.Postprocessing.Passes;
 using Compiler.Instantiation;
 using Compiler.Resolution;

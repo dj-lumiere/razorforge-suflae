@@ -1,3 +1,4 @@
+using System;
 using Compiler.CodeGen;
 using Compiler.Diagnostics;
 using Compiler.Instantiation;
@@ -5,6 +6,9 @@ using Compiler.Postprocessing;
 using Verification;
 using Verification.Results;
 using System.Collections;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using SyntaxTree;
 using TypeModel.Enums;
 using TypeModel.Reprs;

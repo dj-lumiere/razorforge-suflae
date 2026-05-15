@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using Compiler.Diagnostics;
 using System.Globalization;
 using TypeModel.Enums;

@@ -1,4 +1,7 @@
+using System;
 using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
 using Compiler.Resolution;
 using SyntaxTree;
 using TypeModel.Symbols;

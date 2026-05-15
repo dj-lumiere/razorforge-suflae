@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Compiler.Lexer;
 using TypeModel.Reprs;
 using TypeModel.Enums;

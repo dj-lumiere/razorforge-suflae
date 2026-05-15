@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using TypeModel.Symbols;
 
 namespace Verification;

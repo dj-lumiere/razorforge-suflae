@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using Compiler.Desugaring;
 using Compiler.Lexer;
 using Compiler.Postprocessing;

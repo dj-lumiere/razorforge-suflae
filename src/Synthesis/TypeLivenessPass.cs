@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using Compiler.Resolution;
 using TypeModel.Symbols;
 using TypeModel.Types;

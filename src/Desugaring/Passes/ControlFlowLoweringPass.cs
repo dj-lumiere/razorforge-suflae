@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using Compiler.Lexer;
 using Compiler.Postprocessing.Passes;
 using SyntaxTree;

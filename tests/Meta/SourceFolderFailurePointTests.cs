@@ -1,3 +1,7 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace RazorForge.Tests.Meta;
@@ -143,20 +147,20 @@ public sealed partial class SourceFolderFailurePointTests
         ];
 
         List<string> offenders = frontendFolders
-                                 .SelectMany(selector: folder => Directory.EnumerateFiles(
-                                      path: Path.Combine(path1: sourceRoot, path2: folder),
-                                      searchPattern: "*.cs",
-                                      searchOption: SearchOption.AllDirectories))
-                                 .Where(predicate: path => File.ReadAllText(path: path)
+                                .SelectMany(selector: folder => Directory.EnumerateFiles(
+                                     path: Path.Combine(path1: sourceRoot, path2: folder),
+                                     searchPattern: "*.cs",
+                                     searchOption: SearchOption.AllDirectories))
+                                .Where(predicate: path => File.ReadAllText(path: path)
                                                               .Contains(
-                                                                  value:
-                                                                  "throw new NotImplementedException",
-                                                                  comparisonType:
-                                                                  StringComparison.Ordinal))
-                                 .Select(selector: path => Path.GetRelativePath(
-                                      relativeTo: sourceRoot,
-                                      path: path))
-                                 .ToList();
+                                                                   value:
+                                                                   "throw new NotImplementedException",
+                                                                   comparisonType:
+                                                                   StringComparison.Ordinal))
+                                .Select(selector: path => Path.GetRelativePath(
+                                     relativeTo: sourceRoot,
+                                     path: path))
+                                .ToList();
 
         Assert.Empty(collection: offenders);
     }

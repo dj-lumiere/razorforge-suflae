@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using Compiler.Postprocessing;
 using SyntaxTree;
 using TypeModel.Enums;

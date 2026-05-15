@@ -1,3 +1,4 @@
+using System;
 using TypeModel.Enums;
 
 namespace Compiler.Diagnostics;

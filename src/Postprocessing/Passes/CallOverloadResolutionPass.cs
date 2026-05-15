@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Compiler.Desugaring.Passes;
 using Compiler.Instantiation;
 using Compiler.Resolution;

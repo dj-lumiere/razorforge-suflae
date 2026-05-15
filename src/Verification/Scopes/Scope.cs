@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using TypeModel.Symbols;
 using TypeModel.Types;
 using Verification.Enums;

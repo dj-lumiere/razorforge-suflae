@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using Compiler.CodeGen;
 using Compiler.Diagnostics;
 using Compiler.Targeting;

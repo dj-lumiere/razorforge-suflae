@@ -1,3 +1,4 @@
+using System.Linq;
 using Compiler.Diagnostics;
 using Verification.Results;
 

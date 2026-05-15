@@ -1,3 +1,4 @@
+using System;
 using Compiler.Diagnostics;
 using Compiler.Lexer;
 using SyntaxTree;

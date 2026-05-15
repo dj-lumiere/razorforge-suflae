@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using TypeModel.Types;
 using SyntaxTree;
 
@@ -41,9 +43,9 @@ internal sealed class CrashableExpansionPass(PostprocessingContext ctx)
     public void Run(Program program)
     {
         IReadOnlyList<CrashableTypeInfo> crashableTypes = ctx.Registry
-            .GetAllTypes()
-            .OfType<CrashableTypeInfo>()
-            .ToList();
+                                                             .GetAllTypes()
+                                                             .OfType<CrashableTypeInfo>()
+                                                             .ToList();
 
         // Nothing to expand if no crashable types are registered.
         if (crashableTypes.Count == 0) return;

@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using Compiler.Diagnostics;
 using SyntaxTree;
 using TypeModel.Symbols;

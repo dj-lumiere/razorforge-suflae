@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Builder;
 /// <summary>
 /// Describes the package metadata declared in <c>razorforge.toml</c>.
