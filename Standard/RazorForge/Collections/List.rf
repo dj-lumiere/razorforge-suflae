@@ -130,6 +130,29 @@ routine List[T].add_last(value: T)
   me.count = me.count +% 1u64
   return
 
+### Appends every element of `other` to the back of this list, in order.
+### Reserves capacity once up front when the source has a known size, avoiding the
+### per-element growth that a naive `for x in other; me.add_last(value: x)` loop
+### incurs. Equivalent to `extend` in Python or `addAll` in Java/Kotlin.
+###
+### :param other: The sequence to append. Any `Iterable[T]` is accepted; pass a
+###               `List[T]`, `Bytes` (for `List[Byte]`), a generator, an IterTools
+###               chain, etc.
+### :note: Common fast-output idiom: accumulate digit bytes into a `List[Byte]`
+###        via `buf.add_range(other: x.to_digit_bytes())`, then flush once.
+### :see: {List[T].add_last}, {T.to_digit_bytes}
+###
+### NOTE: Stub signature — implementation pending. Tracking:
+###       memory/fast_io_api_plan.md (v0.1.0 first additions).
+@migratable
+routine List[T].add_range(other: Referring[Iterable[T]])
+  # TODO(fast-io): hoist capacity-reserve when `other` exposes a known count.
+  # For now, fall back to per-element append so the routine type-checks while the
+  # optimized path is being designed.
+  for value in other
+    me.add_last(value: value)
+  return
+
 ### Removes and returns the last element, reducing the count by one.
 ### Capacity is not reduced.
 ### :returns: The element that was at the back.
