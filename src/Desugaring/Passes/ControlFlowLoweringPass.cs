@@ -236,22 +236,14 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
         string iterName = $"_lf_iter_{n}";
 
         // -----------------------------------------------------------------------------
-        Statement iterVarStmt = new DeclarationStatement(
-            Declaration: new VariableDeclaration(
-                Name: iterName,
-                Type: null,
-                Initializer: new CallExpression(
-                    Callee: new MemberExpression(
-                        Object: forStmt.Iterable,
-                        PropertyName: "$iter",
-                        Location: loc),
-                    Arguments: [],
-                    Location: loc),
-                Visibility: VisibilityModifier.Secret,
+        CallExpression iterCallExpr = new CallExpression(
+            Callee: new MemberExpression(
+                Object: forStmt.Iterable,
+                PropertyName: "$iter",
                 Location: loc),
+            Arguments: [],
             Location: loc);
 
-        // -----------------------------------------------------------------------------
         CallExpression tryNextCallExpr = new CallExpression(
             Callee: new MemberExpression(
                 Object: new IdentifierExpression(Name: iterName, Location: loc),
@@ -261,14 +253,35 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
             Location: loc);
 
         // When running after SA (stdlib/variant bodies), annotate ResolvedType, ResolvedRoutine,
-        // and LoweringKind on the try_next call so CallOverloadResolutionPass doesn't need to
-        // re-classify it (which fails for instantiated bodies where the receiver variable has
-        // no SA-annotated type). Skip ErrorTypeInfo: SA suppresses stdlib errors.
+        // and LoweringKind on the $iter and try_next calls so CallOverloadResolutionPass doesn't
+        // need to re-classify them (which fails for instantiated bodies where the receiver
+        // variable has no SA-annotated type). Skip ErrorTypeInfo: SA suppresses stdlib errors.
         if (forStmt.Iterable.ResolvedType is { } iterType && iterType is not ErrorTypeInfo)
         {
-            RoutineInfo? iterMethod = ctx.Registry.LookupMethod(type: iterType, methodName: "$iter");
+            // Transparent-protocol unwrap: Referring[X] / Controlling[X] dispatch through X.
+            TypeInfo lookupType = iterType;
+            if (iterType is ProtocolTypeInfo proto &&
+                proto.TypeArguments is { Count: > 0 } pArgs)
+            {
+                string baseName = proto.GenericDefinition?.Name ?? proto.Name;
+                int bracket = baseName.IndexOf(value: '[');
+                if (bracket >= 0) baseName = baseName[..bracket];
+                if (baseName is "Referring" or "Controlling")
+                {
+                    lookupType = pArgs[index: 0];
+                }
+            }
+
+            RoutineInfo? iterMethod = ctx.Registry.LookupMethod(type: lookupType, methodName: "$iter");
             if (iterMethod?.ReturnType is { } iteratorType)
             {
+                iterCallExpr = iterCallExpr with
+                {
+                    ResolvedRoutine = iterMethod,
+                    LoweringKind = CallLoweringKind.DirectMemberRoutine,
+                    ResolvedType = iteratorType
+                };
+
                 RoutineInfo? tryNextMethod =
                     ctx.Registry.LookupMethod(type: iteratorType, methodName: "try_next");
                 if (tryNextMethod != null)
@@ -280,6 +293,15 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
                     };
             }
         }
+
+        Statement iterVarStmt = new DeclarationStatement(
+            Declaration: new VariableDeclaration(
+                Name: iterName,
+                Type: null,
+                Initializer: iterCallExpr,
+                Visibility: VisibilityModifier.Secret,
+                Location: loc),
+            Location: loc);
         Expression tryNextCall = tryNextCallExpr;
 
         // -----------------------------------------------------------------------------
