@@ -484,6 +484,25 @@ public sealed partial class TypeRegistry
     /// <param name="isFailable">Whether this is failable.</param>
     public RoutineInfo? LookupMethod(TypeInfo type, string methodName, bool? isFailable = null)
     {
+        // Transparent-protocol unwrap: Referring[X] / Controlling[X] are markers that
+        // dispatch every method to X. If the receiver is one of these wrappers with a
+        // single type argument, recurse on the inner type. Without this, for-loops over
+        // `Referring[Iterable[T]]` parameters can't resolve $iter at SA time, leading
+        // to "no resolved method" warnings during generic monomorphization.
+        if (type is ProtocolTypeInfo markerProto &&
+            markerProto.TypeArguments is { Count: 1 } markerArgs)
+        {
+            string markerBase = markerProto.GenericDefinition?.Name ?? markerProto.Name;
+            int markerBracket = markerBase.IndexOf(value: '[');
+            if (markerBracket >= 0) markerBase = markerBase[..markerBracket];
+            if (markerBase is "Referring" or "Controlling")
+            {
+                RoutineInfo? viaInner = LookupMethod(type: markerArgs[index: 0],
+                    methodName: methodName, isFailable: isFailable);
+                if (viaInner != null) return viaInner;
+            }
+        }
+
         // First check the type's own methods
         if (_routinesByOwner.TryGetValue(key: type.FullName, value: out List<RoutineInfo>? methods))
         {
