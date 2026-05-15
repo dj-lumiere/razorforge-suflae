@@ -23,9 +23,9 @@ routine start()
 
   # Records can be used as Dict/Set keys
   var s = {p}
-  show(f"set contains p: {s.contains(value: p)}")
-  show(f"set contains q (equal to p): {s.contains(value: q)}")
-  show(f"set contains r: {s.contains(value: r)}")
+  show(f"set contains p: {p in s}")
+  show(f"set contains q (equal to p): {q in s}")
+  show(f"set contains r: {r in s}")
 
   show("DONE")
   return

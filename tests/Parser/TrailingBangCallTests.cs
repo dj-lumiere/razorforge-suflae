@@ -52,6 +52,26 @@ public class TrailingBangCallTests
     }
 
     [Fact]
+    public void Parse_FStringInterpolation_With_NamedArgCall_OK()
+    {
+        // Regression: the insertion-expression lexer used to drop `:` when it
+        // appeared inside nested parens (e.g. inside a named-argument call
+        // within an f-string interpolation). That produced parse errors of
+        // the form "Expected ')' after arguments. Expected RightParen, got
+        // UndecidedInteger". Locks down the fix in Tokenizer.Literals.cs.
+        string source = """
+                        module L/Test
+                        import IO/Console
+                        routine f(value: S64) -> S64
+                          return value
+                        routine start()
+                          show(f"called: {f(value: 2)}")
+                          return
+                        """;
+        Parse(source: source);
+    }
+
+    [Fact]
     public void Parse_BangInMethodName_OK()
     {
         // Positive control — the correct form `method!(args)` must parse cleanly.

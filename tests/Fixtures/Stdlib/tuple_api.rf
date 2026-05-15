@@ -7,9 +7,9 @@ routine start()
   show(f"t (diagnose): {t:?}")
 
   # field access
-  show(f"t.f0: {t.f0}")
-  show(f"t.f1: {t.f1}")
-  show(f"t.f2: {t.f2}")
+  show(f"t.item0: {t.item0}")
+  show(f"t.item1: {t.item1}")
+  show(f"t.item2: {t.item2}")
 
   # Destructuring (value-copy semantics)
   var (a, b, c) = t

@@ -1,5 +1,6 @@
 module Tests/Stdlib/RetainedApi
 import IO/Console
+import BuilderService
 
 entity Node
   payload: S64

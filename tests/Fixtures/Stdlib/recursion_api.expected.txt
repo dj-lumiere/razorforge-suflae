@@ -1,0 +1,13 @@
+fact(0): 1
+fact(1): 1
+fact(5): 120
+fact(10): 3628800
+fact(20): 2432902008176640000
+fib(0): 0
+fib(10): 55
+fib(15): 610
+is_even_n(10): true
+is_odd_n(10): false
+is_even_n(7): false
+fact(15): 1307674368000
+DONE

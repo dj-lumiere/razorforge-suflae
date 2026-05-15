@@ -10,7 +10,7 @@ needs T obeys Equatable, Hashable
   var s: Set[T] = Set[T]()
   for x in items
     discard s.add(value: x)
-  return s.contains(value: target)
+  return target in s
 
 routine min_of_three[T](a: T, b: T, c: T) -> T
 needs T obeys Ordered

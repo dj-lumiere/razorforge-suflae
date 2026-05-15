@@ -33,9 +33,9 @@ routine start()
 
   # Tuple of mixed types — Tuple is a record, holds entities via Owned wrap
   var t = (42_s64, "hello", [1_s64, 2_s64, 3_s64])
-  show(f"t.f0: {t.f0}")
-  show(f"t.f1: {t.f1}")
-  show(f"t.f2 count: {t.f2.count()}")
+  show(f"t.item0: {t.item0}")
+  show(f"t.item1: {t.item1}")
+  show(f"t.item2 count: {t.item2.count()}")
 
   show("DONE")
   return

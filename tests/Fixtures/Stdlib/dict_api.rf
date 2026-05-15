@@ -5,8 +5,8 @@ import IO/Console
 routine start()
   var d = {"one": 1, "two": 2, "three": 3}
   show(f"size: {d.count()}")
-  show(f"contains_key 'two': {d.contains_key(key: "two")}")
-  show(f"contains_key 'four': {d.contains_key(key: "four")}")
+  show(f"contains_key 'two': {"two" in d}")
+  show(f"contains_key 'four': {"four" in d}")
 
   # get by key (deterministic)
   show(f"d['one']: {d["one"]}")
@@ -23,7 +23,7 @@ routine start()
   # remove
   discard d.remove(key: "two")
   show(f"size after remove two: {d.count()}")
-  show(f"contains_key 'two' after remove: {d.contains_key(key: "two")}")
+  show(f"contains_key 'two' after remove: {"two" in d}")
 
   # is_empty
   show(f"is_empty: {d.is_empty()}")

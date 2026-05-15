@@ -3,9 +3,9 @@ import IO/Console
 
 # IEEE 754 special values: NaN, ±Infinity, signed zero.
 routine start()
-  var nan = F64.nan()
-  var inf = F64.infinity()
-  var ninf = -F64.infinity()
+  var nan = F64_NAN
+  var inf = F64_INFINITY
+  var ninf = -F64_INFINITY
   var pz: F64 = 0.0_f64
   var nz: F64 = -0.0_f64
 

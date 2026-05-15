@@ -1,0 +1,10 @@
+count: 5
+is_empty: false
+b[0]: \x68
+b[1]: \x65
+b[4]: \x6F
+hello.bytes == hello.bytes: true
+hello.bytes == world.bytes: false
+byte sum: 532
+??byte count: 3
+DONE

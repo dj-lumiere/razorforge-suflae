@@ -15,12 +15,12 @@ routine start()
   discard s.add(value: 20)  # duplicate, no-op
   show(f"size after add 10/20/30/20: {s.count()}")
 
-  show(f"contains 20: {s.contains(value: 20)}")
-  show(f"contains 99: {s.contains(value: 99)}")
+  show(f"contains 20: {20 in s}")
+  show(f"contains 99: {99 in s}")
 
   discard s.remove(value: 10)
   show(f"size after remove(10): {s.count()}")
-  show(f"contains 10: {s.contains(value: 10)}")
+  show(f"contains 10: {10 in s}")
 
   # Sort iteration for deterministic output
   var collected = []

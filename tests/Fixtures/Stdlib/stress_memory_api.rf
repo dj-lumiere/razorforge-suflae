@@ -43,7 +43,7 @@ routine start()
     discard s.remove(value: i)
     i = i + 1_s64
   show(f"set after 1000 remove: {s.count()}")
-  show(f"set contains 500 after clear: {s.contains(value: 500_s64)}")
+  show(f"set contains 500 after clear: {500_s64 in s}")
 
   show("DONE")
   return

@@ -1,0 +1,11 @@
+PASS list add_last + remove_last preserves size
+PASS list add_last + remove_last preserves last
+PASS set contains added value
+PASS set add duplicate is idempotent
+PASS set remove undoes add
+PASS dict add then index
+PASS dict contains_key after add
+PASS dict remove undoes add
+PASS list equality reflexive
+PASS list equality symmetric
+DONE

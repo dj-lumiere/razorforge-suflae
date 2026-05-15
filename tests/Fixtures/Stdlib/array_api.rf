@@ -24,8 +24,8 @@ routine start()
   show(f"last: {a.last!()}")
 
   # contains / index_of
-  show(f"contains 20: {a.$contains(value: 20)}")
-  show(f"contains 99: {a.$contains(value: 99)}")
+  show(f"contains 20: {20 in a}")
+  show(f"contains 99: {99 in a}")
   show(f"index_of 30: {a.index_of!(value: 30)}")
 
   # Iteration (deterministic — array order is fixed)

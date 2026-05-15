@@ -16,8 +16,8 @@ routine start()
   show(f"d[2]: {d[2]}")
   show(f"d[3]: {d[3]}")
 
-  show(f"contains_key 2: {d.contains_key(key: 2)}")
-  show(f"contains_key 99: {d.contains_key(key: 99)}")
+  show(f"contains_key 2: {2 in d}")
+  show(f"contains_key 99: {99 in d}")
 
   # Overwrite
   discard d.add(key: 1, value: 100)
@@ -26,7 +26,7 @@ routine start()
   # Remove
   discard d.remove(key: 2)
   show(f"size after remove(2): {d.count()}")
-  show(f"contains_key 2 after remove: {d.contains_key(key: 2)}")
+  show(f"contains_key 2 after remove: {2 in d}")
 
   show("DONE")
   return

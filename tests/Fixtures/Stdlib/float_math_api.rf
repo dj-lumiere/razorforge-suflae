@@ -33,7 +33,7 @@ routine start()
   show(f"is_negative(-1.0): {(-1.0_f64).is_negative()}")
   show(f"is_zero(0.0): {(0.0_f64).is_zero()}")
   show(f"is_finite(1.0): {(1.0_f64).is_finite()}")
-  show(f"is_finite(inf): {F64.infinity().is_finite()}")
+  show(f"is_finite(inf): {F64_INFINITY.is_finite()}")
   show(f"signum(-5.0): {(-5.0_f64).signum()}")
   show(f"signum(5.0): {(5.0_f64).signum()}")
 

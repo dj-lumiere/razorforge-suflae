@@ -1,0 +1,12 @@
+size: 3
+contains_key 'two': true
+contains_key 'four': false
+d['one']: 1
+d['three']: 3
+size after add four: 4
+d['four']: 4
+d['one'] after overwrite: 100
+size after remove two: 3
+contains_key 'two' after remove: false
+is_empty: false
+DONE

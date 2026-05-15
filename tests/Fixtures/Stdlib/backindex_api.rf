@@ -15,7 +15,7 @@ routine start()
   show(f"t[^5]: {t[^5]}")
 
   # Bytes back-index (Byte)
-  var b = "hello".bytes()
+  var b = "hello".encode_as_utf8()
   show(f"b[^1]: {b[^1]}")
 
   # Slice with back-index (range form)

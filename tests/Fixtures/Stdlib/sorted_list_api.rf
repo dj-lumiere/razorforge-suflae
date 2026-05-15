@@ -25,8 +25,8 @@ routine start()
   show(f"sl[2]: {sl[2_u64]}")
   show(f"sl[3]: {sl[3_u64]}")
 
-  show(f"contains 20: {sl.contains(value: 20)}")
-  show(f"contains 99: {sl.contains(value: 99)}")
+  show(f"contains 20: {20 in sl}")
+  show(f"contains 99: {99 in sl}")
 
   show("DONE")
   return

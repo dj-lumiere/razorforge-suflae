@@ -1,0 +1,22 @@
+sqrt(2): 1.4142135623731
+sqrt(16): 4
+pow(2, 10): 1024
+exp(0): 1
+exp(1): 2.71828182845905
+log(e): 1
+log10(1000): 3
+sin(0): 0
+cos(0): 1
+floor(3.7): 3
+ceil(3.2): 4
+round(3.5): 4
+round(3.4): 3
+min(3.0, 7.0): 3
+max(3.0, 7.0): 7
+clamp(5, 1..10): 5
+clamp(-1, 0..10): 0
+clamp(100, 0..10): 10
+is_positive(1.0): true
+is_negative(-1.0): true
+is_zero(0.0): true
+is_finite(1.0): true

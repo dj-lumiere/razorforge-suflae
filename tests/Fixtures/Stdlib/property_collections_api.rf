@@ -26,7 +26,7 @@ routine start()
   var s: Set[S64] = {10, 20, 30}
   discard s.add(value: 40)
   check(name: "set contains added value",
-        ok: s.contains(value: 40_s64))
+        ok: 40_s64 in s)
 
   # Set: add idempotence
   var size_before = s.count()
@@ -37,19 +37,19 @@ routine start()
   # Set: remove inverse
   discard s.remove(value: 40)
   check(name: "set remove undoes add",
-        ok: not s.contains(value: 40_s64))
+        ok: not 40_s64 in s)
 
   # Dict: add then get
   var d: Dict[S64, S64] = {1: 10, 2: 20}
   discard d.add(key: 3, value: 30)
   check(name: "dict add then index", ok: d[3] == 30_s64)
   check(name: "dict contains_key after add",
-        ok: d.contains_key(key: 3_s64))
+        ok: 3_s64 in d)
 
   # Dict: remove inverse
   discard d.remove(key: 3)
   check(name: "dict remove undoes add",
-        ok: not d.contains_key(key: 3_s64))
+        ok: not 3_s64 in d)
 
   # Equality symmetry
   var a: List[S64] = [1, 2, 3]

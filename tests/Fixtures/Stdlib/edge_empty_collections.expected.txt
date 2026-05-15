@@ -1,0 +1,14 @@
+list count: 0
+list is_empty: true
+list contains 1: false
+list represent: []
+set count: 0
+set is_empty: true
+set contains 1: false
+dict count: 0
+dict is_empty: true
+dict contains_key 1: false
+empty list iter count: 0
+after empty set iter: 0
+after empty dict iter: 0
+DONE

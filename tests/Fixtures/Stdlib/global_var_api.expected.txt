@@ -1,0 +1,5 @@
+initial counter: 0
+after 3 inc(): 3
+after assign 100: 100
+after summing 1..5: 115
+DONE

@@ -1,0 +1,10 @@
+size: 3
+contains 20: true
+contains 99: false
+is_empty (after init): false
+size after add(40), add(20): 4
+contains 40: true
+size after remove(10): 3
+contains 10: false
+sorted contents: [20, 30, 40]
+DONE

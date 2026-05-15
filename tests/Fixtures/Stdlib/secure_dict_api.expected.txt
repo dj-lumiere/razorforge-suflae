@@ -1,0 +1,11 @@
+new size: 0
+size: 3
+d[1]: 10
+d[2]: 20
+d[3]: 30
+contains_key 2: true
+contains_key 99: false
+d[1] after overwrite: 100
+size after remove(2): 2
+contains_key 2 after remove: false
+DONE

@@ -17,8 +17,8 @@ routine start()
   for x in ss
     show(f"  iter: {x}")
 
-  show(f"contains 20: {ss.contains(value: 20)}")
-  show(f"contains 99: {ss.contains(value: 99)}")
+  show(f"contains 20: {20 in ss}")
+  show(f"contains 99: {99 in ss}")
 
   show("DONE")
   return

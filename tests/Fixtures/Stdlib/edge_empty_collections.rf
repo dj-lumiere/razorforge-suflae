@@ -7,18 +7,18 @@ routine start()
   var l: List[S64] = []
   show(f"list count: {l.count()}")
   show(f"list is_empty: {l.is_empty()}")
-  show(f"list contains 1: {l.contains(value: 1_s64)}")
+  show(f"list contains 1: {1_s64 in l}")
   show(f"list represent: {l}")
 
   var s: Set[S64] = Set[S64]()
   show(f"set count: {s.count()}")
   show(f"set is_empty: {s.is_empty()}")
-  show(f"set contains 1: {s.contains(value: 1_s64)}")
+  show(f"set contains 1: {1_s64 in s}")
 
   var d: Dict[S64, S64] = Dict[S64, S64]()
   show(f"dict count: {d.count()}")
   show(f"dict is_empty: {d.is_empty()}")
-  show(f"dict contains_key 1: {d.contains_key(key: 1_s64)}")
+  show(f"dict contains_key 1: {1_s64 in d}")
 
   # Iteration over empty containers — should produce zero side-effects
   var counter = 0_s64

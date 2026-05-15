@@ -1,0 +1,20 @@
+--- normal_exit ---
+ normal: before using
+  $enter(1)
+  touch(1)
+  $exit(1)
+ normal: after using
+--- early_return(false) ---
+ early: before using (cond=false)
+  $enter(2)
+  touch(2)
+  touch(2)
+  $exit(2)
+ early: after using (unreached when cond=true)
+--- early_return(true) ---
+ early: before using (cond=true)
+  $enter(2)
+  touch(2)
+  about to early-return
+  $exit(2)
+DONE

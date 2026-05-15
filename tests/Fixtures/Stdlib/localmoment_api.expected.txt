@@ -1,0 +1,9 @@
+lm: 5-6-19 -22:-44:-48Z
+lm year: 5
+lm month: 6
+lm day: 19
+lm hour: -22
+abs_m year: 5
+abs_m month: 6
+lm_jp == lm (same instant, different zone): false
+DONE

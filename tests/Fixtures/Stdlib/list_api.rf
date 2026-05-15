@@ -18,8 +18,8 @@ routine start()
   show(f"a[2]: {a[2]}")
 
   # contains
-  show(f"contains 20: {a.contains(value: 20)}")
-  show(f"contains 99: {a.contains(value: 99)}")
+  show(f"contains 20: {20 in a}")
+  show(f"contains 99: {99 in a}")
 
   # is_empty
   show(f"is_empty: {a.is_empty()}")

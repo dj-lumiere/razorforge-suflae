@@ -1,0 +1,6 @@
+--- inner() ---
+ inner enter
+ after retain, strong=1
+ after r2 = r1.retain(), strong=2
+--- after inner (destroy should have happened) ---
+DONE

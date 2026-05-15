@@ -18,12 +18,12 @@ routine start()
   # Comparison
   show(f"F64 1.0 < 2.0: {1.0_f64 < 2.0_f64}")
   show(f"F64 1.0 == 1.0: {1.0_f64 == 1.0_f64}")
-  show(f"F64 NaN == NaN: {F64.nan() == F64.nan()}")
+  show(f"F64 NaN == NaN: {F64_NAN == F64_NAN}")
 
   # Special values
-  show(f"F64 inf: {F64.infinity()}")
-  show(f"F64 -inf: {-F64.infinity()}")
-  show(f"F64 isnan(nan): {F64.nan().is_nan()}")
+  show(f"F64 inf: {F64_INFINITY}")
+  show(f"F64 -inf: {-F64_INFINITY}")
+  show(f"F64 isnan(nan): {F64_NAN.is_nan()}")
   show(f"F64 isnan(1.0): {1.0_f64.is_nan()}")
 
   # Conversion

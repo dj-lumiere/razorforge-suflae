@@ -1,0 +1,15 @@
+zero: 0s
+1s: 1s
+1ms: 1ms
+1us: 1us
+1ns: 1ns
+1s + 1s: 2s
+2s - 1s: 1s
+-1s: -1s
+1h: 1h
+1d: 1d
+1ns < 1us: true
+1us < 1ms: true
+1ms < 1s: true
+1s == 1s: true
+DONE

@@ -16,8 +16,8 @@ routine start()
   show(f"bl[2]: {bl[2_u64]}")
 
   # count_true / count_false (if available — invariants under iteration order)
-  show(f"contains true: {bl.contains(value: true)}")
-  show(f"contains false: {bl.contains(value: false)}")
+  show(f"contains true: {true in bl}")
+  show(f"contains false: {false in bl}")
 
   show("DONE")
   return

@@ -9,28 +9,28 @@ import IO/BytesIO
 
 routine start()
   # --- S64 parse: happy paths ---
-  show(f"parse '42': {try_S64_from_digit_bytes(bytes: "42".bytes()) !!}")
-  show(f"parse '-42': {try_S64_from_digit_bytes(bytes: "-42".bytes()) !!}")
-  show(f"parse '+42': {try_S64_from_digit_bytes(bytes: "+42".bytes()) !!}")
-  show(f"parse '0': {try_S64_from_digit_bytes(bytes: "0".bytes()) !!}")
-  show(f"parse '1234567890': {try_S64_from_digit_bytes(bytes: "1234567890".bytes()) !!}")
+  show(f"parse '42': {try_S64_from_digit_bytes(bytes: "42".encode_as_utf8()) !!}")
+  show(f"parse '-42': {try_S64_from_digit_bytes(bytes: "-42".encode_as_utf8()) !!}")
+  show(f"parse '+42': {try_S64_from_digit_bytes(bytes: "+42".encode_as_utf8()) !!}")
+  show(f"parse '0': {try_S64_from_digit_bytes(bytes: "0".encode_as_utf8()) !!}")
+  show(f"parse '1234567890': {try_S64_from_digit_bytes(bytes: "1234567890".encode_as_utf8()) !!}")
 
   # Leading whitespace
-  show(f"parse '   42': {try_S64_from_digit_bytes(bytes: "   42".bytes()) !!}")
-  show(f"parse '\\t-7': {try_S64_from_digit_bytes(bytes: "\t-7".bytes()) !!}")
+  show(f"parse '   42': {try_S64_from_digit_bytes(bytes: "   42".encode_as_utf8()) !!}")
+  show(f"parse '\\t-7': {try_S64_from_digit_bytes(bytes: "\t-7".encode_as_utf8()) !!}")
 
   # Lenient: stops at first non-digit, doesn't fail
-  show(f"parse '42abc' (stops at 'a'): {try_S64_from_digit_bytes(bytes: "42abc".bytes()) !!}")
-  show(f"parse '42 99' (stops at ' '): {try_S64_from_digit_bytes(bytes: "42 99".bytes()) !!}")
+  show(f"parse '42abc' (stops at 'a'): {try_S64_from_digit_bytes(bytes: "42abc".encode_as_utf8()) !!}")
+  show(f"parse '42 99' (stops at ' '): {try_S64_from_digit_bytes(bytes: "42 99".encode_as_utf8()) !!}")
 
   # --- S64 parse failures ---
-  show(f"try empty: {try_S64_from_digit_bytes(bytes: "".bytes())}")
-  show(f"try 'abc': {try_S64_from_digit_bytes(bytes: "abc".bytes())}")
-  show(f"try '+': {try_S64_from_digit_bytes(bytes: "+".bytes())}")
-  show(f"try '   ': {try_S64_from_digit_bytes(bytes: "   ".bytes())}")
+  show(f"try empty: {try_S64_from_digit_bytes(bytes: "".encode_as_utf8())}")
+  show(f"try 'abc': {try_S64_from_digit_bytes(bytes: "abc".encode_as_utf8())}")
+  show(f"try '+': {try_S64_from_digit_bytes(bytes: "+".encode_as_utf8())}")
+  show(f"try '   ': {try_S64_from_digit_bytes(bytes: "   ".encode_as_utf8())}")
 
   # --- Streaming parse (from_digit_bytes_at) ---
-  var stream = "10 20 -30 40".bytes()
+  var stream = "10 20 -30 40".encode_as_utf8()
   var i: U64 = 0_u64
   var sum: S64 = 0_s64
   loop
@@ -38,8 +38,8 @@ routine start()
     when t
       is None => break
       else pair =>
-        sum = sum + pair.f0
-        i = pair.f1
+        sum = sum + pair.item0
+        i = pair.item1
   show(f"streaming sum: {sum}")
 
   # --- to_digit_bytes (formatting) ---
@@ -50,9 +50,9 @@ routine start()
   show(f"format S64_MAX: {try_to_digit_bytes_s64(v: S64_MAX) !!}")
 
   # --- U64 ---
-  show(f"U64 parse '42': {try_U64_from_digit_bytes(bytes: "42".bytes()) !!}")
-  show(f"U64 parse '+42': {try_U64_from_digit_bytes(bytes: "+42".bytes()) !!}")
-  show(f"U64 try '-42' (must fail): {try_U64_from_digit_bytes(bytes: "-42".bytes())}")
+  show(f"U64 parse '42': {try_U64_from_digit_bytes(bytes: "42".encode_as_utf8()) !!}")
+  show(f"U64 parse '+42': {try_U64_from_digit_bytes(bytes: "+42".encode_as_utf8()) !!}")
+  show(f"U64 try '-42' (must fail): {try_U64_from_digit_bytes(bytes: "-42".encode_as_utf8())}")
 
   show(f"U64 format 0: {try_to_digit_bytes_u64(v: U64(0)) !!}")
   show(f"U64 format U64_MAX: {try_to_digit_bytes_u64(v: U64_MAX) !!}")
