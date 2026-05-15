@@ -43,26 +43,10 @@ routine Address.$add_wrap(you: Address) -> Address
 routine Address.$sub_wrap(you: Address) -> Address
   return sub[Address](me, you)
 
-### Returns the wrapping product of two raw addresses.
-### This is a specialized low-level operation and is rarely appropriate outside
-### runtime support code.
-### :param you: The address value to multiply by.
-### :returns: The resulting `Address` value.
-@readonly
-routine Address.$mul_wrap(you: Address) -> Address
-  return mul[Address](me, you)
-
-# ============================================================================
-# Floor Division (//)
-# Address supports // (Euclidean quotient) but NOT %
-# ============================================================================
-
-### Returns the Euclidean quotient of this address divided by `you`.
-### :param you: The non-zero divisor address value.
-### :returns: The resulting `Address` value.
-@readonly
-routine Address.$floordiv(you: Address) -> Address
-  return unsigned_div[Address](me, you)
+# Note: Address × Address and Address // Address have no meaningful semantics
+# (addresses are points in a memory space, not scalars). Use pointer arithmetic
+# via `Address + ByteSize` / `Address - ByteSize` instead, and `Address - Address`
+# to obtain the byte-distance as a `ByteSize`.
 
 # ============================================================================
 # Comparison Operations
