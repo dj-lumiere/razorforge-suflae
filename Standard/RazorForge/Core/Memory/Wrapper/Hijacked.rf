@@ -52,7 +52,7 @@ dangerous routine T.hijack() -> Hijacked[T]
 @readonly
 dangerous routine Owned[T].hijack() -> Hijacked[T]
 needs T is EntityType
-  return Hijacked[T](me)
+  return Hijacked[T](me.get_address())
 
 ### Loads the value stored at this pointer.
 ### :returns: The value stored at the address this pointer references.
