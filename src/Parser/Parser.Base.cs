@@ -647,8 +647,9 @@ _ => GrammarDiagnosticCode.UnexpectedToken
 
             // Deferred types - store raw string for semantic analyzer to parse with native libraries
             // f128: IEEE binary128, requires LibBF
-            // d32/d64/d128: IEEE decimal floating-point, requires Intel DFP library
-            // Integer/Decimal: arbitrary precision, requires LibBF/MAPM
+            // d32/d64/d128: IEEE decimal floating-point, requires decNumber
+            // Integer: arbitrary precision, requires LibTomMath
+            // Decimal: arbitrary precision, requires decNumber
             TokenType.F128Literal => CleanNumericSuffix(text: text, suffix: "f128"),
             TokenType.D32Literal => CleanNumericSuffix(text: text, suffix: "d32"),
             TokenType.D64Literal => CleanNumericSuffix(text: text, suffix: "d64"),

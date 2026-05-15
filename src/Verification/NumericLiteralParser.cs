@@ -191,10 +191,10 @@ public static class NumericLiteralParser
 
     #endregion
 
-    #region Arbitrary precision Decimal (MAPM)
+    #region Arbitrary precision Decimal (decNumber)
 
     /// <summary>
-    /// Parses a string to an arbitrary precision decimal using MAPM.
+    /// Parses a string to an arbitrary precision decimal (decNumber-backed).
     /// Returns an opaque handle that must be freed with FreeDecimal.
     /// </summary>
     [DllImport(dllName: RuntimeLib,

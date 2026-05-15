@@ -408,6 +408,14 @@ public partial class Tokenizer
                 case '%':
                     AddToken(type: TokenType.Percent);
                     break;
+                case ':':
+                    // Note: `:` at entry depth was already handled above as a
+                    // format-spec start (line ~319). Reaching here means we're
+                    // inside nested parens/brackets — emit a regular Colon
+                    // token so named arguments like `value: 42` inside an
+                    // f-string interpolation parse correctly.
+                    AddToken(type: TokenType.Colon);
+                    break;
                 case '=':
                     if (Match(expected: '='))
                     {
