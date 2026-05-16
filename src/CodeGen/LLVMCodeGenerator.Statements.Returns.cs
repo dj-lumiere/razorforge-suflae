@@ -594,7 +594,7 @@ public partial class LlvmCodeGenerator
                 $"Routine '{_currentEmittingRoutine?.BaseName ?? "<unknown>"}' signaled absent.";
             string typeCStr = EmitCStringConstant(value: typeName);
             string fileCStr = EmitCStringConstant(value: absentStmt.Location.FileName);
-            string msgTextPtr = EmitStringLiteral(sb: _functionDefinitions, value: message);
+            string msgTextPtr = EmitStringLiteral(value: message);
 
             string typeNameAsInt = NextTemp();
             EmitLine(sb: sb, line: $"  {typeNameAsInt} = ptrtoint ptr {typeCStr} to i64");

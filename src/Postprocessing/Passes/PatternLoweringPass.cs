@@ -692,14 +692,14 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
                 when IsResultOrLookup(subjectType):
                 return (MakeCrashableCondition(subject: subject, subjectType: subjectType!,
                     loc: loc, boolType: boolType),
-                    MakeCrashableBindings(subject: subject, subjectType: subjectType!,
+                    MakeCrashableBindings(subject: subject,
                         bindName: typeBindName, loc: loc));
 
             case CrashablePattern { VariableName: { } crashBindName }
                 when IsResultOrLookup(subjectType):
                 return (MakeCrashableCondition(subject: subject, subjectType: subjectType!,
                     loc: loc, boolType: boolType),
-                    MakeCrashableBindings(subject: subject, subjectType: subjectType!,
+                    MakeCrashableBindings(subject: subject,
                         bindName: crashBindName, loc: loc));
 
             case TypePattern tp when IsResultOrLookup(subjectType) || subjectType is VariantTypeInfo:
@@ -857,8 +857,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     ///         consumed by codegen's call-site to resolve protocol dispatch on <c>name</c>.</item>
     /// </list>
     /// </summary>
-    private Statement MakeCrashableBindings(Expression subject, TypeInfo subjectType,
-        string bindName, SourceLocation loc)
+    private Statement MakeCrashableBindings(Expression subject, string bindName, SourceLocation loc)
     {
         TypeInfo? crashableType = ctx.Registry.LookupType(name: "Crashable");
         TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");

@@ -227,7 +227,7 @@ public partial class Parser
         while (Match(type: TokenType.DocComment))
         {
             // Skip any newlines after doc comments
-            while (Match(type: TokenType.Newline)) { }
+            while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
         }
 
         // ═══════════════════════════════════════════════════════════════════════════
@@ -611,7 +611,7 @@ public partial class Parser
         }
 
         // Skip newlines
-        while (Match(type: TokenType.Newline)) { }
+        while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
 
         // ═══════════════════════════════════════════════════════════════════════════
         // CONTROL FLOW STATEMENTS

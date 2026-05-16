@@ -14,11 +14,5 @@ public sealed partial class SemanticVerifier
 {
     #region Phase 4: Mutation Inference
 
-    /// <summary>
-    /// Infers modification categories for all routines using call graph analysis.
-    /// Called after Phase 3 body analysis is complete.
-    /// </summary>
-
-
     #endregion
 }

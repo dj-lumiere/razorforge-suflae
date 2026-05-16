@@ -217,7 +217,7 @@ public partial class LlvmCodeGenerator
     /// Emits an inline primitive type conversion (trunc/zext/sext/fpcast) for @llvm types.
     /// Used for calls like U8(val), S32(val), F64(val), etc.
     /// </summary>
-    private string EmitPrimitiveTypeConversion(StringBuilder sb, string targetTypeName,
+    private string EmitPrimitiveTypeConversion(StringBuilder sb,
         Expression arg, TypeInfo targetType)
     {
         string argValue = EmitExpression(sb: sb, expr: arg);

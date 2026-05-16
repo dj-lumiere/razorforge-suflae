@@ -456,7 +456,7 @@ public partial class Parser
                     constraintTypes.Add(item: ParseType());
                     while (Match(type: TokenType.Comma))
                     {
-                        while (Match(type: TokenType.Newline)) { }
+                        while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
                         if (IsNewConstraintDeclaration()) break;
                         constraintTypes.Add(item: ParseType());
                     }

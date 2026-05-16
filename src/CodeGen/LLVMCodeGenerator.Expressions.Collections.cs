@@ -126,7 +126,7 @@ public partial class LlvmCodeGenerator
         // Reached only via CollectionConstruction lowering kind, not from ListLiteralExpression
         // (which is lowered by ExpressionLoweringPass for entity collection types).
         string collectionPtr =
-            EmitCollectionCreate(sb: sb, resolvedType: resolvedType, typeName: typeName);
+            EmitCollectionCreate(sb: sb, resolvedType: resolvedType);
 
         string addMemberRoutineName;
         bool isMapType = baseName is "Dict" or "SortedDict" or "SecureDict";
@@ -246,7 +246,7 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Emits a zero-arg $create() call for a collection type, handling monomorphization.
     /// </summary>
-    private string EmitCollectionCreate(StringBuilder sb, TypeInfo? resolvedType, string typeName)
+    private string EmitCollectionCreate(StringBuilder sb, TypeInfo? resolvedType)
     {
         if (resolvedType == null) return "null";
 

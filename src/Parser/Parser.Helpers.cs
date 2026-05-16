@@ -238,24 +238,24 @@ public partial class Parser
         var args = new List<Expression>();
 
         // Skip leading newlines
-        while (Match(type: TokenType.Newline)) { }
+        while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
 
         if (!Check(type: TokenType.RightParen))
         {
             do
             {
                 // Skip newlines before each argument (for multi-line formatting)
-                while (Match(type: TokenType.Newline)) { }
+                while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
 
                 args.Add(item: ParseArgument());
 
                 // Skip newlines after each argument (before comma or closing paren)
-                while (Match(type: TokenType.Newline)) { }
+                while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
             } while (Match(type: TokenType.Comma));
         }
 
         // Skip trailing newlines
-        while (Match(type: TokenType.Newline)) { }
+        while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
 
         return args;
     }

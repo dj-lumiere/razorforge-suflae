@@ -153,7 +153,7 @@ _ => GrammarDiagnosticCode.UnexpectedToken
         }
 
         // Actually consume the newlines
-        while (Match(type: TokenType.Newline)) { }
+        while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
 
         return true;
     }

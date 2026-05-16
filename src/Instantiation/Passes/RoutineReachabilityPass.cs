@@ -252,7 +252,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         {
             if (node is ThrowStatement throwStmt)
             {
-                EnqueueThrowCrashMessage(throwStmt: throwStmt, typeSubs: frame.TypeSubs);
+                EnqueueThrowCrashMessage(throwStmt: throwStmt);
                 continue;
             }
             if (node is ListLiteralExpression or SetLiteralExpression or DictLiteralExpression or IndexExpression or UsingStatement)
@@ -292,7 +292,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             {
                 if (node is ThrowStatement throwStmt)
                 {
-                    EnqueueThrowCrashMessage(throwStmt: throwStmt, typeSubs: frame.TypeSubs);
+                    EnqueueThrowCrashMessage(throwStmt: throwStmt);
                     continue;
                 }
                 if (node is ListLiteralExpression or SetLiteralExpression or DictLiteralExpression or IndexExpression or UsingStatement)
@@ -721,7 +721,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                         {
                             if (node is ThrowStatement throwStmt)
                             {
-                                EnqueueThrowCrashMessage(throwStmt: throwStmt, typeSubs: subs);
+                                EnqueueThrowCrashMessage(throwStmt: throwStmt);
                                 continue;
                             }
                             // Collection literals in synthesized bodies (e.g. MakeListReturn for
@@ -1172,7 +1172,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// message — there is no source-AST CallExpression to drive reachability. Mark it live here
     /// for every throw site we walk.
     /// </summary>
-    private void EnqueueThrowCrashMessage(ThrowStatement throwStmt, Dictionary<string, TypeInfo> typeSubs)
+    private void EnqueueThrowCrashMessage(ThrowStatement throwStmt)
     {
         TypeInfo? errorType = throwStmt.Error.ResolvedType
             ?? (throwStmt.Error is CreatorExpression cre ? cre.ConstructedType : null);

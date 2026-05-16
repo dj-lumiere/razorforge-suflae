@@ -85,7 +85,6 @@ public partial class LlvmCodeGenerator
             case CallLoweringKind.ValueConversion when arguments.Count == 1 &&
                                                        constructedType is RecordTypeInfo { HasDirectBackendType: true }:
                 return EmitPrimitiveTypeConversion(sb: sb,
-                    targetTypeName: constructedType.Name,
                     arg: arguments[index: 0],
                     targetType: constructedType);
             case CallLoweringKind.CollectionConstruction when constructedType != null:
@@ -592,7 +591,6 @@ public partial class LlvmCodeGenerator
                     receiverType is RecordTypeInfo { HasDirectBackendType: true })
                 {
                     return EmitPrimitiveTypeConversion(sb: sb,
-                        targetTypeName: conversionTypeName,
                         arg: member.Object,
                         targetType: targetType);
                 }

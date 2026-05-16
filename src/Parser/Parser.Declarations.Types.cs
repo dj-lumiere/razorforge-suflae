@@ -50,7 +50,7 @@ public partial class Parser
         {
             do
             {
-                while (Match(type: TokenType.Newline)) { } // Skip newlines before protocol name
+                while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
 
                 interfaces.Add(item: ParseType());
                 // Newlines between comma-separated protocols are handled by the 'before' skip
@@ -185,7 +185,7 @@ public partial class Parser
         {
             do
             {
-                while (Match(type: TokenType.Newline)) { } // Skip newlines before protocol name
+                while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
 
                 interfaces.Add(item: ParseType());
                 // Newlines between comma-separated protocols are handled by the 'before' skip
@@ -607,7 +607,7 @@ public partial class Parser
         {
             do
             {
-                while (Match(type: TokenType.Newline)) { } // Skip newlines before protocol name
+                while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
 
                 parentProtocols.Add(item: ParseType());
                 // Newlines between comma-separated protocols are handled by the 'before' skip
@@ -654,9 +654,7 @@ public partial class Parser
             List<string> methodAnnotations = ParseAnnotations();
 
             // Skip newlines between annotations and routine keyword
-            while (Match(type: TokenType.Newline))
-            {
-            }
+            while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
 
             // Optional `common` storage-class qualifier — type-level (static) protocol method,
             // e.g. `common routine Me.identity() -> V`. Strips down to a regular `routine` parse

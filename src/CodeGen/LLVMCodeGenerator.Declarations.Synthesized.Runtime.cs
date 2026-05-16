@@ -15,7 +15,7 @@ public partial class LlvmCodeGenerator
 {
     private string EmitSynthesizedStringLiteral(string value)
     {
-        return EmitStringLiteral(sb: _functionDefinitions, value: value);
+        return EmitStringLiteral(value: value);
     }
 
     private void EmitSynthesizedBodyFromAst(RoutineInfo routine, string funcName, Statement body)

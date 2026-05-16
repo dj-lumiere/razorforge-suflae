@@ -41,9 +41,6 @@ public sealed partial class SemanticVerifier
     /// <summary>Call graph for modification inference.</summary>
     private readonly CallGraph _callGraph = new();
 
-    /// <summary>Modification inference engine.</summary>
-    private ModificationInference? _modificationInference;
-
     /// <summary>Errors collected during analysis.</summary>
     private readonly List<SemanticError> _errors = [];
 

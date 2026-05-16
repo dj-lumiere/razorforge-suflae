@@ -124,8 +124,7 @@ public partial class Tokenizer
                 else
                 {
                     ScanEscapeSequence(bitWidth: bitWidth);
-                    content.Append(value: ParseEscapeSequence(escapeStart: escapeStart,
-                        bitWidth: bitWidth));
+                    content.Append(value: ParseEscapeSequence(escapeStart: escapeStart));
                 }
             }
             else
@@ -249,7 +248,7 @@ public partial class Tokenizer
                 {
                     ScanEscapeSequence(bitWidth: 32);
                     textBuffer.Append(
-                        value: ParseEscapeSequence(escapeStart: escapeStart, bitWidth: 32));
+                        value: ParseEscapeSequence(escapeStart: escapeStart));
                 }
 
                 continue;
@@ -749,7 +748,7 @@ public partial class Tokenizer
     /// <summary>
     /// Parses an escape sequence and returns the actual character value.
     /// </summary>
-    private char ParseEscapeSequence(int escapeStart, int bitWidth = 32)
+    private char ParseEscapeSequence(int escapeStart)
     {
         char c = _source[index: escapeStart + 1];
 

@@ -86,7 +86,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             // Standalone BuilderService constants (no owner type): page_size, target_os, etc.
             if (routine.OwnerType == null
                 && TryHandleStandaloneBuilderServiceConstant(routine: routine,
-                    textType: textType, u64Type: u64Type, s64Type: s64Type,
+                    textType: textType, u64Type: u64Type,
                     byteSizeType: byteSizeType))
                 continue;
 
@@ -1924,7 +1924,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// <see cref="DesugaringContext.Target"/> / <see cref="DesugaringContext.BuildMode"/>.
     /// </summary>
     private bool TryHandleStandaloneBuilderServiceConstant(RoutineInfo routine,
-        TypeInfo textType, TypeInfo? u64Type, TypeInfo? s64Type, TypeInfo? byteSizeType)
+        TypeInfo textType, TypeInfo? u64Type, TypeInfo? byteSizeType)
     {
         switch (routine.Name)
         {

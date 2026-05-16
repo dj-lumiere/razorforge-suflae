@@ -35,10 +35,10 @@ public partial class LlvmCodeGenerator
                     numericValue: StripNumericSuffix(text: s),
                     literalType: literal.LiteralType);
             case string s when literal.LiteralType == TokenType.BytesLiteral:
-                return EmitBytesLiteral(sb: sb, value: s);
+                return EmitBytesLiteral(value: s);
             // Actual string literal
             case string s:
-                return EmitStringLiteral(sb: sb, value: s);
+                return EmitStringLiteral(value: s);
         }
 
         // None literal -> emit zeroinitializer for Maybe types ({ i64, ptr } with tag=0)
@@ -97,7 +97,7 @@ public partial class LlvmCodeGenerator
     /// Bytes is `entity Bytes { data: Hijacked[Byte], count: U64 }` — LLVM layout `{ ptr, i64 }`.
     /// Returns a pointer to the Bytes struct.
     /// </summary>
-    private string EmitBytesLiteral(StringBuilder sb, string value)
+    private string EmitBytesLiteral(string value)
     {
         int idx = _stringCounter++;
         string constName = $"@.bytes.{idx}";
@@ -404,7 +404,7 @@ public partial class LlvmCodeGenerator
     /// Text is entity { characters: List[Character] } where List is entity { data: ptr, count: U64, capacity: U64 }
     /// and Character is a U32 codepoint. Returns a pointer to the Text struct.
     /// </summary>
-    private string EmitStringLiteral(StringBuilder sb, string value)
+    private string EmitStringLiteral(string value)
     {
         // Check if we've already emitted this string
         if (_stringConstants.TryGetValue(key: value, value: out string? existingName))

@@ -100,7 +100,7 @@ public partial class LlvmCodeGenerator
         // leaving the entity in an invalid state that crashes on the first method call.
         if (expr.MemberVariables.Count == 0)
         {
-            return EmitCollectionCreate(sb: sb, resolvedType: entity, typeName: entity.Name);
+            return EmitCollectionCreate(sb: sb, resolvedType: entity);
         }
 
         // Evaluate all member variable value expressions first

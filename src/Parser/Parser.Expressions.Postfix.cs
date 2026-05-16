@@ -260,7 +260,7 @@ public partial class Parser
                        .Type == TokenType.Dot)
                 {
                     // Consume newlines and let next iteration handle the dot
-                    while (Match(type: TokenType.Newline)) { }
+                    while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
 
                     continue;
                 }
