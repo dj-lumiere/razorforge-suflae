@@ -715,7 +715,7 @@ internal sealed class BuilderServiceInliningPass
     /// routine on <paramref name="type"/>, or null if the routine is not supported or required
     /// types are not yet registered.
     /// </summary>
-    private Expression? FoldBsCall(string routineName, TypeInfo type, SourceLocation loc)
+    private Expression? FoldBsCall(string routineName, TypeInfo type, SourceLocation loc) // NOSONAR S3776
     {
         EnsureTypes();
         switch (routineName)

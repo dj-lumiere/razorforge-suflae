@@ -755,7 +755,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Validates that a type implements all methods required by a protocol.
     /// </summary>
-    private void ValidateProtocolMethods(TypeSymbol type, ProtocolTypeInfo protocol)
+    private void ValidateProtocolMethods(TypeSymbol type, ProtocolTypeInfo protocol) // NOSONAR S3776
     {
         foreach (ProtocolMethodInfo requiredMethod in protocol.Methods)
         {

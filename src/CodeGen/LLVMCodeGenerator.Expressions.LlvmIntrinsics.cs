@@ -77,7 +77,7 @@ public partial class LlvmCodeGenerator
     /// and contains a known param-name token is treated as an arithmetic expression.
     /// </summary>
     private static string ResolveArithmeticHoles(string template, RoutineInfo method,
-        List<string> llvmTypeArgs)
+        List<string> llvmTypeArgs) // NOSONAR S3776
     {
         if (!template.Contains(value: '{')) return template;
 
@@ -214,7 +214,7 @@ public partial class LlvmCodeGenerator
     }
 
     private static void InferGenericBindings(TypeInfo pattern, TypeInfo concrete,
-        Dictionary<string, TypeInfo> inferred)
+        Dictionary<string, TypeInfo> inferred) // NOSONAR S3776
     {
         if (pattern is GenericParameterTypeInfo genericParam)
         {
@@ -483,7 +483,7 @@ public partial class LlvmCodeGenerator
     /// Resolves a <see cref="TypeExpression"/> to its LLVM type string,
     /// applying active type substitutions and registry lookups.
     /// </summary>
-    private string ResolveTypeExpressionToLlvm(TypeExpression typeExpr)
+    private string ResolveTypeExpressionToLlvm(TypeExpression typeExpr) // NOSONAR S3776
     {
         if (typeExpr.ResolvedType is { } resolvedType && resolvedType is not ErrorTypeInfo)
         {

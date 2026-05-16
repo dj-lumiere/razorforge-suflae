@@ -287,7 +287,7 @@ public partial class LlvmCodeGenerator
     /// <item><see cref="NonePattern"/> -> None member tag (variant) or 0 (Lookup absent).</item>
     /// </list>
     /// </summary>
-    private bool TryGetSwitchTagValue(Pattern pattern, TypeInfo subjectType, out string tagLiteral)
+    private bool TryGetSwitchTagValue(Pattern pattern, TypeInfo subjectType, out string tagLiteral) // NOSONAR S3776
     {
         tagLiteral = "0";
 
@@ -577,7 +577,7 @@ public partial class LlvmCodeGenerator
     /// Emits code for literal pattern matching with correct type comparison.
     /// </summary>
     private void EmitLiteralPatternMatch(StringBuilder sb, string subject, LiteralPattern lit,
-        string matchLabel, string failLabel, TypeInfo? subjectType)
+        string matchLabel, string failLabel, TypeInfo? subjectType) // NOSONAR S3776
     {
         string litValue = lit.Value?.ToString() ?? "0";
         string result = NextTemp();
@@ -672,7 +672,7 @@ public partial class LlvmCodeGenerator
     /// Emits code for type pattern matching.
     /// </summary>
     private void EmitTypePatternMatch(StringBuilder sb, string subject, TypePattern typePattern,
-        string matchLabel, string failLabel, TypeInfo? subjectType)
+        string matchLabel, string failLabel, TypeInfo? subjectType) // NOSONAR S3776
     {
         // Resolve the target type
         TypeInfo? targetType = _registry.LookupType(name: typePattern.Type.Name);

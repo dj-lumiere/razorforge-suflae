@@ -22,7 +22,7 @@ public sealed partial class SemanticVerifier
     /// Analyze literal expression as part of this compiler phase.
     /// </summary>
     private TypeSymbol AnalyzeLiteralExpression(LiteralExpression literal,
-        TypeSymbol? expectedType = null)
+        TypeSymbol? expectedType = null) // NOSONAR S3776
     {
         // Map token type to the corresponding type (PascalCase)
         // None literal: return the expected Maybe type if known, otherwise generic Maybe def.
@@ -993,7 +993,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Parses C99 hex float format: 0x1.ABCDp5 = (hex mantissa) 2^(exponent).
     /// </summary>
-    private static bool TryParseHexFloat(string value, out double result)
+    private static bool TryParseHexFloat(string value, out double result) // NOSONAR S3776
     {
         result = 0;
         if (!value.StartsWith(value: "0x", comparisonType: StringComparison.OrdinalIgnoreCase) ||

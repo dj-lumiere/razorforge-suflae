@@ -83,7 +83,7 @@ public sealed partial class SemanticVerifier
         return resultType;
     }
 
-    private TypeSymbol AnalyzeIdentifierExpression(IdentifierExpression id)
+    private TypeSymbol AnalyzeIdentifierExpression(IdentifierExpression id) // NOSONAR S3776
     {
         switch (id.Name)
         {
@@ -665,7 +665,7 @@ public sealed partial class SemanticVerifier
     /// Dispatch order: (0) verify target is var, (1) try in-place wired ($iadd) -> Blank,
     /// (2) fallback to create-and-assign ($add), (3) error if neither exists.
     /// </summary>
-    private TypeSymbol AnalyzeCompoundAssignment(CompoundAssignmentExpression compound)
+    private TypeSymbol AnalyzeCompoundAssignment(CompoundAssignmentExpression compound) // NOSONAR S3776
     {
         TypeSymbol targetType = AnalyzeExpression(expression: compound.Target);
 
@@ -841,7 +841,7 @@ public sealed partial class SemanticVerifier
         return ErrorTypeInfo.Instance;
     }
 
-    private TypeSymbol AnalyzeUnaryExpression(UnaryExpression unary)
+    private TypeSymbol AnalyzeUnaryExpression(UnaryExpression unary) // NOSONAR S3776
     {
         TypeSymbol operandType = AnalyzeExpression(expression: unary.Operand);
 

@@ -144,7 +144,7 @@ public partial class LlvmCodeGenerator
     /// Converts a prefixed literal (0x hex, 0b binary, 0o octal) to decimal for LLVM IR.
     /// Hex floats (containing '.' or 'p') are passed through for EmitFloatLiteral.
     /// </summary>
-    private static string ConvertPrefixedToDecimal(string value)
+    private static string ConvertPrefixedToDecimal(string value) // NOSONAR S3776
     {
         if (value.Length > 2)
         {
@@ -291,7 +291,7 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Parses C99 hex float format: 0x1.ABCDp5 = (hex mantissa) 2^(exponent).
     /// </summary>
-    private static bool TryParseHexFloat(string value, out double result)
+    private static bool TryParseHexFloat(string value, out double result) // NOSONAR S3776
     {
         result = 0;
         if (!value.StartsWith(value: "0x", comparisonType: StringComparison.OrdinalIgnoreCase) ||

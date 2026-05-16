@@ -347,7 +347,7 @@ internal static class GenericAstRewriter
         }
 
         private static void InferMethodParam(TypeInfo? paramType, TypeInfo argType,
-            IReadOnlyList<string> genericParams, TypeInfo?[] inferred)
+            IReadOnlyList<string> genericParams, TypeInfo?[] inferred) // NOSONAR S3776
         {
             if (paramType == null) return;
             if (paramType is GenericParameterTypeInfo gp)

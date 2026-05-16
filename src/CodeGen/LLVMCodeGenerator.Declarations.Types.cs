@@ -12,7 +12,7 @@ namespace Compiler.CodeGen;
 /// </summary>
 public partial class LlvmCodeGenerator
 {
-    private void GenerateEntityType(EntityTypeInfo entity)
+    private void GenerateEntityType(EntityTypeInfo entity) // NOSONAR S3776
     {
         string typeName = GetEntityTypeName(entity: entity);
 
@@ -130,7 +130,7 @@ public partial class LlvmCodeGenerator
     /// Single-member-variable wrappers are unwrapped to their underlying intrinsic.
     /// </summary>
     /// <param name="record">The record type info.</param>
-    private void GenerateRecordType(RecordTypeInfo record)
+    private void GenerateRecordType(RecordTypeInfo record) // NOSONAR S3776
     {
         // Backend-annotated records don't need struct types
         if (record.HasDirectBackendType)

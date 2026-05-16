@@ -96,7 +96,7 @@ internal sealed class TypeBodyResolver
         }
     }
 
-    private void ResolveRecordBody(RecordDeclaration record)
+    private void ResolveRecordBody(RecordDeclaration record) // NOSONAR S3776
     {
         if (record.Members.Count == 0 && !record.HasPassBody)
         {
@@ -199,7 +199,7 @@ internal sealed class TypeBodyResolver
         _sa._currentTypeMemberVariableNames = previousFieldNames;
     }
 
-    private void ResolveEntityBody(EntityDeclaration entity)
+    private void ResolveEntityBody(EntityDeclaration entity) // NOSONAR S3776
     {
         if (entity.Members.Count == 0 && !entity.HasPassBody)
         {
@@ -452,7 +452,7 @@ internal sealed class TypeBodyResolver
         _sa._currentType = previousType;
     }
 
-    private void ResolveVariantBody(VariantDeclaration variant)
+    private void ResolveVariantBody(VariantDeclaration variant) // NOSONAR S3776
     {
         if (variant.Members.Count == 0)
         {

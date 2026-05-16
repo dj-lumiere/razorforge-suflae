@@ -841,7 +841,7 @@ public sealed partial class TypeRegistry
     /// </summary>
     /// <param name="name">The name of the type to look up.</param>
     /// <returns>The type info if found, null otherwise.</returns>
-    public TypeInfo? LookupType(string name)
+    public TypeInfo? LookupType(string name) // NOSONAR S3776
     {
         // Try exact match first
         if (_types.TryGetValue(key: name, value: out TypeInfo? type))

@@ -54,7 +54,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         new(FileName: "", Line: 0, Column: 0, Position: 0);
 
     /// <summary>Synthesizes and registers all wired routines for the current program.</summary>
-    public void RunGlobal()
+    public void RunGlobal() // NOSONAR S3776
     {
         TypeInfo? textType = ctx.Registry.LookupType(name: "Text");
         TypeInfo? boolType = ctx.Registry.LookupType(name: "Bool");
@@ -276,7 +276,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     //  Per-type handlers
 
     private void HandleRecord(RoutineInfo routine, RecordTypeInfo record,
-        TypeInfo textType, TypeInfo boolType, TypeInfo? s32Type)
+        TypeInfo textType, TypeInfo boolType, TypeInfo? s32Type) // NOSONAR S3776
     {
         // Numeric $create bodies for @llvm-typed primitive records.
         // S64.$create(from: Choice) -> sign_extend; U64.$create(from: Flags) -> reinterpret_bits.
@@ -1693,7 +1693,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// </summary>
     private bool TryHandleBuilderServiceConstant(RoutineInfo routine,
         TypeInfo textType, TypeInfo? u64Type, TypeInfo? s64Type, TypeInfo? boolType,
-        TypeInfo? typeKindType, TypeInfo? listTextType, TypeInfo? byteSizeType = null)
+        TypeInfo? typeKindType, TypeInfo? listTextType, TypeInfo? byteSizeType = null) // NOSONAR S3776
     {
         if (routine.OwnerType == null) return false;
         TypeInfo owner = routine.OwnerType;

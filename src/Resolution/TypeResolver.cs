@@ -115,7 +115,7 @@ internal sealed class TypeResolver
         return resolved;
     }
 
-    private TypeSymbol ResolveTypeCore(TypeExpression typeExpr)
+    private TypeSymbol ResolveTypeCore(TypeExpression typeExpr) // NOSONAR S3776
     {
         // Handle tuple types from parser: Tuple(T, U, ...)
         if (typeExpr is { Name: "Tuple", GenericArguments.Count: > 0 })

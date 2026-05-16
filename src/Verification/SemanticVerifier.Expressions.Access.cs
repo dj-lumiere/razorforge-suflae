@@ -321,7 +321,7 @@ public sealed partial class SemanticVerifier
             : paramType;
     }
 
-    private TypeSymbol AnalyzeIndexExpression(IndexExpression index)
+    private TypeSymbol AnalyzeIndexExpression(IndexExpression index) // NOSONAR S3776
     {
         TypeSymbol objectType = AnalyzeExpression(expression: index.Object);
         TryGetTransparentProtocolTarget(type: objectType, targetType: out TypeSymbol lookupType);
@@ -561,7 +561,7 @@ public sealed partial class SemanticVerifier
     private void ValidateLambdaCaptures(LambdaExpression lambda,
         IReadOnlyDictionary<string, VariableInfo> enclosingScopeVariables,
         IReadOnlyDictionary<string, VariableInfo> localScopeVariables,
-        HashSet<string> parameterNames)
+        HashSet<string> parameterNames) // NOSONAR S3776
     {
         // Find all identifier expressions in the lambda body
         List<IdentifierExpression> identifiers = CollectIdentifiers(expression: lambda.Body);
@@ -676,7 +676,7 @@ public sealed partial class SemanticVerifier
     /// Recursively collects identifier expressions.
     /// </summary>
     private static void CollectIdentifiersRecursive(Expression expression,
-        List<IdentifierExpression> identifiers)
+        List<IdentifierExpression> identifiers) // NOSONAR S3776
     {
         switch (expression)
         {

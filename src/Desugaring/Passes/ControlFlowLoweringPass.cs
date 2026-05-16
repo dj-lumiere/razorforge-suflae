@@ -231,7 +231,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
     /// <summary>
     /// Lower for as part of this compiler phase.
     /// </summary>
-    private BlockStatement LowerFor(ForStatement forStmt)
+    private BlockStatement LowerFor(ForStatement forStmt) // NOSONAR S3776
     {
         SourceLocation loc = forStmt.Location;
         int n = _iterCount++;

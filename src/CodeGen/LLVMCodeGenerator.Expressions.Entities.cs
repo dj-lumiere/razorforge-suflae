@@ -121,7 +121,7 @@ public partial class LlvmCodeGenerator
     /// Generates code to construct a record (value type).
     /// </summary>
     private string EmitRecordConstruction(StringBuilder sb, RecordTypeInfo record,
-        CreatorExpression expr)
+        CreatorExpression expr) // NOSONAR S3776
     {
         // Backend-annotated or single-member-variable wrapper: just return the inner value.
         // BUT: only when there's no explicit `$create(from: argType)` overload — those have

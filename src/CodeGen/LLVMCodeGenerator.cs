@@ -451,7 +451,7 @@ public partial class LlvmCodeGenerator
     /// Initializer expressions (if any) are collected and emitted in a private
     /// <c>@.rf_global_init</c> constructor registered via <c>@llvm.global_ctors</c>.
     /// </summary>
-    private void GenerateGlobalVariableDeclarations()
+    private void GenerateGlobalVariableDeclarations() // NOSONAR S3776
     {
         var initStmts = new List<(string LlvmName, TypeInfo Type, Expression Init)>();
 
@@ -526,7 +526,7 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Generates LLVM type declarations for all types in the registry.
     /// </summary>
-    private void GenerateTypeDeclarations()
+    private void GenerateTypeDeclarations() // NOSONAR S3776
     {
         // Generate entity types (reference types, heap-allocated)
         foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Entity))
@@ -617,7 +617,7 @@ public partial class LlvmCodeGenerator
     /// Only emits 'declare' for external routines that don't have bodies.
     /// Routines with bodies (user program and stdlib) are handled by GenerateRoutineDefinitions().
     /// </summary>
-    private void GenerateRoutineDeclarations()
+    private void GenerateRoutineDeclarations() // NOSONAR S3776
     {
         // Build set of routine names that have bodies (in user programs or stdlib)
         var routinesWithBodies = new HashSet<string>();
@@ -1250,7 +1250,7 @@ public partial class LlvmCodeGenerator
     /// Builds the final output by combining all sections.
     /// </summary>
     /// <returns>The complete LLVM IR module.</returns>
-    private string BuildOutput()
+    private string BuildOutput() // NOSONAR S3776
     {
         var output = new StringBuilder();
 

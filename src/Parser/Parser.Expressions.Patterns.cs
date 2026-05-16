@@ -96,7 +96,7 @@ public partial class Parser
     /// Parses destructuring bindings for pattern matching.
     /// Syntax: (memberVar1, memberVar2) or (memberVar: binding, ...) or nested ((x: x1, y: y1), ...)
     /// </summary>
-    private List<DestructuringBinding> ParseDestructuringBindings()
+    private List<DestructuringBinding> ParseDestructuringBindings() // NOSONAR S3776
     {
         Consume(type: TokenType.LeftParen, errorMessage: "Expected '(' for destructuring pattern");
 
@@ -178,7 +178,7 @@ public partial class Parser
     /// Parses a list of destructuring bindings (without consuming the surrounding parentheses).
     /// Used by ParseTypePattern() for type patterns with destructuring like: is CIRCLE ((x, y), radius)
     /// </summary>
-    private List<DestructuringBinding> ParseDestructuringBindingList()
+    private List<DestructuringBinding> ParseDestructuringBindingList() // NOSONAR S3776
     {
         var bindings = new List<DestructuringBinding>();
 

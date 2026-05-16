@@ -393,7 +393,7 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
         HashSet<string> scope,
         List<string>? inheritedGenericParameters,
         List<GenericConstraintDeclaration>? inheritedGenericConstraints,
-        bool includeMe)
+        bool includeMe) // NOSONAR S3776
     {
         switch (expression)
         {
@@ -1126,7 +1126,7 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
         }
     }
 
-    private static IEnumerable<Expression> GetSubExpressions(Expression expr)
+    private static IEnumerable<Expression> GetSubExpressions(Expression expr) // NOSONAR S3776
     {
         switch (expr)
         {

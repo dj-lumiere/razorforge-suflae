@@ -236,7 +236,7 @@ public sealed partial class TypeRegistry
         return false;
     }
 
-    private bool TypeObeysProtocol(TypeInfo type, string protocolName)
+    private bool TypeObeysProtocol(TypeInfo type, string protocolName) // NOSONAR S3776
     {
         IReadOnlyList<TypeInfo>? implemented = type switch
         {

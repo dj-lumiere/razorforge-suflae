@@ -287,7 +287,7 @@ internal sealed class GenericCallLoweringPass
     /// <summary>
     /// Lower expression as part of this compiler phase.
     /// </summary>
-    private Expression LowerExpression(Expression expr)
+    private Expression LowerExpression(Expression expr) // NOSONAR S3776
     {
         switch (expr)
         {

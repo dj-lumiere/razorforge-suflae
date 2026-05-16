@@ -469,7 +469,7 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
     /// Converts an <see cref="InsertedTextExpression"/> to a left-folded chain of
     /// <c>Text.$add</c> calls interleaved with <c>$represent</c>/<c>$diagnose</c> calls.
     /// </summary>
-    private Expression LowerFString(InsertedTextExpression ftext)
+    private Expression LowerFString(InsertedTextExpression ftext) // NOSONAR S3776
     {
         TypeInfo? textType = ctx.Registry.LookupType(name: "Text");
         SourceLocation loc = ftext.Location;

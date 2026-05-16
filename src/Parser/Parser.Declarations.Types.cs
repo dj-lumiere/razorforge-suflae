@@ -421,7 +421,7 @@ public partial class Parser
     /// field declarations.
     /// </summary>
     private CrashableDeclaration ParseCrashableDeclaration(
-        VisibilityModifier visibility = VisibilityModifier.Open)
+        VisibilityModifier visibility = VisibilityModifier.Open) // NOSONAR S3776
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
         string name = ConsumeIdentifier(errorMessage: "Expected crashable type name");

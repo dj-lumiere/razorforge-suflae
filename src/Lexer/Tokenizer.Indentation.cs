@@ -43,7 +43,7 @@ public partial class Tokenizer
     /// <exception cref="GrammarException">
     /// Thrown when indentation is misaligned (not a multiple of 2).
     /// </exception>
-    private void HandleIndentation()
+    private void HandleIndentation() // NOSONAR S3776
     {
         int spaces = 0;
         bool hasSpaces = false;

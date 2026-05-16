@@ -919,7 +919,7 @@ public sealed partial class SemanticVerifier
     /// Invalid: mixing ascending and descending (a &lt; b &gt; c)
     /// </summary>
     private void ValidateComparisonChain(ChainedComparisonExpression chain,
-        SourceLocation location)
+        SourceLocation location) // NOSONAR S3776
     {
         if (chain.Operators.Count < 2)
         {

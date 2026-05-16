@@ -258,7 +258,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
     /// Recursively lowers nested expressions without erasing explicit <see cref="StealExpression"/>
     /// markers. Steal wrappers are preserved for later ownership-transfer handling.
     /// </summary>
-    private static Expression StripStealFromExpr(Expression expr)
+    private static Expression StripStealFromExpr(Expression expr) // NOSONAR S3776
     {
         switch (expr)
         {

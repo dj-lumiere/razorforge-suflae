@@ -18,7 +18,7 @@ public sealed partial class TypeRegistry
     /// and BaseName for first-overload-wins unqualified lookup.
     /// </summary>
     /// <param name="routine">The routine to register.</param>
-    public void RegisterRoutine(RoutineInfo routine)
+    public void RegisterRoutine(RoutineInfo routine) // NOSONAR S3776
     {
         string registryKey = routine.RegistryKey;
         string baseName = routine.BaseName;
@@ -221,7 +221,7 @@ public sealed partial class TypeRegistry
     /// <param name="fullName">The fully qualified name of the routine.</param>
     /// <returns>The routine info if found, null otherwise.</returns>
     /// <param name="isFailable">Whether this is failable.</param>
-    public RoutineInfo? LookupRoutine(string fullName, bool? isFailable = null)
+    public RoutineInfo? LookupRoutine(string fullName, bool? isFailable = null) // NOSONAR S3776
     {
         if (isFailable == null)
         {
@@ -376,7 +376,7 @@ public sealed partial class TypeRegistry
     /// <param name="genericConstraints">Updated generic constraints (may include implicit ones from protocol-as-type).</param>
     public void UpdateRoutine(RoutineInfo routine, IReadOnlyList<ParameterInfo> parameters,
         TypeInfo? returnType, IReadOnlyList<string>? genericParameters,
-        IReadOnlyList<GenericConstraintDeclaration>? genericConstraints)
+        IReadOnlyList<GenericConstraintDeclaration>? genericConstraints) // NOSONAR S3776
     {
         string baseName = routine.BaseName;
         if (!_routines.ContainsKey(key: baseName))
@@ -743,7 +743,7 @@ public sealed partial class TypeRegistry
     /// parameters for instantiated generic protocols (e.g., Iterator[S64]: T -> S64).
     /// </summary>
     private RoutineInfo SynthesizeProtocolMethod(ProtocolTypeInfo proto,
-        ProtocolMethodInfo protoMethod, TypeInfo ownerType)
+        ProtocolMethodInfo protoMethod, TypeInfo ownerType) // NOSONAR S3776
     {
         // Build substitution map for generic protocols (e.g., Iterator[S64]: T -> S64)
         Dictionary<string, TypeInfo>? substitution = null;

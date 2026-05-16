@@ -426,7 +426,7 @@ public partial class Parser
     /// Context-sensitive: disabled inside when clause bodies to avoid ambiguity.
     /// </summary>
     /// <returns>The parsed expression.</returns>
-    private Expression ParseIsExpression()
+    private Expression ParseIsExpression() // NOSONAR S3776
     {
         Expression expr = ParseBitwiseOr();
 

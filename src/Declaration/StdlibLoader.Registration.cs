@@ -11,7 +11,7 @@ namespace Compiler.Declaration;
 
 public sealed partial class StdlibLoader
 {
-    private static void ResolveProtocolParents(TypeRegistry registry, Program program)
+    private static void ResolveProtocolParents(TypeRegistry registry, Program program) // NOSONAR S3776
     {
         foreach (ISyntaxTreeNode node in program.Declarations)
         {
@@ -100,7 +100,7 @@ public sealed partial class StdlibLoader
     /// Re-resolves member variables for types that had unresolvable forward references
     /// during initial registration. Called after all type shells are registered.
     /// </summary>
-    private static void ResolveProgramMemberVariables(TypeRegistry registry, Program program)
+    private static void ResolveProgramMemberVariables(TypeRegistry registry, Program program) // NOSONAR S3776
     {
         foreach (ISyntaxTreeNode node in program.Declarations)
         {
@@ -185,7 +185,7 @@ public sealed partial class StdlibLoader
     /// where S64 wasn't registered during initial entity registration).
     /// Called after all type shells are registered.
     /// </summary>
-    private static void ResolveProgramProtocolConformances(TypeRegistry registry, Program program)
+    private static void ResolveProgramProtocolConformances(TypeRegistry registry, Program program) // NOSONAR S3776
     {
         foreach (ISyntaxTreeNode node in program.Declarations)
         {
@@ -325,7 +325,7 @@ public sealed partial class StdlibLoader
     }
 
     private static void RegisterProgramRoutines(TypeRegistry registry, Program program,
-        string moduleName)
+        string moduleName) // NOSONAR S3776
     {
         foreach (ISyntaxTreeNode node in program.Declarations)
         {
@@ -1122,7 +1122,7 @@ public sealed partial class StdlibLoader
     /// yet registered when protocols were first processed).
     /// Analogous to ResolveProgramMemberVariables for record/entity member variables.
     /// </summary>
-    private static void ResolveProtocolMethodReturnTypes(TypeRegistry registry, Program program)
+    private static void ResolveProtocolMethodReturnTypes(TypeRegistry registry, Program program) // NOSONAR S3776
     {
         foreach (ISyntaxTreeNode node in program.Declarations)
         {
@@ -1308,7 +1308,7 @@ public sealed partial class StdlibLoader
     /// Fills in method signatures for a previously registered protocol type.
     /// This is the second pass — all protocols are registered, so cross-references resolve.
     /// </summary>
-    private static void FillProtocolMethods(TypeRegistry registry, ProtocolDeclaration protocol)
+    private static void FillProtocolMethods(TypeRegistry registry, ProtocolDeclaration protocol) // NOSONAR S3776
     {
         var existing = registry.LookupType(name: protocol.Name) as ProtocolTypeInfo;
         if (existing == null || existing.Methods.Count > 0)

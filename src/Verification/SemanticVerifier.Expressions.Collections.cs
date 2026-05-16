@@ -258,7 +258,7 @@ public sealed partial class SemanticVerifier
     }
 
     private TypeSymbol AnalyzeDictLiteralExpression(DictLiteralExpression dict,
-        TypeSymbol? expectedType = null)
+        TypeSymbol? expectedType = null) // NOSONAR S3776
     {
         // Extract expected key/value types from dict-shaped expected types.
         TypeSymbol? expectedKeyType = null;

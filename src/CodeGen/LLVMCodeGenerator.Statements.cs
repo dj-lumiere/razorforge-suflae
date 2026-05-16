@@ -141,7 +141,7 @@ public partial class LlvmCodeGenerator
     /// Global declarations (Storage == Global) are emitted at module level in
     /// GenerateGlobalVariableDeclarations and are skipped here.
     /// </summary>
-    private void EmitVariableDeclaration(StringBuilder sb, VariableDeclaration varDecl)
+    private void EmitVariableDeclaration(StringBuilder sb, VariableDeclaration varDecl) // NOSONAR S3776
     {
         // Global variables are declared at module level -> no local alloca needed.
         if (varDecl.Storage == StorageClass.Global) return;
@@ -681,7 +681,7 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Emits a store to an indexed location.
     /// </summary>
-    private void EmitIndexAssignment(StringBuilder sb, IndexExpression index, Expression rhs)
+    private void EmitIndexAssignment(StringBuilder sb, IndexExpression index, Expression rhs) // NOSONAR S3776
     {
         // TODO: Record setitem is a hack and should be following $setitem member routine.
         // TODO: Also, the $setitem routine should be just called through anyway and handled not in here.

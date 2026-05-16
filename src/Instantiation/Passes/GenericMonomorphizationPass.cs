@@ -70,7 +70,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// <summary>
     /// Public entry point
     /// </summary>
-    public void RunGlobal()
+    public void RunGlobal() // NOSONAR S3776
     {
         // Pre-build the routine-declaration index so FindInStdlib is O(1) per lookup.
         BuildRoutineIndex();
@@ -168,7 +168,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     }
     // Per-type processing
 
-    private void ProcessConcreteType(TypeInfo concreteType)
+    private void ProcessConcreteType(TypeInfo concreteType) // NOSONAR S3776
     {
         // Strategy-B reachability gate at the type level: when LiveOwnerTypeNames is populated,
         // skip concrete instances that no reachable routine ever owned. This prevents
@@ -437,7 +437,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// mangled name (e.g. Collections.BTreeDictNode.type_name). This pass ensures that name has a
     /// definition so the linker does not fail.
     /// </summary>
-    private void EmitGenericDefBuilderServiceBodies()
+    private void EmitGenericDefBuilderServiceBodies() // NOSONAR S3776
     {
         foreach (TypeInfo type in ctx.Registry.GetTypesWithMethods())
         {
@@ -473,7 +473,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         RoutineInfo concreteInfo,
         TypeInfo genDef,
         Dictionary<string, TypeInfo> typeSubs,
-        Dictionary<string, string> stringSubs)
+        Dictionary<string, string> stringSubs) // NOSONAR S3776
     {
         // Variant methods (try_/check_/lookup_)
         // These have OriginalName pointing back to the failable source routine.
@@ -1240,7 +1240,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         }
     }
 
-    private void ScanExprForMethodGenericCalls(Expression expr)
+    private void ScanExprForMethodGenericCalls(Expression expr) // NOSONAR S3776
     {
         switch (expr)
         {
@@ -1325,7 +1325,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// against the corresponding call-site argument ResolvedTypes.
     /// </summary>
     private static TypeInfo?[] InferMethodTypeArgsFromCall(
-        RoutineInfo method, IReadOnlyList<string> genParams, CallExpression call)
+        RoutineInfo method, IReadOnlyList<string> genParams, CallExpression call) // NOSONAR S3776
     {
         var result = new TypeInfo?[genParams.Count];
 

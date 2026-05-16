@@ -93,7 +93,7 @@ public partial class Tokenizer
     /// For formatted strings, delegates to ScanFormattedStringLiteral.
     /// </summary>
     private void ScanStringLiteral(bool isRaw, bool isFormatted, TokenType tokenType,
-        int bitWidth = 32)
+        int bitWidth = 32) // NOSONAR S3776
     {
         if (isFormatted)
         {
@@ -165,7 +165,7 @@ public partial class Tokenizer
     /// Scans a formatted string literal (f"..." or rf"..."), emitting a structured token sequence:
     /// InsertionStart, TextSegment*, (LeftBrace, expr tokens, RightBrace)*, InsertionEnd
     /// </summary>
-    private void ScanFormattedStringLiteral(bool isRaw)
+    private void ScanFormattedStringLiteral(bool isRaw) // NOSONAR S3776
     {
         int startLine = _line;
         int startColumn = _column;

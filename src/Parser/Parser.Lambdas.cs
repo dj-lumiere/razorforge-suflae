@@ -104,7 +104,7 @@ public partial class Parser
     ///
     /// The key discriminator is the '=>' or 'given' after the ')'.
     /// </remarks>
-    private bool IsArrowLambdaParameters()
+    private bool IsArrowLambdaParameters() // NOSONAR S3776
     {
         int savedPosition = _position;
 

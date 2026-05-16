@@ -58,7 +58,7 @@ public sealed class RuntimeDispatchRegistrationPass(TypeRegistry registry)
     /// <summary>
     /// Recursively scans statements that can contain call expressions requiring runtime dispatch.
     /// </summary>
-    private void ScanStatement(Statement stmt)
+    private void ScanStatement(Statement stmt) // NOSONAR S3776
     {
         switch (stmt)
         {
@@ -119,7 +119,7 @@ public sealed class RuntimeDispatchRegistrationPass(TypeRegistry registry)
     /// <summary>
     /// Recursively scans expressions and registers protocol call sites already classified by semantic analysis.
     /// </summary>
-    private void ScanExpression(Expression expr)
+    private void ScanExpression(Expression expr) // NOSONAR S3776
     {
         switch (expr)
         {

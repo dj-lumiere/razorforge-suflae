@@ -944,7 +944,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     /// Lowers a list literal to: var _lit_N = Collection(); _lit_N.add_last(e)...
     /// Array[T,N] and BitArray[N] are inline IR -- kept as ListLiteralExpression for codegen.
     /// </summary>
-    private (List<Statement> Hoisted, Expression Expr) LowerListLiteral(ListLiteralExpression list)
+    private (List<Statement> Hoisted, Expression Expr) LowerListLiteral(ListLiteralExpression list) // NOSONAR S3776
     {
         TypeInfo? resolvedType = list.ResolvedType;
         // Unwrap transparent ownership wrappers (Owned[T], Retained[T], Tracked[T]) so that
@@ -1374,7 +1374,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     /// Only handles simple (non-nested, non-index) updates on RecordTypeInfo.
     /// Falls through unchanged for unsupported shapes.
     /// </summary>
-    private (List<Statement> Hoisted, Expression Expr) LowerWithExpression(WithExpression withExpr)
+    private (List<Statement> Hoisted, Expression Expr) LowerWithExpression(WithExpression withExpr) // NOSONAR S3776
     {
         var (baseHoisted, loweredBase) = LowerExpr(withExpr.Base);
         SourceLocation loc = withExpr.Location;

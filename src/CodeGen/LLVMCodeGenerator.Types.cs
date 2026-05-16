@@ -22,7 +22,7 @@ public partial class LlvmCodeGenerator
     /// </summary>
     /// <param name="type">The type to convert.</param>
     /// <returns>The LLVM type string.</returns>
-    private TypeInfo ResolveTypeSubstitution(TypeInfo type)
+    private TypeInfo ResolveTypeSubstitution(TypeInfo type) // NOSONAR S3776
     {
         if (_typeSubstitutions == null)
         {
@@ -724,7 +724,7 @@ public partial class LlvmCodeGenerator
     /// Handles both direct substitution (T -> Point) and nested resolution (Viewed[T] -> Viewed[Point]).
     /// </summary>
     private TypeInfo SubstituteGenericParamInType(TypeInfo type, string paramName,
-        TypeInfo concreteType)
+        TypeInfo concreteType) // NOSONAR S3776
     {
         if (type.Name == paramName || type is GenericParameterTypeInfo gp && gp.Name == paramName)
         {

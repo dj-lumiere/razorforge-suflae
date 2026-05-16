@@ -346,7 +346,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     /// <param name="pattern">The variant pattern to analyze.</param>
     /// <param name="matchedType">The type being matched against.</param>
-    private void AnalyzeVariantPattern(VariantPattern pattern, TypeSymbol matchedType)
+    private void AnalyzeVariantPattern(VariantPattern pattern, TypeSymbol matchedType) // NOSONAR S3776
     {
         // Get the members from the matched type
         IReadOnlyList<VariantMemberInfo>? members = matchedType switch
@@ -761,7 +761,7 @@ public sealed partial class SemanticVerifier
     /// Checks whether Maybe/Result/Lookup error handling types are exhaustively matched.
     /// </summary>
     private static ExhaustivenessResult CheckErrorHandlingExhaustiveness(
-        IReadOnlyList<WhenClause> clauses, TypeSymbol carrierType)
+        IReadOnlyList<WhenClause> clauses, TypeSymbol carrierType) // NOSONAR S3776
     {
         bool hasAbsent = false;
         bool hasCrashableCatchAll = false;

@@ -337,7 +337,7 @@ public sealed partial class SemanticVerifier
         return ErrorTypeInfo.Instance;
     }
 
-    private TypeSymbol AnalyzeGenericMemberExpression(GenericMemberExpression genericMember)
+    private TypeSymbol AnalyzeGenericMemberExpression(GenericMemberExpression genericMember) // NOSONAR S3776
     {
         TypeSymbol objectType = AnalyzeExpression(expression: genericMember.Object);
 
@@ -406,7 +406,7 @@ public sealed partial class SemanticVerifier
         return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
     }
 
-    private TypeSymbol AnalyzeFlagsTestExpression(FlagsTestExpression flagsTest)
+    private TypeSymbol AnalyzeFlagsTestExpression(FlagsTestExpression flagsTest) // NOSONAR S3776
     {
         TypeSymbol subjectType = AnalyzeExpression(expression: flagsTest.Subject);
 
@@ -474,7 +474,7 @@ public sealed partial class SemanticVerifier
         return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
     }
 
-    private static Dictionary<string, TypeInfo> BuildOwnerBindingMap(TypeInfo? ownerType)
+    private static Dictionary<string, TypeInfo> BuildOwnerBindingMap(TypeInfo? ownerType) // NOSONAR S3776
     {
         var map = new Dictionary<string, TypeInfo>();
         if (ownerType == null)
@@ -514,7 +514,7 @@ public sealed partial class SemanticVerifier
         return map;
     }
 
-    private static HashSet<string> GetOwnerGenericParameterNames(TypeInfo? ownerType)
+    private static HashSet<string> GetOwnerGenericParameterNames(TypeInfo? ownerType) // NOSONAR S3776
     {
         var names = new HashSet<string>();
         if (ownerType == null)

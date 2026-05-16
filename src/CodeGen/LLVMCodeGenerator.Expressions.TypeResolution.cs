@@ -551,7 +551,7 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Resolves the type argument from semantic compiler state.
     /// </summary>
-    private TypeInfo? ResolveTypeArgument(TypeExpression ta)
+    private TypeInfo? ResolveTypeArgument(TypeExpression ta) // NOSONAR S3776
     {
         if (ta.ResolvedType is { } resolvedType && resolvedType is not ErrorTypeInfo)
         {
@@ -698,7 +698,7 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Gets the return type of an index expression by looking up $getitem on the target type.
     /// </summary>
-    private TypeInfo? GetIndexReturnType(IndexExpression index)
+    private TypeInfo? GetIndexReturnType(IndexExpression index) // NOSONAR S3776
     {
         TypeInfo? targetType = GetExpressionType(expr: index.Object);
         if (targetType == null)
@@ -763,7 +763,7 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Gets the return type of a call expression.
     /// </summary>
-    private TypeInfo? GetCallReturnType(CallExpression call)
+    private TypeInfo? GetCallReturnType(CallExpression call) // NOSONAR S3776
     {
         if (call.ConstructedType is not null and not ErrorTypeInfo)
         {

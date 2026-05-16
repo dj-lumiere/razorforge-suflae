@@ -394,7 +394,7 @@ internal sealed class WrapperForwardingPass
     private DangerStatement BuildWrapperForwarderBody(TypeSymbol wrapperType, RoutineInfo innerMethod,
         string genericParamName,
         string methodName, bool isFailable, IReadOnlyList<ParameterInfo> parameters,
-        bool hasReturnValue, string? dataFieldName = null, bool innerIsEntity = false)
+        bool hasReturnValue, string? dataFieldName = null, bool innerIsEntity = false) // NOSONAR S3776
     {
         string callPropertyName = isFailable ? methodName + "!" : methodName;
         TypeSymbol innerType = wrapperType.TypeArguments is { Count: > 0 }

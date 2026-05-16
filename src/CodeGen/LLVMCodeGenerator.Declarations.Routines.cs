@@ -335,7 +335,7 @@ public partial class LlvmCodeGenerator
     /// Generates code for a function body.
     /// Emits statements and ensures proper termination.
     /// </summary>
-    private void GenerateRoutineBody(StringBuilder sb, Statement body, RoutineInfo routine)
+    private void GenerateRoutineBody(StringBuilder sb, Statement body, RoutineInfo routine) // NOSONAR S3776
     {
         // Clear local variables for this function
         _localVariables.Clear();

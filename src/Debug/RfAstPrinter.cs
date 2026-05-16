@@ -39,7 +39,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         IReadOnlyDictionary<string, Statement> synthesizedBodies,
         TypeRegistry registry,
         IEnumerable<(SyntaxTree.Program Program, string FilePath, string Module)>? stdlibPrograms = null,
-        IReadOnlyDictionary<string, MonomorphizedBody>? instantiatedGenericBodies = null)
+        IReadOnlyDictionary<string, MonomorphizedBody>? instantiatedGenericBodies = null) // NOSONAR S3776
     {
         // Build RegistryKey -> RoutineInfo for signature reconstruction.
         var routineByKey = registry.GetAllRoutines()

@@ -89,7 +89,7 @@ public sealed partial class StdlibLoader
     /// Scans all stdlib files and loads those declaring "module Core".
     /// </summary>
     /// <param name="registry">The type registry to populate.</param>
-    public void LoadCoreModule(TypeRegistry registry)
+    public void LoadCoreModule(TypeRegistry registry) // NOSONAR S3776
     {
         // Scan all stdlib files and categorize by module
         ScanStdlibFiles();

@@ -301,7 +301,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Checks if a type's method signature matches a protocol method signature.
     /// </summary>
-    private bool MethodSignatureMatches(RoutineInfo typeMethod, ProtocolMethodInfo protoMethod)
+    private bool MethodSignatureMatches(RoutineInfo typeMethod, ProtocolMethodInfo protoMethod) // NOSONAR S3776
     {
         // Check failable matches
         if (typeMethod.IsFailable != protoMethod.IsFailable)

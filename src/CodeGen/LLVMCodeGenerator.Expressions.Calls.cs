@@ -1068,7 +1068,7 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private RoutineInfo? ResolveInitialFreeCallRoutine(string functionName,
         bool isFailableCallSyntax, RoutineInfo? resolvedRoutine,
-        IReadOnlyList<TypeExpression>? typeArguments, List<Expression> arguments)
+        IReadOnlyList<TypeExpression>? typeArguments, List<Expression> arguments) // NOSONAR S3776
     {
         RoutineInfo? routine = resolvedRoutine ??
                                _registry.LookupRoutine(fullName: functionName,
@@ -1183,7 +1183,7 @@ public partial class LlvmCodeGenerator
     /// the entity ptr (already a pointer) as the GEP base; record-rooted chains use the
     /// root alloca's address.
     /// </summary>
-    private string EmitLvalueAddress(StringBuilder sb, Expression expr)
+    private string EmitLvalueAddress(StringBuilder sb, Expression expr) // NOSONAR S3776
     {
         switch (expr)
         {

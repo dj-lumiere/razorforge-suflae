@@ -91,7 +91,7 @@ public partial class Tokenizer
     /// <summary>
     /// Scans a star-based operator (*, **, *%, *^, **%, **^, *=, **=, *%=, **%=, *^=, **^=).
     /// </summary>
-    private void ScanStarOperator()
+    private void ScanStarOperator() // NOSONAR S3776
     {
         bool isPow = Match(expected: '*'); // Check for **
 

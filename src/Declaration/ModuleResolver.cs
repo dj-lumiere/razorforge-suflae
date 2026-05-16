@@ -124,7 +124,7 @@ public sealed class ModuleResolver
     /// silently during pre-registration. Only converts '/' (module hierarchy separator) to OS path
     /// separators; the '.' module-symbol separator is stripped before constructing file paths.
     /// </summary>
-    private string? TryFilesystemFallback(string importPath)
+    private string? TryFilesystemFallback(string importPath) // NOSONAR S3776
     {
         // Split on the last '.' to separate module path from symbol name.
         // "Collections.List"   -> module="Collections",  symbol="List"

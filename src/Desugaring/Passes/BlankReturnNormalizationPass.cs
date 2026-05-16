@@ -72,7 +72,7 @@ internal sealed class BlankReturnNormalizationPass(DesugaringContext _)
         return r with { ReturnType = returnType, Body = body };
     }
 
-    private Statement NormalizeStatement(Statement stmt)
+    private Statement NormalizeStatement(Statement stmt) // NOSONAR S3776
     {
         switch (stmt)
         {

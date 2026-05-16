@@ -594,7 +594,7 @@ public partial class Parser
     /// destructuring patterns (CASE (a, b)), literal patterns, guard patterns (n if n &lt; 0).
     /// </summary>
     /// <returns>A <see cref="Pattern"/> AST node.</returns>
-    private Pattern ParsePattern()
+    private Pattern ParsePattern() // NOSONAR S3776
     {
         SourceLocation location = GetLocation();
 

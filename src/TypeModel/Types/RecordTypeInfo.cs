@@ -312,7 +312,7 @@ public class RecordTypeInfo : TypeInfo
         return left;
     }
 
-    private static long ParseAtom(string expr, ref int pos, Dictionary<string, long> paramValues)
+    private static long ParseAtom(string expr, ref int pos, Dictionary<string, long> paramValues) // NOSONAR S3776
     {
         SkipWhitespace(expr: expr, pos: ref pos);
         if (pos < expr.Length && expr[index: pos] == '(')

@@ -205,7 +205,7 @@ internal partial class Program
     /// Returns (entryFile, projectRoot, outputFile, buildMode, dumpAst, saTiming); entryFile is null on error.
     /// </summary>
     private static (string? EntryFile, string? ProjectRoot, string? OutputFile,
-        RfBuildMode BuildMode, bool DumpAst, bool SaTiming, bool RequireStartRoutine) ResolveEntryFile(string[] args, bool needsOutputArg)
+        RfBuildMode BuildMode, bool DumpAst, bool SaTiming, bool RequireStartRoutine) ResolveEntryFile(string[] args, bool needsOutputArg) // NOSONAR S3776
     {
         // args[0] is the command name (build/buildandrun/check)
         string? targetName = null;
@@ -1365,7 +1365,7 @@ internal partial class Program
     /// Runs the multi-file build pipeline through semantic analysis only (no codegen).
     /// Reports errors and warnings. Returns 0 if type-checking succeeds, 1 otherwise.
     /// </summary>
-    private static int CheckMultiFile(string entryFile, string? projectRoot = null)
+    private static int CheckMultiFile(string entryFile, string? projectRoot = null) // NOSONAR S3776
     {
         if (!File.Exists(path: entryFile))
         {

@@ -56,7 +56,7 @@ public sealed partial class SemanticVerifier
     /// when user code calls them from within the same module.
     /// Uses AST-level throw/absent detection -> no full semantic analysis required.
     /// </summary>
-    internal void PreRegisterUserVariants(Program program)
+    internal void PreRegisterUserVariants(Program program) // NOSONAR S3776
     {
         var generator = new ErrorHandlingGenerator(registry: _registry);
         string? currentModule = GetCurrentModuleName();

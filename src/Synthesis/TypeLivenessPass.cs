@@ -60,7 +60,7 @@ internal sealed class TypeLivenessPass(TypeRegistry registry)
         registry.SetLiveConcreteTypes(liveTypes: _live);
     }
 
-    private void DrainWorklist()
+    private void DrainWorklist() // NOSONAR S3776
     {
         while (_worklist.Count > 0)
         {

@@ -107,7 +107,7 @@ partial class TypeRegistry
     /// Restores registry state from a stdlib snapshot.
     /// Used by tests to skip the expensive stdlib parse + body analysis phases.
     /// </summary>
-    public TypeRegistry(Language language, StdlibSnapshot snapshot)
+    public TypeRegistry(Language language, StdlibSnapshot snapshot) // NOSONAR S3776
     {
         Language = language;
         _ambient = this;

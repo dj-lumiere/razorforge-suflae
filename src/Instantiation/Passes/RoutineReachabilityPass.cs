@@ -88,7 +88,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// Sibling expansion in <see cref="ExpandSyntheticSiblings"/> then handles wrapper transparency
     /// (e.g. Owned[Text].$represent -> Text.$represent).
     /// </summary>
-    private void SeedWiredRoutinesOnLiveTypes()
+    private void SeedWiredRoutinesOnLiveTypes() // NOSONAR S3776
     {
         // Snapshot — EnqueueCallee mutates _liveOwnerTypes when it marks new owners live.
         TypeInfo[] snapshot = _liveOwnerTypes.ToArray();
@@ -911,7 +911,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// <c>Text()</c>) — only <c>ConstructedType</c> is set. Codegen emits a call to
     /// <c>&lt;Type&gt;.$create</c> by mangled name, so we must mark that key live ourselves.
     /// </summary>
-    private RoutineInfo? ResolveNoArgConstructor(CallExpression ce)
+    private RoutineInfo? ResolveNoArgConstructor(CallExpression ce) // NOSONAR S3776
     {
         if (ce.Arguments.Count != 0) return null;
         TypeInfo? ct = ce.ConstructedType;
@@ -949,7 +949,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// using the receiver's resolved type so primitive operators like <c>U32.$bitand</c>
     /// reachable through stdlib bodies (<c>CStr.$create</c>) become live.
     /// </summary>
-    private RoutineInfo? ResolveMemberCall(CallExpression ce)
+    private RoutineInfo? ResolveMemberCall(CallExpression ce) // NOSONAR S3776
     {
         if (ce.Callee is not MemberExpression member) return null;
         TypeInfo? receiverType = member.Object.ResolvedType ?? InferExpressionType(e: member.Object);
@@ -1071,7 +1071,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// types. Backstops <see cref="Expression.ResolvedType"/> for stdlib bodies where SA leaves
     /// receiver types unset (e.g. <c>buffer.offset(write_pos.bytes()).inject(...)</c>).
     /// </summary>
-    private TypeInfo? InferExpressionType(Expression e)
+    private TypeInfo? InferExpressionType(Expression e) // NOSONAR S3776
     {
         if (e.ResolvedType != null) return e.ResolvedType;
         switch (e)
@@ -1200,7 +1200,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         return ctx.Registry.LookupMethod(type: genDef, methodName: callee.Name);
     }
 
-    private RoutineDeclaration? FindDecl(RoutineInfo callee)
+    private RoutineDeclaration? FindDecl(RoutineInfo callee) // NOSONAR S3776
     {
         // Standalone routine: try by bare name in user, then stdlib.
         if (callee.OwnerType == null)

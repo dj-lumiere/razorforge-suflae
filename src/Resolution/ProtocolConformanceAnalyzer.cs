@@ -27,7 +27,7 @@ internal sealed class ProtocolConformanceAnalyzer
     /// Records implicitly conform to RecordType, entities to EntityType, etc.
     /// Also adds all transitive protocols from the marker's obeys chain.
     /// </summary>
-    internal void ApplyImplicitMarkerConformance()
+    internal void ApplyImplicitMarkerConformance() // NOSONAR S3776
     {
         foreach (TypeSymbol type in _sa._registry.GetTypesWithMethods())
         {

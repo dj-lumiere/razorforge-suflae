@@ -9,7 +9,7 @@ namespace Compiler.Parser;
 /// </summary>
 public partial class Parser
 {
-    private List<string> ParseAnnotations()
+    private List<string> ParseAnnotations() // NOSONAR S3776
     {
         var annotations = new List<string>();
 

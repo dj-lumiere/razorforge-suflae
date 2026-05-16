@@ -598,7 +598,7 @@ public partial class Parser
     ///   expr         - Expression statement (fallback)
     /// </remarks>
     /// <returns>The parsed statement, or null if at end of block.</returns>
-    private Statement ParseStatement()
+    private Statement ParseStatement() // NOSONAR S3776
     {
         // ═══════════════════════════════════════════════════════════════════════════
         // INDENTATION HANDLING

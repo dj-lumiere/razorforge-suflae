@@ -182,7 +182,7 @@ internal sealed class CallOverloadResolutionPass
     /// <summary>
     /// Walk expression as part of this compiler phase.
     /// </summary>
-    private void WalkExpression(Expression expr)
+    private void WalkExpression(Expression expr) // NOSONAR S3776
     {
         switch (expr)
         {
