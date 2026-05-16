@@ -70,23 +70,17 @@ public sealed class StdlibApiTests
         };
         using var p = Process.Start(psi)!;
         string stdout = p.StandardOutput.ReadToEnd();
+        string stderr = p.StandardError.ReadToEnd();
         p.WaitForExit();
 
-        // buildandrun emits a banner before the user program's output and a build summary
-        // after. The user-visible run starts after "=== EXECUTION ===" and ends at the
-        // next blank section header (or EOF). Strip the framing.
-        return ExtractExecutionSection(stdout);
-    }
+        if (p.ExitCode != 0)
+        {
+            throw new Xunit.Sdk.XunitException(
+                $"buildandrun failed for {Path.GetFileName(rfPath)} (exit={p.ExitCode}).\n" +
+                $"--- stdout ---\n{stdout}\n--- stderr ---\n{stderr}");
+        }
 
-    private static string ExtractExecutionSection(string output)
-    {
-        const string marker = "=== EXECUTION ===";
-        int idx = output.IndexOf(marker, StringComparison.Ordinal);
-        if (idx < 0) return output;
-        int start = idx + marker.Length;
-        // Skip the newline after the marker.
-        while (start < output.Length && (output[start] == '\r' || output[start] == '\n')) start++;
-        return output[start..];
+        return stdout;
     }
 
     private static string NormalizeNewlines(string s) =>
