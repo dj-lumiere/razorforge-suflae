@@ -213,34 +213,40 @@ routine ByteSize.$represent() -> Text
     return "0B"
 
   var parts = ""
+  var sep = ""
 
   var pib = raw // BYTES_PER_PIB
   var rem = raw % BYTES_PER_PIB
   if pib != 0_u64
-    parts = f"{parts}{pib}PiB"
+    parts = f"{parts}{sep}{pib}PiB"
+    sep = " "
 
   var tib = rem // BYTES_PER_TIB
   rem = rem % BYTES_PER_TIB
   if tib != 0_u64
-    parts = f"{parts}{tib}TiB"
+    parts = f"{parts}{sep}{tib}TiB"
+    sep = " "
 
   var gib = rem // BYTES_PER_GIB
   rem = rem % BYTES_PER_GIB
   if gib != 0_u64
-    parts = f"{parts}{gib}GiB"
+    parts = f"{parts}{sep}{gib}GiB"
+    sep = " "
 
   var mib = rem // BYTES_PER_MIB
   rem = rem % BYTES_PER_MIB
   if mib != 0_u64
-    parts = f"{parts}{mib}MiB"
+    parts = f"{parts}{sep}{mib}MiB"
+    sep = " "
 
   var kib = rem // BYTES_PER_KIB
   rem = rem % BYTES_PER_KIB
   if kib != 0_u64
-    parts = f"{parts}{kib}KiB"
+    parts = f"{parts}{sep}{kib}KiB"
+    sep = " "
 
   if rem != 0_u64
-    parts = f"{parts}{rem}B"
+    parts = f"{parts}{sep}{rem}B"
 
   return parts
 

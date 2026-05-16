@@ -12,4 +12,7 @@ zero: 0s
 1us < 1ms: true
 1ms < 1s: true
 1s == 1s: true
+1h+2m+3s: 1h 2m 3s
+all units: 1d 1h 2m 3s 1ms 1us 1ns
+negative all units: -1d 1h 2m 3s 1ms 1us 1ns
 DONE

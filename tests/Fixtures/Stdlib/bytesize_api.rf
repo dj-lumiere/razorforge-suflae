@@ -25,5 +25,13 @@ routine start()
   show(f"b == b: {b == b}")
   show(f"c == c: {c == c}")
 
+  # Component-breakdown formatting via $represent
+  show(f"0 bytes: {ByteSize(bytes: 0_u64)}")
+  show(f"1500 bytes: {ByteSize(bytes: 1500_u64)}")
+  show(f"1 GiB + 1 byte: {ByteSize(bytes: 1_073_741_825_u64)}")
+  show(f"1 TiB exactly: {ByteSize.tebibytes(n: 1_u64)}")
+  show(f"1 PiB exactly: {ByteSize.pebibytes(n: 1_u64)}")
+  show(f"1 trillion bytes: {ByteSize(bytes: 1_000_000_000_000_u64)}")
+
   show("DONE")
   return

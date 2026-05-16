@@ -371,25 +371,31 @@ routine Duration.$represent() -> Text
 
   var d = me.int_abs()
   var parts = ""
-
-  if me.is_negative()
-    parts = "-"
+  var sep = ""
 
   if d.get_days() != 0_s64
-    parts = f"{parts}{d.get_days()}d"
+    parts = f"{parts}{sep}{d.get_days()}d"
+    sep = " "
   if d.get_hours() != 0_s64
-    parts = f"{parts}{d.get_hours()}h"
+    parts = f"{parts}{sep}{d.get_hours()}h"
+    sep = " "
   if d.get_minutes() != 0_s64
-    parts = f"{parts}{d.get_minutes()}m"
+    parts = f"{parts}{sep}{d.get_minutes()}m"
+    sep = " "
   if d.get_seconds() != 0_s64
-    parts = f"{parts}{d.get_seconds()}s"
+    parts = f"{parts}{sep}{d.get_seconds()}s"
+    sep = " "
   if d.get_milliseconds() != 0_s64
-    parts = f"{parts}{d.get_milliseconds()}ms"
+    parts = f"{parts}{sep}{d.get_milliseconds()}ms"
+    sep = " "
   if d.get_microseconds() != 0_s64
-    parts = f"{parts}{d.get_microseconds()}us"
+    parts = f"{parts}{sep}{d.get_microseconds()}us"
+    sep = " "
   if d.get_nanoseconds() != 0_s64
-    parts = f"{parts}{d.get_nanoseconds()}ns"
+    parts = f"{parts}{sep}{d.get_nanoseconds()}ns"
 
+  if me.is_negative()
+    return f"-{parts}"
   return parts
 
 ### Returns the textual representation of this value.
