@@ -1014,7 +1014,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// overload of e.g. <c>Maybe[T]</c> from being selected when T is an entity type.
     /// </summary>
     private RoutineDeclaration? FindInStdlib(string genericAstName, int expectedParamCount = -1,
-        Dictionary<string, TypeInfo>? typeSubs = null, IReadOnlyList<string>? expectedParamNames = null)
+        Dictionary<string, TypeInfo>? typeSubs = null, List<string>? expectedParamNames = null)
     {
         bool requireGenericSuffix = genericAstName.EndsWith("[generic]");
         string baseName = requireGenericSuffix

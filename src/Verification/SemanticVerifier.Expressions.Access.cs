@@ -488,7 +488,7 @@ public sealed partial class SemanticVerifier
         return trueType;
     }
 
-    private TypeSymbol AnalyzeLambdaExpression(LambdaExpression lambda,
+    private RoutineTypeInfo AnalyzeLambdaExpression(LambdaExpression lambda,
         TypeSymbol? expectedType = null)
     {
         // Collect variables from enclosing scope that might be captured

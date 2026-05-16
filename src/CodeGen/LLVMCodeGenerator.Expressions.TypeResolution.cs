@@ -608,7 +608,7 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Resolves the tuple type expression from semantic compiler state.
     /// </summary>
-    private TypeInfo? ResolveTupleTypeExpression(TypeExpression typeExpr)
+    private TupleTypeInfo? ResolveTupleTypeExpression(TypeExpression typeExpr)
     {
         if (typeExpr.Name is not "Tuple" and not "ValueTuple")
         {

@@ -876,7 +876,7 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
         }
     }
 
-    private Expression LiftLambda(LambdaExpression lambda,
+    private IdentifierExpression LiftLambda(LambdaExpression lambda,
         HashSet<string> scope,
         List<string>? inheritedGenericParameters,
         List<GenericConstraintDeclaration>? inheritedGenericConstraints,

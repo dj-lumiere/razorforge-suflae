@@ -20,7 +20,7 @@ public partial class Parser
     private VariableDeclaration ParseVariableDeclaration(
         VisibilityModifier visibility = VisibilityModifier.Open,
         StorageClass storage = StorageClass.None,
-        IReadOnlyList<string>? annotations = null,
+        List<string>? annotations = null,
         bool isLateInit = false)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));

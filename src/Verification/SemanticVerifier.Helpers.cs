@@ -380,7 +380,7 @@ public sealed partial class SemanticVerifier
     /// routines are not rewritten — they don't have a canonical readonly accessor.
     /// </remarks>
     private void RewriteDisplayRoutineWrapperArgs(string callName,
-        IList<Expression> arguments)
+        List<Expression> arguments)
     {
         bool isShow = callName == "show";
         bool isAlert = callName == "alert";

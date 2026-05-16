@@ -832,13 +832,13 @@ public sealed partial class TypeRegistry
             TypeInfo? substitutedReturn = method.ReturnType != null
                 ? RoutineInfo.SubstituteType(type: method.ReturnType, substitution: substitution)
                 : null;
-            IReadOnlyList<string>? methodOnlyGenericParams = method.GenericParameters?
+            List<string>? methodOnlyGenericParams = method.GenericParameters?
                 .Where(gp => gp != universalOwner.Name)
                 .ToList();
             if (methodOnlyGenericParams?.Count == 0)
                 methodOnlyGenericParams = null;
 
-            IReadOnlyList<GenericConstraintDeclaration>? methodOnlyConstraints = method.GenericConstraints?
+            List<GenericConstraintDeclaration>? methodOnlyConstraints = method.GenericConstraints?
                 .Where(c => methodOnlyGenericParams?.Contains(c.ParameterName) == true)
                 .ToList();
             if (methodOnlyConstraints?.Count == 0)
@@ -999,14 +999,14 @@ public sealed partial class TypeRegistry
         }
 
         // Only keep method-level generic parameters (owner params are now resolved)
-        IReadOnlyList<string>? methodOnlyGenericParams2 = method.GenericParameters?
+        List<string>? methodOnlyGenericParams2 = method.GenericParameters?
             .Where(gp => !substitution2.ContainsKey(gp))
             .ToList();
         if (methodOnlyGenericParams2?.Count == 0)
             methodOnlyGenericParams2 = null;
 
         // Only keep constraints on method-level generic parameters
-        IReadOnlyList<GenericConstraintDeclaration>? methodOnlyConstraints2 = method
+        List<GenericConstraintDeclaration>? methodOnlyConstraints2 = method
             .GenericConstraints?
             .Where(c => methodOnlyGenericParams2?.Contains(c.ParameterName) == true)
             .ToList();

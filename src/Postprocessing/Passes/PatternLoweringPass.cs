@@ -779,7 +779,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     // -----------------------------------------------------------------------------
 
     /// <summary>Builds <c>not subject.present</c> for Maybe absence check.</summary>
-    private Expression MakeNotPresent(Expression subject, SourceLocation loc, TypeInfo? boolType)
+    private UnaryExpression MakeNotPresent(Expression subject, SourceLocation loc, TypeInfo? boolType)
     {
         return new UnaryExpression(
             Operator: UnaryOperator.Not,
@@ -791,7 +791,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     }
 
     /// <summary>Builds <c>subject.present</c> member access (Bool).</summary>
-    private Expression MakePresentAccess(Expression subject, SourceLocation loc)
+    private MemberExpression MakePresentAccess(Expression subject, SourceLocation loc)
     {
         TypeInfo? boolType = ctx.Registry.LookupType(name: "Bool");
         return new MemberExpression(Object: subject, PropertyName: "present", Location: loc)
@@ -811,7 +811,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     }
 
     /// <summary>Builds <c>subject.type_id == 0_u64</c> for a Blank/absent check on Result/Lookup.</summary>
-    private static Expression MakeTypeIdIsZero(Expression subject, SourceLocation loc,
+    private static BinaryExpression MakeTypeIdIsZero(Expression subject, SourceLocation loc,
         TypeInfo? boolType, TypeInfo? u64Type)
     {
         var typeIdAccess = MakeMemberAccess(subject: subject, field: "type_id",
@@ -828,7 +828,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     }
 
     /// <summary>Builds <c>subject.type_id == typeId_u64</c> for a specific Result/Lookup arm.</summary>
-    private static Expression MakeTypeIdEquals(Expression subject, ulong typeId, SourceLocation loc,
+    private static BinaryExpression MakeTypeIdEquals(Expression subject, ulong typeId, SourceLocation loc,
         TypeInfo? boolType, TypeInfo? u64Type)
     {
         var typeIdAccess = MakeMemberAccess(subject: subject, field: "type_id",
@@ -857,7 +857,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     ///         consumed by codegen's call-site to resolve protocol dispatch on <c>name</c>.</item>
     /// </list>
     /// </summary>
-    private Statement MakeCrashableBindings(Expression subject, string bindName, SourceLocation loc)
+    private BlockStatement MakeCrashableBindings(Expression subject, string bindName, SourceLocation loc)
     {
         TypeInfo? crashableType = ctx.Registry.LookupType(name: "Crashable");
         TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
@@ -877,7 +877,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         return new BlockStatement(Statements: [valueBinding, typeIdBinding], Location: loc);
     }
 
-    private Expression MakeCrashableCondition(Expression subject, TypeInfo subjectType,
+    private BinaryExpression MakeCrashableCondition(Expression subject, TypeInfo subjectType,
         SourceLocation loc, TypeInfo? boolType)
     {
         TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
@@ -931,7 +931,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     }
 
     /// <summary>Builds <c>subject.value.is_none()</c> -> the absence check for <c>Maybe[T entity]</c>.</summary>
-    private Expression MakeIsNoneCall(Expression subject, TypeInfo subjectType, SourceLocation loc)
+    private CallExpression MakeIsNoneCall(Expression subject, TypeInfo subjectType, SourceLocation loc)
     {
         TypeInfo? boolType = ctx.Registry.LookupType(name: "Bool");
         TypeInfo? hijackedType = GetEntityMaybeHijackedType(subjectType: subjectType);
@@ -951,7 +951,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     }
 
     /// <summary>Builds <c>subject.value.extract()</c> -> extracts the entity from <c>Maybe[T entity]</c>.</summary>
-    private static Expression MakeEntityMaybeRead(Expression subject, TypeInfo subjectType,
+    private static CallExpression MakeEntityMaybeRead(Expression subject, TypeInfo subjectType,
         TypeInfo entityType, SourceLocation loc)
     {
         TypeInfo? hijackedType = GetEntityMaybeHijackedType(subjectType: subjectType);
@@ -1063,7 +1063,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     /// <summary>
     /// Builds the make binding used by later compiler work.
     /// </summary>
-    private static Statement MakeBinding(string name, Expression value, SourceLocation loc)
+    private static DeclarationStatement MakeBinding(string name, Expression value, SourceLocation loc)
     {
         TypeInfo? type = value.ResolvedType;
         var decl = new VariableDeclaration(

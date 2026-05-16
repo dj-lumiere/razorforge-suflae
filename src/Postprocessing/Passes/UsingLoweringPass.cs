@@ -152,7 +152,7 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
         }
     }
 
-    private Statement LowerUsing(UsingStatement u)
+    private BlockStatement LowerUsing(UsingStatement u)
     {
         // Lower body first -> nested usings expand bottom-up.
         Statement loweredBody = LowerStatement(u.Body);
@@ -314,7 +314,7 @@ internal sealed class UsingLoweringPass(PostprocessingContext ctx)
     private static BlockStatement MakeBlock(IEnumerable<Statement> stmts, SourceLocation loc)
         => new(Statements: stmts.ToList(), Location: loc);
 
-    private static Statement MakeBinding(
+    private static DeclarationStatement MakeBinding(
         string name, Expression value, TypeInfo? type, SourceLocation loc)
     {
         var decl = new VariableDeclaration(

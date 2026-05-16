@@ -589,7 +589,7 @@ public partial class LlvmCodeGenerator
     /// Only infers parameters that belong to the method itself (excludes owner-level params).
     /// </summary>
     private static Dictionary<string, TypeInfo>? InferMemberRoutineTypeArgs(RoutineInfo genericMethod,
-        IReadOnlyList<TypeInfo> argTypes)
+        List<TypeInfo> argTypes)
     {
         if (genericMethod.GenericParameters == null)
         {
@@ -776,7 +776,7 @@ public partial class LlvmCodeGenerator
     /// when the carried routine still points at a generic definition or partial resolution.
     /// </summary>
     private RoutineInfo? NormalizeResolvedRoutineReference(RoutineInfo? routine,
-        TypeInfo? receiverType, TypeInfo? returnType, IReadOnlyList<TypeInfo> argTypes)
+        TypeInfo? receiverType, TypeInfo? returnType, List<TypeInfo> argTypes)
     {
         if (routine == null)
         {

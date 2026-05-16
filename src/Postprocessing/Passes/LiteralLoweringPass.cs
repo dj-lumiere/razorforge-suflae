@@ -447,7 +447,7 @@ internal sealed class LiteralLoweringPass
     /// <summary>
     /// Attempts to lower literal and reports whether it succeeded.
     /// </summary>
-    private static Expression? TryLowerLiteral(LiteralExpression literal)
+    private static CreatorExpression? TryLowerLiteral(LiteralExpression literal)
     {
         SourceLocation loc = literal.Location;
 

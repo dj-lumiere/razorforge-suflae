@@ -391,7 +391,7 @@ internal sealed class WrapperForwardingPass
     ///
     /// where T is the wrapper's generic parameter name.
     /// </summary>
-    private Statement BuildWrapperForwarderBody(TypeSymbol wrapperType, RoutineInfo innerMethod,
+    private DangerStatement BuildWrapperForwarderBody(TypeSymbol wrapperType, RoutineInfo innerMethod,
         string genericParamName,
         string methodName, bool isFailable, IReadOnlyList<ParameterInfo> parameters,
         bool hasReturnValue, string? dataFieldName = null, bool innerIsEntity = false)

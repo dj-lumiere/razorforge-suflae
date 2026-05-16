@@ -202,7 +202,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
     /// Lowers <c>while cond { body }</c> to <c>loop { if !cond { break } body }</c>.
     /// The else branch (if present) is dropped -> while-else is not yet fully implemented.
     /// </summary>
-    private Statement LowerWhile(WhileStatement whileStmt)
+    private LoopStatement LowerWhile(WhileStatement whileStmt)
     {
         SourceLocation loc = whileStmt.Location;
         Statement loweredBody = LowerStatement(stmt: whileStmt.Body);
@@ -231,7 +231,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
     /// <summary>
     /// Lower for as part of this compiler phase.
     /// </summary>
-    private Statement LowerFor(ForStatement forStmt)
+    private BlockStatement LowerFor(ForStatement forStmt)
     {
         SourceLocation loc = forStmt.Location;
         int n = _iterCount++;

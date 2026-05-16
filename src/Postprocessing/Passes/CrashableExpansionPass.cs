@@ -42,7 +42,7 @@ internal sealed class CrashableExpansionPass(PostprocessingContext ctx)
 {
     public void Run(Program program)
     {
-        IReadOnlyList<CrashableTypeInfo> crashableTypes = ctx.Registry
+        List<CrashableTypeInfo> crashableTypes = ctx.Registry
                                                              .GetAllTypes()
                                                              .OfType<CrashableTypeInfo>()
                                                              .ToList();
@@ -233,7 +233,7 @@ internal sealed class CrashableExpansionPass(PostprocessingContext ctx)
     }
 
     /// <summary>Recurses into clause bodies without changing the clauses themselves.</summary>
-    private Statement RecurseIntoClauses(WhenStatement when,
+    private WhenStatement RecurseIntoClauses(WhenStatement when,
         IReadOnlyList<CrashableTypeInfo> crashableTypes)
     {
         bool changed = false;

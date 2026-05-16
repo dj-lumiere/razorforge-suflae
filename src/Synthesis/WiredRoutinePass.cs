@@ -518,7 +518,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// The <c>BinaryExpression(Equal)</c> lowers to <c>icmp eq i32</c> (choice) or
     /// <c>icmp eq i64</c> (flags) in <c>EmitPrimitiveBinaryOp</c>.
     /// </summary>
-    private static Statement BuildEqBodyNumeric(TypeInfo ownerType, TypeInfo boolType,
+    private static ReturnStatement BuildEqBodyNumeric(TypeInfo ownerType, TypeInfo boolType,
         bool isChoice)
     {
         var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
@@ -541,7 +541,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Builds the body: <c>return me.f1 == you.f1 and me.f2 == you.f2 and ...</c>
     /// Zero-field types: <c>return true</c>.
     /// </summary>
-    private static Statement BuildEqBody(TypeInfo ownerType,
+    private static ReturnStatement BuildEqBody(TypeInfo ownerType,
         IReadOnlyList<MemberVariableInfo> fields, TypeInfo boolType)
     {
         if (fields.Count == 0)
@@ -597,7 +597,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Builds the body: <c>return true</c> for zero-field entity types.
     /// Zero-field entities have no distinguishing state, so any two instances are structurally equal.
     /// </summary>
-    private static Statement BuildReturnTrueBody(TypeInfo boolType)
+    private static ReturnStatement BuildReturnTrueBody(TypeInfo boolType)
     {
         return new ReturnStatement(
             Value: new LiteralExpression(
@@ -613,7 +613,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Builds the body: <c>return me.f1.$hash() ^ me.f2.$hash() ^ ...</c>.
     /// Zero-field types: <c>return 0_u64</c>.
     /// </summary>
-    private Statement BuildHashBody(TypeInfo ownerType,
+    private ReturnStatement BuildHashBody(TypeInfo ownerType,
         IReadOnlyList<MemberVariableInfo> fields, TypeInfo u64Type)
     {
         if (fields.Count == 0)
@@ -688,7 +688,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// The numeric create lowers via the existing codegen numeric-create path; <c>$hash</c>
     /// on the result delegates to the primitive type's xxHash64 implementation.
     /// </summary>
-    private static Statement BuildNumericHashBodyViaConversion(TypeInfo ownerType,
+    private static ReturnStatement BuildNumericHashBodyViaConversion(TypeInfo ownerType,
         string conversionTypeName, TypeInfo conversionType, TypeInfo u64Type)
     {
         var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
@@ -716,7 +716,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Builds the body: <c>return [Member1, Member2, ...]</c> as a list literal.
     /// Used for <c>all_cases()</c> on choice and flags types.
     /// </summary>
-    private static Statement BuildAllCasesBody(IReadOnlyList<string> memberNames,
+    private static ReturnStatement BuildAllCasesBody(IReadOnlyList<string> memberNames,
         TypeInfo elementType, TypeInfo listType)
     {
         var elements = memberNames
@@ -738,7 +738,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Used for <c>S64.$create(from: Choice)</c> via <c>sign_extend</c> and
     /// <c>U64.$create(from: Flags)</c> via <c>reinterpret_bits</c>.
     /// </summary>
-    private static Statement BuildLlvmIntrinsicCallBody(string intrinsicName,
+    private static ReturnStatement BuildLlvmIntrinsicCallBody(string intrinsicName,
         TypeInfo fromType, TypeInfo toType, string paramName)
     {
         var fromRef = new IdentifierExpression(Name: paramName, Location: _synthLoc)
@@ -769,7 +769,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// allocates <c>T.data_size()</c> bytes, stores <c>from</c>,
     /// returns <c>Data(type_id, data_address, data_size)</c>.
     /// </summary>
-    private Statement? BuildDataCreateBody(RoutineInfo routine, TypeInfo dataType)
+    private BlockStatement? BuildDataCreateBody(RoutineInfo routine, TypeInfo dataType)
     {
         if (routine.Parameters.Count == 0) return null;
         TypeInfo paramType = routine.Parameters[index: 0].Type;
@@ -867,7 +867,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Builds the body: <c>return me.f1.$secure_hash(k0: k0, k1: k1) ^ me.f2.$secure_hash(...) ^ ...</c>.
     /// Zero-field types: <c>return 0_u64</c>.
     /// </summary>
-    private Statement BuildSecureHashBody(TypeInfo ownerType,
+    private ReturnStatement BuildSecureHashBody(TypeInfo ownerType,
         IReadOnlyList<MemberVariableInfo> fields, TypeInfo u64Type)
     {
         if (fields.Count == 0)
@@ -932,7 +932,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Builds the body: <c>return ConversionType(from: me).$secure_hash(k0: k0, k1: k1)</c>.
     /// Used for Choice (<c>S64(from: me)</c>) and Flags (<c>U64(from: me)</c>).
     /// </summary>
-    private static Statement BuildNumericSecureHashBodyViaConversion(TypeInfo ownerType,
+    private static ReturnStatement BuildNumericSecureHashBodyViaConversion(TypeInfo ownerType,
         string conversionTypeName, TypeInfo conversionType, TypeInfo u64Type)
     {
         var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
@@ -1063,7 +1063,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Field access via <see cref="MemberExpression"/> works for both records (extractvalue) and
     /// entities (GEP + load).
     /// </summary>
-    private static Statement BuildTextBody(
+    private static ReturnStatement BuildTextBody(
         TypeInfo ownerType,
         IReadOnlyList<MemberVariableInfo> fields,
         TypeInfo textType,
@@ -1139,7 +1139,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// <summary>
     /// Builds the body: a WhenStatement over <c>me</c> returning the case name string.
     /// </summary>
-    private static Statement BuildChoiceRepresentBody(ChoiceTypeInfo choice, TypeInfo textType,
+    private static WhenStatement BuildChoiceRepresentBody(ChoiceTypeInfo choice, TypeInfo textType,
         TypeInfo? logicBreachedErrorType)
     {
         var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
@@ -1173,7 +1173,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Builds the body: a WhenStatement over <c>me</c> returning
     /// <c>"Module.ChoiceName(id: N, CaseName)"</c> per case.
     /// </summary>
-    private static Statement BuildChoiceDiagnoseBody(ChoiceTypeInfo choice, TypeInfo textType,
+    private static WhenStatement BuildChoiceDiagnoseBody(ChoiceTypeInfo choice, TypeInfo textType,
         TypeInfo? logicBreachedErrorType)
     {
         var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
@@ -1587,7 +1587,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Falls back to <c>throw LogicBreachedError()</c> with a null ResolvedType when the
     /// type isn't in the registry yet (shouldn't happen in practice).
     /// </summary>
-    private static Statement BuildBreachStatement(TypeInfo? logicBreachedErrorType)
+    private static ThrowStatement BuildBreachStatement(TypeInfo? logicBreachedErrorType)
     {
         // Use CallExpression, not CreatorExpression ??crashable constructors in RF source
         // parse as calls (e.g. LogicBreachedError()), and EmitFunctionCall has the
@@ -1605,7 +1605,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// <summary>
     /// Builds the body: <c>return me.crash_message()</c>.
     /// </summary>
-    private static Statement BuildCrashableRepresentBody(CrashableTypeInfo crashable)
+    private static ReturnStatement BuildCrashableRepresentBody(CrashableTypeInfo crashable)
     {
         var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
             { ResolvedType = crashable };
@@ -1623,7 +1623,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Builds the body:
     /// <c>return f"Module.CrashableName({me.crash_message()}[, field1: {me.f1}, ...])"</c>.
     /// </summary>
-    private static Statement BuildCrashableDiagnoseBody(
+    private static ReturnStatement BuildCrashableDiagnoseBody(
         CrashableTypeInfo crashable, TypeInfo textType)
     {
         var parts = new List<InsertedTextPart>();
@@ -2017,7 +2017,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Builds a <c>return [elem0, elem1, ...]</c> statement using a
     /// <see cref="ListLiteralExpression"/> with the given Text string values.
     /// </summary>
-    private static Statement MakeListReturn(IReadOnlyList<string> values,
+    private static ReturnStatement MakeListReturn(IReadOnlyList<string> values,
         TypeInfo textType, TypeInfo listTextType)
     {
         var elements = values
@@ -2034,7 +2034,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             Location: _synthLoc);
     }
 
-    private static Statement MakeLiteralReturn(string value, TypeInfo returnType) =>
+    private static ReturnStatement MakeLiteralReturn(string value, TypeInfo returnType) =>
         new ReturnStatement(
             Value: new LiteralExpression(
                 Value: value,
@@ -2042,7 +2042,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 Location: _synthLoc) { ResolvedType = returnType },
             Location: _synthLoc);
 
-    private static Statement MakeLiteralReturn(ulong value, TypeInfo returnType) =>
+    private static ReturnStatement MakeLiteralReturn(ulong value, TypeInfo returnType) =>
         new ReturnStatement(
             Value: new LiteralExpression(
                 Value: value,
@@ -2050,7 +2050,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 Location: _synthLoc) { ResolvedType = returnType },
             Location: _synthLoc);
 
-    private static Statement MakeLiteralReturn(long value, TypeInfo returnType) =>
+    private static ReturnStatement MakeLiteralReturn(long value, TypeInfo returnType) =>
         new ReturnStatement(
             Value: new LiteralExpression(
                 Value: value,
@@ -2058,7 +2058,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 Location: _synthLoc) { ResolvedType = returnType },
             Location: _synthLoc);
 
-    private static Statement MakeLiteralReturn(bool value, TypeInfo returnType) =>
+    private static ReturnStatement MakeLiteralReturn(bool value, TypeInfo returnType) =>
         new ReturnStatement(
             Value: new LiteralExpression(
                 Value: value,
@@ -2174,7 +2174,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     ///   <item><c>$diagnose</c>: <c>return f"ValueTuple[T1, T2]({me.item0}, {me.item1})"</c></item>
     /// </list>
     /// </summary>
-    private static Statement BuildTupleTextBody(TupleTypeInfo tuple, TypeInfo textType,
+    private static ReturnStatement BuildTupleTextBody(TupleTypeInfo tuple, TypeInfo textType,
         bool diagnose)
     {
         var parts = new List<InsertedTextPart>();
@@ -2246,7 +2246,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// <summary>
     /// Builds: <c>when me { is Blank => return "Blank", is T as v => return v.$represent(), ... }</c>.
     /// </summary>
-    private static Statement BuildVariantRepresentBody(VariantTypeInfo variant, TypeInfo textType)
+    private static WhenStatement BuildVariantRepresentBody(VariantTypeInfo variant, TypeInfo textType)
     {
         var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
             { ResolvedType = variant };
@@ -2316,7 +2316,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Builds:
     /// <c>when me { is Blank => return "Mod.V(typeid=0, Blank)", is T as v => return f"Mod.V(typeid=N, {v.$represent()})", ... }</c>.
     /// </summary>
-    private static Statement BuildVariantDiagnoseBody(VariantTypeInfo variant, TypeInfo textType)
+    private static WhenStatement BuildVariantDiagnoseBody(VariantTypeInfo variant, TypeInfo textType)
     {
         var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
             { ResolvedType = variant };

@@ -908,7 +908,7 @@ public partial class Parser
     /// Creates a type alias for cleaner code.
     /// </summary>
     /// <returns>A <see cref="DefineDeclaration"/> AST node.</returns>
-    private ISyntaxTreeNode ParseDefineDeclaration(List<string>? annotations = null)
+    private DefineDeclaration ParseDefineDeclaration(List<string>? annotations = null)
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 

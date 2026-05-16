@@ -542,7 +542,7 @@ public sealed partial class SemanticVerifier
         return names;
     }
 
-    private TypeSymbol HandleUnknownExpression(Expression expression)
+    private ErrorTypeInfo HandleUnknownExpression(Expression expression)
     {
         ReportWarning(code: SemanticWarningCode.UnknownExpressionType,
             message: $"Unknown expression type: {expression.GetType().Name}",

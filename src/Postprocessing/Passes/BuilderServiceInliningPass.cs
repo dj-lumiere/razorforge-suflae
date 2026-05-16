@@ -688,7 +688,7 @@ internal sealed class BuilderServiceInliningPass
 
     //  Source location folding
 
-    private Expression? FoldSourceLocationCall(string routineName, SourceLocation callSite)
+    private LiteralExpression? FoldSourceLocationCall(string routineName, SourceLocation callSite)
     {
         return routineName switch
         {

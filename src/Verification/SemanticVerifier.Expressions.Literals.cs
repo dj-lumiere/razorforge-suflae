@@ -414,7 +414,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Parse f128 literal as part of this compiler phase.
     /// </summary>
-    private static ParsedLiteral ParseF128Literal(LiteralExpression literal, string rawValue)
+    private static ParsedF128 ParseF128Literal(LiteralExpression literal, string rawValue)
     {
         NumericLiteralParser.F128 result = NumericLiteralParser.ParseF128(str: rawValue);
         return new ParsedF128(Location: literal.Location, Lo: result.Lo, Hi: result.Hi);
@@ -423,7 +423,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Parse d32 literal as part of this compiler phase.
     /// </summary>
-    private static ParsedLiteral ParseD32Literal(LiteralExpression literal, string rawValue)
+    private static ParsedD32 ParseD32Literal(LiteralExpression literal, string rawValue)
     {
         NumericLiteralParser.D32 result = NumericLiteralParser.ParseD32(str: rawValue);
         return new ParsedD32(Location: literal.Location, Value: result.Value);
@@ -432,7 +432,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Parse d64 literal as part of this compiler phase.
     /// </summary>
-    private static ParsedLiteral ParseD64Literal(LiteralExpression literal, string rawValue)
+    private static ParsedD64 ParseD64Literal(LiteralExpression literal, string rawValue)
     {
         NumericLiteralParser.D64 result = NumericLiteralParser.ParseD64(str: rawValue);
         return new ParsedD64(Location: literal.Location, Value: result.Value);
@@ -441,7 +441,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Parse d128 literal as part of this compiler phase.
     /// </summary>
-    private static ParsedLiteral ParseD128Literal(LiteralExpression literal, string rawValue)
+    private static ParsedD128 ParseD128Literal(LiteralExpression literal, string rawValue)
     {
         NumericLiteralParser.D128 result = NumericLiteralParser.ParseD128(str: rawValue);
         return new ParsedD128(Location: literal.Location, Lo: result.Lo, Hi: result.Hi);
@@ -450,7 +450,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Parse integer literal as part of this compiler phase.
     /// </summary>
-    private ParsedLiteral ParseIntegerLiteral(LiteralExpression literal, string rawValue)
+    private ParsedInteger ParseIntegerLiteral(LiteralExpression literal, string rawValue)
     {
         (byte[] bytes, int sign) = NumericLiteralParser.ParseIntegerToBytes(str: rawValue);
         if (bytes.Length == 0)
@@ -473,7 +473,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Parse decimal literal as part of this compiler phase.
     /// </summary>
-    private ParsedLiteral ParseDecimalLiteral(LiteralExpression literal, string rawValue)
+    private ParsedDecimal ParseDecimalLiteral(LiteralExpression literal, string rawValue)
     {
         (string value, int sign, int exponent, int significantDigits, bool isInteger) =
             NumericLiteralParser.ParseDecimalInfo(str: rawValue);
@@ -504,7 +504,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Parses a signed integer literal (S8-S64) with overflow validation.
     /// </summary>
-    private ParsedLiteral? ParseSignedIntLiteral(LiteralExpression literal, string rawValue,
+    private ParsedSignedInt? ParseSignedIntLiteral(LiteralExpression literal, string rawValue,
         string typeName, long minValue, long maxValue)
     {
         // Extract numeric part by removing the type suffix (e.g., "1s32" "1")
@@ -537,7 +537,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Parses an S128 literal with Int128 overflow validation.
     /// </summary>
-    private ParsedLiteral? ParseS128Literal(LiteralExpression literal, string rawValue)
+    private ParsedSignedInt? ParseS128Literal(LiteralExpression literal, string rawValue)
     {
         string numericPart = ExtractNumericPart(rawValue: rawValue, suffix: "s128");
         string cleanedValue = CleanNumericLiteral(value: numericPart);
@@ -635,7 +635,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Parses an unsigned integer literal (U8-U64, Address) with overflow validation.
     /// </summary>
-    private ParsedLiteral? ParseUnsignedIntLiteral(LiteralExpression literal, string rawValue,
+    private ParsedUnsignedInt? ParseUnsignedIntLiteral(LiteralExpression literal, string rawValue,
         string typeName, ulong maxValue, string? suffix = null)
     {
         // Extract numeric part by removing the type suffix (e.g., "1u32" "1")
@@ -667,7 +667,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Parses a U128 literal with UInt128 overflow validation.
     /// </summary>
-    private ParsedLiteral? ParseU128Literal(LiteralExpression literal, string rawValue)
+    private ParsedUnsignedInt? ParseU128Literal(LiteralExpression literal, string rawValue)
     {
         string numericPart = ExtractNumericPart(rawValue: rawValue, suffix: "u128");
         string cleanedValue = CleanNumericLiteral(value: numericPart);
@@ -688,7 +688,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Parses an F16 (half-precision) floating-point literal using .NET Half type.
     /// </summary>
-    private ParsedLiteral? ParseF16Literal(LiteralExpression literal, string rawValue)
+    private ParsedFloat? ParseF16Literal(LiteralExpression literal, string rawValue)
     {
         string numericPart = ExtractNumericPart(rawValue: rawValue, suffix: "f16");
         string cleanedValue = CleanNumericLiteral(value: numericPart);
@@ -722,7 +722,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Parses an F32 (single-precision) floating-point literal using .NET float type.
     /// </summary>
-    private ParsedLiteral? ParseF32Literal(LiteralExpression literal, string rawValue)
+    private ParsedFloat? ParseF32Literal(LiteralExpression literal, string rawValue)
     {
         string numericPart = ExtractNumericPart(rawValue: rawValue, suffix: "f32");
         string cleanedValue = CleanNumericLiteral(value: numericPart);
@@ -754,7 +754,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Parses an F64 (double-precision) floating-point literal using .NET double type.
     /// </summary>
-    private ParsedLiteral? ParseF64Literal(LiteralExpression literal, string rawValue)
+    private ParsedFloat? ParseF64Literal(LiteralExpression literal, string rawValue)
     {
         string numericPart = ExtractNumericPart(rawValue: rawValue, suffix: "f64");
         string cleanedValue = CleanNumericLiteral(value: numericPart);
@@ -790,7 +790,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Parses a duration literal and converts to nanoseconds.
     /// </summary>
-    private ParsedLiteral? ParseDurationLiteral(LiteralExpression literal, string rawValue,
+    private ParsedDuration? ParseDurationLiteral(LiteralExpression literal, string rawValue,
         string unit, long multiplier)
     {
         // Extract numeric part (remove unit suffix)
@@ -833,7 +833,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Parses a ByteSize literal and converts to ByteSize.
     /// </summary>
-    private ParsedLiteral? ParseByteSizeLiteral(LiteralExpression literal, string rawValue,
+    private ParsedByteSize? ParseByteSizeLiteral(LiteralExpression literal, string rawValue,
         string unit, ulong multiplier)
     {
         // Extract numeric part (remove unit suffix)
@@ -876,7 +876,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Parses a J32 (F32-based) imaginary literal.
     /// </summary>
-    private ParsedLiteral? ParseJ32Literal(LiteralExpression literal, string rawValue)
+    private ParsedJ32? ParseJ32Literal(LiteralExpression literal, string rawValue)
     {
         // Remove 'j32' suffix
         string numericPart = RemoveImaginarySuffix(rawValue: rawValue, suffix: "j32");
@@ -896,7 +896,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Parses a J64 (F64-based) imaginary literal.
     /// </summary>
-    private ParsedLiteral? ParseJ64Literal(LiteralExpression literal, string rawValue)
+    private ParsedJ64? ParseJ64Literal(LiteralExpression literal, string rawValue)
     {
         // Remove 'j64' or 'j' suffix
         string numericPart =
@@ -919,7 +919,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Parses a J128 (F128-based) imaginary literal using native library.
     /// </summary>
-    private ParsedLiteral? ParseJ128Literal(LiteralExpression literal, string rawValue)
+    private ParsedJ128? ParseJ128Literal(LiteralExpression literal, string rawValue)
     {
         // Remove 'j128' suffix
         string numericPart = RemoveImaginarySuffix(rawValue: rawValue, suffix: "j128");
@@ -942,7 +942,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Parses a Jn (arbitrary-precision Decimal-based) imaginary literal using native library.
     /// </summary>
-    private ParsedLiteral? ParseJnLiteral(LiteralExpression literal, string rawValue)
+    private ParsedJn? ParseJnLiteral(LiteralExpression literal, string rawValue)
     {
         // Remove 'jn' suffix
         string numericPart = RemoveImaginarySuffix(rawValue: rawValue, suffix: "jn");

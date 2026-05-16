@@ -89,7 +89,7 @@ public sealed class BackendEntryValidator
     /// <summary>
     /// Validates one syntax tree root and all descendants against backend-entry invariants.
     /// </summary>
-    private static IReadOnlyList<SemanticError> ValidateNode(ISyntaxTreeNode node, TypeRegistry registry)
+    private static List<SemanticError> ValidateNode(ISyntaxTreeNode node, TypeRegistry registry)
     {
         var errors = new List<SemanticError>();
         Walk(node: node, errors: errors, registry: registry);

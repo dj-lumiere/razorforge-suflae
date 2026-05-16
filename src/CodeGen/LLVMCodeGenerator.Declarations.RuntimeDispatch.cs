@@ -77,7 +77,7 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private void EmitRuntimeDispatchSwitch(StringBuilder sb,
         IReadOnlyList<RuntimeDispatchTarget> implementers, string defaultLabel,
-        IReadOnlyList<string> caseLabels)
+        List<string> caseLabels)
     {
         var switchSb = new StringBuilder();
         switchSb.Append($"  switch i64 %type_id, label %{defaultLabel} [");

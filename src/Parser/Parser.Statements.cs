@@ -43,7 +43,7 @@ public partial class Parser
     ///       else3
     /// </remarks>
     /// <returns>An <see cref="IfStatement"/> AST node.</returns>
-    private Statement ParseIfStatement()
+    private IfStatement ParseIfStatement()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -142,7 +142,7 @@ public partial class Parser
     /// Syntax: <c>unless condition</c> = <c>if not condition</c>, followed by indented body.
     /// </summary>
     /// <returns>An <see cref="IfStatement"/> with negated condition.</returns>
-    private Statement ParseUnlessStatement()
+    private IfStatement ParseUnlessStatement()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -172,7 +172,7 @@ public partial class Parser
     /// Optional <c>else</c> block executes if the loop completes without hitting a break.
     /// </summary>
     /// <returns>A <see cref="WhileStatement"/> AST node.</returns>
-    private Statement ParseWhileStatement()
+    private WhileStatement ParseWhileStatement()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -198,7 +198,7 @@ public partial class Parser
     /// Equivalent to <c>while true</c>.
     /// </summary>
     /// <returns>A <see cref="WhileStatement"/> AST node with true condition.</returns>
-    private Statement ParseLoopStatement()
+    private LoopStatement ParseLoopStatement()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -212,7 +212,7 @@ public partial class Parser
     /// Optional <c>else</c> block executes if loop completes without break.
     /// </summary>
     /// <returns>A <see cref="ForStatement"/> AST node.</returns>
-    private Statement ParseForStatement()
+    private ForStatement ParseForStatement()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -827,7 +827,7 @@ public partial class Parser
     /// Syntax: <c>return</c> or <c>return expression</c>
     /// </summary>
     /// <returns>A <see cref="ReturnStatement"/> AST node.</returns>
-    private Statement ParseReturnStatement()
+    private ReturnStatement ParseReturnStatement()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -850,7 +850,7 @@ public partial class Parser
     /// Used in multi-statement when/if branches to explicitly indicate the branch's result.
     /// </summary>
     /// <returns>A <see cref="BecomesStatement"/> AST node.</returns>
-    private Statement ParseBecomesStatement()
+    private BecomesStatement ParseBecomesStatement()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -868,7 +868,7 @@ public partial class Parser
     /// Used with Crashable types for error handling.
     /// </summary>
     /// <returns>A <see cref="ThrowStatement"/> AST node.</returns>
-    private Statement ParseThrowStatement()
+    private ThrowStatement ParseThrowStatement()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -886,7 +886,7 @@ public partial class Parser
     /// Indicates the function returns no value (for optional types).
     /// </summary>
     /// <returns>An <see cref="AbsentStatement"/> AST node.</returns>
-    private Statement ParseAbsentStatement()
+    private AbsentStatement ParseAbsentStatement()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
@@ -901,7 +901,7 @@ public partial class Parser
     /// Syntax: <c>break</c>
     /// </summary>
     /// <returns>A <see cref="BreakStatement"/> AST node.</returns>
-    private Statement ParseBreakStatement()
+    private BreakStatement ParseBreakStatement()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
         ConsumeStatementTerminator();
@@ -913,7 +913,7 @@ public partial class Parser
     /// Syntax: <c>continue</c>
     /// </summary>
     /// <returns>A <see cref="ContinueStatement"/> AST node.</returns>
-    private Statement ParseContinueStatement()
+    private ContinueStatement ParseContinueStatement()
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
         ConsumeStatementTerminator();
@@ -1049,7 +1049,7 @@ public partial class Parser
     /// Expects INDENT token, parses statements until DEDENT.
     /// </summary>
     /// <returns>A <see cref="BlockStatement"/> containing the parsed statements.</returns>
-    private Statement ParseIndentedBlock()
+    private BlockStatement ParseIndentedBlock()
     {
         SourceLocation location = GetLocation();
         var statements = new List<Statement>();

@@ -682,8 +682,8 @@ public sealed partial class SemanticVerifier
     /// Infers type arguments for a generic routine from call arguments.
     /// Returns the inferred type arguments, or null if inference fails.
     /// </summary>
-    private IReadOnlyList<TypeSymbol>? InferGenericTypeArguments(RoutineInfo genericRoutine,
-        IReadOnlyList<Expression> arguments)
+    private TypeInfo[]? InferGenericTypeArguments(RoutineInfo genericRoutine,
+        List<Expression> arguments)
     {
         if (genericRoutine.GenericParameters == null ||
             genericRoutine.GenericParameters.Count == 0)
@@ -737,8 +737,8 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Infers method-level generic type arguments for an already owner-resolved method.
     /// </summary>
-    private IReadOnlyList<TypeSymbol>? InferMethodGenericTypeArguments(RoutineInfo genericMethod,
-        IReadOnlyList<Expression> arguments)
+    private TypeInfo[]? InferMethodGenericTypeArguments(RoutineInfo genericMethod,
+        List<Expression> arguments)
     {
         if (genericMethod.GenericParameters == null ||
             genericMethod.GenericParameters.Count == 0)

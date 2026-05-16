@@ -1131,7 +1131,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         };
     }
 
-    private static Expression MakeZeroArgCreator(TypeInfo collectionType, string baseName,
+    private static CreatorExpression MakeZeroArgCreator(TypeInfo collectionType, string baseName,
         SourceLocation loc)
     {
         List<TypeExpression>? typeArgs = collectionType.TypeArguments?.Count > 0
@@ -1149,7 +1149,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         };
     }
 
-    private Statement MakeCollectionAddCall(Expression receiver, TypeInfo receiverType,
+    private DiscardStatement MakeCollectionAddCall(Expression receiver, TypeInfo receiverType,
         string methodName, List<Expression> args, SourceLocation loc)
     {
         RoutineInfo? method = ctx.Registry.LookupMethod(type: receiverType, methodName: methodName);
@@ -1862,7 +1862,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     /// <summary>
     /// Creates an <see cref="IdentifierExpression"/> for a synthetic temp variable.
     /// </summary>
-    private static Expression MakeRef(string name, TypeInfo? resolvedType, SourceLocation loc)
+    private static IdentifierExpression MakeRef(string name, TypeInfo? resolvedType, SourceLocation loc)
     {
         return new IdentifierExpression(Name: name, Location: loc)
         {

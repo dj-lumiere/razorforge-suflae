@@ -990,7 +990,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
     }
 
     private RoutineInfo ResolveMethodGenericRoutine(RoutineInfo routine,
-        IReadOnlyList<TypeInfo> argTypes)
+        List<TypeInfo> argTypes)
     {
         if (!routine.IsGenericDefinition || routine.GenericParameters == null)
         {

@@ -77,7 +77,7 @@ public partial class LlvmCodeGenerator
     /// and contains a known param-name token is treated as an arithmetic expression.
     /// </summary>
     private static string ResolveArithmeticHoles(string template, RoutineInfo method,
-        IReadOnlyList<string> llvmTypeArgs)
+        List<string> llvmTypeArgs)
     {
         if (!template.Contains(value: '{')) return template;
 
@@ -150,7 +150,7 @@ public partial class LlvmCodeGenerator
     }
 
     private List<string> InferLlvmIntrinsicTypeArguments(RoutineInfo routine,
-        IReadOnlyList<Expression> arguments, TypeInfo? resolvedReturnType)
+        List<Expression> arguments, TypeInfo? resolvedReturnType)
     {
         if (routine.TypeArguments is { Count: > 0 })
         {

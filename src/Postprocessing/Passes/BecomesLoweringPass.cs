@@ -78,7 +78,7 @@ internal sealed class BecomesLoweringPass(PostprocessingContext _)
         };
     }
 
-    private Statement LowerBlock(BlockStatement block)
+    private BlockStatement LowerBlock(BlockStatement block)
     {
         var loweredStatements = new List<Statement>(capacity: block.Statements.Count);
         bool changed = false;
@@ -105,7 +105,7 @@ internal sealed class BecomesLoweringPass(PostprocessingContext _)
             : block;
     }
 
-    private Statement LowerIf(IfStatement ifs)
+    private IfStatement LowerIf(IfStatement ifs)
     {
         Statement thenStatement = LowerStatement(ifs.ThenStatement);
         Statement? elseStatement = ifs.ElseStatement != null
@@ -118,7 +118,7 @@ internal sealed class BecomesLoweringPass(PostprocessingContext _)
             : ifs;
     }
 
-    private Statement LowerWhile(WhileStatement whileStmt)
+    private WhileStatement LowerWhile(WhileStatement whileStmt)
     {
         Statement body = LowerStatement(whileStmt.Body);
         Statement? elseBranch = whileStmt.ElseBranch != null
@@ -131,7 +131,7 @@ internal sealed class BecomesLoweringPass(PostprocessingContext _)
             : whileStmt;
     }
 
-    private Statement LowerLoop(LoopStatement loop)
+    private LoopStatement LowerLoop(LoopStatement loop)
     {
         Statement body = LowerStatement(loop.Body);
         return !ReferenceEquals(body, loop.Body)
@@ -139,7 +139,7 @@ internal sealed class BecomesLoweringPass(PostprocessingContext _)
             : loop;
     }
 
-    private Statement LowerFor(ForStatement forStmt)
+    private ForStatement LowerFor(ForStatement forStmt)
     {
         Statement body = LowerStatement(forStmt.Body);
         Statement? elseBranch = forStmt.ElseBranch != null
@@ -152,7 +152,7 @@ internal sealed class BecomesLoweringPass(PostprocessingContext _)
             : forStmt;
     }
 
-    private Statement LowerWhen(WhenStatement whenStmt)
+    private WhenStatement LowerWhen(WhenStatement whenStmt)
     {
         bool changed = false;
         var clauses = new List<WhenClause>(capacity: whenStmt.Clauses.Count);
@@ -171,7 +171,7 @@ internal sealed class BecomesLoweringPass(PostprocessingContext _)
             : whenStmt;
     }
 
-    private Statement LowerUsing(UsingStatement usingStmt)
+    private UsingStatement LowerUsing(UsingStatement usingStmt)
     {
         Statement body = LowerStatement(usingStmt.Body);
         return !ReferenceEquals(body, usingStmt.Body)
@@ -179,7 +179,7 @@ internal sealed class BecomesLoweringPass(PostprocessingContext _)
             : usingStmt;
     }
 
-    private Statement LowerDanger(DangerStatement danger)
+    private DangerStatement LowerDanger(DangerStatement danger)
     {
         var body = (BlockStatement)LowerStatement(danger.Body);
         return !ReferenceEquals(body, danger.Body)

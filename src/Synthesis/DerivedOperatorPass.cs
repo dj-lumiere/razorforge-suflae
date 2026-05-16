@@ -287,7 +287,7 @@ internal sealed class DerivedOperatorPass
     /// <summary>
     /// Builds: return not me.{methodName}({paramName}: {paramName})
     /// </summary>
-    private static Statement BuildNegatedDelegateBody(TypeSymbol ownerType, RoutineInfo delegateMethod,
+    private static BlockStatement BuildNegatedDelegateBody(TypeSymbol ownerType, RoutineInfo delegateMethod,
         TypeSymbol boolType, string paramName)
     {
         var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
