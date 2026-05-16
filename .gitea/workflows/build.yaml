@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # SonarQube가 blame 정보 쓰므로 전체 히스토리 필요
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -27,40 +29,35 @@ jobs:
       - name: Download native libraries
         run: |
           cd native
-
-          # decNumber - IEEE 754 decimal floating-point (ICU License)
-          # Provides D32/D64/D128 + arbitrary-precision Decimal. REPLACED Intel Decimal.
-          # Without this, decimal_functions.c is #ifdef-stripped and rf_d32_from_string
-          # (and every other rf_d*_*) symbol is missing from razorforge_runtime.so.
           echo "Cloning decNumber..."
           git clone --depth 1 https://github.com/SDL-Hercules-390/decNumber.git decNumber
-
-          # LibBF - Arbitrary precision floating point (MIT)
           echo "Downloading LibBF..."
           curl -L -o libbf.tar.gz "https://bellard.org/libbf/libbf-2025-06-03.tar.gz"
           mkdir -p libbf
           tar -xzf libbf.tar.gz -C libbf --strip-components=1
           rm libbf.tar.gz
-
-          # LibTomMath - Arbitrary precision integers (Public Domain)
           echo "Cloning LibTomMath..."
           git clone --depth 1 https://github.com/libtom/libtommath.git libtommath
 
+      - name: Install SonarScanner for .NET
+        run: dotnet tool install --global dotnet-sonarscanner
+
       - name: Restore dependencies
         run: dotnet restore
+
+      - name: SonarQube Begin
+        run: |
+          dotnet sonarscanner begin \
+            /k:"razorforge-suflae" \
+            /d:sonar.host.url="${{ secrets.SONAR_HOST_URL }}" \
+            /d:sonar.token="${{ secrets.SONAR_TOKEN }}" \
+            /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml"
 
       - name: Build
         run: dotnet build --configuration Release --no-restore
 
       - name: Test
-        run: dotnet test --configuration Release --no-build --verbosity normal
-  sonarqube:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: sonarsource/sonarqube-scan-action@master
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: dotnet test --configuration Release --no-build --verbosity normal --collect:"XPlat Code Coverage" --settings coverlet.runsettings
+
+      - name: SonarQube End
+        run: dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
