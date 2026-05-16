@@ -21,29 +21,122 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Install native build dependencies
+      - name: Install system build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            autoconf \
+            automake \
+            libtool \
+            python3 \
+            curl \
+            wget \
+            ca-certificates \
+            lsb-release \
+            software-properties-common \
+            gnupg
 
-      - name: Download native libraries
+      - name: Install LLVM 20 toolchain
+        run: |
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 20
+          # LLVMSharp NuGet talks to the in-process LLVM C library, but the
+          # RazorForge compiler shells out to `clang` and `opt` for the final
+          # codegen/link step. Make the version-suffixed binaries resolvable
+          # without the suffix.
+          sudo ln -sf /usr/bin/clang-20 /usr/local/bin/clang
+          sudo ln -sf /usr/bin/clang++-20 /usr/local/bin/clang++
+          sudo ln -sf /usr/bin/opt-20 /usr/local/bin/opt
+          sudo ln -sf /usr/bin/llc-20 /usr/local/bin/llc
+          sudo ln -sf /usr/bin/llvm-ar-20 /usr/local/bin/llvm-ar
+          sudo ln -sf /usr/bin/lld-20 /usr/local/bin/lld
+          clang --version
+          opt --version
+
+      - name: Fetch native library sources
         run: |
           cd native
 
-          # decNumber - IEEE 754 decimal floating-point (ICU License)
-          echo "Cloning decNumber..."
+          # --- Core (always needed) ---
+          echo "::group::decNumber"
           git clone --depth 1 https://github.com/SDL-Hercules-390/decNumber.git decNumber
+          echo "::endgroup::"
 
-          # LibBF - Arbitrary precision floating point (MIT)
-          echo "Downloading LibBF..."
+          echo "::group::libbf"
           curl -L -o libbf.tar.gz "https://bellard.org/libbf/libbf-2025-06-03.tar.gz"
           mkdir -p libbf
           tar -xzf libbf.tar.gz -C libbf --strip-components=1
           rm libbf.tar.gz
+          echo "::endgroup::"
 
-          # LibTomMath - Arbitrary precision integers (Public Domain)
-          echo "Cloning LibTomMath..."
+          echo "::group::libtommath"
           git clone --depth 1 https://github.com/libtom/libtommath.git libtommath
+          echo "::endgroup::"
+
+          # --- Modules (loaded on demand) ---
+          echo "::group::zlib"
+          git clone --depth 1 https://github.com/madler/zlib.git zlib
+          echo "::endgroup::"
+
+          echo "::group::zstd"
+          git clone --depth 1 https://github.com/facebook/zstd.git zstd
+          echo "::endgroup::"
+
+          echo "::group::sqlite3 (amalgamation)"
+          mkdir -p sqlite3
+          curl -L -o sqlite3.zip "https://www.sqlite.org/2025/sqlite-amalgamation-3500000.zip"
+          unzip -q -j sqlite3.zip -d sqlite3
+          rm sqlite3.zip
+          echo "::endgroup::"
+
+          echo "::group::libsodium"
+          git clone --depth 1 -b stable https://github.com/jedisct1/libsodium.git libsodium
+          echo "::endgroup::"
+
+          echo "::group::mbedtls"
+          git clone --depth 1 -b v2.28.10 https://github.com/Mbed-TLS/mbedtls.git mbedtls2
+          echo "::endgroup::"
+
+          echo "::group::pcre2"
+          git clone --depth 1 https://github.com/PCRE2Project/pcre2.git pcre2
+          echo "::endgroup::"
+
+          echo "::group::utf8proc"
+          git clone --depth 1 https://github.com/JuliaStrings/utf8proc.git utf8proc
+          echo "::endgroup::"
+
+          echo "::group::yyjson"
+          git clone --depth 1 https://github.com/ibireme/yyjson.git yyjson
+          echo "::endgroup::"
+
+          echo "::group::tomlc99"
+          git clone --depth 1 https://github.com/cktan/tomlc99.git tomlc99
+          echo "::endgroup::"
+
+          echo "::group::bdwgc"
+          git clone --depth 1 https://github.com/ivmai/bdwgc.git bdwgc
+          echo "::endgroup::"
+
+          echo "::group::libuv"
+          git clone --depth 1 https://github.com/libuv/libuv.git libuv
+          echo "::endgroup::"
+
+          echo "::group::libco"
+          git clone --depth 1 https://github.com/rxi/libco.git libco
+          echo "::endgroup::"
+
+          echo "::group::minicsv"
+          git clone --depth 1 https://github.com/jedisct1/minicsv.git minicsv || true
+          echo "::endgroup::"
+
+      - name: Build native libraries
+        run: |
+          cd native
+          chmod +x build.sh
+          CC=clang CXX=clang++ ./build.sh
 
       - name: Install SonarScanner for .NET
         run: |
