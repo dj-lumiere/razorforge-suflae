@@ -56,17 +56,25 @@ if(EXISTS "${LIBSODIUM_SRC}/include/sodium.h" AND EXISTS "${LIBSODIUM_SRC}/crypt
         )
         target_link_libraries(sodium advapi32)
     else()
+        # libsodium normally runs ./configure to detect POSIX features and emit
+        # HAVE_* into config.h. We compile sources directly, so set the ones it
+        # gates `#include <sys/mman.h>` and feature use on. Without HAVE_SYS_MMAN_H
+        # the mlock/munlock declarations are missing and Clang 16+ promotes the
+        # implicit declaration to an error.
         target_compile_definitions(sodium PRIVATE
+            _GNU_SOURCE=1
             HAVE_POSIX_MEMALIGN=1
             HAVE_MMAP=1
             HAVE_MPROTECT=1
             HAVE_MLOCK=1
             HAVE_NANOSLEEP=1
+            HAVE_SYS_MMAN_H=1
+            HAVE_UNISTD_H=1
         )
     endif()
 
     if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "GNU")
-        target_compile_options(sodium PRIVATE -w)
+        target_compile_options(sodium PRIVATE -w -Wno-implicit-function-declaration)
         if(NOT WIN32)
             target_compile_options(sodium PRIVATE -fPIC)
         endif()
