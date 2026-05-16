@@ -16,7 +16,7 @@ public sealed class StdlibApiTests
 {
     private static readonly string RepoRoot = LocateRepoRoot();
     private static readonly string FixturesDir = Path.Combine(RepoRoot, "tests", "Fixtures", "Stdlib");
-    private static readonly string ProjectFile = Path.Combine(RepoRoot, "RazorForge.csproj");
+    private static readonly string CompilerDll = Path.Combine(AppContext.BaseDirectory, "RazorForge.dll");
 
     /// <summary>Enumerates .rf fixture files from the Stdlib fixtures directory.</summary>
     public static IEnumerable<object[]> Fixtures()
@@ -58,11 +58,14 @@ public sealed class StdlibApiTests
 
     private static string RunFixture(string rfPath)
     {
+        // Invoke the already-built compiler assembly directly. Using
+        // `dotnet run --project …` here would re-evaluate the project file on
+        // every fixture (~1-3s of SDK startup × ~150 fixtures = several minutes
+        // of pure overhead).
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            ArgumentList = { "run", "--project", ProjectFile, "--no-build", "--",
-                "buildandrun", rfPath },
+            ArgumentList = { CompilerDll, "buildandrun", rfPath },
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
