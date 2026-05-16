@@ -125,7 +125,7 @@ jobs:
           echo "::endgroup::"
 
           echo "::group::libco"
-          git clone --depth 1 https://github.com/rxi/libco.git libco
+          git clone --depth 1 https://github.com/higan-emu/libco.git libco
           echo "::endgroup::"
 
           echo "::group::minicsv"
