@@ -14,6 +14,8 @@ namespace Compiler.CodeGen;
 /// </summary>
 public partial class LlvmCodeGenerator
 {
+    private const string TracePop = "  call void @_rf_trace_pop()";
+
     #region Return Statements
 
     private void EmitReturn(StringBuilder sb, ReturnStatement ret)
@@ -54,7 +56,7 @@ public partial class LlvmCodeGenerator
         EmitRcRecordCleanup(sb: sb);
         EmitEntityCleanup(sb: sb, returnedVarName: returnedVarName);
         if (_traceCurrentRoutine)
-            EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+            EmitLine(sb: sb, line: TracePop);
 
         TypeInfo? exprType = GetExpressionType(expr: ret.Value);
         if (IsMaybeType(type: retType) && value != "zeroinitializer" &&
@@ -71,7 +73,7 @@ public partial class LlvmCodeGenerator
         EmitRcRecordCleanup(sb: sb);
         EmitEntityCleanup(sb: sb, returnedVarName: null);
         if (_traceCurrentRoutine)
-            EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+            EmitLine(sb: sb, line: TracePop);
         if (_currentRoutineReturnType == null)
         {
             EmitLine(sb: sb, line: "  ret void");
@@ -93,7 +95,7 @@ public partial class LlvmCodeGenerator
         EmitRcRecordCleanup(sb: sb);
         EmitEntityCleanup(sb: sb, returnedVarName: null);
         if (_traceCurrentRoutine)
-            EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+            EmitLine(sb: sb, line: TracePop);
         if (_currentEmittingRoutine?.AsyncStatus == AsyncStatus.CheckVariant &&
             _currentRoutineReturnType != null)
         {
@@ -205,14 +207,14 @@ public partial class LlvmCodeGenerator
                 }
                 EmitRcRecordCleanup(sb: sb);
                 if (_traceCurrentRoutine)
-                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+                    EmitLine(sb: sb, line: TracePop);
                 EmitLine(sb: sb, line: $"  ret {carrier} zeroinitializer");
                 break;
             }
             case VariantSiteKind.FromAbsent:
                 EmitRcRecordCleanup(sb: sb);
                 if (_traceCurrentRoutine)
-                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+                    EmitLine(sb: sb, line: TracePop);
                 EmitLine(sb: sb, line: $"  ret {carrier} zeroinitializer");
                 break;
             case VariantSiteKind.FromReturn:
@@ -237,7 +239,7 @@ public partial class LlvmCodeGenerator
         EmitRcRecordCleanup(sb: sb);
         EmitEntityCleanup(sb: sb, returnedVarName: returnedVarName);
         if (_traceCurrentRoutine)
-            EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+            EmitLine(sb: sb, line: TracePop);
 
         bool isBlank = variantRet.Value is IdentifierExpression { Name: "Blank" };
 
@@ -280,21 +282,21 @@ public partial class LlvmCodeGenerator
                 }
                 EmitRcRecordCleanup(sb: sb);
                 if (_traceCurrentRoutine)
-                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+                    EmitLine(sb: sb, line: TracePop);
                 EmitLine(sb: sb, line: "  ret i1 false");
                 break;
             }
             case VariantSiteKind.FromAbsent:
                 EmitRcRecordCleanup(sb: sb);
                 if (_traceCurrentRoutine)
-                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+                    EmitLine(sb: sb, line: TracePop);
                 EmitLine(sb: sb, line: "  ret i1 false");
                 break;
             case VariantSiteKind.FromReturn:
                 EmitRcRecordCleanup(sb: sb);
                 EmitEntityCleanup(sb: sb, returnedVarName: null);
                 if (_traceCurrentRoutine)
-                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+                    EmitLine(sb: sb, line: TracePop);
                 EmitLine(sb: sb, line: "  ret i1 true");
                 break;
             default:
@@ -314,7 +316,7 @@ public partial class LlvmCodeGenerator
             case VariantSiteKind.FromAbsent:
                 EmitRcRecordCleanup(sb: sb);
                 if (_traceCurrentRoutine)
-                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+                    EmitLine(sb: sb, line: TracePop);
                 EmitLine(sb: sb, line: $"  ret {carrier} zeroinitializer");
                 break;
             case VariantSiteKind.FromReturn:
@@ -337,7 +339,7 @@ public partial class LlvmCodeGenerator
             case VariantSiteKind.FromAbsent:
                 EmitRcRecordCleanup(sb: sb);
                 if (_traceCurrentRoutine)
-                    EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+                    EmitLine(sb: sb, line: TracePop);
                 EmitLine(sb: sb, line: $"  ret {carrier} zeroinitializer");
                 break;
             case VariantSiteKind.FromReturn:
@@ -366,7 +368,7 @@ public partial class LlvmCodeGenerator
 
         EmitRcRecordCleanup(sb: sb);
         if (_traceCurrentRoutine)
-            EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+            EmitLine(sb: sb, line: TracePop);
 
         string v0 = NextTemp();
         EmitLine(sb: sb, line: $"  {v0} = insertvalue {carrier} zeroinitializer, i64 {errTypeId}, 0");
@@ -388,7 +390,7 @@ public partial class LlvmCodeGenerator
         EmitRcRecordCleanup(sb: sb);
         EmitEntityCleanup(sb: sb, returnedVarName: returnedVarName);
         if (_traceCurrentRoutine)
-            EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+            EmitLine(sb: sb, line: TracePop);
 
         bool isBlank = variantRet.Value is IdentifierExpression { Name: "Blank" };
 
@@ -628,7 +630,7 @@ public partial class LlvmCodeGenerator
         // Subsequent `_rf_trace_update_loc` calls in the caller then update the leaked frame's
         // slot instead of the caller's, corrupting the stack trace.
         if (_traceCurrentRoutine)
-            EmitLine(sb: sb, line: "  call void @_rf_trace_pop()");
+            EmitLine(sb: sb, line: TracePop);
         EmitLine(sb: sb, line: $"  ret {absentCarrierType} zeroinitializer");
     }
 

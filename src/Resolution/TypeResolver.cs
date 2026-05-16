@@ -18,6 +18,8 @@ using TypeSymbol = TypeInfo;
 /// </summary>
 internal sealed class TypeResolver
 {
+    private const string MaybeTypeName = "Maybe";
+
     private readonly SemanticVerifier _sa;
 
     internal TypeResolver(SemanticVerifier sa)
@@ -279,7 +281,7 @@ internal sealed class TypeResolver
         }
 
         // Reject Maybe<Data> — Data already supports None
-        if (genericDefCarrierName == "Maybe" && typeArgs[index: 0] is { Name: "Data" })
+        if (genericDefCarrierName == MaybeTypeName && typeArgs[index: 0] is { Name: "Data" })
         {
             _sa.ReportError(code: SemanticDiagnosticCode.NullableDataProhibited,
                 message: "'Data?' is not allowed. 'Data' already supports 'None' natively.",
@@ -287,7 +289,7 @@ internal sealed class TypeResolver
         }
 
         // Reject nested Maybe types (#83): Maybe[Maybe[T]] / T??
-        if (genericDefCarrierName == "Maybe" && IsMaybeType(type: typeArgs[index: 0]))
+        if (genericDefCarrierName == MaybeTypeName && IsMaybeType(type: typeArgs[index: 0]))
         {
             _sa.ReportError(code: SemanticDiagnosticCode.NestedMaybeProhibited,
                 message:
@@ -300,12 +302,12 @@ internal sealed class TypeResolver
         // ownership semantics. Use Retained[T] / Shared[T] for RC entities, or Owned[T?] for
         // unique-ownership nullable. (Generic-parameter T is allowed; the check fires only on
         // concrete entity types resolved at this call site.)
-        if (genericDefCarrierName is "Maybe" or "Result" or "Lookup" &&
+        if (genericDefCarrierName is MaybeTypeName or "Result" or "Lookup" &&
             typeArgs[index: 0].Category is TypeCategory.Entity or TypeCategory.Crashable)
         {
             string carrier = genericDefCarrierName!;
             string inner = typeArgs[index: 0].Name;
-            string hint = carrier == "Maybe"
+            string hint = carrier == MaybeTypeName
                 ? $"Use 'Maybe[Retained[{inner}]]' for RC ownership, or 'Owned[{inner}]?' for unique ownership."
                 : $"Use '{carrier}[Retained[{inner}]]' for RC ownership.";
             _sa.ReportError(code: SemanticDiagnosticCode.BareEntityInCarrierType,
@@ -988,10 +990,10 @@ internal sealed class TypeResolver
         }
 
         string baseName = r.GenericDefinition?.Name ?? r.Name;
-        return baseName is "Maybe" or "Result" or "Lookup" ? baseName : null;
+        return baseName is MaybeTypeName or "Result" or "Lookup" ? baseName : null;
     }
 
-    private static bool IsMaybeType(TypeSymbol type) => GetCarrierBaseName(type: type) == "Maybe";
+    private static bool IsMaybeType(TypeSymbol type) => GetCarrierBaseName(type: type) == MaybeTypeName;
 
     private static string GetBaseTypeName(string typeName)
     {

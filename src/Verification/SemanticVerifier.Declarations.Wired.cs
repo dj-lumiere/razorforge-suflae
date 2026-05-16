@@ -17,6 +17,10 @@ using TypeSymbol = TypeInfo;
 /// </summary>
 public sealed partial class SemanticVerifier
 {
+    private const string ComparableProtocolName = "Comparable";
+    private const string ShiftableProtocolName = "Shiftable";
+    private const string InPlaceShiftableProtocolName = "InPlaceShiftable";
+
     /// <summary>
     /// Known wired methods that are valid operator/special methods.
     /// </summary>
@@ -119,11 +123,11 @@ public sealed partial class SemanticVerifier
         // Comparison operators
         [key: "$eq"] = ["Equatable"],
         [key: "$ne"] = ["Equatable"],
-        [key: "$cmp"] = ["Comparable"],
-        [key: "$lt"] = ["Comparable"],
-        [key: "$le"] = ["Comparable"],
-        [key: "$gt"] = ["Comparable"],
-        [key: "$ge"] = ["Comparable"],
+        [key: "$cmp"] = [ComparableProtocolName],
+        [key: "$lt"] = [ComparableProtocolName],
+        [key: "$le"] = [ComparableProtocolName],
+        [key: "$gt"] = [ComparableProtocolName],
+        [key: "$ge"] = [ComparableProtocolName],
 
         // Bitwise operators
         [key: "$bitand"] = ["Bitwiseable"],
@@ -131,10 +135,10 @@ public sealed partial class SemanticVerifier
         [key: "$bitxor"] = ["Bitwiseable"],
 
         // Shift operators
-        [key: "$ashl"] = ["Shiftable"],
-        [key: "$ashr"] = ["Shiftable"],
-        [key: "$lshl"] = ["Shiftable"],
-        [key: "$lshr"] = ["Shiftable"],
+        [key: "$ashl"] = [ShiftableProtocolName],
+        [key: "$ashr"] = [ShiftableProtocolName],
+        [key: "$lshl"] = [ShiftableProtocolName],
+        [key: "$lshr"] = [ShiftableProtocolName],
         // Unary operators
         [key: "$neg"] = ["Negatable"],
         [key: "$bitnot"] = ["Invertible"],
@@ -160,10 +164,10 @@ public sealed partial class SemanticVerifier
         [key: "$ibitand"] = ["InPlaceBitwiseable"],
         [key: "$ibitor"] = ["InPlaceBitwiseable"],
         [key: "$ibitxor"] = ["InPlaceBitwiseable"],
-        [key: "$iashl"] = ["InPlaceShiftable"],
-        [key: "$iashr"] = ["InPlaceShiftable"],
-        [key: "$ilshl"] = ["InPlaceShiftable"],
-        [key: "$ilshr"] = ["InPlaceShiftable"]
+        [key: "$iashl"] = [InPlaceShiftableProtocolName],
+        [key: "$iashr"] = [InPlaceShiftableProtocolName],
+        [key: "$ilshl"] = [InPlaceShiftableProtocolName],
+        [key: "$ilshr"] = [InPlaceShiftableProtocolName]
     };
 
     /// <summary>

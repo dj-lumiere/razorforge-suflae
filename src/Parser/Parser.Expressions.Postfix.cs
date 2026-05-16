@@ -10,6 +10,8 @@ namespace Compiler.Parser;
 /// </summary>
 public partial class Parser
 {
+    private const string ExpectedRightParenAfterArguments = "Expected ')' after arguments";
+
     private Expression ParsePostfix()
     {
         Expression expr = ParsePrimary();
@@ -41,7 +43,7 @@ public partial class Parser
                 {
                     List<Expression> args = ParseArgumentList();
                     Consume(type: TokenType.RightParen,
-                        errorMessage: "Expected ')' after arguments");
+                        errorMessage: ExpectedRightParenAfterArguments);
 
                     string methodName = expression.Name;
                     if (isMemoryOperation)
@@ -72,7 +74,7 @@ public partial class Parser
                 Advance(); // consume '('
 
                 List<Expression> args = ParseArgumentList();
-                Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after arguments");
+                Consume(type: TokenType.RightParen, errorMessage: ExpectedRightParenAfterArguments);
 
                 if (expr is IdentifierExpression identExpr)
                 {
@@ -93,7 +95,7 @@ public partial class Parser
             {
                 // Function call - supports named arguments (name: value)
                 List<Expression> args = ParseArgumentList();
-                Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after arguments");
+                Consume(type: TokenType.RightParen, errorMessage: ExpectedRightParenAfterArguments);
                 expr = new CallExpression(Callee: expr, Arguments: args, Location: expr.Location);
             }
             else if (Match(type: TokenType.LeftBracket))
@@ -167,7 +169,7 @@ public partial class Parser
                     {
                         List<Expression> genericArgs = ParseArgumentList();
                         Consume(type: TokenType.RightParen,
-                            errorMessage: "Expected ')' after arguments");
+                            errorMessage: ExpectedRightParenAfterArguments);
 
                         string methodName = member;
                         if (isGenericMemOp)
@@ -201,7 +203,7 @@ public partial class Parser
                     // Represented as CallExpression with MemberExpression callee
                     List<Expression> args = ParseArgumentList();
                     Consume(type: TokenType.RightParen,
-                        errorMessage: "Expected ')' after arguments");
+                        errorMessage: ExpectedRightParenAfterArguments);
 
                     Expression memberExpr = new MemberExpression(Object: expr,
                         PropertyName: member + "!",
@@ -216,7 +218,7 @@ public partial class Parser
                     // Represented as CallExpression with MemberExpression callee
                     List<Expression> args = ParseArgumentList();
                     Consume(type: TokenType.RightParen,
-                        errorMessage: "Expected ')' after arguments");
+                        errorMessage: ExpectedRightParenAfterArguments);
 
                     Expression memberExpr = new MemberExpression(Object: expr,
                         PropertyName: member,

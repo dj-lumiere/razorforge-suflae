@@ -12,6 +12,8 @@ using static TestHelpers;
 /// </summary>
 public class ControlFlowAnalysisTests
 {
+    private const string NotAllPathsReturnMessage = "not all code paths return";
+
     #region Return Path Analysis
     /// <summary>
     /// Verifies semantic analysis behavior for all paths return without unexpected diagnostics.
@@ -309,7 +311,7 @@ public class ControlFlowAnalysisTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Message.Contains(value: "not all code paths return",
+            filter: e => e.Message.Contains(value: NotAllPathsReturnMessage,
                 comparisonType: StringComparison.OrdinalIgnoreCase));
     }
 
@@ -329,7 +331,7 @@ public class ControlFlowAnalysisTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Message.Contains(value: "not all code paths return",
+            filter: e => e.Message.Contains(value: NotAllPathsReturnMessage,
                 comparisonType: StringComparison.OrdinalIgnoreCase));
     }
 
@@ -346,7 +348,7 @@ public class ControlFlowAnalysisTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Message.Contains(value: "not all code paths return",
+            filter: e => e.Message.Contains(value: NotAllPathsReturnMessage,
                 comparisonType: StringComparison.OrdinalIgnoreCase));
     }
 
@@ -366,7 +368,7 @@ public class ControlFlowAnalysisTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Message.Contains(value: "not all code paths return",
+            filter: e => e.Message.Contains(value: NotAllPathsReturnMessage,
                 comparisonType: StringComparison.OrdinalIgnoreCase));
     }
 
@@ -384,7 +386,7 @@ public class ControlFlowAnalysisTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Message.Contains(value: "not all code paths return",
+            filter: e => e.Message.Contains(value: NotAllPathsReturnMessage,
                 comparisonType: StringComparison.OrdinalIgnoreCase));
     }
 

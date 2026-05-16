@@ -17,6 +17,8 @@ namespace Builder;
 /// </summary>
 public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
 {
+    private const string SectionSeparator = "# ========================================================";
+
     /// <summary>
     /// Stores the indent state used by this compiler phase.
     /// </summary>
@@ -49,9 +51,9 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
 
         if (stdlibPrograms != null)
         {
-            sb.AppendLine("# ========================================================");
+            sb.AppendLine(SectionSeparator);
             sb.AppendLine("# STDLIB");
-            sb.AppendLine("# ========================================================");
+            sb.AppendLine(SectionSeparator);
             sb.AppendLine();
             foreach ((SyntaxTree.Program prog, string filePath, string module) in stdlibPrograms)
             {
@@ -62,9 +64,9 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
                 sb.AppendLine(prog.Accept(this));
                 sb.AppendLine();
             }
-            sb.AppendLine("# ========================================================");
+            sb.AppendLine(SectionSeparator);
             sb.AppendLine("# USER PROGRAMS");
-            sb.AppendLine("# ========================================================");
+            sb.AppendLine(SectionSeparator);
             sb.AppendLine();
         }
 

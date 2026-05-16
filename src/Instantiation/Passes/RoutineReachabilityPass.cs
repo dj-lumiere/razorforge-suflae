@@ -20,6 +20,10 @@ namespace Compiler.Instantiation.Passes;
 /// </summary>
 internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
 {
+    private const string CreateMethodName = "$create";
+    private const string RepresentMethodName = "$represent";
+    private const string DiagnoseMethodName = "$diagnose";
+
     private readonly HashSet<string> _live = new(comparer: StringComparer.Ordinal);
     private readonly HashSet<string> _visited = new(comparer: StringComparer.Ordinal);
     private readonly Queue<Frame> _worklist = new();
@@ -126,7 +130,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     private static readonly string[] WiredRoutineNames =
     {
         // Display / hash
-        "$represent", "$diagnose", "$hash", "$secure_hash",
+        RepresentMethodName, DiagnoseMethodName, "$hash", "$secure_hash",
         // Equality / comparison
         "$eq", "$ne",
         "$cmp", "$lt", "$le", "$gt", "$ge",
@@ -402,7 +406,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     {
         // Prefer LookupMethod's substituted routine for generic owners. Only accept it when
         // its arity matches (LookupMethod is first-match and may return $create(capacity)).
-        RoutineInfo? routine = ctx.Registry.LookupMethod(type: owner, methodName: "$create");
+        RoutineInfo? routine = ctx.Registry.LookupMethod(type: owner, methodName: CreateMethodName);
         if (routine != null && routine.Parameters.Count == 0)
         {
             EnqueueCallee(callee: routine);
@@ -422,7 +426,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         {
             foreach (RoutineInfo m in ctx.Registry.GetMethodsForType(type: genDef))
             {
-                if (m.Name == "$create" && m.Parameters.Count == 0)
+                if (m.Name == CreateMethodName && m.Parameters.Count == 0)
                 {
                     RoutineInfo substituted = ctx.Registry.SubstituteMethodForOwner(
                         method: m, resolvedOwner: owner)!;
@@ -455,7 +459,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             // through the resulting call expressions in subsequent frames.
             bool isDiagnose = ep.FormatSpec is "?";
             EnqueueMethodIfPresent(owner: concreteType,
-                methodName: isDiagnose ? "$diagnose" : "$represent");
+                methodName: isDiagnose ? DiagnoseMethodName : RepresentMethodName);
         }
     }
 
@@ -796,11 +800,11 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
 
             // (2) Display routines: codegen emits $represent/$diagnose for every owner that has any
             // method emitted. Force them live so transitive callers of show()/alert() resolve.
-            if (name != "$represent" && name != "$diagnose")
+            if (name != RepresentMethodName && name != DiagnoseMethodName)
             {
-                RoutineInfo? rep = ctx.Registry.LookupMethod(type: owner, methodName: "$represent");
+                RoutineInfo? rep = ctx.Registry.LookupMethod(type: owner, methodName: RepresentMethodName);
                 if (rep != null) EnqueueCallee(callee: rep);
-                RoutineInfo? diag = ctx.Registry.LookupMethod(type: owner, methodName: "$diagnose");
+                RoutineInfo? diag = ctx.Registry.LookupMethod(type: owner, methodName: DiagnoseMethodName);
                 if (diag != null) EnqueueCallee(callee: diag);
             }
         }
@@ -826,9 +830,9 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             foreach (TypeInfo arg in typeArgs)
             {
                 if (arg is GenericParameterTypeInfo) continue;
-                RoutineInfo? argRep = ctx.Registry.LookupMethod(type: arg, methodName: "$represent");
+                RoutineInfo? argRep = ctx.Registry.LookupMethod(type: arg, methodName: RepresentMethodName);
                 if (argRep != null) EnqueueCallee(callee: argRep);
-                RoutineInfo? argDiag = ctx.Registry.LookupMethod(type: arg, methodName: "$diagnose");
+                RoutineInfo? argDiag = ctx.Registry.LookupMethod(type: arg, methodName: DiagnoseMethodName);
                 if (argDiag != null) EnqueueCallee(callee: argDiag);
             }
 
@@ -858,7 +862,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         RoutineInfo? matched = null;
         foreach (RoutineInfo m in ctx.Registry.GetMethodsForType(type: ct))
         {
-            if (m.Name == "$create" && m.Parameters.Count == argCount)
+            if (m.Name == CreateMethodName && m.Parameters.Count == argCount)
             {
                 EnqueueCallee(callee: m);
                 if (matched == null) matched = m;
@@ -875,7 +879,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         {
             foreach (RoutineInfo m in ctx.Registry.GetMethodsForType(type: genDef))
             {
-                if (m.Name == "$create" && m.Parameters.Count == argCount)
+                if (m.Name == CreateMethodName && m.Parameters.Count == argCount)
                 {
                     // Substitute generic params onto the concrete owner so GMP can monomorphize.
                     // Without this, EnqueueCallee gets a routine with OwnerType = generic-def and
@@ -899,7 +903,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // LookupMethod. Without this, callers like `SecureDict[K,V](key: ...)` resolve to the
         // no-arg `$create()` overload after the substitution chain — the 1-arg
         // `$create(key: SecureHashKey)` body never gets monomorphized for the concrete owner.
-        return matched ?? ctx.Registry.LookupMethod(type: ct, methodName: "$create");
+        return matched ?? ctx.Registry.LookupMethod(type: ct, methodName: CreateMethodName);
     }
 
     /// <summary>
@@ -914,7 +918,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         if (ct == null) return null;
         foreach (RoutineInfo m in ctx.Registry.GetMethodsForType(type: ct))
         {
-            if (m.Name == "$create" && m.Parameters.Count == 0) return m;
+            if (m.Name == CreateMethodName && m.Parameters.Count == 0) return m;
         }
         // Method-chain constructor: text.S32!() lowers to S32.$create(receiver). The call
         // has zero positional arguments but the member-receiver is the conversion source.
@@ -928,7 +932,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             {
                 foreach (RoutineInfo m in ctx.Registry.GetMethodsForType(type: ct))
                 {
-                    if (m.Name != "$create" || m.Parameters.Count != 1) continue;
+                    if (m.Name != CreateMethodName || m.Parameters.Count != 1) continue;
                     if (m.Parameters[index: 0].Type?.Name == receiverType.Name) return m;
                 }
             }
@@ -1021,7 +1025,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             RoutineInfo? countOnly = null;
             foreach (RoutineInfo m in methods)
             {
-                if (m.Name != "$create" || m.Parameters.Count != argCount) continue;
+                if (m.Name != CreateMethodName || m.Parameters.Count != argCount) continue;
                 countOnly ??= m;
                 bool typesMatch = true;
                 for (int i = 0; i < argCount; i++)

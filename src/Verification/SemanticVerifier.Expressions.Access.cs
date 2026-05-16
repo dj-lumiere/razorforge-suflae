@@ -13,6 +13,8 @@ using TypeSymbol = TypeInfo;
 
 public sealed partial class SemanticVerifier
 {
+    private const string GetItemMethodName = "$getitem";
+
     private static bool TryGetTransparentProtocolTarget(TypeSymbol type, out TypeSymbol targetType)
     {
         if (type is ProtocolTypeInfo { Methods.Count: 0, TypeArguments: { Count: > 0 } } proto)
@@ -325,20 +327,20 @@ public sealed partial class SemanticVerifier
         TryGetTransparentProtocolTarget(type: objectType, targetType: out TypeSymbol lookupType);
 
         // Look for $getitem method — LookupMethod handles generic resolutions
-        RoutineInfo? getItem = _registry.LookupMethod(type: lookupType, methodName: "$getitem");
+        RoutineInfo? getItem = _registry.LookupMethod(type: lookupType, methodName: GetItemMethodName);
         // Try failable variant if non-failable not found
         if (getItem == null)
         {
-            getItem = _registry.LookupMethod(type: lookupType, methodName: "$getitem",
+            getItem = _registry.LookupMethod(type: lookupType, methodName: GetItemMethodName,
                 isFailable: true);
         }
         // Phase D: synthesize a wrapper forwarder if still not found
         if (getItem == null && IsWrapperType(type: lookupType))
         {
             getItem = TrySynthesizeWrapperForwarder(wrapperType: lookupType,
-                methodName: "$getitem", isFailable: false)
+                methodName: GetItemMethodName, isFailable: false)
                 ?? TrySynthesizeWrapperForwarder(wrapperType: lookupType,
-                    methodName: "$getitem", isFailable: true);
+                    methodName: GetItemMethodName, isFailable: true);
         }
 
         // Analyze the index expression with the indexer parameter type as expected type so

@@ -445,7 +445,7 @@ public partial class Parser
                 while (Match(type: TokenType.And))
                 {
                     flagNames.Add(
-                        item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
+                        item: ConsumeIdentifier(errorMessage: ExpectedFlagNameAfterAnd));
                 }
 
                 pattern = new FlagsPattern(FlagNames: flagNames,
@@ -544,7 +544,7 @@ public partial class Parser
         {
             while (Match(type: TokenType.And))
             {
-                flags.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
+                flags.Add(item: ConsumeIdentifier(errorMessage: ExpectedFlagNameAfterAnd));
             }
 
             if (Match(type: TokenType.But))
@@ -556,7 +556,7 @@ public partial class Parser
                 while (Match(type: TokenType.And))
                 {
                     excluded.Add(
-                        item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
+                        item: ConsumeIdentifier(errorMessage: ExpectedFlagNameAfterAnd));
                 }
             }
         }
@@ -577,7 +577,7 @@ public partial class Parser
             while (Match(type: TokenType.And))
             {
                 excluded.Add(
-                    item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
+                    item: ConsumeIdentifier(errorMessage: ExpectedFlagNameAfterAnd));
             }
         }
 

@@ -14,6 +14,10 @@ namespace Compiler.CodeGen;
 /// </summary>
 public partial class LlvmCodeGenerator
 {
+    private const string FloatTypeName = "float";
+    private const string DoubleTypeName = "double";
+    private const string Fp128TypeName = "fp128";
+
     /// <summary>
     /// Emits code for any expression node.
     /// </summary>
@@ -284,8 +288,8 @@ public partial class LlvmCodeGenerator
             return integerResult;
         }
 
-        bool sourceIsFloat = sourceLlvm is "half" or "float" or "double" or "fp128";
-        bool targetIsFloat = targetLlvm is "half" or "float" or "double" or "fp128";
+        bool sourceIsFloat = sourceLlvm is "half" or FloatTypeName or DoubleTypeName or Fp128TypeName;
+        bool targetIsFloat = targetLlvm is "half" or FloatTypeName or DoubleTypeName or Fp128TypeName;
         bool targetUnsigned = IsUnsignedIntegerType(type: targetType);
 
         string result = NextTemp();
@@ -360,8 +364,8 @@ public partial class LlvmCodeGenerator
     {
         if (fromLlvm == toLlvm) return value;
 
-        bool fromIsFloat = fromLlvm is "half" or "float" or "double" or "fp128";
-        bool toIsFloat = toLlvm is "half" or "float" or "double" or "fp128";
+        bool fromIsFloat = fromLlvm is "half" or FloatTypeName or DoubleTypeName or Fp128TypeName;
+        bool toIsFloat = toLlvm is "half" or FloatTypeName or DoubleTypeName or Fp128TypeName;
 
         string cast = NextTemp();
         if (fromIsFloat && toIsFloat)

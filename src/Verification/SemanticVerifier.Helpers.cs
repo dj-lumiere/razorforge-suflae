@@ -53,6 +53,8 @@ internal enum NumericTypeKind
 /// </summary>
 public sealed partial class SemanticVerifier
 {
+    private const string MaybeTypeName = "Maybe";
+
     #region Carrier Type Helpers
 
     /// <summary>
@@ -68,7 +70,7 @@ public sealed partial class SemanticVerifier
         }
 
         string baseName = r.GenericDefinition?.Name ?? r.Name;
-        return baseName is "Maybe" or "Result" or "Lookup" ? baseName : null;
+        return baseName is MaybeTypeName or "Result" or "Lookup" ? baseName : null;
     }
 
     /// <summary>
@@ -79,7 +81,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Returns true if the type is a Maybe carrier type.
     /// </summary>
-    private static bool IsMaybeType(TypeSymbol type) => GetCarrierBaseName(type: type) == "Maybe";
+    private static bool IsMaybeType(TypeSymbol type) => GetCarrierBaseName(type: type) == MaybeTypeName;
 
     /// <summary>
     /// Checks if a pattern represents a None check.
@@ -107,7 +109,7 @@ public sealed partial class SemanticVerifier
     {
         return GetCarrierBaseName(type: carrierType) switch
         {
-            "Maybe" => IsNonePattern(pattern: pattern),
+            MaybeTypeName => IsNonePattern(pattern: pattern),
             "Result" or "Lookup" => IsBlankPattern(pattern: pattern),
             _ => false
         };
@@ -503,7 +505,7 @@ public sealed partial class SemanticVerifier
             return true;
 
         // None (Maybe generic def) is assignable to any Maybe[T]
-        if (source.IsGenericDefinition && source.Name == "Maybe" && IsMaybeType(type: target))
+        if (source.IsGenericDefinition && source.Name == MaybeTypeName && IsMaybeType(type: target))
             return true;
 
         // Entity, record, or wrapper type is implicitly assignable to Maybe[SameType].

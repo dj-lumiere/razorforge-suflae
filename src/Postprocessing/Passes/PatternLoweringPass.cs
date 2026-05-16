@@ -73,6 +73,10 @@ namespace Compiler.Postprocessing.Passes;
 /// </summary>
 internal sealed class PatternLoweringPass(PostprocessingContext ctx)
 {
+    private const string CrashableTypeName = "Crashable";
+    private const string ValueFieldName = "value";
+    private const string TypeIdFieldName = "type_id";
+
     /// <summary>
     /// Tracks the temp count while this compiler phase runs.
     /// </summary>
@@ -455,7 +459,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
             // "is Crashable" (with or without binding): lowerable -> compound tag != 0 &&-> tag != validId.
             // With-binding emits a sibling "<name>__typeid: U64" local; the runtime-dispatch
             // call site in codegen reads it instead of the legacy _protocolTypeIdAllocas dict.
-            TypePattern tp when IsResultOrLookup(subjectType) && tp.Type.Name == "Crashable" => true,
+            TypePattern tp when IsResultOrLookup(subjectType) && tp.Type.Name == CrashableTypeName => true,
 
             // Raw CrashablePattern (with or without binding): same as above.
             CrashablePattern when IsResultOrLookup(subjectType) => true,
@@ -546,7 +550,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
                     if (IsMaybeRecord(subjectType))
                     {
                         // Maybe[T record]: bind to inner .value field.
-                        bindValue = MakeMemberAccess(subject: subject, field: "value",
+                        bindValue = MakeMemberAccess(subject: subject, field: ValueFieldName,
                             fieldType: subjectType!.TypeArguments![0], loc: loc);
                     }
                     else if (IsMaybeEntity(subjectType) && subjectType!.TypeArguments?.Count > 0)
@@ -641,7 +645,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
                 Statement? binding = tp.VariableName != null
                     ? MakeBinding(
                         name: tp.VariableName,
-                        value: MakeMemberAccess(subject: subject, field: "value",
+                        value: MakeMemberAccess(subject: subject, field: ValueFieldName,
                             fieldType: innerType, loc: loc),
                         loc: loc)
                     : null;
@@ -660,7 +664,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
                 string fullName = targetType.FullName ?? negType.Type.Name;
                 ulong typeId = TypeIdHelper.ComputeTypeId(fullName: fullName);
                 Expression cond = new BinaryExpression(
-                    Left: MakeMemberAccess(subject: subject, field: "type_id",
+                    Left: MakeMemberAccess(subject: subject, field: TypeIdFieldName,
                         fieldType: u64Type, loc: loc),
                     Operator: BinaryOperator.NotEqual,
                     Right: new LiteralExpression(Value: typeId, LiteralType: TokenType.U64Literal,
@@ -814,7 +818,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     private static BinaryExpression MakeTypeIdIsZero(Expression subject, SourceLocation loc,
         TypeInfo? boolType, TypeInfo? u64Type)
     {
-        var typeIdAccess = MakeMemberAccess(subject: subject, field: "type_id",
+        var typeIdAccess = MakeMemberAccess(subject: subject, field: TypeIdFieldName,
             fieldType: u64Type, loc: loc);
         var zero = new LiteralExpression(Value: 0UL, LiteralType: TokenType.U64Literal, Location: loc)
         {
@@ -831,7 +835,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     private static BinaryExpression MakeTypeIdEquals(Expression subject, ulong typeId, SourceLocation loc,
         TypeInfo? boolType, TypeInfo? u64Type)
     {
-        var typeIdAccess = MakeMemberAccess(subject: subject, field: "type_id",
+        var typeIdAccess = MakeMemberAccess(subject: subject, field: TypeIdFieldName,
             fieldType: u64Type, loc: loc);
         var constant = new LiteralExpression(Value: typeId, LiteralType: TokenType.U64Literal, Location: loc)
         {
@@ -859,7 +863,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     /// </summary>
     private BlockStatement MakeCrashableBindings(Expression subject, string bindName, SourceLocation loc)
     {
-        TypeInfo? crashableType = ctx.Registry.LookupType(name: "Crashable");
+        TypeInfo? crashableType = ctx.Registry.LookupType(name: CrashableTypeName);
         TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
 
         Expression payload = new CarrierPayloadExpression(
@@ -870,7 +874,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         Statement valueBinding = MakeBinding(name: bindName, value: payload, loc: loc);
         Statement typeIdBinding = MakeBinding(
             name: bindName + "__typeid",
-            value: MakeMemberAccess(subject: subject, field: "type_id",
+            value: MakeMemberAccess(subject: subject, field: TypeIdFieldName,
                 fieldType: u64Type, loc: loc),
             loc: loc);
 
@@ -884,7 +888,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         TypeInfo valueType = subjectType.TypeArguments![0];
         ulong validId = TypeIdHelper.ComputeTypeId(fullName: valueType.FullName);
 
-        Expression typeIdAccess = MakeMemberAccess(subject: subject, field: "type_id",
+        Expression typeIdAccess = MakeMemberAccess(subject: subject, field: TypeIdFieldName,
             fieldType: u64Type, loc: loc);
         Expression notAbsent = new BinaryExpression(
             Left: typeIdAccess,
@@ -893,7 +897,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
                 Location: loc) { ResolvedType = u64Type },
             Location: loc) { ResolvedType = boolType };
         Expression notValid = new BinaryExpression(
-            Left: MakeMemberAccess(subject: subject, field: "type_id", fieldType: u64Type,
+            Left: MakeMemberAccess(subject: subject, field: TypeIdFieldName, fieldType: u64Type,
                 loc: loc),
             Operator: BinaryOperator.NotEqual,
             Right: new LiteralExpression(Value: validId, LiteralType: TokenType.U64Literal,
@@ -926,7 +930,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     private static TypeInfo? GetEntityMaybeHijackedType(TypeInfo subjectType)
     {
         if (subjectType is not RecordTypeInfo rec) return null;
-        MemberVariableInfo? valueField = rec.LookupMemberVariable(memberVariableName: "value");
+        MemberVariableInfo? valueField = rec.LookupMemberVariable(memberVariableName: ValueFieldName);
         return valueField?.Type;
     }
 
@@ -935,7 +939,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     {
         TypeInfo? boolType = ctx.Registry.LookupType(name: "Bool");
         TypeInfo? hijackedType = GetEntityMaybeHijackedType(subjectType: subjectType);
-        var valueAccess = new MemberExpression(Object: subject, PropertyName: "value", Location: loc)
+        var valueAccess = new MemberExpression(Object: subject, PropertyName: ValueFieldName, Location: loc)
         {
             ResolvedType = hijackedType
         };
@@ -955,7 +959,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         TypeInfo entityType, SourceLocation loc)
     {
         TypeInfo? hijackedType = GetEntityMaybeHijackedType(subjectType: subjectType);
-        var valueAccess = new MemberExpression(Object: subject, PropertyName: "value", Location: loc)
+        var valueAccess = new MemberExpression(Object: subject, PropertyName: ValueFieldName, Location: loc)
         {
             ResolvedType = hijackedType
         };

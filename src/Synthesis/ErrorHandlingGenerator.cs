@@ -25,6 +25,8 @@ using TypeInfo = TypeInfo;
 /// </summary>
 public sealed class ErrorHandlingGenerator
 {
+    private const string BlankMemberName = "Blank";
+
     private readonly TypeRegistry _registry;
 
     /// <summary>
@@ -108,7 +110,7 @@ public sealed class ErrorHandlingGenerator
             // Use Check kind so TransformBody emits Result carriers in the variant body —
             // if Lookup kind is used, the body emits Lookup[Blank] but the declaration says Result[Blank].
             ErrorHandlingVariantKind lookupKind =
-                routine.ReturnType == null || routine.ReturnType.Name == "Blank"
+                routine.ReturnType == null || routine.ReturnType.Name == BlankMemberName
                     ? ErrorHandlingVariantKind.Check
                     : ErrorHandlingVariantKind.Lookup;
             variants.Add(item: new GeneratedVariant(Kind: lookupKind, Routine: lookupVariant));
@@ -216,13 +218,13 @@ public sealed class ErrorHandlingGenerator
     /// <returns>The try_ variant routine info.</returns>
     private RoutineInfo GenerateTryVariant(RoutineInfo original)
     {
-        TypeInfo blankType = _registry.LookupType(name: "Blank") ??
+        TypeInfo blankType = _registry.LookupType(name: BlankMemberName) ??
             throw new InvalidOperationException(message: "Blank type not registered");
         TypeInfo returnType = original.ReturnType ?? blankType;
 
         // try_x on a Blank-returning routine -> returns Bool (true=success, false=absent/throw)
         // Maybe[Blank] = { i1, void } is not valid LLVM, so Bool is used directly.
-        if (returnType.Name == "Blank")
+        if (returnType.Name == BlankMemberName)
         {
             TypeInfo boolType = _registry.LookupType(name: "Bool") ??
                 throw new InvalidOperationException(message: "Bool type not registered");
@@ -293,7 +295,7 @@ public sealed class ErrorHandlingGenerator
     {
         // check_ returns Result[T] — success carries T, throw carries the error.
         TypeInfo innerType = original.ReturnType ??
-            _registry.LookupType(name: "Blank") ??
+            _registry.LookupType(name: BlankMemberName) ??
             throw new InvalidOperationException(message: "Blank type not registered");
 
         TypeInfo carrierInner = WrapBareEntityForCarrier(type: innerType);
@@ -337,13 +339,13 @@ public sealed class ErrorHandlingGenerator
     /// <returns>The lookup_ variant routine info.</returns>
     private RoutineInfo GenerateLookupVariant(RoutineInfo original)
     {
-        TypeInfo blankType = _registry.LookupType(name: "Blank") ??
+        TypeInfo blankType = _registry.LookupType(name: BlankMemberName) ??
             throw new InvalidOperationException(message: "Blank type not registered");
         TypeInfo returnType = original.ReturnType ?? blankType;
 
         // Lookup[Blank] degenerates to Result[Blank]: absent and return are both Blank,
         // so the only distinction is throw vs no-throw — same as check_.
-        if (returnType.Name == "Blank")
+        if (returnType.Name == BlankMemberName)
         {
             TypeInfo resultDef = _registry.LookupType(name: "Result") ??
                 throw new InvalidOperationException(message: "Result type not registered");

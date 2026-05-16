@@ -16,6 +16,8 @@ using TypeSymbol = TypeInfo;
 /// </summary>
 public sealed partial class SemanticVerifier
 {
+    private const string AddressTypeName = "Address";
+
     /// <summary>
     /// Analyze literal expression as part of this compiler phase.
     /// </summary>
@@ -45,7 +47,7 @@ public sealed partial class SemanticVerifier
             TokenType.U32Literal => "U32",
             TokenType.U64Literal => "U64",
             TokenType.U128Literal => "U128",
-            TokenType.AddressLiteral => "Address",
+            TokenType.AddressLiteral => AddressTypeName,
 
             // Floating-point
             TokenType.F16Literal => "F16",
@@ -238,7 +240,7 @@ public sealed partial class SemanticVerifier
             "U32" => value is >= 0 and <= uint.MaxValue,
             "U64" => value >= 0, // Any non-negative long fits in U64
             "U128" => value >= 0,
-            "Address" => true, // System-dependent, allow for now
+            AddressTypeName => true, // System-dependent, allow for now
             _ => false
         };
     }
@@ -298,7 +300,7 @@ public sealed partial class SemanticVerifier
                 TokenType.U128Literal => ParseU128Literal(literal: literal, rawValue: rawValue),
                 TokenType.AddressLiteral => ParseUnsignedIntLiteral(literal: literal,
                     rawValue: rawValue,
-                    typeName: "Address",
+                    typeName: AddressTypeName,
                     maxValue: ulong.MaxValue,
                     suffix: "addr"),
 
@@ -599,9 +601,9 @@ public sealed partial class SemanticVerifier
                 typeName: "U64",
                 maxValue: ulong.MaxValue),
             "U128" => ParseU128Literal(literal: literal, rawValue: rawValue),
-            "Address" => ParseUnsignedIntLiteral(literal: literal,
+            AddressTypeName => ParseUnsignedIntLiteral(literal: literal,
                 rawValue: rawValue,
-                typeName: "Address",
+                typeName: AddressTypeName,
                 maxValue: ulong.MaxValue,
                 suffix: "addr"),
             _ => throw new InvalidOperationException(

@@ -17,6 +17,8 @@ using static TestHelpers;
 /// </summary>
 public class CompilerPipelineInputEdgeCaseTests
 {
+    private const string TestRoutineIrSignature = "define void @test()";
+
     /// <summary>
     /// Verifies that source forms with no declarations survive semantic analysis as empty programs.
     /// </summary>
@@ -106,7 +108,7 @@ public class CompilerPipelineInputEdgeCaseTests
 
         string llvmIr = GenerateIr(source: source);
 
-        Assert.Contains(expectedSubstring: "define void @test()", actualString: llvmIr);
+        Assert.Contains(expectedSubstring: TestRoutineIrSignature, actualString: llvmIr);
         Assert.DoesNotContain(expectedSubstring: "\r", actualString: llvmIr);
     }
 
@@ -118,7 +120,7 @@ public class CompilerPipelineInputEdgeCaseTests
     {
         string llvmIr = GenerateIr(source: "\uFEFFroutine test()\n  return\n");
 
-        Assert.Contains(expectedSubstring: "define void @test()", actualString: llvmIr);
+        Assert.Contains(expectedSubstring: TestRoutineIrSignature, actualString: llvmIr);
     }
 
     /// <summary>
@@ -132,7 +134,7 @@ public class CompilerPipelineInputEdgeCaseTests
 
         string llvmIr = GenerateIr(source: source);
 
-        Assert.Contains(expectedSubstring: "define void @test()", actualString: llvmIr);
+        Assert.Contains(expectedSubstring: TestRoutineIrSignature, actualString: llvmIr);
     }
 
     /// <summary>
@@ -152,7 +154,7 @@ public class CompilerPipelineInputEdgeCaseTests
         string llvmIr = await Task.Run(function: () =>
             GenerateIr(source: CreateDeeplyNestedSource(nestingDepth: 32)));
 
-        Assert.Contains(expectedSubstring: "define void @test()", actualString: llvmIr);
+        Assert.Contains(expectedSubstring: TestRoutineIrSignature, actualString: llvmIr);
     }
 
     private static string GenerateIr(string source)

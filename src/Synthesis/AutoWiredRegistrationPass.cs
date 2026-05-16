@@ -20,6 +20,9 @@ namespace Compiler.Synthesis;
 /// </summary>
 internal sealed class AutoWiredRegistrationPass
 {
+    private const string EquatableProtocolName = "Equatable";
+    private const string CreateMethodName = "$create";
+
     private readonly TypeRegistry _registry;
 
     public AutoWiredRegistrationPass(TypeRegistry registry)
@@ -133,7 +136,7 @@ internal sealed class AutoWiredRegistrationPass
                                 existingMethods: existingMethods);
                         }
 
-                        if (boolType != null && ObeysProtocol(type: type, protocolName: "Equatable"))
+                        if (boolType != null && ObeysProtocol(type: type, protocolName: EquatableProtocolName))
                         {
                             MaybeRegisterWiredWithParam(owner: type,
                                 name: "$eq",
@@ -162,7 +165,7 @@ internal sealed class AutoWiredRegistrationPass
                     // accessible `$eq`. Otherwise the auto-derived body would emit calls
                     // like `me.children == you.children` for non-equatable element types
                     // (e.g. `Array[Owned[T], 64]`), and the cascade dead-ends at link time.
-                    if (boolType != null && ObeysProtocol(type: type, protocolName: "Equatable") &&
+                    if (boolType != null && ObeysProtocol(type: type, protocolName: EquatableProtocolName) &&
                         AllFieldsHaveEquality(type: type))
                     {
                         MaybeRegisterWiredWithParam(owner: type,
@@ -180,12 +183,12 @@ internal sealed class AutoWiredRegistrationPass
                     if (type is EntityTypeInfo entityForCreate &&
                         !type.IsGenericDefinition &&
                         !existingMethods.Any(predicate: m =>
-                            m.Name == "$create" &&
+                            m.Name == CreateMethodName &&
                             m.Parameters.Count == entityForCreate.MemberVariables.Count &&
                             entityForCreate.MemberVariables.Select(selector: mv => mv.Name)
                                            .SequenceEqual(second: m.Parameters.Select(selector: p => p.Name))))
                     {
-                        _registry.RegisterRoutine(routine: new RoutineInfo(name: "$create")
+                        _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMethodName)
                         {
                             Kind = RoutineKind.Creator,
                             OwnerType = type,
@@ -233,7 +236,7 @@ internal sealed class AutoWiredRegistrationPass
                         _registry.LookupRoutineOverload(baseName: "S64.$create",
                             argTypes: [type]) == null)
                     {
-                        _registry.RegisterRoutine(routine: new RoutineInfo(name: "$create")
+                        _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMethodName)
                         {
                             Kind = RoutineKind.Creator,
                             OwnerType = s64Type,
@@ -282,9 +285,9 @@ internal sealed class AutoWiredRegistrationPass
 
                     // Synthesize $create(field1: T1, ...) -> CrashableType for construction via throw
                     if (type is CrashableTypeInfo crashableForCreate &&
-                        !existingMethods.Any(predicate: m => m.Name == "$create"))
+                        !existingMethods.Any(predicate: m => m.Name == CreateMethodName))
                     {
-                        _registry.RegisterRoutine(routine: new RoutineInfo(name: "$create")
+                        _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMethodName)
                         {
                             Kind = RoutineKind.Creator,
                             OwnerType = type,
@@ -341,7 +344,7 @@ internal sealed class AutoWiredRegistrationPass
                         _registry.LookupRoutineOverload(baseName: "U64.$create",
                             argTypes: [type]) == null)
                     {
-                        _registry.RegisterRoutine(routine: new RoutineInfo(name: "$create")
+                        _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMethodName)
                         {
                             Kind = RoutineKind.Creator,
                             OwnerType = u64Type,
@@ -394,7 +397,7 @@ internal sealed class AutoWiredRegistrationPass
         if (textType != null)
         {
             var textCreateMethods = _registry.GetMethodsForType(type: textType)
-                                             .Where(predicate: m => m.Name == "$create")
+                                             .Where(predicate: m => m.Name == CreateMethodName)
                                              .ToList();
 
             foreach (TypeSymbol type in _registry.GetAllTypes())
@@ -413,7 +416,7 @@ internal sealed class AutoWiredRegistrationPass
                     continue;
                 }
 
-                _registry.RegisterRoutine(routine: new RoutineInfo(name: "$create")
+                _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMethodName)
                 {
                     Kind = RoutineKind.Creator,
                     OwnerType = textType,
@@ -462,7 +465,7 @@ internal sealed class AutoWiredRegistrationPass
         if (dataType != null)
         {
             var dataCreateMethods = _registry.GetMethodsForType(type: dataType)
-                                             .Where(predicate: m => m.Name == "$create")
+                                             .Where(predicate: m => m.Name == CreateMethodName)
                                              .ToList();
 
             foreach (TypeSymbol type in _registry.GetAllTypes())
@@ -500,7 +503,7 @@ internal sealed class AutoWiredRegistrationPass
                     continue;
                 }
 
-                _registry.RegisterRoutine(routine: new RoutineInfo(name: "$create")
+                _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMethodName)
                 {
                     Kind = RoutineKind.Creator,
                     OwnerType = dataType,
@@ -680,7 +683,7 @@ internal sealed class AutoWiredRegistrationPass
                     TypeSymbol argType = typeArgs[index: idx];
                     foreach (TypeExpression protoExpr in c.ConstraintTypes)
                     {
-                        if (protoExpr.Name == "Equatable" && !TypeHasEquality(type: argType, seen: seen))
+                        if (protoExpr.Name == EquatableProtocolName && !TypeHasEquality(type: argType, seen: seen))
                             return false;
                     }
                 }
@@ -691,7 +694,7 @@ internal sealed class AutoWiredRegistrationPass
         if (_registry.LookupMethod(type: type, methodName: "$eq") != null) return true;
 
         // Type declares obeys Equatable — we expect a `$eq` will eventually be synthesised.
-        if (ObeysProtocol(type: type, protocolName: "Equatable")) return true;
+        if (ObeysProtocol(type: type, protocolName: EquatableProtocolName)) return true;
 
         return false;
     }

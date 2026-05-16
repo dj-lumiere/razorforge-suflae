@@ -12,6 +12,12 @@ using TypeSymbol = TypeInfo;
 
 public sealed partial class SemanticVerifier
 {
+    private const string GraspedWrapperName = "Grasped";
+    private const string ClaimedWrapperName = "Claimed";
+    private const string ViewedWrapperName = "Viewed";
+    private const string InspectedWrapperName = "Inspected";
+    private const string ScopedNoEscapeHint = "(none — scoped, can't escape)";
+
     private bool IsNestedGrasping(Expression source)
     {
         while (true)
@@ -43,7 +49,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static bool IsGraspedType(TypeSymbol type)
     {
-        return type.Name == "Grasped" || type.Name.StartsWith(value: "Grasped[");
+        return type.Name == GraspedWrapperName || type.Name.StartsWith(value: GraspedWrapperName + "[");
     }
 
     /// <summary>
@@ -51,7 +57,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static bool IsClaimedType(TypeSymbol type)
     {
-        return type.Name == "Claimed" || type.Name.StartsWith(value: "Claimed[");
+        return type.Name == ClaimedWrapperName || type.Name.StartsWith(value: ClaimedWrapperName + "[");
     }
 
     /// <summary>
@@ -75,10 +81,10 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static readonly HashSet<string> WrapperTypes =
     [
-        "Viewed",    // Read-only single-threaded token
-        "Grasped",  // Exclusive write single-threaded token
-        "Inspected", // Read-only multi-threaded token
-        "Claimed",    // Exclusive write multi-threaded token
+        ViewedWrapperName,    // Read-only single-threaded token
+        GraspedWrapperName,  // Exclusive write single-threaded token
+        InspectedWrapperName, // Read-only multi-threaded token
+        ClaimedWrapperName,    // Exclusive write multi-threaded token
         "Shared",    // Reference-counted multi-threaded handle
         "Marked",    // Weak reference multi-threaded handle
         "Retained",  // Reference-counted handle
@@ -92,8 +98,8 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static readonly HashSet<string> ReadOnlyWrapperTypes =
     [
-        "Viewed", // Read-only single-threaded token
-        "Inspected" // Read-only multi-threaded token
+        ViewedWrapperName, // Read-only single-threaded token
+        InspectedWrapperName // Read-only multi-threaded token
     ];
 
     /// <summary>
@@ -197,10 +203,10 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static readonly HashSet<string> InlineOnlyTokenTypes =
     [
-        "Viewed", // Read-only single-threaded token
-        "Grasped", // Exclusive write single-threaded token
-        "Inspected", // Read-only multi-threaded token
-        "Claimed" // Exclusive write multi-threaded token
+        ViewedWrapperName, // Read-only single-threaded token
+        GraspedWrapperName, // Exclusive write single-threaded token
+        InspectedWrapperName, // Read-only multi-threaded token
+        ClaimedWrapperName // Exclusive write multi-threaded token
     ];
 
     /// <summary>
@@ -208,8 +214,8 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static readonly HashSet<string> ExclusiveTokenTypes =
     [
-        "Grasped", // Cannot pass same Grasped token twice
-        "Claimed" // Cannot pass same Claimed token twice
+        GraspedWrapperName, // Cannot pass same Grasped token twice
+        ClaimedWrapperName // Cannot pass same Claimed token twice
     ];
 
     /// <summary>
@@ -226,10 +232,10 @@ public sealed partial class SemanticVerifier
             ["Tracked"] = "a.track()",
             ["Shared"] = "a.share()",
             ["Marked"] = "a.mark()",
-            ["Viewed"] = "(none — scoped, can't escape)",
-            ["Grasped"] = "(none — scoped, can't escape)",
-            ["Inspected"] = "(none — scoped, can't escape)",
-            ["Claimed"] = "(none — scoped, can't escape)",
+            [ViewedWrapperName] = ScopedNoEscapeHint,
+            [GraspedWrapperName] = ScopedNoEscapeHint,
+            [InspectedWrapperName] = ScopedNoEscapeHint,
+            [ClaimedWrapperName] = ScopedNoEscapeHint,
         };
 
     /// <summary>

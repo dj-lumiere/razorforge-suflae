@@ -14,6 +14,9 @@ using static TestHelpers;
 /// </summary>
 public class LexerParserEdgeCaseTests
 {
+    private const string RoutineTestSignature = "routine test()";
+    private const string ReturnStatement = "  return";
+
     /// <summary>
     /// Verifies that the tokenizer rejects tabs at each major whitespace breakpoint.
     /// </summary>
@@ -163,9 +166,9 @@ public class LexerParserEdgeCaseTests
     {
         string source = string.Join(separator: lineEnding,
         [
-            "routine test()",
+            RoutineTestSignature,
             "  var value = 1",
-            "  return",
+            ReturnStatement,
             ""
         ]);
 
@@ -184,9 +187,9 @@ public class LexerParserEdgeCaseTests
     {
         string source = string.Join(separator: lineEnding,
         [
-            "routine test()",
+            RoutineTestSignature,
             "  var value = 1",
-            "  return",
+            ReturnStatement,
             ""
         ]);
 
@@ -217,7 +220,7 @@ public class LexerParserEdgeCaseTests
     public void Parse_VeryDeepNesting_Parses()
     {
         const int nestingDepth = 128;
-        var lines = new List<string> { "routine test()" };
+        var lines = new List<string> { RoutineTestSignature };
 
         for (int depth = 0; depth < nestingDepth; depth += 1)
         {
@@ -225,7 +228,7 @@ public class LexerParserEdgeCaseTests
         }
 
         lines.Add(item: $"{new string(c: ' ', count: (nestingDepth + 1) * 2)}pass");
-        lines.Add(item: "  return");
+        lines.Add(item: ReturnStatement);
 
         string source = string.Join(separator: "\n", values: lines);
 
@@ -508,7 +511,7 @@ public class LexerParserEdgeCaseTests
 
     private static string CreateDeeplyNestedSource(int nestingDepth)
     {
-        var lines = new List<string> { "routine test()" };
+        var lines = new List<string> { RoutineTestSignature };
 
         for (int depth = 0; depth < nestingDepth; depth += 1)
         {
@@ -516,7 +519,7 @@ public class LexerParserEdgeCaseTests
         }
 
         lines.Add(item: $"{new string(c: ' ', count: (nestingDepth + 1) * 2)}pass");
-        lines.Add(item: "  return");
+        lines.Add(item: ReturnStatement);
 
         return string.Join(separator: "\n", values: lines);
     }

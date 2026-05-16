@@ -27,6 +27,9 @@ namespace Compiler.Postprocessing.Passes;
 /// </summary>
 internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
 {
+    private const string BlankMemberName = "Blank";
+    private const string TypeIdFieldName = "type_id";
+
     private int _tempCount;
 
     private string NextTempName(string prefix) => $"_{prefix}_{_tempCount++}";
@@ -1197,7 +1200,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         if (typeName == null) return (leftH, bin with { Left = loweredLeft });
 
         ulong typeId;
-        if (typeName is "Blank" or "None")
+        if (typeName is BlankMemberName or "None")
         {
             typeId = 0;
         }
@@ -1211,7 +1214,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         }
 
         var typeIdAccess = new MemberExpression(
-            Object: loweredLeft, PropertyName: "type_id", Location: loc) { ResolvedType = u64Type };
+            Object: loweredLeft, PropertyName: TypeIdFieldName, Location: loc) { ResolvedType = u64Type };
         var constant = new LiteralExpression(
             Value: typeId, LiteralType: TokenType.U64Literal, Location: loc)
             { ResolvedType = u64Type };
@@ -1470,7 +1473,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     {
         TypeInfo? operandType = ipe.Expression.ResolvedType;
         bool isNoneCheck = ipe.Pattern is NonePattern or TypePattern { Type.Name: "None" };
-        bool isBlankCheck = ipe.Pattern is TypePattern { Type.Name: "Blank" };
+        bool isBlankCheck = ipe.Pattern is TypePattern { Type.Name: BlankMemberName };
 
         // Lower the operand expression first.
         var (hoisted, loweredExpr) = LowerExpr(ipe.Expression);
@@ -1501,7 +1504,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         if (isBlankCheck && IsResultOrLookup(operandType))
         {
             var typeIdAccess = new MemberExpression(
-                Object: loweredExpr, PropertyName: "type_id", Location: ipe.Location)
+                Object: loweredExpr, PropertyName: TypeIdFieldName, Location: ipe.Location)
             {
                 ResolvedType = u64Type
             };
@@ -1523,10 +1526,10 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             TypeInfo? targetType = tp.Type.ResolvedType
                 ?? ctx.Registry.LookupType(name: tp.Type.Name);
             // Blank: type_id == 0
-            if (tp.Type.Name == "Blank" || targetType?.Name == "Blank")
+            if (tp.Type.Name == BlankMemberName || targetType?.Name == BlankMemberName)
             {
                 var typeIdAccess = new MemberExpression(
-                    Object: loweredExpr, PropertyName: "type_id", Location: ipe.Location)
+                    Object: loweredExpr, PropertyName: TypeIdFieldName, Location: ipe.Location)
                 { ResolvedType = u64Type };
                 var zero = new LiteralExpression(
                     Value: 0UL,
@@ -1545,7 +1548,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             {
                 ulong typeId = TypeIdHelper.ComputeTypeId(fullName: targetType.FullName);
                 var typeIdAccess = new MemberExpression(
-                    Object: loweredExpr, PropertyName: "type_id", Location: ipe.Location)
+                    Object: loweredExpr, PropertyName: TypeIdFieldName, Location: ipe.Location)
                 { ResolvedType = u64Type };
                 var constant = new LiteralExpression(
                     Value: typeId,
@@ -1917,7 +1920,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
 
         // Result, Lookup, or unknown -- use Blank type pattern
         return new TypePattern(
-            Type: new TypeExpression(Name: "Blank", GenericArguments: null, Location: loc),
+            Type: new TypeExpression(Name: BlankMemberName, GenericArguments: null, Location: loc),
             VariableName: null,
             Bindings: null,
             Location: loc);

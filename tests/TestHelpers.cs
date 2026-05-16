@@ -20,6 +20,8 @@ using TypeInfo = TypeInfo;
 /// </summary>
 public static class TestHelpers
 {
+    private const string ExpectedAtLeastOneError = "Expected at least one error";
+
     #region Stdlib Snapshots
 
     // Captured once per process; each AnalyzeSa call restores in microseconds instead of ~0.5 s.
@@ -127,7 +129,7 @@ public static class TestHelpers
     {
         AnalysisResult result = Analyze(source: source, fileName: fileName);
         Assert.True(condition: result.Errors.Count > 0,
-            userMessage: "Expected at least one error");
+            userMessage: ExpectedAtLeastOneError);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Message.Contains(value: expectedErrorSubstring,
                 comparisonType: StringComparison.OrdinalIgnoreCase));
@@ -206,7 +208,7 @@ public static class TestHelpers
     {
         AnalysisResult result = AnalyzeSa(source: source, fileName: fileName);
         Assert.True(condition: result.Errors.Count > 0,
-            userMessage: "Expected at least one error");
+            userMessage: ExpectedAtLeastOneError);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Message.Contains(value: expectedErrorSubstring,
                 comparisonType: StringComparison.OrdinalIgnoreCase));
@@ -268,7 +270,7 @@ public static class TestHelpers
     {
         AnalysisResult result = AnalyzeSuflae(source: source, fileName: fileName);
         Assert.True(condition: result.Errors.Count > 0,
-            userMessage: "Expected at least one error");
+            userMessage: ExpectedAtLeastOneError);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Message.Contains(value: expectedErrorSubstring,
                 comparisonType: StringComparison.OrdinalIgnoreCase));
@@ -312,7 +314,7 @@ public static class TestHelpers
     {
         AnalysisResult result = AnalyzeSaSuflae(source: source, fileName: fileName);
         Assert.True(condition: result.Errors.Count > 0,
-            userMessage: "Expected at least one error");
+            userMessage: ExpectedAtLeastOneError);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Message.Contains(value: expectedErrorSubstring,
                 comparisonType: StringComparison.OrdinalIgnoreCase));

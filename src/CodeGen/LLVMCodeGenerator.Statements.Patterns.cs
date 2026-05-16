@@ -15,6 +15,8 @@ namespace Compiler.CodeGen;
 /// </summary>
 public partial class LlvmCodeGenerator
 {
+    private const string UnknownRoutineName = "<unknown>";
+
     // Returns true if ALL clauses of the when statement are guaranteed to terminate
     // (i.e. the when_end block is unreachable).
     /// <summary>
@@ -534,7 +536,7 @@ public partial class LlvmCodeGenerator
             case NegatedTypePattern:
                 throw new InvalidOperationException(
                     $"NegatedTypePattern on variant reached codegen ??PatternLoweringPass must lower this. " +
-                    $"Subject type: {subjectType?.Name ?? "<null>"}. Routine: {_currentEmittingRoutine?.Name ?? "<unknown>"}.");
+                    $"Subject type: {subjectType?.Name ?? "<null>"}. Routine: {_currentEmittingRoutine?.Name ?? UnknownRoutineName}.");
 
             case FlagsPattern flagsPattern:
                 EmitFlagsPatternMatch(sb: sb,
@@ -557,17 +559,17 @@ public partial class LlvmCodeGenerator
             case DestructuringPattern:
                 throw new InvalidOperationException(
                     $"DestructuringPattern reached codegen ??PatternLoweringPass must lower this. " +
-                    $"Subject type: {subjectType?.Name ?? "<null>"}. Routine: {_currentEmittingRoutine?.Name ?? "<unknown>"}.");
+                    $"Subject type: {subjectType?.Name ?? "<null>"}. Routine: {_currentEmittingRoutine?.Name ?? UnknownRoutineName}.");
 
             case TypeDestructuringPattern:
                 throw new InvalidOperationException(
                     $"TypeDestructuringPattern reached codegen ??PatternLoweringPass must lower this. " +
-                    $"Subject type: {subjectType?.Name ?? "<null>"}. Routine: {_currentEmittingRoutine?.Name ?? "<unknown>"}.");
+                    $"Subject type: {subjectType?.Name ?? "<null>"}. Routine: {_currentEmittingRoutine?.Name ?? UnknownRoutineName}.");
 
             default:
                 throw new NotImplementedException(
                     message:
-                    $"Pattern type not implemented in codegen: {pattern.GetType().Name}. In routine: {_currentEmittingRoutine?.Name ?? "<unknown>"} (owner: {_currentEmittingRoutine?.OwnerType?.Name ?? "none"})");
+                    $"Pattern type not implemented in codegen: {pattern.GetType().Name}. In routine: {_currentEmittingRoutine?.Name ?? UnknownRoutineName} (owner: {_currentEmittingRoutine?.OwnerType?.Name ?? "none"})");
         }
     }
 

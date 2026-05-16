@@ -18,6 +18,7 @@ namespace Compiler.Instantiation;
 /// </summary>
 internal static class GenericAstRewriter
 {
+    private const string CreateMethodName = "$create";
     /// <summary>
     /// Rewrites a generic routine declaration by substituting all type parameter references
     /// with concrete type names. Returns a deep clone -> the original is not modified.
@@ -266,13 +267,13 @@ internal static class GenericAstRewriter
                 }
             }
 
-            if (original.Name == "$create")
+            if (original.Name == CreateMethodName)
             {
                 TypeInfo? resolvedTarget = ResolveTypeForLookup(expressionType);
                 if (resolvedTarget != null)
                 {
                     RoutineInfo? resolvedCreator = ResolveMethodOnConcreteOwner(ownerType: resolvedTarget,
-                        methodName: "$create",
+                        methodName: CreateMethodName,
                         argTypes: resolvedParamTypes,
                         isFailable: original.IsFailable);
                     resolvedCreator ??= Registry.LookupRoutineOverload(
@@ -520,13 +521,13 @@ internal static class GenericAstRewriter
                 return InstantiateFreeRoutine(candidate: routine);
             }
 
-            if (callName == "$create" && expressionType != null)
+            if (callName == CreateMethodName && expressionType != null)
             {
                 TypeInfo? resolvedTarget = ResolveTypeForLookup(expressionType);
                 if (resolvedTarget != null)
                 {
                     return ResolveMethodOnConcreteOwner(ownerType: resolvedTarget,
-                        methodName: "$create",
+                        methodName: CreateMethodName,
                         argTypes: callArgTypes,
                         isFailable: isFailable);
                 }

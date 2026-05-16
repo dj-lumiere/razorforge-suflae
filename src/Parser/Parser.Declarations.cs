@@ -174,7 +174,7 @@ public partial class Parser
                 receiverTypeArgStrings = typeArgStrings;
                 hasGenericParams = true;
                 Consume(type: TokenType.RightBracket,
-                    errorMessage: "Expected ']' after generic parameters");
+                    errorMessage: ExpectedRightBracketAfterGenericParameters);
             }
             else
             {
@@ -185,7 +185,7 @@ public partial class Parser
                 hasGenericParams = true;
 
                 Consume(type: TokenType.RightBracket,
-                    errorMessage: "Expected ']' after generic parameters");
+                    errorMessage: ExpectedRightBracketAfterGenericParameters);
             }
         }
 
@@ -249,7 +249,7 @@ public partial class Parser
                     }
 
                     Consume(type: TokenType.RightBracket,
-                        errorMessage: "Expected ']' after generic parameters");
+                        errorMessage: ExpectedRightBracketAfterGenericParameters);
                 }
                 else
                 {
@@ -280,7 +280,7 @@ public partial class Parser
                     }
 
                     Consume(type: TokenType.RightBracket,
-                        errorMessage: "Expected ']' after generic parameters");
+                        errorMessage: ExpectedRightBracketAfterGenericParameters);
                 }
             }
         }

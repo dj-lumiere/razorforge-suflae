@@ -20,6 +20,9 @@ namespace Compiler.CodeGen;
 /// </summary>
 public partial class LlvmCodeGenerator
 {
+    private const string EntryLabel = "entry:";
+    private const string RetVoidInstruction = "  ret void";
+
     #region Fields
 
     /// <summary>The type registry from semantic analysis.</summary>
@@ -505,7 +508,7 @@ public partial class LlvmCodeGenerator
 
         var sb = _functionDefinitions;
         EmitLine(sb: sb, line: "define private void @.rf_global_init() {");
-        EmitLine(sb: sb, line: "entry:");
+        EmitLine(sb: sb, line: EntryLabel);
         foreach ((string llvmName, TypeInfo type, Expression init) in initStmts)
         {
             string val = EmitExpression(sb: sb, expr: init);
@@ -515,7 +518,7 @@ public partial class LlvmCodeGenerator
             EmitLine(sb: sb, line: $"  store {storeType} {val}, ptr {llvmName}");
         }
 
-        EmitLine(sb: sb, line: "  ret void");
+        EmitLine(sb: sb, line: RetVoidInstruction);
         EmitLine(sb: sb, line: "}");
         EmitLine(sb: sb, line: "");
     }
@@ -1318,7 +1321,7 @@ public partial class LlvmCodeGenerator
             output.AppendLine(
                 value:
                 "define private void @_rf_trace_push(ptr %r, ptr %f, i32 %ln, i32 %col) alwaysinline {");
-            output.AppendLine(value: "entry:");
+            output.AppendLine(value: EntryLabel);
             output.AppendLine(value: "  %d = load i32, ptr @_rf_trace_depth");
             output.AppendLine(value: "  %idx32 = and i32 %d, 31");
             output.AppendLine(value: "  %idx = zext i32 %idx32 to i64");
@@ -1343,16 +1346,16 @@ public partial class LlvmCodeGenerator
             output.AppendLine(value: "  store i32 %col, ptr %p3");
             output.AppendLine(value: "  %nd = add i32 %d, 1");
             output.AppendLine(value: "  store i32 %nd, ptr @_rf_trace_depth");
-            output.AppendLine(value: "  ret void");
+            output.AppendLine(value: RetVoidInstruction);
             output.AppendLine(value: "}");
             output.AppendLine();
             // pop helper — branchless: depth is always > 0 when pop is called (paired with push)
             output.AppendLine(value: "define private void @_rf_trace_pop() alwaysinline {");
-            output.AppendLine(value: "entry:");
+            output.AppendLine(value: EntryLabel);
             output.AppendLine(value: "  %d = load i32, ptr @_rf_trace_depth");
             output.AppendLine(value: "  %nd = add i32 %d, -1");
             output.AppendLine(value: "  store i32 %nd, ptr @_rf_trace_depth");
-            output.AppendLine(value: "  ret void");
+            output.AppendLine(value: RetVoidInstruction);
             output.AppendLine(value: "}");
             output.AppendLine();
             // update-loc helper — overwrites the line/col of the current (topmost) frame.
@@ -1363,7 +1366,7 @@ public partial class LlvmCodeGenerator
             output.AppendLine(
                 value:
                 "define private void @_rf_trace_update_loc(i32 %ln, i32 %col) alwaysinline {");
-            output.AppendLine(value: "entry:");
+            output.AppendLine(value: EntryLabel);
             output.AppendLine(value: "  %d = load i32, ptr @_rf_trace_depth");
             output.AppendLine(value: "  %has = icmp ugt i32 %d, 0");
             output.AppendLine(value: "  br i1 %has, label %do_update, label %skip");
@@ -1384,18 +1387,18 @@ public partial class LlvmCodeGenerator
             output.AppendLine(value: "  store i32 %col, ptr %p3");
             output.AppendLine(value: "  br label %skip");
             output.AppendLine(value: "skip:");
-            output.AppendLine(value: "  ret void");
+            output.AppendLine(value: RetVoidInstruction);
             output.AppendLine(value: "}");
             output.AppendLine();
             // printer helper — passes exe TLS data to the DLL
             output.AppendLine(value: "declare void @rf_print_shadow_stack_data(ptr, i32)");
             output.AppendLine(value: "define private void @_rf_print_trace_stack() {");
-            output.AppendLine(value: "entry:");
+            output.AppendLine(value: EntryLabel);
             output.AppendLine(value: "  %depth = load i32, ptr @_rf_trace_depth");
             output.AppendLine(
                 value:
                 "  call void @rf_print_shadow_stack_data(ptr @_rf_trace_stack, i32 %depth)");
-            output.AppendLine(value: "  ret void");
+            output.AppendLine(value: RetVoidInstruction);
             output.AppendLine(value: "}");
             output.AppendLine();
         }
@@ -1435,7 +1438,7 @@ public partial class LlvmCodeGenerator
             output.AppendLine();
             output.AppendLine(value: "; Entry point");
             output.AppendLine(value: "define i32 @main(i32 %argc, ptr %argv) {");
-            output.AppendLine(value: "entry:");
+            output.AppendLine(value: EntryLabel);
             output.AppendLine(value: "  call void @rf_runtime_init()");
             output.AppendLine(handler: $"  call void @__rf_set_trace_mode(i32 {traceMode})");
             if (ShouldEmitTrace)

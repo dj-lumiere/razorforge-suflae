@@ -13,6 +13,8 @@ namespace Compiler.CodeGen;
 /// </summary>
 public partial class LlvmCodeGenerator
 {
+    private const string CreateMethodName = "$create";
+
     /// <summary>
     /// Emit routine call as part of this compiler phase.
     /// </summary>
@@ -220,12 +222,12 @@ public partial class LlvmCodeGenerator
                 }
 
                 routine = _registry.LookupMethodOverload(type: creatorOwnerType,
-                              methodName: "$create",
+                              methodName: CreateMethodName,
                               argTypes: semanticArgTypes) ??
                     _registry.LookupRoutineOverload(
-                        baseName: $"{creatorOwnerType.FullName}.$create",
+                        baseName: $"{creatorOwnerType.FullName}.{CreateMethodName}",
                         argTypes: semanticArgTypes) ??
-                    _registry.LookupRoutineOverload(baseName: $"{calledType.Name}.$create",
+                    _registry.LookupRoutineOverload(baseName: $"{calledType.Name}.{CreateMethodName}",
                         argTypes: semanticArgTypes);
                 if (routine == null &&
                     calledType is RecordTypeInfo singleRecord &&
@@ -601,9 +603,9 @@ public partial class LlvmCodeGenerator
                 // (otherwise Text.S32!() resolves to S32.$create(from: S8), the first overload).
                 RoutineInfo? creator =
                     _registry.LookupMethodOverload(type: targetType!,
-                        methodName: "$create",
+                        methodName: CreateMethodName,
                         argTypes: argTypes2);
-                string creatorName = $"{conversionTypeName}.$create";
+                string creatorName = $"{conversionTypeName}.{CreateMethodName}";
                 creator ??= _registry.LookupRoutineOverload(baseName: creatorName,
                     argTypes: argTypes2);
                 if (creator != null)
@@ -1090,7 +1092,7 @@ public partial class LlvmCodeGenerator
             }
         }
 
-        if (routine is { Name: "$create" } &&
+        if (routine is { Name: CreateMethodName } &&
             routine.OwnerType is { IsGenericDefinition: true } genOwner &&
             typeArguments is { Count: > 0 })
         {
@@ -1114,10 +1116,10 @@ public partial class LlvmCodeGenerator
                 }
 
                 RoutineInfo? rebound = _registry.LookupMethodOverload(type: concreteOwner,
-                                           methodName: "$create",
+                                           methodName: CreateMethodName,
                                            argTypes: ctorArgTypes) ??
                                        _registry.LookupMethod(type: concreteOwner,
-                                           methodName: "$create",
+                                           methodName: CreateMethodName,
                                            isFailable: routine.IsFailable);
                 if (rebound != null)
                 {

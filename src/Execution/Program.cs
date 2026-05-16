@@ -23,6 +23,10 @@ namespace Builder;
 /// </summary>
 internal partial class Program
 {
+    private const string BuildCommand = "build";
+    private const string SuflaeLanguageName = "Suflae";
+    private const string RazorForgeLanguageName = "RazorForge";
+
     /// <summary>
     /// Entry point for the RazorForge builder CLI.
     /// Dispatches to the appropriate command handler based on the first argument.
@@ -51,7 +55,7 @@ internal partial class Program
                         .TrimStart(trimChar: '-');
 
         // Check if first arg is a command or a file
-        bool isCommand = command is "parse" or "tokenize" or "codegen" or "build" or "buildandrun" or "cleanbuildandrun" or "check" or "validate-stdlib" or "help";
+        bool isCommand = command is "parse" or "tokenize" or "codegen" or BuildCommand or "buildandrun" or "cleanbuildandrun" or "check" or "validate-stdlib" or "help";
 
         if (!isCommand)
         {
@@ -92,7 +96,7 @@ internal partial class Program
                         : null,
                     buildMode: RfBuildMode.Debug);
 
-            case "build":
+            case BuildCommand:
             {
                 (string? entryFile, string? projectRoot, string? outputFile2,
                     RfBuildMode buildMode2, bool dumpAst2, bool saTiming2, bool requireStart2) = ResolveEntryFile(args: args, needsOutputArg: true);
@@ -421,7 +425,7 @@ internal partial class Program
         bool isSuflae = IsSuflaeFile(path: sourceFile);
 
         Console.WriteLine(
-            value: $"Tokenizing {sourceFile} as {(isSuflae ? "Suflae" : "RazorForge")}...");
+            value: $"Tokenizing {sourceFile} as {(isSuflae ? SuflaeLanguageName : RazorForgeLanguageName)}...");
         Console.WriteLine();
 
         try
@@ -469,7 +473,7 @@ internal partial class Program
         bool isSuflae = IsSuflaeFile(path: sourceFile);
 
         Console.WriteLine(
-            value: $"Parsing {sourceFile} as {(isSuflae ? "Suflae" : "RazorForge")}...");
+            value: $"Parsing {sourceFile} as {(isSuflae ? SuflaeLanguageName : RazorForgeLanguageName)}...");
         Console.WriteLine();
 
         try
@@ -540,8 +544,8 @@ internal partial class Program
         try
         {
             string langName = language == Language.Suflae
-                ? "Suflae"
-                : "RazorForge";
+                ? SuflaeLanguageName
+                : RazorForgeLanguageName;
             Console.WriteLine(value: $"Validating {langName} stdlib routine bodies...");
             Console.WriteLine();
 
@@ -615,7 +619,7 @@ internal partial class Program
         bool isSuflae = IsSuflaeFile(path: sourceFile);
 
         Console.WriteLine(
-            value: $"Building {sourceFile} as {(isSuflae ? "Suflae" : "RazorForge")}...");
+            value: $"Building {sourceFile} as {(isSuflae ? SuflaeLanguageName : RazorForgeLanguageName)}...");
         Console.WriteLine();
 
         try
@@ -739,7 +743,7 @@ internal partial class Program
         string? current = exeDir;
         for (int i = 0; i < 6 && current != null; i++)
         {
-            string candidate = Path.Combine(path1: current, path2: "native", path3: "build");
+            string candidate = Path.Combine(path1: current, path2: "native", path3: BuildCommand);
             if (File.Exists(path: Path.Combine(path1: candidate, path2: "build.ninja")) ||
                 File.Exists(path: Path.Combine(path1: candidate, path2: "Makefile")))
             {
@@ -949,11 +953,11 @@ internal partial class Program
             string nativeLibDir = Path.Combine(path1: nativeBuildDir, path2: "lib");
             string exeNativeBinDir = Path.Combine(path1: exeDir,
                 path2: "native",
-                path3: "build",
+                path3: BuildCommand,
                 path4: "bin");
             string exeNativeLibDir = Path.Combine(path1: exeDir,
                 path2: "native",
-                path3: "build",
+                path3: BuildCommand,
                 path4: "lib");
 
             CopyDirectoryFiles(srcDir: nativeBinDir, dstDir: exeNativeBinDir);
@@ -1137,7 +1141,7 @@ internal partial class Program
 
         Console.WriteLine(
             value:
-            $"Building {entryFile} as {(isSuflae ? "Suflae" : "RazorForge")} (multi-file)...");
+            $"Building {entryFile} as {(isSuflae ? SuflaeLanguageName : RazorForgeLanguageName)} (multi-file)...");
         Console.WriteLine();
 
         try
@@ -1376,7 +1380,7 @@ internal partial class Program
 
         Console.WriteLine(
             value:
-            $"Checking {entryFile} as {(isSuflae ? "Suflae" : "RazorForge")} (multi-file)...");
+            $"Checking {entryFile} as {(isSuflae ? SuflaeLanguageName : RazorForgeLanguageName)} (multi-file)...");
         Console.WriteLine();
 
         try

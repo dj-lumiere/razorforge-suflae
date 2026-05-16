@@ -10,6 +10,8 @@ namespace Compiler.Parser;
 /// </summary>
 public partial class Parser
 {
+    private const string ExpectedRightBracketAfterGenericParameters = "Expected ']' after generic parameters";
+
     private EntityDeclaration ParseEntityDeclaration(
         VisibilityModifier visibility = VisibilityModifier.Open)
     {
@@ -28,7 +30,7 @@ public partial class Parser
             inlineConstraints = result.inlineConstraints;
 
             Consume(type: TokenType.RightBracket,
-                errorMessage: "Expected ']' after generic parameters");
+                errorMessage: ExpectedRightBracketAfterGenericParameters);
         }
 
         // Parse generic constraints (where clause) - merge with inline constraints
@@ -164,7 +166,7 @@ public partial class Parser
             inlineConstraints = result.inlineConstraints;
 
             Consume(type: TokenType.RightBracket,
-                errorMessage: "Expected ']' after generic parameters");
+                errorMessage: ExpectedRightBracketAfterGenericParameters);
         }
 
         // Parse generic constraints (where clause) - merge with inline constraints
@@ -495,7 +497,7 @@ public partial class Parser
             inlineConstraints = result.inlineConstraints;
 
             Consume(type: TokenType.RightBracket,
-                errorMessage: "Expected ']' after generic parameters");
+                errorMessage: ExpectedRightBracketAfterGenericParameters);
         }
 
         // Parse generic constraints (where clause) - merge with inline constraints
@@ -586,7 +588,7 @@ public partial class Parser
             inlineConstraints = result.inlineConstraints;
 
             Consume(type: TokenType.RightBracket,
-                errorMessage: "Expected ']' after generic parameters");
+                errorMessage: ExpectedRightBracketAfterGenericParameters);
         }
 
         // Parse generic constraints (where clause) - merge with inline constraints

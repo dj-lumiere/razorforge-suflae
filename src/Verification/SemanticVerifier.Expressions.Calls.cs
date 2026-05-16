@@ -13,6 +13,12 @@ using TypeSymbol = TypeInfo;
 
 public sealed partial class SemanticVerifier
 {
+    private const string StartRoutineName = "start";
+    private const string UseWhenHint = "Use 'when' to match the result, '??' to provide a default, or make the enclosing routine failable (!).";
+    private const string BlankMemberName = "Blank";
+    private const string GraspMethodName = "grasp";
+    private const string InspectMethodName = "inspect";
+
     private TypeSymbol AnalyzeCallExpression(CallExpression call)
     {
         switch (call.Callee)
@@ -293,13 +299,13 @@ public sealed partial class SemanticVerifier
                         _currentRoutine.HasFailableCalls = true;
 
                         // Non-failable routine (except start/synthesized) cannot call failable routines
-                        if (!_currentRoutine.IsFailable && _currentRoutine.Name != "start" &&
+                        if (!_currentRoutine.IsFailable && _currentRoutine.Name != StartRoutineName &&
                             !_currentRoutine.IsSynthesized)
                         {
                             ReportWarning(code: SemanticWarningCode.UnhandledCrashableCall,
                                 message:
                                 $"Failable routine '{routine.Name}!' called without error handling. " +
-                                "Use 'when' to match the result, '??' to provide a default, or make the enclosing routine failable (!).",
+                                UseWhenHint,
                                 location: call.Location);
                         }
                     }
@@ -328,7 +334,7 @@ public sealed partial class SemanticVerifier
 
                     // Return type is Blank if not specified (routines without explicit return type return Blank)
                     TypeSymbol returnType = routine.ReturnType ??
-                                            _registry.LookupType(name: "Blank") ??
+                                            _registry.LookupType(name: BlankMemberName) ??
                                             ErrorTypeInfo.Instance;
                     return returnType;
                 }
@@ -547,13 +553,13 @@ public sealed partial class SemanticVerifier
                     {
                         _currentRoutine.HasFailableCalls = true;
 
-                        if (!_currentRoutine.IsFailable && _currentRoutine.Name != "start" &&
+                        if (!_currentRoutine.IsFailable && _currentRoutine.Name != StartRoutineName &&
                             !_currentRoutine.IsSynthesized)
                         {
                             ReportWarning(code: SemanticWarningCode.UnhandledCrashableCall,
                                 message:
                                 $"Failable routine '{routine.Name}!' called without error handling. " +
-                                "Use 'when' to match the result, '??' to provide a default, or make the enclosing routine failable (!).",
+                                UseWhenHint,
                                 location: call.Location);
                         }
                     }
@@ -578,7 +584,7 @@ public sealed partial class SemanticVerifier
                         location: call.Location);
 
                     TypeSymbol returnType = routine.ReturnType ??
-                                            _registry.LookupType(name: "Blank") ??
+                                            _registry.LookupType(name: BlankMemberName) ??
                                             ErrorTypeInfo.Instance;
                     return returnType;
                 }
@@ -613,7 +619,7 @@ public sealed partial class SemanticVerifier
 
 // #137: Nested grasping detection — checked before method resolution
                 // since grasp() is generic extension T.grasp() that may not resolve by concrete type name
-                if (member.PropertyName == "grasp" && IsNestedGrasping(source: member.Object))
+                if (member.PropertyName == GraspMethodName && IsNestedGrasping(source: member.Object))
                 {
                     ReportError(code: SemanticDiagnosticCode.NestedHijackingNotAllowed,
                         message: "Cannot grasp a member of an already-grasped object. " +
@@ -714,13 +720,13 @@ public sealed partial class SemanticVerifier
                     {
                         _currentRoutine.HasFailableCalls = true;
 
-                        if (!_currentRoutine.IsFailable && _currentRoutine.Name != "start" &&
+                        if (!_currentRoutine.IsFailable && _currentRoutine.Name != StartRoutineName &&
                             !_currentRoutine.IsSynthesized)
                         {
                             ReportWarning(code: SemanticWarningCode.UnhandledCrashableCall,
                                 message:
                                 $"Failable routine '{method.Name}!' called without error handling. " +
-                                "Use 'when' to match the result, '??' to provide a default, or make the enclosing routine failable (!).",
+                                UseWhenHint,
                                 location: call.Location);
                         }
                     }
@@ -848,7 +854,7 @@ public sealed partial class SemanticVerifier
                     }
 
                     // #12: Partial access rule — entity.field.view() is not allowed
-                    if (member.PropertyName is "view" or "grasp" &&
+                    if (member.PropertyName is "view" or GraspMethodName &&
                         member.Object is MemberExpression innerMember)
                     {
                         TypeSymbol innerObjectType =
@@ -864,7 +870,7 @@ public sealed partial class SemanticVerifier
                     }
 
                     // #137: Nested grasping detection
-                    if (member.PropertyName == "grasp" && IsNestedGrasping(source: member.Object))
+                    if (member.PropertyName == GraspMethodName && IsNestedGrasping(source: member.Object))
                     {
                         ReportError(code: SemanticDiagnosticCode.NestedHijackingNotAllowed,
                             message: "Cannot grasp a member of an already-grasped object. " +
@@ -873,7 +879,7 @@ public sealed partial class SemanticVerifier
                     }
 
                     // #92: Re-grasping prohibition — cannot grasp an already-grasped token
-                    if (member.PropertyName == "grasp" && IsGraspedType(type: objectType))
+                    if (member.PropertyName == GraspMethodName && IsGraspedType(type: objectType))
                     {
                         ReportError(code: SemanticDiagnosticCode.ReHijackingProhibited,
                             message:
@@ -914,10 +920,10 @@ public sealed partial class SemanticVerifier
                     }
 
                     // #100/#101: inspect!/claim! only valid on Shared entity handles
-                    if (member.PropertyName is "inspect" or "claim" &&
+                    if (member.PropertyName is InspectMethodName or "claim" &&
                         !IsSharedType(type: objectType) && objectType is not ErrorTypeInfo)
                     {
-                        ReportError(code: member.PropertyName == "inspect"
+                        ReportError(code: member.PropertyName == InspectMethodName
                                 ? SemanticDiagnosticCode.InspectRequiresMultiRead
                                 : SemanticDiagnosticCode.ReadOnlyRejectsLocking,
                             message: $"'{member.PropertyName}!()' is only valid on Shared handles. " +
@@ -926,12 +932,12 @@ public sealed partial class SemanticVerifier
                     }
 
                     // #19: Lock policy validation — inspect!/claim! must match the lock policy
-                    if (member.PropertyName is "inspect" or "claim" &&
+                    if (member.PropertyName is InspectMethodName or "claim" &&
                         member.Object is IdentifierExpression lockPolicyTarget &&
                         _variableLockPolicies.TryGetValue(key: lockPolicyTarget.Name,
                             value: out string? policy))
                     {
-                        if (member.PropertyName == "inspect" && policy == "Exclusive")
+                        if (member.PropertyName == InspectMethodName && policy == "Exclusive")
                         {
                             ReportError(code: SemanticDiagnosticCode.InspectRequiresMultiRead,
                                 message:
@@ -949,7 +955,7 @@ public sealed partial class SemanticVerifier
                                 location: call.Location);
                         }
 
-                        if (member.PropertyName == "inspect" && policy == "ReadOnly")
+                        if (member.PropertyName == InspectMethodName && policy == "ReadOnly")
                         {
                             ReportError(code: SemanticDiagnosticCode.ReadOnlyRejectsLocking,
                                 message:
@@ -973,7 +979,7 @@ public sealed partial class SemanticVerifier
 
                     // #47: .grasp() on @initonly record warns — record is frozen after construction
                     // Check if the variable holding the record is @initonly bound
-                    if (member.PropertyName == "grasp" && objectType is RecordTypeInfo &&
+                    if (member.PropertyName == GraspMethodName && objectType is RecordTypeInfo &&
                         member.Object is IdentifierExpression graspTarget)
                     {
                         VariableInfo? targetVar =
@@ -1039,7 +1045,7 @@ public sealed partial class SemanticVerifier
                     }
 
                     TypeSymbol returnType = callReturnType ??
-                                            _registry.LookupType(name: "Blank") ??
+                                            _registry.LookupType(name: BlankMemberName) ??
                                             ErrorTypeInfo.Instance;
                     return returnType;
                 }
@@ -1114,13 +1120,13 @@ public sealed partial class SemanticVerifier
                         {
                             _currentRoutine.HasFailableCalls = true;
 
-                            if (!_currentRoutine.IsFailable && _currentRoutine.Name != "start" &&
+                            if (!_currentRoutine.IsFailable && _currentRoutine.Name != StartRoutineName &&
                                 !_currentRoutine.IsSynthesized)
                             {
                                 ReportWarning(code: SemanticWarningCode.UnhandledCrashableCall,
                                     message:
                                     $"Failable routine '{creator.Name}!' called without error handling. " +
-                                    "Use 'when' to match the result, '??' to provide a default, or make the enclosing routine failable (!).",
+                                    UseWhenHint,
                                     location: call.Location);
                             }
                         }
@@ -1151,7 +1157,7 @@ public sealed partial class SemanticVerifier
         // the call's result type is the routine's return type, not the routine type itself.
         if (calleeType is RoutineTypeInfo routineType)
         {
-            return routineType.ReturnType ?? _registry.LookupType(name: "Blank") ?? ErrorTypeInfo.Instance;
+            return routineType.ReturnType ?? _registry.LookupType(name: BlankMemberName) ?? ErrorTypeInfo.Instance;
         }
 
         return calleeType;

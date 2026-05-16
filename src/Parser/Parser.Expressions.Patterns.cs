@@ -9,6 +9,8 @@ namespace Compiler.Parser;
 /// </summary>
 public partial class Parser
 {
+    private const string ExpectedFlagNameAfterAnd = "Expected flag name after 'and'";
+
     private FlagsTestExpression ParseFlagsTestChain(Expression subject, string firstFlag,
         bool isNegated, SourceLocation location)
     {
@@ -21,10 +23,10 @@ public partial class Parser
         if (Match(type: TokenType.And))
         {
             // 'and' chain: READ and WRITE and ...
-            flags.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
+            flags.Add(item: ConsumeIdentifier(errorMessage: ExpectedFlagNameAfterAnd));
             while (Match(type: TokenType.And))
             {
-                flags.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
+                flags.Add(item: ConsumeIdentifier(errorMessage: ExpectedFlagNameAfterAnd));
             }
 
             // Optional 'but' exclusion
@@ -37,7 +39,7 @@ public partial class Parser
                 while (Match(type: TokenType.And))
                 {
                     excluded.Add(
-                        item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
+                        item: ConsumeIdentifier(errorMessage: ExpectedFlagNameAfterAnd));
                 }
             }
 
@@ -75,7 +77,7 @@ public partial class Parser
             while (Match(type: TokenType.And))
             {
                 excluded.Add(
-                    item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
+                    item: ConsumeIdentifier(errorMessage: ExpectedFlagNameAfterAnd));
             }
 
             return new FlagsTestExpression(Subject: subject,

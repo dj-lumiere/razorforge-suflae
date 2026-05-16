@@ -24,6 +24,15 @@ namespace Compiler.Resolution;
 /// </remarks>
 public sealed partial class TypeRegistry
 {
+    private const string ComparableProtocolName = "Comparable";
+    private const string ContainsMethodName = "$contains";
+    private const string BitAndMethodName = "$bitand";
+    private const string ArithmeticShiftLeftMethodName = "$ashl";
+    private const string ShiftableProtocolName = "Shiftable";
+    private const string InPlaceBitAndMethodName = "$ibitand";
+    private const string InPlaceShiftableProtocolName = "InPlaceShiftable";
+    private const string InPlaceArithmeticShiftLeftMethodName = "$iashl";
+
     private readonly Dictionary<(string FullName, string Protocol), bool> _capabilityCache =
         new();
 
@@ -43,13 +52,13 @@ public sealed partial class TypeRegistry
             ["$ne"] = ("Equatable", "$eq"),
             ["$hash"] = ("Hashable", "$hash"),
             ["$secure_hash"] = ("SecureHashable", "$secure_hash"),
-            ["$cmp"] = ("Comparable", "$cmp"),
-            ["$lt"] = ("Comparable", "$cmp"),
-            ["$le"] = ("Comparable", "$cmp"),
-            ["$gt"] = ("Comparable", "$cmp"),
-            ["$ge"] = ("Comparable", "$cmp"),
-            ["$contains"] = ("Container", "$contains"),
-            ["$notcontains"] = ("Container", "$contains"),
+            ["$cmp"] = (ComparableProtocolName, "$cmp"),
+            ["$lt"] = (ComparableProtocolName, "$cmp"),
+            ["$le"] = (ComparableProtocolName, "$cmp"),
+            ["$gt"] = (ComparableProtocolName, "$cmp"),
+            ["$ge"] = (ComparableProtocolName, "$cmp"),
+            ["$contains"] = ("Container", ContainsMethodName),
+            ["$notcontains"] = ("Container", ContainsMethodName),
             ["$getitem!"] = ("Indexable", "$getitem!"),
             ["$setitem!"] = ("Indexable", "$setitem!"),
             ["$iter"] = ("Iterable", "$iter"),
@@ -64,14 +73,14 @@ public sealed partial class TypeRegistry
             ["$mod"] = ("FloorDivisible", "$floordiv"),
             ["$pow"] = ("Exponentiable", "$pow"),
             ["$neg"] = ("Negatable", "$neg"),
-            ["$bitand"] = ("Bitwiseable", "$bitand"),
-            ["$bitor"] = ("Bitwiseable", "$bitand"),
-            ["$bitxor"] = ("Bitwiseable", "$bitand"),
+            ["$bitand"] = ("Bitwiseable", BitAndMethodName),
+            ["$bitor"] = ("Bitwiseable", BitAndMethodName),
+            ["$bitxor"] = ("Bitwiseable", BitAndMethodName),
             ["$bitnot"] = ("Invertible", "$bitnot"),
-            ["$ashl"] = ("Shiftable", "$ashl"),
-            ["$ashr"] = ("Shiftable", "$ashl"),
-            ["$lshl"] = ("Shiftable", "$ashl"),
-            ["$lshr"] = ("Shiftable", "$ashl"),
+            ["$ashl"] = (ShiftableProtocolName, ArithmeticShiftLeftMethodName),
+            ["$ashr"] = (ShiftableProtocolName, ArithmeticShiftLeftMethodName),
+            ["$lshl"] = (ShiftableProtocolName, ArithmeticShiftLeftMethodName),
+            ["$lshr"] = (ShiftableProtocolName, ArithmeticShiftLeftMethodName),
             ["$iadd"] = ("InPlaceAddable", "$iadd"),
             ["$isub"] = ("InPlaceSubtractable", "$isub"),
             ["$imul"] = ("InPlaceMultiplicable", "$imul"),
@@ -79,13 +88,13 @@ public sealed partial class TypeRegistry
             ["$ifloordiv"] = ("InPlaceFloorDivisible", "$ifloordiv"),
             ["$imod"] = ("InPlaceFloorDivisible", "$ifloordiv"),
             ["$ipow"] = ("InPlaceExponentiable", "$ipow"),
-            ["$ibitand"] = ("InPlaceBitwiseable", "$ibitand"),
-            ["$ibitor"] = ("InPlaceBitwiseable", "$ibitand"),
-            ["$ibitxor"] = ("InPlaceBitwiseable", "$ibitand"),
-            ["$iashl"] = ("InPlaceShiftable", "$iashl"),
-            ["$iashr"] = ("InPlaceShiftable", "$iashl"),
-            ["$ilshl"] = ("InPlaceShiftable", "$iashl"),
-            ["$ilshr"] = ("InPlaceShiftable", "$iashl"),
+            ["$ibitand"] = ("InPlaceBitwiseable", InPlaceBitAndMethodName),
+            ["$ibitor"] = ("InPlaceBitwiseable", InPlaceBitAndMethodName),
+            ["$ibitxor"] = ("InPlaceBitwiseable", InPlaceBitAndMethodName),
+            ["$iashl"] = (InPlaceShiftableProtocolName, InPlaceArithmeticShiftLeftMethodName),
+            ["$iashr"] = (InPlaceShiftableProtocolName, InPlaceArithmeticShiftLeftMethodName),
+            ["$ilshl"] = (InPlaceShiftableProtocolName, InPlaceArithmeticShiftLeftMethodName),
+            ["$ilshr"] = (InPlaceShiftableProtocolName, InPlaceArithmeticShiftLeftMethodName),
             ["$add_clamp"] = ("ClampingAddable", "$add_clamp"),
             ["$sub_clamp"] = ("ClampingSubtractable", "$sub_clamp"),
             ["$mul_clamp"] = ("ClampingMultiplicable", "$mul_clamp"),
@@ -136,7 +145,7 @@ public sealed partial class TypeRegistry
     /// <summary>Returns true if the type implements <c>Equatable</c> ($eq).</summary>
     public bool TypeHasEquality(TypeInfo type) => TypeHasWiredRoutine(type: type, wiredName: "$eq");
     /// <summary>Returns true if the type implements <c>Containable</c> ($contains).</summary>
-    public bool TypeHasContainment(TypeInfo type) => TypeHasWiredRoutine(type: type, wiredName: "$contains");
+    public bool TypeHasContainment(TypeInfo type) => TypeHasWiredRoutine(type: type, wiredName: ContainsMethodName);
     /// <summary>Returns true if the type implements <c>Hashable</c> ($hash).</summary>
     public bool TypeHasHashing(TypeInfo type) => TypeHasWiredRoutine(type: type, wiredName: "$hash");
     /// <summary>Returns true if the type implements <c>Comparable</c> ($cmp).</summary>

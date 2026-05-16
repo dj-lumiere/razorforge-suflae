@@ -41,6 +41,15 @@ namespace Compiler.Synthesis;
 /// </summary>
 public sealed class WiredRoutinePass(DesugaringContext ctx)
 {
+    private const string RepresentMethodName = "$represent";
+    private const string DiagnoseMethodName = "$diagnose";
+    private const string HashMethodName = "$hash";
+    private const string SecureHashMethodName = "$secure_hash";
+    private const string BitXorMethodName = "$bitxor";
+    private const string ResultVarName = "result";
+    private const string FirstVarName = "first";
+    private const string OtherParamName = "other";
+
     private static readonly SourceLocation _synthLoc =
         new(FileName: "", Line: 0, Column: 0, Position: 0);
 
@@ -199,12 +208,12 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     {
         switch (routine.Name)
         {
-            case "$represent":
+            case RepresentMethodName:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildTextBody(ownerType: entity, fields: entity.MemberVariables,
                         textType: textType, diagnose: false);
                 break;
-            case "$diagnose":
+            case DiagnoseMethodName:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildTextBody(ownerType: entity, fields: entity.MemberVariables,
                         textType: textType, diagnose: true);
@@ -215,12 +224,12 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     : BuildEqBody(ownerType: entity, fields: entity.MemberVariables,
                         boolType: boolType);
                 break;
-            case "$hash" when entity.MemberVariables.Count > 0 && u64Type != null:
+            case HashMethodName when entity.MemberVariables.Count > 0 && u64Type != null:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildHashBody(ownerType: entity, fields: entity.MemberVariables,
                         u64Type: u64Type);
                 break;
-            case "$secure_hash" when entity.MemberVariables.Count > 0 && u64Type != null:
+            case SecureHashMethodName when entity.MemberVariables.Count > 0 && u64Type != null:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildSecureHashBody(ownerType: entity, fields: entity.MemberVariables,
                         u64Type: u64Type);
@@ -233,12 +242,12 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     {
         switch (routine.Name)
         {
-            case "$represent":
+            case RepresentMethodName:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildTextBody(ownerType: record, fields: record.MemberVariables,
                         textType: textType, diagnose: false);
                 break;
-            case "$diagnose":
+            case DiagnoseMethodName:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildTextBody(ownerType: record, fields: record.MemberVariables,
                         textType: textType, diagnose: true);
@@ -247,11 +256,11 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildEqBody(ownerType: record, fields: record.MemberVariables, boolType: boolType);
                 break;
-            case "$hash" when u64Type != null:
+            case HashMethodName when u64Type != null:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildHashBody(ownerType: record, fields: record.MemberVariables, u64Type: u64Type);
                 break;
-            case "$secure_hash" when u64Type != null:
+            case SecureHashMethodName when u64Type != null:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildSecureHashBody(ownerType: record, fields: record.MemberVariables,
                         u64Type: u64Type);
@@ -329,20 +338,20 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             // or non-copyable (must reconstruct with explicit verbs). See
             // RazorForge-Wiki/docs/Records.md#copy-semantics.
 
-            case "$represent":
+            case RepresentMethodName:
                 // Generic definitions allowed: monomorphization substitutes type params.
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildTextBody(ownerType: record, fields: record.MemberVariables,
                         textType: textType, diagnose: false);
                 break;
 
-            case "$diagnose":
+            case DiagnoseMethodName:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildTextBody(ownerType: record, fields: record.MemberVariables,
                         textType: textType, diagnose: true);
                 break;
 
-            case "$hash":
+            case HashMethodName:
             {
                 // Generic definitions allowed: monomorphization substitutes type params.
                 TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
@@ -352,7 +361,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 break;
             }
 
-            case "$secure_hash":
+            case SecureHashMethodName:
             {
                 if (record.IsGenericDefinition) break;
                 TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
@@ -371,13 +380,13 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         // Generic definitions allowed: monomorphization substitutes type params via _typeSubstitutions.
         switch (routine.Name)
         {
-            case "$represent":
+            case RepresentMethodName:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildTextBody(ownerType: entity, fields: entity.MemberVariables,
                         textType: textType, diagnose: false);
                 break;
 
-            case "$diagnose":
+            case DiagnoseMethodName:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildTextBody(ownerType: entity, fields: entity.MemberVariables,
                         textType: textType, diagnose: true);
@@ -389,7 +398,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     : BuildEqBody(ownerType: entity, fields: entity.MemberVariables, boolType: boolType);
                 break;
 
-            case "$hash" when entity.MemberVariables.Count > 0:
+            case HashMethodName when entity.MemberVariables.Count > 0:
             {
                 TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
                 if (u64Type == null) break;
@@ -398,7 +407,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 break;
             }
 
-            case "$secure_hash" when entity.MemberVariables.Count > 0:
+            case SecureHashMethodName when entity.MemberVariables.Count > 0:
             {
                 TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
                 if (u64Type == null) break;
@@ -418,7 +427,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 var representCall = new CallExpression(
                     Callee: new MemberExpression(
                         Object: fromRef,
-                        PropertyName: "$represent",
+                        PropertyName: RepresentMethodName,
                         Location: _synthLoc) { ResolvedType = textType },
                     Arguments: [],
                     Location: _synthLoc) { ResolvedType = textType };
@@ -434,12 +443,12 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     {
         switch (routine.Name)
         {
-            case "$represent":
+            case RepresentMethodName:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildCrashableRepresentBody(crashable: crashable);
                 break;
 
-            case "$diagnose":
+            case DiagnoseMethodName:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildCrashableDiagnoseBody(crashable: crashable, textType: textType);
                 break;
@@ -467,13 +476,13 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     BuildEqBodyNumeric(ownerType: choice, boolType: boolType, isChoice: true);
                 break;
 
-            case "$hash" when s64Type != null && u64Type != null:
+            case HashMethodName when s64Type != null && u64Type != null:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildNumericHashBodyViaConversion(ownerType: choice, conversionTypeName: "S64",
                         conversionType: s64Type, u64Type: u64Type);
                 break;
 
-            case "$secure_hash" when s64Type != null && u64Type != null:
+            case SecureHashMethodName when s64Type != null && u64Type != null:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildNumericSecureHashBodyViaConversion(ownerType: choice,
                         conversionTypeName: "S64", conversionType: s64Type, u64Type: u64Type);
@@ -490,13 +499,13 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 break;
             }
 
-            case "$represent":
+            case RepresentMethodName:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildChoiceRepresentBody(choice: choice, textType: textType,
                         logicBreachedErrorType: logicBreachedErrorType);
                 break;
 
-            case "$diagnose":
+            case DiagnoseMethodName:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildChoiceDiagnoseBody(choice: choice, textType: textType,
                         logicBreachedErrorType: logicBreachedErrorType);
@@ -629,7 +638,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         // Pre-resolve U64.$bitxor so synthesized CallExpression nodes carry a concrete
         // ResolvedRoutine. Without it, codegen's DirectMemberRoutine path throws when it
         // can't determine the receiver type for the XOR accumulator call.
-        RoutineInfo? u64Bitxor = ctx.Registry.LookupMethod(type: u64Type, methodName: "$bitxor");
+        RoutineInfo? u64Bitxor = ctx.Registry.LookupMethod(type: u64Type, methodName: BitXorMethodName);
 
         Expression? accum = null;
         foreach (MemberVariableInfo field in fields)
@@ -642,9 +651,9 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 Location: _synthLoc) { ResolvedType = field.Type };
             var hashMethod = new MemberExpression(
                 Object: fieldAccess,
-                PropertyName: "$hash",
+                PropertyName: HashMethodName,
                 Location: _synthLoc) { ResolvedType = u64Type };
-            RoutineInfo? fieldHashRoutine = ctx.Registry.LookupMethod(type: field.Type, methodName: "$hash");
+            RoutineInfo? fieldHashRoutine = ctx.Registry.LookupMethod(type: field.Type, methodName: HashMethodName);
             Expression fieldHash = new CallExpression(
                 Callee: hashMethod,
                 Arguments: [],
@@ -667,7 +676,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 accum = new CallExpression(
                     Callee: new MemberExpression(
                         Object: accum,
-                        PropertyName: "$bitxor",
+                        PropertyName: BitXorMethodName,
                         Location: _synthLoc) { ResolvedType = u64Type },
                     Arguments: [new NamedArgumentExpression(Name: "you", Value: fieldHash, Location: _synthLoc)],
                     Location: _synthLoc)
@@ -705,7 +714,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         var hashCall = new CallExpression(
             Callee: new MemberExpression(
                 Object: creator,
-                PropertyName: "$hash",
+                PropertyName: HashMethodName,
                 Location: _synthLoc) { ResolvedType = u64Type },
             Arguments: [],
             Location: _synthLoc) { ResolvedType = u64Type };
@@ -876,7 +885,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     Location: _synthLoc) { ResolvedType = u64Type },
                 Location: _synthLoc);
 
-        RoutineInfo? u64Bitxor = ctx.Registry.LookupMethod(type: u64Type, methodName: "$bitxor");
+        RoutineInfo? u64Bitxor = ctx.Registry.LookupMethod(type: u64Type, methodName: BitXorMethodName);
 
         var k0Ref = new IdentifierExpression(Name: "k0", Location: _synthLoc) { ResolvedType = u64Type };
         var k1Ref = new IdentifierExpression(Name: "k1", Location: _synthLoc) { ResolvedType = u64Type };
@@ -888,9 +897,9 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 { ResolvedType = ownerType };
             var fieldAccess = new MemberExpression(Object: meRef, PropertyName: field.Name,
                 Location: _synthLoc) { ResolvedType = field.Type };
-            RoutineInfo? fieldSecureHashRoutine = ctx.Registry.LookupMethod(type: field.Type, methodName: "$secure_hash");
+            RoutineInfo? fieldSecureHashRoutine = ctx.Registry.LookupMethod(type: field.Type, methodName: SecureHashMethodName);
             Expression fieldHash = new CallExpression(
-                Callee: new MemberExpression(Object: fieldAccess, PropertyName: "$secure_hash",
+                Callee: new MemberExpression(Object: fieldAccess, PropertyName: SecureHashMethodName,
                     Location: _synthLoc) { ResolvedType = u64Type },
                 Arguments:
                 [
@@ -913,7 +922,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 accum = new CallExpression(
                     Callee: new MemberExpression(
                         Object: accum,
-                        PropertyName: "$bitxor",
+                        PropertyName: BitXorMethodName,
                         Location: _synthLoc) { ResolvedType = u64Type },
                     Arguments: [new NamedArgumentExpression(Name: "you", Value: fieldHash, Location: _synthLoc)],
                     Location: _synthLoc)
@@ -946,7 +955,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             LoweringKind = CallLoweringKind.TypeConstructor
         };
         var hashCall = new CallExpression(
-            Callee: new MemberExpression(Object: creator, PropertyName: "$secure_hash",
+            Callee: new MemberExpression(Object: creator, PropertyName: SecureHashMethodName,
                 Location: _synthLoc) { ResolvedType = u64Type },
             Arguments:
             [
@@ -1217,13 +1226,13 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     BuildEqBodyNumeric(ownerType: flags, boolType: boolType, isChoice: false);
                 break;
 
-            case "$hash" when u64Type != null:
+            case HashMethodName when u64Type != null:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildNumericHashBodyViaConversion(ownerType: flags, conversionTypeName: "U64",
                         conversionType: u64Type, u64Type: u64Type);
                 break;
 
-            case "$secure_hash" when u64Type != null:
+            case SecureHashMethodName when u64Type != null:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildNumericSecureHashBodyViaConversion(ownerType: flags,
                         conversionTypeName: "U64", conversionType: u64Type, u64Type: u64Type);
@@ -1240,12 +1249,12 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 break;
             }
 
-            case "$represent":
+            case RepresentMethodName:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildFlagsRepresentBody(flags: flags, textType: textType, boolType: boolType);
                 break;
 
-            case "$diagnose":
+            case DiagnoseMethodName:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildFlagsDiagnoseBody(flags: flags, textType: textType, boolType: boolType);
                 break;
@@ -1311,7 +1320,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         // var result: Text = ""
         stmts.Add(new DeclarationStatement(
             Declaration: new VariableDeclaration(
-                Name: "result",
+                Name: ResultVarName,
                 Type: null,
                 Initializer: emptyText,
                 Visibility: VisibilityModifier.Open,
@@ -1321,7 +1330,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         // var first: Bool = true
         stmts.Add(new DeclarationStatement(
             Declaration: new VariableDeclaration(
-                Name: "first",
+                Name: FirstVarName,
                 Type: null,
                 Initializer: trueLit,
                 Visibility: VisibilityModifier.Open,
@@ -1376,14 +1385,14 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             // result.$add(other: " and FlagName")
             var appendNameCall = new CallExpression(
                 Callee: new MemberExpression(
-                    Object: new IdentifierExpression(Name: "result", Location: _synthLoc)
+                    Object: new IdentifierExpression(Name: ResultVarName, Location: _synthLoc)
                         { ResolvedType = textType },
                     PropertyName: "$add",
                     Location: _synthLoc),
                 Arguments:
                 [
                     new NamedArgumentExpression(
-                        Name: "other",
+                        Name: OtherParamName,
                         Value: andNameLit,
                         Location: _synthLoc)
                 ],
@@ -1391,18 +1400,18 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
             // if first { result = "FlagName"; first = false } else { result = result.$add(...) }
             var innerNameIf = new IfStatement(
-                Condition: new IdentifierExpression(Name: "first", Location: _synthLoc)
+                Condition: new IdentifierExpression(Name: FirstVarName, Location: _synthLoc)
                     { ResolvedType = boolType },
                 ThenStatement: new BlockStatement(
                     Statements:
                     [
                         new AssignmentStatement(
-                            Target: new IdentifierExpression(Name: "result", Location: _synthLoc)
+                            Target: new IdentifierExpression(Name: ResultVarName, Location: _synthLoc)
                                 { ResolvedType = textType },
                             Value: nameLit,
                             Location: _synthLoc),
                         new AssignmentStatement(
-                            Target: new IdentifierExpression(Name: "first", Location: _synthLoc)
+                            Target: new IdentifierExpression(Name: FirstVarName, Location: _synthLoc)
                                 { ResolvedType = boolType },
                             Value: falseLit,
                             Location: _synthLoc)
@@ -1412,7 +1421,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     Statements:
                     [
                         new AssignmentStatement(
-                            Target: new IdentifierExpression(Name: "result", Location: _synthLoc)
+                            Target: new IdentifierExpression(Name: ResultVarName, Location: _synthLoc)
                                 { ResolvedType = textType },
                             Value: appendNameCall,
                             Location: _synthLoc)
@@ -1443,7 +1452,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     Arguments:
                     [
                         new NamedArgumentExpression(
-                            Name: "other", Value: oneLit, Location: _synthLoc)
+                            Name: OtherParamName, Value: oneLit, Location: _synthLoc)
                     ],
                     Location: _synthLoc) { ResolvedType = textType };
 
@@ -1457,7 +1466,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     Arguments:
                     [
                         new NamedArgumentExpression(
-                            Name: "other", Value: zeroCharLit, Location: _synthLoc)
+                            Name: OtherParamName, Value: zeroCharLit, Location: _synthLoc)
                     ],
                     Location: _synthLoc) { ResolvedType = textType };
 
@@ -1492,13 +1501,13 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
         // if first { result = "<none>" }
         stmts.Add(new IfStatement(
-            Condition: new IdentifierExpression(Name: "first", Location: _synthLoc)
+            Condition: new IdentifierExpression(Name: FirstVarName, Location: _synthLoc)
                 { ResolvedType = boolType },
             ThenStatement: new BlockStatement(
                 Statements:
                 [
                     new AssignmentStatement(
-                        Target: new IdentifierExpression(Name: "result", Location: _synthLoc)
+                        Target: new IdentifierExpression(Name: ResultVarName, Location: _synthLoc)
                             { ResolvedType = textType },
                         Value: noneLit,
                         Location: _synthLoc)
@@ -1529,7 +1538,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             computeBits: false);
 
         stmts.Add(new ReturnStatement(
-            Value: new IdentifierExpression(Name: "result", Location: _synthLoc)
+            Value: new IdentifierExpression(Name: ResultVarName, Location: _synthLoc)
                 { ResolvedType = textType },
             Location: _synthLoc));
 
@@ -1558,7 +1567,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
         // return f"Module.FlagsName(value: {bits}, {result})"
         // Both result and bits are Text ??EmitRepresentCall returns them directly.
-        var resultRef = new IdentifierExpression(Name: "result", Location: _synthLoc)
+        var resultRef = new IdentifierExpression(Name: ResultVarName, Location: _synthLoc)
             { ResolvedType = textType };
         var bitsRef = new IdentifierExpression(Name: "bits", Location: _synthLoc)
             { ResolvedType = textType };
@@ -1782,7 +1791,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                             Location: _synthLoc),
                         Arguments: [
                             new NamedArgumentExpression(
-                                Name: "other",
+                                Name: OtherParamName,
                                 Value: new LiteralExpression(
                                     Value: field.Name,
                                     LiteralType: TokenType.TextLiteral,
@@ -2127,12 +2136,12 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     {
         switch (routine.Name)
         {
-            case "$represent":
+            case RepresentMethodName:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildTupleTextBody(tuple: tuple, textType: textType, diagnose: false);
                 break;
 
-            case "$diagnose":
+            case DiagnoseMethodName:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildTupleTextBody(tuple: tuple, textType: textType, diagnose: true);
                 break;
@@ -2156,7 +2165,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 break;
             }
 
-            case "$hash":
+            case HashMethodName:
             {
                 TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
                 if (u64Type == null) break;
@@ -2231,12 +2240,12 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
         switch (routine.Name)
         {
-            case "$represent":
+            case RepresentMethodName:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildVariantRepresentBody(variant: variant, textType: textType);
                 break;
 
-            case "$diagnose":
+            case DiagnoseMethodName:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildVariantDiagnoseBody(variant: variant, textType: textType);
                 break;
@@ -2286,7 +2295,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 var representCall = new CallExpression(
                     Callee: new MemberExpression(
                         Object: vRef,
-                        PropertyName: "$represent",
+                        PropertyName: RepresentMethodName,
                         Location: _synthLoc) { ResolvedType = textType },
                     Arguments: [],
                     Location: _synthLoc) { ResolvedType = textType };
@@ -2358,7 +2367,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 var representCall = new CallExpression(
                     Callee: new MemberExpression(
                         Object: vRef,
-                        PropertyName: "$represent",
+                        PropertyName: RepresentMethodName,
                         Location: _synthLoc) { ResolvedType = textType },
                     Arguments: [],
                     Location: _synthLoc) { ResolvedType = textType };
