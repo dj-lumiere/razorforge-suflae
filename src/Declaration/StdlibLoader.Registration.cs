@@ -51,30 +51,6 @@ public sealed partial class StdlibLoader
     /// method signatures. This ensures forward references between protocols resolve correctly
     /// (e.g., Iterable[T].$iter() -> Iterator[T] where Iterator is another protocol).
     /// </summary>
-    private static void RegisterProgramProtocols(TypeRegistry registry, Program program,
-        string moduleName)
-    {
-        // Pass 1: Register protocol type shells (no methods yet)
-        foreach (ISyntaxTreeNode node in program.Declarations)
-        {
-            if (node is ProtocolDeclaration protocol)
-            {
-                RegisterProtocolTypeShell(registry: registry,
-                    protocol: protocol,
-                    moduleName: moduleName);
-            }
-        }
-
-        // Pass 2: Fill in method signatures (now all protocols are registered for cross-references)
-        foreach (ISyntaxTreeNode node in program.Declarations)
-        {
-            if (node is ProtocolDeclaration protocol)
-            {
-                FillProtocolMethods(registry: registry, protocol: protocol);
-            }
-        }
-    }
-
     /// <summary>
     /// Registers type declarations (record, entity, choice, variant, protocol) from a program.
     /// This is pass 1b of module-based loading. Protocols may already be registered from pass 1a.
@@ -992,12 +968,10 @@ public sealed partial class StdlibLoader
                      {
                          Operator: UnaryOperator.Minus,
                          Operand: LiteralExpression { Value: string negStr }
-                     })
+                     } &&
+                     int.TryParse(s: negStr, result: out int v))
             {
-                if (int.TryParse(s: negStr, result: out int v))
-                {
-                    explicitValue = -v;
-                }
+                explicitValue = -v;
             }
 
             int computedValue;

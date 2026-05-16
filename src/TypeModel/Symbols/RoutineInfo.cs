@@ -424,7 +424,7 @@ public sealed class RoutineInfo
         if (type is TupleTypeInfo tupleType)
         {
             var substitutedElements = tupleType.ElementTypes
-                .Select(selector => (TypeInfo)SubstituteType(type: selector, substitution: substitution))
+                .Select(selector => SubstituteType(type: selector, substitution: substitution))
                 .ToList();
             bool anyChanged = substitutedElements.Where((element, index) =>
                     !ReferenceEquals(objA: element, objB: tupleType.ElementTypes[index: index]))

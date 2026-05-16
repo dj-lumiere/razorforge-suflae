@@ -56,7 +56,7 @@ public partial class LlvmCodeGenerator
     /// Generates code for an `uninit` expression — yields LLVM `undef` of the
     /// surrounding binding's type. Reading without a prior write is UB.
     /// </summary>
-    private string EmitUninitExpression(UninitExpression uninit)
+    private static string EmitUninitExpression(UninitExpression uninit)
     {
         if (uninit.ResolvedType is null)
         {

@@ -140,22 +140,6 @@ public partial class Parser
     }
 
     /// <summary>
-    /// Check if we're at a valid indentation level for statements.
-    /// </summary>
-    private bool IsAtValidIndentationLevel()
-    {
-        return _indentationStack.Count > 0;
-    }
-
-    /// <summary>
-    /// Get current indentation depth for debugging.
-    /// </summary>
-    private int GetIndentationDepth()
-    {
-        return _indentationStack.Count - 1; // Subtract 1 for base level
-    }
-
-    /// <summary>
     /// Returns true if the current token sequence looks like generic type arguments
     /// for a generic call (i.e., <c>func[T]()</c> or <c>func![T]()</c>),
     /// as opposed to an index expression (<c>arr[0]</c>).
@@ -276,34 +260,7 @@ public partial class Parser
         return args;
     }
 
-    /// <summary>
-    /// Parses member variable initializers for record/entity literals: (name1: value1, name2: value2)
-    /// Called after '(' has been consumed.
-    /// </summary>
-    /// <returns>List of member variable name and value pairs.</returns>
-    private List<(string Name, Expression Value)> ParseAllArgsCreatorFields()
-    {
-        var memberVariables = new List<(string Name, Expression Value)>();
 
-        if (!Check(type: TokenType.RightParen))
-        {
-            do
-            {
-                // Parse member variable name
-                string memberVariableName =
-                    ConsumeIdentifier(
-                        errorMessage: "Expected member variable name in record/entity literal");
-                Consume(type: TokenType.Colon,
-                    errorMessage: "Expected ':' after member variable name");
-
-                // Parse member variable value
-                Expression value = ParseExpression();
-                memberVariables.Add(item: (memberVariableName, value));
-            } while (Match(type: TokenType.Comma));
-        }
-
-        return memberVariables;
-    }
 
     #endregion
 

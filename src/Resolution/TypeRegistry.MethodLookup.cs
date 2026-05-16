@@ -562,21 +562,19 @@ public sealed partial class TypeRegistry
             {
                 RoutineInfo? genericMethod =
                     LookupMethod(type: genericDef, methodName: methodName, isFailable: isFailable);
-                if (genericMethod != null)
+                // Skip the generic-def → concrete substitution path when the inner lookup
+                // resolved via the universal-method fallback (e.g. `T.hijack()`). In that
+                // case `genericMethod` already has its universal T baked to the generic-def
+                // (e.g. `Hijacked[Retained-genericdef]`), and a second
+                // SubstituteMethodForOwner with the concrete `type` only substitutes the
+                // OUTER record's generic params (Retained's T → Counter) — it can't reach
+                // the inner T binding any more. Fall through to the universal path below
+                // so `T` binds directly to the concrete `type` (e.g. Retained[Counter])
+                // and produces `Hijacked[Retained[Counter]]`.
+                if (genericMethod != null &&
+                    genericMethod.GenericDefinition?.OwnerType is not GenericParameterTypeInfo)
                 {
-                    // Skip the generic-def → concrete substitution path when the inner lookup
-                    // resolved via the universal-method fallback (e.g. `T.hijack()`). In that
-                    // case `genericMethod` already has its universal T baked to the generic-def
-                    // (e.g. `Hijacked[Retained-genericdef]`), and a second
-                    // SubstituteMethodForOwner with the concrete `type` only substitutes the
-                    // OUTER record's generic params (Retained's T → Counter) — it can't reach
-                    // the inner T binding any more. Fall through to the universal path below
-                    // so `T` binds directly to the concrete `type` (e.g. Retained[Counter])
-                    // and produces `Hijacked[Retained[Counter]]`.
-                    if (genericMethod.GenericDefinition?.OwnerType is not GenericParameterTypeInfo)
-                    {
-                        return SubstituteMethodForOwner(method: genericMethod, resolvedOwner: type);
-                    }
+                    return SubstituteMethodForOwner(method: genericMethod, resolvedOwner: type);
                 }
             }
         }

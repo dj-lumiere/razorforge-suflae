@@ -274,7 +274,7 @@ public static class ManifestLoader
 
                 // Skip comments, empty lines, and imports — stop at first real declaration
                 if (!string.IsNullOrWhiteSpace(value: trimmed) &&
-                    !trimmed.StartsWith(value: "#") && !trimmed.StartsWith(value: "import "))
+                    !trimmed.StartsWith('#') && !trimmed.StartsWith(value: "import "))
                 {
                     break;
                 }

@@ -550,7 +550,7 @@ internal sealed class WrapperForwardingPass
     /// Hijacked is intentionally excluded — its API is the explicit extract/reveal/inject
     /// surface, not transparent forwarding of T's methods.
     /// </summary>
-    private bool IsWrapperType(TypeSymbol type)
+    private static bool IsWrapperType(TypeSymbol type)
     {
         string baseName = GetBaseTypeName(typeName: type.Name);
         return ForwardingWrapperTypes.Contains(value: baseName);

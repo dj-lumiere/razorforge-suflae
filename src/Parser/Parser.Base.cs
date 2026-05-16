@@ -317,7 +317,7 @@ _ => GrammarDiagnosticCode.UnexpectedToken
     /// <summary>
     /// Validate that comparison chain maintains consistent direction
     /// </summary>
-    protected bool IsValidComparisonChain(List<BinaryOperator> operators)
+    protected static bool IsValidComparisonChain(List<BinaryOperator> operators)
     {
         if (operators.Count <= 1)
         {
@@ -624,7 +624,7 @@ _ => GrammarDiagnosticCode.UnexpectedToken
     /// Types without direct C# equivalents (f128, d32, d64, d128, Integer, Decimal) are stored
     /// as raw strings in the AST. The semantic analyzer handles parsing these using native libraries.
     /// </remarks>
-    protected object ParseNumericLiteral(Token token)
+    protected static object ParseNumericLiteral(Token token)
     {
         string text = token.Text;
 

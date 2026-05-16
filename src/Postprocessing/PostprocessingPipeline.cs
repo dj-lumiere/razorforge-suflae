@@ -19,7 +19,7 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
         new LiteralLoweringPass(ctx).Run(program);
         new BuilderServiceInliningPass(ctx.Registry, ctx.VariantBodies).Run(program);
         new GenericCallLoweringPass(ctx.Registry, ctx.VariantBodies).Run(program);
-        new StructuralLoweringPass(ctx).Run(program);
+        StructuralLoweringPass.Run(program);
         new FStringLoweringPass(ctx).Run(program);
         new CrashableExpansionPass(ctx).Run(program);
         // CallOverloadResolutionPass runs after FStringLoweringPass so that the $represent/$diagnose
@@ -39,7 +39,7 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
         new PatternLoweringPass(ctx).Run(program);
         new ExpressionLoweringPass(ctx).Run(program);
         new OperatorLoweringPass(ctx).Run(program);
-        new RecordCopyLoweringPass(ctx).Run(program);
+        RecordCopyLoweringPass.Run(program);
         new BecomesLoweringPass(ctx).Run(program);
         new UsingLoweringPass(ctx).Run(program);
         new LambdaLiftingPass(ctx).Run(program);

@@ -568,19 +568,16 @@ public partial class Parser
                 flags.Add(item: ConsumeIdentifier(errorMessage: "Expected flag name after 'or'"));
             }
         }
-        else if (Check(type: TokenType.But))
+        else if (Match(type: TokenType.But))
         {
-            if (Match(type: TokenType.But))
+            excluded =
+            [
+                ConsumeIdentifier(errorMessage: "Expected flag name after 'but'")
+            ];
+            while (Match(type: TokenType.And))
             {
-                excluded =
-                [
-                    ConsumeIdentifier(errorMessage: "Expected flag name after 'but'")
-                ];
-                while (Match(type: TokenType.And))
-                {
-                    excluded.Add(
-                        item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
-                }
+                excluded.Add(
+                    item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
             }
         }
 

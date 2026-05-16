@@ -218,7 +218,7 @@ internal partial class Program
                 i += 2;
             }
             else if (!args[i]
-                        .StartsWith(value: "-"))
+                        .StartsWith('-'))
             {
                 if (explicitEntry == null)
                 {
@@ -635,8 +635,6 @@ internal partial class Program
             Console.WriteLine(value: "=== PARSING ===");
             var parser = new Parser(tokens: tokens, language: language, fileName: sourceFile);
             SyntaxTree.Program ast = parser.Parse();
-            IReadOnlyList<BuildWarning> parseWarnings = parser.GetWarnings();
-
             Console.WriteLine(value: $"Parsed {ast.Declarations.Count} declarations");
 
             // Semantic Analysis

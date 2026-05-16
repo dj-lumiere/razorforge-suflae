@@ -861,7 +861,6 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         _indent++;
         foreach (RoutineSignature sig in node.Methods)
         {
-            string failStr = sig.Name.EndsWith('!') ? "" : "";   // name already has '!'
             string returnStr = sig.ReturnType != null
                 ? $" -> {sig.ReturnType.Accept(this)}"
                 : " -> Blank";

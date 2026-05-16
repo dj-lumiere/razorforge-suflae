@@ -344,7 +344,6 @@ public partial class LlvmCodeGenerator
         _localEntityVars.Clear();
         _localRcRecordVars.Clear();
         _localRetainedVars.Clear();
-        _currentBlock = "entry";
         _currentRoutineEntryAllocas.Clear();
         _emittedAllocaNames.Clear();
 

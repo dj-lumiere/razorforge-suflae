@@ -288,12 +288,12 @@ public partial class LlvmCodeGenerator
                value == "float" ||
                value == "double" ||
                value == "fp128" ||
-               value.StartsWith(value: "i", comparisonType: StringComparison.Ordinal) &&
+               value.StartsWith('i') &&
                value.Length > 1 &&
                char.IsDigit(value[1]) ||
-               value.StartsWith(value: "%", comparisonType: StringComparison.Ordinal) ||
-               value.StartsWith(value: "{", comparisonType: StringComparison.Ordinal) ||
-               value.StartsWith(value: "[", comparisonType: StringComparison.Ordinal);
+               value.StartsWith('%') ||
+               value.StartsWith('{') ||
+               value.StartsWith('[');
     }
 
     /// <summary>

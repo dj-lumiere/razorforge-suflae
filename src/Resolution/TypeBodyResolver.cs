@@ -531,16 +531,12 @@ internal sealed class TypeBodyResolver
                     location: member.Location);
             }
 
-            members.Add(item: new VariantMemberInfo(type: (TypeInfo)memberType)
+            members.Add(item: new VariantMemberInfo(type: memberType)
             {
                 Location = member.Location
             });
         }
 
-        // Assign tag values: None = 0 (already set), others from 1
-        int tagStart = hasNone
-            ? 1
-            : 0;
         foreach (VariantMemberInfo m in members)
         {
             if (!m.IsNone)

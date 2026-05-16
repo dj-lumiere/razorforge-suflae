@@ -391,8 +391,7 @@ public sealed partial class SemanticVerifier
                                   {
                                       HasDirectBackendType: true
                                   } ltRec && ltRec.LlvmType is { } ltIr &&
-                                  ltIr.StartsWith(value: "i",
-                                      comparisonType: StringComparison.Ordinal) && ltIr != "i1";
+                                  ltIr.StartsWith('i') && ltIr != "i1";
         if (isIntegerCheckedOp && _currentRoutine != null)
         {
             _currentRoutine.HasFailableCalls = true;

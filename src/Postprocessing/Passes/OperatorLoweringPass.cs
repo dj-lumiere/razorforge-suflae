@@ -636,7 +636,6 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                         TryGetFixedWidthIntegerInfo(type: paramType, out _, out _))
                     {
                         argument = WrapNumericOperand(expr: argument, targetType: paramType);
-                        argType = paramType;
                     }
                 }
 

@@ -33,7 +33,7 @@ namespace Compiler.Postprocessing.Passes;
 internal sealed class StructuralLoweringPass(PostprocessingContext _)
 #pragma warning restore CS9113
 {
-    public void Run(Program program)
+    public static void Run(Program program)
     {
         List<ISyntaxTreeNode> decls = program.Declarations;
         for (int i = 0; i < decls.Count; i++)

@@ -30,7 +30,6 @@ namespace Verification;
 public sealed class ModificationInference
 {
     private readonly CallGraph _callGraph;
-    private readonly TypeRegistry _registry;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ModificationInference"/> class.
@@ -40,7 +39,6 @@ public sealed class ModificationInference
     public ModificationInference(CallGraph callGraph, TypeRegistry registry)
     {
         _callGraph = callGraph;
-        _registry = registry;
     }
 
     /// <summary>
@@ -175,7 +173,7 @@ public sealed class ModificationInference
     /// </summary>
     /// <param name="node">The call graph node.</param>
     /// <param name="assignment">The assignment statement.</param>
-    private void AnalyzeAssignmentForModification(CallGraphNode node,
+    private static void AnalyzeAssignmentForModification(CallGraphNode node,
         AssignmentStatement assignment)
     {
         if (!IsMemberVariableOfMe(expression: assignment.Target))

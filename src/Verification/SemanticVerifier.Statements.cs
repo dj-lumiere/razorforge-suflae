@@ -813,15 +813,13 @@ public sealed partial class SemanticVerifier
             }
 
             // Check that RHS is a tuple with matching arity
-            if (rhsType is TupleTypeInfo tupleType)
+            if (rhsType is TupleTypeInfo tupleType &&
+                tupleLhs.Elements.Count != tupleType.ElementTypes.Count)
             {
-                if (tupleLhs.Elements.Count != tupleType.ElementTypes.Count)
-                {
-                    ReportError(code: SemanticDiagnosticCode.DestructuringArityMismatch,
-                        message:
-                        $"Tuple destructuring has {tupleLhs.Elements.Count} targets but the value has {tupleType.ElementTypes.Count} elements.",
-                        location: assign.Location);
-                }
+                ReportError(code: SemanticDiagnosticCode.DestructuringArityMismatch,
+                    message:
+                    $"Tuple destructuring has {tupleLhs.Elements.Count} targets but the value has {tupleType.ElementTypes.Count} elements.",
+                    location: assign.Location);
             }
 
             return;

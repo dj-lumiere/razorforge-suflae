@@ -122,9 +122,6 @@ public partial class LlvmCodeGenerator
     /// <summary>Map of C string values to their global constant names (for deduplication).</summary>
     private readonly Dictionary<string, string> _cstrConstants = new(StringComparer.Ordinal);
 
-    /// <summary>Set of already-declared native functions to avoid duplicate declarations.</summary>
-    private readonly HashSet<string> _declaredNativeRoutines = [];
-
     /// <summary>Map of global variable names to their types (module-level 'global' declarations).</summary>
     private readonly Dictionary<string, TypeInfo> _globalVariables = new();
 
@@ -157,9 +154,6 @@ public partial class LlvmCodeGenerator
 
     /// <summary>The return type of the current function being generated.</summary>
     private TypeInfo? _currentRoutineReturnType;
-
-    /// <summary>The label of the current basic block (for phi node generation).</summary>
-    private string _currentBlock = "entry";
 
     /// <summary>Function-entry alloca instructions emitted once per function.</summary>
     private readonly StringBuilder _currentRoutineEntryAllocas = new();
@@ -1488,11 +1482,6 @@ public partial class LlvmCodeGenerator
     private void EmitLine(StringBuilder sb, string line)
     {
         sb.AppendLine(value: line);
-        // Auto-track current basic block for PHI node predecessors
-        if (line.Length > 0 && line[index: 0] != ' ' && line.EndsWith(value: ':'))
-        {
-            _currentBlock = line[..^1];
-        }
     }
 
     /// <summary>

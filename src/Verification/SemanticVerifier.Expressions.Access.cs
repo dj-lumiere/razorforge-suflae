@@ -261,7 +261,7 @@ public sealed partial class SemanticVerifier
     private TypeSymbol AnalyzeOptionalMemberExpression(OptionalMemberExpression optMember)
     {
         // Analyze the object expression to get its type
-        TypeSymbol objectType = AnalyzeExpression(expression: optMember.Object);
+        AnalyzeExpression(expression: optMember.Object);
 
         // Delegate to regular member analysis for the property lookup
         // The result is wrapped in Maybe[T] since the access may produce none
@@ -653,7 +653,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Checks if a type is a raw entity (not wrapped in a handle or token).
     /// </summary>
-    private bool IsRawEntityType(TypeSymbol type)
+    private static bool IsRawEntityType(TypeSymbol type)
     {
         // Raw entities are entity types that are not wrapped
         return type.Category == TypeCategory.Entity && !IsMemoryToken(type: type) &&

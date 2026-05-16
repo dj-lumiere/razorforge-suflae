@@ -729,7 +729,7 @@ public sealed partial class SemanticVerifier
     /// matching the given name. e.g. <c>Comparable</c> obeys <c>Equatable</c>, so
     /// <c>$eq</c> is reachable through <c>Comparable</c>.
     /// </summary>
-    private bool ProtocolDeclaresMethod(TypeSymbol proto, string methodName,
+    private static bool ProtocolDeclaresMethod(TypeSymbol proto, string methodName,
         HashSet<string>? visited = null)
     {
         if (proto is not ProtocolTypeInfo p) return false;

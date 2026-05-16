@@ -87,9 +87,6 @@ internal sealed class BuilderServiceInliningPass
     internal static bool IsFoldable(string routineName) =>
         _foldableRoutines.Contains(routineName);
 
-    private static readonly SourceLocation _loc =
-        new(FileName: "<bs-inline>", Line: 0, Column: 0, Position: 0);
-
     // Lazily looked up once per pass instance
     private TypeInfo? _u64Type;
     private TypeInfo? _s64Type;

@@ -1449,9 +1449,6 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             typeArgs = [];
             foreach (string paramName in genericDef.GenericParameters ?? [])
             {
-                TypeInfo? argType = recordType.MemberVariables
-                    .Select(f => f.Type)
-                    .FirstOrDefault(t => t?.Name != paramName);
                 // Fallback: just emit the concrete record type as-is
                 typeArgs = null;
                 break;

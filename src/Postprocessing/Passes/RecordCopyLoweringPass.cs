@@ -32,14 +32,9 @@ namespace Compiler.Postprocessing.Passes;
 internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
 {
     /// <summary>
-    /// Stores the loc state used by this compiler phase.
-    /// </summary>
-    private static readonly SourceLocation _loc = new(FileName: "", Line: 0, Column: 0, Position: 0);
-
-    /// <summary>
     /// Runs this compiler phase over its configured input.
     /// </summary>
-    public void Run(Program program)
+    public static void Run(Program program)
     {
         for (int i = 0; i < program.Declarations.Count; i++)
         {

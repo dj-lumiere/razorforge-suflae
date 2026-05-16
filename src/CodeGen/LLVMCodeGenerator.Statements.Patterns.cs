@@ -531,7 +531,7 @@ public partial class LlvmCodeGenerator
                     line: $"  br i1 {condition}, label %{matchLabel}, label %{failLabel}");
                 break;
 
-            case NegatedTypePattern negType:
+            case NegatedTypePattern:
                 throw new InvalidOperationException(
                     $"NegatedTypePattern on variant reached codegen ??PatternLoweringPass must lower this. " +
                     $"Subject type: {subjectType?.Name ?? "<null>"}. Routine: {_currentEmittingRoutine?.Name ?? "<unknown>"}.");

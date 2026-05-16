@@ -122,7 +122,7 @@ internal sealed class TypeResolver
             foreach (TypeExpression argExpr in typeExpr.GenericArguments)
             {
                 TypeSymbol argType = ResolveType(typeExpr: argExpr);
-                elementTypes.Add(item: (TypeInfo)argType);
+                elementTypes.Add(item: argType);
             }
 
             return _sa._registry.GetOrCreateTupleType(elementTypes: elementTypes);
@@ -139,12 +139,12 @@ internal sealed class TypeResolver
             {
                 foreach (TypeExpression paramTypeExpr in paramTupleExpr.GenericArguments)
                 {
-                    paramTypes.Add(item: (TypeInfo)ResolveType(typeExpr: paramTypeExpr));
+                    paramTypes.Add(item: ResolveType(typeExpr: paramTypeExpr));
                 }
             }
             else
             {
-                paramTypes.Add(item: (TypeInfo)ResolveType(typeExpr: paramTupleExpr));
+                paramTypes.Add(item: ResolveType(typeExpr: paramTupleExpr));
             }
 
             TypeInfo? returnType = ResolveType(typeExpr: returnTypeExpr);
@@ -950,18 +950,16 @@ internal sealed class TypeResolver
             case TokenType.U64Literal:
             case TokenType.U128Literal:
             case TokenType.AddressLiteral:
-                if (literal.Value is string rawNumeric)
+                if (literal.Value is string rawNumeric &&
+                    TryParseConstGenericLiteral(name: rawNumeric,
+                        value: out long parsed,
+                        explicitType: out string? explicitType))
                 {
-                    if (TryParseConstGenericLiteral(name: rawNumeric,
-                            value: out long parsed,
-                            explicitType: out string? explicitType))
-                    {
-                        value = new ConstGenericValueTypeInfo(literalText: rawNumeric,
-                            value: parsed,
-                            explicitTypeName: explicitType ?? GetConstGenericExplicitTypeName(
-                                declaredType: declaredType));
-                        return true;
-                    }
+                    value = new ConstGenericValueTypeInfo(literalText: rawNumeric,
+                        value: parsed,
+                        explicitTypeName: explicitType ?? GetConstGenericExplicitTypeName(
+                            declaredType: declaredType));
+                    return true;
                 }
 
                 return false;

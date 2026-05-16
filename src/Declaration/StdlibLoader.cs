@@ -168,7 +168,7 @@ public sealed partial class StdlibLoader
         // Pass 1c: Re-resolve member variables now that all types are registered.
         // The initial registration may have empty member lists due to forward references
         // (e.g., Bytes needs List which needs U64, but files are processed alphabetically).
-        foreach ((Program program, string _, string ns) in _corePrograms)
+        foreach ((Program program, string _, string _) in _corePrograms)
         {
             ResolveProgramMemberVariables(registry: registry, program: program);
         }
@@ -176,7 +176,7 @@ public sealed partial class StdlibLoader
         // Pass 1d: Re-resolve protocol conformances now that all types are registered.
         // Protocol arguments may reference types not yet registered during Pass 1b
         // (e.g., EnumerateIterator[T] obeys Iterable[Tuple[S64, T]] needs S64).
-        foreach ((Program program, string _, string ns) in _corePrograms)
+        foreach ((Program program, string _, string _) in _corePrograms)
         {
             ResolveProgramProtocolConformances(registry: registry, program: program);
         }
@@ -425,12 +425,12 @@ public sealed partial class StdlibLoader
         // Re-resolve member variables now that all type shells in this module are registered.
         // Initial registration may have empty member lists due to forward references
         // (e.g., Set needs SortedSet which may not be registered yet during alphabetical processing).
-        foreach ((Program program, string _, string ns) in programs)
+        foreach ((Program program, string _, string _) in programs)
         {
             ResolveProgramMemberVariables(registry: registry, program: program);
         }
 
-        foreach ((Program program, string _, string ns) in programs)
+        foreach ((Program program, string _, string _) in programs)
         {
             ResolveProgramProtocolConformances(registry: registry, program: program);
         }
@@ -736,7 +736,7 @@ public sealed partial class StdlibLoader
 
         foreach (string ann in annotations)
         {
-            if (ann.StartsWith(value: "llvm(") && ann.EndsWith(value: ")"))
+            if (ann.StartsWith(value: "llvm(") && ann.EndsWith(')'))
             {
                 return ann[5..^1]
                    .Trim(trimChar: '"');

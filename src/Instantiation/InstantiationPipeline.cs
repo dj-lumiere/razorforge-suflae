@@ -16,6 +16,6 @@ public sealed class InstantiationPipeline(InstantiationContext ctx)
         new ReachableGenericCollectionPass(ctx).Run();
         new RoutineReachabilityPass(ctx).Run();
         new GenericClosurePass(ctx).Run();
-        new GenericCanonicalizationPass(ctx).Run();
+        GenericCanonicalizationPass.Run();
     }
 }

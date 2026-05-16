@@ -26,8 +26,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     private readonly HashSet<TypeInfo> _liveOwnerTypes =
         new(comparer: ReferenceEqualityComparer.Instance);
 
-    private Dictionary<string, List<RoutineDeclaration>> _userByName = new(comparer: StringComparer.Ordinal);
-    private Dictionary<string, List<RoutineDeclaration>> _stdlibByName = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, List<RoutineDeclaration>> _userByName = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, List<RoutineDeclaration>> _stdlibByName = new(comparer: StringComparer.Ordinal);
 
     // Per-frame local variable type map (params + var decls). Used by ResolveMemberCall and
     // ResolveCallStyleConstructor to recover receiver types in stdlib bodies where SA didn't
@@ -361,11 +361,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 EnqueueZeroArgCreateIfPresent(owner: collectionType);
                 break;
             }
-            case SetLiteralExpression:
-                EnqueueMethodIfPresent(owner: collectionType, methodName: "add");
-                EnqueueZeroArgCreateIfPresent(owner: collectionType);
-                break;
-            case DictLiteralExpression:
+            case SetLiteralExpression or DictLiteralExpression:
                 EnqueueMethodIfPresent(owner: collectionType, methodName: "add");
                 EnqueueZeroArgCreateIfPresent(owner: collectionType);
                 break;

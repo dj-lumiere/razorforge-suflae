@@ -71,7 +71,7 @@ public partial class Parser
         string value = token.Text;
 
         // Regular text literals
-        if (value.StartsWith(value: "\"") && value.EndsWith(value: "\""))
+        if (value.StartsWith('"') && value.EndsWith('"'))
         {
             value = value.Substring(startIndex: 1, length: value.Length - 2);
         }

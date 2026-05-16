@@ -145,7 +145,7 @@ public sealed partial class SemanticVerifier
     /// <param name="wrapperType">The wrapper type.</param>
     /// <param name="memberVariableName">The name of the member variable to look up.</param>
     /// <returns>The member variable info if found, null otherwise.</returns>
-    private MemberVariableInfo? LookupMemberVariableOnWrapperInnerType(TypeSymbol wrapperType,
+    private static MemberVariableInfo? LookupMemberVariableOnWrapperInnerType(TypeSymbol wrapperType,
         string memberVariableName)
     {
         TypeSymbol? innerType = GetWrapperInnerType(wrapperType: wrapperType);
@@ -240,7 +240,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     /// <param name="type">Type to classify.</param>
     /// <param name="visited">Cycle guard for self-referential record definitions.</param>
-    private bool IsTriviallyCopyable(TypeSymbol type, HashSet<string>? visited = null)
+    private static bool IsTriviallyCopyable(TypeSymbol type, HashSet<string>? visited = null)
     {
         if (type is ErrorTypeInfo or GenericParameterTypeInfo || type.IsBlank)
         {
@@ -323,7 +323,7 @@ public sealed partial class SemanticVerifier
     /// <param name="type">Type to classify.</param>
     /// <returns>The offending wrapper's base name (e.g. <c>"Retained"</c>) and the path
     /// of field names leading to it, or null when no offender exists.</returns>
-    private (string Wrapper, string Path)? FindNonTriviallyCopyableWrapper(TypeSymbol type)
+    private static (string Wrapper, string Path)? FindNonTriviallyCopyableWrapper(TypeSymbol type)
     {
         return FindCore(type: type, prefix: "", visited: new HashSet<string>(StringComparer.Ordinal));
 

@@ -493,7 +493,7 @@ public sealed partial class SemanticVerifier
             Step(label: "RoutineReachabilityPass");
             new GenericClosurePass(ctx: ctx).Run();
             Step(label: "GenericClosurePass");
-            new GenericCanonicalizationPass(ctx: ctx).Run();
+            GenericCanonicalizationPass.Run();
             Step(label: "GenericCanonicalizationPass");
         }
         else

@@ -972,21 +972,19 @@ public sealed partial class SemanticVerifier
                     }
 
                     // #47: .grasp() on @initonly record warns — record is frozen after construction
-                    if (member.PropertyName == "grasp" && objectType is RecordTypeInfo)
+                    // Check if the variable holding the record is @initonly bound
+                    if (member.PropertyName == "grasp" && objectType is RecordTypeInfo &&
+                        member.Object is IdentifierExpression graspTarget)
                     {
-                        // Check if the variable holding the record is @initonly bound
-                        if (member.Object is IdentifierExpression graspTarget)
+                        VariableInfo? targetVar =
+                            _registry.LookupVariable(name: graspTarget.Name);
+                        if (targetVar is { IsModifiable: false })
                         {
-                            VariableInfo? targetVar =
-                                _registry.LookupVariable(name: graspTarget.Name);
-                            if (targetVar is { IsModifiable: false })
-                            {
-                                ReportWarning(code: SemanticWarningCode.HijackOnInitOnly,
-                                    message:
-                                    $"Calling '.grasp()' on @initonly-bound record '{graspTarget.Name}'. " +
-                                    "The record is frozen after construction — grasping has no practical effect.",
-                                    location: call.Location);
-                            }
+                            ReportWarning(code: SemanticWarningCode.HijackOnInitOnly,
+                                message:
+                                $"Calling '.grasp()' on @initonly-bound record '{graspTarget.Name}'. " +
+                                "The record is frozen after construction — grasping has no practical effect.",
+                                location: call.Location);
                         }
                     }
 

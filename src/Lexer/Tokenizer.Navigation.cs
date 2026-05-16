@@ -91,29 +91,6 @@ public partial class Tokenizer
         return _position >= _source.Length;
     }
 
-    /// <summary>
-    /// Peeks at the word starting at the current position without consuming it.
-    /// </summary>
-    /// <returns>
-    /// The word (sequence of letters, digits, underscores) at current position.
-    /// </returns>
-    /// <remarks>
-    /// Used for multi-character token detection like @native.
-    /// </remarks>
-    private string PeekWord()
-    {
-        var word = new StringBuilder();
-        int offset = 0;
-
-        while (!IsAtEnd() && char.IsLetterOrDigit(c: Peek(offset: offset)))
-        {
-            word.Append(value: Peek(offset: offset));
-            offset += 1;
-        }
-
-        return word.ToString();
-    }
-
     #endregion
 
     #region Token Management

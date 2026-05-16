@@ -128,7 +128,7 @@ public sealed class ErrorHandlingGenerator
     /// </summary>
     /// <param name="body">The statement body to analyze.</param>
     /// <returns>Analysis result with throw/absent flags.</returns>
-    private ErrorHandlingAnalysis AnalyzeBody(Statement body)
+    private static ErrorHandlingAnalysis AnalyzeBody(Statement body)
     {
         var analysis = new ErrorHandlingAnalysis();
         AnalyzeStatementRecursive(statement: body, analysis: analysis);

@@ -20,8 +20,6 @@ internal sealed class DerivedOperatorPass
 {
     private readonly TypeRegistry _registry;
     private readonly Dictionary<string, (RoutineInfo Routine, Statement Body)> _synthesizedBodies;
-    private readonly List<SemanticError> _errors;
-
     /// <summary>Synthetic source location used for compiler-generated AST nodes.</summary>
     private static readonly SourceLocation _synthLoc = new(FileName: "", Line: 0, Column: 0, Position: 0);
 
@@ -31,7 +29,6 @@ internal sealed class DerivedOperatorPass
     {
         _registry = registry;
         _synthesizedBodies = synthesizedBodies;
-        _errors = errors;
     }
 
     /// <summary>

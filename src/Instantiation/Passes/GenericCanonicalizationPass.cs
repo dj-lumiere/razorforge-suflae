@@ -8,7 +8,7 @@ namespace Compiler.Instantiation.Passes;
 internal sealed class GenericCanonicalizationPass(InstantiationContext ctx)
 #pragma warning restore CS9113
 {
-    public void Run()
+    public static void Run()
     {
         // TODO: Implement generic canonicalization logic
         // Remaining work:
