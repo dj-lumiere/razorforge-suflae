@@ -203,21 +203,46 @@ routine ByteSize.$cmp(you: ByteSize) -> ComparisonSign
 # ============================================================================
 
 ### Returns the display form of this byte size.
-### The formatter prefers binary units for larger values and falls back to raw
-### bytes for small quantities.
+### Breaks the raw byte count into binary unit components (PiB, TiB, GiB, MiB,
+### KiB, B) and concatenates the non-zero parts, matching the component-wise
+### style of `Duration.$represent`.
 ### :returns: The resulting `Text` value.
 routine ByteSize.$represent() -> Text
   var raw = reinterpret_bits[ByteSize, U64](me)
-  if raw >= BYTES_PER_GIB
-    var gib = F64(raw) / 1073741824.0
-    return f"{gib} GiB"
-  if raw >= BYTES_PER_MIB
-    var mib = F64(raw) / 1048576.0
-    return f"{mib} MiB"
-  if raw >= BYTES_PER_KIB
-    var kib = F64(raw) / 1024.0
-    return f"{kib} KiB"
-  return f"{raw} bytes"
+  if raw == 0_u64
+    return "0B"
+
+  var parts = ""
+
+  var pib = raw // BYTES_PER_PIB
+  var rem = raw % BYTES_PER_PIB
+  if pib != 0_u64
+    parts = f"{parts}{pib}PiB"
+
+  var tib = rem // BYTES_PER_TIB
+  rem = rem % BYTES_PER_TIB
+  if tib != 0_u64
+    parts = f"{parts}{tib}TiB"
+
+  var gib = rem // BYTES_PER_GIB
+  rem = rem % BYTES_PER_GIB
+  if gib != 0_u64
+    parts = f"{parts}{gib}GiB"
+
+  var mib = rem // BYTES_PER_MIB
+  rem = rem % BYTES_PER_MIB
+  if mib != 0_u64
+    parts = f"{parts}{mib}MiB"
+
+  var kib = rem // BYTES_PER_KIB
+  rem = rem % BYTES_PER_KIB
+  if kib != 0_u64
+    parts = f"{parts}{kib}KiB"
+
+  if rem != 0_u64
+    parts = f"{parts}{rem}B"
+
+  return parts
 
 ### Returns the diagnostic form of this byte size.
 ### :returns: The resulting `Text` value.
