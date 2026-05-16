@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using SyntaxTree;
 using TypeModel.Symbols;
 using TypeModel.Types;
@@ -248,9 +249,7 @@ public sealed partial class TypeRegistry
         };
         if (implemented == null) return false;
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (TypeInfo p in implemented)
-            if (Walk(p, protocolName, seen)) return true;
-        return false;
+        return implemented.Any(p => Walk(p, protocolName, seen));
 
         bool Walk(TypeInfo candidate, string target, HashSet<string> seenSet)
         {
@@ -258,8 +257,7 @@ public sealed partial class TypeRegistry
             if (candidate.Name == target) return true;
             TypeInfo latest = LookupType(name: candidate.Name) ?? candidate;
             if (latest is ProtocolTypeInfo proto)
-                foreach (ProtocolTypeInfo parent in proto.ParentProtocols)
-                    if (Walk(parent, target, seenSet)) return true;
+                return proto.ParentProtocols.Any(parent => Walk(parent, target, seenSet));
             return false;
         }
     }

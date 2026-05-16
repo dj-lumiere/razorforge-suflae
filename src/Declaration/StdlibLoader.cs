@@ -305,15 +305,7 @@ public sealed partial class StdlibLoader
     /// </summary>
     private static string? GetDeclaredModule(Program program)
     {
-        foreach (ISyntaxTreeNode node in program.Declarations)
-        {
-            if (node is ModuleDeclaration ns)
-            {
-                return ns.Path;
-            }
-        }
-
-        return null;
+        return (program.Declarations.OfType<ModuleDeclaration>().FirstOrDefault())?.Path;
     }
 
     /// <summary>

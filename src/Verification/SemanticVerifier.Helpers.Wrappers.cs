@@ -287,14 +287,7 @@ public sealed partial class SemanticVerifier
                 return true;
             }
 
-            foreach (MemberVariableInfo member in record.MemberVariables)
-            {
-                if (!IsTriviallyCopyable(type: member.Type, visited: visited))
-                {
-                    return false;
-                }
-            }
-            return true;
+            return record.MemberVariables.All(member => IsTriviallyCopyable(type: member.Type, visited: visited));
         }
 
         // Tuples — anonymous records; mirror the per-field walk.
@@ -305,14 +298,7 @@ public sealed partial class SemanticVerifier
             {
                 return true;
             }
-            foreach (TypeInfo element in tuple.ElementTypes)
-            {
-                if (!IsTriviallyCopyable(type: element, visited: visited))
-                {
-                    return false;
-                }
-            }
-            return true;
+            return tuple.ElementTypes.All(element => IsTriviallyCopyable(type: element, visited: visited));
         }
 
         // Entities (raw `T`) cannot appear in copy positions — separate diagnostics catch them.

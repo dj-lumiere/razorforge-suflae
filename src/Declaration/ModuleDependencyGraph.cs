@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Compiler.Diagnostics;
 using Verification.Results;
 using SyntaxTree;
@@ -163,13 +164,8 @@ public sealed class ModuleDependencyGraph
 
             if (_modules.TryGetValue(key: current, value: out ModuleNode? node))
             {
-                foreach (string dep in node.Dependencies)
-                {
-                    if (DFS(current: dep))
-                    {
-                        return true;
-                    }
-                }
+                if (node.Dependencies.Any(dep => DFS(current: dep)))
+                    return true;
             }
 
             path.RemoveAt(index: path.Count - 1);

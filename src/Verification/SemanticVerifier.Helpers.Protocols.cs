@@ -90,16 +90,12 @@ public sealed partial class SemanticVerifier
         // e.g., needs T obeys Equatable means T satisfies Equatable inside this routine's body.
         if (type is GenericParameterTypeInfo)
         {
-            if (_currentRoutine?.GenericConstraints != null)
-            {
-                foreach (GenericConstraintDeclaration c in _currentRoutine.GenericConstraints)
-                {
-                    if (c.ParameterName == type.Name && c.ConstraintType == ConstraintKind.Obeys &&
-                        c.ConstraintTypes != null &&
-                        c.ConstraintTypes.Any(ct => ct.Name == protocolName))
-                        return true;
-                }
-            }
+            if (_currentRoutine?.GenericConstraints != null &&
+                _currentRoutine.GenericConstraints.Any(c =>
+                    c.ParameterName == type.Name && c.ConstraintType == ConstraintKind.Obeys &&
+                    c.ConstraintTypes != null &&
+                    c.ConstraintTypes.Any(ct => ct.Name == protocolName)))
+                return true;
 
             TypeSymbol? ownerType = _currentRoutine?.OwnerType;
             if (ownerType?.GenericConstraints == null)
@@ -107,15 +103,10 @@ public sealed partial class SemanticVerifier
                 return false;
             }
 
-            foreach (GenericConstraintDeclaration c in ownerType.GenericConstraints)
-            {
-                if (c.ParameterName == type.Name && c.ConstraintType == ConstraintKind.Obeys &&
-                    c.ConstraintTypes != null &&
-                    c.ConstraintTypes.Any(ct => ct.Name == protocolName))
-                    return true;
-            }
-
-            return false;
+            return ownerType.GenericConstraints.Any(c =>
+                c.ParameterName == type.Name && c.ConstraintType == ConstraintKind.Obeys &&
+                c.ConstraintTypes != null &&
+                c.ConstraintTypes.Any(ct => ct.Name == protocolName));
         }
 
         // Get the list of implemented protocols for this type
@@ -131,22 +122,13 @@ public sealed partial class SemanticVerifier
             return false;
         }
 
-        // Check if the protocol is directly declared
-        foreach (TypeSymbol implemented in implementedProtocols)
-        {
-            if (implemented.Name == protocolName ||
-                GetBaseTypeName(typeName: implemented.Name) == protocolName)
-            {
-                return true;
-            }
-
-            // Check parent protocols recursively
-            if (implemented is ProtocolTypeInfo proto &&
-                CheckParentProtocols(proto: proto, targetName: protocolName))
-            {
-                return true;
-            }
-        }
+        // Check if the protocol is directly declared (or via parent protocols recursively)
+        if (implementedProtocols.Any(implemented =>
+                implemented.Name == protocolName ||
+                GetBaseTypeName(typeName: implemented.Name) == protocolName ||
+                (implemented is ProtocolTypeInfo proto &&
+                 CheckParentProtocols(proto: proto, targetName: protocolName))))
+            return true;
 
         // Check if the type has all required methods of the protocol (structural conformance)
         if (protocol is ProtocolTypeInfo protoType)
@@ -200,22 +182,11 @@ public sealed partial class SemanticVerifier
             return false;
         }
 
-        foreach (TypeSymbol implemented in implementedProtocols)
-        {
-            if (implemented.Name == protocolName ||
-                GetBaseTypeName(typeName: implemented.Name) == protocolName)
-            {
-                return true;
-            }
-
-            if (implemented is ProtocolTypeInfo proto &&
-                CheckParentProtocols(proto: proto, targetName: protocolName))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return implementedProtocols.Any(implemented =>
+            implemented.Name == protocolName ||
+            GetBaseTypeName(typeName: implemented.Name) == protocolName ||
+            (implemented is ProtocolTypeInfo proto &&
+             CheckParentProtocols(proto: proto, targetName: protocolName)));
     }
 
     /// <summary>

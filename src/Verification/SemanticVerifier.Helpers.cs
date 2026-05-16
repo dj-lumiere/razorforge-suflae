@@ -740,10 +740,8 @@ public sealed partial class SemanticVerifier
         if (p.Methods.Any(predicate: m =>
                 m.Name == methodName || m.Name + "!" == methodName))
             return true;
-        foreach (ProtocolTypeInfo parent in p.ParentProtocols)
-            if (ProtocolDeclaresMethod(proto: parent, methodName: methodName, visited: visited))
-                return true;
-        return false;
+        return p.ParentProtocols.Any(parent =>
+            ProtocolDeclaresMethod(proto: parent, methodName: methodName, visited: visited));
     }
 
     /// <summary>
@@ -754,14 +752,9 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private bool ConstGenericMatches(string paramName, string otherTypeName)
     {
-        foreach (GenericConstraintDeclaration c in ActiveConstraintsFor(paramName: paramName))
-        {
-            if (c.ConstraintType != ConstraintKind.ConstGeneric || c.ConstraintTypes == null)
-                continue;
-            foreach (TypeExpression ct in c.ConstraintTypes)
-                if (ct.Name == otherTypeName) return true;
-        }
-        return false;
+        return ActiveConstraintsFor(paramName: paramName)
+            .Where(c => c.ConstraintType == ConstraintKind.ConstGeneric && c.ConstraintTypes != null)
+            .Any(c => c.ConstraintTypes!.Any(ct => ct.Name == otherTypeName));
     }
 
     /// <summary>

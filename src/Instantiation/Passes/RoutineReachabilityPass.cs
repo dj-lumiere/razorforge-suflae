@@ -1481,12 +1481,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // "uninstantiated" relative to the enclosing routine's typeSubs and needs the
         // same substitution treatment a `T` argument would.
         if (type.IsGenericDefinition && type.GenericParameters is { Count: > 0 }) return true;
-        if (type.TypeArguments is { Count: > 0 } args)
-        {
-            foreach (TypeInfo a in args)
-                if (ContainsAnyGenericParameter(type: a)) return true;
-        }
-        return false;
+        return type.TypeArguments is { Count: > 0 } args &&
+               args.Any(a => ContainsAnyGenericParameter(type: a));
     }
 
     /// <summary>
@@ -1633,12 +1629,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     private static bool ContainsSubstitutableParameter(TypeInfo type, Dictionary<string, TypeInfo> typeSubs)
     {
         if (type is GenericParameterTypeInfo gp) return typeSubs.ContainsKey(key: gp.Name);
-        if (type.TypeArguments is { Count: > 0 } args)
-        {
-            foreach (TypeInfo a in args)
-                if (ContainsSubstitutableParameter(type: a, typeSubs: typeSubs)) return true;
-        }
-        return false;
+        return type.TypeArguments is { Count: > 0 } args &&
+               args.Any(a => ContainsSubstitutableParameter(type: a, typeSubs: typeSubs));
     }
 
     private static string ComputeConcreteRegistryKey(RoutineInfo routine, TypeInfo concreteOwner, Dictionary<string, TypeInfo> subs)

@@ -326,16 +326,8 @@ public sealed partial class SemanticVerifier
             return null;
         }
 
-        foreach (string ann in annotations)
-        {
-            if (ann.StartsWith(value: "llvm(") && ann.EndsWith(value: ')'))
-            {
-                return ann[5..^1]
-                   .Trim(trimChar: '"');
-            }
-        }
-
-        return null;
+        string? match = annotations.FirstOrDefault(ann => ann.StartsWith(value: "llvm(") && ann.EndsWith(value: ')'));
+        return match?[5..^1].Trim(trimChar: '"');
     }
 
     private void CollectEntityDeclaration(EntityDeclaration entity)
@@ -744,12 +736,7 @@ public sealed partial class SemanticVerifier
 
         // Check parents (Controlling[T] obeys Referring[T] — flagging a type declaring obeys
         // Controlling[T] also catches the transitive Referring case).
-        foreach (string marker in _markerProtocolNames)
-        {
-            if (CheckParentProtocols(proto: protoInfo, targetName: marker))
-                return true;
-        }
-        return false;
+        return _markerProtocolNames.Any(marker => CheckParentProtocols(proto: protoInfo, targetName: marker));
     }
 
     /// <summary>

@@ -84,16 +84,9 @@ internal sealed class TypeResolver
         }
 
         // Try each imported module
-        foreach (string ns in _sa._importedModules)
-        {
-            RoutineInfo? result = _sa._registry.LookupRoutine(fullName: $"{ns}.{name}");
-            if (result != null)
-            {
-                return result;
-            }
-        }
-
-        return null;
+        return _sa._importedModules
+            .Select(ns => _sa._registry.LookupRoutine(fullName: $"{ns}.{name}"))
+            .FirstOrDefault(result => result != null);
     }
 
     /// <summary>
@@ -868,16 +861,9 @@ internal sealed class TypeResolver
             }
         }
 
-        foreach (string ns in _sa._importedModules)
-        {
-            preset = _sa._registry.LookupVariable(name: $"{ns}.{name}");
-            if (preset is { IsPreset: true })
-            {
-                return preset;
-            }
-        }
-
-        return null;
+        return _sa._importedModules
+            .Select(ns => _sa._registry.LookupVariable(name: $"{ns}.{name}"))
+            .FirstOrDefault(v => v is { IsPreset: true });
     }
 
     private TypeSymbol ResolvePresetConstGenericValue(VariableInfo preset,

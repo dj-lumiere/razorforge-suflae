@@ -620,11 +620,7 @@ internal sealed class AutoWiredRegistrationPass
         };
         if (members == null) return true;
 
-        foreach (MemberVariableInfo m in members)
-        {
-            if (!TypeHasEquality(type: m.Type)) return false;
-        }
-        return true;
+        return members.All(m => TypeHasEquality(type: m.Type));
     }
 
     private bool TypeHasEquality(TypeSymbol type)
@@ -715,14 +711,7 @@ internal sealed class AutoWiredRegistrationPass
         }
 
         var seen = new HashSet<string>();
-        foreach (TypeSymbol p in implemented)
-        {
-            if (CheckProtocol(p, protocolName, seen))
-            {
-                return true;
-            }
-        }
-        return false;
+        return implemented.Any(p => CheckProtocol(p, protocolName, seen));
     }
 
     private bool CheckProtocol(TypeSymbol candidate, string targetName, HashSet<string> seen)
@@ -740,15 +729,7 @@ internal sealed class AutoWiredRegistrationPass
         // on the registry's current ProtocolTypeInfo.
         TypeSymbol latest = _registry.LookupType(name: candidate.Name) ?? candidate;
         if (latest is ProtocolTypeInfo proto)
-        {
-            foreach (ProtocolTypeInfo parent in proto.ParentProtocols)
-            {
-                if (CheckProtocol(parent, targetName, seen))
-                {
-                    return true;
-                }
-            }
-        }
+            return proto.ParentProtocols.Any(parent => CheckProtocol(parent, targetName, seen));
         return false;
     }
 

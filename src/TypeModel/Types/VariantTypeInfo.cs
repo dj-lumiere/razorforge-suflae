@@ -38,15 +38,7 @@ public sealed class VariantTypeInfo : TypeInfo
     /// <returns>The matching member info, or null if not found.</returns>
     public VariantMemberInfo? FindMember(TypeInfo type)
     {
-        foreach (VariantMemberInfo member in Members)
-        {
-            if (member.Type?.Name == type.Name)
-            {
-                return member;
-            }
-        }
-
-        return null;
+        return Members.FirstOrDefault(member => member.Type?.Name == type.Name);
     }
 
     /// <inheritdoc/>

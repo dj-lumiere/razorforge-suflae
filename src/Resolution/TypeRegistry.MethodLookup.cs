@@ -292,17 +292,10 @@ public sealed partial class TypeRegistry
             return found;
 
         // Fallback: targeted linear scan (rare; used only by codegen short-name lookups)
-        foreach (RoutineInfo routine in _routines.Values)
-        {
-            if (routine.Name == name &&
-                routine.OwnerType == null &&
-                (isFailable == null || routine.IsFailable == isFailable))
-            {
-                return routine;
-            }
-        }
-
-        return null;
+        return _routines.Values.FirstOrDefault(routine =>
+            routine.Name == name &&
+            routine.OwnerType == null &&
+            (isFailable == null || routine.IsFailable == isFailable));
     }
 
     /// <summary>
@@ -312,16 +305,9 @@ public sealed partial class TypeRegistry
     /// </summary>
     public RoutineInfo? LookupAnyByMethodName(string methodName, bool? isFailable = null)
     {
-        foreach (RoutineInfo routine in _routines.Values)
-        {
-            if (routine.Name == methodName &&
-                (isFailable == null || routine.IsFailable == isFailable))
-            {
-                return routine;
-            }
-        }
-
-        return null;
+        return _routines.Values.FirstOrDefault(routine =>
+            routine.Name == methodName &&
+            (isFailable == null || routine.IsFailable == isFailable));
     }
 
     /// <summary>
@@ -357,12 +343,7 @@ public sealed partial class TypeRegistry
         if (!_genericFreeFunctions.TryGetValue(key: name, value: out List<RoutineInfo>? candidates))
             return null;
 
-        foreach (RoutineInfo routine in candidates)
-        {
-            if (routine.IsVariadic) return routine;
-        }
-
-        return null;
+        return candidates.FirstOrDefault(routine => routine.IsVariadic);
     }
 
     /// <summary>
@@ -599,16 +580,8 @@ public sealed partial class TypeRegistry
         };
 
         if (protocols != null)
-        {
-            foreach (TypeInfo protocol in protocols)
-            {
-                RoutineInfo? protocolMethod = LookupMethod(type: protocol, methodName: methodName);
-                if (protocolMethod != null)
-                {
-                    return protocolMethod;
-                }
-            }
-        }
+            return protocols.Select(protocol => LookupMethod(type: protocol, methodName: methodName))
+                            .FirstOrDefault(m => m != null);
 
         return null;
     }

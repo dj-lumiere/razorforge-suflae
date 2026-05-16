@@ -611,24 +611,12 @@ internal sealed class SignatureResolver
             return false;
         }
 
-        // Check if the protocol is directly declared
-        foreach (TypeSymbol implemented in implementedProtocols)
-        {
-            if (implemented.Name == protocolName ||
-                GetBaseTypeName(typeName: implemented.Name) == protocolName)
-            {
-                return true;
-            }
-
-            // Check parent protocols recursively (if you follow a protocol that extends the target, that counts)
-            if (implemented is ProtocolTypeInfo proto &&
-                _sa.CheckParentProtocols(proto: proto, targetName: protocolName))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        // Check if the protocol is directly declared (or via parent protocols recursively)
+        return implementedProtocols.Any(implemented =>
+            implemented.Name == protocolName ||
+            GetBaseTypeName(typeName: implemented.Name) == protocolName ||
+            (implemented is ProtocolTypeInfo proto &&
+             _sa.CheckParentProtocols(proto: proto, targetName: protocolName)));
     }
 
     /// <summary>
