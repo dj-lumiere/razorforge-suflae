@@ -75,6 +75,14 @@ public sealed class TargetInfo
     /// Controlled by the <c>sa-timing</c> field in the target's TOML table.
     /// </summary>
     public bool SaTiming { get; set; }
+
+    /// <summary>
+    /// When true, prints build-stage banners ("=== SEMANTIC ANALYSIS ===", "Build successful!",
+    /// "=== EXECUTION ===", etc.) during build/buildandrun. Default is false: only errors and
+    /// warnings are printed, and the program's own stdout passes through unframed.
+    /// Controlled by the <c>show-build-stages</c> field in the target's TOML table.
+    /// </summary>
+    public bool ShowBuildStages { get; set; }
 }
 /// <summary>
 /// Represents the parsed contents of a project manifest file.

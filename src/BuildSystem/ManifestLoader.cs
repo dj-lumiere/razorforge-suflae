@@ -168,6 +168,9 @@ public static class ManifestLoader
         if (table.TryGetValue(key: "sa-timing", value: out object? saTiming))
             target.SaTiming = saTiming is bool bs && bs;
 
+        if (table.TryGetValue(key: "show-build-stages", value: out object? showStages))
+            target.ShowBuildStages = showStages is bool bShow && bShow;
+
         // Resolve module name to file path
         if (!moduleIndex.TryGetValue(key: target.Entry, value: out string? resolvedFile))
         {

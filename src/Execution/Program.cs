@@ -99,7 +99,7 @@ internal partial class Program
             case BuildCommand:
             {
                 (string? entryFile, string? projectRoot, string? outputFile2,
-                    RfBuildMode buildMode2, bool dumpAst2, bool saTiming2, bool requireStart2) = ResolveEntryFile(args: args, needsOutputArg: true);
+                    RfBuildMode buildMode2, bool dumpAst2, bool saTiming2, bool requireStart2, bool showStages2) = ResolveEntryFile(args: args, needsOutputArg: true);
                 if (entryFile == null)
                 {
                     return 1;
@@ -111,13 +111,14 @@ internal partial class Program
                     buildMode: buildMode2,
                     dumpAst: dumpAst2,
                     saTiming: saTiming2,
-                    requireStartRoutine: requireStart2);
+                    requireStartRoutine: requireStart2,
+                    showBuildStages: showStages2);
             }
 
             case "buildandrun":
             {
                 (string? entryFile, string? projectRoot, _,
-                    RfBuildMode buildMode3, bool dumpAst3, bool saTiming3, bool requireStart3) = ResolveEntryFile(args: args, needsOutputArg: false);
+                    RfBuildMode buildMode3, bool dumpAst3, bool saTiming3, bool requireStart3, bool showStages3) = ResolveEntryFile(args: args, needsOutputArg: false);
                 if (entryFile == null)
                 {
                     return 1;
@@ -129,7 +130,8 @@ internal partial class Program
                     dumpAst: dumpAst3,
                     saTiming: saTiming3,
                     cleanNativeRuntime: false,
-                    requireStartRoutine: requireStart3);
+                    requireStartRoutine: requireStart3,
+                    showBuildStages: showStages3);
             }
 
             case "cleanbuildandrun":
@@ -148,7 +150,7 @@ internal partial class Program
                 // Stage 2: running inside the freshly-built compiler. Do a clean native
                 // runtime rebuild and then the normal buildandrun.
                 (string? entryFile, string? projectRoot, _,
-                    RfBuildMode buildMode4, bool dumpAst4, bool saTiming4, bool requireStart4) = ResolveEntryFile(args: args, needsOutputArg: false);
+                    RfBuildMode buildMode4, bool dumpAst4, bool saTiming4, bool requireStart4, bool showStages4) = ResolveEntryFile(args: args, needsOutputArg: false);
                 if (entryFile == null)
                 {
                     return 1;
@@ -160,12 +162,13 @@ internal partial class Program
                     dumpAst: dumpAst4,
                     saTiming: saTiming4,
                     cleanNativeRuntime: true,
-                    requireStartRoutine: requireStart4);
+                    requireStartRoutine: requireStart4,
+                    showBuildStages: showStages4);
             }
 
             case "check":
             {
-                (string? entryFile, string? projectRoot, _, _, _, _, _) =
+                (string? entryFile, string? projectRoot, _, _, _, _, _, _) =
                     ResolveEntryFile(args: args, needsOutputArg: false);
                 if (entryFile == null)
                 {
@@ -202,15 +205,16 @@ internal partial class Program
     /// for build/buildandrun/check commands.
     /// When no explicit entry file is given, searches for a razorforge.toml manifest.
     /// Supports --target to select a specific target from the manifest.
-    /// Returns (entryFile, projectRoot, outputFile, buildMode, dumpAst, saTiming); entryFile is null on error.
+    /// Returns (entryFile, projectRoot, outputFile, buildMode, dumpAst, saTiming, requireStartRoutine, showBuildStages); entryFile is null on error.
     /// </summary>
     private static (string? EntryFile, string? ProjectRoot, string? OutputFile,
-        RfBuildMode BuildMode, bool DumpAst, bool SaTiming, bool RequireStartRoutine) ResolveEntryFile(string[] args, bool needsOutputArg) // NOSONAR S3776
+        RfBuildMode BuildMode, bool DumpAst, bool SaTiming, bool RequireStartRoutine, bool ShowBuildStages) ResolveEntryFile(string[] args, bool needsOutputArg) // NOSONAR S3776
     {
         // args[0] is the command name (build/buildandrun/check)
         string? targetName = null;
         string? explicitEntry = null;
         string? outputFile = null;
+        bool cliShowBuildStages = false;
 
         // Parse remaining args
         int i = 1;
@@ -220,6 +224,11 @@ internal partial class Program
             {
                 targetName = args[i + 1];
                 i += 2;
+            }
+            else if (args[i] == "--show-build-stages")
+            {
+                cliShowBuildStages = true;
+                i++;
             }
             else if (!args[i]
                         .StartsWith('-'))
@@ -249,14 +258,14 @@ internal partial class Program
             if (!File.Exists(path: explicitEntry))
             {
                 Console.WriteLine(value: $"Error: File '{explicitEntry}' not found.");
-                return (null, null, null, RfBuildMode.Debug, false, false, false);
+                return (null, null, null, RfBuildMode.Debug, false, false, false, false);
             }
 
             string projectRoot =
                 Path.GetDirectoryName(path: Path.GetFullPath(path: explicitEntry)) ?? ".";
             // Bare .rf source given without manifest — assume an executable build so codegen
             // knows to synthesize @main and SA can require a 'start' routine.
-            return (explicitEntry, projectRoot, outputFile, RfBuildMode.Debug, false, false, true);
+            return (explicitEntry, projectRoot, outputFile, RfBuildMode.Debug, false, false, true, cliShowBuildStages);
         }
 
         // No explicit entry (or .toml manifest given) — load manifest
@@ -279,7 +288,7 @@ internal partial class Program
                     value: "Either provide an entry file or create a razorforge.toml manifest.");
             }
 
-            return (null, null, null, RfBuildMode.Debug, false, false, false);
+            return (null, null, null, RfBuildMode.Debug, false, false, false, false);
         }
 
         try
@@ -298,19 +307,23 @@ internal partial class Program
                     "Valid modes are: debug, release, release-time, release-space.")
             };
 
-            Console.WriteLine(value: $"Using manifest: {manifestPath}");
-            Console.WriteLine(value: $"Target: {target.Name} ({target.Type}, {target.Mode})");
+            bool showBuildStages = cliShowBuildStages || target.ShowBuildStages;
+            if (showBuildStages)
+            {
+                Console.WriteLine(value: $"Using manifest: {manifestPath}");
+                Console.WriteLine(value: $"Target: {target.Name} ({target.Type}, {target.Mode})");
+            }
 
             bool requireStartRoutine = string.Equals(a: target.Type,
                 b: "executable",
                 comparisonType: StringComparison.OrdinalIgnoreCase);
-            return (target.Entry, manifest.ManifestDirectory, outputFile, buildMode, target.DumpAst, target.SaTiming, requireStartRoutine);
+            return (target.Entry, manifest.ManifestDirectory, outputFile, buildMode, target.DumpAst, target.SaTiming, requireStartRoutine, showBuildStages);
         }
         catch (Exception ex)
         {
             Console.WriteLine(
                 value: $"Error loading {ManifestLoader.ManifestFileName}: {ex.Message}");
-            return (null, null, null, RfBuildMode.Debug, false, false, false);
+            return (null, null, null, RfBuildMode.Debug, false, false, false, false);
         }
     }
 
@@ -1126,7 +1139,8 @@ internal partial class Program
     /// </summary>
     private static int BuildMultiFile(string entryFile, string? outputFile,
         string? projectRoot = null, RfBuildMode buildMode = RfBuildMode.Debug,
-        bool dumpAst = false, bool saTiming = false, bool requireStartRoutine = true)
+        bool dumpAst = false, bool saTiming = false, bool requireStartRoutine = true,
+        bool showBuildStages = false)
     {
         if (!File.Exists(path: entryFile))
         {
@@ -1139,10 +1153,13 @@ internal partial class Program
             ? Language.Suflae
             : Language.RazorForge;
 
-        Console.WriteLine(
-            value:
-            $"Building {entryFile} as {(isSuflae ? SuflaeLanguageName : RazorForgeLanguageName)} (multi-file)...");
-        Console.WriteLine();
+        if (showBuildStages)
+        {
+            Console.WriteLine(
+                value:
+                $"Building {entryFile} as {(isSuflae ? SuflaeLanguageName : RazorForgeLanguageName)} (multi-file)...");
+            Console.WriteLine();
+        }
 
         try
         {
@@ -1151,14 +1168,16 @@ internal partial class Program
             string stdlibRoot = StdlibLoader.GetDefaultStdlibPath();
 
             // Phase 1: Parse all files and resolve dependencies
-            Console.WriteLine(value: "=== BUILD DRIVER ===");
+            if (showBuildStages)
+                Console.WriteLine(value: "=== BUILD DRIVER ===");
             var driver = new BuildDriver(projectRoot: projectRoot,
                 stdlibRoot: stdlibRoot,
                 language: language);
             BuildResult buildResult =
                 driver.CompileFile(entryFile: Path.GetFullPath(path: entryFile));
 
-            Console.WriteLine(value: $"Parsed {buildResult.Units.Count} file(s)");
+            if (showBuildStages)
+                Console.WriteLine(value: $"Parsed {buildResult.Units.Count} file(s)");
 
             if (buildResult.Errors.Count > 0)
             {
@@ -1184,10 +1203,11 @@ internal partial class Program
                 }
             }
 
-            Console.WriteLine(
-                value:
-                $"Initialization order: {string.Join(separator: " -> ", values: buildResult
-                .InitializationOrder)}");
+            if (showBuildStages)
+                Console.WriteLine(
+                    value:
+                    $"Initialization order: {string.Join(separator: " -> ", values: buildResult
+                    .InitializationOrder)}");
 
             // Filter out stdlib files they are already loaded by TypeRegistry/StdlibLoader
             string normalizedStdlib = Path.GetFullPath(path: stdlibRoot);
@@ -1237,16 +1257,20 @@ internal partial class Program
             }
 
             // Phase 2: Semantic analysis (multi-file)
-            Console.WriteLine();
-            Console.WriteLine(value: "=== SEMANTIC ANALYSIS ===");
+            if (showBuildStages)
+            {
+                Console.WriteLine();
+                Console.WriteLine(value: "=== SEMANTIC ANALYSIS ===");
+            }
 
             var target = TargetConfig.ForCurrentHost();
             var analyzer = new SemanticVerifier(language: language,
                 target: target, buildMode: buildMode) { SaTiming = saTiming };
             AnalysisResult result = analyzer.AnalyzeMultiple(files: orderedFiles);
 
-            Console.WriteLine(
-                value: $"Routines registered: {result.Registry.GetAllRoutines().Count()}");
+            if (showBuildStages)
+                Console.WriteLine(
+                    value: $"Routines registered: {result.Registry.GetAllRoutines().Count()}");
 
             if (result.Errors.Count > 0)
             {
@@ -1297,8 +1321,11 @@ internal partial class Program
             }
 
             // Phase 3: Code generation (multi-program)
-            Console.WriteLine();
-            Console.WriteLine(value: "=== CODE GENERATION ===");
+            if (showBuildStages)
+            {
+                Console.WriteLine();
+                Console.WriteLine(value: "=== CODE GENERATION ===");
+            }
 
             var userPrograms = orderedFiles.Select(selector: f =>
                                             {
@@ -1328,7 +1355,8 @@ internal partial class Program
             // Output
             string outPath = outputFile ?? Path.ChangeExtension(path: entryFile, extension: ".ll");
             File.WriteAllText(path: outPath, contents: llvmIr);
-            Console.WriteLine(value: $"LLVM IR written to: {outPath}");
+            if (showBuildStages)
+                Console.WriteLine(value: $"LLVM IR written to: {outPath}");
 
             if (dumpAst)
             {
@@ -1341,11 +1369,15 @@ internal partial class Program
                     stdlibPrograms: stdlibPrograms,
                     instantiatedGenericBodies: result.InstantiatedGenericBodies);
                 File.WriteAllText(path: astPath, contents: astText);
-                Console.WriteLine(value: $"Desugared AST written to: {astPath}");
+                if (showBuildStages)
+                    Console.WriteLine(value: $"Desugared AST written to: {astPath}");
             }
 
-            Console.WriteLine();
-            Console.WriteLine(value: "Build successful!");
+            if (showBuildStages)
+            {
+                Console.WriteLine();
+                Console.WriteLine(value: "Build successful!");
+            }
             return 0;
         }
         catch (GrammarException ex)
@@ -1516,7 +1548,8 @@ internal partial class Program
     /// </summary>
     private static int BuildAndRun(string entryFile, string? projectRoot = null,
         RfBuildMode buildMode = RfBuildMode.Debug, bool dumpAst = false, bool saTiming = false,
-        bool cleanNativeRuntime = false, bool requireStartRoutine = true)
+        bool cleanNativeRuntime = false, bool requireStartRoutine = true,
+        bool showBuildStages = false)
     {
         // Remove stale per-target outputs before rebuilding.
         string llFile = Path.ChangeExtension(path: entryFile, extension: ".ll");
@@ -1531,7 +1564,8 @@ internal partial class Program
             buildMode: buildMode,
             dumpAst: dumpAst,
             saTiming: saTiming,
-            requireStartRoutine: requireStartRoutine);
+            requireStartRoutine: requireStartRoutine,
+            showBuildStages: showBuildStages);
         if (buildResult != 0)
         {
             return buildResult;
@@ -1734,8 +1768,11 @@ internal partial class Program
         }
 
         // Run the produced .exe
-        Console.WriteLine();
-        Console.WriteLine(value: "=== EXECUTION ===");
+        if (showBuildStages)
+        {
+            Console.WriteLine();
+            Console.WriteLine(value: "=== EXECUTION ===");
+        }
 
         bool stdinIsPiped = Console.IsInputRedirected;
         var psi = new ProcessStartInfo
