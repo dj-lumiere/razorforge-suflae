@@ -35,10 +35,16 @@ if(EXISTS "${ZLIB_DIR}/zlib.h")
 
     if(WIN32)
         target_compile_definitions(rf_zlib PRIVATE _CRT_SECURE_NO_WARNINGS)
+    else()
+        # zlib's `gzlib.c` only pulls in <unistd.h> (for lseek, read, write, close)
+        # when Z_HAVE_UNISTD_H is defined. Its own ./configure does this via feature
+        # detection; we compile sources directly, so set it explicitly. Without
+        # it, Clang 16+ errors out on the implicit lseek declaration.
+        target_compile_definitions(rf_zlib PRIVATE Z_HAVE_UNISTD_H=1 _LARGEFILE64_SOURCE=1)
     endif()
 
     if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "GNU")
-        target_compile_options(rf_zlib PRIVATE -w)
+        target_compile_options(rf_zlib PRIVATE -w -Wno-implicit-function-declaration)
         if(NOT WIN32)
             target_compile_options(rf_zlib PRIVATE -fPIC)
         endif()
