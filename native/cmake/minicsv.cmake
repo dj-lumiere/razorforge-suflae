@@ -24,7 +24,7 @@ if(EXISTS "${MINICSV_DIR}/minicsv.c" AND EXISTS "${MINICSV_DIR}/minicsv.h")
     endif()
 
     if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "GNU")
-        target_compile_options(rf_minicsv PRIVATE -w)
+        target_compile_options(rf_minicsv PRIVATE -w -Wno-implicit-function-declaration)
         if(NOT WIN32)
             target_compile_options(rf_minicsv PRIVATE -fPIC)
         endif()

@@ -32,8 +32,12 @@ if(EXISTS "${SQLITE3_DIR}/sqlite3.c" AND EXISTS "${SQLITE3_DIR}/sqlite3.h")
         _CRT_SECURE_NO_WARNINGS
     )
 
+    if(NOT WIN32)
+        target_compile_definitions(rf_sqlite3 PRIVATE _GNU_SOURCE=1 _POSIX_C_SOURCE=200809L)
+    endif()
+
     if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "GNU")
-        target_compile_options(rf_sqlite3 PRIVATE -w)
+        target_compile_options(rf_sqlite3 PRIVATE -w -Wno-implicit-function-declaration)
         if(NOT WIN32)
             target_compile_options(rf_sqlite3 PRIVATE -fPIC)
         endif()

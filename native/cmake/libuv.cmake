@@ -145,7 +145,7 @@ if(EXISTS "${LIBUV_INCLUDE_DIR}/uv.h")
         target_compile_definitions(uv_a PRIVATE ${LIBUV_DEFINES})
 
         if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "GNU")
-            target_compile_options(uv_a PRIVATE -Wno-unused-parameter)
+            target_compile_options(uv_a PRIVATE -Wno-unused-parameter -Wno-implicit-function-declaration)
             if(NOT WIN32)
                 target_compile_options(uv_a PRIVATE -fPIC)
             endif()

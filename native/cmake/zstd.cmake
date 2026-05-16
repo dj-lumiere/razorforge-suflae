@@ -37,7 +37,7 @@ if(EXISTS "${ZSTD_LIB_DIR}/zstd.h")
     endif()
 
     if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "GNU")
-        target_compile_options(rf_zstd PRIVATE -w)
+        target_compile_options(rf_zstd PRIVATE -w -Wno-implicit-function-declaration)
         if(NOT WIN32)
             target_compile_options(rf_zstd PRIVATE -fPIC)
         endif()

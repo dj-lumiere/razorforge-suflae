@@ -33,6 +33,7 @@ if(LIBCO_SOURCE AND LIBCO_HEADER)
     target_include_directories(rf_libco PUBLIC ${LIBCO_DIR})
 
     if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "GNU")
+        target_compile_options(rf_libco PRIVATE -w -Wno-implicit-function-declaration)
         if(NOT WIN32)
             target_compile_options(rf_libco PRIVATE -fPIC)
         endif()

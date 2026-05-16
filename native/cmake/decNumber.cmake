@@ -43,7 +43,7 @@ if(EXISTS "${DECNUMBER_SRC_DIR}/decNumber.c" AND EXISTS "${DECNUMBER_INC_DIR}/de
 
     # Suppress warnings for third-party code
     if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "GNU")
-        target_compile_options(decnumber PRIVATE -w)
+        target_compile_options(decnumber PRIVATE -w -Wno-implicit-function-declaration)
         if(NOT WIN32)
             target_compile_options(decnumber PRIVATE -fPIC)
         endif()

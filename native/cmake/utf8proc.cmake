@@ -29,7 +29,7 @@ if(EXISTS "${UTF8PROC_DIR}/utf8proc.c" AND EXISTS "${UTF8PROC_DIR}/utf8proc.h")
     endif()
 
     if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "GNU")
-        target_compile_options(rf_utf8proc PRIVATE -w)
+        target_compile_options(rf_utf8proc PRIVATE -w -Wno-implicit-function-declaration)
         if(NOT WIN32)
             target_compile_options(rf_utf8proc PRIVATE -fPIC)
         endif()

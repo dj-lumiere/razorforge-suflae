@@ -136,7 +136,19 @@ jobs:
         run: |
           cd native
           chmod +x build.sh
-          CC=clang CXX=clang++ ./build.sh
+          # Clang 16+ promoted -Wimplicit-function-declaration to an error by
+          # default. Vendored libs normally use their own ./configure to detect
+          # POSIX features and avoid the warning; we skip configure, so blanket
+          # the build with -Wno-implicit-function-declaration as a safety net for
+          # libs that pull in their own CMakeLists.txt (mbedtls, pcre2, bdwgc,
+          # libbf, libtommath) — for which the per-target flags in cmake/*.cmake
+          # don't apply. Pair it with _GNU_SOURCE so glibc feature-test macros
+          # expose the full POSIX surface (lseek, mlock, ftruncate, etc.).
+          export CC=clang
+          export CXX=clang++
+          export CFLAGS="-D_GNU_SOURCE -Wno-implicit-function-declaration"
+          export CXXFLAGS="-D_GNU_SOURCE -Wno-implicit-function-declaration"
+          ./build.sh
 
       - name: Install SonarScanner for .NET
         run: |

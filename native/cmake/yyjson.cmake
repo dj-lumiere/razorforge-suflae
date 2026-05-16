@@ -24,7 +24,7 @@ if(EXISTS "${YYJSON_DIR}/src/yyjson.c" AND EXISTS "${YYJSON_DIR}/src/yyjson.h")
     endif()
 
     if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "GNU")
-        target_compile_options(rf_yyjson PRIVATE -w)
+        target_compile_options(rf_yyjson PRIVATE -w -Wno-implicit-function-declaration)
         if(NOT WIN32)
             target_compile_options(rf_yyjson PRIVATE -fPIC)
         endif()

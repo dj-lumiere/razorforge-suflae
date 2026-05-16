@@ -24,7 +24,7 @@ if(EXISTS "${TOMLC99_DIR}/toml.c" AND EXISTS "${TOMLC99_DIR}/toml.h")
     endif()
 
     if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "GNU")
-        target_compile_options(rf_tomlc99 PRIVATE -w)
+        target_compile_options(rf_tomlc99 PRIVATE -w -Wno-implicit-function-declaration)
         if(NOT WIN32)
             target_compile_options(rf_tomlc99 PRIVATE -fPIC)
         endif()
