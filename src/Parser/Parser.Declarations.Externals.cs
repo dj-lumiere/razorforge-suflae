@@ -26,14 +26,16 @@ public partial class Parser
                     token: PeekToken(
                         offset: -2)); // -2 because we consumed 'external' and 'routine'
 
-        string name = ConsumeIdentifier(errorMessage: "Expected routine name");
+        var nameSb = new System.Text.StringBuilder(ConsumeIdentifier(errorMessage: "Expected routine name"));
 
         // Support slash-based module paths with a dot-qualified routine name like IO/Console.print
         while (Match(type: TokenType.Dot))
         {
-            string part = ConsumeIdentifier(errorMessage: "Expected identifier after '.'");
-            name = name + "." + part;
+            nameSb.Append('.');
+            nameSb.Append(ConsumeIdentifier(errorMessage: "Expected identifier after '.'"));
         }
+
+        string name = nameSb.ToString();
 
         // Support ! suffix for failable routines
         if (Match(type: TokenType.Bang))

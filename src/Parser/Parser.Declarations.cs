@@ -197,6 +197,8 @@ public partial class Parser
         //   "List[T].append"          -> name="List[T].append" (generics embedded in name)
         //   "Dict[K, V].get[I]"       -> name="Dict[K, V].get", genericParams=["K","V","I"]
         // ===============================================================================
+        var nameSb = new System.Text.StringBuilder(name);
+
         while (Match(type: TokenType.Dot))
         {
             string part = ConsumeMethodName(errorMessage: "Expected method name after '.'");
@@ -206,17 +208,20 @@ public partial class Parser
             //             to: name="List[T].append"
             // For nested receivers (e.g. List[DictEntry[K, V]]), use the serialized type-arg
             // strings rather than the bound leaf identifiers so the name preserves structure.
-            if (hasGenericParams && !name.Contains(value: '.') &&
+            if (hasGenericParams && !nameSb.ToString().Contains(value: '.') &&
                 (receiverTypeArgStrings != null || genericParams != null))
             {
                 List<string> nameArgs = receiverTypeArgStrings ?? genericParams!;
-                name = name + "[" + string.Join(separator: ", ", values: nameArgs) + "]." +
-                       part;
+                nameSb.Append('[');
+                nameSb.Append(string.Join(separator: ", ", values: nameArgs));
+                nameSb.Append("].");
+                nameSb.Append(part);
                 hasGenericParams = false; // Only add once
             }
             else
             {
-                name = name + "." + part;
+                nameSb.Append('.');
+                nameSb.Append(part);
             }
 
             // Check for member-routine-level generic params AFTER the routine name
@@ -279,6 +284,8 @@ public partial class Parser
                 }
             }
         }
+
+        name = nameSb.ToString();
 
         // ===============================================================================
         // PHASE 2c: Parse failable marker (!)

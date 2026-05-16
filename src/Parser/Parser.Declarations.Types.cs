@@ -684,16 +684,17 @@ public partial class Parser
             // Parse routine signature
             if (Match(type: TokenType.Routine))
             {
-                string methodName = ConsumeIdentifier(errorMessage: "Expected member routine name");
+                var methodNameSb = new System.Text.StringBuilder(ConsumeIdentifier(errorMessage: "Expected member routine name"));
 
                 // Handle Me.methodName syntax for instance member routines
                 // Protocol member routines can be: "routine Me.methodName()" or "routine methodName()"
                 while (Match(type: TokenType.Dot))
                 {
-                    string part =
-                        ConsumeMethodName(errorMessage: "Expected member routine name after '.'");
-                    methodName = methodName + "." + part;
+                    methodNameSb.Append('.');
+                    methodNameSb.Append(ConsumeMethodName(errorMessage: "Expected member routine name after '.'"));
                 }
+
+                string methodName = methodNameSb.ToString();
 
                 // Support failable member routines: "routine!"
                 if (Match(type: TokenType.Bang))
@@ -808,17 +809,16 @@ public partial class Parser
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
-        string modulePath = "";
+        var modulePathSb = new System.Text.StringBuilder();
 
         // Parse module path - could be multiple identifiers separated by slashes
         // e.g., module standard/errors
         do
         {
-            string part = ConsumeIdentifier(errorMessage: "Expected module name");
-            modulePath += part;
+            modulePathSb.Append(ConsumeIdentifier(errorMessage: "Expected module name"));
             if (Match(type: TokenType.Slash))
             {
-                modulePath += "/";
+                modulePathSb.Append('/');
             }
             else
             {
@@ -828,7 +828,7 @@ public partial class Parser
 
         ConsumeStatementTerminator();
 
-        return new ModuleDeclaration(Path: modulePath, Location: location);
+        return new ModuleDeclaration(Path: modulePathSb.ToString(), Location: location);
     }
 
     /// <summary>
@@ -841,7 +841,7 @@ public partial class Parser
     {
         SourceLocation location = GetLocation(token: PeekToken(offset: -1));
 
-        string modulePath = "";
+        var modulePathSb = new System.Text.StringBuilder();
         string? alias = null;
         List<string>? specificImports = null;
 
@@ -849,11 +849,10 @@ public partial class Parser
         // Dot marks a specific type within the module: import razorforge/Core.Bool
         do
         {
-            string part = ConsumeIdentifier(errorMessage: "Expected module name");
-            modulePath += part;
+            modulePathSb.Append(ConsumeIdentifier(errorMessage: "Expected module name"));
             if (Match(type: TokenType.Slash))
             {
-                modulePath += "/";
+                modulePathSb.Append('/');
             }
             else if (Match(type: TokenType.Dot))
             {
@@ -875,9 +874,8 @@ public partial class Parser
                 else
                 {
                     // Single type: Core.Bool -> module "Core", type "Bool"
-                    string typeName =
-                        ConsumeIdentifier(errorMessage: "Expected type name after '.'");
-                    modulePath += "." + typeName;
+                    modulePathSb.Append('.');
+                    modulePathSb.Append(ConsumeIdentifier(errorMessage: "Expected type name after '.'"));
                 }
 
                 break;
@@ -887,6 +885,8 @@ public partial class Parser
                 break;
             }
         } while (true);
+
+        string modulePath = modulePathSb.ToString();
 
         // Optional alias
         if (Match(type: TokenType.As))

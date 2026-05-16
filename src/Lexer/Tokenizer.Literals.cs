@@ -36,15 +36,16 @@ public partial class Tokenizer
         int originalCol = _column;
 
         char firstChar = _source[index: startPos];
-        string prefix = firstChar.ToString();
+        var prefixSb = new System.Text.StringBuilder();
+        prefixSb.Append(firstChar);
 
         // Greedy match: build the longest valid prefix
         while (!IsAtEnd() && char.IsLetterOrDigit(c: Peek()))
         {
-            string testPrefix = prefix + Peek();
+            string testPrefix = prefixSb.ToString() + Peek();
             if (_textPrefixes.Any(predicate: p => p.StartsWith(value: testPrefix)))
             {
-                prefix += Advance();
+                prefixSb.Append(Advance());
             }
             else
             {
@@ -52,6 +53,7 @@ public partial class Tokenizer
             }
         }
 
+        string prefix = prefixSb.ToString();
         // Check if we found a valid prefix
         if (!_textPrefixToTokenType.ContainsKey(key: prefix))
         {

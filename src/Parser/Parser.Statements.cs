@@ -613,12 +613,13 @@ public partial class Parser
             Advance();
 
             // Check for qualified name: Type.CASE or Type.CASE.SubCase
+            var nameSb1 = new System.Text.StringBuilder(name);
             while (Match(type: TokenType.Dot))
             {
                 if (Match(type: TokenType.Identifier))
                 {
-                    name += "." + PeekToken(offset: -1)
-                       .Text;
+                    nameSb1.Append('.');
+                    nameSb1.Append(PeekToken(offset: -1).Text);
                 }
                 else
                 {
@@ -627,6 +628,7 @@ public partial class Parser
                         message: "Expected identifier after '.' in pattern");
                 }
             }
+            name = nameSb1.ToString();
 
             // Check for destructuring: Type.CASE (memberVar1, memberVar2), (memberVar: alias), or ((x, y), z)
             List<DestructuringBinding>? bindings = null;
@@ -723,12 +725,13 @@ public partial class Parser
         Advance();
 
         // Check for qualified name: Type.CASE or Type.CASE.SubCase
+        var nameSb2 = new System.Text.StringBuilder(name);
         while (Match(type: TokenType.Dot))
         {
             if (Match(type: TokenType.Identifier))
             {
-                name += "." + PeekToken(offset: -1)
-                   .Text;
+                nameSb2.Append('.');
+                nameSb2.Append(PeekToken(offset: -1).Text);
             }
             else
             {
@@ -736,6 +739,7 @@ public partial class Parser
                     message: "Expected identifier after '.' in pattern");
             }
         }
+        name = nameSb2.ToString();
 
         // Check for destructuring: Type.CASE (memberVar1, memberVar2), (memberVar: alias), or ((x, y), z)
         List<DestructuringBinding>? bindings = null;

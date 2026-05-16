@@ -110,20 +110,21 @@ public partial class Parser
 
         // Support qualified type paths like RazorForge/Collections.Dict
         // This allows referencing types from other modules in type annotations
+        var nameSb = new System.Text.StringBuilder(name);
         while (Match(type: TokenType.Slash))
         {
-            string part =
-                ConsumeIdentifier(errorMessage: "Expected module path component after '/'");
-            name += "/" + part;
+            nameSb.Append('/');
+            nameSb.Append(ConsumeIdentifier(errorMessage: "Expected module path component after '/'"));
 
             // Dot separates the type name from the slash-based module path: razorforge/Core.Bool
             if (Match(type: TokenType.Dot))
             {
-                string typeName = ConsumeIdentifier(errorMessage: "Expected type name after '.'");
-                name += "." + typeName;
+                nameSb.Append('.');
+                nameSb.Append(ConsumeIdentifier(errorMessage: "Expected type name after '.'"));
                 break; // Dot marks the end of the path (rest is the type name)
             }
         }
+        name = nameSb.ToString();
 
         // ─────────────────────────────────────────────────────────────────────
         // Simple type without generics
