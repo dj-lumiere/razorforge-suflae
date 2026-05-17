@@ -51,7 +51,17 @@ public sealed class RuntimeDispatchRegistrationPass(TypeRegistry registry)
         foreach (ISyntaxTreeNode node in program.Declarations)
         {
             if (node is RoutineDeclaration routine)
+            {
+                // Skip generic-template bodies: their call sites carry unresolved generic
+                // receiver types (e.g. `me.alg.apply(...)` where `me.alg: M`), which SA
+                // classifies as RuntimeDispatch on the protocol. The monomorphized clones
+                // in instantiatedGenericBodies are scanned separately and have their
+                // dispatch reclassified to DirectMemberRoutine by GenericAstRewriter —
+                // so registering the protocol stub here would emit a spurious dispatch
+                // table on an unresolved generic return type.
+                if (routine.GenericParameters is { Count: > 0 }) continue;
                 ScanStatement(routine.Body);
+            }
         }
     }
 

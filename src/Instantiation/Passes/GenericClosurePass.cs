@@ -56,6 +56,11 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
         // method calls + Text.$add before operator lowering can fold the `+` chain.
         new Compiler.Postprocessing.Passes.FStringLoweringPass(ctx: postCtx)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
+        // ExpressionLoweringPass: handles RangeExpression, UnaryExpression(Not), pattern lowering
+        // etc. Must run before OperatorLoweringPass — operator lowering folds the BinaryExpressions
+        // ExpressionLowering produces (e.g. `1 til n` -> a range record with `+ 1` / `< n` checks).
+        new Compiler.Postprocessing.Passes.ExpressionLoweringPass(ctx: postCtx)
+            .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
         new Compiler.Postprocessing.Passes.OperatorLoweringPass(ctx: postCtx)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
 

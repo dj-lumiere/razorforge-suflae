@@ -1965,4 +1965,27 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 ctx.VariantBodies[key] = lowered;
         }
     }
+
+    /// <summary>
+    /// Lowers monomorphized generic bodies that GMP cloned from generic-def ASTs after the
+    /// per-program Phase 7 sweep finished. Without this, constructs like
+    /// <c>for i in 0u64 til arr_size</c> (RangeExpression) and `not expr` (UnaryExpression Not)
+    /// inside a monomorphized routine reach codegen unchanged and trip the residual-node guards.
+    /// Mirror of <c>OperatorLoweringPass.RunOnInstantiatedGenericBodies</c>.
+    /// </summary>
+    public void RunOnInstantiatedGenericBodies(
+        Dictionary<string, Compiler.Instantiation.MonomorphizedBody> instantiatedGenericBodies)
+    {
+        foreach (string key in instantiatedGenericBodies.Keys.ToList())
+        {
+            Compiler.Instantiation.MonomorphizedBody entry = instantiatedGenericBodies[key];
+            if (entry.IsSynthesized) continue;
+            Statement lowered = LowerStatementFull(stmt: entry.Ast.Body);
+            if (!ReferenceEquals(lowered, entry.Ast.Body))
+                instantiatedGenericBodies[key] = entry with
+                {
+                    Ast = entry.Ast with { Body = lowered }
+                };
+        }
+    }
 }

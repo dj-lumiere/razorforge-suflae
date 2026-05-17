@@ -271,7 +271,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             }
             RoutineInfo? resolved = node switch
             {
-                CallExpression ce => ce.ResolvedRoutine ?? ResolveNoArgConstructor(ce: ce) ?? ResolveCallStyleConstructor(ce: ce) ?? ResolveMemberCall(ce: ce),
+                CallExpression ce => RetargetProtocolDispatch(ce: ce) ?? ce.ResolvedRoutine ?? ResolveNoArgConstructor(ce: ce) ?? ResolveCallStyleConstructor(ce: ce) ?? ResolveMemberCall(ce: ce),
                 GenericMethodCallExpression gce => gce.ResolvedRoutine,
                 CreatorExpression cre => ResolveCreatorRoutine(cre: cre),
                 _ => null
@@ -306,7 +306,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 }
                 RoutineInfo? resolved = node switch
                 {
-                    CallExpression ce => ce.ResolvedRoutine ?? ResolveNoArgConstructor(ce: ce) ?? ResolveCallStyleConstructor(ce: ce) ?? ResolveMemberCall(ce: ce),
+                    CallExpression ce => RetargetProtocolDispatch(ce: ce) ?? ce.ResolvedRoutine ?? ResolveNoArgConstructor(ce: ce) ?? ResolveCallStyleConstructor(ce: ce) ?? ResolveMemberCall(ce: ce),
                     GenericMethodCallExpression gce => gce.ResolvedRoutine,
                     CreatorExpression cre => ResolveCreatorRoutine(cre: cre),
                     _ => null
@@ -940,6 +940,26 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // Fallback: codegen mangles by FullName regardless of registration.
         _live.Add(item: $"{ct.FullName}.$create");
         return null;
+    }
+
+    /// <summary>
+    /// When SA classified a call as RuntimeDispatch because the receiver is a generic param
+    /// constrained by a protocol (e.g. <c>me.alg.apply(...)</c> where <c>me.alg: M</c> and
+    /// <c>M obeys LazyMonoid</c>), <c>ResolvedRoutine</c> points to the protocol's method.
+    /// In a monomorphized frame the param is bound to a concrete impl record, so the call
+    /// becomes a static dispatch — but reachability would otherwise mark the *protocol*
+    /// method live and never reach the impl's body, leaving the linker with an undefined
+    /// symbol at the rewritten call site. Re-resolve through the receiver so we enqueue the
+    /// concrete impl method (e.g. <c>NumericSumAdd[S64].apply</c>).
+    /// </summary>
+    private RoutineInfo? RetargetProtocolDispatch(CallExpression ce)
+    {
+        if (ce.ResolvedRoutine?.OwnerType is not ProtocolTypeInfo) return null;
+        if (ce.Callee is not MemberExpression member) return null;
+        TypeInfo? receiverType = member.Object.ResolvedType ?? InferExpressionType(e: member.Object);
+        if (receiverType is not GenericParameterTypeInfo gp) return null;
+        if (!_currentFrameSubs.TryGetValue(key: gp.Name, value: out TypeInfo? concrete)) return null;
+        return ResolveMemberCall(ce: ce) ?? ctx.Registry.LookupMethod(type: concrete, methodName: ce.ResolvedRoutine.Name);
     }
 
     /// <summary>
