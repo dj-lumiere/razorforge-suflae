@@ -582,6 +582,18 @@ public partial class LlvmCodeGenerator
     private string EmitUnaryOp(StringBuilder sb, UnaryExpression unary)
     {
         // TODO: This should be done with member routine, not here
+        // BitwiseNot on FlagsTypeInfo is intentionally left unlowered by OperatorLoweringPass
+        // (flags have no $bitnot body to avoid synthesizer recursion). Emit `xor x, -1` directly
+        // on the underlying integer type, mirroring EmitFlagsBitwiseOp.
+        if (unary.Operator == UnaryOperator.BitwiseNot &&
+            GetExpressionType(expr: unary.Operand) is FlagsTypeInfo flagsType)
+        {
+            string operand = EmitExpression(sb: sb, expr: unary.Operand);
+            string llvmType = GetLlvmType(type: flagsType);
+            string result = NextTemp();
+            EmitLine(sb: sb, line: $"  {result} = xor {llvmType} {operand}, -1");
+            return result;
+        }
         return unary.Operator switch
         {
             UnaryOperator.Not => throw new InvalidOperationException(

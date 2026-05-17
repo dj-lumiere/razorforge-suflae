@@ -71,6 +71,24 @@ public partial class LlvmCodeGenerator
                 message: $"Unknown type in constructor: {expr.TypeName}");
         }
 
+        // SA resolved this creator to a `$create(named:)` overload — dispatch through it
+        // instead of inline field-init.
+        if (expr.ResolvedCreatorRoutine is { } creatorRoutine)
+        {
+            var callArgs = expr.MemberVariables
+                .Select(selector: mv => (Expression)new NamedArgumentExpression(
+                    Name: mv.Name, Value: mv.Value, Location: expr.Location))
+                .ToList();
+            return EmitRoutineCall(sb: sb, req: new RoutineCallRequest(
+                FunctionName: creatorRoutine.FullName,
+                Arguments: callArgs,
+                ResolvedRoutine: creatorRoutine,
+                ResolvedReturnType: creatorRoutine.ReturnType ?? type,
+                TypeArguments: null,
+                LoweringKind: CallLoweringKind.DirectRoutine,
+                ConstructedType: type));
+        }
+
         return type switch
         {
             EntityTypeInfo entity => EmitEntityConstruction(sb: sb, entity: entity, expr: expr),
@@ -330,6 +348,32 @@ public partial class LlvmCodeGenerator
     private string EmitMemberVariableAccess(StringBuilder sb, MemberExpression expr)
     {
         string propertyName = expr.PropertyName;
+
+        // Choice / Flags case-member access (e.g. FileMode.WRITE) reaches codegen unfolded
+        // when it appears in a parameter default value: ExpressionLoweringPass only walks
+        // routine bodies, not `ParameterInfo.DefaultValue` (init-only, registry-owned), and
+        // SA never analyzes default values so `ResolvedType` is null on those AST nodes.
+        // Fold to the case's constant value here, looking the type up by identifier name.
+        TypeInfo? choiceFlagsLookup = expr.Object.ResolvedType
+            ?? (expr.Object is IdentifierExpression objId ? _registry.LookupType(name: objId.Name) : null);
+        if (choiceFlagsLookup is ChoiceTypeInfo choiceType)
+        {
+            ChoiceCaseInfo? caseInfo = choiceType.Cases
+                .FirstOrDefault(predicate: c => c.Name == propertyName);
+            if (caseInfo != null)
+            {
+                return caseInfo.ComputedValue.ToString();
+            }
+        }
+        if (choiceFlagsLookup is FlagsTypeInfo flagsType)
+        {
+            FlagsMemberInfo? memberInfo = flagsType.Members
+                .FirstOrDefault(predicate: m => m.Name == propertyName);
+            if (memberInfo != null)
+            {
+                return (1UL << memberInfo.BitPosition).ToString();
+            }
+        }
 
         // Evaluate the target expression
         string target = EmitExpression(sb: sb, expr: expr.Object);

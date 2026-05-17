@@ -110,6 +110,17 @@ internal sealed class TypeResolver
 
     private TypeSymbol ResolveTypeCore(TypeExpression typeExpr) // NOSONAR S3776
     {
+        // `Me` in a member-routine signature refers to the owner type
+        // (e.g. `routine SumS64.combine(you: Me) -> Me` — Me is SumS64).
+        // Protocol contexts use ProtocolSelfTypeInfo via ResolveProtocolType; concrete owners
+        // resolve directly to the owner TypeInfo so callers see Me as a normal nominal type.
+        if (typeExpr is { Name: "Me", GenericArguments: not { Count: > 0 } } &&
+            _sa._currentRoutine?.OwnerType is { } meOwner &&
+            meOwner is not GenericParameterTypeInfo)
+        {
+            return meOwner;
+        }
+
         // Handle tuple types from parser: Tuple(T, U, ...)
         if (typeExpr is { Name: "Tuple", GenericArguments.Count: > 0 })
         {

@@ -568,6 +568,20 @@ public sealed partial class SemanticVerifier
             case IndexExpression index:
             {
                 TypeSymbol indexedObjectType = AnalyzeExpression(expression: index.Object);
+
+                // Failability: lookup $setitem on the indexed type and propagate `!` to caller.
+                // `arr[i] = v` desugars to `arr.$setitem!(i, v)` for failable indexers; a
+                // non-failable caller must mark HasFailableCalls so its `!` decl is justified.
+                TryGetTransparentProtocolTarget(type: indexedObjectType,
+                    targetType: out TypeSymbol setLookupType);
+                RoutineInfo? setItem = _registry.LookupMethod(type: setLookupType,
+                    methodName: "$setitem") ?? _registry.LookupMethod(type: setLookupType,
+                    methodName: "$setitem", isFailable: true);
+                if (setItem is { IsFailable: true } && _currentRoutine != null)
+                {
+                    _currentRoutine.HasFailableCalls = true;
+                }
+
                 if (IsReadOnlyTransparentProtocol(type: indexedObjectType))
                 {
                     ReportError(code: SemanticDiagnosticCode.WriteThroughReadOnlyWrapper,
@@ -668,6 +682,9 @@ public sealed partial class SemanticVerifier
     private TypeSymbol AnalyzeCompoundAssignment(CompoundAssignmentExpression compound) // NOSONAR S3776
     {
         TypeSymbol targetType = AnalyzeExpression(expression: compound.Target);
+        // Analyze the RHS too — without this, constructor calls like `n += S64(5)`
+        // never get classified as TypeConstructor and reach codegen unlowered (S959).
+        AnalyzeExpression(expression: compound.Value);
 
         // Step 0: Verify target is assignable and modifiable
         if (!IsAssignableTarget(target: compound.Target))

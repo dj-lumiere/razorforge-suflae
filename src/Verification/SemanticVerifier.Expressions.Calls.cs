@@ -31,7 +31,11 @@ public sealed partial class SemanticVerifier
                 string callName = isFailableCall
                     ? id.Name[..^1]
                     : id.Name;
-                TypeSymbol? callableType = LookupTypeWithImports(name: id.Name);
+                // Look up the type with `!` stripped — `U32!(level)` is a failable type
+                // constructor call routing to `U32.$create!(from: U64)`. Without stripping,
+                // `LookupTypeWithImports("U32!")` returns null and the call falls through to
+                // non-creator paths, eventually mis-picking a non-failable overload by name.
+                TypeSymbol? callableType = LookupTypeWithImports(name: callName);
                 if (callableType != null && call.TypeArguments is { Count: > 0 } typeArguments)
                 {
                     var resolvedTypeArguments = new List<TypeSymbol>(capacity: typeArguments.Count);
@@ -273,6 +277,24 @@ public sealed partial class SemanticVerifier
                         call.LoweringKind = ClassifyConstruction(type: callableType,
                             isCollectionLiteral: call.IsCollectionLiteral);
                         call.ResolvedRoutine = creator;
+
+                        // Failability propagation for failable constructors (e.g. `U32!(x)`
+                        // routing to `U32.$create!(from: U64)`).
+                        if (creator.IsFailable && _currentRoutine != null)
+                        {
+                            _currentRoutine.HasFailableCalls = true;
+                            if (!_currentRoutine.IsFailable &&
+                                _currentRoutine.Name != StartRoutineName &&
+                                !_currentRoutine.IsSynthesized)
+                            {
+                                ReportWarning(code: SemanticWarningCode.UnhandledCrashableCall,
+                                    message:
+                                    $"Failable constructor '{callableType.Name}!' called without error handling. " +
+                                    UseWhenHint,
+                                    location: call.Location);
+                            }
+                        }
+
                         return creator.ReturnType ?? callableType;
                     }
                 }

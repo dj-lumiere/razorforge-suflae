@@ -350,6 +350,13 @@ public sealed partial class SemanticVerifier
             lookupType: lookupType);
         AnalyzeExpression(expression: index.Index, expectedType: indexExpectedType);
 
+        // Failability propagation: the resolved $getitem may be `!` per its protocol contract
+        // (e.g. Indexable.$getitem!). A non-failable caller using `arr[i]` must propagate that.
+        if (getItem is { IsFailable: true } && _currentRoutine != null)
+        {
+            _currentRoutine.HasFailableCalls = true;
+        }
+
         if (getItem?.ReturnType != null)
         {
             TypeSymbol returnType = getItem.ReturnType;
@@ -940,12 +947,104 @@ public sealed partial class SemanticVerifier
         creator.ConstructedType = type;
         creator.LoweringKind = ClassifyConstruction(type: type, isCollectionLiteral: false);
 
+        // Named-arg → $create routing: if the provided names don't match any field but DO match
+        // a `$create(named:)` overload's parameter names, dispatch through that creator instead
+        // of doing inline field-init. Lets `SegTreeLazy[..](size: 10, alg: alg)` route to
+        // `SegTreeLazy.$create(size:, alg:)` even though `size`/`alg` aren't field names.
+        if (creator.MemberVariables.Count > 0 &&
+            TryRouteCreatorToCreate(type: type, creator: creator))
+        {
+            return type;
+        }
+
         // Validate member variable initializers
         ValidateCreatorMemberVariables(type: type,
             memberVariables: creator.MemberVariables,
             location: creator.Location);
 
         return type;
+    }
+
+    /// <summary>
+    /// Tries to route a CreatorExpression's named args to a matching `$create(named:)` overload.
+    /// Returns true if a matching overload was found and resolved (caller should skip field-init
+    /// validation). The match requires that every provided arg name corresponds to a parameter
+    /// name on some `$create` overload, AND that at least one provided name is NOT a field name
+    /// (field-init pattern is still preferred when all names are fields). Routing is purely
+    /// name-based; arg analysis (with proper expected types) happens via the standard pipeline
+    /// later when codegen evaluates the call.
+    /// </summary>
+    private bool TryRouteCreatorToCreate(TypeSymbol type, CreatorExpression creator)
+    {
+        IReadOnlyList<MemberVariableInfo>? fields = type switch
+        {
+            RecordTypeInfo r => r.MemberVariables,
+            EntityTypeInfo e => e.MemberVariables,
+            _ => null
+        };
+
+        var fieldNames = fields != null
+            ? new HashSet<string>(collection: fields.Select(selector: f => f.Name))
+            : [];
+        var providedNames = creator.MemberVariables.Select(selector: mv => mv.Name).ToList();
+
+        // If every provided name is a field, prefer existing field-init path.
+        if (providedNames.All(predicate: n => fieldNames.Contains(item: n)))
+        {
+            return false;
+        }
+
+        // Name-only match against $create overloads. Iterate type's methods looking for ones
+        // named `$create` whose parameter names match the provided set exactly. If multiple
+        // overloads share the same param names (e.g. `S64.$create(from: S8)` vs
+        // `S64.$create(from: ComparisonSign)`), bail out — disambiguation by arg type is the
+        // job of the legacy path and we don't want to silently pick the wrong overload.
+        var providedNameSet = new HashSet<string>(collection: providedNames);
+        var nameMatches = new List<RoutineInfo>();
+        foreach (RoutineInfo m in _registry.GetMethodsForType(type: type))
+        {
+            string baseName = m.Name;
+            int dot = baseName.LastIndexOf(value: '.');
+            if (dot >= 0) baseName = baseName[(dot + 1)..];
+            if (baseName != "$create" && baseName != "$create!") continue;
+            if (m.Parameters.Count != creator.MemberVariables.Count) continue;
+
+            var pNames = new HashSet<string>(
+                collection: m.Parameters.Select(selector: p => p.Name));
+            if (pNames.SetEquals(other: providedNameSet))
+            {
+                nameMatches.Add(item: m);
+            }
+        }
+
+        if (nameMatches.Count != 1)
+        {
+            return false;
+        }
+
+        RoutineInfo match = nameMatches[index: 0];
+
+        // Analyze each arg with the matching parameter's type as the expected type so integer
+        // literals coerce correctly (e.g. `size: 10` → S8 if the param is S8, not default S32).
+        var paramByName = match.Parameters.ToDictionary(keySelector: p => p.Name);
+        foreach ((string argName, Expression val) in creator.MemberVariables)
+        {
+            TypeSymbol? expected = paramByName.TryGetValue(key: argName,
+                value: out ParameterInfo? p)
+                ? p.Type
+                : null;
+            AnalyzeExpression(expression: val, expectedType: expected);
+        }
+
+        creator.ResolvedCreatorRoutine = match;
+        creator.LoweringKind = CallLoweringKind.TypeConstructor;
+
+        if (match.IsFailable && _currentRoutine != null)
+        {
+            _currentRoutine.HasFailableCalls = true;
+        }
+
+        return true;
     }
 
     /// <summary>

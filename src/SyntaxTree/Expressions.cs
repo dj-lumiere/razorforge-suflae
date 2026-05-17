@@ -456,6 +456,13 @@ public record CreatorExpression(
     /// The fully resolved type constructed by this creator, when known.
     /// </summary>
     public TypeInfo? ConstructedType { get; set; }
+
+    /// <summary>
+    /// When the creator's named arguments match a `$create(named:)` overload (rather than
+    /// field names), SA resolves and stores that creator routine here. Codegen then dispatches
+    /// through the routine instead of doing inline field initialization.
+    /// </summary>
+    public RoutineInfo? ResolvedCreatorRoutine { get; set; }
 }
 
 /// <summary>

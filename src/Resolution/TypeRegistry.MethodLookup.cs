@@ -647,6 +647,25 @@ public sealed partial class TypeRegistry
     public RoutineInfo? LookupMethodOverload(TypeInfo type, string methodName,
         IReadOnlyList<TypeInfo> argTypes)
     {
+        // Transparent-protocol unwrap: Referring[X] / Controlling[X] forward every method
+        // to X. Mirror the unwrap in LookupMethod so overload-driven resolution (e.g. the
+        // CallOverloadResolutionPass walking f-string-lowered $represent calls on a
+        // `Referring[Text]` receiver) lands on Text's method instead of synthesizing a
+        // protocol-dispatch stub on Referring that has no implementers registered.
+        if (type is ProtocolTypeInfo markerProto &&
+            markerProto.TypeArguments is { Count: 1 } markerArgs)
+        {
+            string markerBase = markerProto.GenericDefinition?.Name ?? markerProto.Name;
+            int markerBracket = markerBase.IndexOf(value: '[');
+            if (markerBracket >= 0) markerBase = markerBase[..markerBracket];
+            if (markerBase is "Referring" or "Controlling")
+            {
+                RoutineInfo? viaInner = LookupMethodOverload(type: markerArgs[index: 0],
+                    methodName: methodName, argTypes: argTypes);
+                if (viaInner != null) return viaInner;
+            }
+        }
+
         var candidates = new List<RoutineInfo>();
         CollectMemberRoutineCandidates(type: type, methodName: methodName, candidates: candidates);
 
