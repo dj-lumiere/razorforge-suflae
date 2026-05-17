@@ -301,32 +301,55 @@ routine Text.$hash() -> U64
 ### :param character: The character to test.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine Text.contains(character: Character) -> Bool
+routine Text.$contains(character: Character) -> Bool
   for i in 0u64 til me.count
     if me[i] == character
       return true
   return false
 
 ### Returns `true` when this text contains `other` as a contiguous substring.
-### An empty `other` value is always considered contained.
+### An empty `other` value is always considered contained. Uses the
+### Knuth-Morris-Pratt algorithm for O(n + m) worst-case scanning.
 ### :param other: The substring to search for.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine Text.contains(other: Referring[Text]) -> Bool
+routine Text.$contains(other: Referring[Text]) -> Bool
   if other.is_empty()
     return true
   var other_count = other.count()
   if other_count > me.count
     return false
-  var limit = me.count - other_count + 1u64
-  for i in 0u64 til limit
-    var found = true
-    for j in 0u64 til other_count
-      if me[i + j] != other[j]
-        found = false
-        break
-    if found
-      return true
+
+  # Build KMP longest-proper-prefix-also-suffix (LPS) table for `other`.
+  var lps = List[U64]()
+  for _ in 0u64 til other_count
+    lps.add_last(value: 0u64)
+  var length = 0u64
+  var i = 1u64
+  while i < other_count
+    if other[i] == other[length]
+      length = length + 1u64
+      lps[i] = length
+      i = i + 1u64
+    elseif length != 0u64
+      length = lps[length - 1u64]
+    else
+      lps[i] = 0u64
+      i = i + 1u64
+
+  # Scan `me` against `other` using the LPS table.
+  var hay = 0u64
+  var needle = 0u64
+  while hay < me.count
+    if me[hay] == other[needle]
+      hay = hay + 1u64
+      needle = needle + 1u64
+      if needle == other_count
+        return true
+    elseif needle != 0u64
+      needle = lps[needle - 1u64]
+    else
+      hay = hay + 1u64
   return false
 
 ### Returns `true` when this text begins with `prefix`.

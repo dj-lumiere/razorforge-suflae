@@ -241,23 +241,26 @@ internal sealed class WrapperForwardingPass
         string cacheKey = $"{wrapperDef.Name}.{methodName}#{(isFailable ? "!" : "")}";
         if (!_synthesizedForwarderKeys.Add(item: cacheKey))
         {
-            return _registry.LookupMethod(type: wrapperType,
+            var cached = _registry.LookupMethod(type: wrapperType,
                 methodName: methodName,
                 isFailable: isFailable) ??
                 _registry.LookupMethod(type: wrapperDef,
                     methodName: methodName,
                     isFailable: isFailable);
+            return cached;
         }
 
         // Don't overwrite a method already defined on the wrapper's generic def
         // (source-defined routines like $represent, $diagnose, $destroy take precedence).
-        if (_registry.LookupMethod(type: wrapperDef,
-                methodName: methodName,
-                isFailable: isFailable) != null)
-        {
-            return _registry.LookupMethod(type: wrapperType,
+        var existingOnDef = _registry.LookupMethod(type: wrapperDef,
                 methodName: methodName,
                 isFailable: isFailable);
+        if (existingOnDef != null)
+        {
+            var ret = _registry.LookupMethod(type: wrapperType,
+                methodName: methodName,
+                isFailable: isFailable);
+            return ret;
         }
 
         // Filter out owner-level generics from the inner method's GenericParameters.

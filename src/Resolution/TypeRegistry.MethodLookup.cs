@@ -578,10 +578,31 @@ public sealed partial class TypeRegistry
             EntityTypeInfo e => e.ImplementedProtocols,
             _ => null
         };
-
         if (protocols != null)
-            return protocols.Select(protocol => LookupMethod(type: protocol, methodName: methodName))
-                            .FirstOrDefault(m => m != null);
+        {
+            foreach (var protocol in protocols)
+            {
+                var res = LookupMethod(type: protocol, methodName: methodName);
+                if (res != null) return res;
+            }
+            return null;
+        }
+
+        // WrapperTypeInfo (Owned/Retained/Tracked/Viewed/Grasped/Inspected/Claimed/Shared/Marked)
+        // is the parallel representation to the substituted RecordTypeInfo of the same wrapper.
+        // The RecordTypeInfo path finds methods via its substituted `Controlling[InnerT]` /
+        // `Referring[InnerT]` protocol entry. WrapperTypeInfo carries no ImplementedProtocols,
+        // so the protocols loop above is skipped — without this fallback, the call dispatcher
+        // would then synthesize a forwarder whose body is never emitted (LINKERR). Resolve
+        // directly to InnerType as a last resort. Hijacked is intentionally excluded — its
+        // members must be reached via explicit extract()/reveal().
+        if (type is WrapperTypeInfo forwardingWrapper &&
+            forwardingWrapper.Name is "Owned" or "Retained" or "Tracked" or "Viewed"
+                or "Grasped" or "Inspected" or "Claimed" or "Shared" or "Marked")
+        {
+            return LookupMethod(type: forwardingWrapper.InnerType,
+                methodName: methodName, isFailable: isFailable);
+        }
 
         return null;
     }

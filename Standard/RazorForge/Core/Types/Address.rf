@@ -22,7 +22,7 @@ routine Address.$create(from: Address) -> Address
   return from
 
 # ============================================================================
-# Wrapping Arithmetic Operations (+%, -%, *%)
+# Wrapping Arithmetic Operations (+%, -%)
 # These explicitly wrap on overflow - the only arithmetic allowed on Address
 # ============================================================================
 
