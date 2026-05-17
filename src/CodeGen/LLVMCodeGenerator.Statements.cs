@@ -81,7 +81,7 @@ public partial class LlvmCodeGenerator
 
             case UsingStatement:
                 throw new InvalidOperationException(
-                    "UsingStatement reached codegen ??UsingLoweringPass must run before codegen.");
+                    "UsingStatement reached codegen -> UsingLoweringPass must run before codegen.");
 
             case ThrowStatement throwStmt:
                 EmitThrow(sb: sb, throwStmt: throwStmt);

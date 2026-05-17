@@ -6,5 +6,5 @@ b[4]: \x6F
 hello.bytes == hello.bytes: true
 hello.bytes == world.bytes: false
 byte sum: 532
-??byte count: 3
+-> byte count: 3
 DONE

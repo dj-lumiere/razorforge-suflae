@@ -152,7 +152,7 @@ public class TypeNarrowingTests
                           return 0
                         """;
 
-        // Should not crash ??the is/isnot check may produce warnings
+        // Should not crash -> the is/isnot check may produce warnings
         // but should not cause an internal error
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.NotNull(@object: result);

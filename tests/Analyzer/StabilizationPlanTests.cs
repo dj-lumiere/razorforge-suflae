@@ -10,7 +10,7 @@ using static TestHelpers;
 /// </summary>
 public class StabilizationPlanTests
 {
-    #region P1 ??Protocol method lookup on instantiated generics
+    #region P1 -> Protocol method lookup on instantiated generics
 
     /// <summary>
     /// Verifies that the test validates protocol method on generic owner and substitutes the parameter type.
@@ -121,7 +121,7 @@ public class StabilizationPlanTests
 
     #endregion
 
-    #region P2 ??GenericDefinition preserved across all update paths
+    #region P2 -> GenericDefinition preserved across all update paths
 
     /// <summary>
     /// Verifies that the test validates generic record preserves definition after protocol update.
@@ -193,7 +193,7 @@ public class StabilizationPlanTests
 
     #endregion
 
-    #region P3 ??Using bound type agreement
+    #region P3 -> Using bound type agreement
 
     /// <summary>
     /// Verifies that the test validates using with generic resource binds correct type.
@@ -256,7 +256,7 @@ public class StabilizationPlanTests
 
     #endregion
 
-    #region P4 ??Routine body matching edge cases
+    #region P4 -> Routine body matching edge cases
 
     /// <summary>
     /// Verifies that the test validates overloaded routines zero arg vs one arg both match.
@@ -406,7 +406,7 @@ public class StabilizationPlanTests
 
     #endregion
 
-    #region P5 ??GenericAstRewriter no longer rewrites identifiers
+    #region P5 -> GenericAstRewriter no longer rewrites identifiers
 
     /// <summary>
     /// Verifies that the test validates generic const param resolved at codegen.
@@ -435,7 +435,7 @@ public class StabilizationPlanTests
 
     #endregion
 
-    #region P6 ??No string-based generic heuristics
+    #region P6 -> No string-based generic heuristics
 
     /// <summary>
     /// Verifies that the test validates nested generic type resolved via generic definition.
@@ -500,7 +500,7 @@ public class StabilizationPlanTests
 
     #endregion
 
-    #region Cross-cutting ??Generic + protocol + overload combined
+    #region Cross-cutting -> Generic + protocol + overload combined
 
     /// <summary>
     /// Verifies that the test validates generic with protocol and overloads.

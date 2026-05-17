@@ -349,7 +349,7 @@ public class ExhaustivenessTests
     [Fact]
     public void WhenExpression_NoElse_NonEnumerableType_ReportsError()
     {
-        // S32 has 2**32 values ??without else, cannot be exhaustive
+        // S32 has 2**32 values -> without else, cannot be exhaustive
         string source = """
                         routine test(x: S32) -> S32
                           return when x

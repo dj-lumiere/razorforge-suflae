@@ -13,7 +13,7 @@ using static TestHelpers;
 /// </summary>
 public class UnwrapOperatorTests
 {
-    #region Built-in error handling infrastructure ??try_ variant generation
+    #region Built-in error handling infrastructure -> try_ variant generation
 
     /// <summary>
     /// Verifies that the test validates variant generated and returns the generated Maybe type.
@@ -85,7 +85,7 @@ public class UnwrapOperatorTests
 
     #endregion
 
-    #region !! on plain types without $unwrap ??error
+    #region !! on plain types without $unwrap -> error
 
     /// <summary>
     /// Verifies that the test validates unwrap on S64 and reports the expected error.
@@ -181,7 +181,7 @@ public class UnwrapOperatorTests
 
     #endregion
 
-    #region ?? on plain types without $unwrap_or ??error
+    #region ?? on plain types without $unwrap_or -> error
 
     /// <summary>
     /// Verifies that the test validates coalesce on S64 and reports the expected error.
@@ -241,7 +241,7 @@ public class UnwrapOperatorTests
 
     #endregion
 
-    #region !! on user type with $unwrap ??no error
+    #region !! on user type with $unwrap -> no error
 
     /// <summary>
     /// Verifies that the test validates unwrap on user type with unwrap without unexpected diagnostics.
@@ -291,7 +291,7 @@ public class UnwrapOperatorTests
 
     #endregion
 
-    #region ?? on user type with $unwrap_or ??no error
+    #region ?? on user type with $unwrap_or -> no error
 
     /// <summary>
     /// Verifies that the test validates coalesce on user type with unwrap or without unexpected diagnostics.
@@ -386,7 +386,7 @@ public class UnwrapOperatorTests
 
     #endregion
 
-    #region !! and ?? on non-failable call ??error (no error handling type)
+    #region !! and ?? on non-failable call -> error (no error handling type)
 
     /// <summary>
     /// Verifies that the test validates unwrap on non failable call and reports the expected error.
@@ -430,7 +430,7 @@ public class UnwrapOperatorTests
 
     #endregion
 
-    #region !! on choice/flags ??error (no operators on choice/flags)
+    #region !! on choice/flags -> error (no operators on choice/flags)
 
     /// <summary>
     /// Verifies that the test validates unwrap on choice and reports the expected error.
@@ -460,7 +460,7 @@ public class UnwrapOperatorTests
     public void NoneCoalesce_OnChoice_ReportsError()
     {
         // ?? is caught by the choice operator prohibition check (ArithmeticOnChoiceType)
-        // before reaching the NoneCoalesce handler ??correct behavior
+        // before reaching the NoneCoalesce handler -> correct behavior
         string source = """
                         choice Direction
                           NORTH

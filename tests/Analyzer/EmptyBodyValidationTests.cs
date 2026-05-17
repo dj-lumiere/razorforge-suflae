@@ -41,7 +41,7 @@ public class EmptyBodyValidationTests
     [Fact]
     public void Analyze_EmptyRecordBody_ReportsError()
     {
-        // record with no body (no indent after header) ??followed by another decl to ensure valid parse
+        // record with no body (no indent after header) -> followed by another decl to ensure valid parse
         string source = "record Empty\nrecord Other\n  pass\n";
 
         AnalysisResult result = AnalyzeSa(source: source);

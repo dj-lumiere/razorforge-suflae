@@ -194,7 +194,7 @@ public class TypeProhibitionTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        // No GrammarException thrown ??lexer accepts ASCII byte literals
+        // No GrammarException thrown -> lexer accepts ASCII byte literals
         Assert.NotNull(@object: result);
     }
 

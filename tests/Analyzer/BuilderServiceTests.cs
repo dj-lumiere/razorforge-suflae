@@ -10,7 +10,7 @@ using static TestHelpers;
 /// </summary>
 public class BuilderServiceTests
 {
-    #region Import Gating ??Per-Type Routines
+    #region Import Gating -> Per-Type Routines
     /// <summary>
     /// Verifies that the test validates name without import and reports the expected error.
     /// </summary>
@@ -106,7 +106,7 @@ public class BuilderServiceTests
 
     #endregion
 
-    #region Import Gating ??Standalone Routines
+    #region Import Gating -> Standalone Routines
     /// <summary>
     /// Verifies that the test validates file without import and reports the expected error.
     /// </summary>

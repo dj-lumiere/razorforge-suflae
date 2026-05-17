@@ -101,6 +101,13 @@ public sealed class BackendEntryValidator
     /// </summary>
     private static void Walk(ISyntaxTreeNode node, List<SemanticError> errors, TypeRegistry registry)
     {
+        // Skip bodies of generic routine declarations: their expressions legitimately carry
+        // GenericParameterTypeInfo in ResolvedType (e.g. `me.tree[i]` on `me.tree: List[V]`
+        // is typed V in the gen-def template). The monomorphized clones are validated
+        // separately in the _instantiatedGenericBodies loop, so we don't lose coverage.
+        if (node is RoutineDeclaration { GenericParameters: { Count: > 0 } })
+            return;
+
         if (TryCreateResidualError(node: node, registry: registry, out SemanticError? error))
             errors.Add(item: error!);
 

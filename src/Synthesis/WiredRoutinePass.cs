@@ -20,12 +20,12 @@ namespace Compiler.Synthesis;
 ///
 /// <para>Generated bodies (keyed by <c>RoutineInfo.RegistryKey</c> ??<c>ctx.VariantBodies</c>):</para>
 /// <list type="bullet">
-///   <item><c>$eq</c>   ??field-by-field <c>==</c> AND-chain for concrete <see cref="RecordTypeInfo"/>, <see cref="EntityTypeInfo"/>, <see cref="TupleTypeInfo"/>.</item>
-///   <item><c>$hash</c> ??XOR-chain of <c>me.f.$hash()</c> calls for records, entities, tuples.</item>
-///   <item><c>$represent</c> / <c>$diagnose</c> ??f-string body for <see cref="RecordTypeInfo"/> and
+///   <item><c>$eq</c>   -> field-by-field <c>==</c> AND-chain for concrete <see cref="RecordTypeInfo"/>, <see cref="EntityTypeInfo"/>, <see cref="TupleTypeInfo"/>.</item>
+///   <item><c>$hash</c> -> XOR-chain of <c>me.f.$hash()</c> calls for records, entities, tuples.</item>
+///   <item><c>$represent</c> / <c>$diagnose</c> -> f-string body for <see cref="RecordTypeInfo"/> and
 ///         <see cref="EntityTypeInfo"/>, including generic definitions (monomorphization substitutes type params).</item>
 ///   <item><c>$represent</c> on crashable ??<c>return me.crash_message()</c>.</item>
-///   <item><c>$diagnose</c> on crashable ??f-string <c>Module.Name(crash_message, field: val, ...)</c>.</item>
+///   <item><c>$diagnose</c> on crashable -> f-string <c>Module.Name(crash_message, field: val, ...)</c>.</item>
 ///   <item><c>Text.$create(from: T)</c> ??<c>return from.$represent()</c>.</item>
 /// </list>
 ///
@@ -84,7 +84,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     .Any(r => r.Name == routine.Name && !r.IsSynthesized))
                 continue;
 
-            // BuilderService constant routines apply to all owner types ??check by name first.
+            // BuilderService constant routines apply to all owner types -> check by name first.
             if (routine.OwnerType != null
                 && TryHandleBuilderServiceConstant(routine: routine, textType: textType,
                     u64Type: u64Type, s64Type: s64Type, boolType: boolType,
@@ -1065,8 +1065,8 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// <summary>
     /// Builds the body for <c>$represent</c> or <c>$diagnose</c> on a record or entity.
     /// <list type="bullet">
-    ///   <item><c>$represent</c>: <c>return f"TypeName({me.f1}, {me.f2})"</c> ??open+posted fields, positional.</item>
-    ///   <item><c>$diagnose</c>:  <c>return f"Module.TypeName(f1: {me.f1}, [secret] f2: {me.f2})"</c> ??all fields named,
+    ///   <item><c>$represent</c>: <c>return f"TypeName({me.f1}, {me.f2})"</c> -> open+posted fields, positional.</item>
+    ///   <item><c>$diagnose</c>:  <c>return f"Module.TypeName(f1: {me.f1}, [secret] f2: {me.f2})"</c> -> all fields named,
     ///         values via <c>$represent</c> (not <c>$diagnose</c>) to avoid cascading verbosity.</item>
     /// </list>
     /// Field access via <see cref="MemberExpression"/> works for both records (extractvalue) and
@@ -1279,8 +1279,8 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// <summary>
     /// Builds the common block of statements that computes:
     /// <list type="bullet">
-    ///   <item><c>var result: Text = ""</c> ??flag names joined by <c>" and "</c>.</item>
-    ///   <item><c>var first: Bool = true</c> ??separator sentinel.</item>
+    ///   <item><c>var result: Text = ""</c> -> flag names joined by <c>" and "</c>.</item>
+    ///   <item><c>var first: Bool = true</c> -> separator sentinel.</item>
     ///   <item>When <paramref name="computeBits"/> is <c>true</c>: <c>var bits: Text = "%"</c> ??
     ///         binary string in declaration order, e.g. <c>"%110"</c>.</item>
     ///   <item>For each flag in declaration order:
@@ -1442,7 +1442,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             }
             else
             {
-                // bits.$add(other: "1") ??set branch
+                // bits.$add(other: "1") -> set branch
                 var append1 = new CallExpression(
                     Callee: new MemberExpression(
                         Object: new IdentifierExpression(Name: "bits", Location: _synthLoc)
@@ -1456,7 +1456,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     ],
                     Location: _synthLoc) { ResolvedType = textType };
 
-                // bits.$add(other: "0") ??clear branch
+                // bits.$add(other: "0") -> clear branch
                 var append0 = new CallExpression(
                     Callee: new MemberExpression(
                         Object: new IdentifierExpression(Name: "bits", Location: _synthLoc)
@@ -1566,7 +1566,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             computeBits: true);
 
         // return f"Module.FlagsName(value: {bits}, {result})"
-        // Both result and bits are Text ??EmitRepresentCall returns them directly.
+        // Both result and bits are Text -> EmitRepresentCall returns them directly.
         var resultRef = new IdentifierExpression(Name: ResultVarName, Location: _synthLoc)
             { ResolvedType = textType };
         var bitsRef = new IdentifierExpression(Name: "bits", Location: _synthLoc)
@@ -1598,7 +1598,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// </summary>
     private static ThrowStatement BuildBreachStatement(TypeInfo? logicBreachedErrorType)
     {
-        // Use CallExpression, not CreatorExpression ??crashable constructors in RF source
+        // Use CallExpression, not CreatorExpression -> crashable constructors in RF source
         // parse as calls (e.g. LogicBreachedError()), and EmitFunctionCall has the
         // crashable-construction path; EmitConstructorCall does not.
         var call = new CallExpression(
@@ -1640,7 +1640,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         // Open with "Module.TypeName("
         parts.Add(new TextPart(Text: crashable.FullName + "(", Location: _synthLoc));
 
-        // First element: crash_message() ??use $represent format (no "?")
+        // First element: crash_message() -> use $represent format (no "?")
         var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
             { ResolvedType = crashable };
         var crashMsgCall = new CallExpression(
@@ -1824,7 +1824,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             case "type_kind" when typeKindType is ChoiceTypeInfo typeKindChoice:
             {
                 // Map the owner's category to the TypeKind case name, then look up its
-                // ComputedValue from the registry ??avoids hardcoding ordinals that could
+                // ComputedValue from the registry -> avoids hardcoding ordinals that could
                 // drift out of sync with the BuilderService.rf TypeKind declaration.
                 string caseName = owner.Category switch
                 {
@@ -1880,7 +1880,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             }
 
             case "annotations" when listTextType != null:
-                // Type-level annotations are not yet tracked on TypeInfo ??return empty list
+                // Type-level annotations are not yet tracked on TypeInfo -> return empty list
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     MakeListReturn(values: [], textType: textType, listTextType: listTextType);
                 return true;
@@ -1891,7 +1891,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 return true;
 
             case "protocol_info" when listTextType != null:
-                // Full ProtocolInfo entity allocation deferred ??return empty list
+                // Full ProtocolInfo entity allocation deferred -> return empty list
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     MakeListReturn(values: [], textType: textType, listTextType: listTextType);
                 return true;
@@ -2078,7 +2078,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// <summary>
     /// Approximates the in-memory byte size of a type for <c>data_size()</c>.
     /// Primitive types use their natural width; structs sum field sizes (8-byte aligned).
-    /// Entity and crashable types return 8 (pointer size on 64-bit ??stored by reference).
+    /// Entity and crashable types return 8 (pointer size on 64-bit -> stored by reference).
     /// Backend-annotated records use the LLVM type width parsed from the @llvm("...") string.
     /// </summary>
     private static ulong CalculateDataSizeForType(TypeInfo type) =>
@@ -2088,7 +2088,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             RecordTypeInfo r when r.HasDirectBackendType => LlvmBackendTypeSize(r.BackendType!),
             RecordTypeInfo r => (ulong)(r.MemberVariables.Count * 8),
             EntityTypeInfo => 8,   // heap-allocated; stored as pointer (8 bytes on 64-bit)
-            CrashableTypeInfo => 8, // same ??stored as pointer
+            CrashableTypeInfo => 8, // same -> stored as pointer
             VariantTypeInfo v => (ulong)((v.Members.Count + 1) * 8), // tag + largest payload
             _ => 0
         };
@@ -2100,7 +2100,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// </summary>
     private static ulong LlvmBackendTypeSize(string llvmType) => llvmType.Trim() switch
     {
-        "void" => 0,                // Blank ??zero-sized
+        "void" => 0,                // Blank -> zero-sized
         "i1" or "i8" => 1,
         "i16" or "half" => 2,
         "i32" or "float" => 4,
@@ -2235,7 +2235,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
     private void HandleVariant(RoutineInfo routine, VariantTypeInfo variant, TypeInfo textType)
     {
-        // Skip generic definitions ??no concrete member types to dispatch on.
+        // Skip generic definitions -> no concrete member types to dispatch on.
         if (variant.IsGenericDefinition) return;
 
         switch (routine.Name)

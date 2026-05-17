@@ -19,7 +19,7 @@ namespace Compiler.Synthesis;
 /// </summary>
 internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
 {
-    /// <summary>Per-file stub ??variant generation is global only.</summary>
+    /// <summary>Per-file stub -> variant generation is global only.</summary>
     public static void Run(Program program) { }
 
     /// <summary>
@@ -30,7 +30,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     {
         var generator = new ErrorHandlingGenerator(registry: ctx.Registry);
 
-        // Snapshot before iteration ??registering variants adds new routines to the registry
+        // Snapshot before iteration -> registering variants adds new routines to the registry
         var routines = ctx.Registry.GetAllRoutines().ToList();
 
         foreach (RoutineInfo routine in routines)
@@ -60,7 +60,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
         ErrorHandlingResult result = generator.GenerateVariants(routine: routine, body: body);
 
         // If generation fails (e.g., @llvm_ir routines with no throw/absent AST nodes),
-        // skip ??no error reported. External implementations don't need generated variants.
+        // skip -> no error reported. External implementations don't need generated variants.
         if (result.Error != null) return;
 
         routine.HasThrow = result.HasThrow;

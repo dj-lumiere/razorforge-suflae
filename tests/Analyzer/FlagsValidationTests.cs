@@ -335,7 +335,7 @@ public class FlagsValidationTests
     #region #133: isonly rejects or/but (parser-enforced)
 
     // #133 is enforced at the parser level: the isonly parser only accepts 'and' connective.
-    // 'isonly READ or WRITE' parses as '(perms isonly READ) or WRITE' ??a logical or,
+    // 'isonly READ or WRITE' parses as '(perms isonly READ) or WRITE' -> a logical or,
     // which produces LogicalOperatorRequiresBool. No semantic check needed.
     /// <summary>
     /// Verifies flags validation behavior for is only with or produces parse error.

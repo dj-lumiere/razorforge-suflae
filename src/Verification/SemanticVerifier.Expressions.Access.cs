@@ -323,6 +323,38 @@ public sealed partial class SemanticVerifier
 
     private TypeSymbol AnalyzeIndexExpression(IndexExpression index) // NOSONAR S3776
     {
+        // Type-as-value generic instantiation: when the object is a bare type name (no
+        // shadowing variable) referring to a generic type, reinterpret the brackets as
+        // generic-arg syntax — `NumericSumAdd[T].identity_lazy()` should produce the
+        // resolved type `NumericSumAdd[T]`, not run $getitem on the gen-def.
+        if (index.Object is IdentifierExpression typeRefId &&
+            _registry.LookupVariable(name: typeRefId.Name) == null &&
+            LookupTypeWithImports(name: typeRefId.Name) is { } typeRef &&
+            typeRef.GenericParameters is { Count: > 0 })
+        {
+            var typeArgs = new List<TypeSymbol>();
+            IReadOnlyList<Expression> argExprs = index.Index is TupleLiteralExpression tup
+                ? tup.Elements
+                : [index.Index];
+            foreach (Expression argExpr in argExprs)
+            {
+                TypeSymbol argType = argExpr switch
+                {
+                    IdentifierExpression argId when IsGenericParameter(name: argId.Name)
+                        => new GenericParameterTypeInfo(name: argId.Name),
+                    IdentifierExpression argId when LookupTypeWithImports(name: argId.Name) is { } t
+                        => t,
+                    _ => AnalyzeExpression(expression: argExpr)
+                };
+                typeArgs.Add(item: argType);
+            }
+            if (typeArgs.Count == typeRef.GenericParameters.Count)
+            {
+                return _registry.GetOrCreateResolution(genericDef: typeRef,
+                    typeArguments: typeArgs);
+            }
+        }
+
         TypeSymbol objectType = AnalyzeExpression(expression: index.Object);
         TryGetTransparentProtocolTarget(type: objectType, targetType: out TypeSymbol lookupType);
 
@@ -988,8 +1020,12 @@ public sealed partial class SemanticVerifier
             : [];
         var providedNames = creator.MemberVariables.Select(selector: mv => mv.Name).ToList();
 
-        // If every provided name is a field, prefer existing field-init path.
-        if (providedNames.All(predicate: n => fieldNames.Contains(item: n)))
+        // Prefer existing field-init path only when this looks like a complete field-init:
+        // every provided name is a field AND every required field is provided. Otherwise the
+        // names may match a `$create(named:)` overload where some param names happen to coincide
+        // with field names (e.g. `List[T].$create(capacity:)` where `capacity` is also a field).
+        if (providedNames.All(predicate: n => fieldNames.Contains(item: n)) &&
+            fieldNames.SetEquals(other: providedNames))
         {
             return false;
         }
@@ -1001,12 +1037,16 @@ public sealed partial class SemanticVerifier
         // job of the legacy path and we don't want to silently pick the wrong overload.
         var providedNameSet = new HashSet<string>(collection: providedNames);
         var nameMatches = new List<RoutineInfo>();
-        foreach (RoutineInfo m in _registry.GetMethodsForType(type: type))
+        // Use CollectMemberRoutineCandidates: it walks the generic definition for
+        // generic resolutions (e.g. List[V] → List[T]) and runs SubstituteMethodForOwner
+        // so parameter types come back resolved to the receiver's concrete type args.
+        var candidates = new List<RoutineInfo>();
+        _registry.CollectMemberRoutineCandidates(type: type, methodName: "$create",
+            candidates: candidates);
+        _registry.CollectMemberRoutineCandidates(type: type, methodName: "$create!",
+            candidates: candidates);
+        foreach (RoutineInfo m in candidates)
         {
-            string baseName = m.Name;
-            int dot = baseName.LastIndexOf(value: '.');
-            if (dot >= 0) baseName = baseName[(dot + 1)..];
-            if (baseName != "$create" && baseName != "$create!") continue;
             if (m.Parameters.Count != creator.MemberVariables.Count) continue;
 
             var pNames = new HashSet<string>(

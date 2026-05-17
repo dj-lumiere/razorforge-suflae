@@ -614,7 +614,7 @@ internal partial class Program
     }
 
     /// <summary>
-    /// Runs the full compiler pipeline (tokenize ??parse ??semantic analysis ??LLVM IR generation)
+    /// Runs the full compiler pipeline (tokenize -> parse -> semantic analysis -> LLVM IR generation)
     /// on the given source file and writes the resulting IR to <paramref name="outputFile"/>,
     /// or to a default <c>.ll</c> file if no output path is specified.
     /// Returns 0 on success or 1 if any stage fails.
@@ -1134,7 +1134,7 @@ internal partial class Program
 
     /// <summary>
     /// Runs the multi-file build pipeline: BuildDriver (parse + resolve imports + topo sort)
-    /// ??SemanticVerifier.AnalyzeMultiple ??LLVMCodeGenerator with multiple user programs.
+    /// -> SemanticVerifier.AnalyzeMultiple -> LLVMCodeGenerator with multiple user programs.
     /// Returns 0 on success or 1 if any stage fails.
     /// </summary>
     private static int BuildMultiFile(string entryFile, string? outputFile,
@@ -1491,7 +1491,7 @@ internal partial class Program
                 }
             }
 
-            // Phase 2: Semantic analysis (multi-file) ??no codegen
+            // Phase 2: Semantic analysis (multi-file) -> no codegen
             Console.WriteLine();
             Console.WriteLine(value: "=== SEMANTIC ANALYSIS ===");
 
@@ -1729,7 +1729,7 @@ internal partial class Program
             if (clangProcess.ExitCode != 0)
             {
                 // MSVC's link.exe sends detailed errors (LNK2019) to stdout,
-                // while the summary (LNK1120) goes to stderr ??print both.
+                // while the summary (LNK1120) goes to stderr -> print both.
                 if (!string.IsNullOrWhiteSpace(value: clangStdout))
                 {
                     Console.Error.Write(value: clangStdout);
