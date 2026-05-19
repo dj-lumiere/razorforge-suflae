@@ -331,7 +331,9 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                     expectedParamCount: resolvedRoutine.GenericDefinition.Parameters.Count,
                     typeSubs: typeSubs,
                     expectedParamNames: resolvedRoutine.GenericDefinition.Parameters
-                        .Select(static p => p.Name).ToList());
+                        .Select(static p => p.Name).ToList(),
+                    expectedParamTypeNames: resolvedRoutine.GenericDefinition.Parameters
+                        .Select(static p => (string?)p.Type?.Name).ToList());
                 if (astDecl == null)
                 {
                     // Check if the generic definition has a synthesized body in VariantBodies.
@@ -533,11 +535,13 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         // Regular method: search stdlib + user program ASTs
         string astName = BuildAstName(genDef: genDef, routineName: genMethod.Name);
         var paramNames = genMethod.Parameters.Select(static p => p.Name).ToList();
+        var paramTypeNames = genMethod.Parameters.Select(static p => (string?)p.Type?.Name).ToList();
         RoutineDeclaration? astDecl = FindInStdlib(
             genericAstName: astName,
             expectedParamCount: genMethod.Parameters.Count,
             typeSubs: typeSubs,
-            expectedParamNames: paramNames);
+            expectedParamNames: paramNames,
+            expectedParamTypeNames: paramTypeNames);
 
         if (astDecl == null)
         {
@@ -1014,7 +1018,8 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// overload of e.g. <c>Maybe[T]</c> from being selected when T is an entity type.
     /// </summary>
     private RoutineDeclaration? FindInStdlib(string genericAstName, int expectedParamCount = -1,
-        Dictionary<string, TypeInfo>? typeSubs = null, List<string>? expectedParamNames = null)
+        Dictionary<string, TypeInfo>? typeSubs = null, List<string>? expectedParamNames = null,
+        List<string?>? expectedParamTypeNames = null)
     {
         bool requireGenericSuffix = genericAstName.EndsWith("[generic]");
         string baseName = requireGenericSuffix
@@ -1060,7 +1065,41 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                         break;
                     }
                 }
-                if (namesMatch) return decl;
+                if (namesMatch)
+                {
+                    // Param names alone don't disambiguate same-name-different-type overloads
+                    // (e.g. `$create(from: Set[T])` vs `$create(from: FastSet[T])`). When type
+                    // names are supplied, require those to match too. Without this gate the
+                    // first-declared overload wins by source order, and Set's body ends up
+                    // mounted under FastSet's mangled signature (LINKERR on $iter mismatch).
+                    if (expectedParamTypeNames != null &&
+                        decl.Parameters.Count == expectedParamTypeNames.Count)
+                    {
+                        bool typesMatch = true;
+                        for (int i = 0; i < expectedParamTypeNames.Count; i++)
+                        {
+                            string? expected = expectedParamTypeNames[i];
+                            if (expected == null) continue;
+                            string? actual = decl.Parameters[i].Type?.Name;
+                            if (actual == null) continue;
+                            // Compare by base name (strip [T]/[K,V]) so `Set[T]` matches `Set`
+                            // and `FastSet[T]` matches `FastSet` regardless of generic-arg form.
+                            string expectedBase = StripGenericSuffix(expected);
+                            string actualBase = StripGenericSuffix(actual);
+                            if (expectedBase != actualBase)
+                            {
+                                typesMatch = false;
+                                break;
+                            }
+                        }
+                        if (!typesMatch)
+                        {
+                            countOnlyMatch ??= decl;
+                            continue;
+                        }
+                    }
+                    return decl;
+                }
                 countOnlyMatch ??= decl;
                 continue;
             }
@@ -1069,6 +1108,12 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         }
 
         return countOnlyMatch ?? firstMatch;
+    }
+
+    private static string StripGenericSuffix(string typeName)
+    {
+        int bracket = typeName.IndexOf('[');
+        return bracket >= 0 ? typeName[..bracket] : typeName;
     }
 
     /// <summary>
