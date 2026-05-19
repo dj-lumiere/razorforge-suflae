@@ -4,20 +4,19 @@ import BuilderService
 import Core.SecureHashKey
 
 preset SECURE_SET_INITIAL_CAPACITY: U64 = 16u64
+preset SECURE_SET_INITIAL_ENTRIES: U64 = 16u64
 preset CTRL_EMPTY: U8 = 128_u8
-preset CTRL_DELETED: U8 = 254_u8
+preset CTRL_TOMBSTONED: U8 = 254_u8
 preset CTRL_H2_MASK: U8 = 127_u8
+preset ENTRY_DEAD: U8 = 0_u8
+preset ENTRY_LIVE: U8 = 1_u8
 
-### A set of unique values backed by an open-addressed hash table hardened against hash-flooding attacks.
+### A hash-flooding-resistant insertion-ordered set.
 ###
-### `SecureSet[T]` works like {Set[T]} but uses SipHash-2-4 keyed with a per-instance secret
-### to make the probe sequence unpredictable to external attackers. This prevents
-### worst-case O(n) behaviour that arises when an adversary can craft inputs that all collide
-### in an ordinary set.
-###
-### Each `SecureSet` instance carries its own randomly generated (or caller-supplied) hash
-### key, so two sets holding the same elements will generally have different probe structures.
-### Iteration order is not sorted and is not stable across instances or rehashes.
+### `SecureSet[T]` works like {Set[T]} (insertion-ordered iteration, O(1) average operations)
+### but uses SipHash-2-4 keyed with a per-instance secret to make the probe sequence
+### unpredictable to external attackers. Iteration order follows insertion order; the secure
+### key only affects the probe-array layout, not the entries array.
 ###
 ### **When to use**
 ### - You are storing data derived from untrusted input (e.g. tokens, user-supplied strings, request IDs).
@@ -30,7 +29,7 @@ preset CTRL_H2_MASK: U8 = 127_u8
 ### | `add` | O(1) | O(n) (rehash) |
 ### | `remove` | O(1) | O(n) |
 ### | `$contains` | O(1) | O(n) |
-### | Iteration | O(capacity) | O(capacity) |
+### | Iteration | O(n + tombstones) | O(n + tombstones) |
 ###
 ### :typeparam T: The element type. Must obey {SecureHashable} and {Equatable}.
 ### :see: {Set[T]} for an unsecured but faster general-purpose set.
@@ -38,10 +37,14 @@ preset CTRL_H2_MASK: U8 = 127_u8
 entity SecureSet[T] obeys Iterable[T]
 needs T obeys SecureHashable, Equatable
   secret ctrl: Hijacked[U8]
+  secret indices: Hijacked[U64]
   secret slots: Hijacked[T]
+  secret entry_live: Hijacked[U8]
   secret count: U64
   secret deleted: U64
+  secret entries_used: U64
   secret capacity: U64
+  secret entries_cap: U64
   secret k0: U64
   secret k1: U64
 
@@ -49,83 +52,90 @@ needs T obeys SecureHashable, Equatable
 # Creators
 # ============================================================================
 
-### Creates an empty secure set with a freshly generated secure-hash key.
 routine SecureSet[T].$create() -> SecureSet[T]
   return SecureSet[T](key: SecureHashKey.random())
 
-### Creates an empty secure set with the supplied secure-hash key.
-### :param key: The SipHash-2-4 key used for all hash computations in this instance.
 routine SecureSet[T].$create(key: SecureHashKey) -> SecureSet[T]
   var cap = SECURE_SET_INITIAL_CAPACITY
+  var ecap = SECURE_SET_INITIAL_ENTRIES
   var set = SecureSet[T](
     ctrl: hijacked_none[U8](),
+    indices: hijacked_none[U64](),
     slots: hijacked_none[T](),
+    entry_live: hijacked_none[U8](),
     count: 0u64,
     deleted: 0u64,
+    entries_used: 0u64,
     capacity: cap,
+    entries_cap: ecap,
     k0: key.k0,
     k1: key.k1
   )
   danger!
     set.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(cap))
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](set.ctrl), value: CTRL_EMPTY, size: cap)
-    set.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * cap))
+    set.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
+    set.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * ecap))
+    set.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
   return set
 
-### Creates an empty secure set pre-sized to hold at least `capacity` live elements without rehashing.
-### The actual slot count is rounded up to the next power-of-two.
-### :param key: The SipHash-2-4 key used for all hash computations in this instance.
-### :param capacity: Minimum number of live elements to accommodate before the first rehash.
 routine SecureSet[T].$create(key: SecureHashKey, capacity: U64) -> SecureSet[T]
   var cap = SECURE_SET_INITIAL_CAPACITY
   while cap < capacity
     cap = cap *% 2u64
+  var ecap = SECURE_SET_INITIAL_ENTRIES
+  while ecap < capacity
+    ecap = ecap *% 2u64
   var set = SecureSet[T](
     ctrl: hijacked_none[U8](),
+    indices: hijacked_none[U64](),
     slots: hijacked_none[T](),
+    entry_live: hijacked_none[U8](),
     count: 0u64,
     deleted: 0u64,
+    entries_used: 0u64,
     capacity: cap,
+    entries_cap: ecap,
     k0: key.k0,
     k1: key.k1
   )
   danger!
     set.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(cap))
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](set.ctrl), value: CTRL_EMPTY, size: cap)
-    set.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * cap))
+    set.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
+    set.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * ecap))
+    set.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
   return set
 
-### Releases the raw control and element buffers owned by this set.
 routine SecureSet[T].$destroy()
   danger!
     if not me.ctrl.is_none()
       rf_invalidate(pointer_to_int[U8, Address](me.ctrl))
+    if not me.indices.is_none()
+      rf_invalidate(pointer_to_int[U64, Address](me.indices))
     if not me.slots.is_none()
       rf_invalidate(pointer_to_int[T, Address](me.slots))
+    if not me.entry_live.is_none()
+      rf_invalidate(pointer_to_int[U8, Address](me.entry_live))
   return
 
 # ============================================================================
 # Internal Helpers
 # ============================================================================
 
-### Extracts the 7-bit control-byte fingerprint from a raw hash value.
-### :param hash: The raw SipHash output.
-### :returns: The low 7 bits of `hash`, used to filter candidate slots before a full equality check.
 @readonly
 routine SecureSet[T].h2(hash: U64) -> U8
   return U8(hash & U64(CTRL_H2_MASK))
 
-### Derives the primary probe slot index from a raw hash value.
-### :param hash: The raw SipHash output.
-### :returns: The upper bits of `hash`, used as the starting slot before masking to the table size.
 @readonly
 routine SecureSet[T].h1(hash: U64) -> U64
   return hash >> 7u32
 
-### Searches for `value` by linear probing from its primary secure-hash slot.
-### Control-byte fingerprints are checked before full element equality to reduce element loads.
-### :param value: The element to find.
-### :returns: The slot index of `value` if found, or `capacity` if the element is absent.
+@readonly
+routine SecureSet[T].read_index(slot: U64) -> U64
+  danger!
+    return me.indices.offset(U64.data_size() * slot).extract()
+
 @readonly
 routine SecureSet[T].find_slot(value: T) -> U64
   var h = value.$secure_hash(k0: me.k0, k1: me.k1)
@@ -134,131 +144,145 @@ routine SecureSet[T].find_slot(value: T) -> U64
   var i = me.h1(h) & mask
   danger!
     loop
-      var c = me.ctrl.offset(U8.data_size() * i).extract()
+      var c = me.ctrl.offset(i).extract()
       if c == CTRL_EMPTY
         return me.capacity
       if c == target
-        if me.slots.offset(T.data_size() * i).extract() == value
+        var ei = me.indices.offset(U64.data_size() * i).extract()
+        if me.slots.offset(T.data_size() * ei).extract() == value
           return i
       i = (i +% 1u64) & mask
   return me.capacity
 
-### Writes `val` into the first empty or deleted slot reached from the probe position of `h`.
-### Assumes the caller has already checked for duplicates and will update `count` separately.
-### :param h: The raw SipHash output for `val`.
-### :param val: The element to write.
-routine SecureSet[T].insert_raw(h: U64, val: T)
+routine SecureSet[T].insert_index_raw(h: U64, entry_index: U64)
   var h2_val = me.h2(h)
   var mask = me.capacity -% 1u64
   var i = me.h1(h) & mask
   danger!
     loop
-      var c = me.ctrl.offset(U8.data_size() * i).extract()
+      var c = me.ctrl.offset(i).extract()
       if c == CTRL_EMPTY
-        me.ctrl.offset(U8.data_size() * i).inject(h2_val)
-        me.slots.offset(T.data_size() * i).inject(val)
+        me.ctrl.offset(i).inject(h2_val)
+        me.indices.offset(U64.data_size() * i).inject(entry_index)
         return
-      if c == CTRL_DELETED
-        me.ctrl.offset(U8.data_size() * i).inject(h2_val)
-        me.slots.offset(T.data_size() * i).inject(val)
+      if c == CTRL_TOMBSTONED
+        me.ctrl.offset(i).inject(h2_val)
+        me.indices.offset(U64.data_size() * i).inject(entry_index)
         me.deleted = me.deleted -% 1u64
         return
       i = (i +% 1u64) & mask
   return
 
-### Returns true when the combined live and tombstone load exceeds 87.5% of capacity.
-### Both live elements and tombstones occupy probe space, so both count toward the load threshold.
-### :returns: `true` if a rehash should happen before the next insertion.
 @readonly
 routine SecureSet[T].should_rehash() -> Bool
-  return (me.count +% me.deleted) *% 8u64 >= me.capacity *% 7u64
+  if (me.count +% me.deleted) *% 8u64 >= me.capacity *% 7u64
+    return true
+  if me.entries_used >= me.entries_cap
+    return true
+  return false
 
-### Doubles the table capacity and reinserts all live elements into the new table.
-### Tombstones are discarded during the rebuild; secure hashes are recomputed from the same instance key.
 @migratable
 routine SecureSet[T].rehash()
   var old_cap = me.capacity
+  var old_ecap = me.entries_cap
   var old_ctrl = me.ctrl
+  var old_indices = me.indices
   var old_slots = me.slots
-  var new_cap = old_cap *% 2u64
+  var old_entry_live = me.entry_live
+  var old_entries_used = me.entries_used
+
+  var table_pressured = (me.count +% me.deleted) *% 8u64 >= old_cap *% 7u64
+  var new_cap = old_cap
+  if table_pressured
+    new_cap = old_cap *% 2u64
+
+  var new_ecap = old_ecap
+  if me.count *% 2u64 >= old_ecap
+    new_ecap = old_ecap *% 2u64
 
   danger!
     me.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(new_cap))
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: new_cap)
-    me.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * new_cap))
+    me.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * new_cap))
+    me.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * new_ecap))
+    me.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(new_ecap))
   me.capacity = new_cap
+  me.entries_cap = new_ecap
   me.count = 0u64
   me.deleted = 0u64
+  me.entries_used = 0u64
 
   var i = 0u64
-  while i < old_cap
+  while i < old_entries_used
     danger!
-      var c = old_ctrl.offset(U8.data_size() * i).extract()
-      if c != CTRL_EMPTY and c != CTRL_DELETED
+      var live = old_entry_live.offset(i).extract()
+      if live == ENTRY_LIVE
         var val = old_slots.offset(T.data_size() * i).extract()
-        me.insert_raw(h: val.$secure_hash(k0: me.k0, k1: me.k1), val: val)
+        var new_ei = me.entries_used
+        me.slots.offset(T.data_size() * new_ei).inject(val)
+        me.entry_live.offset(new_ei).inject(ENTRY_LIVE)
+        me.entries_used = me.entries_used +% 1u64
+        me.insert_index_raw(h: val.$secure_hash(k0: me.k0, k1: me.k1), entry_index: new_ei)
         me.count = me.count +% 1u64
     i = i +% 1u64
 
   danger!
     if not old_ctrl.is_none()
       rf_invalidate(pointer_to_int[U8, Address](old_ctrl))
+    if not old_indices.is_none()
+      rf_invalidate(pointer_to_int[U64, Address](old_indices))
     if not old_slots.is_none()
       rf_invalidate(pointer_to_int[T, Address](old_slots))
+    if not old_entry_live.is_none()
+      rf_invalidate(pointer_to_int[U8, Address](old_entry_live))
   return
 
 # ============================================================================
 # Core Operations
 # ============================================================================
 
-### Returns the number of live elements currently stored.
-### :returns: The live element count.
 @readonly
 routine SecureSet[T].count() -> U64
   return me.count
 
-### Returns true if this set contains no live elements.
-### :returns: `true` when `count()` is zero.
 @readonly
 routine SecureSet[T].is_empty() -> Bool
   return me.count == 0u64
 
-### Removes every element while preserving the current slot capacity and hash key.
 routine SecureSet[T].clear()
   danger!
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: me.capacity)
   me.count = 0u64
   me.deleted = 0u64
+  me.entries_used = 0u64
   return
 
-### Returns true if `value` is present in the set.
-### :param value: The element to look up.
-### :returns: `true` if the element exists.
 @readonly
 routine SecureSet[T].$contains(value: T) -> Bool
   return me.find_slot(value) < me.capacity
 
-### Inserts `value` if it is not already present.
-### :param value: The element to insert.
-### :returns: `true` if the element was inserted; `false` if it was already present.
 routine SecureSet[T].add(value: T) -> Bool
   if me.should_rehash()
     me.rehash()
   if me.find_slot(value) < me.capacity
     return false
-  me.insert_raw(h: value.$secure_hash(k0: me.k0, k1: me.k1), val: value)
+  var ei = me.entries_used
+  danger!
+    me.slots.offset(T.data_size() * ei).inject(value)
+    me.entry_live.offset(ei).inject(ENTRY_LIVE)
+  me.entries_used = me.entries_used +% 1u64
+  me.insert_index_raw(h: value.$secure_hash(k0: me.k0, k1: me.k1), entry_index: ei)
   me.count = me.count +% 1u64
   return true
 
-### Removes `value` if it is present in the set.
-### :param value: The element to remove.
-### :returns: `true` if the element was found and removed; `false` if not present.
 routine SecureSet[T].remove(value: T) -> Bool
   var slot = me.find_slot(value)
   if slot >= me.capacity
     return false
+  var ei = me.read_index(slot)
   danger!
-    me.ctrl.offset(U8.data_size() * slot).inject(CTRL_DELETED)
+    me.ctrl.offset(slot).inject(CTRL_TOMBSTONED)
+    me.entry_live.offset(ei).inject(ENTRY_DEAD)
   me.count = me.count -% 1u64
   me.deleted = me.deleted +% 1u64
   return true
@@ -267,46 +291,36 @@ routine SecureSet[T].remove(value: T) -> Bool
 # Iteration
 # ============================================================================
 
-### Returns an iterator over all live elements in slot order.
-### Iteration order is not sorted and is not stable across rehashes or across different instances.
 @readonly
 routine SecureSet[T].$iter() -> SecureSetIterator[T]
   danger!
     return SecureSetIterator[T](
-      ctrl: me.ctrl,
       slots: me.slots,
-      capacity: me.capacity,
-      slot: 0u64
+      entry_live: me.entry_live,
+      entries_used: me.entries_used,
+      pos: 0u64
     )
 
-### Iterator that walks the raw slot array of a {SecureSet[T]} and yields only live elements.
-### Empty and deleted (tombstone) slots are silently skipped.
-### :typeparam T: The element type yielded by the iterator.
+### Iterator that walks the dense entries array of a {SecureSet[T]} in insertion order.
 entity SecureSetIterator[T] obeys Iterator[T]
-  secret ctrl: Hijacked[U8]
   secret slots: Hijacked[T]
-  secret capacity: U64
-  secret slot: U64
+  secret entry_live: Hijacked[U8]
+  secret entries_used: U64
+  secret pos: U64
 
-### Advances to the next live slot and returns its element.
-### :returns: The next live element.
-### :absent: No live slots remain.
 routine SecureSetIterator[T].$next!() -> T
   danger!
-    while me.slot < me.capacity
-      var s = me.slot
-      me.slot = me.slot + 1u64
-      var c = me.ctrl.offset(U8.data_size() * s).extract()
-      if c != CTRL_EMPTY and c != CTRL_DELETED
-        return me.slots.offset(T.data_size() * s).extract()
+    while me.pos < me.entries_used
+      var p = me.pos
+      me.pos = me.pos + 1u64
+      if me.entry_live.offset(p).extract() == ENTRY_LIVE
+        return me.slots.offset(T.data_size() * p).extract()
   absent
 
 # ============================================================================
 # Display
 # ============================================================================
 
-### Returns a compact text representation of the set contents.
-### Elements are rendered in iteration (slot) order, enclosed in braces.
 @readonly
 routine SecureSet[T].$represent() -> Text
   if me.is_empty()
@@ -321,7 +335,6 @@ routine SecureSet[T].$represent() -> Text
   result = result + "}"
   return result
 
-### Returns a diagnostic form that includes the runtime type name and live element count.
 @readonly
 routine SecureSet[T].$diagnose() -> Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
@@ -338,9 +351,6 @@ routine SecureSet[T].$diagnose() -> Text
 # Comparison
 # ============================================================================
 
-### Returns true if both sets contain exactly the same elements.
-### :param other: The other set to compare against.
-### :returns: `true` if both have the same count and every element in this set is also in `other`.
 @readonly
 routine SecureSet[T].$eq(other: SecureSet[T]) -> Bool
   if me.count != other.count
