@@ -34,12 +34,12 @@ routine RoutineTrace.$hash() -> U64
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
-routine RoutineTrace.$secure_hash(k0: U64, k1: U64) -> U64
+routine RoutineTrace.$hash(k0: U64, k1: U64) -> U64
   var acc = 0_u64
   var i = 0_u64
   while i < 10_u64
-    acc = __hash_round(acc: acc, h: me.frames[i].$secure_hash(k0: k0, k1: k1))
+    acc = __hash_round(acc: acc, h: me.frames[i].$hash(k0: k0, k1: k1))
     i = i + 1_u64
-  acc = __hash_round(acc: acc, h: me.depth.$secure_hash(k0: k0, k1: k1))
-  acc = __hash_round(acc: acc, h: me.truncated.$secure_hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.depth.$hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.truncated.$hash(k0: k0, k1: k1))
   return __hash_finalize(h: acc)

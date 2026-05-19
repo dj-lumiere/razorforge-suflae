@@ -4,5 +4,5 @@ module Core
 ### `RecordType` identifies values with structural semantics: copying duplicates
 ### the value, equality compares contents, and hashing reflects the stored
 ### fields rather than external identity.
-protocol RecordType obeys Diagnosable, Equatable, Hashable, Copyable
+protocol RecordType obeys Diagnosable, Equatable, FastHashable, Hashable, Copyable
   pass

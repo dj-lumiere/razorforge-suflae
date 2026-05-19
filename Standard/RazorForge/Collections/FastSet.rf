@@ -1,27 +1,35 @@
 module Collections
 
 import BuilderService
-import Core.SecureHashKey
 
-preset SECURE_SET_INITIAL_CAPACITY: U64 = 16u64
-preset SECURE_SET_INITIAL_ENTRIES: U64 = 16u64
+preset FAST_SET_INITIAL_CAPACITY: U64 = 16u64
+preset FAST_SET_INITIAL_ENTRIES: U64 = 16u64
 preset CTRL_EMPTY: U8 = 128_u8
 preset CTRL_TOMBSTONED: U8 = 254_u8
 preset CTRL_H2_MASK: U8 = 127_u8
 preset ENTRY_DEAD: U8 = 0_u8
 preset ENTRY_LIVE: U8 = 1_u8
 
-### A hash-flooding-resistant insertion-ordered set.
+### An insertion-ordered collection of unique values backed by an open-addressed hash table.
 ###
-### `SecureSet[T]` works like {Set[T]} (insertion-ordered iteration, O(1) average operations)
-### but uses SipHash-2-4 keyed with a per-instance secret to make the probe sequence
-### unpredictable to external attackers. Iteration order follows insertion order; the secure
-### key only affects the probe-array layout, not the entries array.
+### `FastSet[T]` stores each value at most once. Inserting a duplicate is a no-op and leaves the
+### existing element's position in iteration order unchanged. Membership testing, insertion,
+### and removal all run in O(1) average time. Iteration visits live elements in the order they
+### were first inserted, stable across lookups and rehashes. Removing an element and re-adding
+### it places it at the new end of the iteration order.
+###
+### The table uses Python-style "compact dict" layout: a probe array of indices into a dense,
+### append-only entries array. The probe array carries the SwissTable-style H1/H2 control bytes;
+### the entries array carries the elements and a per-entry live byte so removed entries can be
+### skipped without shifting later ones.
 ###
 ### **When to use**
-### - You are storing data derived from untrusted input (e.g. tokens, user-supplied strings, request IDs).
-### - You need membership testing with a security guarantee against hash-flooding.
-### - Use plain {Set[T]} instead when the element space is fully trusted and throughput matters more.
+### - You need fast membership testing (`value in set`).
+### - You need to deduplicate a sequence of values.
+### - You need set algebra: `union`, `intersection`, `difference`, `symmetric_difference`.
+### - You want iteration to follow the order values were first added.
+### - Use {SortedSet[T]} instead when you need elements in a defined sort order.
+### - Use {Set[T]} (the default) for any keys coming from untrusted input.
 ###
 ### **Complexity**
 ### | Operation | Average | Worst case |
@@ -29,13 +37,15 @@ preset ENTRY_LIVE: U8 = 1_u8
 ### | `add` | O(1) | O(n) (rehash) |
 ### | `remove` | O(1) | O(n) |
 ### | `$contains` | O(1) | O(n) |
+### | `union` / `intersection` / `difference` | O(n) | O(n²) |
 ### | Iteration | O(n + tombstones) | O(n + tombstones) |
 ###
-### :typeparam T: The element type. Must obey {SecureHashable} and {Equatable}.
-### :see: {Set[T]} for an unsecured but faster general-purpose set.
-### :see: {SecureDict[K, V]} for the dictionary counterpart.
-entity SecureSet[T] obeys Iterable[T]
-needs T obeys SecureHashable, Equatable
+### :typeparam T: The element type. Must obey {Hashable} and {Equatable}.
+### :see: {Dict[K, V]} for key-value storage with the same hash table design.
+### :see: {SortedSet[T]} for a sorted, duplicate-free collection.
+### :see: {Set[T]} for the safe-by-default counterpart used with untrusted input.
+entity FastSet[T] obeys Iterable[T]
+needs T obeys FastHashable, Equatable
   secret ctrl: Hijacked[U8]
   secret indices: Hijacked[U64]
   secret slots: Hijacked[T]
@@ -45,20 +55,16 @@ needs T obeys SecureHashable, Equatable
   secret entries_used: U64
   secret capacity: U64
   secret entries_cap: U64
-  secret k0: U64
-  secret k1: U64
 
 # ============================================================================
 # Creators
 # ============================================================================
 
-routine SecureSet[T].$create() -> SecureSet[T]
-  return SecureSet[T](key: SecureHashKey.random())
-
-routine SecureSet[T].$create(key: SecureHashKey) -> SecureSet[T]
-  var cap = SECURE_SET_INITIAL_CAPACITY
-  var ecap = SECURE_SET_INITIAL_ENTRIES
-  var set = SecureSet[T](
+### Creates an empty set using the default initial table size.
+routine FastSet[T].$create() -> FastSet[T]
+  var cap = FAST_SET_INITIAL_CAPACITY
+  var ecap = FAST_SET_INITIAL_ENTRIES
+  var set = FastSet[T](
     ctrl: hijacked_none[U8](),
     indices: hijacked_none[U64](),
     slots: hijacked_none[T](),
@@ -67,9 +73,7 @@ routine SecureSet[T].$create(key: SecureHashKey) -> SecureSet[T]
     deleted: 0u64,
     entries_used: 0u64,
     capacity: cap,
-    entries_cap: ecap,
-    k0: key.k0,
-    k1: key.k1
+    entries_cap: ecap
   )
   danger!
     set.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(cap))
@@ -79,14 +83,16 @@ routine SecureSet[T].$create(key: SecureHashKey) -> SecureSet[T]
     set.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
   return set
 
-routine SecureSet[T].$create(key: SecureHashKey, capacity: U64) -> SecureSet[T]
-  var cap = SECURE_SET_INITIAL_CAPACITY
+### Creates an empty set pre-sized to hold at least `capacity` live elements without rehashing.
+### :param capacity: Minimum number of live elements to accommodate before the first rehash.
+routine FastSet[T].$create(capacity: U64) -> FastSet[T]
+  var cap = FAST_SET_INITIAL_CAPACITY
   while cap < capacity
     cap = cap *% 2u64
-  var ecap = SECURE_SET_INITIAL_ENTRIES
+  var ecap = FAST_SET_INITIAL_ENTRIES
   while ecap < capacity
     ecap = ecap *% 2u64
-  var set = SecureSet[T](
+  var set = FastSet[T](
     ctrl: hijacked_none[U8](),
     indices: hijacked_none[U64](),
     slots: hijacked_none[T](),
@@ -95,9 +101,7 @@ routine SecureSet[T].$create(key: SecureHashKey, capacity: U64) -> SecureSet[T]
     deleted: 0u64,
     entries_used: 0u64,
     capacity: cap,
-    entries_cap: ecap,
-    k0: key.k0,
-    k1: key.k1
+    entries_cap: ecap
   )
   danger!
     set.ctrl = Hijacked[U8](rf_allocate_dynamic_uninit(cap))
@@ -107,7 +111,8 @@ routine SecureSet[T].$create(key: SecureHashKey, capacity: U64) -> SecureSet[T]
     set.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
   return set
 
-routine SecureSet[T].$destroy()
+### Releases the raw probe, index, element, and entry-liveness buffers owned by this set.
+routine FastSet[T].$destroy()
   danger!
     if not me.ctrl.is_none()
       rf_invalidate(pointer_to_int[U8, Address](me.ctrl))
@@ -124,21 +129,26 @@ routine SecureSet[T].$destroy()
 # ============================================================================
 
 @readonly
-routine SecureSet[T].h2(hash: U64) -> U8
+routine FastSet[T].h2(hash: U64) -> U8
   return U8(hash & U64(CTRL_H2_MASK))
 
 @readonly
-routine SecureSet[T].h1(hash: U64) -> U64
+routine FastSet[T].h1(hash: U64) -> U64
   return hash >> 7u32
 
 @readonly
-routine SecureSet[T].read_index(slot: U64) -> U64
+routine FastSet[T].read_index(slot: U64) -> U64
   danger!
     return me.indices.offset(U64.data_size() * slot).extract()
 
 @readonly
-routine SecureSet[T].find_slot(value: T) -> U64
-  var h = value.$secure_hash(k0: me.k0, k1: me.k1)
+routine FastSet[T].read_value_at(ei: U64) -> T
+  danger!
+    return me.slots.offset(T.data_size() * ei).extract()
+
+@readonly
+routine FastSet[T].find_slot(value: T) -> U64
+  var h = value.$hash()
   var target = me.h2(h)
   var mask = me.capacity -% 1u64
   var i = me.h1(h) & mask
@@ -154,7 +164,7 @@ routine SecureSet[T].find_slot(value: T) -> U64
       i = (i +% 1u64) & mask
   return me.capacity
 
-routine SecureSet[T].insert_index_raw(h: U64, entry_index: U64)
+routine FastSet[T].insert_index_raw(h: U64, entry_index: U64)
   var h2_val = me.h2(h)
   var mask = me.capacity -% 1u64
   var i = me.h1(h) & mask
@@ -174,7 +184,7 @@ routine SecureSet[T].insert_index_raw(h: U64, entry_index: U64)
   return
 
 @readonly
-routine SecureSet[T].should_rehash() -> Bool
+routine FastSet[T].should_rehash() -> Bool
   if (me.count +% me.deleted) *% 8u64 >= me.capacity *% 7u64
     return true
   if me.entries_used >= me.entries_cap
@@ -182,7 +192,7 @@ routine SecureSet[T].should_rehash() -> Bool
   return false
 
 @migratable
-routine SecureSet[T].rehash()
+routine FastSet[T].rehash()
   var old_cap = me.capacity
   var old_ecap = me.entries_cap
   var old_ctrl = me.ctrl
@@ -222,7 +232,7 @@ routine SecureSet[T].rehash()
         me.slots.offset(T.data_size() * new_ei).inject(val)
         me.entry_live.offset(new_ei).inject(ENTRY_LIVE)
         me.entries_used = me.entries_used +% 1u64
-        me.insert_index_raw(h: val.$secure_hash(k0: me.k0, k1: me.k1), entry_index: new_ei)
+        me.insert_index_raw(h: val.$hash(), entry_index: new_ei)
         me.count = me.count +% 1u64
     i = i +% 1u64
 
@@ -242,14 +252,15 @@ routine SecureSet[T].rehash()
 # ============================================================================
 
 @readonly
-routine SecureSet[T].count() -> U64
+routine FastSet[T].count() -> U64
   return me.count
 
 @readonly
-routine SecureSet[T].is_empty() -> Bool
+routine FastSet[T].is_empty() -> Bool
   return me.count == 0u64
 
-routine SecureSet[T].clear()
+@migratable
+routine FastSet[T].clear()
   danger!
     rf_set_bytes_at(dest: pointer_to_int[U8, Address](me.ctrl), value: CTRL_EMPTY, size: me.capacity)
   me.count = 0u64
@@ -258,10 +269,14 @@ routine SecureSet[T].clear()
   return
 
 @readonly
-routine SecureSet[T].$contains(value: T) -> Bool
+routine FastSet[T].$contains(value: T) -> Bool
   return me.find_slot(value) < me.capacity
 
-routine SecureSet[T].add(value: T) -> Bool
+### Inserts `value` if it is not already present.
+### :param value: The element to insert.
+### :returns: `true` if the element was inserted; `false` if it was already present.
+@migratable
+routine FastSet[T].add(value: T) -> Bool
   if me.should_rehash()
     me.rehash()
   if me.find_slot(value) < me.capacity
@@ -271,11 +286,15 @@ routine SecureSet[T].add(value: T) -> Bool
     me.slots.offset(T.data_size() * ei).inject(value)
     me.entry_live.offset(ei).inject(ENTRY_LIVE)
   me.entries_used = me.entries_used +% 1u64
-  me.insert_index_raw(h: value.$secure_hash(k0: me.k0, k1: me.k1), entry_index: ei)
+  me.insert_index_raw(h: value.$hash(), entry_index: ei)
   me.count = me.count +% 1u64
   return true
 
-routine SecureSet[T].remove(value: T) -> Bool
+### Removes `value` if it is present in the set.
+### :param value: The element to remove.
+### :returns: `true` if the element was found and removed; `false` if not present.
+@migratable
+routine FastSet[T].remove(value: T) -> Bool
   var slot = me.find_slot(value)
   if slot >= me.capacity
     return false
@@ -288,27 +307,101 @@ routine SecureSet[T].remove(value: T) -> Bool
   return true
 
 # ============================================================================
+# FastSet Operations
+# ============================================================================
+
+@readonly
+routine FastSet[T].union(other: FastSet[T]) -> FastSet[T]
+  var result = FastSet[T](me.count +% other.count)
+  for val in me
+    discard result.add(val)
+  for val in other
+    discard result.add(val)
+  return result
+
+@readonly
+routine FastSet[T].intersection(other: FastSet[T]) -> FastSet[T]
+  var result = FastSet[T]()
+  for val in me
+    if val in other
+      discard result.add(val)
+  return result
+
+@readonly
+routine FastSet[T].difference(other: FastSet[T]) -> FastSet[T]
+  var result = FastSet[T]()
+  for val in me
+    if val notin other
+      discard result.add(val)
+  return result
+
+@readonly
+routine FastSet[T].symmetric_difference(other: FastSet[T]) -> FastSet[T]
+  var result = FastSet[T]()
+  for val in me
+    if val notin other
+      discard result.add(val)
+  for val in other
+    if val notin me
+      discard result.add(val)
+  return result
+
+@readonly
+routine FastSet[T].is_subset(other: FastSet[T]) -> Bool
+  if me.count > other.count
+    return false
+  for val in me
+    if val notin other
+      return false
+  return true
+
+@readonly
+routine FastSet[T].is_superset(other: FastSet[T]) -> Bool
+  return other.is_subset(me)
+
+@readonly
+routine FastSet[T].is_disjoint(other: FastSet[T]) -> Bool
+  for val in me
+    if val in other
+      return false
+  return true
+
+# ============================================================================
+# Conversion
+# ============================================================================
+
+### Creates a {List[T]} from all elements of `from` in insertion order.
+### :param from: The set to copy elements from.
+### :returns: A new {List[T]} containing all elements of `from`.
+routine List[T].$create(from: FastSet[T]) -> List[T]
+  var result = List[T](capacity: from.count)
+  for val in from
+    result.add_last(val)
+  return result
+
+# ============================================================================
 # Iteration
 # ============================================================================
 
 @readonly
-routine SecureSet[T].$iter() -> SecureSetIterator[T]
+routine FastSet[T].$iter() -> FastSetIterator[T]
   danger!
-    return SecureSetIterator[T](
+    return FastSetIterator[T](
       slots: me.slots,
       entry_live: me.entry_live,
       entries_used: me.entries_used,
       pos: 0u64
     )
 
-### Iterator that walks the dense entries array of a {SecureSet[T]} in insertion order.
-entity SecureSetIterator[T] obeys Iterator[T]
+### Iterator that walks the dense entries array of a {FastSet[T]} in insertion order.
+### Tombstoned (removed) entries are silently skipped.
+entity FastSetIterator[T] obeys Iterator[T]
   secret slots: Hijacked[T]
   secret entry_live: Hijacked[U8]
   secret entries_used: U64
   secret pos: U64
 
-routine SecureSetIterator[T].$next!() -> T
+routine FastSetIterator[T].$next!() -> T
   danger!
     while me.pos < me.entries_used
       var p = me.pos
@@ -322,7 +415,7 @@ routine SecureSetIterator[T].$next!() -> T
 # ============================================================================
 
 @readonly
-routine SecureSet[T].$represent() -> Text
+routine FastSet[T].$represent() -> Text
   if me.is_empty()
     return "{}"
   var result = "{"
@@ -336,7 +429,7 @@ routine SecureSet[T].$represent() -> Text
   return result
 
 @readonly
-routine SecureSet[T].$diagnose() -> Text
+routine FastSet[T].$diagnose() -> Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
   var first = true
   for val in me
@@ -351,11 +444,9 @@ routine SecureSet[T].$diagnose() -> Text
 # Comparison
 # ============================================================================
 
+### Returns true if both sets contain exactly the same elements (order-independent).
 @readonly
-routine SecureSet[T].$eq(other: SecureSet[T]) -> Bool
+routine FastSet[T].$eq(other: FastSet[T]) -> Bool
   if me.count != other.count
     return false
-  for val in me
-    if val notin other
-      return false
-  return true
+  return me.is_subset(other)

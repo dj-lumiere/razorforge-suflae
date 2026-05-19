@@ -656,5 +656,5 @@ routine S128.$hash() -> U64
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
-routine S128.$secure_hash(k0: U64, k1: U64) -> U64
+routine S128.$hash(k0: U64, k1: U64) -> U64
   return __secure_hash_u128(v: reinterpret_bits[S128, U128](me), k0: k0, k1: k1)

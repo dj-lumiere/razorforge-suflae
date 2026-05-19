@@ -1,12 +1,16 @@
 module Core
 
-### Represents the protocol for stable, non-keyed hashing.
-### `Hashable` is for values that can provide a deterministic hash suitable for
-### ordinary hash tables, deduplication, and lookup structures.
+### Represents the protocol for keyed, attack-resistant hashing.
+### `Hashable` is the default hashing protocol used by `Set` and `Dict`. Its keyed
+### form (SipHash-2-4 semantics) makes the probe sequence unpredictable to external
+### attackers, so it is safe to use with untrusted input. For trusted keys where
+### every cycle matters, use `FastHashable` and `FastSet`/`FastDict` instead.
 protocol Hashable
-  ### Returns the hash of this value.
-  ### Values considered equal should produce the same hash, though unequal values
-  ### may still collide.
-  ### :returns: A `U64` hash code for this value.
+  ### Returns a keyed hash of this value using SipHash-2-4 semantics.
+  ### Implementations should incorporate the full logical value and produce the
+  ### same result for equal values when called with the same key pair.
+  ### :param k0: The first 64-bit key word.
+  ### :param k1: The second 64-bit key word.
+  ### :returns: The resulting `U64` value.
   @readonly
-  routine Me.$hash() -> U64
+  routine Me.$hash(k0: U64, k1: U64) -> U64

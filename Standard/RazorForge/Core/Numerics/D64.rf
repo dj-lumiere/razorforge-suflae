@@ -467,5 +467,5 @@ routine D64.to_bytes_be() -> Array[Byte, 8]
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: The resulting `U64` value.
-routine D64.$secure_hash(k0: U64, k1: U64) -> U64
+routine D64.$hash(k0: U64, k1: U64) -> U64
   return __secure_hash_u64(v: reinterpret_bits[D64, U64](me), k0: k0, k1: k1)

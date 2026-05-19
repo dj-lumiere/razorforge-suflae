@@ -849,7 +849,7 @@ routine BytesUtf8View.$hash() -> U64
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
-routine BytesUtf8View.$secure_hash(k0: U64, k1: U64) -> U64
+routine BytesUtf8View.$hash(k0: U64, k1: U64) -> U64
   danger!
     return __secure_hash_u64(v: U64(me.bytes.address()), k0: k0, k1: k1)
 
@@ -865,8 +865,8 @@ routine BytesUtf8Iterator.$hash() -> U64
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
-routine BytesUtf8Iterator.$secure_hash(k0: U64, k1: U64) -> U64
+routine BytesUtf8Iterator.$hash(k0: U64, k1: U64) -> U64
   danger!
     var acc = __hash_round(acc: 0_u64, h: __secure_hash_u64(v: U64(me.bytes.address()), k0: k0, k1: k1))
-    acc = __hash_round(acc: acc, h: me.index.$secure_hash(k0: k0, k1: k1))
+    acc = __hash_round(acc: acc, h: me.index.$hash(k0: k0, k1: k1))
     return __hash_finalize(h: acc)

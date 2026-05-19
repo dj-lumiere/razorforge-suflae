@@ -1,7 +1,7 @@
 module Core
 
 ### Represents a 128-bit keyed-hash seed for secure hash tables.
-### `SecureHashKey` is used by `SecureSet` and `SecureDict` to randomize
+### `SecureHashKey` is used by `Set` and `Dict` to randomize
 ### SipHash state per table instance and reduce collision-based attacks.
 record SecureHashKey
   ### Stores the first 64-bit SipHash key word.
@@ -31,7 +31,7 @@ routine SecureHashKey.$hash() -> U64
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
-routine SecureHashKey.$secure_hash(k0: U64, k1: U64) -> U64
+routine SecureHashKey.$hash(k0: U64, k1: U64) -> U64
   var acc = __hash_round(acc: 0_u64, h: __secure_hash_u64(v: me.k0, k0: k0, k1: k1))
   acc = __hash_round(acc: acc, h: __secure_hash_u64(v: me.k1, k0: k0, k1: k1))
   return __hash_finalize(h: acc)

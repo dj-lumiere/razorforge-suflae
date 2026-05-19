@@ -4,7 +4,7 @@ import BuilderService
 
 ### Represents immutable UTF-32 text with constant-time character indexing.
 ### `Text` is optimized for in-memory text processing rather than compact storage.
-entity Text obeys Addable, Ordered, Hashable, TextRepeatable, Iterable[Character]
+entity Text obeys Addable, Ordered, FastHashable, Hashable, TextRepeatable, Iterable[Character]
   ### Stores the character buffer.
   secret data: Hijacked[Character]
   ### Stores the number of characters in the buffer.
@@ -292,6 +292,19 @@ routine Text.$hash() -> U64
   var h = __hash_leaf(v: me.count)
   for i in 0u64 til me.count
     h = __hash_round(acc: h, h: __hash_leaf(v: U64(me[i].codepoint())))
+  return __hash_finalize(h)
+
+### Returns a SipHash-2-4 keyed hash of this value.
+### Each code point is folded into the keyed hash so equal texts under the same
+### key produce the same digest.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: The resulting `U64` keyed hash.
+@readonly
+routine Text.$hash(k0: U64, k1: U64) -> U64
+  var h = __hash_leaf(v: me.count)
+  for i in 0u64 til me.count
+    h = __hash_round(acc: h, h: __secure_hash_u64(v: U64(me[i].codepoint()), k0: k0, k1: k1))
   return __hash_finalize(h)
 
 # Search

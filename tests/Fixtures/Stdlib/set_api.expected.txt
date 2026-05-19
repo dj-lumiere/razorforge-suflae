@@ -1,13 +1,11 @@
-size: 3
+new size: 0
+is_empty (new): true
+size after add 10/20/30/20: 3
 contents: {10, 20, 30}
 contains 20: true
 contains 99: false
-is_empty (after init): false
-size after add(40), add(20): 4
-contents after add: {10, 20, 30, 40}
-contains 40: true
-size after remove(10): 3
-contents after remove: {20, 30, 40}
+size after remove(10): 2
+contents after remove: {20, 30}
 contains 10: false
-diagnose: Set[S64](count: 3, {20, 30, 40})
+diagnose: Set[S64](count: 2, {20, 30})
 DONE

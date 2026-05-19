@@ -228,7 +228,7 @@ routine C32.$hash() -> U64
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
-routine C32.$secure_hash(k0: U64, k1: U64) -> U64
-  var acc = __hash_round(acc: 0_u64, h: me.real.$secure_hash(k0: k0, k1: k1))
-  acc = __hash_round(acc: acc, h: me.imag.$secure_hash(k0: k0, k1: k1))
+routine C32.$hash(k0: U64, k1: U64) -> U64
+  var acc = __hash_round(acc: 0_u64, h: me.real.$hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.imag.$hash(k0: k0, k1: k1))
   return __hash_finalize(h: acc)

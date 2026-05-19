@@ -1,16 +1,15 @@
+new size: 0
 size: 3
-contents: {one: 1, two: 2, three: 3}
-contains_key 'two': true
-contains_key 'four': false
-d['one']: 1
-d['three']: 3
-size after add four: 4
-contents after add four: {one: 1, two: 2, three: 3, four: 4}
-d['one'] after overwrite: 100
-contents after overwrite one: {one: 100, two: 2, three: 3, four: 4}
-size after remove two: 3
-contents after remove two: {one: 100, three: 3, four: 4}
-contains_key 'two' after remove: false
-diagnose: Dict[Owned[Text], S64](count: 3, {one: 100, three: 3, four: 4})
-is_empty: false
+contents: {1: 10, 2: 20, 3: 30}
+d[1]: 10
+d[2]: 20
+d[3]: 30
+contains_key 2: true
+contains_key 99: false
+d[1] after overwrite: 100
+contents after overwrite: {1: 100, 2: 20, 3: 30}
+size after remove(2): 2
+contents after remove: {1: 100, 3: 30}
+contains_key 2 after remove: false
+diagnose: Dict[S64, S64](count: 2, {1: 100, 3: 30})
 DONE

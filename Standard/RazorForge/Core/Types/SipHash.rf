@@ -97,7 +97,7 @@ routine SipState.$hash() -> U64
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
-routine SipState.$secure_hash(k0: U64, k1: U64) -> U64
+routine SipState.$hash(k0: U64, k1: U64) -> U64
   var acc = __hash_round(acc: 0_u64, h: __secure_hash_u64(v: me.v0, k0: k0, k1: k1))
   acc = __hash_round(acc: acc, h: __secure_hash_u64(v: me.v1, k0: k0, k1: k1))
   acc = __hash_round(acc: acc, h: __secure_hash_u64(v: me.v2, k0: k0, k1: k1))

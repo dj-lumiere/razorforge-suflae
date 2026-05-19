@@ -182,7 +182,7 @@ routine Hijacked[T].$hash() -> U64
 ### :param k0: The first 64-bit key word.
 ### :param k1: The second 64-bit key word.
 ### :returns: A SipHash-2-4 keyed hash of this pointer's address.
-routine Hijacked[T].$secure_hash(k0: U64, k1: U64) -> U64
+routine Hijacked[T].$hash(k0: U64, k1: U64) -> U64
   danger!
     return __secure_hash_u64(v: U64(me.address()), k0: k0, k1: k1)
 
