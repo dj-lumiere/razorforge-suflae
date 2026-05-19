@@ -197,7 +197,7 @@ routine FastDict[K, V].find_slot(key: K) -> U64
   var i = me.h1(h) & mask
   danger!
     loop
-      var c = me.ctrl.offset(i).extract()
+      var c = me.ctrl.offset(ByteSize(bytes: i)).extract()
       if c == CTRL_EMPTY
         return me.capacity
       if c == target
@@ -217,13 +217,13 @@ routine FastDict[K, V].insert_index_raw(h: U64, entry_index: U64)
   var i = me.h1(h) & mask
   danger!
     loop
-      var c = me.ctrl.offset(i).extract()
+      var c = me.ctrl.offset(ByteSize(bytes: i)).extract()
       if c == CTRL_EMPTY
-        me.ctrl.offset(i).inject(h2_val)
+        me.ctrl.offset(ByteSize(bytes: i)).inject(h2_val)
         me.indices.offset(U64.data_size() * i).inject(entry_index)
         return
       if c == CTRL_TOMBSTONED
-        me.ctrl.offset(i).inject(h2_val)
+        me.ctrl.offset(ByteSize(bytes: i)).inject(h2_val)
         me.indices.offset(U64.data_size() * i).inject(entry_index)
         me.deleted = me.deleted -% 1u64
         return
@@ -281,14 +281,14 @@ routine FastDict[K, V].rehash()
   var i = 0u64
   while i < old_entries_used
     danger!
-      var live = old_entry_live.offset(i).extract()
+      var live = old_entry_live.offset(ByteSize(bytes: i)).extract()
       if live == ENTRY_LIVE
         var k = old_keys.offset(K.data_size() * i).extract()
         var v = old_vals.offset(V.data_size() * i).extract()
         var new_ei = me.entries_used
         me.keys.offset(K.data_size() * new_ei).inject(k)
         me.vals.offset(V.data_size() * new_ei).inject(v)
-        me.entry_live.offset(new_ei).inject(ENTRY_LIVE)
+        me.entry_live.offset(ByteSize(bytes: new_ei)).inject(ENTRY_LIVE)
         me.entries_used = me.entries_used +% 1u64
         me.insert_index_raw(h: k.$hash(), entry_index: new_ei)
         me.count = me.count +% 1u64
@@ -360,7 +360,7 @@ routine FastDict[K, V].add(key: K, value: V) -> Bool
   danger!
     me.keys.offset(K.data_size() * ei).inject(key)
     me.vals.offset(V.data_size() * ei).inject(value)
-    me.entry_live.offset(ei).inject(ENTRY_LIVE)
+    me.entry_live.offset(ByteSize(bytes: ei)).inject(ENTRY_LIVE)
   me.entries_used = me.entries_used +% 1u64
   me.insert_index_raw(h: key.$hash(), entry_index: ei)
   me.count = me.count +% 1u64
@@ -377,8 +377,8 @@ routine FastDict[K, V].remove(key: K) -> Bool
     return false
   var ei = me.read_index(slot)
   danger!
-    me.ctrl.offset(slot).inject(CTRL_TOMBSTONED)
-    me.entry_live.offset(ei).inject(ENTRY_DEAD)
+    me.ctrl.offset(ByteSize(bytes: slot)).inject(CTRL_TOMBSTONED)
+    me.entry_live.offset(ByteSize(bytes: ei)).inject(ENTRY_DEAD)
   me.count = me.count -% 1u64
   me.deleted = me.deleted +% 1u64
   return true
@@ -433,7 +433,7 @@ routine FastDict[K, V].keys() -> List[K]
   var i = 0u64
   while i < me.entries_used
     danger!
-      if me.entry_live.offset(i).extract() == ENTRY_LIVE
+      if me.entry_live.offset(ByteSize(bytes: i)).extract() == ENTRY_LIVE
         result.add_last(me.keys.offset(K.data_size() * i).extract())
     i = i +% 1u64
   return result
@@ -446,7 +446,7 @@ routine FastDict[K, V].values() -> List[V]
   var i = 0u64
   while i < me.entries_used
     danger!
-      if me.entry_live.offset(i).extract() == ENTRY_LIVE
+      if me.entry_live.offset(ByteSize(bytes: i)).extract() == ENTRY_LIVE
         result.add_last(me.vals.offset(V.data_size() * i).extract())
     i = i +% 1u64
   return result
@@ -459,7 +459,7 @@ routine FastDict[K, V].entries() -> List[DictEntry[K, V]]
   var i = 0u64
   while i < me.entries_used
     danger!
-      if me.entry_live.offset(i).extract() == ENTRY_LIVE
+      if me.entry_live.offset(ByteSize(bytes: i)).extract() == ENTRY_LIVE
         var k = me.keys.offset(K.data_size() * i).extract()
         var v = me.vals.offset(V.data_size() * i).extract()
         result.add_last(DictEntry[K, V](key: k, value: v))
@@ -507,7 +507,7 @@ routine FastDictIterator[K, V].$next!() -> DictEntry[K, V]
     while me.pos < me.entries_used
       var p = me.pos
       me.pos = me.pos + 1u64
-      if me.entry_live.offset(p).extract() == ENTRY_LIVE
+      if me.entry_live.offset(ByteSize(bytes: p)).extract() == ENTRY_LIVE
         var k = me.keys.offset(K.data_size() * p).extract()
         var v = me.vals.offset(V.data_size() * p).extract()
         return DictEntry[K, V](key: k, value: v)
@@ -562,7 +562,7 @@ routine FastDict[K, V].$eq(other: FastDict[K, V]) -> Bool
   var i = 0u64
   while i < me.entries_used
     danger!
-      if me.entry_live.offset(i).extract() == ENTRY_LIVE
+      if me.entry_live.offset(ByteSize(bytes: i)).extract() == ENTRY_LIVE
         var k = me.keys.offset(K.data_size() * i).extract()
         var v = me.vals.offset(V.data_size() * i).extract()
         var slot = other.find_slot(k)

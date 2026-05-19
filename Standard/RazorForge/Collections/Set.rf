@@ -144,7 +144,7 @@ routine Set[T].find_slot(value: T) -> U64
   var i = me.h1(h) & mask
   danger!
     loop
-      var c = me.ctrl.offset(i).extract()
+      var c = me.ctrl.offset(ByteSize(bytes: i)).extract()
       if c == CTRL_EMPTY
         return me.capacity
       if c == target
@@ -160,13 +160,13 @@ routine Set[T].insert_index_raw(h: U64, entry_index: U64)
   var i = me.h1(h) & mask
   danger!
     loop
-      var c = me.ctrl.offset(i).extract()
+      var c = me.ctrl.offset(ByteSize(bytes: i)).extract()
       if c == CTRL_EMPTY
-        me.ctrl.offset(i).inject(h2_val)
+        me.ctrl.offset(ByteSize(bytes: i)).inject(h2_val)
         me.indices.offset(U64.data_size() * i).inject(entry_index)
         return
       if c == CTRL_TOMBSTONED
-        me.ctrl.offset(i).inject(h2_val)
+        me.ctrl.offset(ByteSize(bytes: i)).inject(h2_val)
         me.indices.offset(U64.data_size() * i).inject(entry_index)
         me.deleted = me.deleted -% 1u64
         return
@@ -215,12 +215,12 @@ routine Set[T].rehash()
   var i = 0u64
   while i < old_entries_used
     danger!
-      var live = old_entry_live.offset(i).extract()
+      var live = old_entry_live.offset(ByteSize(bytes: i)).extract()
       if live == ENTRY_LIVE
         var val = old_slots.offset(T.data_size() * i).extract()
         var new_ei = me.entries_used
         me.slots.offset(T.data_size() * new_ei).inject(val)
-        me.entry_live.offset(new_ei).inject(ENTRY_LIVE)
+        me.entry_live.offset(ByteSize(bytes: new_ei)).inject(ENTRY_LIVE)
         me.entries_used = me.entries_used +% 1u64
         me.insert_index_raw(h: val.$hash(k0: me.k0, k1: me.k1), entry_index: new_ei)
         me.count = me.count +% 1u64
@@ -269,7 +269,7 @@ routine Set[T].add(value: T) -> Bool
   var ei = me.entries_used
   danger!
     me.slots.offset(T.data_size() * ei).inject(value)
-    me.entry_live.offset(ei).inject(ENTRY_LIVE)
+    me.entry_live.offset(ByteSize(bytes: ei)).inject(ENTRY_LIVE)
   me.entries_used = me.entries_used +% 1u64
   me.insert_index_raw(h: value.$hash(k0: me.k0, k1: me.k1), entry_index: ei)
   me.count = me.count +% 1u64
@@ -281,8 +281,8 @@ routine Set[T].remove(value: T) -> Bool
     return false
   var ei = me.read_index(slot)
   danger!
-    me.ctrl.offset(slot).inject(CTRL_TOMBSTONED)
-    me.entry_live.offset(ei).inject(ENTRY_DEAD)
+    me.ctrl.offset(ByteSize(bytes: slot)).inject(CTRL_TOMBSTONED)
+    me.entry_live.offset(ByteSize(bytes: ei)).inject(ENTRY_DEAD)
   me.count = me.count -% 1u64
   me.deleted = me.deleted +% 1u64
   return true
@@ -313,7 +313,7 @@ routine SetIterator[T].$next!() -> T
     while me.pos < me.entries_used
       var p = me.pos
       me.pos = me.pos + 1u64
-      if me.entry_live.offset(p).extract() == ENTRY_LIVE
+      if me.entry_live.offset(ByteSize(bytes: p)).extract() == ENTRY_LIVE
         return me.slots.offset(T.data_size() * p).extract()
   absent
 
