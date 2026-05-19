@@ -103,7 +103,7 @@ public sealed class BuildDriver
                 continue;
             }
 
-            ProcessFile(filePath: sourceFile, fromFile: null, importLocation: null);
+            ProcessFile(filePath: sourceFile, fromFile: null, importLocation: null, importPathString: null);
         }
 
         // Collect errors from resolver and dependency graph
@@ -138,7 +138,7 @@ public sealed class BuildDriver
     /// <summary>
     /// Processes a single file: parses it, extracts imports, and recursively processes dependencies.
     /// </summary>
-    private void ProcessFile(string filePath, string? fromFile, SourceLocation? importLocation)
+    private void ProcessFile(string filePath, string? fromFile, SourceLocation? importLocation, string? importPathString)
     {
         // Normalize the path
         filePath = Path.GetFullPath(path: filePath);
@@ -146,6 +146,15 @@ public sealed class BuildDriver
         // Skip if already built
         if (_compiledUnits.ContainsKey(key: filePath))
         {
+            // Even if already built, validate the `/`-form import path against the file's actual module.
+            if (fromFile != null && importPathString != null && importLocation != null
+                && _compiledUnits.TryGetValue(key: filePath, value: out FileBuildUnit? existing))
+            {
+                ValidateSlashFormImport(
+                    importPathString: importPathString,
+                    actualModule: existing.Module ?? Path.GetFileNameWithoutExtension(path: filePath),
+                    importLocation: importLocation);
+            }
             return;
         }
 
@@ -170,19 +179,38 @@ public sealed class BuildDriver
             string modulePath = unit.Module ?? Path.GetFileNameWithoutExtension(path: filePath);
             _dependencyGraph.GetOrCreateModule(modulePath: modulePath, sourceFile: filePath);
 
-            // Track dependencies from imports
+            // Validate that `/`-form imports refer to an actual module of that path.
+            // `import Collections/BitList` is an error if the file declares `module Collections`
+            // (BitList is a type, not a submodule).
+            if (importPathString != null && importLocation != null)
+            {
+                ValidateSlashFormImport(
+                    importPathString: importPathString,
+                    actualModule: modulePath,
+                    importLocation: importLocation);
+            }
+
+            // Track dependencies from imports.
+            // Skip self-dependencies for member imports (`.` form) and Core auto-imports — they're no-ops.
             if (fromFile != null && importLocation != null)
             {
                 string fromModule = GetModuleForFile(filePath: fromFile);
 
-                bool success = _dependencyGraph.AddDependency(fromModule: fromModule,
-                    toModule: modulePath,
-                    importLocation: importLocation);
+                bool isMemberImport = importPathString != null && importPathString.Contains(value: '.');
+                bool isSelfMemberImport = isMemberImport && fromModule == modulePath;
+                bool isCoreAutoImport = modulePath == "Core";
 
-                if (!success)
+                if (!isSelfMemberImport && !isCoreAutoImport)
                 {
-                    // Circular dependency detected - don't continue processing
-                    return;
+                    bool success = _dependencyGraph.AddDependency(fromModule: fromModule,
+                        toModule: modulePath,
+                        importLocation: importLocation);
+
+                    if (!success)
+                    {
+                        // Circular dependency detected - don't continue processing
+                        return;
+                    }
                 }
             }
 
@@ -204,7 +232,8 @@ public sealed class BuildDriver
                 {
                     ProcessFile(filePath: resolvedPath,
                         fromFile: filePath,
-                        importLocation: import.Location);
+                        importLocation: import.Location,
+                        importPathString: import.ModulePath);
                 }
             }
         }
@@ -302,6 +331,33 @@ public sealed class BuildDriver
                     Position: 0)));
             return null;
         }
+    }
+
+    /// <summary>
+    /// Validates a `/`-form import path against the actual module declared by the resolved file.
+    /// `import Foo/Bar` requires the file to declare `module Foo/Bar`. If the file declares a
+    /// different module (e.g. `module Foo` because `Bar` is a type in that module), emit an error —
+    /// the caller should have used `import Foo.Bar` instead.
+    /// Member-form imports (paths containing `.`) skip this check.
+    /// </summary>
+    private void ValidateSlashFormImport(string importPathString, string actualModule, SourceLocation importLocation)
+    {
+        // Member-form imports are not subject to module-path equality.
+        if (importPathString.Contains(value: '.'))
+        {
+            return;
+        }
+
+        if (importPathString == actualModule)
+        {
+            return;
+        }
+
+        _errors.Add(item: new SemanticError(
+            Code: SemanticDiagnosticCode.ModuleNotFound,
+            Message: $"No module '{importPathString}'. The file resolved to module '{actualModule}'. " +
+                     $"Use 'import {actualModule}.{importPathString[(importPathString.LastIndexOf(value: '/') + 1)..]}' if you meant to import a member.",
+            Location: importLocation));
     }
 
     /// <summary>

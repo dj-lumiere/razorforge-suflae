@@ -154,6 +154,17 @@ public sealed partial class SemanticVerifier
             return choiceCase.Value.ChoiceType;
         }
 
+        // Try to look up as type FIRST (for static access like `U64.data_size()`).
+        // Types take precedence over routines when both share a bare name — bare type
+        // references for static access (member access, type-as-value generic args, etc.)
+        // are the common case; first-class routine references with name-collisions are rare
+        // and can be disambiguated by qualified name if ever needed.
+        TypeSymbol? type = LookupTypeWithImports(name: id.Name);
+        if (type != null)
+        {
+            return type;
+        }
+
         // Try to look up as routine (function reference)
         // Strip '!' suffix for failable routine references (e.g., "stop!" -> "stop")
         string routineLookupName = id.Name.EndsWith(value: '!')
@@ -172,13 +183,6 @@ public sealed partial class SemanticVerifier
         {
             // Return the function type for first-class function references
             return GetRoutineType(routine: routine);
-        }
-
-        // Try to look up as type (for static access)
-        TypeSymbol? type = LookupTypeWithImports(name: id.Name);
-        if (type != null)
-        {
-            return type;
         }
 
         // Try to look up as generic type parameter (e.g., T in "T.data_size()")
