@@ -858,11 +858,26 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // distinct $create overloads on the same type. LookupMethod alone returns the
         // first-registered one and misses the no-arg variant when callers use it.
         int argCount = cre.MemberVariables.Count;
+        // Use the call's named-argument labels to disambiguate sibling overloads. Without
+        // this, all 1-arg `$create` overloads (capacity: U64 / from: Set / from: FastSet /
+        // from: SortedList / from: SortedSet) get enqueued for any `List[T](x)` call —
+        // FastSet's overload then drags FastSet.$iter etc. into the live set on programs
+        // that never reference FastSet, producing LINKERR across the playground.
+        var argLabels = cre.MemberVariables.Select(static mv => mv.Name).ToList();
+        bool MatchesLabels(RoutineInfo m)
+        {
+            if (m.Parameters.Count != argCount) return false;
+            for (int i = 0; i < argCount; i++)
+            {
+                if (m.Parameters[i].Name != argLabels[i]) return false;
+            }
+            return true;
+        }
         bool found = false;
         RoutineInfo? matched = null;
         foreach (RoutineInfo m in ctx.Registry.GetMethodsForType(type: ct))
         {
-            if (m.Name == CreateMethodName && m.Parameters.Count == argCount)
+            if (m.Name == CreateMethodName && MatchesLabels(m))
             {
                 EnqueueCallee(callee: m);
                 if (matched == null) matched = m;
@@ -879,7 +894,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         {
             foreach (RoutineInfo m in ctx.Registry.GetMethodsForType(type: genDef))
             {
-                if (m.Name == CreateMethodName && m.Parameters.Count == argCount)
+                if (m.Name == CreateMethodName && MatchesLabels(m))
                 {
                     // Substitute generic params onto the concrete owner so GMP can monomorphize.
                     // Without this, EnqueueCallee gets a routine with OwnerType = generic-def and
@@ -899,11 +914,13 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             // <Type>.$create even when no explicit RoutineInfo exists.
             _live.Add(item: $"{ct.FullName}.$create");
         }
-        // Return the matched overload (by arg count) rather than the first $create from
-        // LookupMethod. Without this, callers like `SecureDict[K,V](key: ...)` resolve to the
-        // no-arg `$create()` overload after the substitution chain — the 1-arg
-        // `$create(key: SecureHashKey)` body never gets monomorphized for the concrete owner.
-        return matched ?? ctx.Registry.LookupMethod(type: ct, methodName: CreateMethodName);
+        // Return only the label-matched overload. The previous LookupMethod fallback returned
+        // the first-registered $create by name regardless of param shape — that pulled in
+        // `List[T].$create(from: FastSet[T])` (first 1-arg overload) for any field-init
+        // CreatorExpression like `List[T](data:..., count:..., capacity:...)` that has no
+        // matching $create overload at all. Such field-init creators are emitted inline by
+        // codegen and don't need a routine seeded.
+        return matched;
     }
 
     /// <summary>
