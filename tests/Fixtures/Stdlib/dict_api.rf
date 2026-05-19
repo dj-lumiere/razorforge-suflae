@@ -1,31 +1,34 @@
 module Tests/Stdlib/DictApi
 import IO/Console
 
-# Dict iteration order isn't deterministic — probe specific keys only.
+# Dict iterates in insertion order; overwrites keep position, removals are skipped.
 routine start()
   var d = {"one": 1, "two": 2, "three": 3}
   show(f"size: {d.count()}")
+  show(f"contents: {d}")
   show(f"contains_key 'two': {"two" in d}")
   show(f"contains_key 'four': {"four" in d}")
 
-  # get by key (deterministic)
   show(f"d['one']: {d["one"]}")
   show(f"d['three']: {d["three"]}")
 
-  # add / overwrite
+  # add new key — appended at the end
   discard d.add(key: "four", value: 4)
   show(f"size after add four: {d.count()}")
-  show(f"d['four']: {d["four"]}")
+  show(f"contents after add four: {d}")
 
-  discard d.add(key: "one", value: 100)   # overwrite
+  # overwrite existing — position unchanged
+  discard d.add(key: "one", value: 100)
   show(f"d['one'] after overwrite: {d["one"]}")
+  show(f"contents after overwrite one: {d}")
 
-  # remove
+  # remove — entry skipped, others retain order
   discard d.remove(key: "two")
   show(f"size after remove two: {d.count()}")
+  show(f"contents after remove two: {d}")
   show(f"contains_key 'two' after remove: {"two" in d}")
 
-  # is_empty
+  show(f"diagnose: {d.$diagnose()}")
   show(f"is_empty: {d.is_empty()}")
 
   show("DONE")

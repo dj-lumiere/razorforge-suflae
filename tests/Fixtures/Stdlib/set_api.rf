@@ -1,32 +1,29 @@
 module Tests/Stdlib/SetApi
 import IO/Console
 
-# Set iteration order isn't deterministic — probe deterministic queries only.
+# Set iterates in insertion order; duplicates are no-ops, removals are skipped.
 routine start()
   var s = {10, 20, 30}
   show(f"size: {s.count()}")
+  show(f"contents: {s}")
   show(f"contains 20: {20 in s}")
   show(f"contains 99: {99 in s}")
   show(f"is_empty (after init): {s.is_empty()}")
 
-  # add
+  # add new — appended; duplicate — no-op
   discard s.add(value: 40)
-  discard s.add(value: 20)   # duplicate, no-op
+  discard s.add(value: 20)
   show(f"size after add(40), add(20): {s.count()}")
+  show(f"contents after add: {s}")
   show(f"contains 40: {40 in s}")
 
-  # remove
+  # remove — entry skipped, others retain order
   discard s.remove(value: 10)
   show(f"size after remove(10): {s.count()}")
+  show(f"contents after remove: {s}")
   show(f"contains 10: {10 in s}")
 
-  # Iteration -> deterministic via sort
-  var collected = []
-  for x in s
-    collected.add_last(value: x)
-  # sort (List supports sort)
-  collected.sort()
-  show(f"sorted contents: {collected}")
+  show(f"diagnose: {s.$diagnose()}")
 
   show("DONE")
   return

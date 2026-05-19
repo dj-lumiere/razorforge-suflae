@@ -2,7 +2,7 @@ module Tests/Stdlib/SecureDictApi
 import IO/Console
 import Collections.SecureDict
 
-# SecureDict iteration order isn't deterministic — probe specific keys only.
+# SecureDict uses SipHash but still iterates in insertion order.
 routine start()
   var d = SecureDict[S64, S64]()
   show(f"new size: {d.count()}")
@@ -11,6 +11,7 @@ routine start()
   discard d.add(key: 2, value: 20)
   discard d.add(key: 3, value: 30)
   show(f"size: {d.count()}")
+  show(f"contents: {d}")
 
   show(f"d[1]: {d[1]}")
   show(f"d[2]: {d[2]}")
@@ -19,14 +20,18 @@ routine start()
   show(f"contains_key 2: {2 in d}")
   show(f"contains_key 99: {99 in d}")
 
-  # Overwrite
+  # Overwrite — position unchanged
   discard d.add(key: 1, value: 100)
   show(f"d[1] after overwrite: {d[1]}")
+  show(f"contents after overwrite: {d}")
 
-  # Remove
+  # Remove — entry skipped, others retain order
   discard d.remove(key: 2)
   show(f"size after remove(2): {d.count()}")
+  show(f"contents after remove: {d}")
   show(f"contains_key 2 after remove: {2 in d}")
+
+  show(f"diagnose: {d.$diagnose()}")
 
   show("DONE")
   return
