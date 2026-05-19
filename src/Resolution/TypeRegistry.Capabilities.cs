@@ -52,7 +52,6 @@ public sealed partial class TypeRegistry
             ["$eq"] = ("Equatable", "$eq"),
             ["$ne"] = ("Equatable", "$eq"),
             ["$hash"] = ("Hashable", "$hash"),
-            ["$secure_hash"] = ("SecureHashable", "$secure_hash"),
             ["$cmp"] = (ComparableProtocolName, "$cmp"),
             ["$lt"] = (ComparableProtocolName, "$cmp"),
             ["$le"] = (ComparableProtocolName, "$cmp"),

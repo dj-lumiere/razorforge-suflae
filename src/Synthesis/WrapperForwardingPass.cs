@@ -105,7 +105,6 @@ internal sealed class WrapperForwardingPass
         "$gt",
         "$ge",
         "$hash",
-        "$secure_hash",
         "$represent",
         "$diagnose"
     ];

@@ -44,7 +44,6 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     private const string RepresentMethodName = "$represent";
     private const string DiagnoseMethodName = "$diagnose";
     private const string HashMethodName = "$hash";
-    private const string SecureHashMethodName = "$secure_hash";
     private const string BitXorMethodName = "$bitxor";
     private const string ResultVarName = "result";
     private const string FirstVarName = "first";
@@ -146,7 +145,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             s64Type: s64Type, boolType: boolType, typeKindType: typeKindType,
             listTextType: listTextType, byteSizeType: byteSizeType);
 
-        // Synthesize wired routines ($eq, $hash, $secure_hash, $represent, $diagnose) for
+        // Synthesize wired routines ($eq, $hash, $represent, $diagnose) for
         // generic def entity/record types that have no source-defined implementation.
         // GMP needs a body in VariantBodies[genericDefKey] to rewrite into concrete instances.
         RunForGenericDefWiredRoutines(textType: textType, boolType: boolType,
@@ -224,12 +223,14 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     : BuildEqBody(ownerType: entity, fields: entity.MemberVariables,
                         boolType: boolType);
                 break;
-            case HashMethodName when entity.MemberVariables.Count > 0 && u64Type != null:
+            case HashMethodName when entity.MemberVariables.Count > 0 && u64Type != null
+                                     && routine.Parameters.Count == 0:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildHashBody(ownerType: entity, fields: entity.MemberVariables,
                         u64Type: u64Type);
                 break;
-            case SecureHashMethodName when entity.MemberVariables.Count > 0 && u64Type != null:
+            case HashMethodName when entity.MemberVariables.Count > 0 && u64Type != null
+                                     && routine.Parameters.Count == 2:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildSecureHashBody(ownerType: entity, fields: entity.MemberVariables,
                         u64Type: u64Type);
@@ -256,11 +257,11 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildEqBody(ownerType: record, fields: record.MemberVariables, boolType: boolType);
                 break;
-            case HashMethodName when u64Type != null:
+            case HashMethodName when u64Type != null && routine.Parameters.Count == 0:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildHashBody(ownerType: record, fields: record.MemberVariables, u64Type: u64Type);
                 break;
-            case SecureHashMethodName when u64Type != null:
+            case HashMethodName when u64Type != null && routine.Parameters.Count == 2:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildSecureHashBody(ownerType: record, fields: record.MemberVariables,
                         u64Type: u64Type);
@@ -351,7 +352,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                         textType: textType, diagnose: true);
                 break;
 
-            case HashMethodName:
+            case HashMethodName when routine.Parameters.Count == 0:
             {
                 // Generic definitions allowed: monomorphization substitutes type params.
                 TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
@@ -361,7 +362,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 break;
             }
 
-            case SecureHashMethodName:
+            case HashMethodName when routine.Parameters.Count == 2:
             {
                 if (record.IsGenericDefinition) break;
                 TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
@@ -398,7 +399,8 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     : BuildEqBody(ownerType: entity, fields: entity.MemberVariables, boolType: boolType);
                 break;
 
-            case HashMethodName when entity.MemberVariables.Count > 0:
+            case HashMethodName when entity.MemberVariables.Count > 0
+                                     && routine.Parameters.Count == 0:
             {
                 TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
                 if (u64Type == null) break;
@@ -407,7 +409,8 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 break;
             }
 
-            case SecureHashMethodName when entity.MemberVariables.Count > 0:
+            case HashMethodName when entity.MemberVariables.Count > 0
+                                     && routine.Parameters.Count == 2:
             {
                 TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
                 if (u64Type == null) break;
@@ -476,13 +479,15 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     BuildEqBodyNumeric(ownerType: choice, boolType: boolType, isChoice: true);
                 break;
 
-            case HashMethodName when s64Type != null && u64Type != null:
+            case HashMethodName when s64Type != null && u64Type != null
+                                     && routine.Parameters.Count == 0:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildNumericHashBodyViaConversion(ownerType: choice, conversionTypeName: "S64",
                         conversionType: s64Type, u64Type: u64Type);
                 break;
 
-            case SecureHashMethodName when s64Type != null && u64Type != null:
+            case HashMethodName when s64Type != null && u64Type != null
+                                     && routine.Parameters.Count == 2:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildNumericSecureHashBodyViaConversion(ownerType: choice,
                         conversionTypeName: "S64", conversionType: s64Type, u64Type: u64Type);
@@ -653,7 +658,8 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 Object: fieldAccess,
                 PropertyName: HashMethodName,
                 Location: _synthLoc) { ResolvedType = u64Type };
-            RoutineInfo? fieldHashRoutine = ctx.Registry.LookupMethod(type: field.Type, methodName: HashMethodName);
+            RoutineInfo? fieldHashRoutine = ctx.Registry.LookupMethodOverload(
+                type: field.Type, methodName: HashMethodName, argTypes: []);
             Expression fieldHash = new CallExpression(
                 Callee: hashMethod,
                 Arguments: [],
@@ -870,10 +876,10 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             Location: _synthLoc);
     }
 
-    //  $secure_hash
+    //  keyed $hash(k0, k1)
 
     /// <summary>
-    /// Builds the body: <c>return me.f1.$secure_hash(k0: k0, k1: k1) ^ me.f2.$secure_hash(...) ^ ...</c>.
+    /// Builds the body: <c>return me.f1.$hash(k0: k0, k1: k1) ^ me.f2.$hash(...) ^ ...</c>.
     /// Zero-field types: <c>return 0_u64</c>.
     /// </summary>
     private ReturnStatement BuildSecureHashBody(TypeInfo ownerType,
@@ -897,9 +903,10 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 { ResolvedType = ownerType };
             var fieldAccess = new MemberExpression(Object: meRef, PropertyName: field.Name,
                 Location: _synthLoc) { ResolvedType = field.Type };
-            RoutineInfo? fieldSecureHashRoutine = ctx.Registry.LookupMethod(type: field.Type, methodName: SecureHashMethodName);
+            RoutineInfo? fieldSecureHashRoutine = ctx.Registry.LookupMethodOverload(
+                type: field.Type, methodName: HashMethodName, argTypes: [u64Type, u64Type]);
             Expression fieldHash = new CallExpression(
-                Callee: new MemberExpression(Object: fieldAccess, PropertyName: SecureHashMethodName,
+                Callee: new MemberExpression(Object: fieldAccess, PropertyName: HashMethodName,
                     Location: _synthLoc) { ResolvedType = u64Type },
                 Arguments:
                 [
@@ -938,7 +945,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     }
 
     /// <summary>
-    /// Builds the body: <c>return ConversionType(from: me).$secure_hash(k0: k0, k1: k1)</c>.
+    /// Builds the body: <c>return ConversionType(from: me).$hash(k0: k0, k1: k1)</c>.
     /// Used for Choice (<c>S64(from: me)</c>) and Flags (<c>U64(from: me)</c>).
     /// </summary>
     private static ReturnStatement BuildNumericSecureHashBodyViaConversion(TypeInfo ownerType,
@@ -955,7 +962,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             LoweringKind = CallLoweringKind.TypeConstructor
         };
         var hashCall = new CallExpression(
-            Callee: new MemberExpression(Object: creator, PropertyName: SecureHashMethodName,
+            Callee: new MemberExpression(Object: creator, PropertyName: HashMethodName,
                 Location: _synthLoc) { ResolvedType = u64Type },
             Arguments:
             [
@@ -1226,13 +1233,13 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     BuildEqBodyNumeric(ownerType: flags, boolType: boolType, isChoice: false);
                 break;
 
-            case HashMethodName when u64Type != null:
+            case HashMethodName when u64Type != null && routine.Parameters.Count == 0:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildNumericHashBodyViaConversion(ownerType: flags, conversionTypeName: "U64",
                         conversionType: u64Type, u64Type: u64Type);
                 break;
 
-            case SecureHashMethodName when u64Type != null:
+            case HashMethodName when u64Type != null && routine.Parameters.Count == 2:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildNumericSecureHashBodyViaConversion(ownerType: flags,
                         conversionTypeName: "U64", conversionType: u64Type, u64Type: u64Type);

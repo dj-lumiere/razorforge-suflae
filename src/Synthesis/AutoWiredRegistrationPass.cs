@@ -128,11 +128,17 @@ internal sealed class AutoWiredRegistrationPass
                         // declares `obeys Hashable` / `obeys Equatable`. This avoids fanning out
                         // synthesized bodies (and corresponding LLVM defs) for every record in
                         // scope, and gives users an explicit place to override semantics.
-                        if (u64Type != null && ObeysProtocol(type: type, protocolName: "Hashable"))
+                        if (u64Type != null && ObeysProtocol(type: type, protocolName: "FastHashable"))
                         {
                             MaybeRegisterWired(owner: type,
                                 name: "$hash",
                                 returnType: u64Type,
+                                existingMethods: existingMethods);
+                        }
+
+                        if (u64Type != null && ObeysProtocol(type: type, protocolName: "Hashable"))
+                        {
+                            MaybeRegisterKeyedHash(owner: type, u64Type: u64Type,
                                 existingMethods: existingMethods);
                         }
 
@@ -218,6 +224,8 @@ internal sealed class AutoWiredRegistrationPass
                         MaybeRegisterWired(owner: type,
                             name: "$hash",
                             returnType: u64Type,
+                            existingMethods: existingMethods);
+                        MaybeRegisterKeyedHash(owner: type, u64Type: u64Type,
                             existingMethods: existingMethods);
                     }
 
@@ -326,6 +334,8 @@ internal sealed class AutoWiredRegistrationPass
                         MaybeRegisterWired(owner: type,
                             name: "$hash",
                             returnType: u64Type,
+                            existingMethods: existingMethods);
+                        MaybeRegisterKeyedHash(owner: type, u64Type: u64Type,
                             existingMethods: existingMethods);
                     }
 
@@ -536,6 +546,36 @@ internal sealed class AutoWiredRegistrationPass
             OwnerType = owner,
             Parameters = [],
             ReturnType = returnType,
+            IsFailable = false,
+            DeclaredModification = ModificationCategory.Readonly,
+            ModificationCategory = ModificationCategory.Readonly,
+            Visibility = VisibilityModifier.Open,
+            IsSynthesized = true
+        });
+    }
+
+    /// <summary>
+    /// Registers the keyed `$hash(k0: U64, k1: U64) -> U64` overload if not already defined.
+    /// Distinct from the unkeyed `$hash()` by parameter count, so both can coexist.
+    /// </summary>
+    private void MaybeRegisterKeyedHash(TypeSymbol owner, TypeSymbol u64Type,
+        List<RoutineInfo> existingMethods)
+    {
+        if (existingMethods.Any(predicate: m => m.Name == "$hash" && m.Parameters.Count == 2))
+        {
+            return;
+        }
+
+        _registry.RegisterRoutine(routine: new RoutineInfo(name: "$hash")
+        {
+            Kind = RoutineKind.MemberRoutine,
+            OwnerType = owner,
+            Parameters =
+            [
+                new ParameterInfo(name: "k0", type: u64Type),
+                new ParameterInfo(name: "k1", type: u64Type)
+            ],
+            ReturnType = u64Type,
             IsFailable = false,
             DeclaredModification = ModificationCategory.Readonly,
             ModificationCategory = ModificationCategory.Readonly,

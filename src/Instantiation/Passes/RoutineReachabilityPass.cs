@@ -130,7 +130,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     private static readonly string[] WiredRoutineNames =
     {
         // Display / hash
-        RepresentMethodName, DiagnoseMethodName, "$hash", "$secure_hash",
+        RepresentMethodName, DiagnoseMethodName, "$hash",
         // Equality / comparison
         "$eq", "$ne",
         "$cmp", "$lt", "$le", "$gt", "$ge",
