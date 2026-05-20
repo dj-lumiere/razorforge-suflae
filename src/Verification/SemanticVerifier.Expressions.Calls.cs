@@ -708,7 +708,8 @@ public sealed partial class SemanticVerifier
                         {
                             expectedParamType = method.Parameters[index: posIdx].Type;
                         }
-                        if (expectedParamType != null && dispatchType != null)
+                        if (expectedParamType != null && dispatchType != null
+                            && method.OwnerType is { IsGenericDefinition: true })
                         {
                             expectedParamType =
                                 SubstituteOwnerGenerics(paramType: expectedParamType,

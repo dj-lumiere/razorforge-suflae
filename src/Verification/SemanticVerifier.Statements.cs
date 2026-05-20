@@ -78,10 +78,12 @@ public sealed partial class SemanticVerifier
     {
         // Construct the base name matching how the routine was registered.
         string baseName;
+        TypeSymbol? routineOwnerType = null;
         if (_currentType != null)
         {
             // Member routine inside type body: OwnerType.Name + "." + routine.Name
             baseName = $"{RoutineInfo.GetTypeIdentity(type: _currentType)}.{routine.Name}";
+            routineOwnerType = _currentType;
         }
         else if (routine.Name.Contains(value: '.'))
         {
@@ -97,6 +99,7 @@ public sealed partial class SemanticVerifier
                 ? typeName[..typeName.IndexOf(value: '[')]
                 : typeName;
             TypeSymbol? ownerType = LookupTypeWithImports(name: lookupName);
+            routineOwnerType = ownerType;
 
             baseName = ownerType != null
                 ? $"{RoutineInfo.GetTypeIdentity(type: ownerType)}.{methodName}"
@@ -115,10 +118,14 @@ public sealed partial class SemanticVerifier
         // then fall back to BaseName for the first-overload-wins entry.
         // Set up generic parameter context so ResolveType recognizes T, U, etc.
         // (mirrors Phase 2.5 registration in Signatures.cs)
+        // Set OwnerType so `Me` in param types resolves to the concrete owner
+        // (e.g. `routine SumS64.combine(you: Me) -> Me` needs Me → SumS64 during param-type
+        // resolution at line 137, which happens before routineInfo is looked up).
         RoutineInfo? prevRoutine = _currentRoutine;
         _currentRoutine = new RoutineInfo(name: baseName)
         {
-            GenericParameters = routine.GenericParameters
+            GenericParameters = routine.GenericParameters,
+            OwnerType = routineOwnerType
         };
 
         RoutineInfo? routineInfo = null;

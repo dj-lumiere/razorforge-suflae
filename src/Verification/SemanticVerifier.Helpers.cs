@@ -322,11 +322,14 @@ public sealed partial class SemanticVerifier
                     paramType = SubstituteWithMapping(type: paramType,
                         substitutions: substitutions);
                 }
-                else
+                else if (routine.OwnerType is { IsGenericDefinition: true })
                 {
-                    // Owner like `List[T]` against receiver `List[S64]` — substitute T → S64
-                    // so that callback parameter types (e.g. `Routine[(T, T), Bool]`) target-type
-                    // lambda parameters correctly.
+                    // Owner like `List[T]` (gen-def) against receiver `List[S64]` — substitute
+                    // T → S64 so callback parameter types (e.g. `Routine[(T, T), Bool]`) target-type
+                    // lambda parameters correctly. Skip when OwnerType is already a resolution
+                    // (e.g. `Hijacked[BTreeListNode[T]]`) — its Parameters are already substituted,
+                    // applying again would double-wrap (`T → BTreeListNode[T]` applied to a
+                    // `BTreeListNode[T]` param produces `BTreeListNode[BTreeListNode[T]]`).
                     paramType =
                         SubstituteOwnerGenerics(paramType: paramType,
                             lookupType: callObjectType,
