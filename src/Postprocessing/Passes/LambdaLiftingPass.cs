@@ -958,7 +958,7 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
             Visibility = VisibilityModifier.Secret,
             Location = lambda.Location,
             Module = _currentModuleName,
-            ModulePath = _currentModuleName?.Split('/'),
+            ModulePath = _currentModuleName?.Split('/').ToList(),
             GenericParameters = genericParameters,
             GenericConstraints = genericConstraints,
             IsSynthesized = true
@@ -1061,7 +1061,7 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
             Visibility = VisibilityModifier.Secret,
             Location = lambda.Location,
             Module = _currentModuleName,
-            ModulePath = _currentModuleName?.Split('/'),
+            ModulePath = _currentModuleName?.Split('/').ToList(),
             GenericParameters = genericParameters,
             GenericConstraints = genericConstraints,
             IsSynthesized = true
@@ -1098,7 +1098,7 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
     }
 
     private static Dictionary<string, TypeInfo> CollectCaptureTypesFromBody(
-        Expression body, IReadOnlyList<string> captureNames)
+        Expression body, List<string> captureNames)
     {
         var targets = new HashSet<string>(captureNames, StringComparer.Ordinal);
         var result = new Dictionary<string, TypeInfo>(StringComparer.Ordinal);
@@ -1812,7 +1812,7 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
     }
 
     private static IEnumerable<string> GetDestructuringBindings(
-        IReadOnlyList<DestructuringBinding>? bindings)
+        List<DestructuringBinding>? bindings)
     {
         if (bindings == null)
         {

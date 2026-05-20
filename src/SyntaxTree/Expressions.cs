@@ -373,7 +373,7 @@ public record CallExpression(
     /// (e.g., <c>buf.read![U8](offset)</c> -> <c>TypeArguments = [U8]</c>).
     /// Null for calls with no method-level type args.
     /// </summary>
-    public IReadOnlyList<TypeExpression>? TypeArguments { get; set; }
+    public List<TypeExpression>? TypeArguments { get; set; }
 }
 
 /// <summary>

@@ -568,8 +568,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         TypeInfo concreteOwner, TypeInfo genDef)
     {
         var subs = new Dictionary<string, TypeInfo>(comparer: StringComparer.Ordinal);
-        IReadOnlyList<string>? gParams = genDef.GenericParameters;
-        IReadOnlyList<TypeInfo>? typeArgs = concreteOwner.TypeArguments;
+        List<string>? gParams = genDef.GenericParameters;
+        List<TypeInfo>? typeArgs = concreteOwner.TypeArguments;
         if (gParams != null && typeArgs != null)
         {
             for (int i = 0; i < gParams.Count && i < typeArgs.Count; i++)
@@ -676,8 +676,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 WrapperTypeInfo w => ctx.Registry.LookupType(name: w.Name),
                 _ => null
             };
-            IReadOnlyList<TypeInfo>? typeArgs = owner.TypeArguments;
-            IReadOnlyList<string>? gParams = genDef?.GenericParameters;
+            List<TypeInfo>? typeArgs = owner.TypeArguments;
+            List<string>? gParams = genDef?.GenericParameters;
             if (gParams != null && typeArgs != null && gParams.Count == typeArgs.Count)
             {
                 for (int i = 0; i < gParams.Count; i++)
@@ -1405,7 +1405,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             // Case A: pure generic def — substitute by GenericParameters.
             if (routine.IsGenericDefinition)
             {
-                IReadOnlyList<string>? rgParams = routine.GenericParameters;
+                List<string>? rgParams = routine.GenericParameters;
                 if (rgParams != null)
                 {
                     var concreteTypeArgs = new List<TypeInfo>(capacity: rgParams.Count);
@@ -1508,7 +1508,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                     if (resolved != null) return TransferSubstitutedTypeArguments(input: routine, resolved: resolved, typeSubs: typeSubs);
                     // Fallback: synthesized routine, mark substituted RegistryKey live
                     var synthSubs = new Dictionary<string, TypeInfo>(comparer: StringComparer.Ordinal);
-                    IReadOnlyList<string>? defParams = ownerGenDef.GenericParameters;
+                    List<string>? defParams = ownerGenDef.GenericParameters;
                     if (defParams != null)
                     {
                         for (int i = 0; i < defParams.Count && i < substArgs.Count; i++)
@@ -1529,7 +1529,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         }
         // If owner is a generic def (e.g. List[T]) referencing T from the frame, build the
         // concrete instantiation List[ConcreteT] and look up the method on it.
-        IReadOnlyList<string>? gParams = owner.GenericParameters;
+        List<string>? gParams = owner.GenericParameters;
         if (gParams != null && gParams.Count > 0 && owner.IsGenericDefinition)
         {
             var concreteArgs = new List<TypeInfo>(capacity: gParams.Count);
@@ -1647,8 +1647,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // symbol `SortedList[S64].get_by_rank[S64]` that codegen call sites never reference.
         // Detect owner-leak: if every name in the def's GenericParameters also appears in the
         // owner's GenericParameters, the def has no true method-level generics — skip transfer.
-        IReadOnlyList<string>? defParams = (input.GenericDefinition ?? input).GenericParameters;
-        IReadOnlyList<string>? ownerParams = input.OwnerType switch
+        List<string>? defParams = (input.GenericDefinition ?? input).GenericParameters;
+        List<string>? ownerParams = input.OwnerType switch
         {
             EntityTypeInfo { GenericDefinition: { } d } => d.GenericParameters ?? input.OwnerType.GenericParameters,
             RecordTypeInfo { GenericDefinition: { } d } => d.GenericParameters ?? input.OwnerType.GenericParameters,

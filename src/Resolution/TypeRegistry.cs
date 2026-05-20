@@ -75,11 +75,11 @@ public sealed partial class TypeRegistry
 
     /// <summary>Drains and returns all types discovered since the last drain (or since tracking
     /// started). Returns empty if tracking is not active.</summary>
-    public IReadOnlyList<TypeInfo> DrainGmpDiscoveryQueue()
+    public List<TypeInfo> DrainGmpDiscoveryQueue()
     {
         if (_gmpDiscoveryQueue == null || _gmpDiscoveryQueue.Count == 0)
             return [];
-        var result = _gmpDiscoveryQueue.ToArray();
+        var result = _gmpDiscoveryQueue.ToList();
         _gmpDiscoveryQueue.Clear();
         return result;
     }
@@ -306,7 +306,7 @@ public sealed partial class TypeRegistry
     /// Gets the parsed stdlib programs (for code generation).
     /// Returns the programs parsed by the stdlib loader, including routine bodies.
     /// </summary>
-    public IReadOnlyList<(Program Program, string FilePath, string Module)> StdlibPrograms =>
+    public List<(Program Program, string FilePath, string Module)> StdlibPrograms =>
         _stdlibLoader?.AllLoadedPrograms ?? [];
 
     private readonly List<(Program Program, string FilePath, string Module)> _userPrograms = [];
@@ -315,7 +315,7 @@ public sealed partial class TypeRegistry
     /// Gets user (non-stdlib) programs that have been analyzed.
     /// Used by synthesis passes to search for generic routine bodies in user code.
     /// </summary>
-    public IReadOnlyList<(Program Program, string FilePath, string Module)> UserPrograms =>
+    public List<(Program Program, string FilePath, string Module)> UserPrograms =>
         _userPrograms;
 
     /// <summary>Registers a user program so synthesis passes can search it for routine bodies.</summary>
@@ -502,7 +502,7 @@ public sealed partial class TypeRegistry
     /// </summary>
     /// <param name="recordName">The name of the record to update.</param>
     /// <param name="protocols">The resolved protocol types.</param>
-    public void UpdateRecordProtocols(string recordName, IReadOnlyList<TypeInfo> protocols)
+    public void UpdateRecordProtocols(string recordName, List<TypeInfo> protocols)
     {
         if (!_types.TryGetValue(key: recordName, value: out TypeInfo? type))
         {
@@ -539,7 +539,7 @@ public sealed partial class TypeRegistry
     /// <param name="recordName">The name of the record to update.</param>
     /// <param name="memberVariables">The resolved member variables.</param>
     public void UpdateRecordMemberVariables(string recordName,
-        IReadOnlyList<MemberVariableInfo> memberVariables)
+        List<MemberVariableInfo> memberVariables)
     {
         if (!_types.TryGetValue(key: recordName, value: out TypeInfo? type))
         {
@@ -576,7 +576,7 @@ public sealed partial class TypeRegistry
     /// <param name="entityName">The name of the entity to update.</param>
     /// <param name="memberVariables">The resolved member variables.</param>
     public void UpdateEntityMemberVariables(string entityName,
-        IReadOnlyList<MemberVariableInfo> memberVariables)
+        List<MemberVariableInfo> memberVariables)
     {
         if (!_types.TryGetValue(key: entityName, value: out TypeInfo? type))
         {
@@ -603,7 +603,7 @@ public sealed partial class TypeRegistry
     /// </summary>
     /// <param name="entityName">The name of the entity to update.</param>
     /// <param name="protocols">The resolved protocol types.</param>
-    public void UpdateEntityProtocols(string entityName, IReadOnlyList<TypeInfo> protocols)
+    public void UpdateEntityProtocols(string entityName, List<TypeInfo> protocols)
     {
         if (!_types.TryGetValue(key: entityName, value: out TypeInfo? type))
         {
@@ -620,7 +620,7 @@ public sealed partial class TypeRegistry
 
     /// <summary>Updates a crashable type's member variables.</summary>
     public void UpdateCrashableMemberVariables(string typeName,
-        IReadOnlyList<MemberVariableInfo> memberVariables)
+        List<MemberVariableInfo> memberVariables)
     {
         if (!_types.TryGetValue(key: typeName, value: out TypeInfo? type) ||
             type is not CrashableTypeInfo crashable)
@@ -639,7 +639,7 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>Updates a crashable type's implemented protocols.</summary>
-    public void UpdateCrashableProtocols(string typeName, IReadOnlyList<TypeInfo> protocols)
+    public void UpdateCrashableProtocols(string typeName, List<TypeInfo> protocols)
     {
         if (!_types.TryGetValue(key: typeName, value: out TypeInfo? type) ||
             type is not CrashableTypeInfo crashable)
@@ -662,7 +662,7 @@ public sealed partial class TypeRegistry
     /// </summary>
     /// <param name="choiceName">The name of the choice to update.</param>
     /// <param name="protocols">The resolved protocol types.</param>
-    public void UpdateChoiceProtocols(string choiceName, IReadOnlyList<TypeInfo> protocols)
+    public void UpdateChoiceProtocols(string choiceName, List<TypeInfo> protocols)
     {
         if (!_types.TryGetValue(key: choiceName, value: out TypeInfo? type))
         {
@@ -693,7 +693,7 @@ public sealed partial class TypeRegistry
     /// </summary>
     /// <param name="flagsName">The name of the flags type to update.</param>
     /// <param name="protocols">The resolved protocol types.</param>
-    public void UpdateFlagsProtocols(string flagsName, IReadOnlyList<TypeInfo> protocols)
+    public void UpdateFlagsProtocols(string flagsName, List<TypeInfo> protocols)
     {
         if (!_types.TryGetValue(key: flagsName, value: out TypeInfo? type))
         {
@@ -724,7 +724,7 @@ public sealed partial class TypeRegistry
     /// <param name="protocolName">The name of the protocol to update.</param>
     /// <param name="parentProtocols">The resolved parent protocol types.</param>
     public void UpdateProtocolParents(string protocolName,
-        IReadOnlyList<ProtocolTypeInfo> parentProtocols)
+        List<ProtocolTypeInfo> parentProtocols)
     {
         if (!_types.TryGetValue(key: protocolName, value: out TypeInfo? type))
         {
@@ -758,7 +758,7 @@ public sealed partial class TypeRegistry
     /// </summary>
     /// <param name="choiceName">The name of the choice to update.</param>
     /// <param name="cases">The resolved choice cases.</param>
-    public void UpdateChoiceCases(string choiceName, IReadOnlyList<ChoiceCaseInfo> cases)
+    public void UpdateChoiceCases(string choiceName, List<ChoiceCaseInfo> cases)
     {
         if (!_types.TryGetValue(key: choiceName, value: out TypeInfo? type))
         {
@@ -789,7 +789,7 @@ public sealed partial class TypeRegistry
     /// <summary>
     /// Updates the declared member set for an already-registered flags type.
     /// </summary>
-    public void UpdateFlagsMembers(string flagsName, IReadOnlyList<FlagsMemberInfo> members)
+    public void UpdateFlagsMembers(string flagsName, List<FlagsMemberInfo> members)
     {
         if (!_types.TryGetValue(key: flagsName, value: out TypeInfo? type))
         {
@@ -903,7 +903,7 @@ public sealed partial class TypeRegistry
     /// <param name="typeArguments">The type arguments for resolution.</param>
     /// <returns>The resolved type (cached if already created).</returns>
     public TypeInfo GetOrCreateResolution(TypeInfo genericDef,
-        IReadOnlyList<TypeInfo> typeArguments)
+        List<TypeInfo> typeArguments)
     {
         // Don't create or store instances where SA failed to resolve a type argument.
         // Storing ErrorTypeInfo-keyed instances produces broken concrete types that crash codegen.
@@ -1003,7 +1003,7 @@ public sealed partial class TypeRegistry
     /// Returns null if the type has not been resolved yet.
     /// Use this in passes that must not create new concrete type instances as a side effect.
     /// </summary>
-    public TypeInfo? TryGetResolution(TypeInfo genericDef, IReadOnlyList<TypeInfo> typeArguments)
+    public TypeInfo? TryGetResolution(TypeInfo genericDef, List<TypeInfo> typeArguments)
     {
         string fullKey =
             $"{genericDef.Name}[{string.Join(separator: ", ", values: typeArguments.Select(selector: t => t.FullName))}]";
@@ -1059,7 +1059,7 @@ public sealed partial class TypeRegistry
     /// <param name="returnType">The return type (null for Blank/void).</param>
     /// <param name="isFailable">Whether the function can throw/absent.</param>
     /// <returns>The cached or newly created function type.</returns>
-    public RoutineTypeInfo GetOrCreateRoutineType(IReadOnlyList<TypeInfo> parameterTypes,
+    public RoutineTypeInfo GetOrCreateRoutineType(List<TypeInfo> parameterTypes,
         TypeInfo? returnType, bool isFailable = false)
     {
         // Build the signature key
@@ -1095,7 +1095,7 @@ public sealed partial class TypeRegistry
     /// </summary>
     /// <param name="elementTypes">The types of each element in the tuple.</param>
     /// <returns>The cached or newly created tuple type.</returns>
-    public TupleTypeInfo GetOrCreateTupleType(IReadOnlyList<TypeInfo> elementTypes)
+    public TupleTypeInfo GetOrCreateTupleType(List<TypeInfo> elementTypes)
     {
         // Build the cache key
         string typeList = string.Join(separator: ", ",
@@ -1413,7 +1413,7 @@ public sealed partial class TypeRegistry
     /// For generic implementing types, resolves the concrete type against the protocol's type arguments.
     /// This is the authoritative implementer list; codegen should read this instead of scanning all types.
     /// </summary>
-    public IReadOnlyList<TypeInfo> GetProtocolImplementors(ProtocolTypeInfo protocol)
+    public List<TypeInfo> GetProtocolImplementors(ProtocolTypeInfo protocol)
     {
         ProtocolTypeInfo protocolDef = protocol.GenericDefinition ?? protocol;
         string protocolBaseName = protocolDef.Name;
@@ -1437,7 +1437,7 @@ public sealed partial class TypeRegistry
                 continue;
             }
 
-            IReadOnlyList<TypeInfo>? implemented = type switch
+            List<TypeInfo>? implemented = type switch
             {
                 EntityTypeInfo e => e.ImplementedProtocols,
                 RecordTypeInfo r => r.ImplementedProtocols,

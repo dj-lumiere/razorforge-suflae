@@ -17,10 +17,10 @@ public sealed class EntityTypeInfo : TypeInfo
     public override TypeCategory Category => TypeCategory.Entity;
 
     /// <summary>MemberVariables declared in this entity.</summary>
-    public IReadOnlyList<MemberVariableInfo> MemberVariables { get; set; } = [];
+    public List<MemberVariableInfo> MemberVariables { get; set; } = [];
 
     /// <summary>Protocols this entity implements (obeys).</summary>
-    public IReadOnlyList<TypeInfo> ImplementedProtocols { get; set; } = [];
+    public List<TypeInfo> ImplementedProtocols { get; set; } = [];
 
     /// <summary>
     /// For generic definitions, the original generic type this was resolved from.
@@ -60,7 +60,7 @@ public sealed class EntityTypeInfo : TypeInfo
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">Thrown if this is not a generic definition.</exception>
     /// <exception cref="ArgumentException">Thrown if the number of type arguments doesn't match.</exception>
-    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(List<TypeInfo> typeArguments)
     {
         if (!IsGenericDefinition)
         {

@@ -349,8 +349,8 @@ public sealed partial class SemanticVerifier
                                && !IsStdlibFile(filePath: w.Location.FileName))
             .ToList();
         return new AnalysisResult(Registry: _registry,
-            Errors: _errors.AsReadOnly(),
-            Warnings: userWarnings.AsReadOnly(),
+            Errors: _errors.ToList(),
+            Warnings: userWarnings.ToList(),
             ParsedLiterals: _parsedLiterals,
             SynthesizedBodies: allSynthesized,
             InstantiatedGenericBodies: _instantiatedGenericBodies,
@@ -602,7 +602,7 @@ public sealed partial class SemanticVerifier
     /// block user builds.
     /// </summary>
     /// <returns>List of errors found in stdlib routine bodies.</returns>
-    public IReadOnlyList<SemanticError> ValidateStdlibBodies()
+    public List<SemanticError> ValidateStdlibBodies()
     {
         int errorsBefore = _errors.Count;
 
@@ -714,7 +714,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     /// <param name="files">The programs and their file paths, in topological (dependency) order.</param>
     /// <returns>Analysis result containing errors, warnings, and the populated type registry.</returns>
-    public AnalysisResult AnalyzeMultiple(IReadOnlyList<(Program Program, string FilePath)> files)
+    public AnalysisResult AnalyzeMultiple(List<(Program Program, string FilePath)> files)
     {
         _importSnapshots.Clear();
         _symbolNameSnapshots.Clear();
@@ -846,8 +846,8 @@ public sealed partial class SemanticVerifier
         if (_errors.Count > 0)
         {
             return new AnalysisResult(Registry: _registry,
-                Errors: _errors.AsReadOnly(),
-                Warnings: _warnings.AsReadOnly(),
+                Errors: _errors.ToList(),
+                Warnings: _warnings.ToList(),
                 ParsedLiterals: _parsedLiterals,
                 SynthesizedBodies: new Dictionary<string, Statement>(),
                 InstantiatedGenericBodies: _instantiatedGenericBodies,
@@ -906,8 +906,8 @@ public sealed partial class SemanticVerifier
         }
 
         return new AnalysisResult(Registry: _registry,
-            Errors: _errors.AsReadOnly(),
-            Warnings: _warnings.AsReadOnly(),
+            Errors: _errors.ToList(),
+            Warnings: _warnings.ToList(),
             ParsedLiterals: _parsedLiterals,
             SynthesizedBodies: allSynthesized2,
             InstantiatedGenericBodies: _instantiatedGenericBodies,
@@ -1136,12 +1136,12 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Gets all errors collected during analysis.
     /// </summary>
-    public IReadOnlyList<SemanticError> Errors => _errors;
+    public List<SemanticError> Errors => _errors;
 
     /// <summary>
     /// Gets all warnings collected during analysis.
     /// </summary>
-    public IReadOnlyList<SemanticWarning> Warnings => _warnings;
+    public List<SemanticWarning> Warnings => _warnings;
 
     #endregion
 

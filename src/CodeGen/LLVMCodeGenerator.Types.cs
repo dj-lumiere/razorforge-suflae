@@ -577,7 +577,7 @@ public partial class LlvmCodeGenerator
         RoutineInfo Routine,
         TypeInfo OwnerType,
         bool IsFailable,
-        IReadOnlyList<string>? ModulePath,
+        List<string>? ModulePath,
         string MangledName,
         bool IsMonomorphized,
         Dictionary<string, TypeInfo>? MemberRoutineTypeArgs
@@ -663,11 +663,11 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private ResolvedMemberRoutine? ResolveMemberRoutine(TypeInfo receiverType, string methodName,
         bool? isFailable = null,
-        IReadOnlyList<TypeInfo>? methodTypeArgs = null,
-        IReadOnlyList<TypeInfo>? argTypes = null)
+        List<TypeInfo>? methodTypeArgs = null,
+        List<TypeInfo>? argTypes = null)
     {
         receiverType = ApplyTypeSubstitutions(type: receiverType);
-        IReadOnlyList<TypeInfo>? resolvedArgTypes = argTypes?
+        List<TypeInfo>? resolvedArgTypes = argTypes?
             .Select(selector: ApplyTypeSubstitutions)
             .ToList();
 
@@ -858,7 +858,7 @@ public partial class LlvmCodeGenerator
         TypeInfo? owner = routine.OwnerType;
         return owner?.TypeArguments is { Count: > 0 } ownerArgs && HasUnresolvedParam(ownerArgs);
 
-        static bool HasUnresolvedParam(IReadOnlyList<TypeInfo> types)
+        static bool HasUnresolvedParam(List<TypeInfo> types)
         {
             foreach (TypeInfo t in types)
             {

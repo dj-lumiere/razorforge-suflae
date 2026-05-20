@@ -110,7 +110,7 @@ public sealed partial class SemanticVerifier
         }
 
         // Get the list of implemented protocols for this type
-        IReadOnlyList<TypeSymbol>? implementedProtocols = type switch
+        List<TypeSymbol>? implementedProtocols = type switch
         {
             RecordTypeInfo record => record.ImplementedProtocols,
             EntityTypeInfo entity => entity.ImplementedProtocols,
@@ -170,7 +170,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     internal bool ExplicitlyImplementsProtocol(TypeSymbol type, string protocolName)
     {
-        IReadOnlyList<TypeSymbol>? implementedProtocols = type switch
+        List<TypeSymbol>? implementedProtocols = type switch
         {
             RecordTypeInfo record => record.ImplementedProtocols,
             EntityTypeInfo entity => entity.ImplementedProtocols,
@@ -370,7 +370,7 @@ public sealed partial class SemanticVerifier
     /// Extracts the inner type T from the first <c>Referring[T]</c> or <c>Controlling[T]</c>
     /// entry in <paramref name="protocols"/>. Returns null if neither is present.
     /// </summary>
-    private static TypeSymbol? GetReferringControllingInnerType(IReadOnlyList<TypeSymbol> protocols)
+    private static TypeSymbol? GetReferringControllingInnerType(List<TypeSymbol> protocols)
     {
         foreach (TypeSymbol proto in protocols)
         {

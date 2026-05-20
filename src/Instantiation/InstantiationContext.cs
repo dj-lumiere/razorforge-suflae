@@ -21,7 +21,7 @@ public sealed class InstantiationContext
     /// <summary>
     /// User programs that seed reachable generic type and routine discovery.
     /// </summary>
-    public IReadOnlyList<(Program Program, string FilePath, string Module)> UserPrograms { get; }
+    public List<(Program Program, string FilePath, string Module)> UserPrograms { get; }
 
     /// <summary>
     /// Verified routine bodies keyed by registry key, used as source bodies for instantiation.
@@ -84,7 +84,7 @@ public sealed class InstantiationContext
     /// Initializes shared state for Phase 6 generic reachability and monomorphization.
     /// </summary>
     public InstantiationContext(TypeRegistry registry,
-        IReadOnlyList<(Program Program, string FilePath, string Module)> userPrograms,
+        List<(Program Program, string FilePath, string Module)> userPrograms,
         IReadOnlyDictionary<string, Statement> routineBodies,
         Dictionary<string, Statement>? variantBodies = null,
         Dictionary<string, MonomorphizedBody>? instantiatedGenericBodies = null,

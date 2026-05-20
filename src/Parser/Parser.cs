@@ -44,7 +44,7 @@ public partial class Parser
     /// <summary>
     /// Gets all parse errors encountered during parsing.
     /// </summary>
-    public IReadOnlyList<string> GetErrors()
+    public List<string> GetErrors()
     {
         return _errors;
     }

@@ -36,7 +36,7 @@ public sealed class WrapperTypeInfo : TypeInfo
 
 
     /// <inheritdoc/>
-    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(List<TypeInfo> typeArguments)
     {
         if (typeArguments.Count != 1)
         {

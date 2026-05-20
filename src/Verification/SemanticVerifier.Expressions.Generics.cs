@@ -128,10 +128,10 @@ public sealed partial class SemanticVerifier
                 // Owner-level generic params (e.g. T from Hijacked[T]) are bound by the receiver.
                 // Compare typeArgs only against method-level params (e.g. U from recast_as[U]).
                 var ownerGenericParamNames = GetOwnerGenericParameterNames(ownerType: objectType);
-                IReadOnlyList<string> methodOnlyParams =
+                List<string> methodOnlyParams =
                     method.GenericParameters?
                           .Where(predicate: gp => !ownerGenericParamNames.Contains(item: gp))
-                          .ToList() ?? (IReadOnlyList<string>)Array.Empty<string>();
+                          .ToList() ?? new List<string>();
 
                 if (methodOnlyParams.Count != typeArgs.Count)
                 {
@@ -350,7 +350,7 @@ public sealed partial class SemanticVerifier
         // Look up the member on the object type
         if (objectType is TypeInfo objTypeInfo)
         {
-            IReadOnlyList<MemberVariableInfo>? memberVars = objTypeInfo switch
+            List<MemberVariableInfo>? memberVars = objTypeInfo switch
             {
                 EntityTypeInfo e => e.MemberVariables,
                 RecordTypeInfo r => r.MemberVariables,
@@ -489,9 +489,9 @@ public sealed partial class SemanticVerifier
             _ => ownerType.IsGenericDefinition ? ownerType : null
         };
 
-        IReadOnlyList<string>? paramNames =
+        List<string>? paramNames =
             def?.GenericParameters ?? ownerType.GenericParameters;
-        IReadOnlyList<TypeInfo>? args = ownerType.TypeArguments;
+        List<TypeInfo>? args = ownerType.TypeArguments;
 
         if (paramNames != null && args != null)
         {

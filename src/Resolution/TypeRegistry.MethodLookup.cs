@@ -119,7 +119,7 @@ public sealed partial class TypeRegistry
     /// </summary>
     /// <param name="baseName">The routine's base name (e.g., "List.append", "IO.show").</param>
     /// <param name="argTypes">The argument types to match against.</param>
-    public RoutineInfo? LookupRoutineOverload(string baseName, IReadOnlyList<TypeInfo> argTypes)
+    public RoutineInfo? LookupRoutineOverload(string baseName, List<TypeInfo> argTypes)
     {
         // Try exact overload match by RegistryKey format.
         // Zero-arg routines register under baseName (no '#' suffix) — match that directly.
@@ -355,9 +355,9 @@ public sealed partial class TypeRegistry
     /// <param name="returnType">The resolved return type.</param>
     /// <param name="genericParameters">Updated generic parameters (may include implicit ones from protocol-as-type).</param>
     /// <param name="genericConstraints">Updated generic constraints (may include implicit ones from protocol-as-type).</param>
-    public void UpdateRoutine(RoutineInfo routine, IReadOnlyList<ParameterInfo> parameters,
-        TypeInfo? returnType, IReadOnlyList<string>? genericParameters,
-        IReadOnlyList<GenericConstraintDeclaration>? genericConstraints) // NOSONAR S3776
+    public void UpdateRoutine(RoutineInfo routine, List<ParameterInfo> parameters,
+        TypeInfo? returnType, List<string>? genericParameters,
+        List<GenericConstraintDeclaration>? genericConstraints) // NOSONAR S3776
     {
         string baseName = routine.BaseName;
         if (!_routines.ContainsKey(key: baseName))
@@ -572,7 +572,7 @@ public sealed partial class TypeRegistry
         // context to discover Obeys constraints, so it cannot resolve them here.
 
         // Check implemented protocols for default implementations
-        IReadOnlyList<TypeInfo>? protocols = type switch
+        List<TypeInfo>? protocols = type switch
         {
             RecordTypeInfo r => r.ImplementedProtocols,
             EntityTypeInfo e => e.ImplementedProtocols,
@@ -645,7 +645,7 @@ public sealed partial class TypeRegistry
     /// on the same owner type (for example Moment.$sub(Duration) and Moment.$sub(Moment)).
     /// </summary>
     public RoutineInfo? LookupMethodOverload(TypeInfo type, string methodName,
-        IReadOnlyList<TypeInfo> argTypes)
+        List<TypeInfo> argTypes)
     {
         // Transparent-protocol unwrap: Referring[X] / Controlling[X] forward every method
         // to X. Mirror the unwrap in LookupMethod so overload-driven resolution (e.g. the
@@ -1142,7 +1142,7 @@ public sealed partial class TypeRegistry
                 resolvedOwner: type)!);
         }
 
-        IReadOnlyList<TypeInfo>? protocols = type switch
+        List<TypeInfo>? protocols = type switch
         {
             RecordTypeInfo r => r.ImplementedProtocols,
             EntityTypeInfo e => e.ImplementedProtocols,
@@ -1295,7 +1295,7 @@ public sealed partial class TypeRegistry
     /// <param name="typeArguments">The type arguments for resolution.</param>
     /// <returns>The resolved routine (cached if already created).</returns>
     public RoutineInfo GetOrCreateRoutineResolution(RoutineInfo genericDef,
-        IReadOnlyList<TypeInfo> typeArguments)
+        List<TypeInfo> typeArguments)
     {
         RoutineInfo resolved = genericDef.CreateInstance(typeArguments: typeArguments);
         string key = resolved.RegistryKey;
@@ -1372,7 +1372,7 @@ public sealed partial class TypeRegistry
     /// Returns all methods registered for the given owner type (by FullName key).
     /// Used by SA's eager wrapper-forwarder synthesis to enumerate inner-type methods.
     /// </summary>
-    public IReadOnlyList<RoutineInfo> GetMethodsForOwner(TypeInfo ownerType)
+    public List<RoutineInfo> GetMethodsForOwner(TypeInfo ownerType)
     {
         if (_routinesByOwner.TryGetValue(key: ownerType.FullName, value: out List<RoutineInfo>? list))
             return list;

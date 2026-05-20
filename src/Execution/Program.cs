@@ -506,7 +506,7 @@ internal partial class Program
             Console.WriteLine(value: "=== PARSING ===");
             var parser = new Parser(tokens: tokens, language: language, fileName: sourceFile);
             SyntaxTree.Program ast = parser.Parse();
-            IReadOnlyList<BuildWarning> warnings = parser.GetWarnings();
+            List<BuildWarning> warnings = parser.GetWarnings();
 
             Console.WriteLine(
                 value: $"Successfully parsed! AST contains {ast.Declarations.Count} declarations");
@@ -563,7 +563,7 @@ internal partial class Program
             Console.WriteLine();
 
             var analyzer = new SemanticVerifier(language: language);
-            IReadOnlyList<SemanticError> stdlibErrors = analyzer.ValidateStdlibBodies();
+            List<SemanticError> stdlibErrors = analyzer.ValidateStdlibBodies();
 
             if (stdlibErrors.Count == 0)
             {
@@ -696,7 +696,7 @@ internal partial class Program
             Console.WriteLine(value: "=== CODE GENERATION ===");
 
             // Pass stdlib programs to codegen so intrinsic routines get built
-            IReadOnlyList<(SyntaxTree.Program Program, string FilePath, string Module)>
+            List<(SyntaxTree.Program Program, string FilePath, string Module)>
                 stdlibPrograms = result.Registry.StdlibPrograms;
             var generator = new LlvmCodeGenerator(program: ast,
                 registry: result.Registry,
@@ -1338,7 +1338,7 @@ internal partial class Program
                                             })
                                            .ToList();
 
-            IReadOnlyList<(SyntaxTree.Program Program, string FilePath, string Module)>
+            List<(SyntaxTree.Program Program, string FilePath, string Module)>
                 stdlibPrograms = result.Registry.StdlibPrograms;
             var generator = new LlvmCodeGenerator(userPrograms: userPrograms,
                 registry: result.Registry,

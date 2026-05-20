@@ -23,8 +23,8 @@ public sealed record FileBuildUnit(
     string FilePath,
     string? Module,
     Program Ast,
-    IReadOnlyList<ImportDeclaration> Imports,
-    IReadOnlyList<BuildWarning> ParseWarnings);
+    List<ImportDeclaration> Imports,
+    List<BuildWarning> ParseWarnings);
 
 /// <summary>
 /// Result of a complete multi-file build.
@@ -34,10 +34,10 @@ public sealed record FileBuildUnit(
 /// <param name="Warnings">All warnings encountered during building.</param>
 /// <param name="InitializationOrder">Modules in safe initialization order.</param>
 public sealed record BuildResult(
-    IReadOnlyList<FileBuildUnit> Units,
-    IReadOnlyList<SemanticError> Errors,
-    IReadOnlyList<BuildWarning> Warnings,
-    IReadOnlyList<string> InitializationOrder);
+    List<FileBuildUnit> Units,
+    List<SemanticError> Errors,
+    List<BuildWarning> Warnings,
+    List<string> InitializationOrder);
 
 /// <summary>
 /// Coordinates multi-file building with circular import detection.
@@ -83,7 +83,7 @@ public sealed class BuildDriver
     /// </summary>
     /// <param name="sourceFiles">The source files to build.</param>
     /// <returns>The build result with all units and errors.</returns>
-    public BuildResult CompileFiles(IReadOnlyList<string> sourceFiles)
+    public BuildResult CompileFiles(List<string> sourceFiles)
     {
         // Pre-register all stdlib files so imports resolve without filesystem probing.
         PreRegisterStdlib();
@@ -111,7 +111,7 @@ public sealed class BuildDriver
         _errors.AddRange(collection: _dependencyGraph.Errors);
 
         // Get initialization order (if no cycles)
-        IReadOnlyList<string> initOrder = [];
+        List<string> initOrder = [];
         if (_dependencyGraph.Errors.Count == 0)
         {
             try
@@ -287,7 +287,7 @@ public sealed class BuildDriver
             // Parse
             var parser = new Parser.Parser(tokens: tokens, language: language, fileName: filePath);
             Program ast = parser.Parse();
-            IReadOnlyList<BuildWarning> warnings = parser.GetWarnings();
+            List<BuildWarning> warnings = parser.GetWarnings();
 
             // Extract module and imports
             string? modulePath = null;

@@ -96,7 +96,7 @@ public sealed partial class SemanticVerifier
     /// Maps operator wired methods to their required protocols.
     /// Types must follow the protocol to define the operator method.
     /// </summary>
-    private static readonly Dictionary<string, string[]> WiredToProtocols = new()
+    private static readonly Dictionary<string, List<string>> WiredToProtocols = new()
     {
         // Arithmetic operators
         [key: "$add"] = ["Addable", "DurationAddable"],
@@ -173,7 +173,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Gets the required protocol for a wired method, or null if no protocol is required.
     /// </summary>
-    internal static IReadOnlyList<string>? GetRequiredProtocols(string wiredName)
+    internal static List<string>? GetRequiredProtocols(string wiredName)
     {
         return WiredToProtocols.GetValueOrDefault(key: wiredName);
     }

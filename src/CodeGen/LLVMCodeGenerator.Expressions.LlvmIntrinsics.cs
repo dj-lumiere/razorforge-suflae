@@ -21,7 +21,7 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private string EmitLlvmIntrinsicCall(StringBuilder sb, RoutineInfo routine,
         string? receiver, List<Expression> arguments,
-        IReadOnlyList<TypeExpression>? typeArguments,
+        List<TypeExpression>? typeArguments,
         TypeInfo? resolvedReturnType = null)
     {
         // Emit argument values.
@@ -32,7 +32,7 @@ public partial class LlvmCodeGenerator
             argValues.Add(EmitExpression(sb: sb, expr: arg));
 
         // Resolve type arguments to LLVM type strings.
-        IReadOnlyList<string>? genericParameters =
+        List<string>? genericParameters =
             routine.GenericParameters ?? routine.GenericDefinition?.GenericParameters;
         var llvmTypeArgs = new List<string>();
         if (typeArguments != null)
@@ -81,7 +81,7 @@ public partial class LlvmCodeGenerator
     {
         if (!template.Contains(value: '{')) return template;
 
-        IReadOnlyList<string>? genericParameters =
+        List<string>? genericParameters =
             method.GenericParameters ?? method.GenericDefinition?.GenericParameters;
         if (genericParameters is not { Count: > 0 }) return template;
 
@@ -89,7 +89,7 @@ public partial class LlvmCodeGenerator
         // TypeArguments (so ConstGenericValueTypeInfo.Value is exact); fall back to parsing
         // llvmTypeArgs strings for direct numeric overrides.
         var paramValues = new Dictionary<string, long>(comparer: StringComparer.Ordinal);
-        IReadOnlyList<TypeInfo>? routineTypeArgs = method.TypeArguments;
+        List<TypeInfo>? routineTypeArgs = method.TypeArguments;
         for (int i = 0; i < genericParameters.Count; i++)
         {
             if (routineTypeArgs is { } rta && i < rta.Count
@@ -157,7 +157,7 @@ public partial class LlvmCodeGenerator
             return routine.TypeArguments.Select(selector: GetLlvmType).ToList();
         }
 
-        IReadOnlyList<string>? genericParameters =
+        List<string>? genericParameters =
             routine.GenericParameters ?? routine.GenericDefinition?.GenericParameters;
         if (genericParameters is not { Count: > 0 })
         {
@@ -383,7 +383,7 @@ public partial class LlvmCodeGenerator
                 substituted = substituted.Replace(oldValue: "{first}", newValue: firstResult);
 
             // {T}, {From}, {To}, etc. — named generic parameters -> LLVM types
-            IReadOnlyList<string>? genericParameters =
+            List<string>? genericParameters =
                 method.GenericParameters ?? method.GenericDefinition?.GenericParameters;
             if (genericParameters != null)
             {

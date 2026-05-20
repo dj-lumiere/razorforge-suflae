@@ -22,10 +22,10 @@ public sealed class ProtocolMethodInfo
     public ModificationCategory Modification { get; init; } = ModificationCategory.Migratable;
 
     /// <summary>Parameter types (excluding me for instance methods).</summary>
-    public IReadOnlyList<TypeInfo> ParameterTypes { get; init; } = [];
+    public List<TypeInfo> ParameterTypes { get; init; } = [];
 
     /// <summary>Parameter names.</summary>
-    public IReadOnlyList<string> ParameterNames { get; init; } = [];
+    public List<string> ParameterNames { get; init; } = [];
 
     /// <summary>Return type, or null for void.</summary>
     public TypeInfo? ReturnType { get; init; }

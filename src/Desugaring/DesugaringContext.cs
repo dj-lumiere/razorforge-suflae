@@ -20,7 +20,7 @@ namespace Compiler.Desugaring;
 public sealed record RuntimeDispatchEntry(
     ProtocolTypeInfo Protocol,
     string MethodName,
-    IReadOnlyList<TypeInfo> KnownImplementers);
+    List<TypeInfo> KnownImplementers);
 
 /// <summary>
 /// Shared context for all desugaring passes.

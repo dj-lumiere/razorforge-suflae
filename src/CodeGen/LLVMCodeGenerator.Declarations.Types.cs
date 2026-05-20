@@ -217,7 +217,7 @@ public partial class LlvmCodeGenerator
     /// Maybe[BTreeSetNode[S64]] created during member variable substitution).
     /// </summary>
     private void EnsureMemberVariableTypesGenerated(
-        IReadOnlyList<MemberVariableInfo> memberVariables)
+        List<MemberVariableInfo> memberVariables)
     {
         var visited = new HashSet<string>();
         foreach (MemberVariableInfo mv in memberVariables)

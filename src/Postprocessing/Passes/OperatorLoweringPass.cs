@@ -1036,7 +1036,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
     }
 
     private static void InferMethodGenericArguments(TypeInfo paramType, TypeInfo argType,
-        IReadOnlyList<string> genericParameters, TypeInfo?[] inferred)
+        List<string> genericParameters, TypeInfo?[] inferred)
     {
         if (paramType is GenericParameterTypeInfo)
         {

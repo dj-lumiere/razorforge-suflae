@@ -269,8 +269,8 @@ internal sealed class WrapperForwardingPass
         // `Owned[BTreeSetNode[S64]].keys_add_last[S64]` while codegen call sites use the
         // un-suffixed `Owned[BTreeSetNode[S64]].keys_add_last`. Strip owner-level params so
         // only true method-level generics (e.g. `Hijacked[T].recast_as[U]` -> `[U]`) survive.
-        IReadOnlyList<string>? innerOwnerParams = innerLookupType.GenericParameters;
-        IReadOnlyList<string>? filteredGenericParams = innerMethod.GenericParameters;
+        List<string>? innerOwnerParams = innerLookupType.GenericParameters;
+        List<string>? filteredGenericParams = innerMethod.GenericParameters;
         if (filteredGenericParams is { Count: > 0 } && innerOwnerParams is { Count: > 0 })
         {
             filteredGenericParams = filteredGenericParams
@@ -278,7 +278,7 @@ internal sealed class WrapperForwardingPass
                 .ToList();
             if (filteredGenericParams.Count == 0) filteredGenericParams = null;
         }
-        IReadOnlyList<GenericConstraintDeclaration>? filteredConstraints = innerMethod.GenericConstraints;
+        List<GenericConstraintDeclaration>? filteredConstraints = innerMethod.GenericConstraints;
         if (filteredConstraints is { Count: > 0 } && innerOwnerParams is { Count: > 0 })
         {
             filteredConstraints = filteredConstraints
@@ -316,7 +316,7 @@ internal sealed class WrapperForwardingPass
             }
         }
 
-        IReadOnlyList<ParameterInfo> forwarderParameters = innerMethod.Parameters;
+        List<ParameterInfo> forwarderParameters = innerMethod.Parameters;
         TypeSymbol? forwarderReturnType = innerMethod.ReturnType;
         if (innerRename is { Count: > 0 })
         {
@@ -395,7 +395,7 @@ internal sealed class WrapperForwardingPass
     /// </summary>
     private DangerStatement BuildWrapperForwarderBody(TypeSymbol wrapperType, RoutineInfo innerMethod,
         string genericParamName,
-        string methodName, bool isFailable, IReadOnlyList<ParameterInfo> parameters,
+        string methodName, bool isFailable, List<ParameterInfo> parameters,
         bool hasReturnValue, string? dataFieldName = null, bool innerIsEntity = false) // NOSONAR S3776
     {
         string callPropertyName = isFailable ? methodName + "!" : methodName;

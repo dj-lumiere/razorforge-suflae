@@ -35,7 +35,7 @@ public sealed class ConstGenericValueTypeInfo : TypeInfo
     }
 
     /// <inheritdoc/>
-    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(List<TypeInfo> typeArguments)
     {
         throw new InvalidOperationException(
             message: "Cannot create instance of a const generic value.");

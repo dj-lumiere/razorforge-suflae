@@ -75,7 +75,7 @@ public sealed partial class SemanticVerifier
         }
 
         // Build a mapping from type parameter names to actual types
-        IReadOnlyList<string>? typeParamNames = genericDef.GenericParameters;
+        List<string>? typeParamNames = genericDef.GenericParameters;
         if (typeParamNames == null || typeParamNames.Count != genericType.TypeArguments.Count)
         {
             return type;

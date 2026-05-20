@@ -18,7 +18,7 @@ public sealed class ModuleResolver
     private readonly List<SemanticError> _errors = [];
 
     /// <summary>Gets all errors from module resolution.</summary>
-    public IReadOnlyList<SemanticError> Errors => _errors;
+    public List<SemanticError> Errors => _errors;
 
     /// <summary>
     /// Index mapping "ModuleName" or "ModuleName.SymbolName" to the source file that declares it.

@@ -349,7 +349,7 @@ public sealed partial class SemanticVerifier
     private void AnalyzeVariantPattern(VariantPattern pattern, TypeSymbol matchedType) // NOSONAR S3776
     {
         // Get the members from the matched type
-        IReadOnlyList<VariantMemberInfo>? members = matchedType switch
+        List<VariantMemberInfo>? members = matchedType switch
         {
             VariantTypeInfo variant => variant.Members,
             _ => null
@@ -564,7 +564,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Checks whether the given when clauses exhaustively cover all cases of the matched type.
     /// </summary>
-    private static ExhaustivenessResult CheckExhaustiveness(IReadOnlyList<WhenClause> clauses,
+    private static ExhaustivenessResult CheckExhaustiveness(List<WhenClause> clauses,
         TypeSymbol matchedType)
     {
         // If any clause is a catch-all pattern, it's always exhaustive
@@ -611,7 +611,7 @@ public sealed partial class SemanticVerifier
     /// Checks whether all cases of a choice type are covered by 'is' TypePatterns.
     /// </summary>
     private static ExhaustivenessResult CheckChoiceExhaustiveness(
-        IReadOnlyList<WhenClause> clauses, ChoiceTypeInfo choice)
+        List<WhenClause> clauses, ChoiceTypeInfo choice)
     {
         var coveredCases = new HashSet<string>();
 
@@ -699,7 +699,7 @@ public sealed partial class SemanticVerifier
     /// not VariantPattern.
     /// </summary>
     private static ExhaustivenessResult CheckVariantExhaustiveness(
-        IReadOnlyList<WhenClause> clauses, IReadOnlyList<VariantMemberInfo> members,
+        List<WhenClause> clauses, List<VariantMemberInfo> members,
         string typeName)
     {
         var coveredMembers = new HashSet<string>();
@@ -761,7 +761,7 @@ public sealed partial class SemanticVerifier
     /// Checks whether Maybe/Result/Lookup error handling types are exhaustively matched.
     /// </summary>
     private static ExhaustivenessResult CheckErrorHandlingExhaustiveness(
-        IReadOnlyList<WhenClause> clauses, TypeSymbol carrierType) // NOSONAR S3776
+        List<WhenClause> clauses, TypeSymbol carrierType) // NOSONAR S3776
     {
         bool hasAbsent = false;
         bool hasCrashableCatchAll = false;
@@ -839,7 +839,7 @@ public sealed partial class SemanticVerifier
     /// <summary>
     /// Checks whether both true and false are covered by literal patterns.
     /// </summary>
-    private static ExhaustivenessResult CheckBoolExhaustiveness(IReadOnlyList<WhenClause> clauses)
+    private static ExhaustivenessResult CheckBoolExhaustiveness(List<WhenClause> clauses)
     {
         bool hasTrue = false;
         bool hasFalse = false;

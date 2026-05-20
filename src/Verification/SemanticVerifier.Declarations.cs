@@ -630,7 +630,7 @@ public sealed partial class SemanticVerifier
         }
 
         // Get the list of implemented protocols for this type
-        IReadOnlyList<TypeSymbol>? implementedProtocols = type switch
+        List<TypeSymbol>? implementedProtocols = type switch
         {
             RecordTypeInfo record => record.ImplementedProtocols,
             EntityTypeInfo entity => entity.ImplementedProtocols,
@@ -684,7 +684,7 @@ public sealed partial class SemanticVerifier
     /// Enforces the closed allowlist for marker-protocol (<c>Referring</c>/<c>Controlling</c>)
     /// obeyance. See <see cref="_markerProtocolBlessedWrappers"/> for rationale.
     /// </summary>
-    private void ValidateMarkerProtocolMembership(TypeSymbol type, IReadOnlyList<TypeSymbol> implementedProtocols)
+    private void ValidateMarkerProtocolMembership(TypeSymbol type, List<TypeSymbol> implementedProtocols)
     {
         // Resolve the base name of the obeyer for membership lookup. Generic instances carry
         // names like "Owned[T]" / "Owned[S64]"; the allowlist keys on the generic-def name.
@@ -815,8 +815,8 @@ public sealed partial class SemanticVerifier
     /// <param name="typeParameters">The declared type parameters.</param>
     /// <param name="location">Source location for error reporting.</param>
     internal void ValidateConstraintTypeParameters(
-        IReadOnlyList<GenericConstraintDeclaration>? constraints,
-        IReadOnlyList<string>? typeParameters, SourceLocation? location)
+        List<GenericConstraintDeclaration>? constraints,
+        List<string>? typeParameters, SourceLocation? location)
     {
         if (constraints == null || constraints.Count == 0)
         {

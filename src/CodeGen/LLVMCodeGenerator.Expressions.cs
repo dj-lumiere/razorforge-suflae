@@ -144,7 +144,7 @@ public partial class LlvmCodeGenerator
         string? moduleName = _currentEmittingRoutine?.OwnerType?.Module ??
                              _currentEmittingRoutine?.Module;
 
-        IReadOnlyList<TypeInfo> paramTypes = routineType.ParameterTypes.ToList();
+        List<TypeInfo> paramTypes = routineType.ParameterTypes.ToList();
 
         if (moduleName != null && !bareName.Contains(value: '.'))
         {

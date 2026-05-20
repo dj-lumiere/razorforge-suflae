@@ -126,7 +126,7 @@ public sealed partial class SemanticVerifier
     private void AnalyzeCallArguments(RoutineInfo routine, List<Expression> arguments,
         SourceLocation location, TypeSymbol? callObjectType = null)
     {
-        IReadOnlyList<ParameterInfo> parameters = routine.Parameters;
+        List<ParameterInfo> parameters = routine.Parameters;
         int totalParams = parameters.Count;
 
         // Phase 1: Validate named argument ordering and build parameter bindings.
@@ -625,13 +625,13 @@ public sealed partial class SemanticVerifier
             // Constraints can live on the routine, the enclosing type, or — for
             // extension methods — on the routine's owner type (e.g., `Array[T,N]`
             // declares `needs N is U64`).
-            IReadOnlyList<IReadOnlyList<GenericConstraintDeclaration>?> sources =
+            List<List<GenericConstraintDeclaration>?> sources =
             [
                 _currentRoutine?.GenericConstraints,
                 _currentType?.GenericConstraints,
                 _currentRoutine?.OwnerType?.GenericConstraints
             ];
-            foreach (IReadOnlyList<GenericConstraintDeclaration>? constraints in sources)
+            foreach (List<GenericConstraintDeclaration>? constraints in sources)
             {
                 if (constraints == null) continue;
                 foreach (GenericConstraintDeclaration c in constraints)
@@ -1042,7 +1042,7 @@ public sealed partial class SemanticVerifier
 
         // Strategy 1: Extract element type from Iterable[X] protocol conformance.
         // This correctly handles chained generics like EnumerateIterator[T] obeys Iterable[Tuple[S64, T]]
-        IReadOnlyList<TypeSymbol>? protocols = iterableType switch
+        List<TypeSymbol>? protocols = iterableType switch
         {
             RecordTypeInfo record => record.ImplementedProtocols,
             EntityTypeInfo entity => entity.ImplementedProtocols,

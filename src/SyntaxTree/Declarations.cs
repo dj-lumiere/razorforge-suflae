@@ -98,7 +98,7 @@ public record VariableDeclaration(
     VisibilityModifier Visibility,
     SourceLocation Location,
     StorageClass Storage = StorageClass.None,
-    IReadOnlyList<string>? Annotations = null,
+    List<string>? Annotations = null,
     bool IsLateInit = false) : Declaration(Location: Location)
 {
     /// <inheritdoc/>

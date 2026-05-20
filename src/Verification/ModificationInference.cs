@@ -198,7 +198,7 @@ public sealed class ModificationInference
     /// </summary>
     private static bool IsHijackedField(TypeInfo? ownerType, string fieldName)
     {
-        IReadOnlyList<MemberVariableInfo>? fields = ownerType switch
+        List<MemberVariableInfo>? fields = ownerType switch
         {
             EntityTypeInfo e => e.MemberVariables,
             RecordTypeInfo r => r.MemberVariables,

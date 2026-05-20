@@ -15,7 +15,7 @@ public sealed class RoutineTypeInfo : TypeInfo
     public override TypeCategory Category => TypeCategory.Routine;
 
     /// <summary>Parameter types for this function type.</summary>
-    public IReadOnlyList<TypeInfo> ParameterTypes { get; }
+    public List<TypeInfo> ParameterTypes { get; }
 
     /// <summary>Return type for this function type. Null means no return (Blank).</summary>
     public TypeInfo? ReturnType { get; }
@@ -28,7 +28,7 @@ public sealed class RoutineTypeInfo : TypeInfo
     /// </summary>
     /// <param name="parameterTypes">The parameter types.</param>
     /// <param name="returnType">The return type (null for Blank/void).</param>
-    public RoutineTypeInfo(IReadOnlyList<TypeInfo> parameterTypes, TypeInfo? returnType) : base(
+    public RoutineTypeInfo(List<TypeInfo> parameterTypes, TypeInfo? returnType) : base(
         name: BuildName(parameterTypes: parameterTypes, returnType: returnType))
     {
         ParameterTypes = parameterTypes;
@@ -39,7 +39,7 @@ public sealed class RoutineTypeInfo : TypeInfo
     /// Builds the display name for a function type.
     /// Examples: "(S32, S32) -> S32", "() -> Bool", "(Text) -> Blank"
     /// </summary>
-    private static string BuildName(IReadOnlyList<TypeInfo> parameterTypes, TypeInfo? returnType)
+    private static string BuildName(List<TypeInfo> parameterTypes, TypeInfo? returnType)
     {
         string paramList = string.Join(separator: ", ",
             values: parameterTypes.Select(selector: p => p.Name));
@@ -85,7 +85,7 @@ public sealed class RoutineTypeInfo : TypeInfo
     }
 
     /// <inheritdoc/>
-    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(List<TypeInfo> typeArguments)
     {
         // Function types don't have generic parameters in the traditional sense
         // But we might need to substitute type parameters in param/return types

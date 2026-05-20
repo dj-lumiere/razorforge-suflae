@@ -980,7 +980,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     /// </summary>
     private static Statement GenerateDestructuringBindings(
         List<DestructuringBinding> bindings, Expression subject,
-        IReadOnlyList<MemberVariableInfo> memberVars, SourceLocation loc)
+        List<MemberVariableInfo> memberVars, SourceLocation loc)
     {
         var stmts = new List<Statement>(capacity: bindings.Count);
         foreach (DestructuringBinding b in bindings)

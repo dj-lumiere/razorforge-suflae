@@ -892,7 +892,7 @@ public partial class LlvmCodeGenerator
     }
 
     private TypeInfo? ResolveEntityMemberTypeFromAst(TypeExpression typeExpr, string? moduleName,
-        IReadOnlyList<string>? genericParams)
+        List<string>? genericParams)
     {
         if (genericParams != null && genericParams.Any(predicate: gp => gp == typeExpr.Name))
         {

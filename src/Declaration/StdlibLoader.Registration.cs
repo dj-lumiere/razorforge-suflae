@@ -237,7 +237,7 @@ public sealed partial class StdlibLoader
     /// Resolves a list of protocol type expressions into TypeInfo instances.
     /// </summary>
     private static List<TypeInfo> ResolveProtocolList(TypeRegistry registry,
-        IReadOnlyList<TypeExpression> protoExprs, IReadOnlyList<string>? genericParams)
+        List<TypeExpression> protoExprs, List<string>? genericParams)
     {
         var result = new List<TypeInfo>();
         foreach (TypeExpression protoExpr in protoExprs)
@@ -258,7 +258,7 @@ public sealed partial class StdlibLoader
     /// Resolves member variable types from a list of member declarations.
     /// </summary>
     private static List<MemberVariableInfo> ResolveMemberVariables(TypeRegistry registry,
-        IReadOnlyList<SyntaxTree.Declaration> members, IReadOnlyList<string>? genericParams,
+        List<SyntaxTree.Declaration> members, List<string>? genericParams,
         TypeInfo? owner = null, string? moduleName = null)
     {
         var result = new List<MemberVariableInfo>();
@@ -387,7 +387,7 @@ public sealed partial class StdlibLoader
         ExternalDeclaration external, string moduleName)
     {
         // Build generic context for type resolution (e.g., T, To, From)
-        IReadOnlyList<string>? genericCtx = external.GenericParameters is { Count: > 0 }
+        List<string>? genericCtx = external.GenericParameters is { Count: > 0 }
             ? external.GenericParameters
             : null;
 
@@ -423,7 +423,7 @@ public sealed partial class StdlibLoader
             Parameters = parameters,
             ReturnType = returnType,
             Module = moduleName,
-            ModulePath = moduleName?.Split('/'),
+            ModulePath = moduleName?.Split('/').ToList(),
             Location = external.Location,
             IsDangerous = external.IsDangerous,
             GenericParameters = external.GenericParameters,
@@ -577,7 +577,7 @@ public sealed partial class StdlibLoader
             genericContext.AddRange(collection: routine.GenericParameters);
         }
 
-        IReadOnlyList<string>? ctx = genericContext.Count > 0
+        List<string>? ctx = genericContext.Count > 0
             ? genericContext
             : null;
 
@@ -624,7 +624,7 @@ public sealed partial class StdlibLoader
             Parameters = parameters,
             ReturnType = returnType,
             Module = moduleName,
-            ModulePath = moduleName?.Split('/'),
+            ModulePath = moduleName?.Split('/').ToList(),
             Location = routine.Location,
             IsFailable = routine.IsFailable,
             IsVariadic = routine.Parameters.Any(predicate: p => p.IsVariadic),
@@ -1218,7 +1218,7 @@ public sealed partial class StdlibLoader
                 genericContext.AddRange(collection: routine.GenericParameters);
             }
 
-            IReadOnlyList<string>? ctx = genericContext.Count > 0
+            List<string>? ctx = genericContext.Count > 0
                 ? genericContext
                 : null;
 

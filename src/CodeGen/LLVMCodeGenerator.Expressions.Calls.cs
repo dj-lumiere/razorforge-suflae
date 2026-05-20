@@ -20,7 +20,7 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private string EmitRoutineCall(StringBuilder sb, RoutineCallRequest req)
     {
-        (string functionName, List<Expression> arguments, RoutineInfo? resolvedRoutine, TypeInfo? resolvedReturnType, IReadOnlyList<TypeExpression>? typeArguments, CallLoweringKind loweringKind, TypeInfo? constructedType) = req;
+        (string functionName, List<Expression> arguments, RoutineInfo? resolvedRoutine, TypeInfo? resolvedReturnType, List<TypeExpression>? typeArguments, CallLoweringKind loweringKind, TypeInfo? constructedType) = req;
         // Synthesized bodies (e.g. $hash, $eq, $cmp) are built programmatically and never
         // pass through SemanticVerifier, so they arrive with Unknown. Treat as DirectRoutine.
         if (loweringKind == CallLoweringKind.Unknown)
@@ -470,7 +470,7 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private string EmitMemberRoutineCall(StringBuilder sb, MemberExpression member,
         List<Expression> arguments, RoutineInfo? resolvedRoutine = null,
-        IReadOnlyList<TypeExpression>? typeArguments = null,
+        List<TypeExpression>? typeArguments = null,
         CallLoweringKind loweringKind = CallLoweringKind.Unknown)
     {
         // Synthesized bodies (e.g. $hash, $eq, $cmp) are built programmatically and never
@@ -1016,7 +1016,7 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private string? TryEmitRecoveredFreeIntrinsicCall(StringBuilder sb, string functionName,
         RoutineInfo? resolvedRoutine, List<Expression> arguments,
-        IReadOnlyList<TypeExpression>? typeArguments, TypeInfo? resolvedReturnType)
+        List<TypeExpression>? typeArguments, TypeInfo? resolvedReturnType)
     {
         if (resolvedRoutine == null && typeArguments is { Count: > 0 })
         {
@@ -1068,7 +1068,7 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private RoutineInfo? ResolveInitialFreeCallRoutine(string functionName,
         bool isFailableCallSyntax, RoutineInfo? resolvedRoutine,
-        IReadOnlyList<TypeExpression>? typeArguments, List<Expression> arguments) // NOSONAR S3776
+        List<TypeExpression>? typeArguments, List<Expression> arguments) // NOSONAR S3776
     {
         RoutineInfo? routine = resolvedRoutine ??
                                _registry.LookupRoutine(fullName: functionName,
@@ -1216,7 +1216,7 @@ public partial class LlvmCodeGenerator
                 // For entity parents, the parent's *value* is already a ptr to the entity
                 // struct. For record parents, recurse to get the parent's storage address.
                 string basePtr;
-                IReadOnlyList<MemberVariableInfo>? memberVars;
+                List<MemberVariableInfo>? memberVars;
                 string parentLlvmType;
                 switch (parentType)
                 {
@@ -1290,6 +1290,6 @@ internal sealed record RoutineCallRequest(
     List<Expression> Arguments,
     RoutineInfo? ResolvedRoutine,
     TypeInfo? ResolvedReturnType,
-    IReadOnlyList<TypeExpression>? TypeArguments,
+    List<TypeExpression>? TypeArguments,
     CallLoweringKind LoweringKind,
     TypeInfo? ConstructedType);

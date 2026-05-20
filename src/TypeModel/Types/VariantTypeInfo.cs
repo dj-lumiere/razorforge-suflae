@@ -16,7 +16,7 @@ public sealed class VariantTypeInfo : TypeInfo
     public override TypeCategory Category => TypeCategory.Variant;
 
     /// <summary>The member types of this variant.</summary>
-    public IReadOnlyList<VariantMemberInfo> Members { get; init; } = [];
+    public List<VariantMemberInfo> Members { get; init; } = [];
 
     /// <summary>
     /// For generic definitions, the original generic type this was resolved from.
@@ -44,7 +44,7 @@ public sealed class VariantTypeInfo : TypeInfo
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">Thrown if this is not a generic definition.</exception>
     /// <exception cref="ArgumentException">Thrown if the number of type arguments doesn't match.</exception>
-    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(List<TypeInfo> typeArguments)
     {
         if (!IsGenericDefinition)
         {

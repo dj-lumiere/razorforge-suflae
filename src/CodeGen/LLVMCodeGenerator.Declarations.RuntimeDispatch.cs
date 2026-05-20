@@ -43,7 +43,7 @@ public partial class LlvmCodeGenerator
     /// Emit runtime dispatch stub as part of this compiler phase.
     /// </summary>
     private void EmitRuntimeDispatchStub(string mangledName, string returnType,
-        IReadOnlyList<RuntimeDispatchTarget> implementers)
+        List<RuntimeDispatchTarget> implementers)
     {
         string defaultLabel = NextLabel(prefix: "dispatch_default");
         var caseLabels = implementers
@@ -76,7 +76,7 @@ public partial class LlvmCodeGenerator
     /// Emit runtime dispatch switch as part of this compiler phase.
     /// </summary>
     private void EmitRuntimeDispatchSwitch(StringBuilder sb,
-        IReadOnlyList<RuntimeDispatchTarget> implementers, string defaultLabel,
+        List<RuntimeDispatchTarget> implementers, string defaultLabel,
         List<string> caseLabels)
     {
         var switchSb = new StringBuilder();

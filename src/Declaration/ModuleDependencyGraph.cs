@@ -59,7 +59,7 @@ public sealed class ModuleDependencyGraph
     private readonly List<SemanticError> _errors = [];
 
     /// <summary>Gets all errors discovered during dependency analysis.</summary>
-    public IReadOnlyList<SemanticError> Errors => _errors;
+    public List<SemanticError> Errors => _errors;
 
     /// <summary>
     /// Registers a module in the graph.
@@ -186,7 +186,7 @@ public sealed class ModuleDependencyGraph
     /// </summary>
     /// <returns>List of module paths in initialization order (dependencies first).</returns>
     /// <exception cref="InvalidOperationException">Thrown if there are undetected cycles.</exception>
-    public IReadOnlyList<string> GetInitializationOrder()
+    public List<string> GetInitializationOrder()
     {
         var result = new List<string>();
         var visited = new HashSet<string>();

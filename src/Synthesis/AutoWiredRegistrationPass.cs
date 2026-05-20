@@ -652,7 +652,7 @@ internal sealed class AutoWiredRegistrationPass
     /// </summary>
     private bool AllFieldsHaveEquality(TypeSymbol type)
     {
-        IReadOnlyList<MemberVariableInfo>? members = type switch
+        List<MemberVariableInfo>? members = type switch
         {
             RecordTypeInfo r => r.MemberVariables,
             EntityTypeInfo e => e.MemberVariables,
@@ -737,7 +737,7 @@ internal sealed class AutoWiredRegistrationPass
 
     private bool ObeysProtocol(TypeSymbol type, string protocolName)
     {
-        IReadOnlyList<TypeSymbol>? implemented = type switch
+        List<TypeSymbol>? implemented = type switch
         {
             ChoiceTypeInfo c => c.ImplementedProtocols,
             FlagsTypeInfo f => f.ImplementedProtocols,

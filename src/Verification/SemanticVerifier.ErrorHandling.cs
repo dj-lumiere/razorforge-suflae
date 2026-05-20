@@ -234,7 +234,7 @@ public sealed partial class SemanticVerifier
             moduleName: moduleName);
     }
 
-    private static RoutineInfo? MatchRoutineDeclaration(IReadOnlyList<RoutineInfo> candidates,
+    private static RoutineInfo? MatchRoutineDeclaration(List<RoutineInfo> candidates,
         RoutineDeclaration decl, string? moduleName)
     {
         static string NormalizeTypeName(string name)

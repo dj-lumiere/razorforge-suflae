@@ -307,7 +307,7 @@ public sealed partial class SemanticVerifier
         if (lookupType.TypeArguments is not { Count: > 0 }) return paramType;
 
         TypeSymbol? lookupGenericDef = GetGenericDefinition(resolution: lookupType);
-        IReadOnlyList<string>? ownerGenericParams = lookupGenericDef?.GenericParameters
+        List<string>? ownerGenericParams = lookupGenericDef?.GenericParameters
             ?? ownerType?.GenericParameters;
         if (ownerGenericParams is not { Count: > 0 }) return paramType;
 
@@ -333,7 +333,7 @@ public sealed partial class SemanticVerifier
             typeRef.GenericParameters is { Count: > 0 })
         {
             var typeArgs = new List<TypeSymbol>();
-            IReadOnlyList<Expression> argExprs = index.Index is TupleLiteralExpression tup
+            List<Expression> argExprs = index.Index is TupleLiteralExpression tup
                 ? tup.Elements
                 : [index.Index];
             foreach (Expression argExpr in argExprs)
@@ -392,7 +392,7 @@ public sealed partial class SemanticVerifier
         if (getItem?.ReturnType != null)
         {
             TypeSymbol returnType = getItem.ReturnType;
-            IReadOnlyList<string>? ownerGenericParams = null;
+            List<string>? ownerGenericParams = null;
             if (lookupType.TypeArguments is { Count: > 0 })
             {
                 TypeSymbol? lookupGenericDef = GetGenericDefinition(resolution: lookupType);
@@ -450,7 +450,7 @@ public sealed partial class SemanticVerifier
         if (getSlice?.ReturnType != null)
         {
             TypeSymbol returnType = getSlice.ReturnType;
-            IReadOnlyList<string>? ownerGenericParams = null;
+            List<string>? ownerGenericParams = null;
             if (lookupType.TypeArguments is { Count: > 0 })
             {
                 TypeSymbol? lookupGenericDef = GetGenericDefinition(resolution: lookupType);
@@ -542,7 +542,7 @@ public sealed partial class SemanticVerifier
         _registry.EnterScope(kind: ScopeKind.Function, name: "lambda");
 
         // Extract expected parameter types from context (e.g., Routine[(S64, S64), Bool])
-        IReadOnlyList<TypeSymbol>? expectedParamTypes = expectedType is RoutineTypeInfo rt
+        List<TypeSymbol>? expectedParamTypes = expectedType is RoutineTypeInfo rt
             ? rt.ParameterTypes
             : null;
 
@@ -1008,7 +1008,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private bool TryRouteCreatorToCreate(TypeSymbol type, CreatorExpression creator)
     {
-        IReadOnlyList<MemberVariableInfo>? fields = type switch
+        List<MemberVariableInfo>? fields = type switch
         {
             RecordTypeInfo r => r.MemberVariables,
             EntityTypeInfo e => e.MemberVariables,
@@ -1098,7 +1098,7 @@ public sealed partial class SemanticVerifier
         List<(string Name, Expression Value)> memberVariables, SourceLocation location)
     {
         // Get the type's member variables
-        IReadOnlyList<MemberVariableInfo>? typeMemberVariables = type switch
+        List<MemberVariableInfo>? typeMemberVariables = type switch
         {
             RecordTypeInfo record => record.MemberVariables,
             EntityTypeInfo entity => entity.MemberVariables,

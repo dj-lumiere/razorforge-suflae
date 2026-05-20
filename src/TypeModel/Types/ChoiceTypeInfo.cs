@@ -17,10 +17,10 @@ public sealed class ChoiceTypeInfo : RecordTypeInfo
     public override TypeCategory Category => TypeCategory.Choice;
 
     /// <summary>The cases of this choice type.</summary>
-    public IReadOnlyList<ChoiceCaseInfo> Cases { get; init; } = [];
+    public List<ChoiceCaseInfo> Cases { get; init; } = [];
 
     /// <summary>Protocols this choice implements (obeys).</summary>
-    public new IReadOnlyList<TypeInfo> ImplementedProtocols
+    public new List<TypeInfo> ImplementedProtocols
     {
         get => base.ImplementedProtocols;
         init => base.ImplementedProtocols = value;
@@ -40,7 +40,7 @@ public sealed class ChoiceTypeInfo : RecordTypeInfo
 
  
     /// <inheritdoc/>
-    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(List<TypeInfo> typeArguments)
     {
         throw new InvalidOperationException(
             message: $"Choice type '{Name}' cannot be resolved with type arguments.");

@@ -17,16 +17,16 @@ public abstract class TypeInfo
     public abstract TypeCategory Category { get; }
 
     /// <summary>Generic type parameters, if any (e.g., ["T"] for List&lt;T&gt;).</summary>
-    public IReadOnlyList<string>? GenericParameters { get; init; }
+    public List<string>? GenericParameters { get; init; }
 
     /// <summary>Generic constraints on type parameters.</summary>
-    public IReadOnlyList<GenericConstraintDeclaration>? GenericConstraints { get; init; }
+    public List<GenericConstraintDeclaration>? GenericConstraints { get; init; }
 
     /// <summary>Whether this is a generic type definition (has unsubstituted type parameters).</summary>
     public bool IsGenericDefinition => GenericParameters is { Count: > 0 };
 
     /// <summary>For resolved generics, the type arguments used.</summary>
-    public IReadOnlyList<TypeInfo>? TypeArguments { get; init; }
+    public List<TypeInfo>? TypeArguments { get; init; }
 
     /// <summary>Whether this is a resolved generic type.</summary>
     public bool IsGenericResolution => TypeArguments is { Count: > 0 };
@@ -87,5 +87,5 @@ public abstract class TypeInfo
     /// <summary>
     /// Creates a resolved version of this generic type with the given type arguments.
     /// </summary>
-    public abstract TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments);
+    public abstract TypeInfo CreateInstance(List<TypeInfo> typeArguments);
 }

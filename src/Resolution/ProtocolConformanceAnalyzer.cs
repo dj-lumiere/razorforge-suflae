@@ -64,7 +64,7 @@ internal sealed class ProtocolConformanceAnalyzer
             CollectTransitiveProtocols(protocol: marker, result: transitiveProtocols);
 
             // Merge with existing user-declared protocols
-            IReadOnlyList<TypeSymbol> existing = GetImplementedProtocols(type: type);
+            List<TypeSymbol> existing = GetImplementedProtocols(type: type);
             var merged = new List<TypeSymbol>(collection: existing);
 
             // Add transitive protocols first, then the marker itself
@@ -113,7 +113,7 @@ internal sealed class ProtocolConformanceAnalyzer
     /// <summary>
     /// Gets the implemented protocols for any type that supports them.
     /// </summary>
-    private static IReadOnlyList<TypeSymbol> GetImplementedProtocols(TypeSymbol type)
+    private static List<TypeSymbol> GetImplementedProtocols(TypeSymbol type)
     {
         return type switch
         {
@@ -127,7 +127,7 @@ internal sealed class ProtocolConformanceAnalyzer
     /// <summary>
     /// Updates the implemented protocols for any type that supports them.
     /// </summary>
-    private void UpdateTypeProtocols(TypeSymbol type, IReadOnlyList<TypeSymbol> protocols)
+    private void UpdateTypeProtocols(TypeSymbol type, List<TypeSymbol> protocols)
     {
         switch (type)
         {

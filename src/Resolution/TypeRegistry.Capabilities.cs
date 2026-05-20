@@ -238,7 +238,7 @@ public sealed partial class TypeRegistry
 
     private bool TypeObeysProtocol(TypeInfo type, string protocolName) // NOSONAR S3776
     {
-        IReadOnlyList<TypeInfo>? implemented = type switch
+        List<TypeInfo>? implemented = type switch
         {
             ChoiceTypeInfo c => c.ImplementedProtocols,
             FlagsTypeInfo f => f.ImplementedProtocols,

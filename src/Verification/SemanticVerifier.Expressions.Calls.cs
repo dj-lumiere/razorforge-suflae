@@ -111,7 +111,7 @@ public sealed partial class SemanticVerifier
                     routine.GenericParameters is { Count: > 0 } &&
                     call.Arguments.Count == routine.Parameters.Count)
                 {
-                    IReadOnlyList<TypeInfo>? inferred =
+                    List<TypeInfo>? inferred =
                         InferGenericTypeArguments(genericRoutine: routine,
                             arguments: call.Arguments);
                     if (inferred != null)
@@ -151,7 +151,7 @@ public sealed partial class SemanticVerifier
                                 preferredArity: call.Arguments.Count);
                         if (generic != null)
                         {
-                            IReadOnlyList<TypeInfo>? inferred =
+                            List<TypeInfo>? inferred =
                                 InferGenericTypeArguments(genericRoutine: generic,
                                     arguments: call.Arguments);
                             routine = inferred != null
@@ -217,7 +217,7 @@ public sealed partial class SemanticVerifier
                                     preferredArity: call.Arguments.Count);
                             if (generic != null)
                             {
-                                IReadOnlyList<TypeInfo>? inferred =
+                                List<TypeInfo>? inferred =
                                     InferGenericTypeArguments(genericRoutine: generic,
                                         arguments: call.Arguments);
                                 // Use GetOrCreateRoutineResolution so the monomorphisation lands
@@ -244,7 +244,7 @@ public sealed partial class SemanticVerifier
                         _registry.LookupVariadicGenericOverload(name: callName);
                     if (variadicGeneric != null)
                     {
-                        IReadOnlyList<TypeInfo>? inferred =
+                        List<TypeInfo>? inferred =
                             InferGenericTypeArguments(genericRoutine: variadicGeneric,
                                 arguments: call.Arguments);
                         routine = inferred != null
@@ -522,7 +522,7 @@ public sealed partial class SemanticVerifier
                                 _registry.LookupGenericOverload(name: callName);
                             if (genericImport != null)
                             {
-                                IReadOnlyList<TypeInfo>? inferredImport =
+                                List<TypeInfo>? inferredImport =
                                     InferGenericTypeArguments(genericRoutine: genericImport,
                                         arguments: call.Arguments);
                                 routine = inferredImport != null
@@ -543,7 +543,7 @@ public sealed partial class SemanticVerifier
                         _registry.LookupVariadicGenericOverload(name: callName);
                     if (variadicGeneric != null)
                     {
-                        IReadOnlyList<TypeInfo>? inferred =
+                        List<TypeInfo>? inferred =
                             InferGenericTypeArguments(genericRoutine: variadicGeneric,
                                 arguments: call.Arguments);
                         routine = inferred != null
@@ -833,7 +833,7 @@ public sealed partial class SemanticVerifier
 
                     if (method.IsGenericDefinition)
                     {
-                        IReadOnlyList<TypeInfo>? inferredMethodTypeArgs =
+                        List<TypeInfo>? inferredMethodTypeArgs =
                             InferMethodGenericTypeArguments(genericMethod: method,
                                 arguments: call.Arguments);
                         if (inferredMethodTypeArgs != null)

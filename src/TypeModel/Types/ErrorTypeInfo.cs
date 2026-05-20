@@ -23,7 +23,7 @@ public sealed class ErrorTypeInfo : TypeInfo
 
     /// <inheritdoc/>
     /// <returns>Always returns this instance.</returns>
-    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(List<TypeInfo> typeArguments)
     {
         return this;
     }

@@ -365,7 +365,7 @@ public sealed partial class SemanticVerifier
         TypeSymbol? expectedType = null)
     {
         // Extract per-element expected types from tuple expected type
-        IReadOnlyList<TypeInfo>? expectedElementTypes = null;
+        List<TypeInfo>? expectedElementTypes = null;
         if (expectedType is TupleTypeInfo expectedTuple &&
             expectedTuple.ElementTypes.Count == tuple.Elements.Count)
         {
@@ -682,7 +682,7 @@ public sealed partial class SemanticVerifier
     /// Infers type arguments for a generic routine from call arguments.
     /// Returns the inferred type arguments, or null if inference fails.
     /// </summary>
-    private TypeInfo[]? InferGenericTypeArguments(RoutineInfo genericRoutine,
+    private List<TypeInfo>? InferGenericTypeArguments(RoutineInfo genericRoutine,
         List<Expression> arguments)
     {
         if (genericRoutine.GenericParameters == null ||
@@ -731,13 +731,13 @@ public sealed partial class SemanticVerifier
             }
         }
 
-        return typeArgs!;
+        return typeArgs.ToList()!;
     }
 
     /// <summary>
     /// Infers method-level generic type arguments for an already owner-resolved method.
     /// </summary>
-    private TypeInfo[]? InferMethodGenericTypeArguments(RoutineInfo genericMethod,
+    private List<TypeInfo>? InferMethodGenericTypeArguments(RoutineInfo genericMethod,
         List<Expression> arguments)
     {
         if (genericMethod.GenericParameters == null ||
@@ -773,11 +773,11 @@ public sealed partial class SemanticVerifier
             }
         }
 
-        return inferred!;
+        return inferred.ToList()!;
     }
 
     private static void InferMethodTypeArgumentsFromTypes(TypeSymbol paramType, TypeSymbol argType,
-        IReadOnlyList<string> genericParameters, TypeSymbol?[] inferred)
+        List<string> genericParameters, TypeSymbol?[] inferred)
     {
         if (paramType is GenericParameterTypeInfo)
         {

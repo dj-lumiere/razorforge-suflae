@@ -36,7 +36,7 @@ public sealed class BackendEntryValidator
     /// <summary>
     /// Validates a full program and returns any residual-node errors.
     /// </summary>
-    public IReadOnlyList<SemanticError> ValidateProgram(Program program)
+    public List<SemanticError> ValidateProgram(Program program)
     {
         return ValidateNode(node: program, registry: _registry);
     }
@@ -44,7 +44,7 @@ public sealed class BackendEntryValidator
     /// <summary>
     /// Validates a synthesized statement body and returns any residual-node errors.
     /// </summary>
-    public IReadOnlyList<SemanticError> ValidateStatement(Statement statement)
+    public List<SemanticError> ValidateStatement(Statement statement)
     {
         return ValidateNode(node: statement, registry: _registry);
     }
@@ -52,7 +52,7 @@ public sealed class BackendEntryValidator
     /// <summary>
     /// Validates a concrete monomorphized body before backend entry.
     /// </summary>
-    public static IReadOnlyList<SemanticError> ValidateMonomorphizedBody(MonomorphizedBody body)
+    public static List<SemanticError> ValidateMonomorphizedBody(MonomorphizedBody body)
     {
         var errors = new List<SemanticError>();
 

@@ -123,7 +123,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         // Fixed-point expansion: drain types created during body rewriting
         // (e.g. ListEmitter[Byte] registered when GenericAstRewriter rewrites List[Byte].$iter).
         // The self-nesting guard in GetOrCreateResolution prevents Hijacked^N infinite chains.
-        IReadOnlyList<TypeInfo> discovered;
+        List<TypeInfo> discovered;
         bool madeProgress;
         do
         {
@@ -191,7 +191,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         if (genDef?.GenericParameters == null || genDef.GenericParameters.Count == 0)
             return;
 
-        IReadOnlyList<TypeInfo>? typeArgs = concreteType.TypeArguments;
+        List<TypeInfo>? typeArgs = concreteType.TypeArguments;
         if (typeArgs == null || typeArgs.Count != genDef.GenericParameters.Count)
             return;
 
@@ -1370,7 +1370,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// against the corresponding call-site argument ResolvedTypes.
     /// </summary>
     private static TypeInfo?[] InferMethodTypeArgsFromCall(
-        RoutineInfo method, IReadOnlyList<string> genParams, CallExpression call) // NOSONAR S3776
+        RoutineInfo method, List<string> genParams, CallExpression call) // NOSONAR S3776
     {
         var result = new TypeInfo?[genParams.Count];
 

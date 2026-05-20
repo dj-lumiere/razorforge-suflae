@@ -24,7 +24,7 @@ public sealed class TypeParameterPlaceholder : TypeInfo
 
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">Always thrown as type parameters cannot be resolved.</exception>
-    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(List<TypeInfo> typeArguments)
     {
         throw new InvalidOperationException(
             message: $"Type parameter '{Name}' cannot be resolved.");

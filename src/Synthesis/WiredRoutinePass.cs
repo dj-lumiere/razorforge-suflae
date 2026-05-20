@@ -556,7 +556,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Zero-field types: <c>return true</c>.
     /// </summary>
     private static ReturnStatement BuildEqBody(TypeInfo ownerType,
-        IReadOnlyList<MemberVariableInfo> fields, TypeInfo boolType)
+        List<MemberVariableInfo> fields, TypeInfo boolType)
     {
         if (fields.Count == 0)
         {
@@ -628,7 +628,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Zero-field types: <c>return 0_u64</c>.
     /// </summary>
     private ReturnStatement BuildHashBody(TypeInfo ownerType,
-        IReadOnlyList<MemberVariableInfo> fields, TypeInfo u64Type)
+        List<MemberVariableInfo> fields, TypeInfo u64Type)
     {
         if (fields.Count == 0)
         {
@@ -731,7 +731,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Builds the body: <c>return [Member1, Member2, ...]</c> as a list literal.
     /// Used for <c>all_cases()</c> on choice and flags types.
     /// </summary>
-    private static ReturnStatement BuildAllCasesBody(IReadOnlyList<string> memberNames,
+    private static ReturnStatement BuildAllCasesBody(List<string> memberNames,
         TypeInfo elementType, TypeInfo listType)
     {
         var elements = memberNames
@@ -883,7 +883,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Zero-field types: <c>return 0_u64</c>.
     /// </summary>
     private ReturnStatement BuildSecureHashBody(TypeInfo ownerType,
-        IReadOnlyList<MemberVariableInfo> fields, TypeInfo u64Type)
+        List<MemberVariableInfo> fields, TypeInfo u64Type)
     {
         if (fields.Count == 0)
             return new ReturnStatement(
@@ -981,7 +981,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Zero-field types: <c>return 0_s32</c>.
     /// </summary>
     private static Statement BuildCmpBody(TypeInfo ownerType,
-        IReadOnlyList<MemberVariableInfo> fields, TypeInfo s32Type, TypeInfo boolType)
+        List<MemberVariableInfo> fields, TypeInfo s32Type, TypeInfo boolType)
     {
         var zeroS32 = new LiteralExpression(
             Value: 0L,
@@ -1081,7 +1081,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// </summary>
     private static ReturnStatement BuildTextBody(
         TypeInfo ownerType,
-        IReadOnlyList<MemberVariableInfo> fields,
+        List<MemberVariableInfo> fields,
         TypeInfo textType,
         bool diagnose)
     {
@@ -1771,7 +1771,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
             case "member_type_id" when u64Type != null && boolType != null:
             {
-                IReadOnlyList<MemberVariableInfo>? fields = owner switch
+                List<MemberVariableInfo>? fields = owner switch
                 {
                     RecordTypeInfo r => r.MemberVariables,
                     EntityTypeInfo e => e.MemberVariables,
@@ -2033,7 +2033,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Builds a <c>return [elem0, elem1, ...]</c> statement using a
     /// <see cref="ListLiteralExpression"/> with the given Text string values.
     /// </summary>
-    private static ReturnStatement MakeListReturn(IReadOnlyList<string> values,
+    private static ReturnStatement MakeListReturn(List<string> values,
         TypeInfo textType, TypeInfo listTextType)
     {
         var elements = values

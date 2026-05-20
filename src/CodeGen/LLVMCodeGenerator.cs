@@ -64,11 +64,11 @@ public partial class LlvmCodeGenerator
     ];
 
     /// <summary>The user program ASTs to generate code for (single-file or multi-file).</summary>
-    private readonly IReadOnlyList<(Program Program, string FilePath, string Module)>
+    private readonly List<(Program Program, string FilePath, string Module)>
         _userPrograms;
 
     /// <summary>The stdlib programs to include routine bodies from.</summary>
-    private readonly IReadOnlyList<(Program Program, string FilePath, string Module)>
+    private readonly List<(Program Program, string FilePath, string Module)>
         _stdlibPrograms;
 
     /// <summary>
@@ -181,7 +181,7 @@ public partial class LlvmCodeGenerator
     private record RuntimeDispatchInfo(
         string MemberRoutineName,
         string ReturnType,
-        IReadOnlyList<TypeInfo> KnownImplementers);
+        List<TypeInfo> KnownImplementers);
 
     /// <summary>
     /// Maps local variable names that were bound via "when is Protocol x" pattern matching
@@ -232,7 +232,7 @@ public partial class LlvmCodeGenerator
     /// <param name="liveRoutineKeys">Reachable routine keys from RoutineReachabilityPass; empty disables filtering.</param>
     /// <param name="liveOwnerTypeNames">Live owner type full-names from RoutineReachabilityPass; empty disables filtering.</param>
     public LlvmCodeGenerator(Program program, TypeRegistry registry,
-        IReadOnlyList<(Program Program, string FilePath, string Module)>? stdlibPrograms = null,
+        List<(Program Program, string FilePath, string Module)>? stdlibPrograms = null,
         TargetConfig? target = null, RfBuildMode buildMode = RfBuildMode.Debug,
         IReadOnlyDictionary<string, Statement>? synthesizedBodies = null,
         IReadOnlyDictionary<string, MonomorphizedBody>? instantiatedGenericBodies = null,
@@ -267,9 +267,9 @@ public partial class LlvmCodeGenerator
     /// <param name="liveRoutineKeys">Reachable routine keys from RoutineReachabilityPass; empty disables filtering.</param>
     /// <param name="liveOwnerTypeNames">Live owner type full-names from RoutineReachabilityPass; empty disables filtering.</param>
     public LlvmCodeGenerator(
-        IReadOnlyList<(Program Program, string FilePath, string Module)> userPrograms,
+        List<(Program Program, string FilePath, string Module)> userPrograms,
         TypeRegistry registry,
-        IReadOnlyList<(Program Program, string FilePath, string Module)>? stdlibPrograms = null,
+        List<(Program Program, string FilePath, string Module)>? stdlibPrograms = null,
         TargetConfig? target = null, RfBuildMode buildMode = RfBuildMode.Debug,
         IReadOnlyDictionary<string, Statement>? synthesizedBodies = null,
         IReadOnlyDictionary<string, MonomorphizedBody>? instantiatedGenericBodies = null,

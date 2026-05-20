@@ -15,10 +15,10 @@ public sealed class ProtocolTypeInfo : TypeInfo
     public override TypeCategory Category => TypeCategory.Protocol;
 
     /// <summary>Method signatures defined by this protocol.</summary>
-    public IReadOnlyList<ProtocolMethodInfo> Methods { get; set; } = [];
+    public List<ProtocolMethodInfo> Methods { get; set; } = [];
 
     /// <summary>Parent protocols that this protocol extends.</summary>
-    public IReadOnlyList<ProtocolTypeInfo> ParentProtocols { get; init; } = [];
+    public List<ProtocolTypeInfo> ParentProtocols { get; init; } = [];
 
     /// <summary>
     /// For generic definitions, the original generic type this was resolved from.
@@ -36,7 +36,7 @@ public sealed class ProtocolTypeInfo : TypeInfo
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">Thrown if this is not a generic definition.</exception>
     /// <exception cref="ArgumentException">Thrown if the number of type arguments doesn't match.</exception>
-    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(List<TypeInfo> typeArguments)
     {
         if (!IsGenericDefinition)
         {

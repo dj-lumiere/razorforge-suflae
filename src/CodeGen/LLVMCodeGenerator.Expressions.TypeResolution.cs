@@ -288,7 +288,7 @@ public partial class LlvmCodeGenerator
         }
 
         // Find the member variable
-        IReadOnlyList<MemberVariableInfo>? memberVars = objType switch
+        List<MemberVariableInfo>? memberVars = objType switch
         {
             EntityTypeInfo e => e.MemberVariables,
             RecordTypeInfo r => r.MemberVariables,
@@ -542,7 +542,7 @@ public partial class LlvmCodeGenerator
                 resolvedElems.Add(item: resolved);
             }
 
-            if (anyChanged) return new TupleTypeInfo(elementTypes: resolvedElems.AsReadOnly());
+            if (anyChanged) return new TupleTypeInfo(elementTypes: resolvedElems.ToList());
         }
 
         return type;
@@ -719,7 +719,7 @@ public partial class LlvmCodeGenerator
         }
 
         TypeInfo returnType = getItem.ReturnType;
-        IReadOnlyList<string>? ownerGenericParams = null;
+        List<string>? ownerGenericParams = null;
         if (lookupType.TypeArguments is { Count: > 0 })
         {
             TypeInfo? lookupGenericDef = lookupType switch

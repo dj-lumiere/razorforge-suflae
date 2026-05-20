@@ -32,8 +32,8 @@ namespace Verification.Results;
 /// GMP gates monomorphization on membership so unreachable generic instances are skipped.</param>
 public sealed record AnalysisResult(
     TypeRegistry Registry,
-    IReadOnlyList<SemanticError> Errors,
-    IReadOnlyList<SemanticWarning> Warnings,
+    List<SemanticError> Errors,
+    List<SemanticWarning> Warnings,
     IReadOnlyDictionary<SourceLocation, ParsedLiteral> ParsedLiterals,
     IReadOnlyDictionary<string, Statement> SynthesizedBodies,
     IReadOnlyDictionary<string, MonomorphizedBody> InstantiatedGenericBodies,

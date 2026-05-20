@@ -21,10 +21,10 @@ public class RecordTypeInfo : TypeInfo
     public override TypeCategory Category => TypeCategory.Record;
 
     /// <summary>MemberVariables declared in this record.</summary>
-    public IReadOnlyList<MemberVariableInfo> MemberVariables { get; set; } = [];
+    public List<MemberVariableInfo> MemberVariables { get; set; } = [];
 
     /// <summary>Protocols this record implements (obeys).</summary>
-    public IReadOnlyList<TypeInfo> ImplementedProtocols { get; set; } = [];
+    public List<TypeInfo> ImplementedProtocols { get; set; } = [];
 
     /// <summary>
     /// Backend type from @llvm("type") annotation. Null if not a backend-annotated type.
@@ -98,7 +98,7 @@ public class RecordTypeInfo : TypeInfo
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">Thrown if this is not a generic definition.</exception>
     /// <exception cref="ArgumentException">Thrown if the number of type arguments doesn't match.</exception>
-    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(List<TypeInfo> typeArguments)
     {
         if (!IsGenericDefinition)
         {
@@ -134,7 +134,7 @@ public class RecordTypeInfo : TypeInfo
             values: typeArguments.Select(selector: t => t.FullName))}]";
 
         var substitutedProtocols = ImplementedProtocols
-            .Select(selector: p => (ProtocolTypeInfo)SubstituteType(type: p, substitution: substitution))
+            .Select(selector: p => (TypeInfo)(ProtocolTypeInfo)SubstituteType(type: p, substitution: substitution))
             .ToList();
 
         return new RecordTypeInfo(name: resolvedName)
@@ -161,7 +161,7 @@ public class RecordTypeInfo : TypeInfo
     /// Returns the template unchanged if it contains no holes.
     /// </summary>
     private static string? ResolveBackendTypeTemplate(string? template,
-        IReadOnlyList<string>? genericParams, IReadOnlyList<TypeInfo> typeArguments)
+        List<string>? genericParams, List<TypeInfo> typeArguments)
     {
         if (template == null || genericParams == null || !template.Contains(value: '{'))
         {

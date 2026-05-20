@@ -16,10 +16,10 @@ public sealed class FlagsTypeInfo : RecordTypeInfo
     public override TypeCategory Category => TypeCategory.Flags;
 
     /// <summary>The members of this flags type.</summary>
-    public IReadOnlyList<FlagsMemberInfo> Members { get; init; } = [];
+    public List<FlagsMemberInfo> Members { get; init; } = [];
 
     /// <summary>Protocols this flags type implements (obeys).</summary>
-    public new IReadOnlyList<TypeInfo> ImplementedProtocols
+    public new List<TypeInfo> ImplementedProtocols
     {
         get => base.ImplementedProtocols;
         init => base.ImplementedProtocols = value;
@@ -33,7 +33,7 @@ public sealed class FlagsTypeInfo : RecordTypeInfo
 
  
     /// <inheritdoc/>
-    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(List<TypeInfo> typeArguments)
     {
         throw new InvalidOperationException(
             message: $"Flags type '{Name}' cannot be resolved with type arguments.");

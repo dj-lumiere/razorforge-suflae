@@ -12,7 +12,7 @@ public sealed class ErrorHandlingResult
     public static readonly ErrorHandlingResult Empty = new() { Variants = [] };
 
     /// <summary>The generated variants.</summary>
-    public IReadOnlyList<GeneratedVariant> Variants { get; init; } = [];
+    public List<GeneratedVariant> Variants { get; init; } = [];
 
     /// <summary>Error message if generation failed.</summary>
     public string? Error { get; init; }
@@ -27,7 +27,7 @@ public sealed class ErrorHandlingResult
     /// Concrete crashable types directly thrown by this routine (from <c>throw</c> statements).
     /// Populated from <see cref="ErrorHandlingAnalysis.ThrownTypes"/>.
     /// </summary>
-    public IReadOnlyList<TypeInfo> ThrownTypes { get; init; } = [];
+    public List<TypeInfo> ThrownTypes { get; init; } = [];
 
     /// <summary>Whether generation was successful.</summary>
     public bool Success => Error == null;

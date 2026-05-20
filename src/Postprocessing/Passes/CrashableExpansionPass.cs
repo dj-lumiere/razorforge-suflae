@@ -78,7 +78,7 @@ internal sealed class CrashableExpansionPass(PostprocessingContext ctx)
     }
 
     private void ExpandMemberList(List<SyntaxTree.Declaration> members,
-        IReadOnlyList<CrashableTypeInfo> crashableTypes)
+        List<CrashableTypeInfo> crashableTypes)
     {
         for (int j = 0; j < members.Count; j++)
         {
@@ -91,7 +91,7 @@ internal sealed class CrashableExpansionPass(PostprocessingContext ctx)
 
     // ?�?�?� Statement walker ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
 
-    private Statement ExpandStatement(Statement stmt, IReadOnlyList<CrashableTypeInfo> crashableTypes)
+    private Statement ExpandStatement(Statement stmt, List<CrashableTypeInfo> crashableTypes)
     {
         switch (stmt)
         {
@@ -176,7 +176,7 @@ internal sealed class CrashableExpansionPass(PostprocessingContext ctx)
     // ?�?�?� WhenStatement expansion ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
 
     private Statement ExpandWhen(WhenStatement when,
-        IReadOnlyList<CrashableTypeInfo> crashableTypes)
+        List<CrashableTypeInfo> crashableTypes)
     {
         // Only expand carrier-type subjects (Result/Lookup).
         // Subject-less when (Expression == null) is never a carrier -> just recurse.
@@ -234,7 +234,7 @@ internal sealed class CrashableExpansionPass(PostprocessingContext ctx)
 
     /// <summary>Recurses into clause bodies without changing the clauses themselves.</summary>
     private WhenStatement RecurseIntoClauses(WhenStatement when,
-        IReadOnlyList<CrashableTypeInfo> crashableTypes)
+        List<CrashableTypeInfo> crashableTypes)
     {
         bool changed = false;
         var clauses = new List<WhenClause>(capacity: when.Clauses.Count);

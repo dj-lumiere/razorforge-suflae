@@ -70,8 +70,8 @@ public sealed class CallGraphNode
     }
 
     /// <summary>Gets all callees (routines called by this routine).</summary>
-    public IReadOnlyList<CallEdge> Callees => _callees;
+    public List<CallEdge> Callees => _callees;
 
     /// <summary>Gets all callers (routines that call this routine).</summary>
-    public IReadOnlyList<CallGraphNode> Callers => _callers;
+    public List<CallGraphNode> Callers => _callers;
 }

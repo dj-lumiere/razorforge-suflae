@@ -218,7 +218,7 @@ internal static class GenericAstRewriter
         }
 
         public RoutineInfo? ResolveRoutine(RoutineInfo? original, TypeInfo? expressionType = null,
-            IReadOnlyList<TypeInfo>? callArgTypes = null)
+            List<TypeInfo>? callArgTypes = null)
         {
             if (original == null || Registry == null)
                 return null;
@@ -232,7 +232,7 @@ internal static class GenericAstRewriter
             // Prefer concrete call-site arg types for method-generic inference — routine's own
             // Parameters still carry generic param refs (e.g., I) that ResolveTypeForLookup
             // can't concretize since they're method-level, not owner-level.
-            IReadOnlyList<TypeInfo> methodInferArgTypes = callArgTypes is { Count: > 0 }
+            List<TypeInfo> methodInferArgTypes = callArgTypes is { Count: > 0 }
                 ? callArgTypes
                 : resolvedParamTypes;
 
@@ -319,7 +319,7 @@ internal static class GenericAstRewriter
         // Mirrors OperatorLoweringPass.ResolveMethodGenericRoutine: infer method-level
         // generic arguments from call-site param types, then GetOrCreateRoutineResolution.
         private RoutineInfo? TryResolveMethodGeneric(RoutineInfo routine,
-            IReadOnlyList<TypeInfo> argTypes)
+            List<TypeInfo> argTypes)
         {
             if (Registry == null || !routine.IsGenericDefinition ||
                 routine.GenericParameters == null)
@@ -347,7 +347,7 @@ internal static class GenericAstRewriter
         }
 
         private static void InferMethodParam(TypeInfo? paramType, TypeInfo argType,
-            IReadOnlyList<string> genericParams, TypeInfo?[] inferred) // NOSONAR S3776
+            List<string> genericParams, TypeInfo?[] inferred) // NOSONAR S3776
         {
             if (paramType == null) return;
             if (paramType is GenericParameterTypeInfo gp)
@@ -414,7 +414,7 @@ internal static class GenericAstRewriter
         }
 
         private RoutineInfo? ResolveMethodOnConcreteOwner(TypeInfo ownerType, string methodName,
-            IReadOnlyList<TypeInfo> argTypes, bool isFailable)
+            List<TypeInfo> argTypes, bool isFailable)
         {
             string lookupMethodName = NormalizeMethodLookupName(methodName: methodName);
             RoutineInfo? overload = Registry!.LookupMethodOverload(type: ownerType,
@@ -441,7 +441,7 @@ internal static class GenericAstRewriter
         }
 
         public RoutineInfo? ResolveCallRoutine(CallExpression call, TypeInfo? expressionType,
-            IReadOnlyList<TypeInfo> callArgTypes)
+            List<TypeInfo> callArgTypes)
         {
             if (Registry == null)
             {
@@ -461,7 +461,7 @@ internal static class GenericAstRewriter
         }
 
         private RoutineInfo? ResolveMemberCallRoutine(MemberExpression member,
-            IReadOnlyList<TypeInfo> callArgTypes)
+            List<TypeInfo> callArgTypes)
         {
             TypeInfo? receiverType = ResolveTypeForLookup(member.Object.ResolvedType);
             if (receiverType == null)
@@ -480,7 +480,7 @@ internal static class GenericAstRewriter
 
         private RoutineInfo? ResolveFreeCallRoutine(CallExpression call,
             IdentifierExpression identifier,
-            TypeInfo? expressionType, IReadOnlyList<TypeInfo> callArgTypes)
+            TypeInfo? expressionType, List<TypeInfo> callArgTypes)
         {
             string callName = identifier.Name.EndsWith(value: '!')
                 ? identifier.Name[..^1]

@@ -144,7 +144,7 @@ public sealed class RoutineInfo
     public TypeSymbol? OwnerType { get; init; }
 
     /// <summary>Parameters of this routine.</summary>
-    public IReadOnlyList<ParameterInfo> Parameters { get; init; } = [];
+    public List<ParameterInfo> Parameters { get; init; } = [];
 
     /// <summary>Return type. Null means "not yet inferred" (transient during analysis). After body analysis, always Blank or a concrete type.</summary>
     public TypeSymbol? ReturnType { get; set; }
@@ -166,7 +166,7 @@ public sealed class RoutineInfo
     /// <c>check_</c>/<c>lookup_</c> variant). Populated after Phase 5 body analysis.
     /// Does not include types thrown by called routines (propagated throws).
     /// </summary>
-    public IReadOnlyList<TypeSymbol> ThrowableTypes { get; set; } = [];
+    public List<TypeSymbol> ThrowableTypes { get; set; } = [];
 
     /// <summary>The declared modification category for this routine (from source annotation).</summary>
     public ModificationCategory DeclaredModification { get; init; } =
@@ -180,16 +180,16 @@ public sealed class RoutineInfo
         ModificationCategory.Migratable;
 
     /// <summary>Generic type parameters, if any.</summary>
-    public IReadOnlyList<string>? GenericParameters { get; init; }
+    public List<string>? GenericParameters { get; init; }
 
     /// <summary>Generic constraints on type parameters.</summary>
-    public IReadOnlyList<GenericConstraintDeclaration>? GenericConstraints { get; init; }
+    public List<GenericConstraintDeclaration>? GenericConstraints { get; init; }
 
     /// <summary>Whether this is a generic routine definition.</summary>
     public bool IsGenericDefinition => GenericParameters is { Count: > 0 };
 
     /// <summary>For resolved generics, the type arguments used.</summary>
-    public IReadOnlyList<TypeSymbol>? TypeArguments { get; init; }
+    public List<TypeSymbol>? TypeArguments { get; init; }
 
     /// <summary>Visibility modifier.</summary>
     public VisibilityModifier Visibility { get; init; } = VisibilityModifier.Open;
@@ -201,10 +201,10 @@ public sealed class RoutineInfo
     public string? Module { get; init; }
 
     /// <summary>Module path segments (e.g., ["Core", "Memory", "Wrapper"]).</summary>
-    public IReadOnlyList<string>? ModulePath { get; init; }
+    public List<string>? ModulePath { get; init; }
 
     /// <summary>Annotations on this routine (e.g., @readonly, @inline).</summary>
-    public IReadOnlyList<string> Annotations { get; init; } = [];
+    public List<string> Annotations { get; init; } = [];
 
     /// <summary>Whether this routine is marked @readonly (can be called through Viewed/Inspected).</summary>
     public bool IsReadOnly =>
@@ -321,7 +321,7 @@ public sealed class RoutineInfo
     /// <returns>A new <see cref="RoutineInfo"/> with types substituted.</returns>
     /// <exception cref="InvalidOperationException">Thrown if this is not a generic definition.</exception>
     /// <exception cref="ArgumentException">Thrown if the number of type arguments doesn't match.</exception>
-    public RoutineInfo CreateInstance(IReadOnlyList<TypeSymbol> typeArguments)
+    public RoutineInfo CreateInstance(List<TypeSymbol> typeArguments)
     {
         if (!IsGenericDefinition)
         {

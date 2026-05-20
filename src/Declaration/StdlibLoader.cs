@@ -42,11 +42,11 @@ public sealed partial class StdlibLoader
         new(comparer: StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Gets the parsed Core module programs.</summary>
-    public IReadOnlyList<(Program Program, string FilePath, string Module)> ParsedPrograms =>
+    public List<(Program Program, string FilePath, string Module)> ParsedPrograms =>
         _corePrograms;
 
     /// <summary>Gets all parsed programs (core + loaded modules) for codegen.</summary>
-    public IReadOnlyList<(Program Program, string FilePath, string Module)> AllLoadedPrograms
+    public List<(Program Program, string FilePath, string Module)> AllLoadedPrograms
     {
         get
         {
@@ -515,7 +515,7 @@ public sealed partial class StdlibLoader
     /// Must run after all protocols are registered (pass 1a) so parent lookups succeed.
     /// </summary>
     private static TypeInfo? ResolveSimpleType(TypeRegistry registry, TypeExpression? typeExpr,
-        IReadOnlyList<string>? genericParams = null, string? moduleName = null)
+        List<string>? genericParams = null, string? moduleName = null)
     {
         if (typeExpr == null)
         {

@@ -18,10 +18,10 @@ public sealed class CrashableTypeInfo : TypeInfo
     public override TypeCategory Category => TypeCategory.Crashable;
 
     /// <summary>Member variables declared in this crashable type.</summary>
-    public IReadOnlyList<MemberVariableInfo> MemberVariables { get; set; } = [];
+    public List<MemberVariableInfo> MemberVariables { get; set; } = [];
 
     /// <summary>Protocols this crashable type implements (always includes Crashable).</summary>
-    public IReadOnlyList<TypeInfo> ImplementedProtocols { get; set; } = [];
+    public List<TypeInfo> ImplementedProtocols { get; set; } = [];
 
     /// <summary>
     /// The synthesized crash title (sentence-cased type name, e.g. "Network error" for NetworkError).
@@ -46,7 +46,7 @@ public sealed class CrashableTypeInfo : TypeInfo
     }
 
     /// <inheritdoc/>
-    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(List<TypeInfo> typeArguments)
     {
         throw new InvalidOperationException(
             message: $"Crashable type '{Name}' cannot be resolved with type arguments.");

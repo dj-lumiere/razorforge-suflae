@@ -727,9 +727,9 @@ _ => GrammarDiagnosticCode.UnexpectedToken
     /// <summary>
     /// Get all warnings collected during parsing
     /// </summary>
-    public IReadOnlyList<BuildWarning> GetWarnings()
+    public List<BuildWarning> GetWarnings()
     {
-        return _warnings.AsReadOnly();
+        return _warnings.ToList();
     }
 
     /// <summary>

@@ -16,7 +16,7 @@ public sealed class TupleTypeInfo : RecordTypeInfo
     /// <summary>
     /// The element types in order (item0, item1, ..., itemN).
     /// </summary>
-    public IReadOnlyList<TypeInfo> ElementTypes { get; }
+    public List<TypeInfo> ElementTypes { get; }
 
     /// <summary>
     /// <c>true</c> when all elements are record-like (records, choices, flags, variants,
@@ -37,7 +37,7 @@ public sealed class TupleTypeInfo : RecordTypeInfo
     };
 
     /// <summary>Creates a tuple type whose element types are the supplied list.</summary>
-    public TupleTypeInfo(IReadOnlyList<TypeInfo> elementTypes) : base(
+    public TupleTypeInfo(List<TypeInfo> elementTypes) : base(
         name: BuildName(elementTypes: elementTypes))
     {
         ElementTypes = elementTypes;
@@ -57,7 +57,7 @@ public sealed class TupleTypeInfo : RecordTypeInfo
         TypeArguments = elementTypes;
     }
 
-    internal static string BuildName(IReadOnlyList<TypeInfo> elementTypes)
+    internal static string BuildName(List<TypeInfo> elementTypes)
     {
         string args = string.Join(separator: ", ",
             values: elementTypes.Select(selector: t => t.Name));
@@ -66,7 +66,7 @@ public sealed class TupleTypeInfo : RecordTypeInfo
 
  
     /// <inheritdoc/>
-    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(List<TypeInfo> typeArguments)
     {
         throw new InvalidOperationException(
             "Tuple types cannot be further resolved. Create a new TupleTypeInfo instead.");

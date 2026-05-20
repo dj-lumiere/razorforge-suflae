@@ -27,7 +27,7 @@ public sealed class ProtocolSelfTypeInfo : TypeInfo
     }
 
     /// <inheritdoc/>
-    public override TypeInfo CreateInstance(IReadOnlyList<TypeInfo> typeArguments)
+    public override TypeInfo CreateInstance(List<TypeInfo> typeArguments)
     {
         throw new InvalidOperationException(
             message:
