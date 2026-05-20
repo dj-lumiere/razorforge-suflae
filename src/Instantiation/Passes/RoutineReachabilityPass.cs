@@ -469,6 +469,54 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// name and doesn't disambiguate when a type has multiple overloads with the same name but
     /// different parameter shapes (e.g. <c>get_by_rank!(U64)</c> vs <c>get_by_rank(node, rank)</c>).
     /// </summary>
+    private RoutineInfo? LookupMethodMatchingParamTypes(TypeInfo owner, string methodName,
+        RoutineInfo inputRoutine, Dictionary<string, TypeInfo> typeSubs)
+    {
+        int paramCount = inputRoutine.Parameters.Count;
+        bool isFailable = inputRoutine.IsFailable;
+        var inputSigs = new string[paramCount];
+        for (int i = 0; i < paramCount; i++)
+        {
+            TypeInfo? pt = inputRoutine.Parameters[index: i].Type;
+            if (pt == null) return null;
+            TypeInfo subbed = RoutineInfo.SubstituteType(type: pt, substitution: typeSubs);
+            inputSigs[i] = subbed.FullName ?? subbed.Name;
+        }
+
+        bool Matches(RoutineInfo m)
+        {
+            if (m.Name != methodName) return false;
+            if (m.Parameters.Count != paramCount) return false;
+            if (m.IsFailable != isFailable) return false;
+            for (int i = 0; i < paramCount; i++)
+            {
+                TypeInfo? pt = m.Parameters[index: i].Type;
+                if (pt == null) return false;
+                TypeInfo subbed = RoutineInfo.SubstituteType(type: pt, substitution: typeSubs);
+                string sig = subbed.FullName ?? subbed.Name;
+                if (sig != inputSigs[i]) return false;
+            }
+            return true;
+        }
+
+        foreach (RoutineInfo m in ctx.Registry.GetMethodsForType(type: owner))
+            if (Matches(m: m)) return m;
+
+        TypeInfo? genDef = owner switch
+        {
+            EntityTypeInfo { GenericDefinition: { } d } => d,
+            RecordTypeInfo { GenericDefinition: { } d } => d,
+            _ => null
+        };
+        if (genDef != null)
+        {
+            foreach (RoutineInfo m in ctx.Registry.GetMethodsForType(type: genDef))
+                if (Matches(m: m))
+                    return BuildOwnerSubstitutedRoutine(genericMethod: m, concreteOwner: owner, genDef: genDef);
+        }
+        return null;
+    }
+
     private RoutineInfo? LookupMethodMatchingSignature(TypeInfo owner, string methodName,
         int paramCount, bool isFailable)
     {
@@ -1450,9 +1498,12 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                     // vs SortedDict.get_by_rank(BTreeDictNode, U64)). Without this, reach marks
                     // the failable 1-arg version live while codegen call sites need the
                     // non-failable 2-arg version.
-                    RoutineInfo? resolved = LookupMethodMatchingSignature(
+                    RoutineInfo? resolved = LookupMethodMatchingParamTypes(
                         owner: concreteOwner, methodName: routine.Name,
-                        paramCount: routine.Parameters.Count, isFailable: routine.IsFailable)
+                        inputRoutine: routine, typeSubs: typeSubs)
+                        ?? LookupMethodMatchingSignature(
+                            owner: concreteOwner, methodName: routine.Name,
+                            paramCount: routine.Parameters.Count, isFailable: routine.IsFailable)
                         ?? ctx.Registry.LookupMethod(type: concreteOwner, methodName: routine.Name);
                     if (resolved != null) return TransferSubstitutedTypeArguments(input: routine, resolved: resolved, typeSubs: typeSubs);
                     // Fallback: synthesized routine, mark substituted RegistryKey live
@@ -1497,7 +1548,19 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 TypeInfo concreteOwner = ctx.Registry.GetOrCreateResolution(
                     genericDef: owner, typeArguments: concreteArgs);
                 _liveOwnerTypes.Add(item: concreteOwner);
-                RoutineInfo? resolved = ctx.Registry.LookupMethod(type: concreteOwner, methodName: routine.Name);
+                // Disambiguate overloads by parameter signature. LookupMethod's first-match heuristic
+                // picks the wrong overload when multiple share name + count + failability — e.g.
+                // List[T] has five 1-arg non-failable `$create` overloads ($create(capacity: U64),
+                // $create(from: FastSet[T]), etc.). Match on substituted parameter type names so
+                // `List[T].$create#U64` substitutes to `List[S64].$create(capacity: U64)` instead of
+                // dragging FastSet.$iter into the live set.
+                RoutineInfo? resolved = LookupMethodMatchingParamTypes(
+                    owner: concreteOwner, methodName: routine.Name,
+                    inputRoutine: routine, typeSubs: typeSubs)
+                    ?? LookupMethodMatchingSignature(
+                        owner: concreteOwner, methodName: routine.Name,
+                        paramCount: routine.Parameters.Count, isFailable: routine.IsFailable)
+                    ?? ctx.Registry.LookupMethod(type: concreteOwner, methodName: routine.Name);
                 if (resolved != null) return TransferSubstitutedTypeArguments(input: routine, resolved: resolved, typeSubs: typeSubs);
                 // Synthesized routines (try_next, $represent, $diagnose, wrapper forwarders) live
                 // only on the generic-def. Manually mark the substituted RegistryKey live so the
