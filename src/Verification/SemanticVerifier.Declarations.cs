@@ -794,17 +794,6 @@ public sealed partial class SemanticVerifier
                         $"but implementation on '{type.Name}' is @{typeMethod.ModificationCategory.ToString().ToLowerInvariant()}.",
                         location: typeMethod.Location ?? new SourceLocation("", 0, 0, 0));
                 }
-                // Entity + writable protocol method -> impl must be @migratable
-                else if (type.Category == TypeCategory.Entity &&
-                         requiredMethod.Modification != ModificationCategory.Readonly &&
-                         typeMethod.ModificationCategory != ModificationCategory.Migratable)
-                {
-                    ReportError(code: SemanticDiagnosticCode.ProtocolMutationContractViolation,
-                        message:
-                        $"Protocol '{protocol.Name}' requires '{requiredMethod.Name}' to be writable, " +
-                        $"but entity '{type.Name}' implementation must be @migratable.",
-                        location: typeMethod.Location ?? new SourceLocation("", 0, 0, 0));
-                }
             }
         }
 

@@ -16,5 +16,4 @@ protocol Indexable[K, V]
   ### The write semantics are defined by the conforming type.
   ### :param key: The key to resolve.
   ### :param value: The value to use.
-  @writable
   routine Me.$setitem!(key: K, value: V)
