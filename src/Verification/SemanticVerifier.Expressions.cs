@@ -59,7 +59,8 @@ public sealed partial class SemanticVerifier
             UninitExpression uninit => AnalyzeUninitExpression(uninit: uninit,
                 expectedType: expectedType),
             WithExpression with => AnalyzeWithExpression(with: with),
-            NamedArgumentExpression named => AnalyzeExpression(expression: named.Value),
+            NamedArgumentExpression named => AnalyzeExpression(expression: named.Value,
+                expectedType: expectedType),
             DictEntryLiteralExpression dictEntry => AnalyzeDictEntryLiteralExpression(
                 dictEntry: dictEntry,
                 expectedType: expectedType),

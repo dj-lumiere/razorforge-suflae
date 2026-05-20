@@ -940,9 +940,17 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 return changed ? list with { Elements = elems } : expr;
             }
 
+            case LambdaExpression lambda:
+            {
+                Expression loweredBody = LowerExpression(lambda.Body);
+                return ReferenceEquals(loweredBody, lambda.Body)
+                    ? expr
+                    : lambda with { Body = loweredBody };
+            }
+
             default:
                 // LiteralExpression, IdentifierExpression, TypeExpression, RangeExpression,
-                // LambdaExpression, DictLiteralExpression, SetLiteralExpression,
+                // DictLiteralExpression, SetLiteralExpression,
                 // DictEntryLiteralExpression, CarrierPayloadExpression, TypeIdExpression, etc.
                 return expr;
         }

@@ -311,14 +311,27 @@ public sealed partial class SemanticVerifier
                 paramType = elemType;
             }
 
-            if (callObjectType != null &&
-                routine.OwnerType is GenericParameterTypeInfo genParamOwner)
+            if (callObjectType != null)
             {
-                var substitutions = new Dictionary<string, TypeSymbol>
+                if (routine.OwnerType is GenericParameterTypeInfo genParamOwner)
                 {
-                    [key: genParamOwner.Name] = callObjectType
-                };
-                paramType = SubstituteWithMapping(type: paramType, substitutions: substitutions);
+                    var substitutions = new Dictionary<string, TypeSymbol>
+                    {
+                        [key: genParamOwner.Name] = callObjectType
+                    };
+                    paramType = SubstituteWithMapping(type: paramType,
+                        substitutions: substitutions);
+                }
+                else
+                {
+                    // Owner like `List[T]` against receiver `List[S64]` — substitute T → S64
+                    // so that callback parameter types (e.g. `Routine[(T, T), Bool]`) target-type
+                    // lambda parameters correctly.
+                    paramType =
+                        SubstituteOwnerGenerics(paramType: paramType,
+                            lookupType: callObjectType,
+                            ownerType: routine.OwnerType) ?? paramType;
+                }
             }
 
             Expression argExpr = binding.Value;

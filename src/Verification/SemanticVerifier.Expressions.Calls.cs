@@ -693,14 +693,35 @@ public sealed partial class SemanticVerifier
                 if (method != null && !method.IsGenericDefinition && call.Arguments.Count > 0)
                 {
                     var resolvedArgTypes = new List<TypeSymbol>(capacity: call.Arguments.Count);
+                    int posIdx = 0;
                     foreach (Expression arg in call.Arguments)
                     {
                         Expression actualArg = arg is NamedArgumentExpression named ? named.Value : arg;
-                        TypeSymbol argType = AnalyzeExpression(expression: actualArg);
+                        TypeSymbol? expectedParamType = null;
+                        if (arg is NamedArgumentExpression namedArg)
+                        {
+                            ParameterInfo? p = method.Parameters
+                                .FirstOrDefault(predicate: pp => pp.Name == namedArg.Name);
+                            if (p != null) expectedParamType = p.Type;
+                        }
+                        else if (posIdx < method.Parameters.Count)
+                        {
+                            expectedParamType = method.Parameters[index: posIdx].Type;
+                        }
+                        if (expectedParamType != null && dispatchType != null)
+                        {
+                            expectedParamType =
+                                SubstituteOwnerGenerics(paramType: expectedParamType,
+                                    lookupType: dispatchType,
+                                    ownerType: method.OwnerType) ?? expectedParamType;
+                        }
+                        TypeSymbol argType = AnalyzeExpression(expression: actualArg,
+                            expectedType: expectedParamType);
                         if (argType != ErrorTypeInfo.Instance)
                         {
                             resolvedArgTypes.Add(item: argType);
                         }
+                        posIdx++;
                     }
 
                     bool arityMismatch = method.Parameters.Count != resolvedArgTypes.Count;

@@ -153,6 +153,57 @@ public sealed partial class SemanticVerifier
             }
         }
 
+        // Routine types (callback parameters): substitute inside parameter and return types
+        // so `Routine[(T, T), Bool]` becomes `Routine[(S64, S64), Bool]` for target-typing
+        // lambda arguments.
+        if (type is RoutineTypeInfo routineType)
+        {
+            var newParams = new List<TypeInfo>(capacity: routineType.ParameterTypes.Count);
+            bool anyChanged = false;
+            foreach (TypeInfo p in routineType.ParameterTypes)
+            {
+                var substituted = (TypeInfo)SubstituteWithMapping(type: p,
+                    substitutions: substitutions);
+                newParams.Add(item: substituted);
+                if (!ReferenceEquals(objA: substituted, objB: p)) anyChanged = true;
+            }
+            TypeInfo? newReturn = routineType.ReturnType;
+            if (newReturn != null)
+            {
+                var substitutedRet = (TypeInfo)SubstituteWithMapping(type: newReturn,
+                    substitutions: substitutions);
+                if (!ReferenceEquals(objA: substitutedRet, objB: newReturn))
+                {
+                    newReturn = substitutedRet;
+                    anyChanged = true;
+                }
+            }
+            if (anyChanged)
+            {
+                return _registry.GetOrCreateRoutineType(parameterTypes: newParams,
+                    returnType: newReturn,
+                    isFailable: routineType.IsFailable);
+            }
+        }
+
+        // Tuple types: substitute inside element types.
+        if (type is TupleTypeInfo tupleType)
+        {
+            var newElems = new List<TypeInfo>(capacity: tupleType.ElementTypes.Count);
+            bool anyChanged = false;
+            foreach (TypeInfo el in tupleType.ElementTypes)
+            {
+                var substituted = (TypeInfo)SubstituteWithMapping(type: el,
+                    substitutions: substitutions);
+                newElems.Add(item: substituted);
+                if (!ReferenceEquals(objA: substituted, objB: el)) anyChanged = true;
+            }
+            if (anyChanged)
+            {
+                return _registry.GetOrCreateTupleType(elementTypes: newElems);
+            }
+        }
+
         return type;
     }
 
