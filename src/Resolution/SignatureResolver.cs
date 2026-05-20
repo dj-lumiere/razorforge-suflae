@@ -332,7 +332,7 @@ internal sealed class SignatureResolver
         }
 
         // Get the list of implemented protocols for this type
-        IReadOnlyList<TypeSymbol>? implementedProtocols = currentOwnerType switch
+        List<TypeSymbol>? implementedProtocols = currentOwnerType switch
         {
             RecordTypeInfo record => record.ImplementedProtocols,
             EntityTypeInfo entity => entity.ImplementedProtocols,
@@ -392,6 +392,21 @@ internal sealed class SignatureResolver
                     substitution[key: genericDef.GenericParameters[index: i]] =
                         protocol.TypeArguments[index: i].Name;
                 }
+            }
+        }
+
+        // Bare `obeys Indexable` without type args: treat the protocol's generic parameters
+        // as inferred-from-impl. We record the first binding we see for each param and check
+        // subsequent positions for consistency, so $getitem(key: S64)/$setitem(key: S64) is
+        // accepted but $getitem(key: S64)/$setitem(key: Text) is not.
+        List<string>? inferableParams = null;
+        if (substitution == null)
+        {
+            ProtocolTypeInfo genericDef = protocol.GenericDefinition ?? protocol;
+            if (genericDef.GenericParameters is { Count: > 0 })
+            {
+                inferableParams = genericDef.GenericParameters.ToList();
+                substitution = new Dictionary<string, string>();
             }
         }
 
@@ -459,6 +474,12 @@ internal sealed class SignatureResolver
                                           value: out string? substName)
                     ? substName
                     : expectedType.Name;
+                if (inferableParams != null && inferableParams.Contains(item: expectedType.Name) &&
+                    !substitution!.ContainsKey(key: expectedType.Name))
+                {
+                    substitution[key: expectedType.Name] = actualType.Name;
+                    expectedName = actualType.Name;
+                }
                 if (actualType.Name != expectedName)
                 {
                     _sa.ReportError(code: SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
@@ -495,6 +516,12 @@ internal sealed class SignatureResolver
                                                 value: out string? substRetName)
                     ? substRetName
                     : expectedReturn.Name;
+                if (inferableParams != null && inferableParams.Contains(item: expectedReturn.Name) &&
+                    !substitution!.ContainsKey(key: expectedReturn.Name))
+                {
+                    substitution[key: expectedReturn.Name] = actualReturn.Name;
+                    expectedReturnName = actualReturn.Name;
+                }
                 if (actualReturn.Name != expectedReturnName)
                 {
                     _sa.ReportError(code: SemanticDiagnosticCode.ProtocolMethodSignatureMismatch,
@@ -562,7 +589,7 @@ internal sealed class SignatureResolver
         }
 
         // Get the required protocol for this wired method
-        IReadOnlyList<string>? requiredProtocols = SemanticVerifier.GetRequiredProtocols(wiredName: routineInfo.Name);
+        List<string>? requiredProtocols = SemanticVerifier.GetRequiredProtocols(wiredName: routineInfo.Name);
         if (requiredProtocols == null || requiredProtocols.Count == 0)
         {
             return; // Not an operator method or no protocol required
@@ -599,7 +626,7 @@ internal sealed class SignatureResolver
     private bool ExplicitlyFollowsProtocol(TypeSymbol type, string protocolName)
     {
         // Get the list of explicitly declared protocols for this type
-        IReadOnlyList<TypeSymbol>? implementedProtocols = type switch
+        List<TypeSymbol>? implementedProtocols = type switch
         {
             RecordTypeInfo record => record.ImplementedProtocols,
             EntityTypeInfo entity => entity.ImplementedProtocols,
