@@ -715,12 +715,24 @@ public partial class LlvmCodeGenerator
 
         RoutineInfo? setItem = LookupSetItemMethod(index: index);
 
+        // Wrapper-record detection: if the resolved $setitem's value-param type doesn't match
+        // the target's last type-argument, the lookup unwrapped through a wrapper (e.g.
+        // Owned[List[S64]] -> inner List[S64].$setitem!(i64)). The inline mangled-name path
+        // would emit a call to the wrapper's symbol which doesn't exist, so escape to the
+        // standard method-dispatch path that handles wrapper forwarding correctly.
+        bool isWrapperForwardingSetItem =
+            setItem != null &&
+            setItem.Parameters.Count >= 2 &&
+            targetType?.TypeArguments is { Count: 1 } &&
+            setItem.Parameters[^1].Type.FullName != targetType.TypeArguments[^1].FullName;
+
         // Record $setitem!: the receiver must be the alloca pointer so mutations persist in the
         // caller's frame. EmitMemberRoutineCall evaluates the receiver as a loaded value, which would
         // discard writes -> so keep the pointer-based dispatch inline for this case.
         if (setItem != null && targetType is RecordTypeInfo &&
             setItem.Name.Contains(value: "$setitem") &&
             index.Object is IdentifierExpression recId &&
+            !isWrapperForwardingSetItem &&
             (!setItem.IsGenericDefinition || targetType.IsGenericResolution))
         {
             string value = EmitExpression(sb: sb, expr: rhs);
@@ -744,13 +756,19 @@ public partial class LlvmCodeGenerator
                 ? GetLlvmType(type: indexType)
                 : "i64";
             string valueLlvm;
-            if (targetType.TypeArguments is { Count: > 0 })
-            {
-                valueLlvm = GetLlvmType(type: targetType.TypeArguments[^1]);
-            }
-            else if (setItem.Parameters.Count >= 2)
+            // Prefer the resolved $setitem's value param type — that's what the call signature
+            // actually expects. Only fall back to TypeArguments[^1] when the param is still an
+            // unresolved generic parameter (rare; should not happen for IsGenericResolution targets).
+            // Falling through to TypeArguments[^1] is wrong for single-arg wrappers like
+            // Owned[List[S64]], where the last type-arg is List[S64], not the element type S64.
+            if (setItem.Parameters.Count >= 2 &&
+                setItem.Parameters[^1].Type is not GenericParameterTypeInfo)
             {
                 valueLlvm = GetLlvmType(type: setItem.Parameters[^1].Type);
+            }
+            else if (targetType.TypeArguments is { Count: > 0 })
+            {
+                valueLlvm = GetLlvmType(type: targetType.TypeArguments[^1]);
             }
             else
             {

@@ -372,13 +372,17 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 };
             }
 
-            //  SliceExpression -> obj.$getslice(from: a, to: b)
+            //  SliceExpression -> obj.$getslice[!](from: a, to: b)
             case SliceExpression slice:
             {
                 Expression loweredObj = LowerExpression(slice.Object);
                 Expression loweredStart = LowerExpression(slice.Start);
                 Expression loweredEnd = LowerExpression(slice.End);
                 RoutineInfo? resolvedGetSlice = null;
+                // Default to "!" (failable) — all stdlib collections use failable $getslice!.
+                // Mirror the $getitem! lowering path so reachability/codegen can resolve the
+                // correct symbol name when the LookupMethod-by-bare-name path returns null.
+                string slicePropertyName = "$getslice!";
                 TypeInfo? targetType = slice.Object.ResolvedType;
                 if (targetType != null)
                 {
@@ -401,6 +405,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
 
                         resolvedGetSlice = ResolveMethodGenericRoutine(routine: resolvedGetSlice,
                             argTypes: argTypes);
+                        slicePropertyName = resolvedGetSlice.IsFailable ? "$getslice!" : "$getslice";
                     }
                 }
 
@@ -415,7 +420,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     getsliceKind = CallLoweringKind.Unknown;
                 var member = new MemberExpression(
                     Object: loweredObj,
-                    PropertyName: "$getslice",
+                    PropertyName: slicePropertyName,
                     Location: slice.Location);
                 return new CallExpression(
                     Callee: member,
