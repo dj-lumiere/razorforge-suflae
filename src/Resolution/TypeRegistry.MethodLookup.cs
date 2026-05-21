@@ -654,13 +654,21 @@ public sealed partial class TypeRegistry
             foreach (TypeExpression protocolExpr in c.ConstraintTypes)
             {
                 TypeInfo? proto = LookupType(name: protocolExpr.Name);
-                if (proto is not ProtocolTypeInfo)
+                if (proto is not ProtocolTypeInfo protoInfo)
                     continue;
-                RoutineInfo? method = LookupMethod(type: proto,
-                    methodName: methodName,
-                    isFailable: isFailable);
-                if (method != null)
-                    return method;
+                // Synthesize directly with the generic parameter as ownerType so that
+                // Me-self-type slots in the protocol signature substitute to `param`
+                // (e.g. `T`), not to the protocol itself. Going through LookupMethod
+                // would bind Me to the protocol type, yielding signatures like
+                // `combine(you: Combinable) -> Combinable` instead of `-> T`.
+                ProtocolMethodInfo? protoMethod =
+                    protoInfo.Methods.FirstOrDefault(predicate: m =>
+                        m.Name == methodName &&
+                        (isFailable == null || m.IsFailable == isFailable));
+                if (protoMethod != null)
+                    return SynthesizeProtocolMethod(proto: protoInfo,
+                        protoMethod: protoMethod,
+                        ownerType: param);
             }
         }
 
