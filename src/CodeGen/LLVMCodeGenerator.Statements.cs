@@ -753,11 +753,7 @@ public partial class LlvmCodeGenerator
             string indexValue = EmitExpression(sb: sb, expr: index.Index);
             TypeInfo? indexType = GetExpressionType(expr: index.Index);
 
-            string mangledName = targetType.IsGenericResolution
-                ? Q(name: DecorateRoutineSymbolName(
-                    baseName: $"{targetType.FullName}.{SanitizeLlvmName(name: setItem.Name)}",
-                    isFailable: setItem.IsFailable))
-                : MangleRoutineName(routine: setItem);
+            string mangledName = MangleRoutineName(routine: setItem);
 
             GenerateRoutineDeclaration(routine: setItem);
 
