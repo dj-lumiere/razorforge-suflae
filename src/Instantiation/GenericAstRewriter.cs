@@ -977,6 +977,18 @@ internal static class GenericAstRewriter
                         (expr is CreatorExpression originalCreator
                             ? originalCreator.ConstructedType
                             : null);
+                    if (creator.ResolvedCreatorRoutine != null)
+                    {
+                        // Rewriting `List[T](capacity: …)` → `List[S64](capacity: …)` updates
+                        // TypeArguments/ConstructedType above, but `ResolvedCreatorRoutine`
+                        // still points at the generic-def `List[T].$create`. Codegen reads
+                        // `creatorRoutine.FullName` directly, so without this resolve the
+                        // emitted call references the unsubstituted symbol and links fail.
+                        creator.ResolvedCreatorRoutine = ctx.ResolveRoutine(
+                            original: creator.ResolvedCreatorRoutine,
+                            expressionType: creator.ConstructedType)
+                            ?? creator.ResolvedCreatorRoutine;
+                    }
                     break;
 
                 case TypeConversionExpression conversion:

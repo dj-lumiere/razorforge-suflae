@@ -376,11 +376,23 @@ public partial class LlvmCodeGenerator
                 _localVariables[key: "me"] = routine.OwnerType;
             }
         }
+        // Entity $create that references `me`: allocate the entity at routine entry, bind
+        // `me` to the fresh pointer, and let the body mutate via `me.field = …` / `return me`.
+        // Canonical `return Type(field: …)` $create routines that never touch `me` skip this.
+        else if (routine.OwnerType is EntityTypeInfo creatorEntity &&
+                 IsCreatorRoutine(routine: routine) &&
+                 MeReferenceScanner.Scan(body: body))
+        {
+            string mePtr = EmitEntityAllocation(sb: sb, entity: creatorEntity);
+            EmitEntryAlloca(llvmName: "%me.addr", llvmType: "ptr");
+            EmitLine(sb: sb, line: $"  store ptr {mePtr}, ptr %me.addr");
+            _localVariables[key: "me"] = routine.OwnerType;
+        }
 
         // Register parameters as local variables
         foreach (ParameterInfo param in routine.Parameters)
         {
-            // Parameters are passed by value, create a local copy
+            // Parameters are passed as value, create a local copy
             // Use "entry_" instead of "entry" to avoid conflict with the entry: block label
             string emittedParamName = param.Name == "entry" ? "entry_" : param.Name;
             string paramPtr = $"%{param.Name}.addr";
