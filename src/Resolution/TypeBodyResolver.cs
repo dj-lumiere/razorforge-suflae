@@ -366,8 +366,9 @@ internal sealed class TypeBodyResolver
             // type-level method even with the `Me.` prefix, matching the impl-side syntax
             // `common routine NumericSumAdd[T].identity() -> T`.
             bool isCommonMethod = sig.Annotations?.Contains(item: "common") == true;
-            bool isInstanceMethod = fullName.StartsWith(value: "Me.") && !isCommonMethod;
-            string methodName = isInstanceMethod
+            bool hasMePrefix = fullName.StartsWith(value: "Me.");
+            bool isInstanceMethod = hasMePrefix && !isCommonMethod;
+            string methodName = hasMePrefix
                 ? fullName[3..]
                 : fullName;
 
