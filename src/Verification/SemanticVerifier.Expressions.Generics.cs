@@ -342,54 +342,68 @@ public sealed partial class SemanticVerifier
         TypeSymbol objectType = AnalyzeExpression(expression: genericMember.Object);
 
         // Resolve type arguments
+        var resolvedTypeArgs = new List<TypeInfo>(capacity: genericMember.TypeArguments.Count);
         foreach (TypeExpression typeArg in genericMember.TypeArguments)
         {
-            ResolveType(typeExpr: typeArg);
+            resolvedTypeArgs.Add(item: ResolveType(typeExpr: typeArg));
+        }
+
+        // Typewise receiver: `Ident[T]` parsed as GenericMemberExpression(Ident, Ident.Name, [T])
+        // — the parser sets MemberName == Object.Name when the source was `Ident[Args]`, not
+        // `obj.field[i]`. When that holds and Object resolves to a generic type, return the
+        // monomorphized type so the outer `.method()` call has a proper typewise receiver type.
+        if (genericMember.Object is IdentifierExpression idReceiver &&
+            idReceiver.Name == genericMember.MemberName &&
+            objectType.IsGenericDefinition &&
+            resolvedTypeArgs.Count == objectType.GenericParameters?.Count)
+        {
+            TypeSymbol resolved = _registry.GetOrCreateResolution(
+                genericDef: objectType,
+                typeArguments: resolvedTypeArgs);
+            genericMember.ResolvedType = resolved;
+            return resolved;
         }
 
         // Look up the member on the object type
-        if (objectType is TypeInfo objTypeInfo)
+        List<MemberVariableInfo>? memberVars = objectType switch
         {
-            List<MemberVariableInfo>? memberVars = objTypeInfo switch
+            EntityTypeInfo e => e.MemberVariables,
+            RecordTypeInfo r => r.MemberVariables,
+            _ => null
+        };
+        MemberVariableInfo? memberVar =
+            memberVars?.FirstOrDefault(predicate: mv => mv.Name == genericMember.MemberName);
+        if (memberVar != null)
+        {
+            // Member found — the [args] are indexing into the member's value.
+            // Analyze the "type arguments" as expressions (they're actually index values).
+            foreach (TypeExpression typeArg in genericMember.TypeArguments)
             {
-                EntityTypeInfo e => e.MemberVariables,
-                RecordTypeInfo r => r.MemberVariables,
-                _ => null
-            };
-            MemberVariableInfo? memberVar =
-                memberVars?.FirstOrDefault(predicate: mv => mv.Name == genericMember.MemberName);
-            if (memberVar != null)
-            {
-                // Member found — the [args] are indexing into the member's value.
-                // Analyze the "type arguments" as expressions (they're actually index values).
-                foreach (TypeExpression typeArg in genericMember.TypeArguments)
+                // The type arg's Name is actually a variable name — analyze it as identifier
+                if (typeArg.Name != null)
                 {
-                    // The type arg's Name is actually a variable name — analyze it as identifier
-                    if (typeArg.Name != null)
-                    {
-                        AnalyzeExpression(expression: new IdentifierExpression(Name: typeArg.Name,
-                            Location: typeArg.Location));
-                    }
+                    AnalyzeExpression(expression: new IdentifierExpression(Name: typeArg.Name,
+                        Location: typeArg.Location));
                 }
-
-                // Determine the element type of the member's collection type
-                TypeInfo? memberType = memberVar.Type;
-                if (memberType is { TypeArguments: { Count: > 0 } })
-                {
-                    // e.g., List[SortedDict[K,V]]  element is SortedDict[K,V]
-                    return memberType.TypeArguments[index: 0];
-                }
-
-                // If the member type has a $getitem method, use its return type
-                RoutineInfo? getItem =
-                    _registry.LookupMethod(type: memberType, methodName: "$getitem");
-                if (getItem?.ReturnType != null)
-                {
-                    return getItem.ReturnType;
-                }
-
-                return memberType ?? ErrorTypeInfo.Instance;
             }
+
+            // Determine the element type of the member's collection type
+            TypeInfo? memberType = memberVar.Type;
+            if (memberType is { TypeArguments: { Count: > 0 } })
+            {
+                // e.g., List[SortedDict[K,V]]  element is SortedDict[K,V]
+                return memberType.TypeArguments[index: 0];
+            }
+
+            // If the member type has a $getitem method, use its return type
+            RoutineInfo? getItem =
+                _registry.LookupMethod(type: memberType, methodName: "$getitem");
+            if (getItem?.ReturnType != null)
+            {
+                return getItem.ReturnType;
+            }
+
+            return memberType;
         }
 
         return ErrorTypeInfo.Instance;

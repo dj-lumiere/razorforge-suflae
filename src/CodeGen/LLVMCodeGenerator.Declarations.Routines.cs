@@ -48,9 +48,9 @@ public partial class LlvmCodeGenerator
         var paramTypes = new List<string>();
 
         // For methods, add implicit 'me' parameter first
-        // Skip 'me' for $create routines (static factories)
+        // Skip 'me' for $create routines (static factories) and common (type-level) routines
         bool isCreator = IsCreatorRoutine(routine: routine);
-        if (routine.OwnerType != null && !isCreator)
+        if (routine.OwnerType != null && !isCreator && !routine.IsCommon)
         {
             // $setitem! on records: me is passed by pointer so mutations propagate to caller
             paramTypes.Add(item: GetImplicitMeParameterDeclaration(routine: routine,
@@ -235,9 +235,9 @@ public partial class LlvmCodeGenerator
         var paramList = new List<string>();
 
         // For methods, add implicit 'me' parameter first
-        // Skip 'me' for $create routines (static factories) and void/Blank owner types
+        // Skip 'me' for $create routines (static factories), common (type-level) routines, and void/Blank owner types
         bool isCreator = IsCreatorRoutine(routine: routineInfo);
-        if (routineInfo.OwnerType != null && !isCreator)
+        if (routineInfo.OwnerType != null && !isCreator && !routineInfo.IsCommon)
         {
             string meParam = GetImplicitMeParameterDeclaration(routine: routineInfo,
                 includeName: true);
@@ -354,8 +354,8 @@ public partial class LlvmCodeGenerator
         // Track current routine for source_routine() / source_module() injection
         _currentEmittingRoutine = routine;
 
-        // Register implicit 'me' parameter for methods (skip for $create static factories)
-        if (routine.OwnerType != null && !IsCreatorRoutine(routine: routine))
+        // Register implicit 'me' parameter for methods (skip for $create static factories and common routines)
+        if (routine.OwnerType != null && !IsCreatorRoutine(routine: routine) && !routine.IsCommon)
         {
             if (IsRecordSetItem(routine: routine))
             {

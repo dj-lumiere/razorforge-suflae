@@ -1031,9 +1031,19 @@ internal static class GenericAstRewriter
 
     private static CallExpression CloneCall(CallExpression call, RewriteContext ctx)
     {
+        Expression rewrittenCallee = RewriteExpression(expr: call.Callee, ctx: ctx);
+        // `T(0)` parses as CallExpression(Callee=IdentifierExpression("T")). The plain
+        // IdentifierExpression rewrite arm doesn't substitute names (variables vs. type
+        // params are ambiguous). For a CallExpression callee that *is* a generic-param
+        // identifier, swap "T" -> "Core.S64" so codegen emits the right constructor.
+        if (rewrittenCallee is IdentifierExpression idCallee &&
+            ctx.StringSubs.TryGetValue(key: idCallee.Name, value: out string? sub))
+        {
+            rewrittenCallee = idCallee with { Name = sub };
+        }
         var rewritten = call with
         {
-            Callee = RewriteExpression(expr: call.Callee, ctx: ctx),
+            Callee = rewrittenCallee,
             Arguments = call.Arguments
                             .Select(selector: a => RewriteExpression(expr: a, ctx: ctx))
                             .ToList(),

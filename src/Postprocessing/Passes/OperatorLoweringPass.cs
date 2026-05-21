@@ -323,6 +323,33 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
             // IndexExpression -> obj.$getitem!(idx)
             case IndexExpression idx:
             {
+                // Typewise type-receiver: `NumericSumAdd[T].method()` parses as
+                // IndexExpression(Ident("NumericSumAdd"), Ident("T")) because the parser only
+                // treats `Ident[...]` as a generic-method form when `]` is immediately followed
+                // by `(`. SA recognizes the pattern and resolves the IndexExpression to the
+                // generic resolution type — collapse to a bare typed identifier so MemberExpression
+                // codegen sees a typewise receiver.
+                string? GendefName(TypeInfo? t) => t switch
+                {
+                    RecordTypeInfo { GenericDefinition: { } d } => d.Name,
+                    EntityTypeInfo { GenericDefinition: { } d } => d.Name,
+                    ProtocolTypeInfo { GenericDefinition: { } d } => d.Name,
+                    VariantTypeInfo { GenericDefinition: { } d } => d.Name,
+                    _ => null
+                };
+                if (idx.Object is IdentifierExpression typeObjId &&
+                    idx.ResolvedType is { IsGenericResolution: true } resolvedTy &&
+                    (resolvedTy.Name == typeObjId.Name
+                     || GendefName(resolvedTy) == typeObjId.Name))
+                {
+                    return new IdentifierExpression(
+                        Name: typeObjId.Name,
+                        Location: idx.Location)
+                    {
+                        ResolvedType = resolvedTy
+                    };
+                }
+
                 Expression loweredObj = LowerExpression(idx.Object);
                 Expression loweredIdx = LowerExpression(idx.Index);
 
@@ -446,7 +473,13 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
             //  GenericMemberExpression -> member + index ??$getitem!
             // Parser quirk: obj.field[i] is parsed as GenericMemberExpression(obj, "field", [i]).
             // TypeArguments are index expressions in disguise; lower to IndexExpression then recurse.
-            case GenericMemberExpression gme when gme.TypeArguments.Count > 0:
+            //
+            // Exception: `Ident[T]` (type-with-type-args, e.g. `NumericSumAdd[T].identity_lazy()`)
+            // is parsed as GenericMemberExpression(Ident, Ident.Name, [T]) — Object.Name == MemberName.
+            // Those are real type args, not indices; lower to a plain MemberExpression so the
+            // typewise receiver flows through codegen normally.
+            case GenericMemberExpression gme when gme.TypeArguments.Count > 0 &&
+                !(gme.Object is IdentifierExpression idObj && idObj.Name == gme.MemberName):
             {
                 Expression loweredObj = LowerExpression(gme.Object);
                 var memberExpr = new MemberExpression(
@@ -475,6 +508,21 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
 
                 // Recurse -> IndexExpression case above converts to $getitem! call.
                 return LowerExpression(indexExpr);
+            }
+
+            // Typewise receiver `Ident[T]` parsed as GenericMemberExpression(Ident, Ident.Name, [T]).
+            // Collapse to a bare IdentifierExpression carrying the resolved type so the outer
+            // MemberExpression (e.g. `.identity_lazy()`) sees an identifier with ResolvedType set
+            // — that is how codegen detects typewise/common calls.
+            case GenericMemberExpression gme when gme.TypeArguments.Count > 0 &&
+                gme.Object is IdentifierExpression typeIdent && typeIdent.Name == gme.MemberName:
+            {
+                return new IdentifierExpression(
+                    Name: gme.MemberName,
+                    Location: gme.Location)
+                {
+                    ResolvedType = gme.ResolvedType ?? typeIdent.ResolvedType
+                };
             }
 
             case GenericMemberExpression gme:
