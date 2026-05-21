@@ -120,6 +120,30 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     }
 
     /// <summary>
+    /// Lowers monomorphized generic bodies that GMP cloned from generic-def ASTs after the
+    /// per-program Phase 7 sweep finished. Without this, `when me.field is None => ... else x => ...`
+    /// over <c>Maybe[Wrapper[T]]</c> (e.g. <c>Maybe[Retained[ListNode[T]]]</c>) reaches codegen
+    /// as an unlowered TypePattern/ElsePattern pair; the codegen TypePattern path then falls
+    /// through to an unconditional match, silently selecting the first arm regardless of state.
+    /// Mirror of <c>ExpressionLoweringPass.RunOnInstantiatedGenericBodies</c>.
+    /// </summary>
+    public void RunOnInstantiatedGenericBodies(
+        Dictionary<string, Compiler.Instantiation.MonomorphizedBody> instantiatedGenericBodies)
+    {
+        foreach (string key in instantiatedGenericBodies.Keys.ToList())
+        {
+            Compiler.Instantiation.MonomorphizedBody entry = instantiatedGenericBodies[key];
+            if (entry.IsSynthesized) continue;
+            Statement lowered = LowerStatement(stmt: entry.Ast.Body);
+            if (!ReferenceEquals(lowered, entry.Ast.Body))
+                instantiatedGenericBodies[key] = entry with
+                {
+                    Ast = entry.Ast with { Body = lowered }
+                };
+        }
+    }
+
+    /// <summary>
     /// Runs this compiler phase over its configured input.
     /// </summary>
     public void RunOnVariantBodies()

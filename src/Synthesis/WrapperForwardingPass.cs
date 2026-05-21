@@ -466,6 +466,89 @@ internal sealed class WrapperForwardingPass
                 : new ExpressionStatement(Expression: innerCall, Location: _synthLoc);
             innerStatements = [callStmt];
         }
+        else if (GetBaseTypeName(typeName: wrapperType.Name) is "Retained" or "Tracked")
+        {
+            // RC wrappers: `me` is a ptr to `RetainController[T]`, NOT to T directly. Reaching
+            // T requires double-indirection through the controller's `data: Hijacked[T]` field:
+            //
+            //   danger!
+            //     var raw  = Hijacked[RetainController[T]](me)
+            //     var ctrl = raw.reveal()              # RetainController[T] ptr
+            //     [return] ctrl.borrow_data().reveal().method(args...)
+            //
+            // Without this branch, the pointer-wrapper branch below would emit
+            // `Hijacked[T](me).reveal().method(...)`, treating the controller's strong+weak
+            // counts (first 8 bytes) as if they were T's first 8 bytes.
+            var controllerTypeExpr = new TypeExpression(
+                Name: "RetainController",
+                GenericArguments:
+                [
+                    new TypeExpression(Name: genericParamName, GenericArguments: null,
+                        Location: _synthLoc)
+                ],
+                Location: _synthLoc);
+            var hijackedCtrlCtor = new CreatorExpression(
+                TypeName: "Hijacked",
+                TypeArguments: [controllerTypeExpr],
+                MemberVariables:
+                    [("", new IdentifierExpression(Name: "me", Location: _synthLoc))],
+                Location: _synthLoc);
+            var rawDecl = new DeclarationStatement(
+                Declaration: new VariableDeclaration(
+                    Name: "raw",
+                    Type: null,
+                    Initializer: hijackedCtrlCtor,
+                    Visibility: VisibilityModifier.Open,
+                    Location: _synthLoc),
+                Location: _synthLoc);
+            var ctrlCall = new CallExpression(
+                Callee: new MemberExpression(
+                    Object: new IdentifierExpression(Name: "raw", Location: _synthLoc),
+                    PropertyName: "reveal",
+                    Location: _synthLoc),
+                Arguments: [],
+                Location: _synthLoc);
+            var ctrlDecl = new DeclarationStatement(
+                Declaration: new VariableDeclaration(
+                    Name: "ctrl",
+                    Type: null,
+                    Initializer: ctrlCall,
+                    Visibility: VisibilityModifier.Open,
+                    Location: _synthLoc),
+                Location: _synthLoc);
+            var borrowCall = new CallExpression(
+                Callee: new MemberExpression(
+                    Object: new IdentifierExpression(Name: "ctrl", Location: _synthLoc),
+                    PropertyName: "borrow_data",
+                    Location: _synthLoc),
+                Arguments: [],
+                Location: _synthLoc);
+            var innerRevealCall = new CallExpression(
+                Callee: new MemberExpression(
+                    Object: borrowCall,
+                    PropertyName: "reveal",
+                    Location: _synthLoc),
+                Arguments: [],
+                Location: _synthLoc)
+            {
+                ResolvedType = innerType
+            };
+            var innerCall = new CallExpression(
+                Callee: new MemberExpression(
+                    Object: innerRevealCall,
+                    PropertyName: callPropertyName,
+                    Location: _synthLoc),
+                Arguments: forwardedArgs,
+                Location: _synthLoc)
+            {
+                // ResolvedRoutine intentionally null — see record-struct branch for reasoning.
+                ResolvedType = innerMethod.ReturnType
+            };
+            Statement callStmt = hasReturnValue
+                ? new ReturnStatement(Value: innerCall, Location: _synthLoc)
+                : new ExpressionStatement(Expression: innerCall, Location: _synthLoc);
+            innerStatements = [rawDecl, ctrlDecl, callStmt];
+        }
         else
         {
             // Pointer wrapper: var raw = Hijacked[T](me); raw.reveal()/extract().method(...)

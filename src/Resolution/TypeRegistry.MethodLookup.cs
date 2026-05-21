@@ -580,15 +580,37 @@ public sealed partial class TypeRegistry
         };
         if (protocols != null)
         {
-            foreach (var protocol in protocols)
+            // Retained/Tracked obey `Controlling[T]`. The recursive LookupMethod call on a
+            // `Controlling[X]` protocol triggers the marker-protocol unwrap at the top of this
+            // method, dispatching the lookup transparently to X's method. That is correct for
+            // protocol-as-type parameter receivers (where the call site already holds an X-shaped
+            // pointer), but WRONG for RC wrappers — their pointer addresses a `RetainController[T]`
+            // struct, NOT T directly. Letting the unwrap proceed here returns the inner T method
+            // (e.g. `ListNode.chain_text`), which the call dispatcher then invokes with the
+            // controller pointer as `me`, reading strong+weak counts as if they were T's first
+            // fields. Skip the protocols loop for Retained/Tracked records so the call dispatcher
+            // falls through to the wrapper-forwarder synthesis path, which emits the correct
+            // double-indirection body.
+            string recBaseName = type switch
             {
-                var res = LookupMethod(type: protocol, methodName: methodName);
-                if (res != null) return res;
+                RecordTypeInfo r2 => r2.GenericDefinition?.Name ?? r2.Name,
+                _ => type.Name
+            };
+            int recBracket = recBaseName.IndexOf(value: '[');
+            if (recBracket >= 0) recBaseName = recBaseName[..recBracket];
+            bool skipProtocols = recBaseName is "Retained" or "Tracked";
+            if (!skipProtocols)
+            {
+                foreach (var protocol in protocols)
+                {
+                    var res = LookupMethod(type: protocol, methodName: methodName);
+                    if (res != null) return res;
+                }
             }
             return null;
         }
 
-        // WrapperTypeInfo (Owned/Retained/Tracked/Viewed/Grasped/Inspected/Claimed/Shared/Marked)
+        // WrapperTypeInfo (Owned/Viewed/Grasped/Inspected/Claimed/Shared/Marked)
         // is the parallel representation to the substituted RecordTypeInfo of the same wrapper.
         // The RecordTypeInfo path finds methods via its substituted `Controlling[InnerT]` /
         // `Referring[InnerT]` protocol entry. WrapperTypeInfo carries no ImplementedProtocols,
@@ -596,8 +618,14 @@ public sealed partial class TypeRegistry
         // would then synthesize a forwarder whose body is never emitted (LINKERR). Resolve
         // directly to InnerType as a last resort. Hijacked is intentionally excluded — its
         // members must be reached via explicit extract()/reveal().
+        //
+        // Retained/Tracked are also excluded: they are `@llvm("ptr")` to a `RetainController[T]`,
+        // NOT to T directly. Falling through here would dispatch an inner-T method with `me` =
+        // controller pointer, reading controller's strong+weak counts as if they were T's first
+        // fields. The forwarder-synthesis path emits the correct double-indirection body
+        // (Hijacked[RetainController[T]](me).reveal().borrow_data().reveal().method(...)).
         if (type is WrapperTypeInfo forwardingWrapper &&
-            forwardingWrapper.Name is "Owned" or "Retained" or "Tracked" or "Viewed"
+            forwardingWrapper.Name is "Owned" or "Viewed"
                 or "Grasped" or "Inspected" or "Claimed" or "Shared" or "Marked")
         {
             return LookupMethod(type: forwardingWrapper.InnerType,

@@ -117,6 +117,15 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             {
                 RoutineInfo? release = ctx.Registry.LookupMethod(type: type, methodName: "release");
                 if (release != null) EnqueueCallee(callee: release);
+
+                // Copy verb is also called implicitly by codegen on RC-wrapper var bindings
+                // (and by PLP-synthesized ElsePattern bindings on Maybe[Wrapper[T]] that
+                // appear after Phase 6 reachability runs). Seed per concrete wrapper so the
+                // body gets monomorphized — otherwise we get a "declared but never defined"
+                // LINKERR for instantiations only referenced via implicit codegen retain.
+                string copyVerb = ownerBase == "Retained" ? "retain" : "track";
+                RoutineInfo? copy = ctx.Registry.LookupMethod(type: type, methodName: copyVerb);
+                if (copy != null) EnqueueCallee(callee: copy);
             }
         }
     }
@@ -259,7 +268,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 EnqueueThrowCrashMessage(throwStmt: throwStmt);
                 continue;
             }
-            if (node is ListLiteralExpression or SetLiteralExpression or DictLiteralExpression or IndexExpression or UsingStatement)
+            if (node is ListLiteralExpression or SetLiteralExpression or DictLiteralExpression or IndexExpression or UsingStatement or UnaryExpression { Operator: UnaryOperator.ForceUnwrap })
             {
                 EnqueueImplicitLoweringCallees(node: node, typeSubs: frame.TypeSubs);
                 continue;
@@ -299,7 +308,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                     EnqueueThrowCrashMessage(throwStmt: throwStmt);
                     continue;
                 }
-                if (node is ListLiteralExpression or SetLiteralExpression or DictLiteralExpression or IndexExpression or UsingStatement)
+                if (node is ListLiteralExpression or SetLiteralExpression or DictLiteralExpression or IndexExpression or UsingStatement or UnaryExpression { Operator: UnaryOperator.ForceUnwrap })
                 {
                     EnqueueImplicitLoweringCallees(node: node, typeSubs: frame.TypeSubs);
                     continue;
@@ -333,6 +342,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             DictLiteralExpression d => d.ResolvedType,
             IndexExpression ix => ix.Object.ResolvedType,
             UsingStatement u => u.Resource.ResolvedType,
+            UnaryExpression { Operator: UnaryOperator.ForceUnwrap } fu => fu.Operand.ResolvedType,
             _ => null
         };
         if (rawType == null) return;
@@ -377,6 +387,13 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 // tracks failability on RoutineInfo separately. See TypeRegistry.MethodLookup.cs:236.
                 EnqueueMethodIfPresent(owner: collectionType, methodName: "$getitem");
                 EnqueueMethodIfPresent(owner: collectionType, methodName: "$setitem");
+                break;
+            case UnaryExpression { Operator: UnaryOperator.ForceUnwrap }:
+                // `expr!!` is lowered by OperatorLoweringPass (Phase 7) to `expr.$unwrap()` or
+                // `expr.$unwrap!()`. Seed both on the operand's resolved owner so Maybe/Result/
+                // Lookup carriers' unwrap bodies get monomorphized.
+                EnqueueMethodIfPresent(owner: collectionType, methodName: "$unwrap");
+                EnqueueMethodIfPresent(owner: collectionType, methodName: "$unwrap!");
                 break;
             case UsingStatement:
                 // `using r.view() as v` lowers (in Phase 7 — after this pass) to
@@ -780,7 +797,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                             // BuilderService.protocols) need the same implicit add/$create seeding
                             // as user-code literals; otherwise the literal's $create body never
                             // gets monomorphized and codegen emits a call to an undefined symbol.
-                            if (node is ListLiteralExpression or SetLiteralExpression or DictLiteralExpression or IndexExpression or UsingStatement)
+                            if (node is ListLiteralExpression or SetLiteralExpression or DictLiteralExpression or IndexExpression or UsingStatement or UnaryExpression { Operator: UnaryOperator.ForceUnwrap })
                             {
                                 EnqueueImplicitLoweringCallees(node: node, typeSubs: subs);
                                 continue;
@@ -1817,7 +1834,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             || node is ListLiteralExpression || node is SetLiteralExpression
             || node is DictLiteralExpression || node is IndexExpression
             || node is InsertedTextExpression
-            || node is UsingStatement) sink.Add(item: node);
+            || node is UsingStatement
+            || node is UnaryExpression { Operator: UnaryOperator.ForceUnwrap }) sink.Add(item: node);
 
         Type t = node.GetType();
         if (t.IsPrimitive || node is string || t.IsEnum) return;

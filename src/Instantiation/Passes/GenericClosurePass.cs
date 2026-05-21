@@ -59,6 +59,18 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
         // ExpressionLoweringPass: handles RangeExpression, UnaryExpression(Not), pattern lowering
         // etc. Must run before OperatorLoweringPass — operator lowering folds the BinaryExpressions
         // ExpressionLowering produces (e.g. `1 til n` -> a range record with `+ 1` / `< n` checks).
+        // Mirror the per-file PLP → ELP → PLP → ELP cycle: the first PLP folds Maybe/Result/Lookup
+        // when-chains (introducing UnaryExpression(Not)); ELP lowers those Not nodes; a second
+        // PLP catches the WhenStatements that ELP synthesized for `??` / `?.`; final ELP lowers
+        // any Not nodes the second PLP added. Without PLP here, `when subj is None => … else x =>`
+        // over `Maybe[Wrapper[T]]` reaches codegen as raw TypePattern/ElsePattern; the codegen
+        // TypePattern path falls through to an unconditional match → the first arm always wins.
+        new Compiler.Postprocessing.Passes.PatternLoweringPass(ctx: postCtx)
+            .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
+        new Compiler.Postprocessing.Passes.ExpressionLoweringPass(ctx: postCtx)
+            .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
+        new Compiler.Postprocessing.Passes.PatternLoweringPass(ctx: postCtx)
+            .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
         new Compiler.Postprocessing.Passes.ExpressionLoweringPass(ctx: postCtx)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
         new Compiler.Postprocessing.Passes.OperatorLoweringPass(ctx: postCtx)

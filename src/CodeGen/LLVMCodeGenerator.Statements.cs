@@ -804,9 +804,9 @@ public partial class LlvmCodeGenerator
 
     #region RC Record Cleanup
 
-    /// <summary>RC wrapper base names that require retain/release.</summary>
+    /// <summary>RC wrapper base names that require copy/release on var binding.</summary>
     private static readonly HashSet<string> RcWrapperBaseNames =
-        ["Retained", "Shared", "Tracked", "Marked"];
+        ["Retained", "Tracked"];
 
     /// <summary>
     /// Emits retain calls for all RC wrapper fields in a record.
@@ -894,40 +894,55 @@ public partial class LlvmCodeGenerator
         }
     }
 
+    /// <summary>Copy verb per RC wrapper (the method that bumps the appropriate count).</summary>
+    private static string? RcCopyVerb(string wrapperBase) => wrapperBase switch
+    {
+        "Retained" => "retain",
+        "Tracked" => "track",
+        _ => null
+    };
+
     /// <summary>
-    /// Bumps the strong count for an RC wrapper variable by calling retain() on it.
-    /// Used when copying an existing Retained[T] into a new variable (not from a .retain() call).
+    /// Bumps the count for an RC wrapper variable by calling its copy verb.
+    /// Retained → retain (strong), Tracked → track (weak). Other wrappers skip.
     /// </summary>
     private void EmitRetainedVarRetain(StringBuilder sb, string llvmAddr,
         RecordTypeInfo recordType)
     {
-        string llvmType = GetLlvmType(type: recordType);
-        string loaded = NextTemp();
-        EmitLine(sb: sb, line: $"  {loaded} = load {llvmType}, ptr {llvmAddr}");
-
-        RoutineInfo? retainMethod = _registry.LookupMethod(type: recordType, methodName: "retain");
-        if (retainMethod == null)
+        if (GetGenericBaseName(type: recordType) is not { } baseName ||
+            RcCopyVerb(wrapperBase: baseName) is not { } verb)
         {
             return;
         }
 
-        GenerateRoutineDeclaration(routine: retainMethod);
-        string mangled = MangleRoutineName(routine: retainMethod);
+        RoutineInfo? copyMethod = _registry.LookupMethod(type: recordType, methodName: verb);
+        if (copyMethod == null)
+        {
+            return;
+        }
+
+        string llvmType = GetLlvmType(type: recordType);
+        string loaded = NextTemp();
+        EmitLine(sb: sb, line: $"  {loaded} = load {llvmType}, ptr {llvmAddr}");
+
+        GenerateRoutineDeclaration(routine: copyMethod);
+        string mangled = MangleRoutineName(routine: copyMethod);
         string rcLlvm = GetParameterLlvmType(type: recordType);
-        // retain() returns Retained[T] (same struct value); discard -> heap mutation already done
         EmitLine(sb: sb, line: $"  {NextTemp()} = call {rcLlvm} @{mangled}({rcLlvm} {loaded})");
     }
 
     /// <summary>
-    /// Decrements the strong count for an RC wrapper variable by calling release() on it.
-    /// Potentially deallocates the inner data if strong count reaches zero.
+    /// Decrements the count for an RC wrapper variable by calling release() on it.
+    /// Both Retained and Tracked expose `release` (Tracked.release is dangerous-marked).
     /// </summary>
     private void EmitRetainedVarRelease(StringBuilder sb, string llvmAddr,
         RecordTypeInfo recordType)
     {
-        string llvmType = GetLlvmType(type: recordType);
-        string loaded = NextTemp();
-        EmitLine(sb: sb, line: $"  {loaded} = load {llvmType}, ptr {llvmAddr}");
+        if (GetGenericBaseName(type: recordType) is not { } baseName ||
+            RcCopyVerb(wrapperBase: baseName) is null)
+        {
+            return;
+        }
 
         RoutineInfo? releaseMethod =
             _registry.LookupMethod(type: recordType, methodName: "release");
@@ -935,6 +950,10 @@ public partial class LlvmCodeGenerator
         {
             return;
         }
+
+        string llvmType = GetLlvmType(type: recordType);
+        string loaded = NextTemp();
+        EmitLine(sb: sb, line: $"  {loaded} = load {llvmType}, ptr {llvmAddr}");
 
         GenerateRoutineDeclaration(routine: releaseMethod);
         string mangled = MangleRoutineName(routine: releaseMethod);
