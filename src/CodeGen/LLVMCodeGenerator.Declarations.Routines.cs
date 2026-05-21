@@ -471,15 +471,12 @@ public partial class LlvmCodeGenerator
     /// </summary>
     internal static string MangleRoutineName(RoutineInfo routine)
     {
-        static bool ShouldDisambiguateByParameterTypes(RoutineInfo candidate)
-        {
-            if (candidate.Parameters.Count == 0)
-            {
-                return false;
-            }
-
-            return candidate.Name == "$create" || candidate.OriginalName != null;
-        }
+        // All routines with parameters are disambiguated by parameter type. Overloads
+        // sharing only a name (e.g. LocalMoment.$sub(Duration) vs $sub(LocalMoment),
+        // or $hash() vs $hash(k0, k1)) collapse to the same symbol otherwise and the
+        // linker arbitrarily picks one definition, mis-typing every call site.
+        static bool ShouldDisambiguateByParameterTypes(RoutineInfo candidate) =>
+            candidate.Parameters.Count > 0;
 
         // Lambda closures: [lambda]filename:line:col(paramTypes)
         if (routine.IsLambda)
@@ -571,12 +568,67 @@ public partial class LlvmCodeGenerator
         if (ShouldDisambiguateByParameterTypes(candidate: routine))
         {
             string paramTypes = string.Join(separator: ",",
-                values: routine.Parameters.Select(selector: p => p.Type.FullName));
+                values: routine.Parameters.Select(
+                    selector: p => MangleParamTypeName(routine: routine, paramType: p.Type)));
             baseName = $"{baseName}({paramTypes})";
         }
 
         return Q(name: DecorateRoutineSymbolName(baseName: baseName,
             isFailable: routine.IsFailable));
+    }
+
+    /// <summary>
+    /// Maps a wrapper-forwarder's disambiguated inner generic param (e.g. `__rfwd_T__`,
+    /// or the original `T` colliding with the wrapper's own param) to the concrete inner
+    /// type argument for symbol mangling. Without this, a forwarder body for
+    /// `Retained[ListNode[S64]].chain_contains(T)` emits as `chain_contains(__rfwd_T__)`
+    /// while the rewritten call site emits `chain_contains(Core.S64)` — linker miss.
+    /// </summary>
+    private static string MangleParamTypeName(RoutineInfo routine, TypeInfo paramType)
+    {
+        if (routine.WrapperForwarderInnerGenericDef?.GenericParameters
+                is { Count: > 0 } innerParamNames
+            && routine.OwnerType?.TypeArguments is { Count: > 0 } ownerArgs
+            && ownerArgs.Count == 1
+            && ownerArgs[index: 0].TypeArguments is { } innerArgs
+            && innerArgs.Count == innerParamNames.Count)
+        {
+            return MangleParamTypeFullName(type: paramType,
+                innerParamNames: innerParamNames, innerArgs: innerArgs);
+        }
+        return paramType.FullName;
+    }
+
+    private static string MangleParamTypeFullName(TypeInfo type,
+        List<string> innerParamNames, List<TypeInfo> innerArgs)
+    {
+        if (type is GenericParameterTypeInfo gp)
+        {
+            string lookup = gp.ForwarderOriginalName ?? gp.Name;
+            int idx = innerParamNames.IndexOf(item: lookup);
+            if (idx < 0) idx = innerParamNames.IndexOf(item: gp.Name);
+            return idx >= 0 ? innerArgs[index: idx].FullName : type.FullName;
+        }
+        if (type.TypeArguments is { Count: > 0 } args)
+        {
+            string baseName = string.IsNullOrEmpty(value: type.Module)
+                ? type.Name
+                : $"{type.Module}.{type.Name}";
+            if (type.Name.Contains(value: '['))
+            {
+                // Name already embeds the (unsubstituted) args. Substitute literally inside it
+                // is brittle; fall back to per-arg recursion for the bracket portion.
+                int br = type.Name.IndexOf(value: '[');
+                baseName = string.IsNullOrEmpty(value: type.Module)
+                    ? type.Name.Substring(startIndex: 0, length: br)
+                    : $"{type.Module}.{type.Name.Substring(startIndex: 0, length: br)}";
+            }
+            string joined = string.Join(separator: ", ",
+                values: args.Select(selector: a => MangleParamTypeFullName(
+                    type: a, innerParamNames: innerParamNames, innerArgs: innerArgs)));
+            return $"{baseName}[{joined}]";
+        }
+        return type.FullName;
     }
 
     internal static string DecorateRoutineSymbolName(string baseName, bool isFailable)

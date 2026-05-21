@@ -217,6 +217,15 @@ public partial class LlvmCodeGenerator
         {
             _localRetainedVars.Add(item: (varDecl.Name, $"%{uniqueName}.addr", rcWrapRecord));
 
+            // Zero-init the alloca: if the declaration sits inside a conditional (e.g.
+            // a `when`-arm binding `else r => ...`) that doesn't execute on the active
+            // path, the alloca still exists and the function-level cleanup walks it.
+            // Without zero-init, release() loads garbage and dereferences a junk
+            // controller pointer → AV. RC wrappers are @llvm("ptr"), so null is a
+            // safe sentinel and EmitRetainedVarRelease null-checks before releasing.
+            EmitLine(sb: _currentRoutineEntryAllocas,
+                line: $"  store {GetLlvmType(type: rcWrapRecord)} zeroinitializer, ptr {varPtr}");
+
             // Move semantics: if the initializer is entity.retain(), the RC wrapper
             // now manages the entity's lifetime. Remove it from scope-exit entity cleanup to prevent
             // double-free (rc.release() already frees the entity when count reaches zero).
@@ -895,6 +904,27 @@ public partial class LlvmCodeGenerator
         string loaded = NextTemp();
         EmitLine(sb: sb, line: $"  {loaded} = load {llvmType}, ptr {llvmAddr}");
 
+        // For Maybe[T] carriers, the `value` field (RC wrapper) is uninitialized when
+        // present=false. Calling release on a garbage controller AVs. Gate the entire
+        // field-release walk on the present flag.
+        string? skipLabel = null;
+        if (IsMaybeType(type: recordType))
+        {
+            MemberVariableInfo? presentField = recordType.MemberVariables
+                .FirstOrDefault(f => f.Name == "present");
+            if (presentField != null)
+            {
+                string presentVal = NextTemp();
+                EmitLine(sb: sb,
+                    line: $"  {presentVal} = extractvalue {llvmType} {loaded}, {presentField.Index}");
+                string doLabel = NextLabel(prefix: "rcrel_do");
+                skipLabel = NextLabel(prefix: "rcrel_skip");
+                EmitLine(sb: sb,
+                    line: $"  br i1 {presentVal}, label %{doLabel}, label %{skipLabel}");
+                EmitLine(sb: sb, line: $"{doLabel}:");
+            }
+        }
+
         foreach (MemberVariableInfo field in recordType.MemberVariables)
         {
             if (field.Type is not WrapperTypeInfo w || !RcWrapperBaseNames.Contains(item: w.Name))
@@ -916,6 +946,12 @@ public partial class LlvmCodeGenerator
             string mangled = MangleRoutineName(routine: releaseMethod);
             string fieldLlvm = GetParameterLlvmType(type: w);
             EmitLine(sb: sb, line: $"  call void @{mangled}({fieldLlvm} {fieldVal})");
+        }
+
+        if (skipLabel != null)
+        {
+            EmitLine(sb: sb, line: $"  br label %{skipLabel}");
+            EmitLine(sb: sb, line: $"{skipLabel}:");
         }
     }
 
@@ -1000,7 +1036,20 @@ public partial class LlvmCodeGenerator
         GenerateRoutineDeclaration(routine: releaseMethod);
         string mangled = MangleRoutineName(routine: releaseMethod);
         string rcLlvm = GetParameterLlvmType(type: recordType);
+
+        // Null-check guard: conditionally-declared RC wrapper bindings (e.g. a
+        // `when`-arm `else r => ...`) have hoisted, zero-inited allocas that the
+        // function-exit cleanup walks even when their arm never ran. Skip release
+        // when the controller pointer is null.
+        string isNull = NextTemp();
+        string skipLabel = NextLabel(prefix: "rcwrap_rel_skip");
+        string doLabel = NextLabel(prefix: "rcwrap_rel_do");
+        EmitLine(sb: sb, line: $"  {isNull} = icmp eq {llvmType} {loaded}, null");
+        EmitLine(sb: sb, line: $"  br i1 {isNull}, label %{skipLabel}, label %{doLabel}");
+        EmitLine(sb: sb, line: $"{doLabel}:");
         EmitLine(sb: sb, line: $"  call void @{mangled}({rcLlvm} {loaded})");
+        EmitLine(sb: sb, line: $"  br label %{skipLabel}");
+        EmitLine(sb: sb, line: $"{skipLabel}:");
     }
 
     #endregion

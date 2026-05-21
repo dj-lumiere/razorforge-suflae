@@ -662,10 +662,24 @@ public partial class LlvmCodeGenerator
             }
         }
 
-        // Build argument list: receiver first, then explicit arguments
-        var argValues = new List<string> { receiver };
-        var argTypes = new List<string> { GetParameterLlvmType(type: receiverType) };
-        var argTypeInfos = new List<TypeInfo> { receiverType };
+        // Build argument list: receiver first, then explicit arguments.
+        // Skip the receiver for routines that don't take an implicit `me`:
+        //   - creators (`$create`) — owner-scoped but no receiver in the param list
+        //   - common routines — explicitly declared without `me`
+        // Prepending a phantom receiver for these shifts every actual argument by one
+        // slot in the LLVM call, corrupting all reads (e.g. Moment.$create(year:2026,...)
+        // saw year=zeroinitializer-cast and emitted timestamps in the wrong century).
+        bool methodTakesReceiver =
+            !(method?.IsCommon == true || method?.Name == CreateMethodName);
+        var argValues = methodTakesReceiver
+            ? new List<string> { receiver }
+            : new List<string>();
+        var argTypes = methodTakesReceiver
+            ? new List<string> { GetParameterLlvmType(type: receiverType) }
+            : new List<string>();
+        var argTypeInfos = methodTakesReceiver
+            ? new List<TypeInfo> { receiverType }
+            : new List<TypeInfo>();
 
         foreach (Expression arg in arguments)
         {
@@ -689,9 +703,10 @@ public partial class LlvmCodeGenerator
         // on operator-style method calls. Once the concrete argument types are known, retry exact
         // overload lookup here so failable operators like $add!/$sub! do not degrade to
         // undecorated placeholder symbols such as Core.S32.$add.
+        int receiverSkip = methodTakesReceiver ? 1 : 0;
         if (method == null)
         {
-            var concreteArgTypes = argTypeInfos.Skip(count: 1).ToList();
+            var concreteArgTypes = argTypeInfos.Skip(count: receiverSkip).ToList();
             method = concreteArgTypes.Count > 0
                 ? _registry.LookupMethodOverload(type: receiverType,
                     methodName: methodName,
@@ -712,7 +727,7 @@ public partial class LlvmCodeGenerator
         method = NormalizeResolvedRoutineReference(routine: method,
             receiverType: receiverType,
             returnType: null,
-            argTypes: argTypeInfos.Skip(1).ToList());
+            argTypes: argTypeInfos.Skip(receiverSkip).ToList());
 
         // Last-chance: method-generic on a concrete owner (e.g., Array[T,N].$getitem[I]).
         // Neither OLP nor GenericAstRewriter may have resolved it; infer I from the actual
@@ -732,7 +747,7 @@ public partial class LlvmCodeGenerator
             genericMethodForInference.OwnerType is not null &&
             !genericMethodForInference.OwnerType.IsGenericDefinition)
         {
-            var mArgTypes = argTypeInfos.Skip(count: 1).ToList();
+            var mArgTypes = argTypeInfos.Skip(count: receiverSkip).ToList();
             Dictionary<string, TypeInfo>? inferred = InferMemberRoutineTypeArgs(
                 genericMethod: genericMethodForInference, argTypes: mArgTypes);
             if (inferred != null &&

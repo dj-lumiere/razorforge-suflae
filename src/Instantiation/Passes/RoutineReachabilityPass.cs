@@ -272,7 +272,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 EnqueueThrowCrashMessage(throwStmt: throwStmt);
                 continue;
             }
-            if (node is ListLiteralExpression or SetLiteralExpression or DictLiteralExpression or IndexExpression or UsingStatement or UnaryExpression { Operator: UnaryOperator.ForceUnwrap })
+            if (node is ListLiteralExpression or SetLiteralExpression or DictLiteralExpression or IndexExpression or UsingStatement or UnaryExpression { Operator: UnaryOperator.ForceUnwrap } or BinaryExpression)
             {
                 EnqueueImplicitLoweringCallees(node: node, typeSubs: frame.TypeSubs);
                 continue;
@@ -312,7 +312,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                     EnqueueThrowCrashMessage(throwStmt: throwStmt);
                     continue;
                 }
-                if (node is ListLiteralExpression or SetLiteralExpression or DictLiteralExpression or IndexExpression or UsingStatement or UnaryExpression { Operator: UnaryOperator.ForceUnwrap })
+                if (node is ListLiteralExpression or SetLiteralExpression or DictLiteralExpression or IndexExpression or UsingStatement or UnaryExpression { Operator: UnaryOperator.ForceUnwrap } or BinaryExpression)
                 {
                     EnqueueImplicitLoweringCallees(node: node, typeSubs: frame.TypeSubs);
                     continue;
@@ -339,6 +339,41 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// </summary>
     private void EnqueueImplicitLoweringCallees(object node, Dictionary<string, TypeInfo> typeSubs)
     {
+        // BinaryExpression handled separately — OperatorLoweringPass (Phase 7) lowers
+        // `a op b` to `a.$method(b)`, but reachability runs in Phase 6 before that.
+        // Resolve the exact overload by argument type so two overloads of e.g. $sub
+        // (LocalMoment.$sub(Duration) and LocalMoment.$sub(LocalMoment)) both reach
+        // the live set when their respective call sites exist in user code.
+        if (node is BinaryExpression bin)
+        {
+            string? methodName = bin.Operator.GetMethodName();
+            if (methodName == null) return;
+            bool reversed = bin.Operator is BinaryOperator.In or BinaryOperator.NotIn;
+            Expression recvExpr = reversed ? bin.Right : bin.Left;
+            Expression argExpr = reversed ? bin.Left : bin.Right;
+            TypeInfo? recvRaw = recvExpr.ResolvedType;
+            TypeInfo? argRaw = argExpr.ResolvedType;
+            if (recvRaw == null) return;
+            TypeInfo recv = RoutineInfo.SubstituteType(type: recvRaw, substitution: typeSubs);
+            TypeInfo? arg = argRaw != null
+                ? RoutineInfo.SubstituteType(type: argRaw, substitution: typeSubs)
+                : null;
+            RoutineInfo? resolved = arg != null
+                ? ctx.Registry.LookupMethodOverload(type: recv, methodName: methodName, argTypes: [arg])
+                : null;
+            resolved ??= ctx.Registry.LookupMethod(type: recv, methodName: methodName);
+            if (resolved == null && !methodName.EndsWith('!'))
+            {
+                string failable = methodName + "!";
+                resolved = arg != null
+                    ? ctx.Registry.LookupMethodOverload(type: recv, methodName: failable, argTypes: [arg])
+                    : null;
+                resolved ??= ctx.Registry.LookupMethod(type: recv, methodName: failable);
+            }
+            if (resolved != null) EnqueueCallee(callee: resolved);
+            return;
+        }
+
         TypeInfo? rawType = node switch
         {
             ListLiteralExpression l => l.ResolvedType,
@@ -801,7 +836,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                             // BuilderService.protocols) need the same implicit add/$create seeding
                             // as user-code literals; otherwise the literal's $create body never
                             // gets monomorphized and codegen emits a call to an undefined symbol.
-                            if (node is ListLiteralExpression or SetLiteralExpression or DictLiteralExpression or IndexExpression or UsingStatement or UnaryExpression { Operator: UnaryOperator.ForceUnwrap })
+                            if (node is ListLiteralExpression or SetLiteralExpression or DictLiteralExpression or IndexExpression or UsingStatement or UnaryExpression { Operator: UnaryOperator.ForceUnwrap } or BinaryExpression)
                             {
                                 EnqueueImplicitLoweringCallees(node: node, typeSubs: subs);
                                 continue;
@@ -1839,7 +1874,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             || node is DictLiteralExpression || node is IndexExpression
             || node is InsertedTextExpression
             || node is UsingStatement
-            || node is UnaryExpression { Operator: UnaryOperator.ForceUnwrap }) sink.Add(item: node);
+            || node is UnaryExpression { Operator: UnaryOperator.ForceUnwrap }
+            || node is BinaryExpression bin && bin.Operator.GetMethodName() != null) sink.Add(item: node);
 
         Type t = node.GetType();
         if (t.IsPrimitive || node is string || t.IsEnum) return;

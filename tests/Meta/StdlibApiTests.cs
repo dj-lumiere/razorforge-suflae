@@ -72,9 +72,18 @@ public sealed class StdlibApiTests
             WorkingDirectory = RepoRoot
         };
         using var p = Process.Start(psi)!;
-        string stdout = p.StandardOutput.ReadToEnd();
-        string stderr = p.StandardError.ReadToEnd();
-        p.WaitForExit();
+        var stdoutTask = p.StandardOutput.ReadToEndAsync();
+        var stderrTask = p.StandardError.ReadToEndAsync();
+        const int timeoutMs = 60_000;
+        if (!p.WaitForExit(timeoutMs))
+        {
+            try { p.Kill(entireProcessTree: true); } catch { }
+            throw new Xunit.Sdk.XunitException(
+                $"buildandrun timed out after {timeoutMs / 1000}s for {Path.GetFileName(rfPath)}.\n" +
+                $"--- stdout (partial) ---\n{stdoutTask.Result}\n--- stderr (partial) ---\n{stderrTask.Result}");
+        }
+        string stdout = stdoutTask.Result;
+        string stderr = stderrTask.Result;
 
         if (p.ExitCode != 0)
         {
