@@ -1,6 +1,6 @@
 using Compiler.Diagnostics;
 
-namespace Compiler.Lexer;
+namespace Compiler.Tokenizer;
 
 /// <summary>
 /// Partial class containing numeric literal scanning methods for the unified tokenizer.

@@ -3,7 +3,7 @@ using System.Linq;
 using System.Text;
 using Compiler.Diagnostics;
 
-namespace Compiler.Lexer;
+namespace Compiler.Tokenizer;
 
 /// <summary>
 /// Partial class containing string and character literal scanning methods for the unified tokenizer.

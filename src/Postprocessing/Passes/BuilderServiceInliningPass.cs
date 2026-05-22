@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Compiler.Desugaring;
 using Compiler.Instantiation;
-using Compiler.Lexer;
+using Compiler.Tokenizer;
 using Compiler.Resolution;
 using SyntaxTree;
 using TypeModel.Enums;

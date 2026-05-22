@@ -11,7 +11,7 @@ using static TestHelpers;
 /// </summary>
 public class ErrorHandlingValidationTests
 {
-    #region Throw Requires Named Crashable Type
+    #region Throw Needs Named Crashable Type
     /// <summary>
     /// Verifies semantic analysis behavior for throw entity no record error.
     /// </summary>

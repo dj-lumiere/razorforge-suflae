@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using Compiler.Diagnostics;
-using Compiler.Lexer;
+using Compiler.Tokenizer;
 
 namespace Compiler.Parser;
 

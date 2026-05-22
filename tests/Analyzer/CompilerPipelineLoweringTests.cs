@@ -1018,7 +1018,7 @@ public class CompilerPipelineLoweringTests
             Arguments:
             [
                 new LiteralExpression(Value: "65_u32",
-                    LiteralType: Compiler.Lexer.TokenType.U32Literal,
+                    LiteralType: Compiler.Tokenizer.TokenType.U32Literal,
                     Location: program.Location)
             ],
             Location: program.Location) { ResolvedType = characterType };
@@ -1050,7 +1050,7 @@ public class CompilerPipelineLoweringTests
         var leakedIndex = new IndexExpression(
             Object: new IdentifierExpression(Name: "items", Location: program.Location),
             Index: new LiteralExpression(Value: "0_s64",
-                LiteralType: Compiler.Lexer.TokenType.S64Literal,
+                LiteralType: Compiler.Tokenizer.TokenType.S64Literal,
                 Location: program.Location),
             Location: program.Location) { ResolvedType = new GenericParameterTypeInfo(name: "T") };
 
@@ -1116,7 +1116,7 @@ public class CompilerPipelineLoweringTests
             Arguments:
             [
                 new LiteralExpression(Value: "1_s32",
-                    LiteralType: Compiler.Lexer.TokenType.S32Literal,
+                    LiteralType: Compiler.Tokenizer.TokenType.S32Literal,
                     Location: program.Location)
             ],
             Location: program.Location);

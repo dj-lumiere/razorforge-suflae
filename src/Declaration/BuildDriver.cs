@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Compiler.Diagnostics;
-using Compiler.Lexer;
+using Compiler.Tokenizer;
 using Compiler.Parser;
 using Verification.Results;
 using SyntaxTree;

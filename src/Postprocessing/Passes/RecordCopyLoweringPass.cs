@@ -22,7 +22,7 @@ namespace Compiler.Postprocessing.Passes;
 /// </list>
 ///
 /// <para>Runs last in the per-file desugaring pipeline (after <see cref="PatternLoweringPass"/>).
-/// Requires <c>ResolvedType</c> to be set on all expressions (Phase 5 output).</para>
+/// Needs <c>ResolvedType</c> to be set on all expressions (Phase 5 output).</para>
 ///
 /// <para>Injection is limited to <em>borrowed-reference</em> expressions in assignment
 /// positions: <see cref="IdentifierExpression"/> and <see cref="MemberExpression"/> with a

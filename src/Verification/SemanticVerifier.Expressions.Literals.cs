@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 using Compiler.Diagnostics;
-using Compiler.Lexer;
+using Compiler.Tokenizer;
 using SyntaxTree;
 using TypeModel.Enums;
 using TypeModel.Types;

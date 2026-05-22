@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using Compiler.Lexer;
+using Compiler.Tokenizer;
 using TypeModel.Reprs;
 using TypeModel.Enums;
 using TypeModel.Symbols;

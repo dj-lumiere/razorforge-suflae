@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Compiler.Diagnostics;
-using Compiler.Lexer;
+using Compiler.Tokenizer;
 using SyntaxTree;
 using TypeModel.Enums;
 using TypeModel.Types;

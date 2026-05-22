@@ -1,6 +1,6 @@
 using Compiler.Diagnostics;
 
-namespace Compiler.Lexer;
+namespace Compiler.Tokenizer;
 
 /// <summary>
 /// Partial class containing the main token scanning dispatch logic for the unified tokenizer.

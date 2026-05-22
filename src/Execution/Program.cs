@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using Compiler.CodeGen;
 using Compiler.Declaration;
 using Compiler.Diagnostics;
-using Compiler.Lexer;
+using Compiler.Tokenizer;
 using Compiler.Parser;
 using Compiler.Targeting;
 using Verification;

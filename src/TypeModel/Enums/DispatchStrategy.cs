@@ -14,7 +14,7 @@ public enum DispatchStrategy
 
     /// <summary>
     /// Varargs arguments have mixed concrete types.
-    /// Requires auto-boxing to Data and dict-based dispatch at runtime.
+    /// Needs auto-boxing to Data and dict-based dispatch at runtime.
     /// </summary>
     Runtime
 }

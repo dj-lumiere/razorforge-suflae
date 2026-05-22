@@ -4,7 +4,7 @@ using Compiler.Diagnostics;
 using System.Globalization;
 using TypeModel.Enums;
 
-namespace Compiler.Lexer;
+namespace Compiler.Tokenizer;
 
 /// <summary>
 /// Unified tokenizer for both RazorForge and Suflae programming languages.
@@ -212,7 +212,7 @@ public partial class Tokenizer
             [key: "None"] = TokenType.None,
 
             // Generic constraints
-            [key: "needs"] = TokenType.Requires,
+            [key: "needs"] = TokenType.Needs,
         };
 
         // RF-only keywords

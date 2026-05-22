@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using Compiler.Diagnostics;
-using Compiler.Lexer;
+using Compiler.Tokenizer;
 using SyntaxTree;
 
 namespace Compiler.Parser;
@@ -418,7 +418,7 @@ public partial class Parser
             }
 
             if (PeekToken(offset: offset)
-                   .Type != TokenType.Requires)
+                   .Type != TokenType.Needs)
             {
                 return existingConstraints;
             }
@@ -436,8 +436,8 @@ public partial class Parser
         // ═══════════════════════════════════════════════════════════════════════════
         // Each parameter can have its own needs clause or they can be comma-separated
         // Skip newlines between needs clauses only when 'needs' obeys
-        while (SkipNewlinesIfFollowedBy(type: TokenType.Requires) &&
-               Match(type: TokenType.Requires))
+        while (SkipNewlinesIfFollowedBy(type: TokenType.Needs) &&
+               Match(type: TokenType.Needs))
         {
             do
             {

@@ -1,4 +1,4 @@
-namespace Compiler.Lexer;
+namespace Compiler.Tokenizer;
 
 /// <summary>
 /// Represents a single token produced by the lexical analyzer.

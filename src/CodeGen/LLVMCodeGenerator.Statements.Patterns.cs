@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using Compiler.Lexer;
+using Compiler.Tokenizer;
 using Compiler.Postprocessing;
 using SyntaxTree;
 using TypeModel.Symbols;

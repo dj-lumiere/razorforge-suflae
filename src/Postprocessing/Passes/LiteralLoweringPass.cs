@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
-using Compiler.Lexer;
+using Compiler.Tokenizer;
 using SyntaxTree;
 
 namespace Compiler.Postprocessing.Passes;

@@ -31,7 +31,7 @@ public enum ModificationCategory
 
     /// <summary>
     /// Modifies in-place within existing memory allocation.
-    /// Requires modifiable token: Grasped or Claimed.
+    /// Needs modifiable token: Grasped or Claimed.
     /// Cannot be called through Viewed or Inspected tokens.
     /// </summary>
     Writable,
@@ -39,7 +39,7 @@ public enum ModificationCategory
     /// <summary>
     /// Can relocate memory buffers (e.g., List.push causing reallocation).
     /// Banned during iteration to prevent iterator invalidation.
-    /// Requires ownership or exclusive access outside iteration.
+    /// Needs ownership or exclusive access outside iteration.
     /// This is the default/most permissive category.
     /// </summary>
     Migratable

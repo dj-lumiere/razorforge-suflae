@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using Compiler.Lexer;
+using Compiler.Tokenizer;
 using SyntaxTree;
 
 namespace Compiler.Parser;

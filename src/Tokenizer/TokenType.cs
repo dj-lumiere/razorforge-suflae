@@ -1,4 +1,4 @@
-namespace Compiler.Lexer;
+namespace Compiler.Tokenizer;
 
 #region Token Type Enumeration
 
@@ -274,7 +274,7 @@ public enum TokenType
     /// <summary>
     /// Variant declaration keyword.
     /// Tagged union - each case can hold different data types.
-    /// Requires pattern matching to unpack. Cases are immediately disposed after unpacking.
+    /// Needs pattern matching to unpack. Cases are immediately disposed after unpacking.
     /// </summary>
     Variant,
 
@@ -840,7 +840,7 @@ public enum TokenType
     /// Enforces build-time protocol requirements on generic types.
     /// Example: routine sort[T]() needs T obeys Comparable
     /// </summary>
-    Requires,
+    Needs,
 
     #endregion
 

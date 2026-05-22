@@ -247,7 +247,7 @@ public sealed partial class SemanticVerifier
     public static TypeRegistry.StdlibSnapshot CaptureStdlibSnapshot(Language language)
     {
         var sa = new SemanticVerifier(language: language) { SaOnly = true };
-        var tokens = new Compiler.Lexer.Tokenizer(
+        var tokens = new Compiler.Tokenizer.Tokenizer(
             source: "module __snapshot__",
             fileName: "__snapshot__",
             language: language).Tokenize();

@@ -18,7 +18,7 @@ namespace Compiler.Desugaring.Passes;
 /// preset RUNS: S64 = 20_s64
 /// for _ in 0..RUNS ?? for _ in 0..S64(20)
 /// </code>
-/// <para>Requires <see cref="VariableInfo.PresetValue"/> to be set on preset entries in
+/// <para>Needs <see cref="VariableInfo.PresetValue"/> to be set on preset entries in
 /// the <see cref="TypeRegistry"/>, which happens during
 /// <c>CollectPresetDeclaration</c> in Phase 3.</para>
 /// </summary>

@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Compiler.Lexer;
+namespace Compiler.Tokenizer;
 
 /// <summary>
 /// Partial class containing character navigation and token management methods for the unified tokenizer.

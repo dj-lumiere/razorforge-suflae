@@ -1,6 +1,6 @@
 using Compiler.Diagnostics;
 
-namespace Compiler.Lexer;
+namespace Compiler.Tokenizer;
 
 /// <summary>
 /// Partial class containing indentation and newline handling methods for the unified tokenizer.

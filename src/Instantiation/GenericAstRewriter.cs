@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Compiler.Lexer;
+using Compiler.Tokenizer;
 using Compiler.Postprocessing;
 using Compiler.Postprocessing.Passes;
 using Compiler.Resolution;

@@ -1,4 +1,4 @@
-namespace Compiler.Lexer;
+namespace Compiler.Tokenizer;
 
 /// <summary>
 /// Partial class containing operator scanning methods for the unified tokenizer.

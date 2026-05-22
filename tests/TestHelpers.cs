@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using Compiler.Lexer;
+using Compiler.Tokenizer;
 using Compiler.Resolution;
 using Verification;
 using Verification.Results;
