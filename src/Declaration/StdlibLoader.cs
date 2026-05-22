@@ -294,7 +294,7 @@ public sealed partial class StdlibLoader
         Language language = isSuflaeFile
             ? Language.Suflae
             : Language.RazorForge;
-        var tokenizer = new Tokenizer(source: code, fileName: filePath, language: language);
+        var tokenizer = new Tokenizer.Tokenizer(source: code, fileName: filePath, language: language);
         List<Token> tokens = tokenizer.Tokenize();
         var parser = new Parser.Parser(tokens: tokens, language: language, fileName: filePath);
         return parser.Parse();
