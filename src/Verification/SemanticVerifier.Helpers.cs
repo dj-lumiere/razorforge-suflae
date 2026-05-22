@@ -572,8 +572,8 @@ public sealed partial class SemanticVerifier
                 source.FullName == typeArg.Name ||
                 source.Name == typeArg.FullName)
                 return true;
-            // Raw entity E -> Maybe[Owned[E]]: rvalue entity auto-wraps into Owned, then carrier.
-            // Owned[T] is declared as `record Owned[T]` in stdlib, so it surfaces as
+            // Raw entity E -> Maybe[E]: rvalue entity auto-wraps into Owned, then carrier.
+            // T is declared as `record T` in stdlib, so it surfaces as
             // RecordTypeInfo (not WrapperTypeInfo) at runtime — match by name + arity instead
             // of pattern-matching the runtime kind.
             if (source.Category == TypeCategory.Entity &&
@@ -583,7 +583,7 @@ public sealed partial class SemanticVerifier
                 return true;
         }
 
-        // Raw entity E (rvalue) -> Owned[E]: a freshly produced entity transfers ownership.
+        // Raw entity E (rvalue) -> E: a freshly produced entity transfers ownership.
         if (source.Category == TypeCategory.Entity &&
             IsOwnedOf(type: target, out TypeSymbol? ownedInnerOfTarget) &&
             (source.Name == ownedInnerOfTarget.Name ||
@@ -595,10 +595,10 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Returns true when <paramref name="type"/> represents <c>Owned[X]</c> for some inner type
+    /// Returns true when <paramref name="type"/> represents <c>X</c> for some inner type
     /// <c>X</c>, regardless of whether the runtime kind is <see cref="WrapperTypeInfo"/>
     /// (legacy) or <see cref="RecordTypeInfo"/> (current — <c>Owned</c> is declared as
-    /// <c>record Owned[T]</c> in the stdlib, so most resolutions arrive as records). Resolutions
+    /// <c>record T</c> in the stdlib, so most resolutions arrive as records). Resolutions
     /// of generic records carry their parameterized form in <see cref="TypeSymbol.Name"/>
     /// (e.g. <c>"Owned[Core.Text]"</c>), so we strip the bracket suffix before comparing.
     /// </summary>
@@ -768,7 +768,7 @@ public sealed partial class SemanticVerifier
         if (_registry.LookupMethod(type: type, methodName: methodName) != null)
             return true;
 
-        // Phase D: transparent wrappers (Owned[T], etc.) forward operator wired methods
+        // Phase D: transparent wrappers (T, etc.) forward operator wired methods
         // to the inner T's implementation. Synthesize the forwarder lazily.
         if (IsWrapperType(type: type) &&
             TrySynthesizeWrapperForwarder(wrapperType: type, methodName: methodName,

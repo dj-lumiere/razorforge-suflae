@@ -15,7 +15,7 @@ namespace Compiler.Instantiation.Passes;
 /// (<c>start()</c>, <c>@test</c>, <c>@bench</c>) over <c>CallExpression.ResolvedRoutine</c> and
 /// <c>GenericMethodCallExpression.ResolvedRoutine</c>. Tracks per-frame type substitutions so
 /// generic-def call sites (e.g. <c>me.insertion_sort(...)</c> inside <c>List[T].sort</c>) resolve
-/// to the correct concrete callee (<c>List[Owned[Text]].insertion_sort</c>) for the calling
+/// to the correct concrete callee (<c>List[Text].insertion_sort</c>) for the calling
 /// concrete instantiation.
 /// </summary>
 internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
@@ -86,7 +86,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// AST call sites. To prevent the GMP gate from stripping bodies that have downstream callers
     /// in synthesized code, force every wired routine on every live concrete type into the live set.
     /// Sibling expansion in <see cref="ExpandSyntheticSiblings"/> then handles wrapper transparency
-    /// (e.g. Owned[Text].$represent -> Text.$represent).
+    /// (e.g. Text.$represent -> Text.$represent).
     /// </summary>
     private void SeedWiredRoutinesOnLiveTypes() // NOSONAR S3776
     {
@@ -390,7 +390,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // routine becomes the concrete instantiation (e.g. List[S64]) when typeSubs has T → S64.
         TypeInfo concreteType = RoutineInfo.SubstituteType(type: rawType, substitution: typeSubs);
 
-        // Unwrap Owned/Retained/Tracked — these are RecordTypeInfo (declared `record Owned[T]`),
+        // Unwrap Owned/Retained/Tracked — these are RecordTypeInfo (declared `record T`),
         // NOT WrapperTypeInfo. Match by base name + TypeArguments[0] so we get the inner
         // collection type the lowering will actually call methods on.
         TypeInfo collectionType = concreteType;
@@ -1448,7 +1448,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// <summary>
     /// Substitutes the generic-def callee owner+typeArgs through the calling frame's typeSubs
     /// to yield a concrete callee. E.g. callee = <c>List[T].insertion_sort</c>, frame subs
-    /// {T -> Owned[Text]} -> <c>List[Owned[Text]].insertion_sort</c>.
+    /// {T -> Text} -> <c>List[Text].insertion_sort</c>.
     /// </summary>
     private RoutineInfo SubstituteRoutine(RoutineInfo routine, Dictionary<string, TypeInfo> typeSubs)
     {

@@ -395,7 +395,7 @@ public enum SemanticDiagnosticCode
     BareEntityAssignment = 413,
     /// <summary>
     /// Implicit copy of a value whose type contains a non-trivially-copyable wrapper
-    /// (`Owned[T]`, `Retained[T]`, `Tracked[T]`, ...). Each ownership wrapper has its
+    /// (`T`, `Retained[T]`, `Tracked[T]`, ...). Each ownership wrapper has its
     /// own verb (`steal` / `.retain()` / `.track()`) that must appear at every copy site.
     /// </summary>
     ImplicitWrapperCopy = 420,

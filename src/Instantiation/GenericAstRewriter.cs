@@ -206,7 +206,7 @@ internal static class GenericAstRewriter
                 if (Registry != null && newWrapperArgs.Count == 1)
                 {
                     // Create-if-missing — body rewriting can encounter wrapper parameterizations
-                    // (e.g., Hijacked[Owned[Text]]) that no earlier pass materialized. Without
+                    // (e.g., Hijacked[Text]) that no earlier pass materialized. Without
                     // creation here, GMP never sees the type and codegen emits unresolved symbols.
                     return Registry.GetOrCreateWrapperType(wrapperName: wrapper.Name,
                         innerType: newWrapperArgs[0],

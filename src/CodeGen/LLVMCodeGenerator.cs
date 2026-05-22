@@ -1062,7 +1062,7 @@ public partial class LlvmCodeGenerator
                 // Skip derived operators on generic owner types (e.g. ArrayIterator.$ne).
                 // GMP monomorphizes these into InstantiatedGenericBodies (Phase B); emitting the
                 // generic-def version here would call a non-existent generic $eq/$contains.
-                // Exception: synthesized wrapper forwarder bodies (Owned[T].key_get, etc.) are
+                // Exception: synthesized wrapper forwarder bodies (T.key_get, etc.) are
                 // anchored on the generic-def owner by design. For each concrete resolution,
                 // emit the body with the wrapper's type parameter substituted.
                 if (synthInfo.OwnerType?.IsGenericDefinition == true)

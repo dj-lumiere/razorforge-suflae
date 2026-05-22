@@ -15,8 +15,8 @@ namespace Compiler.Resolution;
 /// Used to gate codegen `declare` emission and reachability seeding for wired
 /// routine families whose body has a built-in constraint surface that the registered
 /// implementation can't satisfy for every instantiation — e.g. `Array[T, N].$eq`
-/// declares `needs T obeys Equatable`, so `Array[Owned[X], 64]` should NOT carry an
-/// `$eq` symbol because `Owned[X]` is not equatable.
+/// declares `needs T obeys Equatable`, so `Array[X, 64]` should NOT carry an
+/// `$eq` symbol because `X` is not equatable.
 ///
 /// Results are cached per FullName + protocol for the lifetime of the registry.
 /// Cache entries are conservative — when the cache cannot decide (incomplete type

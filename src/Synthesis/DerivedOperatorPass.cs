@@ -131,7 +131,7 @@ internal sealed class DerivedOperatorPass
             // for the same instantiations as `$eq`. Without this, Array[T,N].$ne is
             // unconditionally derivable even when $eq requires `T obeys Equatable`,
             // and the synthesized `$ne` body references a non-existent `$eq` at link
-            // time for instantiations that fail the constraint (e.g. Array[Owned[X],N]).
+            // time for instantiations that fail the constraint (e.g. Array[X,N]).
             GenericParameters = eqMethod.GenericParameters,
             GenericConstraints = eqMethod.GenericConstraints,
             Visibility = eqMethod.Visibility,

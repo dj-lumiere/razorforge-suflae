@@ -283,7 +283,7 @@ public sealed class RoutineInfo
 
     /// <summary>
     /// For wrapper-forwarder synthesized routines: the inner type's generic definition
-    /// (e.g. List[T] when wrapping Owned[List[T]]). Used to look up the concrete inner
+    /// (e.g. List[T] when wrapping List[T]). Used to look up the concrete inner
     /// method after monomorphization.
     /// </summary>
     public TypeSymbol? WrapperForwarderInnerGenericDef { get; init; }

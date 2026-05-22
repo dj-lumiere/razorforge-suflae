@@ -947,7 +947,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     private (List<Statement> Hoisted, Expression Expr) LowerListLiteral(ListLiteralExpression list) // NOSONAR S3776
     {
         TypeInfo? resolvedType = list.ResolvedType;
-        // Unwrap transparent ownership wrappers (Owned[T], Retained[T], Tracked[T]) so that
+        // Unwrap transparent ownership wrappers (T, Retained[T], Tracked[T]) so that
         // Owned[List[S64]] uses "List" as baseName, not "Owned".
         TypeInfo? listType = UnwrapOwnershipWrapper(resolvedType) ?? resolvedType;
         SourceLocation loc = list.Location;
@@ -1109,7 +1109,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     {
         if (type is WrapperTypeInfo { Name: "Owned" or "Retained" or "Tracked" } w)
             return w.InnerType;
-        // Owned[T] / Retained[T] / Tracked[T] are declared as `record Owned[T]` in stdlib, so
+        // T / Retained[T] / Tracked[T] are declared as `record T` in stdlib, so
         // they surface as RecordTypeInfo, not WrapperTypeInfo. Match by base name + single
         // TypeArgument and return the inner collection so downstream lowering sees the actual
         // base (BitList, SortedSet, …) instead of the Owned envelope.

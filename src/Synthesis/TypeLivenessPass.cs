@@ -45,8 +45,8 @@ internal sealed class TypeLivenessPass(TypeRegistry registry)
         DrainWorklist();
 
         // Seed 2 (deferred): concrete wrapper instances whose inner type is already live.
-        // Deferring prevents phantom wrappers (e.g. Owned[BTreeSetNode[Owned[Bytes]]] created
-        // as a SA side-effect of Bytes.split -> List[Owned[Bytes]] -> List.$create(from: SortedSet[T]))
+        // Deferring prevents phantom wrappers (e.g. BTreeSetNode[Owned[Bytes]] created
+        // as a SA side-effect of Bytes.split -> List[Bytes] -> List.$create(from: SortedSet[T]))
         // from being seeded just because they exist in the registry.
         foreach (WrapperTypeInfo w in registry.AllConcreteWrapperInstances)
         {

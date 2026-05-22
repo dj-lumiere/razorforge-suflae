@@ -113,7 +113,7 @@ internal sealed class AutoWiredRegistrationPass
                     // Skip comparison/hash/copy stubs; two Blanks are trivially equal.
                     // Wrapper types (Owned, Retained, Viewed, etc.) are transparent forwarders —
                     // WrapperForwardingPass lazily synthesizes their $hash/$eq/$cmp from the inner T.
-                    // Don't register field-based stubs here: for zero-field wrappers (Owned[T])
+                    // Don't register field-based stubs here: for zero-field wrappers (T)
                     // WiredRoutinePass would generate wrong bodies (returns 0 / returns true).
                     bool isWrapper = type is RecordTypeInfo &&
                                      WrapperForwardingPass.WrapperTypeNames.Contains(
@@ -164,13 +164,13 @@ internal sealed class AutoWiredRegistrationPass
                     // Only synthesize `$eq` when every member field's type also has an
                     // accessible `$eq`. Otherwise the auto-derived body would emit calls
                     // like `me.children == you.children` for non-equatable element types
-                    // (e.g. `Array[Owned[T], 64]`), and the cascade dead-ends at link time.
+                    // (e.g. `Array[T, 64]`), and the cascade dead-ends at link time.
                     // Entities that genuinely need equality but hold non-equatable fields
                     // should declare `$eq` explicitly with the right semantics.
                     // Only synthesize `$eq` when every member field's type also has an
                     // accessible `$eq`. Otherwise the auto-derived body would emit calls
                     // like `me.children == you.children` for non-equatable element types
-                    // (e.g. `Array[Owned[T], 64]`), and the cascade dead-ends at link time.
+                    // (e.g. `Array[T, 64]`), and the cascade dead-ends at link time.
                     if (boolType != null && ObeysProtocol(type: type, protocolName: EquatableProtocolName) &&
                         AllFieldsHaveEquality(type: type))
                     {
@@ -418,7 +418,7 @@ internal sealed class AutoWiredRegistrationPass
                     continue;
                 }
 
-                // Skip generic-definition types (Owned[T], Retained[T], List[T], etc. without
+                // Skip generic-definition types (T, Retained[T], List[T], etc. without
                 // concrete arg) and WrapperTypeInfo definitions — registering a $create(from: T)
                 // for the bare wrapper produces a phantom Text.$create(Core.Owned) symbol that
                 // overload-resolution can drift onto, then linker fails (no definition emitted).
@@ -662,7 +662,7 @@ internal sealed class AutoWiredRegistrationPass
     /// Returns true when every member-variable type on <paramref name="type"/> supports `$eq`
     /// — either it obeys `Equatable`, has an explicit `$eq` method, or is a primitive /
     /// `@llvm("...")`-backed record (whose equality is a built-in instruction). Used to gate
-    /// auto-derivation of `$eq` so entities holding non-equatable fields (e.g. `Array[Owned[T], N]`)
+    /// auto-derivation of `$eq` so entities holding non-equatable fields (e.g. `Array[T, N]`)
     /// don't get a synthesised body whose recursion dead-ends at link time.
     /// </summary>
     private bool AllFieldsHaveEquality(TypeSymbol type)
@@ -689,8 +689,8 @@ internal sealed class AutoWiredRegistrationPass
     /// (2) explicit `$eq` method or obeys `Equatable` — registered conformance;
     /// (3) generic resolution like `Array[T, N]` — looks up the generic def's `$eq` method
     /// and recursively verifies every `T obeys Equatable` constraint against the substituted
-    /// type args. Without (3), `Array[Owned[X], 64]` passes the check (because `Array.$eq` exists
-    /// on the generic def) even though the body's recursion into `Owned[X].$ne` link-errors.
+    /// type args. Without (3), `Array[X, 64]` passes the check (because `Array.$eq` exists
+    /// on the generic def) even though the body's recursion into `X.$ne` link-errors.
     /// </summary>
     private bool TypeHasEquality(TypeSymbol type, HashSet<string> seen)
     {

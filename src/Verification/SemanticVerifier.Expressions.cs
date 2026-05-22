@@ -914,7 +914,7 @@ public sealed partial class SemanticVerifier
                     operandType.TypeArguments is { Count: > 0 })
                 {
                     TypeSymbol inner = operandType.TypeArguments[index: 0];
-                    // `Maybe[Owned[T]]!!` yields `Grasped[T]` — Owned is unique, so the unwrap
+                    // `Maybe[T]!!` yields `Grasped[T]` — Owned is unique, so the unwrap
                     // is an exclusive scope-bound borrow, not a copy. Same LLVM repr (ptr), but
                     // typed as Grasped so the destructor scheduler skips it.
                     if (IsMaybeType(type: operandType) &&

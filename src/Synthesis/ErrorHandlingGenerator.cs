@@ -413,7 +413,7 @@ public sealed class ErrorHandlingGenerator
     /// Carrier-shape adjustment for failable return types. Post-Owned-retirement,
     /// bare entity <c>T</c> IS the lvalue/bound form, so <c>Maybe[T]</c> /
     /// <c>Result[T]</c> / <c>Lookup[T]</c> over a bare entity is the correct shape:
-    /// the carrier owns the bound entity directly, no <c>Owned[T]</c> intermediary.
+    /// the carrier owns the bound entity directly, no <c>T</c> intermediary.
     /// Identity for all inputs; retained for the call-site hook in case future
     /// carrier-element transforms (e.g., needs-RecordType relaxation) want a single
     /// chokepoint.

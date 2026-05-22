@@ -295,7 +295,7 @@ public sealed partial class StdlibLoader
     /// </summary>
     /// <summary>
     /// BuilderService per-type routines whose stdlib decls return
-    /// <c>List[Owned[FieldInfo|ProtocolInfo|RoutineInfo]]</c> or <c>Dict[Owned[Text], Data]</c>.
+    /// <c>List[Owned[FieldInfo|ProtocolInfo|RoutineInfo]]</c> or <c>Dict[Text, Data]</c>.
     /// Registering these as universal <c>T.x()</c> routines from BuilderService.rf forces GMP to
     /// monomorphize the heavy carrier closure (BTreeListNode/Owned/Array/ArrayIterator) for every
     /// type even when the user program never imports BuilderService.
@@ -667,7 +667,7 @@ public sealed partial class StdlibLoader
             .FirstOrDefault();
         bool isEntitySpecialization = entityConstraintParam != null;
 
-        // Transparent pointer wrappers (e.g. Owned[T]) carry `needs T is EntityType` as a
+        // Transparent pointer wrappers (e.g. T) carry `needs T is EntityType` as a
         // contract annotation but have a single fixed LLVM layout (ptr) for all type arguments.
         // They are wrapper types — NOT entity specializations — so register them normally.
         if (isEntitySpecialization &&

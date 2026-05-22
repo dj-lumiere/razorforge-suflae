@@ -528,7 +528,7 @@ internal sealed class TypeBodyResolver
             {
                 _sa.ReportError(code: SemanticDiagnosticCode.BareEntityInCarrierType,
                     message: $"Variant member '{memberTypeName}' is a bare entity type. " +
-                             "Use an RC wrapper (Retained[T], Shared[T], Tracked[T]) or Owned[T] to make ownership explicit.",
+                             "Use an RC wrapper (Retained[T], Shared[T], Tracked[T]) or T to make ownership explicit.",
                     location: member.Location);
             }
 

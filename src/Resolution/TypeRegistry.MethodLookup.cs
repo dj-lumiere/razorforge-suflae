@@ -956,9 +956,9 @@ public sealed partial class TypeRegistry
         }
 
         // Wrapper-forwarder: re-resolve signature against the concrete inner method instead of
-        // naive name substitution (inner-T vs wrapper-T collision: both Owned[T] and List[T] use T,
+        // naive name substitution (inner-T vs wrapper-T collision: both T and List[T] use T,
         // so {T: List[Character]} would map List[T].$getitem!'s T to List[Character], not Character).
-        // Note: wrapper types like Owned[T] may be RecordTypeInfo (declared as `record` in RF),
+        // Note: wrapper types like T may be RecordTypeInfo (declared as `record` in RF),
         // not WrapperTypeInfo, so check TypeArguments.Count rather than the runtime type.
         if (method is { IsSynthesized: true, WrapperForwarderInnerMethod: { } innerGenMethod } &&
             resolvedOwner.TypeArguments is { Count: 1 } && resolvedOwner is not GenericParameterTypeInfo)
@@ -1001,7 +1001,7 @@ public sealed partial class TypeRegistry
                     AsyncStatus = method.AsyncStatus,
                     OriginalName = method.OriginalName,
                     // Propagate method-level generic parameters from the concrete inner method so
-                    // OperatorLoweringPass can monomorphize (e.g. Owned[Text].$getitem![I] -> [U64]).
+                    // OperatorLoweringPass can monomorphize (e.g. Text.$getitem![I] -> [U64]).
                     GenericParameters = concreteInnerMethod.GenericParameters ?? method.GenericParameters,
                     GenericConstraints = concreteInnerMethod.GenericConstraints ?? method.GenericConstraints,
                 };

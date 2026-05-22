@@ -31,7 +31,7 @@ public enum PointerFlavor
     Marked,
     /// <summary>Unsafe hijack borrow (Hijacked[T]).</summary>
     Hijacked,
-    /// <summary>Unique ownership pointer (Owned[T]).</summary>
+    /// <summary>Unique ownership pointer (T).</summary>
     Owned,
     /// <summary>Untyped raw pointer (CPtr / Address).</summary>
     Raw

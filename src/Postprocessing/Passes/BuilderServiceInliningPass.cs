@@ -771,7 +771,9 @@ internal sealed class BuilderServiceInliningPass
             {
                 TypeInfo? tkType = _registry.LookupType(name: "TypeKind");
                 if (tkType is not ChoiceTypeInfo tkChoice) return null;
-                string caseName = type.Category switch
+                // Wrappers (Owned/Retained/Grasped/etc) report the inner type's kind.
+                TypeInfo kindType = type is WrapperTypeInfo wt ? wt.InnerType : type;
+                string caseName = kindType.Category switch
                 {
                     TypeCategory.Record => "RECORD",
                     TypeCategory.Entity => "ENTITY",
@@ -782,7 +784,7 @@ internal sealed class BuilderServiceInliningPass
                     TypeCategory.Routine => "ROUTINE",
                     TypeCategory.Protocol => "PROTOCOL",
                     _ => throw new InvalidOperationException(
-                        $"Unhandled TypeCategory '{type.Category}' in type_kind BuilderService mapping.")
+                        $"Unhandled TypeCategory '{kindType.Category}' in type_kind BuilderService mapping.")
                 };
                 ChoiceCaseInfo? found = tkChoice.Cases.FirstOrDefault(c => c.Name == caseName);
                 if (found == null) return null;

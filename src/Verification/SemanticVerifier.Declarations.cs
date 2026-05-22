@@ -687,7 +687,7 @@ public sealed partial class SemanticVerifier
     private void ValidateMarkerProtocolMembership(TypeSymbol type, List<TypeSymbol> implementedProtocols)
     {
         // Resolve the base name of the obeyer for membership lookup. Generic instances carry
-        // names like "Owned[T]" / "Owned[S64]"; the allowlist keys on the generic-def name.
+        // names like "T" / "Owned[S64]"; the allowlist keys on the generic-def name.
         string obeyerBaseName = type switch
         {
             RecordTypeInfo { GenericDefinition: { } def } => def.Name,

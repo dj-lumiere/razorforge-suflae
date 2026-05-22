@@ -571,18 +571,12 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
                 if (ep.VariableName != null)
                 {
                     Expression bindValue;
-                    if (IsMaybeRecord(subjectType))
+                    if (IsMaybeRecord(subjectType) || IsMaybeEntity(subjectType))
                     {
-                        // Maybe[T record]: bind to inner .value field.
+                        // Maybe[T] (record or entity): bind to inner .value field. Bound T is
+                        // record-shaped (pointer slot) so both branches read the same way.
                         bindValue = MakeMemberAccess(subject: subject, field: ValueFieldName,
                             fieldType: subjectType!.TypeArguments![0], loc: loc);
-                    }
-                    else if (IsMaybeEntity(subjectType) && subjectType!.TypeArguments?.Count > 0)
-                    {
-                        // Maybe[T entity]: else arm binds to the inner entity via .value.extract()
-                        TypeInfo innerType = subjectType.TypeArguments[0];
-                        bindValue = MakeEntityMaybeRead(subject: subject, subjectType: subjectType,
-                            entityType: innerType, loc: loc);
                     }
                     else if (IsResultOrLookup(subjectType) && subjectType!.TypeArguments?.Count > 0
                              && isElseNarrowed)
@@ -627,38 +621,12 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
             // -----------------------------------------------------------------------------
 
             case NonePattern:
-                // Reached for Maybe[T record] and Maybe[T entity] (gated by IsLowerablePattern).
-                if (IsMaybeEntity(subjectType))
-                    return (MakeIsNoneCall(subject: subject, subjectType: subjectType!, loc: loc), null);
-                // Maybe[T record]: use the present flag.
+                // Maybe[T] (both entity and record T): use the present flag. Bound T is
+                // record-shaped (pointer slot), so the entity-vs-record split collapses at
+                // the carrier level.
                 return (MakeNotPresent(subject: subject, loc: loc, boolType: boolType), null);
 
-            case TypePattern tp when IsMaybeEntity(subjectType):
-            {
-                // `is None` on Maybe[T entity] tests `is_none()`; other TypePatterns test
-                // `not is_none()`. Parser emits `is None` as TypePattern with Type.Name == "None".
-                TypeInfo innerType = subjectType!.TypeArguments![0];
-                Expression isNone = MakeIsNoneCall(subject: subject, subjectType: subjectType, loc: loc);
-                Expression cond = tp.Type.Name == "None"
-                    ? isNone
-                    : new UnaryExpression(
-                        Operator: UnaryOperator.Not,
-                        Operand: isNone,
-                        Location: loc)
-                    {
-                        ResolvedType = boolType
-                    };
-                Statement? binding = tp.VariableName != null
-                    ? MakeBinding(
-                        name: tp.VariableName,
-                        value: MakeEntityMaybeRead(subject: subject, subjectType: subjectType,
-                            entityType: innerType, loc: loc),
-                        loc: loc)
-                    : null;
-                return (cond, binding);
-            }
-
-            case TypePattern tp when IsMaybeRecord(subjectType):
+            case TypePattern tp when IsMaybeRecord(subjectType) || IsMaybeEntity(subjectType):
             {
                 // `is None` on Maybe[T record] tests absence (`not present`); other TypePatterns
                 // test presence. Parser emits `is None` as TypePattern with Type.Name == "None".

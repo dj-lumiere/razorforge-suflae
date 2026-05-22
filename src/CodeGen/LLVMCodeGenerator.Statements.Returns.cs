@@ -506,7 +506,7 @@ public partial class LlvmCodeGenerator
         string innerLlvm = GetLlvmType(type: innerType);
         if (innerLlvm == "i64") return value;
 
-        // Pointer-typed values (wrapper types like Owned[T], Retained[T], etc.) must use
+        // Pointer-typed values (wrapper types like T, Retained[T], etc.) must use
         // ptrtoint, not zext -- zext is only valid for integer types.
         if (innerLlvm == "ptr")
         {

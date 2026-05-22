@@ -177,7 +177,7 @@ public enum SemanticWarningCode
 
     /// <summary>
     /// Implicit copy of a value whose type contains a non-trivially-copyable wrapper
-    /// (`Owned[T]`, `Retained[T]`, `Tracked[T]`, ...). Each ownership wrapper has its
+    /// (`T`, `Retained[T]`, `Tracked[T]`, ...). Each ownership wrapper has its
     /// own verb (`steal` / `.retain()` / `.track()`) that must appear at every copy site
     /// so reference-count bumps and ownership transfers are visible in the source.
     /// Currently emitted as a warning during Phase 1 rollout; will be promoted to a

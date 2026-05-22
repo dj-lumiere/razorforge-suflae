@@ -27,7 +27,7 @@ public partial class LlvmCodeGenerator
         if (routine.Annotations.Contains(value: "innate"))
             return;
 
-        // Skip declarations on generic-definition owner types (e.g. Owned[T], List[T]) —
+        // Skip declarations on generic-definition owner types (e.g. T, List[T]) —
         // these produce invalid LLVM IR; only monomorphized concrete instances should be declared
         if (routine.OwnerType?.IsGenericDefinition == true)
             return;
@@ -682,7 +682,7 @@ public partial class LlvmCodeGenerator
         //   - bare entity (post-Owned-retirement: bound T can't be duplicated, so
         //     the me pointer is exclusive at the call boundary by the
         //     entity-ownership rule),
-        //   - legacy `Owned[T]` wrapper (transitional, while Owned still exists),
+        //   - legacy `T` wrapper (transitional, while Owned still exists),
         //   - `Grasped[T]` (scope-bound exclusive borrow — its definition).
         bool isExclusive = routine.OwnerType is EntityTypeInfo
                            || routine.OwnerType is WrapperTypeInfo { Name: "Owned" or "Grasped" };

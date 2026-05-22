@@ -264,13 +264,13 @@ public sealed partial class SemanticVerifier
             return operandType;
         }
 
-        // Owned[T] is explicitly stealable — ownership transfer is its design purpose
+        // T is explicitly stealable — ownership transfer is its design purpose
         bool isOwned = operandType is WrapperTypeInfo { Name: "Owned" };
 
         if (!isOwned && !IsRawEntityType(type: operandType))
         {
             ReportError(code: SemanticDiagnosticCode.StealScopeBoundToken,
-                message: $"Cannot steal '{operandType.Name}' - only raw entities and Owned[T] can be stolen.",
+                message: $"Cannot steal '{operandType.Name}' - only raw entities and T can be stolen.",
                 location: steal.Location);
             steal.ResolvedType = operandType;
             return operandType;
@@ -282,7 +282,7 @@ public sealed partial class SemanticVerifier
             _deadrefVariables.Add(item: stolenId.Name);
         }
 
-        // `steal Owned[T]` unwraps to bare T — Owned[T] is a binding-only ownership marker,
+        // `steal T` unwraps to bare T — T is a binding-only ownership marker,
         // and steal transfers the bare entity out of that binding. For raw entity operands
         // (already bare), steal is a no-op on the type.
         // `steal` always produces an rvalue `?T` — it consumes an lvalue binding and yields

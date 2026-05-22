@@ -101,7 +101,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         }
 
         // One-time pass over ALL concrete types in _resolutions that weren't in the liveness set.
-        // Catches types created before GMP started (e.g. List[Owned[Bytes]] resolved during SA
+        // Catches types created before GMP started (e.g. List[Bytes] resolved during SA
         // but not reached by the liveness walk). Self-nesting types (Hijacked^N) are blocked by
         // the guard in GetOrCreateResolution, so this scan terminates.
         // Materialize to a list first — ProcessConcreteType modifies _resolutions during iteration.
@@ -111,7 +111,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             ProcessConcreteType(preExisting);
         }
 
-        // Same for wrapper instances (Hijacked[T], Owned[T], etc.). Wrappers like Hijacked have
+        // Same for wrapper instances (Hijacked[T], T, etc.). Wrappers like Hijacked have
         // explicit method definitions in stdlib that need monomorphization for each concrete T,
         // but live in _wrapperResolutions and aren't enqueued by NotifyConcreteRegistration.
         foreach (TypeInfo preExisting in ctx.Registry.AllConcreteWrapperInstancesUnfiltered.ToList())
@@ -140,8 +140,8 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
 
             // Wrapper instances aren't enqueued by NotifyConcreteRegistration (it only handles
             // EntityTypeInfo/RecordTypeInfo). Re-scan _wrapperResolutions each round to pick up
-            // new wrappers like Hijacked[Owned[Text]] that GenericAstRewriter created while
-            // rewriting Owned[List[Owned[Text]]] forwarder bodies.
+            // new wrappers like Hijacked[Text] that GenericAstRewriter created while
+            // rewriting List[Owned[Text]] forwarder bodies.
             foreach (TypeInfo wrapper in ctx.Registry.AllConcreteWrapperInstancesUnfiltered.ToList())
             {
                 if (!processedTypes.Add(wrapper.FullName)) continue;
@@ -158,7 +158,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         }
 
         // Scan built bodies for method-generic call sites (e.g. $getitem[U64]! called from
-        // List[Owned[Bytes]].$eq). SA only analyzes generic-def bodies, so these concrete
+        // List[Bytes].$eq). SA only analyzes generic-def bodies, so these concrete
         // call sites are never registered in _routineResolutions. Register them now so
         // ProcessResolvedMethodGenericRoutines can build their bodies.
         ScanAndRegisterMethodGenericCallResolutions();
@@ -268,7 +268,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// <summary>
     /// Returns false when this concrete instantiation does not actually have the wired
     /// routine. Example: `Array[T, N].$eq` is declared `needs T obeys Equatable` — for
-    /// `T = Owned[X]` (not equatable), the routine does not exist on this owner. Body
+    /// `T = X` (not equatable), the routine does not exist on this owner. Body
     /// emission must skip it so derived companions (`$ne`, `$notcontains`) don't reference
     /// a missing symbol downstream in codegen. The actual protocol-to-wired-routine map
     /// lives in <see cref="TypeRegistry"/> (single source of truth).
@@ -360,8 +360,8 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                         continue;
                     }
                     // Two-level generic wrapper forwarder: the generic-def body is stored under
-                    // GenericDefinition.GenericDefinition (the Owned[T] forwarder), not under
-                    // GenericDefinition (the Owned[Text] forwarder with method-level generic I).
+                    // GenericDefinition.GenericDefinition (the T forwarder), not under
+                    // GenericDefinition (the Text forwarder with method-level generic I).
                     // typeSubs already contains both T->Text (from owner) and I->U64 (from TypeArguments).
                     string? genDefGenDefKey = resolvedRoutine.GenericDefinition.GenericDefinition?.RegistryKey;
                     if (genDefGenDefKey != null &&
@@ -488,7 +488,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 typeSubs: typeSubs,
                 stringSubs: stringSubs);
         // If the concrete method still has unresolved method-level generic parameters
-        // (e.g. Owned[Text].$getitem! where index: I is still GenericParameterTypeInfo),
+        // (e.g. Text.$getitem! where index: I is still GenericParameterTypeInfo),
         // skip this body here. ProcessResolvedMethodGenericRoutines handles per-concrete-
         // index-type specialization once OperatorLoweringPass registers the resolutions.
         if (concreteInfo.Parameters.Any(static p => p.Type is GenericParameterTypeInfo))
@@ -1213,7 +1213,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
 
     /// <summary>
     /// Walks all built InstantiatedGenericBodies and registers method-level generic
-    /// call-site resolutions (e.g. $getitem[U64]! called from List[Owned[Bytes]].$eq).
+    /// call-site resolutions (e.g. $getitem[U64]! called from List[Bytes].$eq).
     /// SA only analyzes generic-def bodies, so these concrete resolutions are never in
     /// _routineResolutions. Registering them here lets ProcessResolvedMethodGenericRoutines
     /// build the bodies before codegen runs.

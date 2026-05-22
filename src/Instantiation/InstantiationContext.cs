@@ -62,7 +62,7 @@ public sealed class InstantiationContext
     /// Strategy-B live routine set: <see cref="RegistryKey"/> values reachable from
     /// program entry points (<c>start()</c>, <c>@test</c>, <c>@bench</c>) via a transitive
     /// call-graph BFS. When non-empty, GMP gates body emission on membership so unreachable
-    /// methods on live concrete types (e.g. <c>List[Owned[Text]].insertion_sort</c> when no caller
+    /// methods on live concrete types (e.g. <c>List[Text].insertion_sort</c> when no caller
     /// uses it) are skipped, preventing the stdlib closure cascade from forcing emission of
     /// unused routines. Populated by <c>RoutineReachabilityPass</c>; empty disables filtering.
     /// </summary>

@@ -552,28 +552,9 @@ public sealed partial class SemanticVerifier
             // This mirrors the binding-vs-rvalue distinction: `alert([1,2,3])` keeps the bare
             // entity (and prints List-shaped output), while `var a = [1,2,3]; alert(a)` makes
             // a Owned (and prints the Owned envelope).
-            // Bare entity types are value-in-flight only — they cannot be stored in a binding.
-            // Auto-bind rule:
-            //   - rvalue `?T` (initializer.IsRvalueExpr=true) → bound lvalue `T` (no wrap).
-            //     Post-Owned-retirement this is the canonical path: the slot holds bare entity
-            //     T which IS the lvalue/bound form.
-            //   - legacy bare-entity rvalue (IsRvalueExpr=false) → `Owned[T]` (transitional).
-            //     This branch fires for source that hasn't been migrated to mark rvalue returns
-            //     with `?T`. Removed in Step 6 once stdlib/playground sed completes.
-            if (_registry.Language == Language.RazorForge
-                && varType is EntityTypeInfo
-                && !varDecl.Initializer.IsRvalueExpr)
-            {
-                varType = _registry.GetOrCreateWrapperType(wrapperName: "Owned",
-                    innerType: varType,
-                    isReadOnly: false);
-                // Mirror the wrap onto the literal's ResolvedType so the literal itself describes
-                // the Owned-wrapped type at the binding site. Downstream lowering (LowerListLiteral
-                // / LowerSetLiteral / LowerDictLiteral) calls UnwrapOwnershipWrapper to recover the
-                // bare collection type for `.add` / `.add_last` resolution, so this doesn't break
-                // codegen.
-                varDecl.Initializer.ResolvedType = varType;
-            }
+            // Post-Owned-retirement: bound `T` (entity lvalue) is record-shaped storage with
+            // entity-ownership semantics layered on top. No wrapper synthesis — the slot holds
+            // bare entity T directly.
         }
         else
         {
@@ -632,23 +613,9 @@ public sealed partial class SemanticVerifier
                 location: varDecl.Location);
         }
 
-        // RazorForge: bare entity-type var bindings are prohibited regardless of initializer
-        // form. Collection literals (`{1: ...}`) and explicit constructors (`SortedDict[…](...)`)
-        // both produce entity values whose lifetime must be carried by an ownership wrapper. The
-        // ownership wrappers themselves (`Owned`/`Retained`/`Tracked`) are RecordTypeInfo so they
-        // don't hit this check.
-        if (_registry.Language == Language.RazorForge
-            && varDecl is { Type: not null, Initializer: not null }
-            && varType is EntityTypeInfo entityVarType
-            && varDecl.Initializer is not IdentifierExpression)
-        {
-            ReportError(code: SemanticDiagnosticCode.BareEntityAssignment,
-                message:
-                $"Variable '{varDecl.Name}' of bare entity type '{entityVarType.Name}' is not allowed. " +
-                $"Wrap as 'Owned[{entityVarType.Name}]', 'Retained[{entityVarType.Name}]', or " +
-                $"'Tracked[{entityVarType.Name}]'.",
-                location: varDecl.Location);
-        }
+        // Post-Owned-retirement: bare entity-typed `var x: T = ...` is the normal bound form.
+        // Bound `T` is record-shaped pointer storage with entity-ownership semantics layered on;
+        // the no-duplicate-handle rule is enforced separately at copy sites (block above).
 
         // Variant copy prohibition: `var box2 = box1` is not allowed
         // Variants must be dismantled immediately with pattern matching

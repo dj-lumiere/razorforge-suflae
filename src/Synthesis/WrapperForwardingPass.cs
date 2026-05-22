@@ -11,10 +11,10 @@ namespace Compiler.Synthesis;
 
 /// <summary>
 /// Phase D synthesizer: lazily generates transparent-forwarding routines on wrapper
-/// types (Owned[T], Viewed[T], Grasped[T], etc.) when user code calls a method that
+/// types (T, Viewed[T], Grasped[T], etc.) when user code calls a method that
 /// exists on the inner type T but not directly on the wrapper.
 ///
-/// Synthesis anchors on the wrapper's generic definition (e.g. Owned[T]) so that
+/// Synthesis anchors on the wrapper's generic definition (e.g. T) so that
 /// monomorphization handles per-instance specialization.  The forwarder body is:
 ///
 ///   danger!
@@ -96,7 +96,7 @@ internal sealed class WrapperForwardingPass
         // Operators/hashing/display: invoked from generic stdlib container
         // bodies after monomorphization, so they bypass SA's lazy synthesis
         // path. Wrappers do not define these themselves — they transparently
-        // forward to inner T (e.g. Owned[Text].$eq -> Text.$eq).
+        // forward to inner T (e.g. Text.$eq -> Text.$eq).
         "$eq",
         "$ne",
         "$cmp",
@@ -553,7 +553,7 @@ internal sealed class WrapperForwardingPass
         {
             // Pointer wrapper: var raw = Hijacked[T](me); raw.reveal()/extract().method(...)
             // Entity inner types: reveal() reinterprets the ptr directly as T (no dereference)
-            //   — correct for Owned[T] where me IS the entity ptr, not a slot holding one.
+            //   — correct for T where me IS the entity ptr, not a slot holding one.
             // Record inner types: extract() dereferences the ptr to load the value — correct
             //   for Hijacked[RecordType] where the ptr points to a heap/stack slot.
             // innerIsEntity is determined from the concrete inner type at the call site so

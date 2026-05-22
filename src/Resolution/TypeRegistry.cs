@@ -918,7 +918,7 @@ public sealed partial class TypeRegistry
         string fullKey =
             $"{genericDef.Name}[{string.Join(separator: ", ", values: typeArguments.Select(selector: t => t.FullName))}]";
         // WrapperTypeInfo.Name is bare ("Owned") without inner type args, so using Name alone
-        // collapses "Maybe[Owned[X]]" and "Maybe[Owned[Y]]" to the same shortKey "Maybe[Owned]".
+        // collapses "Maybe[X]" and "Maybe[Y]" to the same shortKey "Maybe[Owned]".
         // GetShortName expands wrappers to "Wrapper[Inner.Name]" to keep shortKeys distinct.
         string shortKey =
             $"{genericDef.Name}[{string.Join(separator: ", ", values: typeArguments.Select(selector: GetShortName))}]";
@@ -979,9 +979,9 @@ public sealed partial class TypeRegistry
             // Guards:
             // 1. Fully-concrete: no unresolved GenericParameterTypeInfo args (avoids LookupMethod recursion).
             // 2. No self-nesting: skip types where a type argument's FullName contains the outer type's
-            //    bare base name — e.g. Hijacked[Hijacked[Owned[Text]]] created by Hijacked[T].offset
+            //    bare base name — e.g. Hijacked[Hijacked[Text]] created by Hijacked[T].offset
             //    body rewriting would recurse unboundedly (Hijacked^N for all N).
-            //    resolved.Name may already contain type args (e.g. "Hijacked[Owned[Text]]"),
+            //    resolved.Name may already contain type args (e.g. "Hijacked[Text]"),
             //    so strip everything from '[' onwards to get just the bare name "Hijacked".
             if (_gmpDiscoveryQueue != null && resolved is EntityTypeInfo or RecordTypeInfo &&
                 IsFullyConcrete(resolved))
@@ -1045,7 +1045,7 @@ public sealed partial class TypeRegistry
 
     /// Short name for a type argument used in the shortKey of GetOrCreateResolution / TryGetResolution.
     /// WrapperTypeInfo.Name is bare ("Owned") without inner args, so we expand it recursively to
-    /// "Owned[InnerName]" to prevent shortKey collisions across different inner types.
+    /// "InnerName" to prevent shortKey collisions across different inner types.
     private static string GetShortName(TypeInfo t) =>
         t is WrapperTypeInfo wt
             ? $"{wt.Name}[{GetShortName(wt.InnerType)}]"
@@ -1371,7 +1371,7 @@ public sealed partial class TypeRegistry
     /// <summary>
     /// All concrete wrapper instances bypassing the liveness filter. Mirror of
     /// <see cref="AllConcreteGenericInstancesUnfiltered"/> for wrapper types — used by GMP to
-    /// monomorphize methods on wrappers like <c>Hijacked[Owned[Text]]</c> that were created
+    /// monomorphize methods on wrappers like <c>Hijacked[Text]</c> that were created
     /// during stdlib analysis but never reached the liveness walk (e.g. as a field type of an
     /// iterator entity referenced indirectly via $represent/$diagnose).
     /// </summary>

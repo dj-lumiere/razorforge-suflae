@@ -308,29 +308,10 @@ internal sealed class TypeResolver
         // The identity/ownership-transfer semantics of `Maybe[Entity].$unwrap() -> T`
         // are still an open design question (likely `?T` — return-position rvalue).
 
-        // Reject entity-class generic carriers (List/Set/Dict/PriorityQueue/...) with bare-entity
-        // type arguments. Each entity stored inside the collection must carry its own ownership
-        // wrapper (Owned/Retained/Tracked) — a bare entity has no defined lifetime semantics inside
-        // a heap-allocated container. The ownership wrappers themselves are exempt because they
-        // exist precisely to provide that wrapping.
-        if (genericDef.Category == TypeCategory.Entity
-            && genericDefCarrierName is not ("Owned" or "Retained" or "Tracked"))
-        {
-            for (int i = 0; i < typeArgs.Count; i++)
-            {
-                if (typeArgs[index: i].Category is not (TypeCategory.Entity or TypeCategory.Crashable))
-                    continue;
-                string carrier = genericDefCarrierName ?? genericDef.Name;
-                string inner = typeArgs[index: i].Name;
-                _sa.ReportError(code: SemanticDiagnosticCode.BareEntityInCarrierType,
-                    message:
-                    $"'{carrier}[…]' type argument '{inner}' is a bare entity. Wrap it as " +
-                    $"'Owned[{inner}]', 'Retained[{inner}]', or 'Tracked[{inner}]' so the container has " +
-                    "defined ownership semantics.",
-                    location: typeExpr.Location);
-                break;
-            }
-        }
+        // Post-Owned-retirement: bare entity T in collection slots is fine — bound T is
+        // record-shaped (pointer-sized) so List[T]/Dict[K,T] hold the same layout regardless
+        // of whether T is entity or record. Entity-ownership semantics (no duplicate handles)
+        // are enforced separately at SA-level assignment/copy sites.
 
         // Validate generic constraints
         ValidateGenericConstraints(genericDef: genericDef,
