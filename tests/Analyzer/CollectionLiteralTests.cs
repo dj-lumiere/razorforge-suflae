@@ -323,6 +323,42 @@ public class CollectionLiteralTests
     }
 
     /// <summary>
+    /// Regression: bare-entity constructor calls bound via `var x = T(...)` must auto-wrap
+    /// to Owned[T] so the local owns the heap allocation. Without the wrap, the var holds a
+    /// bare entity pointer, scope-exit cleanup invalidates it, and any caller that stored
+    /// the pointer (e.g. an entity field via constructor argument) reads dangling memory.
+    /// Originally hit in playground/SegTreeLazy.rf as a heap-layout-flaky IOOB/AV.
+    /// </summary>
+    [Fact]
+    public void CreatorExpression_BareEntity_InfersOwnedWrap()
+    {
+        string source = """
+                        routine test()
+                          var items = List[S64](capacity: 8u64)
+                          return
+                        """;
+
+        Program program = Parse(source: source);
+        var analyzer = new SemanticVerifier(language: Language.RazorForge) { SaOnly = true };
+        AnalysisResult result = analyzer.Analyze(program: program);
+
+        Assert.Empty(collection: result.Errors);
+
+        RoutineDeclaration routine = program.Declarations.OfType<RoutineDeclaration>()
+            .Single(predicate: declaration => declaration.Name == "test");
+        BlockStatement body = Assert.IsType<BlockStatement>(routine.Body);
+        VariableDeclaration variable = body.Statements
+            .OfType<DeclarationStatement>()
+            .Select(selector: statement => statement.Declaration)
+            .OfType<VariableDeclaration>()
+            .Single(predicate: declaration => declaration.Name == "items");
+
+        TypeInfo? resolvedType = variable.Initializer?.ResolvedType;
+        Assert.NotNull(@object: resolvedType);
+        Assert.Equal(expected: "Core.Owned[Core.List[Core.S64]]", actual: resolvedType!.FullName);
+    }
+
+    /// <summary>
     /// Verifies that the test validates literal with wrong arity and reports the expected error.
     /// </summary>
     [Fact]
