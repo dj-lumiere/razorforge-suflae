@@ -13,7 +13,7 @@ entity BTreeDictNode[K, V]
 needs K obeys Comparable
   entry_keys: Array[K, 63]
   entry_values: Array[V, 63]
-  children: Array[Owned[BTreeDictNode[K, V]], 64]
+  children: Array[BTreeDictNode[K, V], 64]
   key_count: U64
   child_count: U64
   subtree_size: U64
@@ -49,7 +49,7 @@ needs K obeys Comparable
 ### :see: {SortedList[T]} for a sorted sequence that allows duplicates.
 entity SortedDict[K, V] obeys Iterable[DictEntry[K, V]]
 needs K obeys Comparable
-  secret root: Owned[BTreeDictNode[K, V]]?
+  secret root: BTreeDictNode[K, V]?
   secret count: U64
 
 # ============================================================================
@@ -286,7 +286,7 @@ routine BTreeDictNode[K, V].$create(is_leaf: Bool) -> BTreeDictNode[K, V]
   return BTreeDictNode[K, V](
     entry_keys: zero_value[Array[K, 63]](),
     entry_values: zero_value[Array[V, 63]](),
-    children: zero_value[Array[Owned[BTreeDictNode[K, V]], 64]](),
+    children: zero_value[Array[BTreeDictNode[K, V], 64]](),
     key_count: 0u64,
     child_count: 0u64,
     subtree_size: 0u64,

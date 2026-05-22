@@ -45,15 +45,6 @@ dangerous routine Hijacked[T].$create(from: Address) -> Hijacked[T]
 dangerous routine T.hijack() -> Hijacked[T]
   return Hijacked[T](me.get_address())
 
-### Produces a raw pointer to the entity owned by `me`.
-### Avoids double-wrapping: `Owned[T].hijack()` returns `Hijacked[T]`, not `Hijacked[Owned[T]]`.
-### `Owned[T]` is structurally a `ptr` to T's storage; this is a reinterpretation only.
-### :returns: A `Hijacked[T]` pointing at the same storage as `me`.
-@readonly
-dangerous routine Owned[T].hijack() -> Hijacked[T]
-needs T is EntityType
-  return Hijacked[T](me.get_address())
-
 ### Loads the value stored at this pointer.
 ### :returns: The value stored at the address this pointer references.
 dangerous routine Hijacked[T].extract() -> T

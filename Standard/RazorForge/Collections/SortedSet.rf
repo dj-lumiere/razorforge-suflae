@@ -13,7 +13,7 @@ preset MIN_KEYS: U64 = 31u64  # B/2 - 1
 entity BTreeSetNode[T]
 needs T obeys Comparable
   keys: Array[T, 63]                           # Keys in this node (fixed capacity)
-  children: Array[Owned[BTreeSetNode[T]], 64]  # Child pointers (empty for leaf)
+  children: Array[BTreeSetNode[T], 64]  # Child pointers (empty for leaf)
   key_count: U64                               # Active key count (0 to 63)
   child_count: U64                             # Active child count (0 to 64)
   subtree_size: U64                            # Total elements in this subtree
@@ -234,7 +234,7 @@ routine BTreeSetNode[T].children_add_range_from(other: Referring[BTreeSetNode[T]
 ### :see: {SortedDict[K, V]} for a sorted mapping from keys to values.
 entity SortedSet[T] obeys Iterable[T]
 needs T obeys Comparable
-  secret root: Owned[BTreeSetNode[T]]?
+  secret root: BTreeSetNode[T]?
   secret count: U64
 
 # ============================================================================
@@ -248,7 +248,7 @@ needs T obeys Comparable
 routine BTreeSetNode[T].$create(is_leaf: Bool) -> BTreeSetNode[T]
   return BTreeSetNode[T](
     keys: zero_value[Array[T, 63]](),
-    children: zero_value[Array[Owned[BTreeSetNode[T]], 64]](),
+    children: zero_value[Array[BTreeSetNode[T], 64]](),
     key_count: 0u64,
     child_count: 0u64,
     subtree_size: 0u64,

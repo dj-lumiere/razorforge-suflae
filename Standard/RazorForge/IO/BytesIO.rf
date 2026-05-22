@@ -160,7 +160,7 @@ routine U64.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> Tuple[U
 ### Marked `!` for the same reason as `S64.to_digit_bytes!` — the per-iteration
 ### `U8(from: U64)` narrowing is failable in general but unreachable here.
 ### :returns: A freshly allocated `Bytes` carrying the digit sequence.
-routine U64.to_digit_bytes!() -> Owned[Bytes]
+routine U64.to_digit_bytes!() -> ?Bytes
   if me == 0_u64
     var buf: List[Byte] = []
     buf.add_last(value: Byte(from: 0x30_u8))
@@ -190,7 +190,7 @@ routine S8.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> Tuple[S8
   var pair = S64.from_digit_bytes_at!(bytes: bytes, start: start)
   return (S8(from: pair.f0), pair.f1)
 
-routine S8.to_digit_bytes!() -> Owned[Bytes]
+routine S8.to_digit_bytes!() -> ?Bytes
   return S64(from: me).to_digit_bytes!()
 
 routine S16.from_digit_bytes!(bytes: Referring[Bytes]) -> S16
@@ -200,7 +200,7 @@ routine S16.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> Tuple[S
   var pair = S64.from_digit_bytes_at!(bytes: bytes, start: start)
   return (S16(from: pair.f0), pair.f1)
 
-routine S16.to_digit_bytes!() -> Owned[Bytes]
+routine S16.to_digit_bytes!() -> ?Bytes
   return S64(from: me).to_digit_bytes!()
 
 routine S32.from_digit_bytes!(bytes: Referring[Bytes]) -> S32
@@ -210,7 +210,7 @@ routine S32.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> Tuple[S
   var pair = S64.from_digit_bytes_at!(bytes: bytes, start: start)
   return (S32(from: pair.f0), pair.f1)
 
-routine S32.to_digit_bytes!() -> Owned[Bytes]
+routine S32.to_digit_bytes!() -> ?Bytes
   return S64(from: me).to_digit_bytes!()
 
 # ============================================================================
@@ -224,7 +224,7 @@ routine U8.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> Tuple[U8
   var pair = U64.from_digit_bytes_at!(bytes: bytes, start: start)
   return (U8(from: pair.f0), pair.f1)
 
-routine U8.to_digit_bytes!() -> Owned[Bytes]
+routine U8.to_digit_bytes!() -> ?Bytes
   return U64(from: me).to_digit_bytes!()
 
 routine U16.from_digit_bytes!(bytes: Referring[Bytes]) -> U16
@@ -234,7 +234,7 @@ routine U16.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> Tuple[U
   var pair = U64.from_digit_bytes_at!(bytes: bytes, start: start)
   return (U16(from: pair.f0), pair.f1)
 
-routine U16.to_digit_bytes!() -> Owned[Bytes]
+routine U16.to_digit_bytes!() -> ?Bytes
   return U64(from: me).to_digit_bytes!()
 
 routine U32.from_digit_bytes!(bytes: Referring[Bytes]) -> U32
@@ -244,7 +244,7 @@ routine U32.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> Tuple[U
   var pair = U64.from_digit_bytes_at!(bytes: bytes, start: start)
   return (U32(from: pair.f0), pair.f1)
 
-routine U32.to_digit_bytes!() -> Owned[Bytes]
+routine U32.to_digit_bytes!() -> ?Bytes
   return U64(from: me).to_digit_bytes!()
 
 # ============================================================================
@@ -280,7 +280,7 @@ routine S128.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> Tuple[
   var value: S128 = if negative then -acc else acc
   return (value, i)
 
-routine S128.to_digit_bytes!() -> Owned[Bytes]
+routine S128.to_digit_bytes!() -> ?Bytes
   if me == 0_s128
     var buf: List[Byte] = []
     buf.add_last(value: Byte(from: 0x30_u8))
@@ -327,7 +327,7 @@ routine U128.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> Tuple[
     i = i + 1_u64
   return (acc, i)
 
-routine U128.to_digit_bytes!() -> Owned[Bytes]
+routine U128.to_digit_bytes!() -> ?Bytes
   if me == 0_u128
     var buf: List[Byte] = []
     buf.add_last(value: Byte(from: 0x30_u8))
@@ -377,7 +377,7 @@ routine Integer.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> Tup
   var value: Integer = if negative then -acc else acc
   return (value, i)
 
-routine Integer.to_digit_bytes!() -> Owned[Bytes]
+routine Integer.to_digit_bytes!() -> ?Bytes
   var zero = Integer(from: 0_s64)
   if me == zero
     var buf: List[Byte] = []
@@ -421,6 +421,6 @@ routine Integer.to_digit_bytes!() -> Owned[Bytes]
 # **API shape to fill in:**
 #   routine F64.from_digit_bytes!(bytes: Referring[Bytes]) -> F64
 #   routine F64.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> Tuple[F64, U64]
-#   routine F64.to_digit_bytes!() -> Owned[Bytes]
+#   routine F64.to_digit_bytes!() -> ?Bytes
 #   (and identical signatures for every other floating-point + complex type)
 # ============================================================================

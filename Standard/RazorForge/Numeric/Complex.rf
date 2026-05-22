@@ -6,9 +6,9 @@ module Numerics
 ### :see: {Decimal}, {Numeric-Types}
 entity Complex obeys Numeric, Equatable
   ### Stores the real component.
-  secret real: Owned[Decimal]
+  secret real: Decimal
   ### Stores the imaginary component.
-  secret imag: Owned[Decimal]
+  secret imag: Decimal
 
 # Complex constants
 preset COMPLEX_ZERO: Complex = Complex(real: Decimal.zero(), imag: Decimal.zero())
@@ -21,21 +21,21 @@ preset COMPLEX_I: Complex = Complex(real: Decimal.zero(), imag: Decimal.one())
 
 ### Creates the complex zero value.
 ### :returns: The resulting `Complex` value.
-routine Complex.$create() -> Complex
+routine Complex.$create() -> ?Complex
   return COMPLEX_ZERO
 
 ### Creates a purely real complex value.
 ### The imaginary component is initialized to zero.
 ### :param real: The real component.
 ### :returns: The resulting `Complex` value.
-routine Complex.$create(real: Decimal) -> Complex
+routine Complex.$create(real: Decimal) -> ?Complex
   return Complex(real: real, imag: Decimal.zero())
 
 ### Creates a complex value from explicit real and imaginary components.
 ### :param real: The real component.
 ### :param imag: The imaginary component.
 ### :returns: The resulting `Complex` value.
-routine Complex.$create(real: Decimal, imag: Decimal) -> Complex
+routine Complex.$create(real: Decimal, imag: Decimal) -> ?Complex
   return Complex(real: real, imag: imag)
 
 ### Creates a complex value from polar coordinates.
@@ -45,7 +45,7 @@ routine Complex.$create(real: Decimal, imag: Decimal) -> Complex
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.from_polar(r: Decimal, theta: Decimal, precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
+routine Complex.from_polar(r: Decimal, theta: Decimal, precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
   return Complex(real: r * theta.cos(precision), imag: r * theta.sin(precision))
 
 # ============================================================================
@@ -56,28 +56,28 @@ routine Complex.from_polar(r: Decimal, theta: Decimal, precision: S32 = DECIMAL_
 ### :param you: The value to add.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.$add(you: Complex) -> Complex
+routine Complex.$add(you: Complex) -> ?Complex
   return Complex(real: me.real + you.real, imag: me.imag + you.imag)
 
 ### Subtracts `you` from this complex value component-wise.
 ### :param you: The value to subtract.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.$sub(you: Complex) -> Complex
+routine Complex.$sub(you: Complex) -> ?Complex
   return Complex(real: me.real - you.real, imag: me.imag - you.imag)
 
 ### Multiplies this value by `you` using the standard complex product rule.
 ### :param you: The value to multiply by.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.$mul(you: Complex) -> Complex
+routine Complex.$mul(you: Complex) -> ?Complex
   return Complex(real: me.real * you.real - me.imag * you.imag, imag: me.real * you.imag + me.imag * you.real)
 
 ### Divides this value by `you`.
 ### :param you: The non-zero divisor.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.$truediv(you: Complex) -> Complex
+routine Complex.$truediv(you: Complex) -> ?Complex
   var d = you.real * you.real + you.imag * you.imag
   return Complex(
     real: (me.real * you.real + me.imag * you.imag) / d,
@@ -87,7 +87,7 @@ routine Complex.$truediv(you: Complex) -> Complex
 ### Returns the additive inverse of this complex value.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.$neg() -> Complex
+routine Complex.$neg() -> ?Complex
   return Complex(real: -me.real, imag: -me.imag)
 
 ### Returns `true` when both the real and imaginary components are equal.
@@ -104,20 +104,20 @@ routine Complex.$eq(you: Complex) -> Bool
 ### Returns the real component.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Complex.real_part() -> Decimal
+routine Complex.real_part() -> ?Decimal
   return me.real
 
 ### Returns the imaginary component.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Complex.imag_part() -> Decimal
+routine Complex.imag_part() -> ?Decimal
   return me.imag
 
 ### Returns the magnitude of this value.
 ### This is equivalent to `sqrt(real^2 + imag^2)`.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Complex.abs() -> Decimal
+routine Complex.abs() -> ?Decimal
   return (me.real * me.real + me.imag * me.imag).sqrt()
 
 ### Returns the squared magnitude of this value.
@@ -125,28 +125,28 @@ routine Complex.abs() -> Decimal
 ### square root.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Complex.norm() -> Decimal
+routine Complex.norm() -> ?Decimal
   return me.real * me.real + me.imag * me.imag
 
 ### Returns the complex conjugate of this value.
 ### The real component is preserved and the imaginary component changes sign.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.conjugate() -> Complex
+routine Complex.conjugate() -> ?Complex
   return Complex(real: me.real, imag: -me.imag)
 
 ### Returns the phase angle of this complex value in radians.
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Complex.arg(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
+routine Complex.arg(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
   return me.imag.atan2(me.real, precision)
 
 ### Computes the principal complex square root.
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.sqrt(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
+routine Complex.sqrt(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
   var r = me.abs()
   if r.is_zero()
     return COMPLEX_ZERO
@@ -162,7 +162,7 @@ routine Complex.sqrt(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.exp(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
+routine Complex.exp(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
   var ea = me.real.exp(precision)
   return Complex(real: ea * me.imag.cos(precision), imag: ea * me.imag.sin(precision))
 
@@ -170,7 +170,7 @@ routine Complex.exp(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.log(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
+routine Complex.log(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
   return Complex(real: me.abs().log(precision), imag: me.arg(precision))
 
 ### Raises this value to a complex exponent.
@@ -178,14 +178,14 @@ routine Complex.log(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.pow(exp: Complex, precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
+routine Complex.pow(exp: Complex, precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
   return (exp * me.log(precision)).exp(precision)
 
 ### Computes the complex sine of this value.
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.sin(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
+routine Complex.sin(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
   return Complex(
     real: me.real.sin(precision) * me.imag.cosh(precision),
     imag: me.real.cos(precision) * me.imag.sinh(precision)
@@ -195,7 +195,7 @@ routine Complex.sin(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.cos(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
+routine Complex.cos(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
   return Complex(
     real: me.real.cos(precision) * me.imag.cosh(precision),
     imag: -(me.real.sin(precision) * me.imag.sinh(precision))
@@ -205,7 +205,7 @@ routine Complex.cos(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.tan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
+routine Complex.tan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
   var a2 = me.real + me.real
   var b2 = me.imag + me.imag
   var d = a2.cos(precision) + b2.cosh(precision)
@@ -215,7 +215,7 @@ routine Complex.tan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.asin(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
+routine Complex.asin(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
   var iz = Complex(real: -me.imag, imag: me.real)
   var w = iz + (COMPLEX_ONE - me * me).sqrt(precision)
   var v = w.log(precision)
@@ -225,7 +225,7 @@ routine Complex.asin(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.acos(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
+routine Complex.acos(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
   var s = (COMPLEX_ONE - me * me).sqrt(precision)
   var w = me + Complex(real: -s.imag_part(), imag: s.real_part())
   var v = w.log(precision)
@@ -235,7 +235,7 @@ routine Complex.acos(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.atan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
+routine Complex.atan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
   var one = Decimal.one()
   var two = Decimal(2_s64)
   var num = Complex(real: me.real, imag: me.imag + one)
@@ -247,7 +247,7 @@ routine Complex.atan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.sinh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
+routine Complex.sinh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
   return Complex(
     real: me.real.sinh(precision) * me.imag.cos(precision),
     imag: me.real.cosh(precision) * me.imag.sin(precision)
@@ -257,7 +257,7 @@ routine Complex.sinh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.cosh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
+routine Complex.cosh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
   return Complex(
     real: me.real.cosh(precision) * me.imag.cos(precision),
     imag: me.real.sinh(precision) * me.imag.sin(precision)
@@ -267,7 +267,7 @@ routine Complex.cosh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.tanh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
+routine Complex.tanh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
   var a2 = me.real + me.real
   var b2 = me.imag + me.imag
   var d = a2.cosh(precision) + b2.cos(precision)
@@ -277,21 +277,21 @@ routine Complex.tanh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.asinh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
+routine Complex.asinh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
   return (me + (me * me + COMPLEX_ONE).sqrt(precision)).log(precision)
 
 ### Computes the principal inverse hyperbolic cosine of this value.
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.acosh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
+routine Complex.acosh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
   return (me + (me * me - COMPLEX_ONE).sqrt(precision)).log(precision)
 
 ### Computes the principal inverse hyperbolic tangent of this value.
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.atanh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
+routine Complex.atanh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
   var two = Decimal(2_s64)
   var v = ((COMPLEX_ONE + me) / (COMPLEX_ONE - me)).log(precision)
   return Complex(real: v.real_part().divide(two, precision), imag: v.imag_part().divide(two, precision))
@@ -300,7 +300,7 @@ routine Complex.atanh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.log10(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Complex
+routine Complex.log10(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
   var v = me.log(precision)
   var ln10 = Decimal(10_s64).log(precision)
   return Complex(real: v.real_part().divide(ln10, precision), imag: v.imag_part().divide(ln10, precision))

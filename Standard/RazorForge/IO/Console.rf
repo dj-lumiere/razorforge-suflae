@@ -105,15 +105,15 @@ routine ask_all() -> Text
 
 ### Reads all remaining input and splits it into lines.
 ### Windows line endings are normalized before splitting.
-### :returns: The resulting `List[Owned[Text]]` value.
-routine ask_lines() -> List[Owned[Text]]
+### :returns: The resulting `List[Text]` value.
+routine ask_lines() -> ?List[Text]
   var all = ask_all()
   var normalized = all.replace(old: "\r\n", new: "\n")
   return normalized.split(CHARACTER_NEWLINE)
 
 ### Reads all remaining input and splits it into whitespace-delimited words.
-### :returns: The resulting `List[Owned[Text]]` value.
-routine ask_words() -> List[Owned[Text]]
+### :returns: The resulting `List[Text]` value.
+routine ask_words() -> ?List[Text]
   var all = ask_all()
   return all.words()
 

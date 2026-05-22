@@ -23,16 +23,6 @@ needs T is EntityType
     var ctrl = RetainController[T](data: me.hijack()).hijack()
     return Retained[T](ctrl)
 
-### Move-on-consume: transfers the entity owned by `me` into a new RC handle.
-### Avoids double-wrapping: `Owned[T].retain()` returns `Retained[T]`, not `Retained[Owned[T]]`.
-### The original `Owned[T]` binding is invalidated after this call.
-### :returns: The resulting `Retained[T]` value.
-routine Owned[T].retain() -> Retained[T]
-needs T is EntityType
-  danger!
-    var ctrl = RetainController[T](data: me.hijack()).hijack()
-    return Retained[T](ctrl)
-
 # ============================================================================
 # Reference counting
 # ============================================================================

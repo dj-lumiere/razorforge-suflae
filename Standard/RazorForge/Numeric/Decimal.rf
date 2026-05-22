@@ -38,7 +38,7 @@ routine Decimal.get_precision() -> S32
 
 ### Creates the decimal value `0`.
 ### :returns: The resulting `Decimal` value.
-routine Decimal.$create() -> Decimal
+routine Decimal.$create() -> ?Decimal
   var dec = Decimal(handle: rf_bigdec_new())
   rf_bigdec_set_s64(dec.handle, 0)
   return dec
@@ -48,7 +48,7 @@ routine Decimal.$create() -> Decimal
 ### representation.
 ### :param value: The initial integer value.
 ### :returns: The resulting `Decimal` value.
-routine Decimal.$create(value: S64) -> Decimal
+routine Decimal.$create(value: S64) -> ?Decimal
   var dec = Decimal(handle: rf_bigdec_new())
   rf_bigdec_set_s64(dec.handle, value)
   return dec
@@ -59,7 +59,7 @@ routine Decimal.$create(value: S64) -> Decimal
 ### literal.
 ### :param value: The initial floating-point value.
 ### :returns: The resulting `Decimal` value.
-routine Decimal.$create(value: F64) -> Decimal
+routine Decimal.$create(value: F64) -> ?Decimal
   var dec = Decimal(handle: rf_bigdec_new())
   rf_bigdec_set_f64(dec.handle, value)
   return dec
@@ -69,7 +69,7 @@ routine Decimal.$create(value: F64) -> Decimal
 ### exact decimal-domain input rather than binary floating-point notation rules.
 ### :param text: The textual decimal representation.
 ### :returns: The resulting `Decimal` value.
-routine Decimal.$create!(text: Referring[Text]) -> Decimal
+routine Decimal.$create!(text: Referring[Text]) -> ?Decimal
   var dec = Decimal(handle: rf_bigdec_new())
   rf_bigdec_set_str(dec.handle, text.to_cstr())
   return dec
@@ -84,7 +84,7 @@ routine Decimal.$destroy()
 ### :param other: The decimal value to duplicate.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.$copy(other: Decimal) -> Decimal
+routine Decimal.$copy(other: Decimal) -> ?Decimal
   var dec = Decimal(handle: rf_bigdec_copy(other.handle))
   return dec
 
@@ -96,7 +96,7 @@ routine Decimal.$copy(other: Decimal) -> Decimal
 ### :param other: The value to add.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.$add(other: Decimal) -> Decimal
+routine Decimal.$add(other: Decimal) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_add(result.handle, me.handle, other.handle)
   return result
@@ -105,7 +105,7 @@ routine Decimal.$add(other: Decimal) -> Decimal
 ### :param other: The value to subtract.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.$sub(other: Decimal) -> Decimal
+routine Decimal.$sub(other: Decimal) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_sub(result.handle, me.handle, other.handle)
   return result
@@ -114,7 +114,7 @@ routine Decimal.$sub(other: Decimal) -> Decimal
 ### :param other: The value to multiply by.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.$mul(other: Decimal) -> Decimal
+routine Decimal.$mul(other: Decimal) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_mul(result.handle, me.handle, other.handle)
   return result
@@ -124,7 +124,7 @@ routine Decimal.$mul(other: Decimal) -> Decimal
 ### :param other: The non-zero divisor.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.$truediv(other: Decimal) -> Decimal
+routine Decimal.$truediv(other: Decimal) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_div(result.handle, DECIMAL_DEFAULT_PRECISION, me.handle, other.handle)
   return result
@@ -136,7 +136,7 @@ routine Decimal.$truediv(other: Decimal) -> Decimal
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.divide(other: Decimal, precision: S32) -> Decimal
+routine Decimal.divide(other: Decimal, precision: S32) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_div(result.handle, precision, me.handle, other.handle)
   return result
@@ -144,7 +144,7 @@ routine Decimal.divide(other: Decimal, precision: S32) -> Decimal
 ### Returns the additive inverse of this value.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.$neg() -> Decimal
+routine Decimal.$neg() -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_neg(result.handle, me.handle)
   return result
@@ -179,7 +179,7 @@ routine Decimal.$cmp(you: Decimal) -> ComparisonSign
 ### Returns the absolute magnitude of this value.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.abs() -> Decimal
+routine Decimal.abs() -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_abs(result.handle, me.handle)
   return result
@@ -188,7 +188,7 @@ routine Decimal.abs() -> Decimal
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.sqrt(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
+routine Decimal.sqrt(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_sqrt(result.handle, precision, me.handle)
   return result
@@ -198,7 +198,7 @@ routine Decimal.sqrt(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.pow(exp: Decimal, precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
+routine Decimal.pow(exp: Decimal, precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_pow(result.handle, precision, me.handle, exp.handle)
   return result
@@ -207,7 +207,7 @@ routine Decimal.pow(exp: Decimal, precision: S32 = DECIMAL_DEFAULT_PRECISION) ->
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.exp(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
+routine Decimal.exp(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_exp(result.handle, precision, me.handle)
   return result
@@ -216,7 +216,7 @@ routine Decimal.exp(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.log(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
+routine Decimal.log(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_log(result.handle, precision, me.handle)
   return result
@@ -225,7 +225,7 @@ routine Decimal.log(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.log10(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
+routine Decimal.log10(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_log10(result.handle, precision, me.handle)
   return result
@@ -238,7 +238,7 @@ routine Decimal.log10(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.sin(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
+routine Decimal.sin(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_sin(result.handle, precision, me.handle)
   return result
@@ -247,7 +247,7 @@ routine Decimal.sin(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.cos(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
+routine Decimal.cos(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_cos(result.handle, precision, me.handle)
   return result
@@ -256,7 +256,7 @@ routine Decimal.cos(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.tan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
+routine Decimal.tan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_tan(result.handle, precision, me.handle)
   return result
@@ -265,7 +265,7 @@ routine Decimal.tan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.asin(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
+routine Decimal.asin(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_asin(result.handle, precision, me.handle)
   return result
@@ -274,7 +274,7 @@ routine Decimal.asin(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.acos(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
+routine Decimal.acos(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_acos(result.handle, precision, me.handle)
   return result
@@ -283,7 +283,7 @@ routine Decimal.acos(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.atan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
+routine Decimal.atan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_atan(result.handle, precision, me.handle)
   return result
@@ -294,7 +294,7 @@ routine Decimal.atan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.atan2(x: Decimal, precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
+routine Decimal.atan2(x: Decimal, precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
   if x.is_zero()
     return when
       me.is_positive() => Decimal.pi(precision).divide(Decimal(2_s64), precision)
@@ -314,7 +314,7 @@ routine Decimal.atan2(x: Decimal, precision: S32 = DECIMAL_DEFAULT_PRECISION) ->
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.sinh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
+routine Decimal.sinh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_sinh(result.handle, precision, me.handle)
   return result
@@ -323,7 +323,7 @@ routine Decimal.sinh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.cosh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
+routine Decimal.cosh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_cosh(result.handle, precision, me.handle)
   return result
@@ -332,7 +332,7 @@ routine Decimal.cosh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.tanh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
+routine Decimal.tanh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_tanh(result.handle, precision, me.handle)
   return result
@@ -344,7 +344,7 @@ routine Decimal.tanh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
 ### Rounds this value upward to the next integral decimal value.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.ceil() -> Decimal
+routine Decimal.ceil() -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_ceil(result.handle, me.handle)
   return result
@@ -352,7 +352,7 @@ routine Decimal.ceil() -> Decimal
 ### Rounds this value downward to the previous integral decimal value.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.floor() -> Decimal
+routine Decimal.floor() -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_floor(result.handle, me.handle)
   return result
@@ -361,7 +361,7 @@ routine Decimal.floor() -> Decimal
 ### :param decimal_places: The number of digits to keep after the decimal point.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.round(decimal_places: S32 = 0) -> Decimal
+routine Decimal.round(decimal_places: S32 = 0) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_round(result.handle, decimal_places, me.handle)
   return result
@@ -370,7 +370,7 @@ routine Decimal.round(decimal_places: S32 = 0) -> Decimal
 ### :param decimal_places: The number of digits to keep after the decimal point.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.int_truncate(decimal_places: S32 = 0) -> Decimal
+routine Decimal.int_truncate(decimal_places: S32 = 0) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_trunc(result.handle, decimal_places, me.handle)
   return result
@@ -442,7 +442,7 @@ routine Decimal.$represent(decimal_places: S32 = 10) -> Text
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.pi(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
+routine Decimal.pi(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_pi(result.handle, precision)
   return result
@@ -451,7 +451,7 @@ routine Decimal.pi(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.e(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
+routine Decimal.e(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_e(result.handle, precision)
   return result
@@ -464,24 +464,24 @@ routine Decimal.e(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
 ### This surface matches parsing APIs that communicate failure through absence
 ### rather than exceptions.
 ### :param text: The text to parse.
-### :returns: The resulting `Maybe[Owned[Decimal]]` value.
-@readonly
-routine Decimal.parse(text: Referring[Text]) -> Maybe[Owned[Decimal]]
+### :returns: The resulting `Maybe[Decimal]` value.
+routine Decimal.$create!(text: Referring[Text]) -> ?Decimal
   var dec = Decimal(handle: rf_bigdec_new())
   rf_bigdec_set_str(dec.handle, text.to_cstr())
-  # MAPM doesn't return error codes for parsing, so we just return the result
+  if dec.handle == cptr_none()
+    throw DecimalValueError()
   return dec
 
 ### Returns the additive identity for `Decimal`.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.zero() -> Decimal
+routine Decimal.zero() -> ?Decimal
   return Decimal(0_s64)
 
 ### Returns the multiplicative identity for `Decimal`.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.one() -> Decimal
+routine Decimal.one() -> ?Decimal
   return Decimal(1_s64)
 
 # ============================================================================
@@ -495,7 +495,7 @@ routine Decimal.one() -> Decimal
 ### :param terms: The number of series terms to accumulate.
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Decimal` value.
-routine exp_taylor(x: Decimal, terms: S32 = 20, precision: S32 = 50) -> Decimal
+routine exp_taylor(x: Decimal, terms: S32 = 20, precision: S32 = 50) -> ?Decimal
   var result = Decimal.one()
   var term = Decimal.one()
 
@@ -515,7 +515,7 @@ routine exp_taylor(x: Decimal, terms: S32 = 20, precision: S32 = 50) -> Decimal
 ### :param iterations: The number of refinement steps to perform.
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Decimal` value.
-routine sqrt_newton(x: Decimal, iterations: S32 = 20, precision: S32 = 50) -> Decimal
+routine sqrt_newton(x: Decimal, iterations: S32 = 20, precision: S32 = 50) -> ?Decimal
   if x.is_zero() or x.is_negative()
     return Decimal.zero()
 
@@ -535,7 +535,7 @@ routine sqrt_newton(x: Decimal, iterations: S32 = 20, precision: S32 = 50) -> De
 ### Computes pi with a Machin-style arctangent identity.
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Decimal` value.
-routine compute_pi(precision: S32 = 50) -> Decimal
+routine compute_pi(precision: S32 = 50) -> ?Decimal
   var one = Decimal.one()
   var four = Decimal(4_s64)
   var five = Decimal(5_s64)

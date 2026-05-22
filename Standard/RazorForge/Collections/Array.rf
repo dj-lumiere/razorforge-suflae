@@ -28,13 +28,12 @@ import BuilderService
 ### | `index_of!` | O(N) |
 ### | Iteration | O(N) |
 ###
-### :typeparam T: The element type stored in the array. Must be a record type.
+### :typeparam T: The element type stored in the array.
 ### :typeparam N: The compile-time element count, supplied as a `U64` literal.
 ### :see: {List[T]} for a heap-backed growable sequence.
 ### :see: {BitArray[N]} for a compact fixed-size bit sequence.
 @llvm("[{N} x {T}]")
 record Array[T, N]
-needs T is RecordType
 needs N is U64
   # N elements of T stored inline by compiler - no explicit member variables needed
   pass
@@ -191,7 +190,7 @@ routine Array[T, N].$diagnose() -> Text
 ### :param you: The other array to compare against.
 ### :returns: `true` if every corresponding pair of elements is equal.
 ### :note: Requires `T` to obey `Equatable`. Arrays of non-equatable element types
-###        (e.g. `Owned[U]` where `U` is not equatable) do not get an `$eq`
+###        (e.g. a `U` that is not equatable) do not get an `$eq`
 ###        operator — `==` on such arrays is a build error.
 @readonly
 routine Array[T, N].$eq(you: Array[T, N]) -> Bool

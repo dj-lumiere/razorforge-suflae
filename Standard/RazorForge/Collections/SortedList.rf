@@ -11,7 +11,7 @@ preset MIN_KEYS_LIST: U64 = 31u64
 entity BTreeListNode[T]
 needs T obeys Comparable
   keys: Array[T, 63]
-  children: Array[Owned[BTreeListNode[T]], 64]
+  children: Array[BTreeListNode[T], 64]
   key_count: U64
   child_count: U64
   subtree_size: U64
@@ -47,7 +47,7 @@ needs T obeys Comparable
 ### :see: {SortedDict[K, V]} for sorted key-value storage.
 entity SortedList[T] obeys Iterable[T]
 needs T obeys Comparable
-  secret root: Owned[BTreeListNode[T]]?
+  secret root: BTreeListNode[T]?
   secret count: U64
 
 # ============================================================================
@@ -243,7 +243,7 @@ routine BTreeListNode[T].children_add_range_from(other: Referring[BTreeListNode[
 routine BTreeListNode[T].$create(is_leaf: Bool) -> BTreeListNode[T]
   return BTreeListNode[T](
     keys: zero_value[Array[T, 63]](),
-    children: zero_value[Array[Owned[BTreeListNode[T]], 64]](),
+    children: zero_value[Array[BTreeListNode[T], 64]](),
     key_count: 0u64,
     child_count: 0u64,
     subtree_size: 0u64,
