@@ -87,6 +87,9 @@ public sealed partial class SemanticVerifier
     private TypeSymbol AnalyzeListLiteralExpression(ListLiteralExpression list,
         TypeSymbol? expectedType = null)
     {
+        // Collection literals are entity rvalues — value-in-flight produced by a fresh
+        // `$create + add_last` sequence. Mark for the auto-bind rule (rvalue ?T → bound T).
+        list.IsRvalueExpr = true;
         // Extract expected element type from list-shaped expected types.
         TypeSymbol? expectedElementType = null;
         TypeSymbol? collectionExpectedType = expectedType != null
@@ -195,6 +198,8 @@ public sealed partial class SemanticVerifier
     private TypeSymbol AnalyzeSetLiteralExpression(SetLiteralExpression set,
         TypeSymbol? expectedType = null)
     {
+        // Collection literals are entity rvalues; see AnalyzeListLiteralExpression.
+        set.IsRvalueExpr = true;
         // Extract expected element type from set-shaped expected types.
         TypeSymbol? expectedElementType = null;
         TypeSymbol? collectionExpectedType = expectedType != null
@@ -260,6 +265,8 @@ public sealed partial class SemanticVerifier
     private TypeSymbol AnalyzeDictLiteralExpression(DictLiteralExpression dict,
         TypeSymbol? expectedType = null) // NOSONAR S3776
     {
+        // Collection literals are entity rvalues; see AnalyzeListLiteralExpression.
+        dict.IsRvalueExpr = true;
         // Extract expected key/value types from dict-shaped expected types.
         TypeSymbol? expectedKeyType = null;
         TypeSymbol? expectedValueType = null;

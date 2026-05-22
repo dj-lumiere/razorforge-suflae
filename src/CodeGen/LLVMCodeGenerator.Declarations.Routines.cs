@@ -678,7 +678,15 @@ public partial class LlvmCodeGenerator
 
     private static string GetImplicitMeParameterAttributes(RoutineInfo routine)
     {
-        if (routine.OwnerType is WrapperTypeInfo { Name: "Owned" or "Grasped" })
+        // Exclusive me-params get `noalias`. Three cases qualify:
+        //   - bare entity (post-Owned-retirement: bound T can't be duplicated, so
+        //     the me pointer is exclusive at the call boundary by the
+        //     entity-ownership rule),
+        //   - legacy `Owned[T]` wrapper (transitional, while Owned still exists),
+        //   - `Grasped[T]` (scope-bound exclusive borrow — its definition).
+        bool isExclusive = routine.OwnerType is EntityTypeInfo
+                           || routine.OwnerType is WrapperTypeInfo { Name: "Owned" or "Grasped" };
+        if (isExclusive)
         {
             return routine.ModificationCategory == ModificationCategory.Readonly
                 ? "noalias readonly"
@@ -692,13 +700,16 @@ public partial class LlvmCodeGenerator
 
         return routine.OwnerType switch
         {
-            EntityTypeInfo or WrapperTypeInfo => "readonly",
+            WrapperTypeInfo => "readonly",
             _ => string.Empty
         };
     }
 
     private static string GetExplicitParameterAttributes(TypeInfo? type) =>
-        type is WrapperTypeInfo { Name: "Owned" or "Grasped" } ? "noalias" : string.Empty;
+        type is EntityTypeInfo
+        || type is WrapperTypeInfo { Name: "Owned" or "Grasped" }
+            ? "noalias"
+            : string.Empty;
 
     /// <summary>
     /// Checks if an external("C") function returns a struct type that needs sret on Windows x64.

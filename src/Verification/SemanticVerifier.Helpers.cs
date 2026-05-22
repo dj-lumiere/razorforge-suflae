@@ -538,7 +538,8 @@ public sealed partial class SemanticVerifier
                 // Bare entity T: accepted by both Referring[T] and Controlling[T].
                 if (source.Category == TypeCategory.Entity &&
                     (source.FullName == borrowInner.FullName ||
-                     source.Name == borrowInner.Name))
+                     source.Name == borrowInner.Name ||
+                     GetBaseTypeName(typeName: source.Name) == GetBaseTypeName(typeName: borrowInner.Name)))
                     return true;
             }
 

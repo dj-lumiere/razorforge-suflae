@@ -358,6 +358,7 @@ public sealed partial class SemanticVerifier
                     TypeSymbol returnType = routine.ReturnType ??
                                             _registry.LookupType(name: BlankMemberName) ??
                                             ErrorTypeInfo.Instance;
+                    call.IsRvalueExpr = routine.IsRvalueReturn;
                     return returnType;
                 }
 
@@ -608,6 +609,7 @@ public sealed partial class SemanticVerifier
                     TypeSymbol returnType = routine.ReturnType ??
                                             _registry.LookupType(name: BlankMemberName) ??
                                             ErrorTypeInfo.Instance;
+                    call.IsRvalueExpr = routine.IsRvalueReturn;
                     return returnType;
                 }
 
@@ -1091,6 +1093,7 @@ public sealed partial class SemanticVerifier
                     TypeSymbol returnType = callReturnType ??
                                             _registry.LookupType(name: BlankMemberName) ??
                                             ErrorTypeInfo.Instance;
+                    call.IsRvalueExpr = method.IsRvalueReturn;
                     return returnType;
                 }
 

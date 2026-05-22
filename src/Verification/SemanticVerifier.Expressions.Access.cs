@@ -236,6 +236,7 @@ public sealed partial class SemanticVerifier
                 }
             }
 
+            member.IsRvalueExpr = method.IsRvalueReturn;
             return returnType ?? _registry.LookupType(name: "Blank") ?? ErrorTypeInfo.Instance;
         }
 

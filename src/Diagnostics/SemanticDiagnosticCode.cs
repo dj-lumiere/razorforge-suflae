@@ -789,6 +789,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Danger blocks cannot be nested.</summary>
     NestedDangerBlock = 801,
 
+    /// <summary>`?T` rvalue mark is only valid at routine return position (slots are lvalue).</summary>
+    RvalueMarkInSlotPosition = 802,
+
     /// <summary>Blank cannot be used as a generic type argument (it has no value).</summary>
     BlankAsTypeArgument = 805,
 

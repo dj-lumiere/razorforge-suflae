@@ -553,11 +553,16 @@ public sealed partial class SemanticVerifier
             // entity (and prints List-shaped output), while `var a = [1,2,3]; alert(a)` makes
             // a Owned (and prints the Owned envelope).
             // Bare entity types are value-in-flight only — they cannot be stored in a binding.
-            // Any `var x = <expr-of-bare-entity-type>` wraps to Owned[T] at the binding site so
-            // the local holds a destructable handle. Signatures and return types stay bare;
-            // Owned[T] lives only at binding sites.
+            // Auto-bind rule:
+            //   - rvalue `?T` (initializer.IsRvalueExpr=true) → bound lvalue `T` (no wrap).
+            //     Post-Owned-retirement this is the canonical path: the slot holds bare entity
+            //     T which IS the lvalue/bound form.
+            //   - legacy bare-entity rvalue (IsRvalueExpr=false) → `Owned[T]` (transitional).
+            //     This branch fires for source that hasn't been migrated to mark rvalue returns
+            //     with `?T`. Removed in Step 6 once stdlib/playground sed completes.
             if (_registry.Language == Language.RazorForge
-                && varType is EntityTypeInfo)
+                && varType is EntityTypeInfo
+                && !varDecl.Initializer.IsRvalueExpr)
             {
                 varType = _registry.GetOrCreateWrapperType(wrapperName: "Owned",
                     innerType: varType,
@@ -791,6 +796,14 @@ public sealed partial class SemanticVerifier
 
     private void AnalyzeAssignmentStatement(AssignmentStatement assign)
     {
+        // Re-binding clears prior deadref state for a simple identifier target.
+        // Mirrors AnalyzeVariableDeclaration: an assignment establishes a fresh value,
+        // so a previously stolen-from binding becomes live again at this point.
+        if (assign.Target is IdentifierExpression rebindId)
+        {
+            _deadrefVariables.Remove(item: rebindId.Name);
+        }
+
         // #173: Tuple assignment destructuring — (a, b) = (b, a)
         if (assign.Target is TupleLiteralExpression tupleLhs)
         {

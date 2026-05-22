@@ -410,25 +410,13 @@ public sealed class ErrorHandlingGenerator
     }
 
     /// <summary>
-    /// Auto-wraps a bare entity return type into <c>Owned[T]</c> so the carrier
-    /// (<c>Maybe[T]</c>/<c>Result[T]</c>/<c>Lookup[T]</c>) satisfies its
-    /// <c>needs T is RecordType</c> constraint. The carrier owns the wrapped
-    /// value, so unique-ownership <c>Owned[T]</c> is the natural shape. Record,
-    /// already-wrapped, and other types pass through unchanged.
+    /// Carrier-shape adjustment for failable return types. Post-Owned-retirement,
+    /// bare entity <c>T</c> IS the lvalue/bound form, so <c>Maybe[T]</c> /
+    /// <c>Result[T]</c> / <c>Lookup[T]</c> over a bare entity is the correct shape:
+    /// the carrier owns the bound entity directly, no <c>Owned[T]</c> intermediary.
+    /// Identity for all inputs; retained for the call-site hook in case future
+    /// carrier-element transforms (e.g., needs-RecordType relaxation) want a single
+    /// chokepoint.
     /// </summary>
-    private TypeInfo WrapBareEntityForCarrier(TypeInfo type)
-    {
-        if (type.Category != TypeCategory.Entity)
-        {
-            return type;
-        }
-        TypeInfo? ownedDef = _registry.LookupType(name: "Owned");
-        if (ownedDef == null)
-        {
-            return type;
-        }
-        return _registry.GetOrCreateResolution(
-            genericDef: ownedDef,
-            typeArguments: [type]);
-    }
+    private TypeInfo WrapBareEntityForCarrier(TypeInfo type) => type;
 }

@@ -176,6 +176,7 @@ public sealed partial class SemanticVerifier
 
             generic.ResolvedRoutine = method;
             generic.LoweringKind = ClassifyMethodCall(method: method);
+            generic.IsRvalueExpr = method.IsRvalueReturn;
 
             if (method.ReturnType == null)
             {
@@ -265,6 +266,7 @@ public sealed partial class SemanticVerifier
 
                 generic.ResolvedRoutine = routine;
                 generic.LoweringKind = ClassifyStandaloneRoutineCall(routine: routine);
+                generic.IsRvalueExpr = routine.IsRvalueReturn;
 
                 foreach (Expression arg in generic.Arguments)
                 {

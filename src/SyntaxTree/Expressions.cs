@@ -41,6 +41,20 @@ public abstract record Expression(SourceLocation Location) : SyntaxTreeNode(Loca
     /// This separates semantic type identity from ABI/storage identity.
     /// </summary>
     public BackendRepr? ResolvedRepr { get; set; }
+
+    /// <summary>
+    /// True if this expression produced an rvalue `?T` (entity in-flight, not yet bound).
+    /// Set by SA on:
+    ///   - call expressions whose callee's <c>RoutineInfo.IsRvalueReturn</c> is true,
+    ///   - `steal x` expressions (consume lvalue → produce rvalue),
+    ///   - expressions whose inner expression carries the rvalue mark and structurally
+    ///     forwards it (parens, etc.).
+    /// Drives auto-bind at binding sites and distinct diagnostic formatting
+    /// (`?T` vs `T` render differently in error messages). Kept independent of
+    /// <see cref="ResolvedType"/>, which carries only the bare entity type — rvalue-ness
+    /// is a per-expression production attribute, not a type identity.
+    /// </summary>
+    public bool IsRvalueExpr { get; set; }
 }
 
 #endregion
@@ -805,6 +819,7 @@ public record Parameter(
 /// <param name="Name">Base type name (s32, Text, MyClass, etc.)</param>
 /// <param name="GenericArguments">Optional list of type arguments for generic types</param>
 /// <param name="Location">Source location information</param>
+/// <param name="IsRvalue">True if this type was written with the `?T` prefix mark (entity rvalue, return-position only). SA enforces position validity.</param>
 /// <remarks>
 /// Type expression patterns:
 /// <list type="bullet">
@@ -817,7 +832,8 @@ public record Parameter(
 public record TypeExpression(
     string Name,
     List<TypeExpression>? GenericArguments,
-    SourceLocation Location) : Expression(Location: Location)
+    SourceLocation Location,
+    bool IsRvalue = false) : Expression(Location: Location)
 {
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)

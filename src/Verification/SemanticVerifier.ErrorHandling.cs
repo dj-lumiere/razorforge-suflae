@@ -80,16 +80,6 @@ public sealed partial class SemanticVerifier
             if (routineInfo == null || !routineInfo.IsFailable) continue;
             if (routineInfo.Annotations.Any(predicate: a => a == "crash_only")) continue;
 
-            // A failable routine returning a bare entity/crashable produces a `try_*` variant
-            // whose return type is Maybe[Entity] — which violates `Maybe[T] needs T is RecordType`
-            // (see Standard/RazorForge/Core/Errors/Maybe.rf). The entity-specialization of Maybe
-            // was removed (commit fbe2a25). Without this check, ErrorHandlingGenerator silently
-            // builds Maybe[Entity] via GetOrCreateResolution, the record layout falls back to
-            // `{ Bool, T }` with T=Entity (invalid), and PatternLoweringPass's IsMaybeEntity path
-            // emits `subject.value.is_none()` — a call on the bare entity that SA never resolves,
-            // tripping codegen's DirectMemberRoutine guard. Reject at the routine declaration.
-            if (RejectFailableEntityReturn(routineInfo: routineInfo, decl: routineDecl)) continue;
-
             // Generate and register variants from the parsed body (AST scan, no SA errors)
             ErrorHandlingResult result =
                 generator.GenerateVariants(routine: routineInfo, body: routineDecl.Body);
@@ -100,31 +90,6 @@ public sealed partial class SemanticVerifier
                 _registry.RegisterRoutine(routine: variant.Routine);
             }
         }
-    }
-
-    /// <summary>
-    /// Reports S953 BareEntityInCarrierType when a failable routine's return type is a bare
-    /// crashable. Bare entity returns auto-wrap to Owned[T] in the carrier (handled by
-    /// ErrorHandlingGenerator.WrapBareEntityForCarrier) so they don't need rejection.
-    /// Returns true if rejected (caller should skip variant generation).
-    /// </summary>
-    private bool RejectFailableEntityReturn(RoutineInfo routineInfo, RoutineDeclaration decl)
-    {
-        TypeSymbol? ret = routineInfo.ReturnType;
-        if (ret == null) return false;
-        if (ret.Category != TypeCategory.Crashable) return false;
-
-        string inner = ret.Name;
-        string hint = $"Wrap the return as 'Maybe[Retained[{inner}]]'/'Result[Retained[{inner}]]' " +
-                      $"(RC), or 'Owned[{inner}]?'/'Owned[{inner}]' (unique ownership), or return " +
-                      $"a record type instead.";
-        ReportError(code: SemanticDiagnosticCode.BareEntityInCarrierType,
-            message:
-            $"Failable routine '{decl.Name}' returns bare crashable '{inner}'; its auto-generated " +
-            $"try_/check_/lookup_ variant would build 'Maybe[{inner}]' (or similar carrier) which " +
-            $"violates 'needs T is RecordType'. {hint}",
-            location: decl.Location);
-        return true;
     }
 
     /// <summary>

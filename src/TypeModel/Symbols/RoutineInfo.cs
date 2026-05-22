@@ -149,6 +149,12 @@ public sealed class RoutineInfo
     /// <summary>Return type. Null means "not yet inferred" (transient during analysis). After body analysis, always Blank or a concrete type.</summary>
     public TypeSymbol? ReturnType { get; set; }
 
+    /// <summary>True if the source wrote the return type with the `?T` rvalue mark
+    /// (entity rvalue, in-flight). Carried from <see cref="TypeExpression.IsRvalue"/>.
+    /// SA enforces position validity; downstream passes use this to drive auto-bind
+    /// from rvalue `?T` back to lvalue `T` at the binding site.</summary>
+    public bool IsRvalueReturn { get; init; }
+
     /// <summary>Whether this routine can fail (has ! suffix).</summary>
     public bool IsFailable { get; init; }
 

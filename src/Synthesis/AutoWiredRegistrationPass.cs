@@ -418,6 +418,15 @@ internal sealed class AutoWiredRegistrationPass
                     continue;
                 }
 
+                // Skip generic-definition types (Owned[T], Retained[T], List[T], etc. without
+                // concrete arg) and WrapperTypeInfo definitions — registering a $create(from: T)
+                // for the bare wrapper produces a phantom Text.$create(Core.Owned) symbol that
+                // overload-resolution can drift onto, then linker fails (no definition emitted).
+                if (type.IsGenericDefinition || type is WrapperTypeInfo)
+                {
+                    continue;
+                }
+
                 bool alreadyDefined = textCreateMethods.Any(predicate: m =>
                     m.Parameters.Count == 1 &&
                     m.Parameters[index: 0].Type.FullName == type.FullName);
@@ -489,6 +498,12 @@ internal sealed class AutoWiredRegistrationPass
 
                 // Skip non-boxable types
                 if (IsCarrierType(type: type) || type is VariantTypeInfo or WrapperTypeInfo)
+                {
+                    continue;
+                }
+
+                // Skip generic-definition types (same reason as Text loop above)
+                if (type.IsGenericDefinition)
                 {
                     continue;
                 }

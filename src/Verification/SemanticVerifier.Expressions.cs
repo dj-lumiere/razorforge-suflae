@@ -210,6 +210,14 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private TypeSymbol AnalyzeBinaryExpression(BinaryExpression binary)
     {
+        // Re-binding (lhs = rhs) revives a stolen-from identifier: clear deadref
+        // BEFORE analyzing the LHS so the deadref-read check at line ~135 doesn't fire.
+        if (binary.Operator == BinaryOperator.Assign &&
+            binary.Left is IdentifierExpression rebindId)
+        {
+            _deadrefVariables.Remove(item: rebindId.Name);
+        }
+
         // TODO: This should be done with not operator, but with member routines.
         TypeSymbol leftType = AnalyzeExpression(expression: binary.Left);
         TypeSymbol rightType = AnalyzeExpression(expression: binary.Right);

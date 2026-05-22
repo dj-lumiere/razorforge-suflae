@@ -27,6 +27,32 @@ internal sealed class SignatureResolver
         _typeResolver = typeResolver;
     }
 
+    /// <summary>
+    /// Reports S802 for any `?T` rvalue mark in a slot-position type expression.
+    /// Slots (params, vars, fields, type-args) hold lvalue; only routine return type may carry `?T`.
+    /// Recurses into generic arguments — `List[?T]` is rejected because the slot inside the
+    /// collection is itself an lvalue slot.
+    /// </summary>
+    private void RejectRvalueMarkInSlot(TypeExpression? typeExpr, string positionDescription)
+    {
+        if (typeExpr is null) return;
+        if (typeExpr.IsRvalue)
+        {
+            _sa.ReportError(code: SemanticDiagnosticCode.RvalueMarkInSlotPosition,
+                message:
+                $"`?T` rvalue mark is not valid in {positionDescription}; rvalue is return-only.",
+                location: typeExpr.Location);
+        }
+
+        if (typeExpr.GenericArguments is { } args)
+        {
+            foreach (TypeExpression arg in args)
+            {
+                RejectRvalueMarkInSlot(typeExpr: arg, positionDescription: "type argument");
+            }
+        }
+    }
+
     #region Phase 2.5: Routine Signature Resolution and Registration
 
     /// <summary>
@@ -135,6 +161,8 @@ internal sealed class SignatureResolver
                 continue;
             }
 
+            RejectRvalueMarkInSlot(typeExpr: param.Type,
+                positionDescription: $"parameter '{param.Name}'");
             TypeSymbol paramType = _typeResolver.ResolveType(typeExpr: param.Type);
 
             // #74: Varargs parameter gets wrapped as List[T]
@@ -208,7 +236,16 @@ internal sealed class SignatureResolver
             }
         }
 
-        // Resolve return type
+        // Resolve return type. Top-level `?T` is legal (entity rvalue, return-position only);
+        // nested `?T` inside generic args is a slot position and rejected.
+        if (routine.ReturnType?.GenericArguments is { } retArgs)
+        {
+            foreach (TypeExpression arg in retArgs)
+            {
+                RejectRvalueMarkInSlot(typeExpr: arg, positionDescription: "type argument");
+            }
+        }
+
         TypeSymbol? returnType = routine.ReturnType != null
             ? _typeResolver.ResolveType(typeExpr: routine.ReturnType)
             : null;
@@ -245,6 +282,7 @@ internal sealed class SignatureResolver
             Parameters = parameters,
             ReturnType = returnType,
             IsFailable = routine.IsFailable,
+            IsRvalueReturn = routine.ReturnType?.IsRvalue ?? false,
             IsVariadic = routine.Parameters.Any(predicate: p => p.IsVariadic),
             GenericParameters = allGenericParams.Count > 0
                 ? allGenericParams
@@ -665,6 +703,8 @@ internal sealed class SignatureResolver
 
         foreach (Parameter param in externalDecl.Parameters)
         {
+            RejectRvalueMarkInSlot(typeExpr: param.Type,
+                positionDescription: $"parameter '{param.Name}'");
             TypeSymbol paramType = param.Type != null
                 ? _typeResolver.ResolveType(typeExpr: param.Type)
                 : ErrorTypeInfo.Instance;
@@ -675,7 +715,15 @@ internal sealed class SignatureResolver
             });
         }
 
-        // Resolve return type
+        // Resolve return type. Top-level `?T` legal; nested `?T` in generic args rejected.
+        if (externalDecl.ReturnType?.GenericArguments is { } extRetArgs)
+        {
+            foreach (TypeExpression arg in extRetArgs)
+            {
+                RejectRvalueMarkInSlot(typeExpr: arg, positionDescription: "type argument");
+            }
+        }
+
         TypeSymbol? returnType = externalDecl.ReturnType != null
             ? _typeResolver.ResolveType(typeExpr: externalDecl.ReturnType)
             : null;
