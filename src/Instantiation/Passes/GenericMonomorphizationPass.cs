@@ -141,7 +141,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             // Wrapper instances aren't enqueued by NotifyConcreteRegistration (it only handles
             // EntityTypeInfo/RecordTypeInfo). Re-scan _wrapperResolutions each round to pick up
             // new wrappers like Hijacked[Text] that GenericAstRewriter created while
-            // rewriting List[Owned[Text]] forwarder bodies.
+            // rewriting List[Text] forwarder bodies.
             foreach (TypeInfo wrapper in ctx.Registry.AllConcreteWrapperInstancesUnfiltered.ToList())
             {
                 if (!processedTypes.Add(wrapper.FullName)) continue;

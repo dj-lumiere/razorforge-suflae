@@ -1887,7 +1887,9 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         };
         if (baseName != "Maybe") return false;
         if (type.TypeArguments is not { Count: > 0 }) return false;
-        return type.TypeArguments[0] is not EntityTypeInfo;
+        // Post-Owned-retirement: Maybe[T entity] uses the same record-shaped carrier
+        // as Maybe[T record] (single `present`+`value` layout), so accept both.
+        return true;
     }
 
     /// <summary>Returns true if the type is <c>Result[T]</c> or <c>Lookup[T]</c>.</summary>
