@@ -274,7 +274,7 @@ public sealed partial class StdlibLoader
     /// <returns>The parsed program AST.</returns>
     private Program ParseFile(string code, string filePath)
     {
-        var tokenizer = new Tokenizer(source: code, fileName: filePath, language: _language);
+        var tokenizer = new Tokenizer.Tokenizer(source: code, fileName: filePath, language: _language);
         List<Token> tokens = tokenizer.Tokenize();
         var parser = new Parser.Parser(tokens: tokens, language: _language, fileName: filePath);
         return parser.Parse();
