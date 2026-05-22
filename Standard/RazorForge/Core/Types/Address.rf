@@ -148,7 +148,7 @@ routine Address.$represent() -> Text
     else
       digits.add_last(Character(0x0041u32 + nibble - 10u32))
     i = i + 1u32
-  return Text(from_list: digits)
+  return Text(from_list: steal digits)
 
 ### Returns the diagnostic form of this address.
 ### :returns: The resulting `Text` value.

@@ -248,7 +248,7 @@ routine ByteSize.$represent() -> Text
   if rem != 0_u64
     parts = f"{parts}{sep}{rem}B"
 
-  return parts
+  return steal parts
 
 ### Returns the diagnostic form of this byte size.
 ### :returns: The resulting `Text` value.

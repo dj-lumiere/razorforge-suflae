@@ -81,7 +81,7 @@ routine FastSet[T].$create() -> FastSet[T]
     set.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
     set.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * ecap))
     set.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
-  return set
+  return steal set
 
 ### Creates an empty set pre-sized to hold at least `capacity` live elements without rehashing.
 ### :param capacity: Minimum number of live elements to accommodate before the first rehash.
@@ -109,7 +109,7 @@ routine FastSet[T].$create(capacity: U64) -> FastSet[T]
     set.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
     set.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * ecap))
     set.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
-  return set
+  return steal set
 
 ### Releases the raw probe, index, element, and entry-liveness buffers owned by this set.
 routine FastSet[T].$destroy()
@@ -317,7 +317,7 @@ routine FastSet[T].union(other: FastSet[T]) -> FastSet[T]
     discard result.add(val)
   for val in other
     discard result.add(val)
-  return result
+  return steal result
 
 @readonly
 routine FastSet[T].intersection(other: FastSet[T]) -> FastSet[T]
@@ -325,7 +325,7 @@ routine FastSet[T].intersection(other: FastSet[T]) -> FastSet[T]
   for val in me
     if val in other
       discard result.add(val)
-  return result
+  return steal result
 
 @readonly
 routine FastSet[T].difference(other: FastSet[T]) -> FastSet[T]
@@ -333,7 +333,7 @@ routine FastSet[T].difference(other: FastSet[T]) -> FastSet[T]
   for val in me
     if val notin other
       discard result.add(val)
-  return result
+  return steal result
 
 @readonly
 routine FastSet[T].symmetric_difference(other: FastSet[T]) -> FastSet[T]
@@ -344,7 +344,7 @@ routine FastSet[T].symmetric_difference(other: FastSet[T]) -> FastSet[T]
   for val in other
     if val notin me
       discard result.add(val)
-  return result
+  return steal result
 
 @readonly
 routine FastSet[T].is_subset(other: FastSet[T]) -> Bool
@@ -377,7 +377,7 @@ routine List[T].$create(from: FastSet[T]) -> List[T]
   var result = List[T](capacity: from.count)
   for val in from
     result.add_last(val)
-  return result
+  return steal result
 
 # ============================================================================
 # Iteration
@@ -426,7 +426,7 @@ routine FastSet[T].$represent() -> Text
     result = result + val.$represent()
     first = false
   result = result + "}"
-  return result
+  return steal result
 
 @readonly
 routine FastSet[T].$diagnose() -> Text
@@ -438,7 +438,7 @@ routine FastSet[T].$diagnose() -> Text
     result = result + val.$represent()
     first = false
   result = result + "})"
-  return result
+  return steal result
 
 # ============================================================================
 # Comparison

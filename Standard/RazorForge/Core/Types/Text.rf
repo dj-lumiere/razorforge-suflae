@@ -101,7 +101,7 @@ routine Text.$create(from: CStr) -> Text
         # Invalid byte — replacement character
         list.add_last(Character(0xFFFDu32))
         i = i + 1u64
-    return Text(from_list: list)
+    return Text(from_list: steal list)
 
 # Core operations
 
@@ -436,7 +436,7 @@ routine Text.to_uppercase() -> Text
   var result = List[Character]()
   for i in 0u64 til me.count
     result.add_last(me[i].to_uppercase())
-  return Text(from_list: result)
+  return Text(from_list: steal result)
 
 ### Converts this value to lowercase.
 ### Case conversion follows the behavior defined on `Character`.
@@ -446,7 +446,7 @@ routine Text.to_lowercase() -> Text
   var result = List[Character]()
   for i in 0u64 til me.count
     result.add_last(me[i].to_lowercase())
-  return Text(from_list: result)
+  return Text(from_list: steal result)
 
 ### Returns a copy with leading and trailing whitespace removed.
 ### Whitespace is identified using `Character.is_whitespace()`.
@@ -529,7 +529,7 @@ routine Text.replace(old: Referring[Text], new: Referring[Text]) -> Text
     else
       result.add_last(me[i])
       i += 1u64
-  return Text(from_list: result)
+  return Text(from_list: steal result)
 
 ### Returns a copy without the matching prefix.
 ### When `prefix` is not present, the original text is returned unchanged.
@@ -571,7 +571,7 @@ routine Text.reverse() -> Text
       break
     i -= 1u64
     result.add_last(me[i])
-  return Text(from_list: result)
+  return Text(from_list: steal result)
 
 ### Returns a copy padded on the left.
 ### If `width` is less than or equal to the current length, the original text is returned.
@@ -588,7 +588,7 @@ routine Text.pad_start(width: U64, fill: Character) -> Text
     result.add_last(fill)
   for i in 0u64 til me.count
     result.add_last(me[i])
-  return Text(from_list: result)
+  return Text(from_list: steal result)
 
 ### Returns a copy padded on the right.
 ### If `width` is less than or equal to the current length, the original text is returned.
@@ -605,7 +605,7 @@ routine Text.pad_end(width: U64, fill: Character) -> Text
   var pad_count = width - me.count
   for p in 0u64 til pad_count
     result.add_last(fill)
-  return Text(from_list: result)
+  return Text(from_list: steal result)
 
 # Split/Join
 
@@ -619,12 +619,12 @@ routine Text.split(separator: Character) -> List[Owned[Text]]
   var current = List[Character]()
   for i in 0u64 til me.count
     if me[i] == separator
-      parts.add_last(Text(from_list: current))
+      parts.add_last(Text(from_list: steal current))
       current = List[Character]()
     else
       current.add_last(me[i])
-  parts.add_last(Text(from_list: current))
-  return parts
+  parts.add_last(Text(from_list: steal current))
+  return steal parts
 
 ### Splits this value into parts.
 ### An empty separator splits the text into one-character segments.
@@ -636,7 +636,7 @@ routine Text.split(separator: Referring[Text]) -> List[Owned[Text]]
     var parts = List[Owned[Text]]()
     for i in 0u64 til me.count
       parts.add_last(Text(from_character: me[i]))
-    return parts
+    return steal parts
   var separator_count = separator.count()
   var parts = List[Owned[Text]]()
   var start: U64 = 0u64
@@ -656,7 +656,7 @@ routine Text.split(separator: Referring[Text]) -> List[Owned[Text]]
     else
       i += 1u64
   parts.add_last(me[start til me.count])
-  return parts
+  return steal parts
 
 ### Returns a new text formed by joining `parts` with this separator.
 ### The separator is inserted between parts, not before the first or after the last.
@@ -675,7 +675,7 @@ routine Text.join(parts: List[Owned[Text]]) -> Text
     for i in 0u64 til part.count()
       result.add_last(part[i])
     first = false
-  return Text(from_list: result)
+  return Text(from_list: steal result)
 
 ### Returns the lines in this text.
 ### Windows line endings are normalized to `\n` before splitting.
@@ -695,13 +695,13 @@ routine Text.words() -> List[Owned[Text]]
   for i in 0u64 til me.count
     if me[i].is_whitespace()
       if not current.is_empty()
-        parts.add_last(Text(from_list: current))
+        parts.add_last(Text(from_list: steal current))
         current = List[Character]()
     else
       current.add_last(me[i])
   if not current.is_empty()
-    parts.add_last(Text(from_list: current))
-  return parts
+    parts.add_last(Text(from_list: steal current))
+  return steal parts
 
 # Conversion to modifiable list
 

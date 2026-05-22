@@ -289,12 +289,12 @@ routine Bytes.split(separator: Byte) -> List[Owned[Bytes]]
   var current = List[Byte]()
   for i in 0 til me.count
     if me[i] == separator
-      parts.add_last(Bytes(from_list: current))
+      parts.add_last(Bytes(from_list: steal current))
       current = List[Byte]()
     else
       current.add_last(me[i])
-  parts.add_last(Bytes(from_list: current))
-  return parts
+  parts.add_last(Bytes(from_list: steal current))
+  return steal parts
 
 # Transform
 
@@ -310,7 +310,7 @@ routine Bytes.reverse() -> Bytes
       break
     i -= 1u64
     result.add_last(me[i])
-  return Bytes(from_list: result)
+  return Bytes(from_list: steal result)
 
 ### Returns a repeated copy of this value.
 ### This is the binary-sequence equivalent of text repetition.
@@ -346,7 +346,7 @@ routine List[Byte].$create(source: Bytes) -> List[Byte]
     danger!
       result.add_last(source.data.stride(count: S64(i)).extract())
     i += 1u64
-  return result
+  return steal result
 
 # Iteration
 
@@ -397,7 +397,7 @@ routine Bytes.$represent() -> Text
       result.add_last(byte_text[j])
       j += 1u64
     i += 1u64
-  return Text(from_list: result)
+  return Text(from_list: steal result)
 
 ### Returns the diagnostic form of this byte sequence.
 ### The diagnostic form includes both the byte count and the escaped payload.
@@ -434,7 +434,7 @@ routine Text.encode_as_utf8() -> Bytes
         result.add_last(Byte(int_truncate[U32, U8](0x80u32 | ((codepoint >> 12u32) & 0x3Fu32))))
         result.add_last(Byte(int_truncate[U32, U8](0x80u32 | ((codepoint >> 6u32) & 0x3Fu32))))
         result.add_last(Byte(int_truncate[U32, U8](0x80u32 | (codepoint & 0x3Fu32))))
-  return Bytes(from_list: result)
+  return Bytes(from_list: steal result)
 
 ### Decodes this byte sequence as UTF-8, replacing malformed subsequences with
 ### the Unicode replacement character.
@@ -508,7 +508,7 @@ routine Bytes.decode_as_utf8_lossy() -> Text
         codepoint = 0xFFFDu32
         i += 1u64
     result.add_last(Character(codepoint))
-  return Text(from_list: result)
+  return Text(from_list: steal result)
 
 ### Decodes this byte sequence as UTF-8.
 ### Malformed input causes a `MalformedUtf8Error` instead of lossy replacement.
@@ -568,7 +568,7 @@ routine Bytes.decode_as_utf8!() -> Text
       else =>
         throw MalformedUtf8Error(index: i, reason: "invalid leading byte")
     result.add_last(Character(codepoint))
-  return Text(from_list: result)
+  return Text(from_list: steal result)
 
 ### Represents a strict lazy UTF-8 view over a borrowed `Bytes` value.
 ### Iteration throws {MalformedUtf8Error} on the first ill-formed subsequence.
@@ -804,7 +804,7 @@ routine Text.encode_as_utf16() -> List[U16]
       result.add_last(U16((cp >> 10u32) + 0xD800u32))
       result.add_last(U16((cp & 0x3FFu32) + 0xDC00u32))
     i += 1u64
-  return result
+  return steal result
 
 ### Decodes a list of UTF-16 code units into `Text`.
 ### Invalid surrogate structure is replaced with the Unicode replacement
@@ -833,7 +833,7 @@ routine List[U16].decode_as_utf16() -> Text
     else
       result.add_last(Character(0xFFFDu32))
       i += 1u64
-  return Text(from_list: result)
+  return Text(from_list: steal result)
 
 # ============================================================================
 # Hashing for BytesUtf8View / BytesUtf8Iterator

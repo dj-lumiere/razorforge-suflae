@@ -434,7 +434,7 @@ routine Deque[T].$represent() -> Text
     result = result + v.$represent()
     i = i +% 1u64
   result = result + "]"
-  return result
+  return steal result
 
 @readonly
 routine Deque[T].$diagnose() -> Text
@@ -446,7 +446,7 @@ routine Deque[T].$diagnose() -> Text
     result = result + v.$represent()
     i = i +% 1u64
   result = result + "])"
-  return result
+  return steal result
 
 ### Returns true if both deques contain the same elements in the same logical order.
 ### :param other: The other deque to compare against.

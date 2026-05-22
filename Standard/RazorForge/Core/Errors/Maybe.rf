@@ -4,7 +4,7 @@ module Core
 ### `Maybe[T]` stores either a present `T` or the absence of a value without
 ### carrying crash information.
 ### :typeparam T: The wrapped value type.
-record Maybe[T] needs T is RecordType
+record Maybe[T]
   ### Indicates whether the optional currently holds a value.
   secret present: Bool
   ### Stores the wrapped value when `present` is true.
@@ -13,7 +13,7 @@ record Maybe[T] needs T is RecordType
 ### Returns the display form of this optional value.
 ### Present values are rendered using the wrapped value's text form.
 ### :returns: The resulting `Text` value.
-routine Maybe[T].$represent() -> Text needs T is RecordType
+routine Maybe[T].$represent() -> Text
   if not me.present
     return "None"
   return f"{me.value}"
@@ -21,7 +21,7 @@ routine Maybe[T].$represent() -> Text needs T is RecordType
 ### Returns the diagnostic form of this optional value.
 ### This form keeps the `Maybe` wrapper visible for debugging and logs.
 ### :returns: The resulting `Text` value.
-routine Maybe[T].$diagnose() -> Text needs T is RecordType
+routine Maybe[T].$diagnose() -> Text
   if not me.present
     return "Core.Maybe(None)"
   return f"Core.Maybe({me.value})"
@@ -31,7 +31,7 @@ routine Maybe[T].$diagnose() -> Text needs T is RecordType
 ### Use this when absence is a logic error rather than an expected branch.
 ### :returns: The contained `T` value.
 ### :throws: {AbsentValueError} if this `Maybe` is absent.
-routine Maybe[T].$unwrap!() -> T needs T is RecordType
+routine Maybe[T].$unwrap!() -> T
   if not me.present
     throw AbsentValueError()
   return me.value
@@ -40,8 +40,7 @@ routine Maybe[T].$unwrap!() -> T needs T is RecordType
 ### This avoids branching at the call site when a fixed fallback is acceptable.
 ### :param fallback: The fallback value to return when absent.
 ### :returns: The contained `T` value, or `fallback` if this `Maybe` is absent.
-routine Maybe[T].$unwrap_or(fallback: T) -> T needs T is RecordType
+routine Maybe[T].$unwrap_or(fallback: T) -> T
   if not me.present
     return fallback
   return me.value
-

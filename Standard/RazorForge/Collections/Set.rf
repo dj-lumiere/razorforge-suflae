@@ -77,7 +77,7 @@ routine Set[T].$create(key: SecureHashKey) -> Set[T]
     set.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
     set.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * ecap))
     set.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
-  return set
+  return steal set
 
 routine Set[T].$create(key: SecureHashKey, capacity: U64) -> Set[T]
   var cap = SET_INITIAL_CAPACITY
@@ -105,7 +105,7 @@ routine Set[T].$create(key: SecureHashKey, capacity: U64) -> Set[T]
     set.indices = Hijacked[U64](rf_allocate_dynamic_uninit(U64.data_size() * cap))
     set.slots = hijacked_from[T](rf_allocate_dynamic_uninit(T.data_size() * ecap))
     set.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
-  return set
+  return steal set
 
 routine Set[T].$destroy()
   danger!
@@ -322,32 +322,32 @@ routine SetIterator[T].$next!() -> T
 # ============================================================================
 
 @readonly
-routine Set[T].union(other: Set[T]) -> Set[T]
+routine Set[T].union(other: Referring[Set[T]]) -> Set[T]
   var result = Set[T](key: SecureHashKey.random(), capacity: me.count +% other.count)
   for val in me
     discard result.add(val)
   for val in other
     discard result.add(val)
-  return result
+  return steal result
 
 @readonly
-routine Set[T].intersection(other: Set[T]) -> Set[T]
+routine Set[T].intersection(other: Referring[Set[T]]) -> Set[T]
   var result = Set[T]()
   for val in me
     if val in other
       discard result.add(val)
-  return result
+  return steal result
 
 @readonly
-routine Set[T].difference(other: Set[T]) -> Set[T]
+routine Set[T].difference(other: Referring[Set[T]]) -> Set[T]
   var result = Set[T]()
   for val in me
     if val notin other
       discard result.add(val)
-  return result
+  return steal result
 
 @readonly
-routine Set[T].symmetric_difference(other: Set[T]) -> Set[T]
+routine Set[T].symmetric_difference(other: Referring[Set[T]]) -> Set[T]
   var result = Set[T]()
   for val in me
     if val notin other
@@ -355,10 +355,10 @@ routine Set[T].symmetric_difference(other: Set[T]) -> Set[T]
   for val in other
     if val notin me
       discard result.add(val)
-  return result
+  return steal result
 
 @readonly
-routine Set[T].is_subset(other: Set[T]) -> Bool
+routine Set[T].is_subset(other: Referring[Set[T]]) -> Bool
   if me.count > other.count
     return false
   for val in me
@@ -367,11 +367,11 @@ routine Set[T].is_subset(other: Set[T]) -> Bool
   return true
 
 @readonly
-routine Set[T].is_superset(other: Set[T]) -> Bool
+routine Set[T].is_superset(other: Referring[Set[T]]) -> Bool
   return other.is_subset(me)
 
 @readonly
-routine Set[T].is_disjoint(other: Set[T]) -> Bool
+routine Set[T].is_disjoint(other: Referring[Set[T]]) -> Bool
   for val in me
     if val in other
       return false
@@ -388,7 +388,7 @@ routine List[T].$create(from: Set[T]) -> List[T]
   var result = List[T](capacity: from.count)
   for val in from
     result.add_last(val)
-  return result
+  return steal result
 
 # ============================================================================
 # Display
@@ -406,7 +406,7 @@ routine Set[T].$represent() -> Text
     result = result + val.$represent()
     first = false
   result = result + "}"
-  return result
+  return steal result
 
 @readonly
 routine Set[T].$diagnose() -> Text
@@ -418,7 +418,7 @@ routine Set[T].$diagnose() -> Text
     result = result + val.$represent()
     first = false
   result = result + "})"
-  return result
+  return steal result
 
 # ============================================================================
 # Comparison

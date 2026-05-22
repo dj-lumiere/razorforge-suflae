@@ -211,7 +211,7 @@ routine BitArray[N].$represent() -> Text
     result = result + me[i].$represent()
     i = i +% 1u64
   result = result + "]"
-  return result
+  return steal result
 
 @readonly
 routine BitArray[N].$diagnose() -> Text
@@ -223,6 +223,6 @@ routine BitArray[N].$diagnose() -> Text
     result = result + me[i].$represent()
     i = i +% 1u64
   result = result + "])"
-  return result
+  return steal result
 
 # Comparison (==, !=) is auto-generated using memcmp for records

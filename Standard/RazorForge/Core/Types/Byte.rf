@@ -146,7 +146,7 @@ routine Byte.$represent() -> Text
     digits.add_last(Character(0x0030u32 + low))
   else
     digits.add_last(Character(0x0041u32 + low - 10u32))
-  return Text(from_list: digits)
+  return Text(from_list: steal digits)
 
 ### Returns the diagnostic form of this byte.
 ### The diagnostic form includes both the unsigned numeric value and the escaped

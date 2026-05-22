@@ -361,7 +361,7 @@ routine PriorityQueue[TPriority, TElement].drain() -> List[TElement]
   var result = List[TElement](me.count())
   while not me.is_empty()
     result.add_last(me.remove!())
-  return result
+  return steal result
 
 # ============================================================================
 # Utility Operations
@@ -392,7 +392,7 @@ routine List[PQEntry[TPriority, TElement]].$create(source: PriorityQueue[TPriori
   while i < source.count()
     result.add_last(source.get_entry_raw(i))
     i = i +% 1u64
-  return result
+  return steal result
 
 # ============================================================================
 # Iteration (heap order, NOT priority order)
@@ -446,7 +446,7 @@ routine PriorityQueue[TPriority, TElement].$represent() -> Text
     result = result + entry.priority.$represent() + ": " + entry.element.$represent()
     i = i +% 1u64
   result = result + "]"
-  return result
+  return steal result
 
 routine PriorityQueue[TPriority, TElement].$diagnose() -> Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", ["
@@ -457,4 +457,4 @@ routine PriorityQueue[TPriority, TElement].$diagnose() -> Text
     result = result + entry.priority.$represent() + ": " + entry.element.$represent()
     i = i +% 1u64
   result = result + "])"
-  return result
+  return steal result

@@ -212,7 +212,7 @@ routine BTreeListNode[T].children_truncate(n: U64)
 ### :param other: The source node to copy from.
 ### :param start: Zero-based start index in `other`.
 ### :param count: Number of keys to copy.
-routine BTreeListNode[T].keys_add_range_from(other: BTreeListNode[T], start: U64, count: U64)
+routine BTreeListNode[T].keys_add_range_from(other: Referring[BTreeListNode[T]], start: U64, count: U64)
   if count > 0u64
     danger!
       var elem_size = T.data_size()
@@ -226,7 +226,7 @@ routine BTreeListNode[T].keys_add_range_from(other: BTreeListNode[T], start: U64
 ### :param other: The source node to copy from.
 ### :param start: Zero-based start index in `other`.
 ### :param count: Number of child pointers to copy.
-routine BTreeListNode[T].children_add_range_from(other: BTreeListNode[T], start: U64, count: U64)
+routine BTreeListNode[T].children_add_range_from(other: Referring[BTreeListNode[T]], start: U64, count: U64)
   if count > 0u64
     danger!
       var elem_size = Address.data_size()
@@ -300,7 +300,7 @@ routine SortedList[T].$contains(value: T) -> Bool
 ### :returns: `true` if found anywhere in the subtree.
 @readonly
 @inline
-routine SortedList[T].search_node(node: BTreeListNode[T], value: T) -> Bool
+routine SortedList[T].search_node(node: Referring[BTreeListNode[T]], value: T) -> Bool
   var i = me.lower_bound(node: node, value: value)
   if i < node.keys_count() and value == node.keys_get(i)
     return true
@@ -324,7 +324,7 @@ routine SortedList[T].count_of(value: T) -> U64
 ### :param value: The value to count.
 ### :returns: Number of occurrences found in the subtree.
 @readonly
-routine SortedList[T].count_in_node(node: BTreeListNode[T], value: T) -> U64
+routine SortedList[T].count_in_node(node: Referring[BTreeListNode[T]], value: T) -> U64
   var count = 0u64
   var i = 0u64
   while i < node.keys_count()
@@ -343,7 +343,7 @@ routine SortedList[T].count_in_node(node: BTreeListNode[T], value: T) -> U64
 ### :returns: Smallest index `i` where `node.keys[i] >= value`, or `keys_count()` if all keys are smaller.
 @readonly
 @inline
-routine SortedList[T].lower_bound(node: BTreeListNode[T], value: T) -> U64
+routine SortedList[T].lower_bound(node: Referring[BTreeListNode[T]], value: T) -> U64
   var lo = 0u64
   var hi = node.keys_count()
   while lo < hi
@@ -360,7 +360,7 @@ routine SortedList[T].lower_bound(node: BTreeListNode[T], value: T) -> U64
 ### :returns: Smallest index `i` where `node.keys[i] > value`, or `keys_count()` if all keys are `<= value`.
 @readonly
 @inline
-routine SortedList[T].upper_bound(node: BTreeListNode[T], value: T) -> U64
+routine SortedList[T].upper_bound(node: Referring[BTreeListNode[T]], value: T) -> U64
   var lo = 0u64
   var hi = node.keys_count()
   while lo < hi
@@ -389,7 +389,7 @@ routine SortedList[T].add(value: T)
     danger!
       var old_root = Hijacked[BTreeListNode[T]](me.root!!).reveal()
       var new_root = BTreeListNode[T](is_leaf: false)
-      new_root.children_add_last(value: old_root)
+      new_root.children_add_last(value: steal old_root)
       me.split_child(parent_node: new_root, child_idx: 0u64)
       new_root.subtree_size = new_root.children_get(0u64).subtree_size +% new_root.children_get(1u64).subtree_size +% 1u64
       me.root = steal new_root
@@ -404,7 +404,7 @@ routine SortedList[T].add(value: T)
 ### :param node: A non-full node to insert into.
 ### :param value: The element to insert.
 @inline
-routine SortedList[T].insert_non_full(node: BTreeListNode[T], value: T)
+routine SortedList[T].insert_non_full(node: Controlling[BTreeListNode[T]], value: T)
   if node.is_leaf
     var i = me.upper_bound(node: node, value: value)
     node.keys_add_at(i: i, value: value)
@@ -423,7 +423,7 @@ routine SortedList[T].insert_non_full(node: BTreeListNode[T], value: T)
 ### :param parent_node: The parent node that owns the full child.
 ### :param child_idx: Index of the full child within `parent_node`'s children buffer.
 @inline
-routine SortedList[T].split_child(parent_node: BTreeListNode[T], child_idx: U64)
+routine SortedList[T].split_child(parent_node: Controlling[BTreeListNode[T]], child_idx: U64)
   var child = parent_node.children_get(child_idx)
   var mid = unsigned_div[U64](B_LIST -% 1u64, 2u64)
 
@@ -488,7 +488,7 @@ routine SortedList[T].remove(value: T) -> Bool
 ### :param value: The value to remove.
 ### :returns: `true` if a matching element was found and removed.
 @inline
-routine SortedList[T].remove_from_node(node: BTreeListNode[T], value: T) -> Bool
+routine SortedList[T].remove_from_node(node: Controlling[BTreeListNode[T]], value: T) -> Bool
   var i = me.lower_bound(node: node, value: value)
 
   if i < node.keys_count() and value == node.keys_get(i)
@@ -531,7 +531,7 @@ routine SortedList[T].remove_from_node(node: BTreeListNode[T], value: T) -> Bool
 ### :param idx: Index of the separator key whose left child to descend.
 ### :returns: The in-order predecessor key.
 @inline
-routine SortedList[T].get_predecessor(node: BTreeListNode[T], idx: U64) -> T
+routine SortedList[T].get_predecessor(node: Referring[BTreeListNode[T]], idx: U64) -> T
   var current = node.children_get(idx)
   while not current.is_leaf
     current = current.children_get(current.children_count() -% 1u64)
@@ -542,7 +542,7 @@ routine SortedList[T].get_predecessor(node: BTreeListNode[T], idx: U64) -> T
 ### :param idx: Index of the separator key whose right child to descend.
 ### :returns: The in-order successor key.
 @inline
-routine SortedList[T].get_successor(node: BTreeListNode[T], idx: U64) -> T
+routine SortedList[T].get_successor(node: Referring[BTreeListNode[T]], idx: U64) -> T
   var current = node.children_get(idx +% 1u64)
   while not current.is_leaf
     current = current.children_get(0u64)
@@ -552,7 +552,7 @@ routine SortedList[T].get_successor(node: BTreeListNode[T], idx: U64) -> T
 ### :param node: The parent node whose two adjacent children are merged.
 ### :param i: Index of the separator key and the left child that absorbs the right.
 @inline
-routine SortedList[T].merge_children_at(node: BTreeListNode[T], i: U64)
+routine SortedList[T].merge_children_at(node: Controlling[BTreeListNode[T]], i: U64)
   var left = node.children_get(i)
   var right = node.children_get(i +% 1u64)
 
@@ -571,7 +571,7 @@ routine SortedList[T].merge_children_at(node: BTreeListNode[T], i: U64)
 ### :param i: The child index that is about to be descended into.
 ### :returns: The adjusted child index after any rotation or merge.
 @inline
-routine SortedList[T].fix_child(node: BTreeListNode[T], i: U64) -> U64
+routine SortedList[T].fix_child(node: Controlling[BTreeListNode[T]], i: U64) -> U64
   if node.children_get(i).keys_count() > MIN_KEYS_LIST
     return i
   if i > 0u64 and node.children_get(i -% 1u64).keys_count() > MIN_KEYS_LIST
@@ -590,7 +590,7 @@ routine SortedList[T].fix_child(node: BTreeListNode[T], i: U64) -> U64
 ### :param node: The parent node.
 ### :param i: Index of the child that receives the borrowed key.
 @inline
-routine SortedList[T].rotate_right_at(node: BTreeListNode[T], i: U64)
+routine SortedList[T].rotate_right_at(node: Controlling[BTreeListNode[T]], i: U64)
   var left = node.children_get(i -% 1u64)
   var child = node.children_get(i)
 
@@ -608,7 +608,7 @@ routine SortedList[T].rotate_right_at(node: BTreeListNode[T], i: U64)
 ### :param node: The parent node.
 ### :param i: Index of the child that receives the borrowed key.
 @inline
-routine SortedList[T].rotate_left_at(node: BTreeListNode[T], i: U64)
+routine SortedList[T].rotate_left_at(node: Controlling[BTreeListNode[T]], i: U64)
   var right = node.children_get(i +% 1u64)
   var child = node.children_get(i)
 
@@ -625,7 +625,7 @@ routine SortedList[T].rotate_left_at(node: BTreeListNode[T], i: U64)
 ### Recomputes `node.subtree_size` from its keys and children.
 ### :param node: The node whose subtree size is to be refreshed.
 @inline
-routine SortedList[T].update_subtree_size(node: BTreeListNode[T])
+routine SortedList[T].update_subtree_size(node: Controlling[BTreeListNode[T]])
   if node.is_leaf
     node.subtree_size = node.keys_count()
   else
@@ -672,7 +672,7 @@ routine SortedList[T].$getitem!(index: BackIndex) -> T
 ### :param rank: Zero-based position in the in-order traversal of this subtree.
 ### :returns: The element at that rank.
 @readonly
-routine SortedList[T].get_by_rank(node: BTreeListNode[T], rank: U64) -> T
+routine SortedList[T].get_by_rank(node: Referring[BTreeListNode[T]], rank: U64) -> T
   if node.is_leaf
     return node.keys_get(rank)
 
@@ -703,11 +703,12 @@ routine SortedList[T].get_by_rank(node: BTreeListNode[T], rank: U64) -> T
 routine SortedList[T].range(min_val: T, max_val: T) -> List[T]
   var result = List[T]()
   if me.root is None
-    return result
-  danger!
-    var root_ref = Hijacked[BTreeListNode[T]](me.root!!).reveal()
-    me.range_collect(node: root_ref, min_val: min_val, max_val: max_val, result: result)
-  return result
+    pass
+  else
+    danger!
+      var root_ref = Hijacked[BTreeListNode[T]](me.root!!).reveal()
+      me.range_collect(node: root_ref, min_val: min_val, max_val: max_val, result: result)
+  return steal result
 
 ### Appends elements in `[min_val, max_val]` from `node`'s subtree into `result`.
 ### :param node: The subtree root to traverse.
@@ -715,7 +716,7 @@ routine SortedList[T].range(min_val: T, max_val: T) -> List[T]
 ### :param max_val: Inclusive upper bound.
 ### :param result: The list to append matching elements into.
 @readonly
-routine SortedList[T].range_collect(node: BTreeListNode[T], min_val: T, max_val: T, result: List[T])
+routine SortedList[T].range_collect(node: Referring[BTreeListNode[T]], min_val: T, max_val: T, result: Controlling[List[T]])
   var i = 0u64
   while i < node.keys_count()
     if not node.is_leaf and (i == 0u64 or node.keys_get(i -% 1u64) >= min_val)
@@ -786,17 +787,18 @@ routine SortedList[T].$iter() -> SortedListIterator[T]
 routine List[T].$create(from: SortedList[T]) -> List[T]
   var result = List[T](capacity: from.count)
   if from.root is None
-    return result
-  danger!
-    var root_ref = Hijacked[BTreeListNode[T]](from.root!!).reveal()
-    from.collect_inorder(node: root_ref, result: result)
-  return result
+    pass
+  else
+    danger!
+      var root_ref = Hijacked[BTreeListNode[T]](from.root!!).reveal()
+      from.collect_inorder(node: root_ref, result: result)
+  return steal result
 
 ### Appends all keys from `node`'s subtree into `result` via in-order traversal.
 ### :param node: The subtree root to traverse.
 ### :param result: The list to append elements into.
 @readonly
-routine SortedList[T].collect_inorder(node: BTreeListNode[T], result: List[T])
+routine SortedList[T].collect_inorder(node: Referring[BTreeListNode[T]], result: Controlling[List[T]])
   var i = 0u64
   while i < node.keys_count()
     if not node.is_leaf
@@ -834,7 +836,7 @@ routine SortedList[T].$represent() -> Text
     result = result + v.$represent()
     i = i +% 1u64
   result = result + "]"
-  return result
+  return steal result
 
 @readonly
 routine SortedList[T].$diagnose() -> Text
@@ -846,7 +848,7 @@ routine SortedList[T].$diagnose() -> Text
     result = result + v.$represent()
     i = i +% 1u64
   result = result + "])"
-  return result
+  return steal result
 
 ### Returns true if both lists contain exactly the same elements in the same order.
 ### :param other: The list to compare against.

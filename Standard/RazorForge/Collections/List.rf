@@ -332,7 +332,7 @@ routine List[T].$getslice!(start: U64, end: U64) -> List[T]
       result.add_last(me.data.offset(byte_offset).extract())
       i = i + 1u64
 
-  return result
+  return steal result
 
 # ============================================================================
 # Slicing with [a to b] syntax (backward index using ^)
@@ -358,7 +358,7 @@ routine List[T].$getslice!(start: BackIndex, end: BackIndex) -> List[T]
       result.add_last(me.data.offset(byte_offset).extract())
       i = i + 1u64
 
-  return result
+  return steal result
 
 ### Ensures the backing allocation holds at least `new_capacity` elements.
 ### Does nothing if the current capacity already meets or exceeds `new_capacity`.
@@ -453,7 +453,7 @@ routine List[T].$represent() -> Text
     result = result + v.$represent()
     i = i +% 1u64
   result = result + "]"
-  return result
+  return steal result
 
 @readonly
 routine List[T].$diagnose() -> Text
@@ -465,7 +465,7 @@ routine List[T].$diagnose() -> Text
     result = result + v.$represent()
     i = i +% 1u64
   result = result + "])"
-  return result
+  return steal result
 
 ### Appends `count` elements from `source` beginning at `from` into this list.
 ### Elements are copied as a single contiguous range using a memcopy.
@@ -623,7 +623,7 @@ needs T obeys Comparable
   var copy = List[T](capacity: me.count)
   copy.add_range!(source: me, from: 0u64, count: me.count)
   copy.sort()
-  return copy
+  return steal copy
 
 ### Returns a new list with the same elements sorted using `compare`.
 ### The original list is left unchanged.
@@ -634,7 +634,7 @@ routine List[T].sorted_by(compare: Routine[(T, T), Bool]) -> List[T]
   var copy = List[T](capacity: me.count)
   copy.add_range!(source: me, from: 0u64, count: me.count)
   copy.sort_by(compare)
-  return copy
+  return steal copy
 
 ### Reverses the order of all elements in place.
 ### The first element becomes last, the last becomes first, and element count is unchanged.
@@ -712,7 +712,7 @@ routine List[T].insertion_sort_by(start: U64, end: U64, compare: Routine[(T, T),
 ### :param mid: Start index of the second sorted run (and exclusive end of the first).
 ### :param right: Exclusive end index of the second sorted run.
 ### :param buffer: A pre-allocated list used as temporary storage during the merge.
-routine List[T].merge_into(left: U64, mid: U64, right: U64, buffer: List[T])
+routine List[T].merge_into(left: U64, mid: U64, right: U64, buffer: Controlling[List[T]])
 needs T obeys Comparable
   # Copy [left, right) into the buffer
   var i = left
@@ -763,7 +763,7 @@ needs T obeys Comparable
 ### :param right: Exclusive end index of the second sorted run.
 ### :param buffer: A pre-allocated list used as temporary storage during the merge.
 ### :param compare: A routine that returns `true` when its first argument should precede its second.
-routine List[T].merge_into_by(left: U64, mid: U64, right: U64, buffer: List[T], compare: Routine[(T, T), Bool])
+routine List[T].merge_into_by(left: U64, mid: U64, right: U64, buffer: Controlling[List[T]], compare: Routine[(T, T), Bool])
   var i = left
   loop
     if i >= right

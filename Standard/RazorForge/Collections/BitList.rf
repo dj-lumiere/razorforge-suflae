@@ -376,7 +376,7 @@ routine BitList.$bitand(other: BitList) -> BitList
     var val = me.get_bit_internal(i) and other.get_bit_internal(i)
     result.add_last(val)
     i = i +% 1u64
-  return result
+  return steal result
 
 ### Returns the bitwise union of two bit lists.
 ### Missing bits past the end of the shorter input are treated as `false`.
@@ -394,7 +394,7 @@ routine BitList.$bitor(other: BitList) -> BitList
     var b = if i < other.count then other.get_bit_internal(i) else false
     result.add_last(a or b)
     i = i +% 1u64
-  return result
+  return steal result
 
 ### Returns the bitwise exclusive-or of two bit lists.
 ### Missing bits past the end of the shorter input are treated as `false`.
@@ -412,7 +412,7 @@ routine BitList.$bitxor(other: BitList) -> BitList
     var b = if i < other.count then other.get_bit_internal(i) else false
     result.add_last(a ^ b)
     i = i +% 1u64
-  return result
+  return steal result
 
 ### Returns a new bit list with every stored bit inverted.
 ### :returns: A copy of this list with `true` and `false` swapped at each position.
@@ -425,7 +425,7 @@ routine BitList.$bitnot() -> BitList
   while i < me.count
     result.add_last(not me.get_bit_internal(i))
     i = i +% 1u64
-  return result
+  return steal result
 
 # ============================================================================
 # Iteration Support
@@ -499,7 +499,7 @@ routine BitList.reverse() -> BitList
   while i > 0u64
     i = i -% 1u64
     result.add_last(me.get_bit_internal(i))
-  return result
+  return steal result
 
 # ============================================================================
 # Comparison Operations
@@ -593,7 +593,7 @@ routine BitList.from_u8(value: U8) -> BitList
   while i < 8u8
     result.add_last((value & (1u8 << i)) != 0u8)
     i = i + 1u8
-  return result
+  return steal result
 
 ### Expands a `U16` into a sixteen-bit list.
 ### The least-significant bit of `value` becomes the first element in the list.
@@ -606,7 +606,7 @@ routine BitList.from_u16(value: U16) -> BitList
   while i < 16u16
     result.add_last((value & (1u16 << i)) != 0u16)
     i = i + 1u16
-  return result
+  return steal result
 
 ### Expands a `U32` into a thirty-two-bit list.
 ### The least-significant bit of `value` becomes the first element in the list.
@@ -619,7 +619,7 @@ routine BitList.from_u32(value: U32) -> BitList
   while i < 32u32
     result.add_last((value & (1u32 << i)) != 0u32)
     i = i + 1u32
-  return result
+  return steal result
 
 ### Returns a compact display form of the logical bit sequence.
 ### :returns: The resulting `Text` value.
@@ -633,7 +633,7 @@ routine BitList.$represent() -> Text
     result = result + v.$represent()
     i = i +% 1u64
   result = result + "]"
-  return result
+  return steal result
 
 ### Returns a diagnostic form that includes the bit count, one-bit count, and contents.
 ### :returns: The resulting `Text` value.
@@ -647,7 +647,7 @@ routine BitList.$diagnose() -> Text
     result = result + v.$represent()
     i = i +% 1u64
   result = result + "])"
-  return result
+  return steal result
 
 ### Expands a `U64` into a sixty-four-bit list.
 ### The least-significant bit of `value` becomes the first element in the list.
@@ -660,4 +660,4 @@ routine BitList.from_u64(value: U64) -> BitList
   while i < 64u64
     result.add_last((value & (1u64 << i)) != 0u64)
     i = i +% 1u64
-  return result
+  return steal result

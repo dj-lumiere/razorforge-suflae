@@ -86,7 +86,7 @@ routine FastDict[K, V].$create() -> FastDict[K, V]
     dict.keys = hijacked_from[K](rf_allocate_dynamic_uninit(K.data_size() * ecap))
     dict.vals = hijacked_from[V](rf_allocate_dynamic_uninit(V.data_size() * ecap))
     dict.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
-  return dict
+  return steal dict
 
 ### Creates an empty dictionary pre-sized to hold at least `capacity` live entries without rehashing.
 ### Both the probe table and the entries array are rounded up to the next power-of-two.
@@ -117,7 +117,7 @@ routine FastDict[K, V].$create(capacity: U64) -> FastDict[K, V]
     dict.keys = hijacked_from[K](rf_allocate_dynamic_uninit(K.data_size() * ecap))
     dict.vals = hijacked_from[V](rf_allocate_dynamic_uninit(V.data_size() * ecap))
     dict.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
-  return dict
+  return steal dict
 
 ### Releases the raw probe, index, key, value, and entry-liveness buffers owned by this dictionary.
 routine FastDict[K, V].$destroy()
@@ -436,7 +436,7 @@ routine FastDict[K, V].keys() -> List[K]
       if me.entry_live.offset(ByteSize(bytes: i)).extract() == ENTRY_LIVE
         result.add_last(me.keys.offset(K.data_size() * i).extract())
     i = i +% 1u64
-  return result
+  return steal result
 
 ### Returns all live values in insertion order.
 ### :returns: A {List[V]} of every value; order matches the corresponding `keys()` call.
@@ -449,7 +449,7 @@ routine FastDict[K, V].values() -> List[V]
       if me.entry_live.offset(ByteSize(bytes: i)).extract() == ENTRY_LIVE
         result.add_last(me.vals.offset(V.data_size() * i).extract())
     i = i +% 1u64
-  return result
+  return steal result
 
 ### Returns all live entries in insertion order.
 ### :returns: A {List[DictEntry[K, V]]} of every key-value pair; order matches the sequence in which the keys were first added.
@@ -464,7 +464,7 @@ routine FastDict[K, V].entries() -> List[DictEntry[K, V]]
         var v = me.vals.offset(V.data_size() * i).extract()
         result.add_last(DictEntry[K, V](key: k, value: v))
     i = i +% 1u64
-  return result
+  return steal result
 
 # ============================================================================
 # Iteration
@@ -531,7 +531,7 @@ routine FastDict[K, V].$represent() -> Text
     result = result + entry.key.$represent() + ": " + entry.value.$represent()
     first = false
   result = result + "}"
-  return result
+  return steal result
 
 ### Returns a diagnostic form that includes the runtime type name and live entry count.
 @readonly
@@ -544,7 +544,7 @@ routine FastDict[K, V].$diagnose() -> Text
     result = result + entry.key.$represent() + ": " + entry.value.$represent()
     first = false
   result = result + "})"
-  return result
+  return steal result
 
 # ============================================================================
 # Comparison

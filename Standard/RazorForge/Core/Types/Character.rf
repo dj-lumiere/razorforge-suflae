@@ -185,7 +185,7 @@ routine Character.to_byte() -> Byte
 routine Character.$represent() -> Text
   var list = List[Character]()
   list.add_last(me)
-  return Text(from_list: list)
+  return Text(from_list: steal list)
 
 ### Returns the diagnostic form of this character.
 ### The diagnostic form includes both the printable character and its numeric

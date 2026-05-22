@@ -563,7 +563,7 @@ routine U128.$represent() -> Text
     var digit = U8(unsigned_rem[U128](a: remaining, b: 10u128))
     remaining = unsigned_div[U128](a: remaining, b: 10u128)
     digits.add_first(Character(0x0030u32 + U32(digit)))
-  return Text(from_list: digits)
+  return Text(from_list: steal digits)
 
 routine U128.$diagnose() -> Text
   return "U128(" + me.$represent() + ")"

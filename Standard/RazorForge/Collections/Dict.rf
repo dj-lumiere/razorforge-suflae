@@ -81,7 +81,7 @@ routine Dict[K, V].$create(key: SecureHashKey) -> Dict[K, V]
     dict.keys = hijacked_from[K](rf_allocate_dynamic_uninit(K.data_size() * ecap))
     dict.vals = hijacked_from[V](rf_allocate_dynamic_uninit(V.data_size() * ecap))
     dict.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
-  return dict
+  return steal dict
 
 routine Dict[K, V].$create(key: SecureHashKey, capacity: U64) -> Dict[K, V]
   var cap = DICT_INITIAL_CAPACITY
@@ -111,7 +111,7 @@ routine Dict[K, V].$create(key: SecureHashKey, capacity: U64) -> Dict[K, V]
     dict.keys = hijacked_from[K](rf_allocate_dynamic_uninit(K.data_size() * ecap))
     dict.vals = hijacked_from[V](rf_allocate_dynamic_uninit(V.data_size() * ecap))
     dict.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
-  return dict
+  return steal dict
 
 routine Dict[K, V].$destroy()
   danger!
@@ -360,7 +360,7 @@ routine Dict[K, V].keys() -> List[K]
       if me.entry_live.offset(ByteSize(bytes: i)).extract() == ENTRY_LIVE
         result.add_last(me.keys.offset(K.data_size() * i).extract())
     i = i +% 1u64
-  return result
+  return steal result
 
 ### Returns all live values in insertion order.
 ### :returns: A {List[V]} of every value; order matches the corresponding `keys()` call.
@@ -373,7 +373,7 @@ routine Dict[K, V].values() -> List[V]
       if me.entry_live.offset(ByteSize(bytes: i)).extract() == ENTRY_LIVE
         result.add_last(me.vals.offset(V.data_size() * i).extract())
     i = i +% 1u64
-  return result
+  return steal result
 
 ### Returns all live entries in insertion order.
 ### :returns: A {List[DictEntry[K, V]]} of every key-value pair; order matches the sequence in which the keys were first added.
@@ -388,7 +388,7 @@ routine Dict[K, V].entries() -> List[DictEntry[K, V]]
         var v = me.vals.offset(V.data_size() * i).extract()
         result.add_last(DictEntry[K, V](key: k, value: v))
     i = i +% 1u64
-  return result
+  return steal result
 
 # ============================================================================
 # Iteration
@@ -440,7 +440,7 @@ routine Dict[K, V].$represent() -> Text
     result = result + entry.key.$represent() + ": " + entry.value.$represent()
     first = false
   result = result + "}"
-  return result
+  return steal result
 
 @readonly
 routine Dict[K, V].$diagnose() -> Text
@@ -452,7 +452,7 @@ routine Dict[K, V].$diagnose() -> Text
     result = result + entry.key.$represent() + ": " + entry.value.$represent()
     first = false
   result = result + "})"
-  return result
+  return steal result
 
 # ============================================================================
 # Comparison
