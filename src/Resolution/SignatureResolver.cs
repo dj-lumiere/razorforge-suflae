@@ -263,6 +263,19 @@ internal sealed class SignatureResolver
                 location: routine.ReturnType?.Location ?? routine.Location);
         }
 
+        // Post-Owned-retirement: bare entity / generic-param in return position must use `?T`.
+        // Bound `T` is for lvalue/slot storage; returns produce values "in flight" (rvalue).
+        // Generic params require the mark because the instantiated T may be an entity; for
+        // records the `?` is a no-op, so requiring it costs nothing.
+        bool isRvalueReturn = routine.ReturnType?.IsRvalue ?? false;
+        if (!isRvalueReturn && returnType is EntityTypeInfo or GenericParameterTypeInfo)
+        {
+            _sa.ReportError(code: SemanticDiagnosticCode.BareEntityReturnMissingRvalueMark,
+                message: $"Return type '{returnType.Name}' must use the rvalue mark `?{returnType.Name}` " +
+                         "in return position.",
+                location: routine.ReturnType?.Location ?? routine.Location);
+        }
+
         // Merge implicit generics with explicit generics
         List<string> allGenericParams = filteredGenericParams?.ToList() ?? [];
         allGenericParams.AddRange(collection: implicitGenerics);
