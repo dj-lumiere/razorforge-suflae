@@ -24,14 +24,14 @@ routine start()
   var d = c.sorted_by(compare: (x, y) => x > y)
   show(f"sorted_by(>) of c: {d}")
 
-  # Sort by string length (entity element — Owned[Text])
-  var words: List[Owned[Text]] = ["hello", "a", "world", "xy", "z"]
+  # Sort by string length (entity element — Text)
+  var words: List[Text] = ["hello", "a", "world", "xy", "z"]
   words.sort_by(compare: (x, y) => x.count() < y.count())
   show(f"sorted by length: {words}")
 
   # Stability check: sort_by on equal keys should preserve original order
   # (this is a property the user expects from merge sort)
-  var pairs: List[Owned[Text]] = ["a1", "b1", "a2", "b2"]
+  var pairs: List[Text] = ["a1", "b1", "a2", "b2"]
   pairs.sort_by(compare: (x, y) => x[0_u64] < y[0_u64])
   show(f"stable by first char: {pairs}")
 

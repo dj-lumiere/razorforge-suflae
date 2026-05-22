@@ -11,6 +11,6 @@ contents after overwrite one: {one: 100, two: 2, three: 3, four: 4}
 size after remove two: 3
 contents after remove two: {one: 100, three: 3, four: 4}
 contains_key 'two' after remove: false
-diagnose: FastDict[Owned[Text], S64](count: 3, {one: 100, three: 3, four: 4})
+diagnose: FastDict[Text, S64](count: 3, {one: 100, three: 3, four: 4})
 is_empty: false
 DONE

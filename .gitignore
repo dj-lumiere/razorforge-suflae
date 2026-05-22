@@ -83,3 +83,5 @@ old
 /.dotnet-cli/.dotnet/
 /.sonarqube
 /benchmarks/
+/build.log
+/test.log

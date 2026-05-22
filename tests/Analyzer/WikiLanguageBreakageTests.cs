@@ -339,7 +339,7 @@ public class WikiLanguageBreakageTests
                         entity Node
                           value: S32
 
-                        routine get_view(node: Owned[Node]) -> Viewed[Node]
+                        routine get_view(node: Node) -> Viewed[Node]
                           return node.view()
                         """;
 

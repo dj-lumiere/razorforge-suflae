@@ -5,7 +5,7 @@ import IterTools
 # Tuple destructuring inside for-in headers — common in zip/enumerate iteration.
 routine start()
   # Iterate with index via enumerate (Tuple[U64, T])
-  var labels: List[Owned[Text]] = ["a", "b", "c"]
+  var labels: List[Text] = ["a", "b", "c"]
   for (i, label) in labels.enumerate()
     show(f"  {i}: {label}")
 

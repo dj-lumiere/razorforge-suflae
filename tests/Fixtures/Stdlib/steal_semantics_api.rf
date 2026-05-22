@@ -16,12 +16,12 @@ routine Resource.$destroy()
   show(f"  destroy({me.tag})")
   return
 
-routine make_box() -> Owned[Resource]
+routine make_box() -> Resource
   show(" make_box: create")
   return Resource(tag: 7)
   # ownership transferred to caller — no destroy at make_box exit
 
-routine consume(r: Owned[Resource])
+routine consume(r: Resource)
   show(f" consume: tag={r.tag}")
   return
   # destroy fires here when r goes out of scope

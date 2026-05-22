@@ -3,9 +3,9 @@ import IO/Console
 import Collections
 
 # SortedDict iterates in key-sorted order -> deterministic.
-# Text is an entity, so the key type is Owned[Text].
+# Text is an entity, so the key type is Text.
 routine start()
-  var sd = SortedDict[Owned[Text], S64]()
+  var sd = SortedDict[Text, S64]()
   discard sd.add(key: "charlie", value: 3)
   discard sd.add(key: "alpha", value: 1)
   discard sd.add(key: "bravo", value: 2)

@@ -8,7 +8,7 @@ using static TestHelpers;
 
 /// <summary>
 /// Tests for the move-on-consume rule:
-/// - `a.retain()` / `a.track()` on a raw entity or `Owned[T]` source consumes the receiver.
+/// - `a.retain()` / `a.track()` on a raw entity or `T` source consumes the receiver.
 /// - `.retain()` on an already-RC handle (`Retained[T]`, `Shared[T]`, ...) is a refcount bump
 ///   and the source remains valid.
 /// Use-after-consume is reported as <c>S615 UseAfterSteal</c>.
@@ -37,7 +37,7 @@ public class MoveOnConsumeTests
                     comparisonType: StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>`.retain()` on an `Owned[T]` source kills the receiver.</summary>
+    /// <summary>`.retain()` on an `T` source kills the receiver.</summary>
     /// <remarks>
     /// Same ownership-transfer rule as raw entity — the receiver name dies because the
     /// ownership moves into the new RC handle.
@@ -45,14 +45,14 @@ public class MoveOnConsumeTests
     [Fact]
     public void Analyze_RetainOnOwned_KillsSource()
     {
-        // A field-stored Owned[T] is a stable surface for testing the rule. Reading the
+        // A field-stored T is a stable surface for testing the rule. Reading the
         // same field a second time after `.retain()` consumed the borrow should error.
         string source = """
                         entity Node
                           value: S64
 
                         record Box
-                          inner: Owned[Node]
+                          inner: Node
 
                         routine start()
                           var b = Box(inner: Node(value: 1))

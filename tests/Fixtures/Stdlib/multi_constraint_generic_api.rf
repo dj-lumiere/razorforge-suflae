@@ -21,7 +21,7 @@ routine start()
   show(f"in_set 20: {in_set_and_max(items: nums, target: 20_s64)}")
   show(f"in_set 99: {in_set_and_max(items: nums, target: 99_s64)}")
 
-  var words: List[Owned[Text]] = ["alpha", "bravo", "charlie"]
+  var words: List[Text] = ["alpha", "bravo", "charlie"]
   show(f"in_set 'bravo': {in_set_and_max(items: words, target: "bravo")}")
   show(f"in_set 'delta': {in_set_and_max(items: words, target: "delta")}")
 

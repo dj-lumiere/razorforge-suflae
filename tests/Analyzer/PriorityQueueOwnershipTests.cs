@@ -9,12 +9,12 @@ using static TestHelpers;
 /// Type-signature tests for the entity-in-carrier ownership rule applied to PriorityQueue.
 /// `PriorityQueue[K, V]` is an entity, so a var binding must wrap it in `Owned[…]`.
 /// `Text` is also an entity, so when stored as the PQ's value type it must itself be
-/// `Owned[Text]`. Only the fully-wrapped form is legal.
+/// `Text`. Only the fully-wrapped form is legal.
 /// </summary>
 public class PriorityQueueOwnershipTests
 {
     /// <summary>
-    /// `var pq: PriorityQueue[S128, Owned[Text]] = {…}` — bare PriorityQueue entity in a var
+    /// `var pq: PriorityQueue[S128, Text] = {…}` — bare PriorityQueue entity in a var
     /// binding violates the entity-ownership rule. The carrier itself must be Owned-wrapped.
     /// </summary>
     [Fact]
@@ -22,7 +22,7 @@ public class PriorityQueueOwnershipTests
     {
         string source = """
                         routine test()
-                          var pq: PriorityQueue[S128, Owned[Text]] = {1: "high", 10: "low", 5: "mid"}
+                          var pq: PriorityQueue[S128, Text] = {1: "high", 10: "low", 5: "mid"}
                           return
                         """;
 
@@ -49,7 +49,7 @@ public class PriorityQueueOwnershipTests
     }
 
     /// <summary>
-    /// `var pq: Owned[PriorityQueue[S128, Owned[Text]]] = {…}` — fully-wrapped form: the
+    /// `var pq: Owned[PriorityQueue[S128, Text]] = {…}` — fully-wrapped form: the
     /// PriorityQueue is Owned, and the inner Text value is Owned. This is the only legal
     /// shape for a PriorityQueue of entity values.
     /// </summary>
@@ -58,7 +58,7 @@ public class PriorityQueueOwnershipTests
     {
         string source = """
                         routine test()
-                          var pq: Owned[PriorityQueue[S128, Owned[Text]]] = {1: "high", 10: "low", 5: "mid"}
+                          var pq: Owned[PriorityQueue[S128, Text]] = {1: "high", 10: "low", 5: "mid"}
                           return
                         """;
 

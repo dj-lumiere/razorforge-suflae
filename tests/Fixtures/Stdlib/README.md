@@ -36,7 +36,7 @@ Each fixture passes iff its captured stdout matches the snapshot exactly (traili
   - Sorted variants (SortedSet/SortedDict) iterate in order — direct printing is safe.
 - **End with `show("DONE")`** so a failure mid-way is visible in the diff.
 - **No file I/O / network / time / RNG** — fixtures must be hermetic.
-- **Entity element types** in collection type-params need `Owned[T]`: `Dict[Owned[Text], S64]`, not `Dict[Text, S64]`.
+- **Entity element types** in collection type-params need `T`: `Dict[Text, S64]`, not `Dict[Text, S64]`.
 
 ## Inventory
 

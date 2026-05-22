@@ -89,7 +89,7 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items: Owned[Dict[S64, Owned[Text]]] = {:}
+                          var items: Owned[Dict[S64, Text]] = {:}
                           return
                         """;
 
@@ -217,7 +217,7 @@ public class CollectionLiteralTests
     {
         string source = """
                         routine test()
-                          var items: Owned[PriorityQueue[S64, Owned[Text]]] = {1: "high", 10: "low"}
+                          var items: Owned[PriorityQueue[S64, Text]] = {1: "high", 10: "low"}
                           return
                         """;
 
@@ -324,7 +324,7 @@ public class CollectionLiteralTests
 
     /// <summary>
     /// Regression: bare-entity constructor calls bound via `var x = T(...)` must auto-wrap
-    /// to Owned[T] so the local owns the heap allocation. Without the wrap, the var holds a
+    /// to T so the local owns the heap allocation. Without the wrap, the var holds a
     /// bare entity pointer, scope-exit cleanup invalidates it, and any caller that stored
     /// the pointer (e.g. an entity field via constructor argument) reads dangling memory.
     /// Originally hit in playground/SegTreeLazy.rf as a heap-layout-flaky IOOB/AV.

@@ -24,7 +24,7 @@ routine start()
     g.set(value: 42)
   show(f"after grasp.set(42): {b.value}")
 
-  # Owned[T].view() peels — directly Viewed[Box] not Viewed[Owned[Box]]
+  # T.view() peels — directly Viewed[Box] not Viewed[Box]
   var another = Box(value: 100)
   var v2 = another.view()
   show(f"v2 type: {v2.type_name()}")

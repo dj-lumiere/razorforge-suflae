@@ -4,7 +4,7 @@ import Collections.FastDict
 
 # FastDict uses unkeyed xxHash; iterates in insertion order.
 routine start()
-  var d = FastDict[Owned[Text], S64]()
+  var d = FastDict[Text, S64]()
   discard d.add(key: "one", value: 1)
   discard d.add(key: "two", value: 2)
   discard d.add(key: "three", value: 3)

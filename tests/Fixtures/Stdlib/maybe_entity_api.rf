@@ -3,7 +3,7 @@ import IO/Console
 import Core/Errors/Common
 import Core/Errors/DivisionByZeroError
 
-# Bare-entity return — compiler auto-wraps to Maybe[Owned[Text]] in the try_ variant.
+# Bare-entity return — compiler auto-wraps to Maybe[Text] in the try_ variant.
 routine get_text!(n: S64) -> Text
   when n
     == 0 => throw DivisionByZeroError()

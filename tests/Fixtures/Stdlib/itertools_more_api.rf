@@ -12,7 +12,7 @@ routine start()
   show(f"select_many 1..x: {fanned}")
 
   # min_by / max_by — select key
-  var words: List[Owned[Text]] = ["pear", "fig", "banana", "kiwi"]
+  var words: List[Text] = ["pear", "fig", "banana", "kiwi"]
   show(f"min by length: {words.min_by[U64](selector: w => w.count())}")
   show(f"max by length: {words.max_by[U64](selector: w => w.count())}")
 
