@@ -79,8 +79,16 @@ public sealed partial class SemanticVerifier
     /// </summary>
     internal bool ImplementsProtocol(TypeSymbol type, string protocolName)
     {
-        // Get the protocol type
+        // Get the protocol type. Parameterised protocol names like "Controlling[List[S64]]"
+        // won't resolve directly (only the generic definition is registered) — strip brackets
+        // and fall back to the base name so conformance checks see the protocol either way.
         TypeSymbol? protocol = LookupTypeWithImports(name: protocolName);
+        if (protocol is not { Category: TypeCategory.Protocol } &&
+            protocolName.Contains(value: '['))
+        {
+            string baseProtocolName = GetBaseTypeName(typeName: protocolName);
+            protocol = LookupTypeWithImports(name: baseProtocolName);
+        }
         if (protocol is not { Category: TypeCategory.Protocol })
         {
             return false;

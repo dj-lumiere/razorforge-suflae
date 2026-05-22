@@ -282,7 +282,15 @@ public sealed partial class SemanticVerifier
             _deadrefVariables.Add(item: stolenId.Name);
         }
 
-        // Return the same type (raw entity or Owned[T]); steal transfers ownership
+        // `steal Owned[T]` unwraps to bare T — Owned[T] is a binding-only ownership marker,
+        // and steal transfers the bare entity out of that binding. For raw entity operands
+        // (already bare), steal is a no-op on the type.
+        if (isOwned && operandType is WrapperTypeInfo owned && owned.InnerType != null)
+        {
+            steal.ResolvedType = owned.InnerType;
+            return owned.InnerType;
+        }
+
         steal.ResolvedType = operandType;
         return operandType;
     }

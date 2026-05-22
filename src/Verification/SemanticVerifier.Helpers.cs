@@ -359,9 +359,15 @@ public sealed partial class SemanticVerifier
             Expression argValue = argExpr is NamedArgumentExpression namedArg
                 ? namedArg.Value
                 : argExpr;
+            // Borrow protocols (Referring[T] / Controlling[T]) accept the source by reference —
+            // no copy/move is happening at the call site, so no verb is required.
+            string paramBase = GetBaseTypeName(typeName: paramType.Name);
+            bool paramIsBorrow = paramType.Category == TypeCategory.Protocol &&
+                                 paramBase is "Referring" or "Controlling";
             if (_registry.Language == Language.RazorForge &&
                 argValue is IdentifierExpression or MemberExpression &&
-                !IsTriviallyCopyable(type: argType))
+                !IsTriviallyCopyable(type: argType) &&
+                !paramIsBorrow)
             {
                 var hint = FindNonTriviallyCopyableWrapper(type: argType);
                 if (hint != null)
@@ -508,8 +514,37 @@ public sealed partial class SemanticVerifier
         // Protocol conformance - if target is a protocol, check if source implements it
         if (target.Category == TypeCategory.Protocol)
         {
+            // Borrow protocols (Referring[T] / Controlling[T]) accept an ownership-carrying or
+            // bare source whose inner type matches T. Owned/Retained/Grasped are accepted by
+            // both; Viewed is readonly so accepted only by Referring; Hijacked needs explicit
+            // .reveal() — never accepted by implicit borrow coercion.
+            string targetBase = GetBaseTypeName(typeName: target.Name);
+            if ((targetBase == "Referring" || targetBase == "Controlling") &&
+                target.TypeArguments is { Count: 1 } borrowArgs)
+            {
+                TypeSymbol borrowInner = borrowArgs[index: 0];
+                if (TryGetOwnershipWrapperInner(type: source, wrapperBase: out string? srcWrapper,
+                        inner: out TypeSymbol? srcInner))
+                {
+                    bool wrapperAllowed = targetBase == "Referring"
+                        ? srcWrapper is "Owned" or "Retained" or "Grasped" or "Viewed"
+                            or "Controlling" or "Referring"
+                        : srcWrapper is "Owned" or "Retained" or "Grasped" or "Controlling";
+                    if (wrapperAllowed && srcInner != null &&
+                        (srcInner.FullName == borrowInner.FullName ||
+                         srcInner.Name == borrowInner.Name))
+                        return true;
+                }
+                // Bare entity T: accepted by both Referring[T] and Controlling[T].
+                if (source.Category == TypeCategory.Entity &&
+                    (source.FullName == borrowInner.FullName ||
+                     source.Name == borrowInner.Name))
+                    return true;
+            }
+
             return ImplementsProtocol(type: source, protocolName: target.Name);
         }
+
 
         // Const generic: `needs N is U64` means N is a U64 value at runtime.
         // Treat N as assignable to U64 (and vice versa).
@@ -566,6 +601,36 @@ public sealed partial class SemanticVerifier
     /// of generic records carry their parameterized form in <see cref="TypeSymbol.Name"/>
     /// (e.g. <c>"Owned[Core.Text]"</c>), so we strip the bracket suffix before comparing.
     /// </summary>
+    /// <summary>
+    /// If <paramref name="type"/> is an ownership-carrying or borrow wrapper
+    /// (Owned/Retained/Tracked/Grasped/Viewed/Controlling/Referring/Hijacked) over some inner T,
+    /// returns the base wrapper name and inner T. Returns false for anything else.
+    /// </summary>
+    private static bool TryGetOwnershipWrapperInner(TypeSymbol type, out string? wrapperBase,
+        out TypeSymbol? inner)
+    {
+        string baseName = GetBaseTypeName(typeName: type.Name);
+        if (baseName is "Owned" or "Retained" or "Tracked" or "Grasped" or "Viewed"
+            or "Controlling" or "Referring" or "Hijacked")
+        {
+            if (type is WrapperTypeInfo w && w.InnerType != null)
+            {
+                wrapperBase = baseName;
+                inner = w.InnerType;
+                return true;
+            }
+            if (type.TypeArguments is { Count: 1 } args)
+            {
+                wrapperBase = baseName;
+                inner = args[index: 0];
+                return true;
+            }
+        }
+        wrapperBase = null;
+        inner = null;
+        return false;
+    }
+
     private static bool IsOwnedOf(TypeSymbol type, out TypeSymbol inner)
     {
         if (type is WrapperTypeInfo { Name: "Owned" } wrapped)

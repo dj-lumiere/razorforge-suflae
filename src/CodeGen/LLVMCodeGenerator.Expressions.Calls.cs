@@ -298,8 +298,9 @@ public partial class LlvmCodeGenerator
             }
         }
 
-        // Inside monomorphized bodies, mismatched semantic annotations are a pipeline bug.
-        // Instantiation must fully resolve generic calls before codegen starts.
+        // Inside monomorphized bodies, an unresolved generic parameter on a non-generic
+        // routine's expected parameter type indicates the pipeline failed to substitute.
+        // Plain wrapper coercions (e.g. Text → Referring[Text]) are not pipeline bugs.
         if (_typeSubstitutions != null && routine != null && routine.GenericDefinition == null &&
             !routine.IsGenericDefinition && argValues.Count > 0 && routine.Parameters.Count > 0)
         {
@@ -309,10 +310,7 @@ public partial class LlvmCodeGenerator
                 expectedType = ApplyTypeSubstitutions(type: expectedType);
             }
 
-            TypeInfo? actualArgType = GetExpressionType(expr: arguments[index: 0]);
-
-            if (actualArgType != null && expectedType != null &&
-                actualArgType.FullName != expectedType.FullName)
+            if (expectedType != null && ContainsGenericParameter(type: expectedType))
             {
                 RoutineInfo? genericOverload = _registry.LookupGenericOverload(name: routine.Name);
                 if (genericOverload?.GenericParameters is { Count: > 0 })

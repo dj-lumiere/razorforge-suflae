@@ -552,9 +552,11 @@ public sealed partial class SemanticVerifier
             // This mirrors the binding-vs-rvalue distinction: `alert([1,2,3])` keeps the bare
             // entity (and prints List-shaped output), while `var a = [1,2,3]; alert(a)` makes
             // a Owned (and prints the Owned envelope).
+            // Bare entity types are value-in-flight only — they cannot be stored in a binding.
+            // Any `var x = <expr-of-bare-entity-type>` wraps to Owned[T] at the binding site so
+            // the local holds a destructable handle. Signatures and return types stay bare;
+            // Owned[T] lives only at binding sites.
             if (_registry.Language == Language.RazorForge
-                && varDecl.Initializer is ListLiteralExpression
-                    or SetLiteralExpression or DictLiteralExpression
                 && varType is EntityTypeInfo)
             {
                 varType = _registry.GetOrCreateWrapperType(wrapperName: "Owned",
