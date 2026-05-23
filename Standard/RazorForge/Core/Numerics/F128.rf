@@ -669,7 +669,10 @@ routine F128.$create!(from_text: Text) -> F128
     if not has_digit
       throw InvalidValueError(input: from_text, target: "F128")
   var cstr_val = CStr(from: from_text)
-  return rf_parse_F128(cstr_val)
+  var result: F128 = 0.0f128
+  danger!
+    rf_parse_F128(cstr: cstr_val, out: result.hijack())
+  return result
 
 # ============================================================================
 # Hashing

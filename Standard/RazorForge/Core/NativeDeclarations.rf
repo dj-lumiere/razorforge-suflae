@@ -1117,10 +1117,12 @@ external("C") routine rf_parse_F32(cstr: CStr) -> F32
 ### :param cstr: The text to parse.
 ### :returns: The parsed `F64` value.
 external("C") routine rf_parse_F64(cstr: CStr) -> F64
-### Parses a null-terminated UTF-8 string as `F128`.
+### Parses a null-terminated UTF-8 string as `F128`, writing the result through `out`.
 ### :param cstr: The text to parse.
-### :returns: The parsed `F128` value.
-external("C") routine rf_parse_F128(cstr: CStr) -> F128
+### :param out: Storage receiving the parsed `F128` value.
+### :note: Out-param ABI — the C function `void rf_parse_F128(const char*, f128_t*)`
+###        avoids the Windows x64 sret/xmm0 mismatch that breaks an f128_t return value.
+external("C") routine rf_parse_F128(cstr: CStr, out: Hijacked[F128])
 
 # ============================================================================
 # Text Formatting (primitive values -> heap-allocated CStr pointer)

@@ -1417,19 +1417,25 @@ unsigned long long __fixunstfdi(const f128_t* a) { return (unsigned long long)rf
 
 // Parse a null-terminated decimal string (CStr) into an F128 value.
 // Uses LibBF's bf_atof for full 113-bit precision.
-f128_t rf_parse_F128(const char* cstr)
+//
+// Out-param ABI: the result is written through `out` rather than returned by value.
+// Windows x64 returns 16-byte aggregates via a hidden sret pointer in rcx, but the
+// RazorForge caller compiles the call as if it returns an fp128 in xmm0 — the two
+// ABIs are incompatible and the function would never effectively execute. Writing
+// through a pointer sidesteps the mismatch.
+void rf_parse_F128(const char* cstr, f128_t* out)
 {
     if (!cstr || *cstr == '\0') {
-        return rf_f128_zero(0);
+        *out = rf_f128_zero(0);
+        return;
     }
     ensure_bf_ctx();
     bf_t r;
     bf_init(&bf_ctx, &r);
     const char *next = NULL;
     bf_atof(&r, cstr, &next, 10, F128_PREC, BF_RNDN);
-    f128_t result = bf_to_f128(&r);
+    *out = bf_to_f128(&r);
     bf_delete(&r);
-    return result;
 }
 
 // ============================================================================
