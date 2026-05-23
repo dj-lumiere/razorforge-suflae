@@ -70,6 +70,7 @@ internal sealed class BuilderServiceInliningPass
         "full_type_name",
         "member_variable_count",
         "is_generic",
+        "is_in_flight",
         "type_kind"
     };
 
@@ -768,6 +769,15 @@ internal sealed class BuilderServiceInliningPass
                 return new LiteralExpression(
                     Value: isGen,
                     LiteralType: isGen ? TokenType.True : TokenType.False,
+                    Location: loc) { ResolvedType = _boolType };
+            }
+
+            case "is_in_flight" when _boolType != null:
+            {
+                bool inFlight = receiverIsInFlight && type is EntityTypeInfo;
+                return new LiteralExpression(
+                    Value: inFlight,
+                    LiteralType: inFlight ? TokenType.True : TokenType.False,
                     Location: loc) { ResolvedType = _boolType };
             }
 

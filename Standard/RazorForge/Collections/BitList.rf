@@ -1,5 +1,7 @@
 module Collections
 
+import BuilderService
+
 ### A growable, densely packed sequence of boolean values stored in machine words.
 ###
 ### `BitList` packs up to 64 bits per `U64` word, making it significantly more
@@ -625,21 +627,21 @@ routine BitList.from_u32(value: U32) -> ?BitList
 ### :returns: The resulting `Text` value.
 @readonly
 routine BitList.$represent() -> ?Text
-  var result = "BitList["
+  var result = me.type_name() + "(["
   var i = 0u64
   for v in me
     if i > 0u64
       result = result + ", "
     result = result + v.$represent()
     i = i +% 1u64
-  result = result + "]"
+  result = result + "])"
   return steal result
 
 ### Returns a diagnostic form that includes the bit count, one-bit count, and contents.
 ### :returns: The resulting `Text` value.
 @readonly
 routine BitList.$diagnose() -> ?Text
-  var result = "BitList(count: " + me.count().$represent() + ", ones: " + me.count_ones().$represent() + ", ["
+  var result = me.full_type_name() + "(count: " + me.count().$represent() + ", ["
   var i = 0u64
   for v in me
     if i > 0u64

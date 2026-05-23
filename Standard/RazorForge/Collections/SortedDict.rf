@@ -975,19 +975,19 @@ routine SortedDictIterator[K, V].$next!() -> DictEntry[K, V]
 
 @readonly
 routine SortedDict[K, V].$represent() -> ?Text
-  var result = "SortedDict{"
+  var result = me.type_name() + "({"
   var i = 0u64
   for entry in me
     if i > 0u64
       result = result + ", "
     result = result + entry.key.$represent() + ": " + entry.value.$represent()
     i = i +% 1u64
-  result = result + "}"
+  result = result + "})"
   return steal result
 
 @readonly
 routine SortedDict[K, V].$diagnose() -> ?Text
-  var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
+  var result = me.full_type_name() + "(count: " + me.count().$represent() + ", {"
   var i = 0u64
   for entry in me
     if i > 0u64

@@ -26,6 +26,7 @@ public static class BuilderInfoProvider
         "type_id",
         "module_name",
         "is_generic",
+        "is_in_flight",
         "generic_args",
         "member_variable_count",
         "member_variable_info",
@@ -151,6 +152,11 @@ public static class BuilderInfoProvider
         {
             MaybeRegister(owner: type,
                 name: "is_generic",
+                returnType: boolType,
+                existingMethods: existingMethods,
+                registry: registry);
+            MaybeRegister(owner: type,
+                name: "is_in_flight",
                 returnType: boolType,
                 existingMethods: existingMethods,
                 registry: registry);

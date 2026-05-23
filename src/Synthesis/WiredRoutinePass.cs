@@ -1828,6 +1828,13 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     MakeLiteralReturn(value: owner.IsGenericDefinition, returnType: boolType);
                 return true;
 
+            case "is_in_flight" when boolType != null:
+                // Synth body is only reached for bound `me` receivers (BSInliningPass folds
+                // literal/in-flight receivers at the call site). Bound values are never in-flight.
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    MakeLiteralReturn(value: false, returnType: boolType);
+                return true;
+
             case "type_kind" when typeKindType is ChoiceTypeInfo typeKindChoice:
             {
                 // Map the owner's category to the TypeKind case name, then look up its

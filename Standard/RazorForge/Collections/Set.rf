@@ -410,7 +410,7 @@ routine Set[T].$represent() -> ?Text
 
 @readonly
 routine Set[T].$diagnose() -> ?Text
-  var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
+  var result = me.full_type_name() + "(count: " + me.count().$represent() + ", {"
   var first = true
   for val in me
     if not first

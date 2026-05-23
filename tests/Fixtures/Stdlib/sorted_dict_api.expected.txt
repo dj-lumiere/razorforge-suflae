@@ -2,7 +2,7 @@ size: 3
 sd['alpha']: 1
 sd['bravo']: 2
 sd['charlie']: 3
-  key: alpha
-  key: bravo
-  key: charlie
+  key: DictEntry[Core.Text, Core.S64](alpha, 1)
+  key: DictEntry[Core.Text, Core.S64](bravo, 2)
+  key: DictEntry[Core.Text, Core.S64](charlie, 3)
 DONE

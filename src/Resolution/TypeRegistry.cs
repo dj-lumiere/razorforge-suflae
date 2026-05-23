@@ -364,6 +364,20 @@ public sealed partial class TypeRegistry
             return false;
         }
 
+        _stdlibLoader ??= new StdlibLoader(stdlibRoot: _stdlibPath, language: Language);
+
+        // Bare module name (e.g. `import Collections`) — load every file declaring `module <Name>`
+        // via the multi-file overload. Filesystem fallback can't handle directory-as-module unless
+        // the directory contains a same-named anchor file (e.g. BuilderService/BuilderService.rf).
+        bool isBareModuleName = !importPath.Contains(value: '/') && !importPath.Contains(value: '.');
+        if (isBareModuleName && _stdlibLoader.LoadModule(registry: this, moduleName: importPath))
+        {
+            _loadedModules.Add(item: moduleId);
+            effectiveModule = importPath;
+            _moduleNames[key: moduleId] = effectiveModule;
+            return true;
+        }
+
         // Initialize the module resolver if needed
         _moduleResolver ??= new ModuleResolver(
             projectRoot: Path.GetDirectoryName(path: currentFile) ??
@@ -384,7 +398,6 @@ public sealed partial class TypeRegistry
         _loadedModules.Add(item: moduleId);
 
         // Load the module using StdlibLoader
-        _stdlibLoader ??= new StdlibLoader(stdlibRoot: _stdlibPath, language: Language);
         effectiveModule =
             _stdlibLoader.LoadModule(registry: this, filePath: resolvedPath, moduleId: moduleId);
 

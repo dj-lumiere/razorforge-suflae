@@ -204,6 +204,14 @@ common routine T.member_type_id(member_name: Text) -> U64
 @innate
 routine T.member_type_id(member_name: Text) -> U64
 
+### Returns whether this value is an in-flight entity (not yet bound to a variable or field).
+### Records, choices, variants, and flags are never in-flight — only entities have this state.
+### Bound entities (those held in a `var`/`let` binding or member field) return `false`.
+### :returns: `true` if this value is an in-flight `?T`, `false` otherwise.
+@readonly
+@innate
+routine T.is_in_flight() -> Bool
+
 ### Returns whether this type is a generic definition.
 ### Concrete generic instantiations return `false`.
 ### :returns: `true` if this type is a generic definition, `false` for concrete instantiations.

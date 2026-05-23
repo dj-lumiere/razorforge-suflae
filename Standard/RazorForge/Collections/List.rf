@@ -457,7 +457,7 @@ routine List[T].$represent() -> ?Text
 
 @readonly
 routine List[T].$diagnose() -> ?Text
-  var result = me.type_name() + "(count: " + me.count().$represent() + ", ["
+  var result = me.full_type_name() + "(count: " + me.count().$represent() + ", ["
   var i = 0u64
   for v in me
     if i > 0u64

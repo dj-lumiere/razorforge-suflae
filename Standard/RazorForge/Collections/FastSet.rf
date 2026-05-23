@@ -416,21 +416,19 @@ routine FastSetIterator[T].$next!() -> ?T
 
 @readonly
 routine FastSet[T].$represent() -> ?Text
-  if me.is_empty()
-    return "{}"
-  var result = "{"
+  var result = me.type_name() + "({"
   var first = true
   for val in me
     if not first
       result = result + ", "
     result = result + val.$represent()
     first = false
-  result = result + "}"
+  result = result + "})"
   return steal result
 
 @readonly
 routine FastSet[T].$diagnose() -> ?Text
-  var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
+  var result = me.full_type_name() + "(count: " + me.count().$represent() + ", {"
   var first = true
   for val in me
     if not first

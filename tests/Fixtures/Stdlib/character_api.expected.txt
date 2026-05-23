@@ -9,9 +9,9 @@ to_uppercase 'a': A
 'A' is_uppercase: true
 ' ' is_whitespace: true
 'a' is_ascii: true
-'?? is_ascii: false
-'?? codepoint: 54620
-'?? is_cjk: false
+'한' is_ascii: false
+'한' codepoint: 54620
+'한' is_cjk: false
 '7' digit_value: 7
 'a' < 'b': true
 'a' == 'a': true

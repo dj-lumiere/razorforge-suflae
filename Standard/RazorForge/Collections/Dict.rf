@@ -444,7 +444,7 @@ routine Dict[K, V].$represent() -> ?Text
 
 @readonly
 routine Dict[K, V].$diagnose() -> ?Text
-  var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
+  var result = me.full_type_name() + "(count: " + me.count().$represent() + ", {"
   var first = true
   for entry in me
     if not first

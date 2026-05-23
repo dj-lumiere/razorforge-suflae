@@ -521,22 +521,20 @@ routine FastDictIterator[K, V].$next!() -> DictEntry[K, V]
 ### Entries are rendered as `key: value` pairs in insertion order.
 @readonly
 routine FastDict[K, V].$represent() -> ?Text
-  if me.is_empty()
-    return "{:}"
-  var result = "{"
+  var result = me.type_name() + "({"
   var first = true
   for entry in me
     if not first
       result = result + ", "
     result = result + entry.key.$represent() + ": " + entry.value.$represent()
     first = false
-  result = result + "}"
+  result = result + "})"
   return steal result
 
 ### Returns a diagnostic form that includes the runtime type name and live entry count.
 @readonly
 routine FastDict[K, V].$diagnose() -> ?Text
-  var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
+  var result = me.full_type_name() + "(count: " + me.count().$represent() + ", {"
   var first = true
   for entry in me
     if not first

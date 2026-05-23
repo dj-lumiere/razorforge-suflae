@@ -169,16 +169,16 @@ routine ArrayIterator[T, N].$next!() -> ?T
 # ============================================================================
 
 routine Array[T, N].$represent() -> ?Text
-  var result = "Array["
+  var result = me.type_name() + "(["
   for i in 0u64 til N
     if i > 0u64
       result = result + ", "
     result = result + me[i].$represent()
-  result = result + "]"
+  result = result + "])"
   return steal result
 
 routine Array[T, N].$diagnose() -> ?Text
-  var result = me.type_name() + "(count: " + N.$represent() + ", ["
+  var result = me.full_type_name() + "(["
   for i in 0u64 til N
     if i > 0u64
       result = result + ", "

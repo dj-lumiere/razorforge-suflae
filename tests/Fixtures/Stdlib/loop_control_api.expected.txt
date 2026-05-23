@@ -1,3 +1,4 @@
+Warning: Could not remove stale build artifact 'L:\programming\RiderProjects\RazorForge\tests\Fixtures\Stdlib\razorforge_runtime.dll': Access to the path 'L:\programming\RiderProjects\RazorForge\tests\Fixtures\Stdlib\razorforge_runtime.dll' is denied.
 --- continue in for ---
   for x=1
   for x=2

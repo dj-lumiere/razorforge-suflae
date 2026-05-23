@@ -1169,6 +1169,14 @@ internal static class GenericAstRewriter
                     LiteralType: typeInfo.IsGenericDefinition ? TokenType.True : TokenType.False,
                     Location: location) { ResolvedType = boolType },
 
+            // is_in_flight: monomorphized receivers reaching this rewriter are bound — folder at
+            // BSInliningPass handles in-flight literal receivers earlier in the pipeline.
+            "is_in_flight" when boolType != null =>
+                new LiteralExpression(
+                    Value: false,
+                    LiteralType: TokenType.False,
+                    Location: location) { ResolvedType = boolType },
+
             _ => null
         };
     }

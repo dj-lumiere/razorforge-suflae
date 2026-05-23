@@ -1,9 +1,9 @@
 a: 0x0000_0000_0000_1000
 b: 0x0000_0000_0000_2000
-offset: 256 bytes
+offset: 256B
 a + offset: 0x0000_0000_0000_1100
 b - offset: 0x0000_0000_0000_1F00
-b - a: 4.0 KiB
+b - a: 4KiB
 a == a: true
 a < b: true
 a > b: false

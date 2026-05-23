@@ -438,18 +438,18 @@ routine PriorityQueueIterator[TPriority, TElement].$next!() -> PQEntry[TPriority
   return _result
 
 routine PriorityQueue[TPriority, TElement].$represent() -> ?Text
-  var result = "PriorityQueue["
+  var result = me.type_name() + "(["
   var i = 0u64
   for entry in me
     if i > 0u64
       result = result + ", "
     result = result + entry.priority.$represent() + ": " + entry.element.$represent()
     i = i +% 1u64
-  result = result + "]"
+  result = result + "])"
   return steal result
 
 routine PriorityQueue[TPriority, TElement].$diagnose() -> ?Text
-  var result = me.type_name() + "(count: " + me.count().$represent() + ", ["
+  var result = me.full_type_name() + "(count: " + me.count().$represent() + ", ["
   var i = 0u64
   for entry in me
     if i > 0u64

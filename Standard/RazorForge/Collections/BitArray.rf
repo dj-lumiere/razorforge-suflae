@@ -203,19 +203,19 @@ routine BitArray[N].$contains(value: Bool) -> Bool
 
 @readonly
 routine BitArray[N].$represent() -> ?Text
-  var result = "BitArray["
+  var result = me.type_name() + "(["
   var i = 0u64
   while i < N
     if i > 0u64
       result = result + ", "
     result = result + me[i].$represent()
     i = i +% 1u64
-  result = result + "]"
+  result = result + "])"
   return steal result
 
 @readonly
 routine BitArray[N].$diagnose() -> ?Text
-  var result = me.type_name() + "(count: " + N.$represent() + ", ones: " + me.count_ones().$represent() + ", ["
+  var result = me.full_type_name() + "(["
   var i = 0u64
   while i < N
     if i > 0u64
