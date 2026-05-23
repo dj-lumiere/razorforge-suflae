@@ -295,7 +295,7 @@ internal sealed class SignatureResolver
             Parameters = parameters,
             ReturnType = returnType,
             IsFailable = routine.IsFailable,
-            IsRvalueReturn = routine.ReturnType?.IsRvalue ?? false,
+            IsInFlightReturn = routine.ReturnType?.IsRvalue ?? false,
             IsVariadic = routine.Parameters.Any(predicate: p => p.IsVariadic),
             GenericParameters = allGenericParams.Count > 0
                 ? allGenericParams

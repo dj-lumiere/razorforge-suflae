@@ -287,7 +287,7 @@ public sealed partial class SemanticVerifier
         // (already bare), steal is a no-op on the type.
         // `steal` always produces an rvalue `?T` — it consumes an lvalue binding and yields
         // an in-flight entity that must be re-bound (or consumed) at the use site.
-        steal.IsRvalueExpr = true;
+        steal.IsInFlight = true;
         if (isOwned && operandType is WrapperTypeInfo owned && owned.InnerType != null)
         {
             steal.ResolvedType = owned.InnerType;

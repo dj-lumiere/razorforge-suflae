@@ -153,7 +153,7 @@ public sealed class RoutineInfo
     /// (entity rvalue, in-flight). Carried from <see cref="TypeExpression.IsRvalue"/>.
     /// SA enforces position validity; downstream passes use this to drive auto-bind
     /// from rvalue `?T` back to lvalue `T` at the binding site.</summary>
-    public bool IsRvalueReturn { get; init; }
+    public bool IsInFlightReturn { get; init; }
 
     /// <summary>Whether this routine can fail (has ! suffix).</summary>
     public bool IsFailable { get; init; }

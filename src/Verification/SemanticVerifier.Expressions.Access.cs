@@ -236,7 +236,7 @@ public sealed partial class SemanticVerifier
                 }
             }
 
-            member.IsRvalueExpr = method.IsRvalueReturn;
+            member.IsInFlight = method.IsInFlightReturn;
             return returnType ?? _registry.LookupType(name: "Blank") ?? ErrorTypeInfo.Instance;
         }
 
@@ -980,6 +980,11 @@ public sealed partial class SemanticVerifier
         creator.ConstructedType = type;
         creator.LoweringKind = ClassifyConstruction(type: type, isCollectionLiteral: false);
 
+        // Propagate the in-flight bit from the resolved type's implicit constructor.
+        // If TryRouteCreatorToCreate routes through a user-declared `$create` below,
+        // it overrides this with that routine's IsInFlightReturn.
+        creator.IsInFlight = type.ImplicitConstructorReturnsInFlight;
+
         // Named-arg → $create routing: if the provided names don't match any field but DO match
         // a `$create(named:)` overload's parameter names, dispatch through that creator instead
         // of doing inline field-init. Lets `SegTreeLazy[..](size: 10, alg: alg)` route to
@@ -1079,6 +1084,7 @@ public sealed partial class SemanticVerifier
 
         creator.ResolvedCreatorRoutine = match;
         creator.LoweringKind = CallLoweringKind.TypeConstructor;
+        creator.IsInFlight = match.IsInFlightReturn;
 
         if (match.IsFailable && _currentRoutine != null)
         {

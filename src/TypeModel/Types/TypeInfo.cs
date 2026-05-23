@@ -35,6 +35,16 @@ public abstract class TypeInfo
     public bool IsBlank => Name == "Blank";
 
     /// <summary>
+    /// True for types whose implicit/synthesized default constructor produces an
+    /// in-flight (`?T`) value rather than a bound value. Entities are always in-flight
+    /// at construction (the freshly-created handle is unbound until a `var`/`let` /
+    /// field/param consumes it). Records and other value types default to false.
+    /// Used by creator analysis to propagate <see cref="SyntaxTree.Expression.IsInFlight"/>
+    /// when no user-declared <c>$create</c> routine resolves at the call site.
+    /// </summary>
+    public virtual bool ImplicitConstructorReturnsInFlight => false;
+
+    /// <summary>
     /// Set to true when this concrete generic instance was first created during stdlib body
     /// analysis. Such types are excluded from <c>AllConcreteGenericInstances</c> and GMP
     /// until user code references them, at which point the registry clears this flag

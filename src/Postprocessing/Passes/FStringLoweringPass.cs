@@ -504,13 +504,50 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
                         }
                     }
 
-                    exprs.Add(new CallExpression(
+                    Expression renderCall = new CallExpression(
                         Callee: new MemberExpression(
                             Object: loweredInner,
                             PropertyName: methodName,
                             Location: ep.Location),
                         Arguments: [],
-                        Location: ep.Location) { ResolvedType = textType });
+                        Location: ep.Location) { ResolvedType = textType };
+
+                    // In-flight entity values (`?T`) inject `?` immediately before the
+                    // short type name in the rendered output, so a value of type
+                    // `Module.Counter` renders as `Module.?Counter(...)`. The rendered
+                    // text is post-processed via `Text.replace` because the type-name
+                    // prefix is compile-time known and appears verbatim at the head of
+                    // `$diagnose` / `$represent` output.
+                    if (ep.Expression.IsInFlight &&
+                        ep.Expression.ResolvedType is EntityTypeInfo entityType)
+                    {
+                        string fullName = entityType.FullName;
+                        int dot = fullName.LastIndexOf('.');
+                        string marked = dot < 0
+                            ? "?" + fullName
+                            : fullName[..(dot + 1)] + "?" + fullName[(dot + 1)..];
+                        renderCall = new CallExpression(
+                            Callee: new MemberExpression(
+                                Object: renderCall,
+                                PropertyName: "replace",
+                                Location: ep.Location) { ResolvedType = textType },
+                            Arguments:
+                            [
+                                new NamedArgumentExpression(Name: "old",
+                                    Value: new LiteralExpression(Value: fullName,
+                                        LiteralType: TokenType.TextLiteral,
+                                        Location: ep.Location) { ResolvedType = textType },
+                                    Location: ep.Location),
+                                new NamedArgumentExpression(Name: "new",
+                                    Value: new LiteralExpression(Value: marked,
+                                        LiteralType: TokenType.TextLiteral,
+                                        Location: ep.Location) { ResolvedType = textType },
+                                    Location: ep.Location)
+                            ],
+                            Location: ep.Location) { ResolvedType = textType };
+                    }
+
+                    exprs.Add(renderCall);
                     break;
                 }
             }

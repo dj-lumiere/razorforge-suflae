@@ -295,6 +295,7 @@ public sealed partial class SemanticVerifier
                             }
                         }
 
+                        call.IsInFlight = creator.IsInFlightReturn;
                         return creator.ReturnType ?? callableType;
                     }
                 }
@@ -358,7 +359,7 @@ public sealed partial class SemanticVerifier
                     TypeSymbol returnType = routine.ReturnType ??
                                             _registry.LookupType(name: BlankMemberName) ??
                                             ErrorTypeInfo.Instance;
-                    call.IsRvalueExpr = routine.IsRvalueReturn;
+                    call.IsInFlight = routine.IsInFlightReturn;
                     return returnType;
                 }
 
@@ -395,6 +396,7 @@ public sealed partial class SemanticVerifier
                             call.ResolvedRoutine = creator;
                             call.LoweringKind = ClassifyConstruction(type: type,
                                 isCollectionLiteral: call.IsCollectionLiteral);
+                            call.IsInFlight = creator.IsInFlightReturn;
                             return creator.ReturnType ?? type;
                         }
 
@@ -470,6 +472,8 @@ public sealed partial class SemanticVerifier
 
                     ValidateExclusiveTokenUniqueness(arguments: call.Arguments,
                         location: call.Location);
+                    if (type is TypeInfo ti)
+                        call.IsInFlight = ti.ImplicitConstructorReturnsInFlight;
                     return type;
                 }
 
@@ -609,7 +613,7 @@ public sealed partial class SemanticVerifier
                     TypeSymbol returnType = routine.ReturnType ??
                                             _registry.LookupType(name: BlankMemberName) ??
                                             ErrorTypeInfo.Instance;
-                    call.IsRvalueExpr = routine.IsRvalueReturn;
+                    call.IsInFlight = routine.IsInFlightReturn;
                     return returnType;
                 }
 
@@ -1093,7 +1097,7 @@ public sealed partial class SemanticVerifier
                     TypeSymbol returnType = callReturnType ??
                                             _registry.LookupType(name: BlankMemberName) ??
                                             ErrorTypeInfo.Instance;
-                    call.IsRvalueExpr = method.IsRvalueReturn;
+                    call.IsInFlight = method.IsInFlightReturn;
                     return returnType;
                 }
 

@@ -127,6 +127,16 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 RoutineInfo? copy = ctx.Registry.LookupMethod(type: type, methodName: copyVerb);
                 if (copy != null) EnqueueCallee(callee: copy);
             }
+
+            // FStringLoweringPass synthesizes `<diagnose>.replace(old:..., new:...)` for
+            // f-string `:?`/`?` interpolations of in-flight entity values, to inject the
+            // `?` mark before the short type name. Seed Text.replace once Text is live so
+            // the synthesized call resolves.
+            if (type.Name == "Text" && type.Module == "Core")
+            {
+                RoutineInfo? replace = ctx.Registry.LookupMethod(type: type, methodName: "replace");
+                if (replace != null) EnqueueCallee(callee: replace);
+            }
         }
     }
 

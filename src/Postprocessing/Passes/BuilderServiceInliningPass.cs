@@ -366,7 +366,8 @@ internal sealed class BuilderServiceInliningPass
             TypeInfo? receiverType = ResolveReceiverType(bsCallee.Object);
             if (receiverType != null)
             {
-                Expression? folded = FoldBsCall(routineName, receiverType, bsCall.Location);
+                Expression? folded = FoldBsCall(routineName, receiverType, bsCall.Location,
+                    receiverIsInFlight: bsCallee.Object.IsInFlight);
                 if (folded != null) return folded;
             }
         }
@@ -715,9 +716,11 @@ internal sealed class BuilderServiceInliningPass
     /// routine on <paramref name="type"/>, or null if the routine is not supported or required
     /// types are not yet registered.
     /// </summary>
-    private Expression? FoldBsCall(string routineName, TypeInfo type, SourceLocation loc) // NOSONAR S3776
+    private Expression? FoldBsCall(string routineName, TypeInfo type, SourceLocation loc,
+        bool receiverIsInFlight = false) // NOSONAR S3776
     {
         EnsureTypes();
+        string inFlightPrefix = receiverIsInFlight && type is EntityTypeInfo ? "?" : "";
         switch (routineName)
         {
             case "data_size" when _u64Type != null && _byteSizeType != null:
@@ -732,7 +735,7 @@ internal sealed class BuilderServiceInliningPass
                 // GenericMonomorphizationPass will fold per concrete instance later, producing
                 // the correct "List[Core.S64]" form. Folding here would bake the bare "List".
                 if (type.IsGenericDefinition && _currentTypeSubs == null) return null;
-                return MakeLiteralText(GetShortTypeName(type), _textType, loc);
+                return MakeLiteralText(inFlightPrefix + GetShortTypeName(type), _textType, loc);
             }
 
             case "module_name" when _textType != null:
@@ -740,7 +743,8 @@ internal sealed class BuilderServiceInliningPass
 
             case "full_type_name" when _textType != null:
                 if (type.IsGenericDefinition && _currentTypeSubs == null) return null;
-                return MakeLiteralText(GetFullTypeName(type), _textType, loc);
+                return MakeLiteralText(InsertInFlightMark(GetFullTypeName(type), inFlightPrefix),
+                    _textType, loc);
 
             case "member_variable_count" when _s64Type != null:
             {
@@ -846,6 +850,13 @@ internal sealed class BuilderServiceInliningPass
             return type.Name;
         string argList = string.Join(separator: ", ", values: args.Select(selector: GetShortTypeName));
         return $"{type.Name}[{argList}]";
+    }
+
+    private static string InsertInFlightMark(string fullName, string mark)
+    {
+        if (mark.Length == 0) return fullName;
+        int dot = fullName.LastIndexOf('.');
+        return dot < 0 ? mark + fullName : fullName[..(dot + 1)] + mark + fullName[(dot + 1)..];
     }
 
     private string GetFullTypeName(TypeInfo type)

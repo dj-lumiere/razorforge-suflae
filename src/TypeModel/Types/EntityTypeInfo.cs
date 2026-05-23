@@ -16,6 +16,9 @@ public sealed class EntityTypeInfo : TypeInfo
     /// <inheritdoc/>
     public override TypeCategory Category => TypeCategory.Entity;
 
+    /// <inheritdoc/>
+    public override bool ImplicitConstructorReturnsInFlight => true;
+
     /// <summary>MemberVariables declared in this entity.</summary>
     public List<MemberVariableInfo> MemberVariables { get; set; } = [];
 

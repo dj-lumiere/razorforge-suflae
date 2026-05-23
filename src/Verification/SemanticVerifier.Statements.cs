@@ -650,12 +650,25 @@ public sealed partial class SemanticVerifier
                 location: varDecl.Location);
         }
 
+        // Scoped access tokens (Viewed / Grasped / Inspected / Claimed) cannot bind to a
+        // var at all — they only exist inline within their producing expression. Use the
+        // value inline (`a.view().x`) or open a scope (`using a.view() as v`).
+        if (_registry.Language == Language.RazorForge &&
+            IsInlineOnlyTokenType(type: varType))
+        {
+            string wrapperName = GetBaseTypeName(typeName: varType.Name);
+            ReportError(code: SemanticDiagnosticCode.ImplicitWrapperCopy,
+                message:
+                $"'{wrapperName}[…]' is a scoped access token and cannot be stored in '{varDecl.Name}'. " +
+                $"Use it inline (e.g. 'expr.member'), or open a scope with 'using expr as {varDecl.Name}'.",
+                location: varDecl.Location);
+        }
         // Phase 1: warn when the initializer is a "borrowed reference" (identifier or member
         // access chain) and the source type is not trivially copyable. Reference-count bumps,
         // ownership transfers, and weak-handle clones must each appear at the copy site as an
         // explicit verb. See RazorForge-Wiki/docs/Records.md#copy-semantics. Promoted to a
         // hard error once stdlib migration completes (Phase 2).
-        if (_registry.Language == Language.RazorForge &&
+        else if (_registry.Language == Language.RazorForge &&
             varDecl.Initializer is IdentifierExpression or MemberExpression &&
             !IsTriviallyCopyable(type: varType))
         {

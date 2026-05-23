@@ -434,7 +434,8 @@ internal sealed class GenericCallLoweringPass
             {
                 LoweringKind = gmc.LoweringKind,
                 ConstructedType = gmc.ConstructedType,
-                ResolvedType = gmc.ResolvedType
+                ResolvedType = gmc.ResolvedType,
+                IsInFlight = gmc.IsInFlight
             };
         }
 
@@ -468,7 +469,8 @@ internal sealed class GenericCallLoweringPass
                 ConstructedType = gmc.ConstructedType,
                 ResolvedRoutine = gmc.ResolvedRoutine,
                 TypeArguments = gmc.TypeArguments.Count > 0 ? gmc.TypeArguments : null,
-                ResolvedType = gmc.ResolvedType
+                ResolvedType = gmc.ResolvedType,
+                IsInFlight = gmc.IsInFlight
             };
         }
 
@@ -491,7 +493,8 @@ internal sealed class GenericCallLoweringPass
             ConstructedType = gmc.ConstructedType,
             ResolvedRoutine = gmc.ResolvedRoutine,
             TypeArguments = gmc.TypeArguments.Count > 0 ? gmc.TypeArguments : null,
-            ResolvedType = gmc.ResolvedType
+            ResolvedType = gmc.ResolvedType,
+            IsInFlight = gmc.IsInFlight
         };
     }
 
