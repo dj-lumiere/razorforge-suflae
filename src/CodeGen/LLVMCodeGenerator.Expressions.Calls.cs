@@ -85,7 +85,11 @@ public partial class LlvmCodeGenerator
         switch (loweringKind)
         {
             case CallLoweringKind.ValueConversion when arguments.Count == 1 &&
-                                                       constructedType is RecordTypeInfo { HasDirectBackendType: true }:
+                                                       constructedType is RecordTypeInfo { HasDirectBackendType: true } &&
+                                                       GetExpressionType(expr: arguments[index: 0]) is RecordTypeInfo { HasDirectBackendType: true }:
+                // Both source and target must be @llvm primitive-typed for inline cast.
+                // When source is non-primitive (e.g. Text in `F128!("3.14")`), fall through
+                // to the routine lookup path so it resolves to `Target.$create!(from: src)`.
                 return EmitPrimitiveTypeConversion(sb: sb,
                     arg: arguments[index: 0],
                     targetType: constructedType);
@@ -441,7 +445,15 @@ public partial class LlvmCodeGenerator
 
         string targetLlvm = GetLlvmType(type: record);
         string argLlvm = GetLlvmType(type: argType);
-        if (argLlvm != targetLlvm) return true;
+        if (argLlvm != targetLlvm)
+        {
+            // Differing LLVM types: only inline as a scalar cast when the source is also
+            // @llvm-primitive (e.g. S64→S32 trunc, F32→F64 fpext). When the source is a
+            // non-primitive carrier such as Text, inlining would emit a bogus
+            // `ptrtoint ptr to fp128`; the real conversion lives in `$create!` and the
+            // routine call must be honored instead.
+            return argType is RecordTypeInfo { HasDirectBackendType: true };
+        }
 
         // Same LLVM type. If the resolved routine's first param doesn't match the arg type,
         // SA picked the wrong overload (e.g. synthesized U64(Address) resolving to U64.$create(S8));
