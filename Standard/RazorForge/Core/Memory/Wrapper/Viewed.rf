@@ -36,6 +36,18 @@ routine Viewed[T].$exit()
   return
 
 # ============================================================================
+# Marker-protocol coercion ($refer) — yields the inner entity as ?T
+# ============================================================================
+
+### Yields the inner entity as an in-flight `?T` reference for read-only access.
+### Inserted implicitly at call sites whose parameter is `Referring[T]`.
+### :returns: The inner entity as `?T`.
+@readonly
+routine Viewed[T].$refer() -> ?T
+  danger!
+    return Hijacked[T](me).reveal()
+
+# ============================================================================
 # Display (transparent - delegates to inner value)
 # ============================================================================
 

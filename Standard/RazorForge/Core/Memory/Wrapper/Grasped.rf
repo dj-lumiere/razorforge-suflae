@@ -37,6 +37,25 @@ routine Grasped[T].$exit()
   return
 
 # ============================================================================
+# Marker-protocol coercion ($refer/$control) — yields the inner entity as ?T
+# ============================================================================
+
+### Yields the inner entity as an in-flight `?T` reference for read-only access.
+### Inserted implicitly at call sites whose parameter is `Referring[T]`.
+### :returns: The inner entity as `?T`.
+@readonly
+routine Grasped[T].$refer() -> ?T
+  danger!
+    return Hijacked[T](me).reveal()
+
+### Yields the inner entity as an in-flight `?T` reference for read/write access.
+### Inserted implicitly at call sites whose parameter is `Controlling[T]`.
+### :returns: The inner entity as `?T`.
+routine Grasped[T].$control() -> ?T
+  danger!
+    return Hijacked[T](me).reveal()
+
+# ============================================================================
 # Display (transparent - delegates to inner value)
 # ============================================================================
 
