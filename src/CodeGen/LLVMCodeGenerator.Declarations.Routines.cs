@@ -220,6 +220,20 @@ public partial class LlvmCodeGenerator
             return;
         }
 
+        // Reachability gate: when LiveRoutineKeys is populated, skip routines not reachable
+        // from program entry points. Otherwise codegen emits every module-level routine
+        // (including unreached helpers) and any callee they reference must also be defined,
+        // producing spurious linker errors for stdlib methods the program never actually uses.
+        // Lifted lambdas are exempted: LambdaLiftingPass runs in Phase 7, after reachability
+        // in Phase 6, so their keys aren't in the live set even when referenced by address
+        // from a reachable enclosing routine.
+        if (_liveRoutineKeys.Count > 0
+            && !_liveRoutineKeys.Contains(item: routineInfo.RegistryKey)
+            && !routineInfo.IsLambda)
+        {
+            return;
+        }
+
         string funcName = nameOverride ?? MangleRoutineName(routine: routineInfo);
 
         // Skip if already generated (prevents duplicates between user program and stdlib)

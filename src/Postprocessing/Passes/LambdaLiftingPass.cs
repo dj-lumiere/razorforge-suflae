@@ -952,7 +952,7 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
 
         ctx.Registry.RegisterRoutine(routine: new RoutineInfo(name: liftedName)
         {
-            Kind = RoutineKind.Function,
+            Kind = RoutineKind.Lambda,
             Parameters = BuildLiftedParameterInfos(lambda, routineType),
             ReturnType = routineType.ReturnType,
             Visibility = VisibilityModifier.Secret,
@@ -1055,7 +1055,7 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
 
         ctx.Registry.RegisterRoutine(routine: new RoutineInfo(name: liftedName)
         {
-            Kind = RoutineKind.Function,
+            Kind = RoutineKind.Lambda,
             Parameters = allParamInfos,
             ReturnType = routineType.ReturnType,
             Visibility = VisibilityModifier.Secret,
