@@ -129,6 +129,14 @@ public partial class LlvmCodeGenerator
             memberVariableValues.Add(item: value);
         }
 
+        // Field initializers with `steal` transfer ownership from local entity vars into
+        // the new entity. Drop the source locals from the cleanup set so the function-exit
+        // rf_invalidate pass doesn't free the same allocation now held by the field.
+        foreach ((string _, Expression fieldExpr) in expr.MemberVariables)
+        {
+            ConsumeTransferredLocalOwnership(expr: fieldExpr);
+        }
+
         // Allocate and initialize
         return EmitEntityAllocation(sb: sb,
             entity: entity,
@@ -302,6 +310,11 @@ public partial class LlvmCodeGenerator
                 line: $"  {fieldPtr} = getelementptr {typeName}, ptr {entityPtr}, i32 0, i32 {i}");
             EmitLine(sb: sb, line: $"  store {fieldType} {value}, ptr {fieldPtr}");
         }
+
+        // Field initializers with `steal` transfer ownership from local entity vars into
+        // the new entity. Drop the source locals from the cleanup set so the function-exit
+        // rf_invalidate pass doesn't free the same allocation now held by the field.
+        ConsumeTransferredCallOwnership(arguments: arguments);
 
         return entityPtr;
     }
