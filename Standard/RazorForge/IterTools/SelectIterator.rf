@@ -15,7 +15,7 @@ entity SelectIterator[T, U] obeys Iterable[U]
 ### source value.
 ### :returns: The resulting `SelectEmitter[T, U]` value.
 @readonly
-routine SelectIterator[T, U].$iter() -> SelectEmitter[T, U]
+routine SelectIterator[T, U].$iter() -> ?SelectEmitter[T, U]
   return SelectEmitter[T, U](source: me.source.$iter(), transform: me.transform)
 
 ### Iterates over a source sequence and projects each yielded value through a transform routine.
@@ -30,7 +30,7 @@ entity SelectEmitter[T, U] obeys Iterator[U]
 ### Returns the next projected value from the mapped sequence.
 ### The transform runs once for each successfully yielded source value.
 ### :returns: The resulting `U` value.
-routine SelectEmitter[T, U].$next!() -> U
+routine SelectEmitter[T, U].$next!() -> ?U
   var item = me.source.$next!()
   return me.transform(item)
 
@@ -40,5 +40,5 @@ routine SelectEmitter[T, U].$next!() -> U
 ### :param transform: The routine used to map each source value to a result value.
 ### :returns: The resulting `SelectIterator[T, U]` value.
 @readonly
-routine Iterable[T].select[U](transform: Routine[(T,), U]) -> SelectIterator[T, U]
+routine Iterable[T].select[U](transform: Routine[(T,), U]) -> ?SelectIterator[T, U]
   return SelectIterator[T, U](source: me, transform: transform)

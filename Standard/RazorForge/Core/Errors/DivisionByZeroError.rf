@@ -7,5 +7,5 @@ crashable DivisionByZeroError
 
 ### Returns the default message for division-by-zero failures.
 ### :returns: The resulting `Text` value.
-routine DivisionByZeroError.crash_message() -> Text
+routine DivisionByZeroError.crash_message() -> ?Text
   return "You tried to divide by zero, which is not allowed."

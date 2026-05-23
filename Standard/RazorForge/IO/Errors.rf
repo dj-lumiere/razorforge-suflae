@@ -9,5 +9,5 @@ crashable IOError
 
 ### Returns the message associated with this I/O failure.
 ### :returns: The resulting `Text` value.
-routine IOError.crash_message() -> Text
+routine IOError.crash_message() -> ?Text
   return me.description

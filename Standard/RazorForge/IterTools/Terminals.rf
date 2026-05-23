@@ -4,7 +4,7 @@ module IterTools
 ### Values are consumed eagerly in iteration order.
 ### :returns: The resulting `List[T]` value.
 @readonly
-routine Iterable[T].List() -> List[T]
+routine Iterable[T].List() -> ?List[T]
   var result = List[T]()
   for item in me
     result.add_last(item)
@@ -14,7 +14,7 @@ routine Iterable[T].List() -> List[T]
 ### Duplicate values collapse according to the set's equality and ordering semantics.
 ### :returns: The resulting `Set[T]` value.
 @readonly
-routine Iterable[T].Set() -> Set[T]
+routine Iterable[T].Set() -> ?Set[T]
 needs T obeys Hashable, Comparable
   var result = Set[T]()
   for item in me
@@ -35,7 +35,7 @@ routine Iterable[T].get_count() -> U64
 ### This is a convenience terminal operation over the first iterator element.
 ### :returns: The resulting `T` value.
 @readonly
-routine Iterable[T].first!() -> T
+routine Iterable[T].first!() -> ?T
   var emitter = me.$iter()
   return emitter.$next!()
 
@@ -43,7 +43,7 @@ routine Iterable[T].first!() -> T
 ### The iterable is consumed fully in order to find the final element.
 ### :returns: The resulting `T` value.
 @readonly
-routine Iterable[T].last!() -> T
+routine Iterable[T].last!() -> ?T
   var emitter = me.$iter()
   var latest = emitter.$next!()
   loop
@@ -81,7 +81,7 @@ routine Iterable[T].all(predicate: Routine[(T,), Bool]) -> Bool
 ### :param combiner: The routine used to produce the next accumulator value.
 ### :returns: The resulting `U` value.
 @readonly
-routine Iterable[T].accumulate[U](start: U, combiner: Routine[(U, T), U]) -> U
+routine Iterable[T].accumulate[U](start: U, combiner: Routine[(U, T), U]) -> ?U
   var result = start
   for item in me
     result = combiner(result, item)
@@ -91,7 +91,7 @@ routine Iterable[T].accumulate[U](start: U, combiner: Routine[(U, T), U]) -> U
 ### The first element is used as the initial accumulator; subsequent elements are added to it.
 ### :returns: The resulting `T` value.
 @readonly
-routine Iterable[T].sum!() -> T
+routine Iterable[T].sum!() -> ?T
 needs T obeys Addable
   var emitter = me.$iter()
   var result = emitter.$next!()
@@ -104,7 +104,7 @@ needs T obeys Addable
 ### Returns the smallest value in this iterable.
 ### :returns: The resulting `T` value.
 @readonly
-routine Iterable[T].min!() -> T
+routine Iterable[T].min!() -> ?T
 needs T obeys Comparable
   var emitter = me.$iter()
   var result = emitter.$next!()
@@ -119,7 +119,7 @@ needs T obeys Comparable
 ### Returns the largest value in this iterable.
 ### :returns: The resulting `T` value.
 @readonly
-routine Iterable[T].max!() -> T
+routine Iterable[T].max!() -> ?T
 needs T obeys Comparable
   var emitter = me.$iter()
   var result = emitter.$next!()
@@ -135,7 +135,7 @@ needs T obeys Comparable
 ### :param selector: The routine that extracts a comparable key from each element.
 ### :returns: The resulting `T` value.
 @readonly
-routine Iterable[T].min_by![U](selector: Routine[(T,), U]) -> T
+routine Iterable[T].min_by![U](selector: Routine[(T,), U]) -> ?T
 needs U obeys Comparable
   var emitter = me.$iter()
   var best = emitter.$next!()
@@ -154,7 +154,7 @@ needs U obeys Comparable
 ### :param selector: The routine that extracts a comparable key from each element.
 ### :returns: The resulting `T` value.
 @readonly
-routine Iterable[T].max_by![U](selector: Routine[(T,), U]) -> T
+routine Iterable[T].max_by![U](selector: Routine[(T,), U]) -> ?T
 needs U obeys Comparable
   var emitter = me.$iter()
   var best = emitter.$next!()
@@ -184,7 +184,7 @@ routine Iterable[T].get_count(predicate: Routine[(T,), Bool]) -> U64
 ### :param default: The value to return when the iterable yields nothing.
 ### :returns: The resulting `T` value.
 @readonly
-routine Iterable[T].first_or_default(default: T) -> T
+routine Iterable[T].first_or_default(default: T) -> ?T
   var emitter = me.$iter()
   var result = emitter.try_next()
   when result
@@ -195,7 +195,7 @@ routine Iterable[T].first_or_default(default: T) -> T
 ### :param default: The value to return when the iterable yields nothing.
 ### :returns: The resulting `T` value.
 @readonly
-routine Iterable[T].last_or_default(default: T) -> T
+routine Iterable[T].last_or_default(default: T) -> ?T
   var latest = default
   for item in me
     latest = item

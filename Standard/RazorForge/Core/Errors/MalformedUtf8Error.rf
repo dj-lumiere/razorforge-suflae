@@ -10,5 +10,5 @@ crashable MalformedUtf8Error
 
 ### Returns the default message for malformed UTF-8 input.
 ### :returns: The resulting `Text` value.
-routine MalformedUtf8Error.crash_message() -> Text
+routine MalformedUtf8Error.crash_message() -> ?Text
   return f"Malformed UTF-8 at byte {me.index}: {me.reason}."

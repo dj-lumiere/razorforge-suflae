@@ -10,4 +10,4 @@ protocol UncheckedExponentiable
   ### :param you: The exponent value.
   ### :returns: The resulting `Me` value.
   @readonly
-  dangerous routine Me.$pow_unchecked(you: Me) -> Me
+  dangerous routine Me.$pow_unchecked(you: Me) -> ?Me

@@ -581,7 +581,7 @@ routine F128.F64() -> F64
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-routine F128.$diagnose() -> Text
+routine F128.$diagnose() -> ?Text
   return Text(from: me)
 
 ### Returns a stable hash derived from the raw floating-point encoding.
@@ -606,7 +606,7 @@ routine F128.hash() -> U64
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-routine F128.$represent() -> Text
+routine F128.$represent() -> ?Text
   var cstr_result = rf_format_F128(me)
   return Text(from: CStr(from_ptr: cstr_result))
 

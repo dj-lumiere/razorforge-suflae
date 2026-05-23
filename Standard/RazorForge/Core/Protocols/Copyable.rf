@@ -9,4 +9,4 @@ protocol Copyable
   ### value while giving the result its own valid lifetime and invariants.
   ### :returns: A copy of this value.
   @readonly
-  routine Me.copy() -> Me
+  routine Me.copy() -> ?Me

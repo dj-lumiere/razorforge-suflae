@@ -80,7 +80,7 @@ routine Retained[T].weak_count() -> S32
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Retained[T].$represent() -> Text
+routine Retained[T].$represent() -> ?Text
   danger!
     var ctrl = Hijacked[RetainController[T]](me).reveal()
     return ctrl.borrow_data().reveal().$represent()
@@ -88,7 +88,7 @@ routine Retained[T].$represent() -> Text
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Retained[T].$diagnose() -> Text
+routine Retained[T].$diagnose() -> ?Text
   danger!
     var ctrl = Hijacked[RetainController[T]](me).reveal()
     var rc = ctrl.strong_count()

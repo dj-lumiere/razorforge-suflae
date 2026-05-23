@@ -11,4 +11,4 @@ protocol UncheckedMultiplicable
   ### :param you: The other factor.
   ### :returns: The resulting `Me` value.
   @readonly
-  dangerous routine Me.$mul_unchecked(you: Me) -> Me
+  dangerous routine Me.$mul_unchecked(you: Me) -> ?Me

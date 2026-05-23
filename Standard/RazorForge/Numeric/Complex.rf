@@ -335,7 +335,7 @@ routine Complex.is_imaginary() -> Bool
 ### :param decimal_places: The number of decimal places to render.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Complex.$represent(decimal_places: S32 = 10) -> Text
+routine Complex.$represent(decimal_places: S32 = 10) -> ?Text
   var real_text = me.real.$represent(decimal_places)
   var imag_abs = me.imag.abs().$represent(decimal_places)
   if me.imag.is_negative()
@@ -346,5 +346,5 @@ routine Complex.$represent(decimal_places: S32 = 10) -> Text
 ### :param decimal_places: The number of decimal places to render.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Complex.$diagnose(decimal_places: S32 = 10) -> Text
+routine Complex.$diagnose(decimal_places: S32 = 10) -> ?Text
   return "Complex(" + me.$represent(decimal_places) + ")"

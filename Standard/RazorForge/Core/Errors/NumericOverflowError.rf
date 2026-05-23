@@ -8,5 +8,5 @@ crashable NumericOverflowError
 
 ### Returns the stored numeric overflow message.
 ### :returns: The resulting `Text` value.
-routine NumericOverflowError.crash_message() -> Text
+routine NumericOverflowError.crash_message() -> ?Text
   return me.description

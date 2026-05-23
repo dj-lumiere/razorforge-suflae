@@ -14,7 +14,7 @@ entity TakeWhileIterator[T] obeys Iterable[T]
 ### never resumes after termination.
 ### :returns: The resulting `TakeWhileEmitter[T]` value.
 @readonly
-routine TakeWhileIterator[T].$iter() -> TakeWhileEmitter[T]
+routine TakeWhileIterator[T].$iter() -> ?TakeWhileEmitter[T]
   return TakeWhileEmitter[T](source: me.source.$iter(), predicate: me.predicate, done: false)
 
 ### Iterates over a source sequence until the continuation predicate fails.
@@ -32,7 +32,7 @@ entity TakeWhileEmitter[T] obeys Iterator[T]
 ### calls.
 ### :returns: The resulting `T` value.
 ### :absent: Returns absent when the predicate has failed or the source ends first.
-routine TakeWhileEmitter[T].$next!() -> T
+routine TakeWhileEmitter[T].$next!() -> ?T
   if me.done
     absent
   var item = me.source.$next!()
@@ -46,5 +46,5 @@ routine TakeWhileEmitter[T].$next!() -> T
 ### :param predicate: The predicate that controls when iteration stops.
 ### :returns: The resulting `TakeWhileIterator[T]` value.
 @readonly
-routine Iterable[T].take_while(predicate: Routine[(T,), Bool]) -> TakeWhileIterator[T]
+routine Iterable[T].take_while(predicate: Routine[(T,), Bool]) -> ?TakeWhileIterator[T]
   return TakeWhileIterator[T](source: me, predicate: predicate)

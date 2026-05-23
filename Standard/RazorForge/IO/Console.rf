@@ -78,7 +78,7 @@ routine alert[T](value: T, end: Text = "\n")
 ### Reads one line of text from standard input.
 ### Line termination is not included in the returned text.
 ### :returns: The resulting `Text` value.
-routine ask_line() -> Text
+routine ask_line() -> ?Text
   var ptr = rf_console_ask_line()
   if ptr.is_none()
     return ""
@@ -87,7 +87,7 @@ routine ask_line() -> Text
 
 ### Reads one whitespace-delimited word from standard input.
 ### :returns: The resulting `Text` value.
-routine ask_word() -> Text
+routine ask_word() -> ?Text
   var ptr = rf_console_ask_word()
   if ptr.is_none()
     return ""
@@ -96,7 +96,7 @@ routine ask_word() -> Text
 
 ### Reads all remaining text from standard input.
 ### :returns: The resulting `Text` value.
-routine ask_all() -> Text
+routine ask_all() -> ?Text
   var ptr = rf_console_ask_all()
   if ptr.is_none()
     return ""
@@ -123,7 +123,7 @@ routine ask_words() -> ?List[Text]
 
 ### Reads all remaining standard input as raw bytes.
 ### :returns: The resulting `Bytes` value.
-routine ask_raw() -> Bytes
+routine ask_raw() -> ?Bytes
   var ptr = rf_console_ask_all()
   if ptr.is_none()
     return Bytes()
@@ -132,7 +132,7 @@ routine ask_raw() -> Bytes
 ### Reads up to `count` bytes from standard input.
 ### :param count: The maximum number of bytes to read.
 ### :returns: The resulting `Bytes` value.
-routine ask_bytes(count: U64) -> Bytes
+routine ask_bytes(count: U64) -> ?Bytes
   var ptr = rf_console_ask_bytes(count)
   if ptr.is_none()
     return Bytes()

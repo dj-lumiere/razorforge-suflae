@@ -47,20 +47,20 @@ dangerous routine T.hijack() -> Hijacked[T]
 
 ### Loads the value stored at this pointer.
 ### :returns: The value stored at the address this pointer references.
-dangerous routine Hijacked[T].extract() -> T
+dangerous routine Hijacked[T].extract() -> ?T
 needs T is RecordType
   return load[T](me)
 
 ### Loads the entity value stored at this pointer.
 ### :returns: The entity value stored at the address this pointer references.
-dangerous routine Hijacked[T].extract() -> T
+dangerous routine Hijacked[T].extract() -> ?T
 needs T is EntityType
   return load[T](me)
 
 ### Reinterprets this pointer as the entity {T} it directly points to (no dereference).
 ### Use when the Hijacked[T] value IS the entity ptr, not a slot holding one.
 ### :returns: The entity `T` at this address, without loading from a pointer slot.
-dangerous routine Hijacked[T].reveal() -> T
+dangerous routine Hijacked[T].reveal() -> ?T
 needs T is EntityType
   return reinterpret_bits[Hijacked[T], T](me)
 
@@ -72,7 +72,7 @@ dangerous routine Hijacked[T].inject(value: T)
 
 ### Loads the value at this pointer reinterpreted as type `U` without type-system checks.
 ### :returns: The value stored at this address interpreted as `U`.
-dangerous routine Hijacked[T].extract_as[U]() -> U
+dangerous routine Hijacked[T].extract_as[U]() -> ?U
   var as_u = me.recast_as[U]()
   return as_u.extract()
 
@@ -103,7 +103,7 @@ dangerous routine Hijacked[T].stride(count: S64) -> Hijacked[T]
 ### Returns the value at byte offset {offset} from this pointer without moving the pointer.
 ### :param offset: The byte offset.
 ### :returns: The value stored `offset` bytes from this pointer.
-dangerous routine Hijacked[T].extract_at_offset(offset: ByteSize) -> T
+dangerous routine Hijacked[T].extract_at_offset(offset: ByteSize) -> ?T
   return me.offset(bytes: offset).extract()
 
 ### Writes {value} at byte offset {at} from this pointer without moving the pointer.
@@ -198,13 +198,13 @@ routine Hijacked[T].$hash(k0: U64, k1: U64) -> U64
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Hijacked[T].$represent() -> Text
+routine Hijacked[T].$represent() -> ?Text
   danger!
     return me.type_name()
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Hijacked[T].$diagnose() -> Text
+routine Hijacked[T].$diagnose() -> ?Text
   danger!
     return f"{me.type_name()}(addr: {me.address()}, none: {me.is_none()})"

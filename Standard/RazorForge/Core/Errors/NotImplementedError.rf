@@ -8,5 +8,5 @@ crashable NotImplementedError
 
 ### Returns the default message for unimplemented functionality.
 ### :returns: The resulting `Text` value.
-routine NotImplementedError.crash_message() -> Text
+routine NotImplementedError.crash_message() -> ?Text
   return f"Not implemented: {me.feature}"

@@ -94,7 +94,7 @@ routine S64.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> Tuple[S
 ### the failure path is unreachable in practice — but propagating via `!`
 ### avoids `danger!` and gives callers `try_to_digit_bytes(...)` for free.
 ### :returns: A freshly allocated `Bytes` carrying the digit sequence.
-routine S64.to_digit_bytes!() -> Bytes
+routine S64.to_digit_bytes!() -> ?Bytes
   if me == 0_s64
     var buf: List[Byte] = []
     buf.add_last(value: Byte(from: 0x30_u8))  # '0'
@@ -347,7 +347,7 @@ routine U128.to_digit_bytes!() -> ?Bytes
 # Integer (arbitrary precision).
 # ============================================================================
 
-routine Integer.from_digit_bytes!(bytes: Referring[Bytes]) -> Integer
+routine Integer.from_digit_bytes!(bytes: Referring[Bytes]) -> ?Integer
   var pair = Integer.from_digit_bytes_at!(bytes: bytes, start: 0_u64)
   return pair.f0
 

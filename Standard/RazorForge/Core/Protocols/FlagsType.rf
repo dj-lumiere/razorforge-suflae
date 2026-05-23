@@ -16,16 +16,16 @@ protocol FlagsType obeys Diagnosable, FastHashable, Hashable
   ### specific flags value currently contains them.
   ### :returns: The resulting `List[Me]` value.
   @[readonly, innate]
-  routine Me.all_cases() -> List[Me]
+  routine Me.all_cases() -> ?List[Me]
 
   ### Returns the value with all declared flags enabled.
   ### This is the union of every individual declared flag bit.
   ### :returns: The resulting `Me` value.
   @[readonly, innate]
-  routine Me.all_on() -> Me
+  routine Me.all_on() -> ?Me
 
   ### Returns the value with all declared flags disabled.
   ### This is the zero-bitmask identity for the flag type.
   ### :returns: The resulting `Me` value.
   @[readonly, innate]
-  routine Me.all_off() -> Me
+  routine Me.all_off() -> ?Me

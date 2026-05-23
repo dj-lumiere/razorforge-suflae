@@ -610,7 +610,7 @@ routine S8.signum() -> S8
 # Text Representation and Parsing
 # ============================================================================
 
-routine S8.$represent() -> Text
+routine S8.$represent() -> ?Text
   if me == 0s8
     return "0"
   if me > 0s8
@@ -620,7 +620,7 @@ routine S8.$represent() -> Text
   # yields |me| (works correctly even for S8.MIN, whose absolute value overflows S8).
   return "-" + (0u8 -% reinterpret_bits[S8, U8](me)).$represent()
 
-routine S8.$diagnose() -> Text
+routine S8.$diagnose() -> ?Text
   return "S8(" + me.$represent() + ")"
 
 ### Parses a decimal string into an `S8`, accepting an optional leading `+` or `−` sign.

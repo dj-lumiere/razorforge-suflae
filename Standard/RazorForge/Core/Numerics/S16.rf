@@ -607,7 +607,7 @@ routine S16.signum() -> S16
 # Text Representation and Parsing
 # ============================================================================
 
-routine S16.$represent() -> Text
+routine S16.$represent() -> ?Text
   if me == 0s16
     return "0"
   if me > 0s16
@@ -617,7 +617,7 @@ routine S16.$represent() -> Text
   # yields |me| (works correctly even for S16.MIN, whose absolute value overflows S16).
   return "-" + (0u16 -% reinterpret_bits[S16, U16](me)).$represent()
 
-routine S16.$diagnose() -> Text
+routine S16.$diagnose() -> ?Text
   return "S16(" + me.$represent() + ")"
 
 ### Parses a decimal string into an `S16`, accepting an optional leading `+` or `−` sign.

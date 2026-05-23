@@ -17,4 +17,4 @@ protocol ChoiceType obeys Diagnosable, FastHashable, Hashable
   ### diagnostics, and user-defined lookup tables.
   ### :returns: The resulting `List[Me]` value.
   @[readonly, innate, generated]
-  routine Me.all_cases() -> List[Me]
+  routine Me.all_cases() -> ?List[Me]

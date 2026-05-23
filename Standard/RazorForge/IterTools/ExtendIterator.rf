@@ -13,7 +13,7 @@ entity ExtendIterator[T] obeys Iterable[T]
 ### The returned emitter walks `first` to completion before switching to `second`.
 ### :returns: The resulting `ExtendEmitter[T]` value.
 @readonly
-routine ExtendIterator[T].$iter() -> ExtendEmitter[T]
+routine ExtendIterator[T].$iter() -> ?ExtendEmitter[T]
   return ExtendEmitter[T](first: me.first.$iter(), second: me.second.$iter(), in_second: false)
 
 ### Iterates over an `ExtendIterator[T]` by exhausting the first source before moving to the second.
@@ -29,7 +29,7 @@ entity ExtendEmitter[T] obeys Iterator[T]
 ### Returns the next value from the concatenated sequence.
 ### Once the first iterator is exhausted, all remaining values come from the second iterator.
 ### :returns: The resulting `T` value.
-routine ExtendEmitter[T].$next!() -> T
+routine ExtendEmitter[T].$next!() -> ?T
   if not me.in_second
     var result = me.first.try_next()
     when result
@@ -42,5 +42,5 @@ routine ExtendEmitter[T].$next!() -> T
 ### :param other: The iterable to consume after `me`.
 ### :returns: The resulting `ExtendIterator[T]` value.
 @readonly
-routine Iterable[T].extend(other: Iterable[T]) -> ExtendIterator[T]
+routine Iterable[T].extend(other: Iterable[T]) -> ?ExtendIterator[T]
   return ExtendIterator[T](first: me, second: other)

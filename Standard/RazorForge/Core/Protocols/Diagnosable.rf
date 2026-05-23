@@ -9,4 +9,4 @@ protocol Diagnosable obeys Representable
   ### escaped content that is unsuitable for end-user display.
   ### :returns: A fully qualified, field-named text representation suitable for debugging.
   @[readonly, generated]
-  routine Me.$diagnose() -> Text
+  routine Me.$diagnose() -> ?Text

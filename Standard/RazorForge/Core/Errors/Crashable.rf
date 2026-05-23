@@ -9,11 +9,11 @@ protocol Crashable
   ### logs, or surfaced diagnostics.
   ### :returns: The resulting `Text` value.
   @readonly
-  routine Me.crash_message() -> Text
+  routine Me.crash_message() -> ?Text
 
   ### Returns a short title for this crashable value.
   ### The title should name the crash type in sentence case and stay stable
   ### across instances so tooling can group similar failures.
   ### :returns: The resulting `Text` value.
   @readonly
-  routine Me.crash_title() -> Text
+  routine Me.crash_title() -> ?Text

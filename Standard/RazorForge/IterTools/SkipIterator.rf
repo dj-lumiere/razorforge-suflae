@@ -12,7 +12,7 @@ entity SkipIterator[T] obeys Iterable[T]
 ### The returned emitter defers the actual skipping until iteration begins.
 ### :returns: The resulting `SkipEmitter[T]` value.
 @readonly
-routine SkipIterator[T].$iter() -> SkipEmitter[T]
+routine SkipIterator[T].$iter() -> ?SkipEmitter[T]
   return SkipEmitter[T](source: me.source.$iter(), remaining: me.count)
 
 ### Iterates over a source sequence after discarding an initial prefix.
@@ -26,7 +26,7 @@ entity SkipEmitter[T] obeys Iterator[T]
 ### Returns the next value after any remaining skipped prefix has been consumed.
 ### Values are discarded only until `remaining` reaches zero.
 ### :returns: The resulting `T` value.
-routine SkipEmitter[T].$next!() -> T
+routine SkipEmitter[T].$next!() -> ?T
   while me.remaining > 0u64
     me.source.$next!()
     me.remaining = me.remaining - 1u64
@@ -36,5 +36,5 @@ routine SkipEmitter[T].$next!() -> T
 ### :param count: The number of leading values to discard.
 ### :returns: The resulting `SkipIterator[T]` value.
 @readonly
-routine Iterable[T].skip(count: U64) -> SkipIterator[T]
+routine Iterable[T].skip(count: U64) -> ?SkipIterator[T]
   return SkipIterator[T](source: me, count: count)

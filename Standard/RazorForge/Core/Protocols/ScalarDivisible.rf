@@ -8,4 +8,4 @@ protocol ScalarDivisible
   ### :param you: The scalar divisor.
   ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.$truediv(you: Numeric) -> Me
+  routine Me.$truediv(you: Numeric) -> ?Me

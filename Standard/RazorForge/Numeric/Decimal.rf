@@ -428,7 +428,7 @@ routine F64.$create(from: Decimal) -> F64
 ### :param decimal_places: The number of decimal places to emit.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Decimal.$represent(decimal_places: S32 = 10) -> Text
+routine Decimal.$represent(decimal_places: S32 = 10) -> ?Text
   var CStr = rf_bigdec_get_str(me.handle, decimal_places)
   var text = Text.from_cstr(CStr)
   rf_invalidate(pointer_to_int[Byte, Address](CStr.ptr))

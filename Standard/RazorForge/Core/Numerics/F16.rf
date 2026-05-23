@@ -334,13 +334,13 @@ routine F16.from_bits(bits: U16) -> F16
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-routine F16.$represent() -> Text
+routine F16.$represent() -> ?Text
   var cstr_result = rf_format_F16(me)
   return Text(from: CStr(from_ptr: cstr_result))
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-routine F16.$diagnose() -> Text
+routine F16.$diagnose() -> ?Text
   return "F16(" + me.$represent() + ")"
 
 ### Implements the wired routine behavior for this value.

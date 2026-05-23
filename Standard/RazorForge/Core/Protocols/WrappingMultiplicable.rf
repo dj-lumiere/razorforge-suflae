@@ -9,4 +9,4 @@ protocol WrappingMultiplicable
   ### :param you: The other factor.
   ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.$mul_wrap(you: Me) -> Me
+  routine Me.$mul_wrap(you: Me) -> ?Me

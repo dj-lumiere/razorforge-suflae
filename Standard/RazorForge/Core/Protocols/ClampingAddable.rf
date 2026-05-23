@@ -11,4 +11,4 @@ protocol ClampingAddable
   ### :param you: The other value to add.
   ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.$add_clamp(you: Me) -> Me
+  routine Me.$add_clamp(you: Me) -> ?Me

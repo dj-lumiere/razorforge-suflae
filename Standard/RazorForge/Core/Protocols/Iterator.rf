@@ -9,4 +9,4 @@ protocol Iterator[T]
   ### Implementations should return `absent` once the iterator is exhausted.
   ### :returns: The next element in the iteration sequence.
   @writable
-  routine Me.$next!() -> T
+  routine Me.$next!() -> ?T

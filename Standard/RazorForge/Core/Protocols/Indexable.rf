@@ -10,7 +10,7 @@ protocol Indexable[K, V]
   ### :param key: The key to resolve.
   ### :returns: The element at the given index.
   @readonly
-  routine Me.$getitem!(key: K) -> V
+  routine Me.$getitem!(key: K) -> ?V
 
   ### Stores `value` at `key`.
   ### The write semantics are defined by the conforming type.

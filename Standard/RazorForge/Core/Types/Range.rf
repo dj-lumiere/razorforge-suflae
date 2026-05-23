@@ -48,7 +48,7 @@ routine Range[T].is_ascending() -> Bool
 ### This is the increment used for each successive value.
 ### :returns: The resulting `T` value.
 @readonly
-routine Range[T].get_step() -> T
+routine Range[T].get_step() -> ?T
   return me.step
 
 ### Returns true if this value is empty.
@@ -87,7 +87,7 @@ entity RangeEmitter[T] needs T obeys Comparable, Numeric
 ### The emitter starts at `me.start`.
 ### :returns: The resulting `RangeEmitter[T]` value.
 @readonly
-routine Range[T].$iter() -> RangeEmitter[T]
+routine Range[T].$iter() -> ?RangeEmitter[T]
   return RangeEmitter[T](
     current: me.start,
     end: me.end,
@@ -101,7 +101,7 @@ routine Range[T].$iter() -> RangeEmitter[T]
 ### Each successful call yields the current value and advances by `step`.
 ### :returns: The resulting `T` value.
 ### :absent: Returns absent when the requested value is unavailable.
-routine RangeEmitter[T].$next!() -> T
+routine RangeEmitter[T].$next!() -> ?T
   if me.done
     absent
 

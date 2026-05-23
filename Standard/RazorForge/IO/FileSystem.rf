@@ -116,7 +116,7 @@ routine delete_path_all!(path: Referring[Text])
 ### :param a: The left-hand path segment.
 ### :param b: The right-hand path segment.
 ### :returns: The resulting `Text` value.
-routine join_path(a: Text, b: Text) -> Text
+routine join_path(a: Text, b: Text) -> ?Text
   var a_cstr = CStr(from: a)
   var b_cstr = CStr(from: b)
   var ptr = rf_fs_join_path(a_cstr, a_cstr.count().S32(), b_cstr, b_cstr.count().S32())
@@ -128,7 +128,7 @@ routine join_path(a: Text, b: Text) -> Text
 ### Paths without a parent return the runtime's normalized empty-parent representation.
 ### :param path: The path to inspect.
 ### :returns: The resulting `Text` value.
-routine parent_path(path: Referring[Text]) -> Text
+routine parent_path(path: Referring[Text]) -> ?Text
   var cstr = CStr(from: path)
   var ptr = rf_fs_parent_path(path: cstr, len: cstr.count().S32())
   var len = rf_get_result_len()
@@ -139,7 +139,7 @@ routine parent_path(path: Referring[Text]) -> Text
 ### Directory separators are removed from the returned value.
 ### :param path: The path to inspect.
 ### :returns: The resulting `Text` value.
-routine file_name(path: Referring[Text]) -> Text
+routine file_name(path: Referring[Text]) -> ?Text
   var cstr = CStr(from: path)
   var ptr = rf_fs_file_name(path: cstr, len: cstr.count().S32())
   var len = rf_get_result_len()
@@ -150,7 +150,7 @@ routine file_name(path: Referring[Text]) -> Text
 ### Hidden-file semantics follow the runtime path parser.
 ### :param path: The path to inspect.
 ### :returns: The resulting `Text` value.
-routine file_stem(path: Referring[Text]) -> Text
+routine file_stem(path: Referring[Text]) -> ?Text
   var cstr = CStr(from: path)
   var ptr = rf_fs_file_stem(path: cstr, len: cstr.count().S32())
   var len = rf_get_result_len()
@@ -161,7 +161,7 @@ routine file_stem(path: Referring[Text]) -> Text
 ### The returned value omits the leading dot when an extension is present.
 ### :param path: The path to inspect.
 ### :returns: The resulting `Text` value.
-routine extension(path: Referring[Text]) -> Text
+routine extension(path: Referring[Text]) -> ?Text
   var cstr = CStr(from: path)
   var ptr = rf_fs_extension(path: cstr, len: cstr.count().S32())
   var len = rf_get_result_len()
@@ -177,7 +177,7 @@ routine extension(path: Referring[Text]) -> Text
 ### :param path: The path to resolve.
 ### :returns: The resulting `Text` value.
 ### :throws: May throw {IOError}.
-routine absolute_path!(path: Referring[Text]) -> Text
+routine absolute_path!(path: Referring[Text]) -> ?Text
   var cstr = CStr(from: path)
   var ptr = rf_fs_absolute_path(path: cstr, len: cstr.count().S32())
   var len = rf_get_result_len()
@@ -192,7 +192,7 @@ routine absolute_path!(path: Referring[Text]) -> Text
 ### :param path: The path to resolve.
 ### :returns: The resulting `Text` value.
 ### :throws: May throw {IOError}.
-routine canonical_path!(path: Referring[Text]) -> Text
+routine canonical_path!(path: Referring[Text]) -> ?Text
   var cstr = CStr(from: path)
   var ptr = rf_fs_canonical_path(path: cstr, len: cstr.count().S32())
   var len = rf_get_result_len()

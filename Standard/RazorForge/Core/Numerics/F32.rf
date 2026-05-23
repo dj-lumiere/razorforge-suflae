@@ -375,13 +375,13 @@ routine F32.from_bits(bits: U32) -> F32
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-routine F32.$represent() -> Text
+routine F32.$represent() -> ?Text
   var cstr_result = rf_format_F32(me)
   return Text(from: CStr(from_ptr: cstr_result))
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-routine F32.$diagnose() -> Text
+routine F32.$diagnose() -> ?Text
   var cstr_result = rf_format_F32(me)
   return "F32(" + Text(from: CStr(from_ptr: cstr_result)) + ")"
 

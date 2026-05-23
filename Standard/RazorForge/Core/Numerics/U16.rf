@@ -553,10 +553,10 @@ routine U16.is_odd() -> Bool
 # Text Representation and Parsing
 # ============================================================================
 
-routine U16.$represent() -> Text
+routine U16.$represent() -> ?Text
   return U32(me).$represent()
 
-routine U16.$diagnose() -> Text
+routine U16.$diagnose() -> ?Text
   return "U16(" + me.$represent() + ")"
 
 ### Parses a decimal string into a `U16`.

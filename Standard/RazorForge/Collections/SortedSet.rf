@@ -54,7 +54,7 @@ dangerous routine BTreeSetNode[T].children_base() -> Hijacked[BTreeSetNode[T]]
 ### :param i: The zero-based position within the key buffer.
 ### :returns: The key stored at that position.
 @readonly
-routine BTreeSetNode[T].keys_get(i: U64) -> T
+routine BTreeSetNode[T].keys_get(i: U64) -> ?T
   danger!
     return me.keys_base().stride(count: i.S64()).extract()
 
@@ -70,7 +70,7 @@ routine BTreeSetNode[T].keys_set(i: U64, value: T)
 ### :param i: The zero-based position within the child buffer.
 ### :returns: The child node stored at that position.
 @readonly
-routine BTreeSetNode[T].children_get(i: U64) -> BTreeSetNode[T]
+routine BTreeSetNode[T].children_get(i: U64) -> ?BTreeSetNode[T]
   danger!
     return me.children_base().stride(count: i.S64()).extract()
 
@@ -245,7 +245,7 @@ needs T obeys Comparable
 ### The node starts empty with zero keys, zero children, and no cached subtree size.
 ### :param is_leaf: Whether the new node should be treated as a leaf.
 ### :returns: The resulting `BTreeSetNode[T]` value.
-routine BTreeSetNode[T].$create(is_leaf: Bool) -> BTreeSetNode[T]
+routine BTreeSetNode[T].$create(is_leaf: Bool) -> ?BTreeSetNode[T]
   return BTreeSetNode[T](
     keys: zero_value[Array[T, 63]](),
     children: zero_value[Array[BTreeSetNode[T], 64]](),
@@ -261,7 +261,7 @@ routine BTreeSetNode[T].$create(is_leaf: Bool) -> BTreeSetNode[T]
 
 ### Creates an empty sorted set with no root node.
 ### :returns: The resulting `SortedSet[T]` value.
-routine SortedSet[T].$create() -> SortedSet[T]
+routine SortedSet[T].$create() -> ?SortedSet[T]
   return SortedSet[T](
     root: None,
     count: 0u64
@@ -599,7 +599,7 @@ routine SortedSet[T].remove_from_node(node: Controlling[BTreeSetNode[T]], value:
 ### :param idx: Index into node.keys whose left subtree to descend.
 ### :returns: The in-order predecessor of keys[idx].
 @inline
-routine SortedSet[T].get_predecessor(node: Referring[BTreeSetNode[T]], idx: U64) -> T
+routine SortedSet[T].get_predecessor(node: Referring[BTreeSetNode[T]], idx: U64) -> ?T
   var current = node.children_get(idx)
   while not current.is_leaf
     current = current.children_get(current.children_count() -% 1u64)
@@ -611,7 +611,7 @@ routine SortedSet[T].get_predecessor(node: Referring[BTreeSetNode[T]], idx: U64)
 ### :param idx: Index into node.keys whose right subtree to descend.
 ### :returns: The in-order successor of keys[idx].
 @inline
-routine SortedSet[T].get_successor(node: Referring[BTreeSetNode[T]], idx: U64) -> T
+routine SortedSet[T].get_successor(node: Referring[BTreeSetNode[T]], idx: U64) -> ?T
   var current = node.children_get(idx +% 1u64)
   while not current.is_leaf
     current = current.children_get(0u64)
@@ -757,7 +757,7 @@ routine SortedSet[T].update_subtree_size(node: Controlling[BTreeSetNode[T]])
 ### :returns: The element at that sorted position.
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
 @readonly
-routine SortedSet[T].$getitem!(index: U64) -> T
+routine SortedSet[T].$getitem!(index: U64) -> ?T
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   danger!
@@ -769,7 +769,7 @@ routine SortedSet[T].$getitem!(index: U64) -> T
 ### :param index: The backward position to resolve.
 ### :returns: The element at the resolved sorted position.
 @readonly
-routine SortedSet[T].$getitem!(index: BackIndex) -> T
+routine SortedSet[T].$getitem!(index: BackIndex) -> ?T
   var idx = index.resolve!(me.count)
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
@@ -783,7 +783,7 @@ routine SortedSet[T].$getitem!(index: BackIndex) -> T
 ### :param rank: The zero-based in-order rank to resolve.
 ### :returns: The element at that in-order rank within the subtree.
 @readonly
-routine SortedSet[T].get_by_rank(node: Referring[BTreeSetNode[T]], rank: U64) -> T
+routine SortedSet[T].get_by_rank(node: Referring[BTreeSetNode[T]], rank: U64) -> ?T
   if node.is_leaf
     return node.keys_get(rank)
 
@@ -818,7 +818,7 @@ routine SortedSet[T].get_by_rank(node: Referring[BTreeSetNode[T]], rank: U64) ->
 ### :param max_val: The inclusive upper bound.
 ### :returns: A `List[T]` containing all matching elements in ascending order.
 @readonly
-routine SortedSet[T].range(min_val: T, max_val: T) -> List[T]
+routine SortedSet[T].range(min_val: T, max_val: T) -> ?List[T]
   var result = List[T]()
   if me.root is None
     pass
@@ -859,7 +859,7 @@ routine SortedSet[T].range_collect(node: Referring[BTreeSetNode[T]], min_val: T,
 ### :returns: The minimum element.
 ### :absent: The set is empty.
 @readonly
-routine SortedSet[T].min!() -> T
+routine SortedSet[T].min!() -> ?T
   if me.is_empty()
     absent
   danger!
@@ -872,7 +872,7 @@ routine SortedSet[T].min!() -> T
 ### :returns: The maximum element.
 ### :absent: The set is empty.
 @readonly
-routine SortedSet[T].max!() -> T
+routine SortedSet[T].max!() -> ?T
   if me.is_empty()
     absent
   danger!
@@ -885,14 +885,14 @@ routine SortedSet[T].max!() -> T
 ### :returns: The minimum element.
 ### :absent: The set is empty.
 @readonly
-routine SortedSet[T].first!() -> T
+routine SortedSet[T].first!() -> ?T
   return me.min!()
 
 ### Returns the last (largest) element in the set; equivalent to `max!()`.
 ### :returns: The maximum element.
 ### :absent: The set is empty.
 @readonly
-routine SortedSet[T].last!() -> T
+routine SortedSet[T].last!() -> ?T
   return me.max!()
 
 # ============================================================================
@@ -902,13 +902,13 @@ routine SortedSet[T].last!() -> T
 ### Returns an iterator over the set in ascending sorted order.
 ### :returns: The resulting `SortedSetIterator[T]` value.
 @readonly
-routine SortedSet[T].$iter() -> SortedSetIterator[T]
+routine SortedSet[T].$iter() -> ?SortedSetIterator[T]
   return SortedSetIterator[T](set: me, index: 0u64)
 
 ### Materializes the set as a list in ascending order.
 ### :param from: The set to copy values from.
 ### :returns: The resulting `List[T]` value.
-routine List[T].$create(from: SortedSet[T]) -> List[T]
+routine List[T].$create(from: SortedSet[T]) -> ?List[T]
   var result = List[T](capacity: from.count)
   if from.root is None
     pass
@@ -946,7 +946,7 @@ entity SortedSetIterator[T] obeys Iterator[T]
 ### Returns the next element in ascending set order.
 ### :returns: The element at the current sorted rank.
 ### :absent: All elements have been yielded.
-routine SortedSetIterator[T].$next!() -> T
+routine SortedSetIterator[T].$next!() -> ?T
   if me.index >= me.set.count()
     absent
   var _result = me.set[me.index]
@@ -960,7 +960,7 @@ routine SortedSetIterator[T].$next!() -> T
 ### Returns a compact display form of the set contents in ascending order.
 ### :returns: The resulting `Text` value.
 @readonly
-routine SortedSet[T].$represent() -> Text
+routine SortedSet[T].$represent() -> ?Text
   var result = "SortedSet{"
   var i = 0u64
   for v in me
@@ -974,7 +974,7 @@ routine SortedSet[T].$represent() -> Text
 ### Returns a diagnostic form that includes the runtime type name and element count.
 ### :returns: The resulting `Text` value.
 @readonly
-routine SortedSet[T].$diagnose() -> Text
+routine SortedSet[T].$diagnose() -> ?Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
   var i = 0u64
   for v in me

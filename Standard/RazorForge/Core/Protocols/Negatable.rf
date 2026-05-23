@@ -7,4 +7,4 @@ protocol Negatable
   ### Returns the additive inverse of this value.
   ### :returns: The arithmetic negation of this value.
   @readonly
-  routine Me.$neg() -> Me
+  routine Me.$neg() -> ?Me

@@ -309,7 +309,7 @@ routine U64.$create!(from: Integer) -> U64
 ### :param radix: The numeric base to use.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Integer.$represent(radix: S32 = 10) -> Text
+routine Integer.$represent(radix: S32 = 10) -> ?Text
   var CStr = rf_bigint_get_str(me.handle, radix)
   var text = Text.from_cstr(CStr)
   rf_invalidate(pointer_to_int[Byte, Address](CStr.ptr))

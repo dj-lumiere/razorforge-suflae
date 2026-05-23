@@ -207,7 +207,7 @@ routine ByteSize.$cmp(you: ByteSize) -> ComparisonSign
 ### KiB, B) and concatenates the non-zero parts, matching the component-wise
 ### style of `Duration.$represent`.
 ### :returns: The resulting `Text` value.
-routine ByteSize.$represent() -> Text
+routine ByteSize.$represent() -> ?Text
   var raw = reinterpret_bits[ByteSize, U64](me)
   if raw == 0_u64
     return "0B"
@@ -252,7 +252,7 @@ routine ByteSize.$represent() -> Text
 
 ### Returns the diagnostic form of this byte size.
 ### :returns: The resulting `Text` value.
-routine ByteSize.$diagnose() -> Text
+routine ByteSize.$diagnose() -> ?Text
   return "ByteSize(" + reinterpret_bits[ByteSize, U64](me).$represent() + ")"
 
 # ============================================================================

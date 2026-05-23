@@ -54,10 +54,10 @@ needs K obeys Hashable, Equatable
 # Creators
 # ============================================================================
 
-routine Dict[K, V].$create() -> Dict[K, V]
+routine Dict[K, V].$create() -> ?Dict[K, V]
   return Dict[K, V](key: SecureHashKey.random())
 
-routine Dict[K, V].$create(key: SecureHashKey) -> Dict[K, V]
+routine Dict[K, V].$create(key: SecureHashKey) -> ?Dict[K, V]
   var cap = DICT_INITIAL_CAPACITY
   var ecap = DICT_INITIAL_ENTRIES
   var dict = Dict[K, V](
@@ -83,7 +83,7 @@ routine Dict[K, V].$create(key: SecureHashKey) -> Dict[K, V]
     dict.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
   return steal dict
 
-routine Dict[K, V].$create(key: SecureHashKey, capacity: U64) -> Dict[K, V]
+routine Dict[K, V].$create(key: SecureHashKey, capacity: U64) -> ?Dict[K, V]
   var cap = DICT_INITIAL_CAPACITY
   while cap < capacity
     cap = cap *% 2u64
@@ -145,12 +145,12 @@ routine Dict[K, V].read_index(slot: U64) -> U64
     return me.indices.offset(U64.data_size() * slot).extract()
 
 @readonly
-routine Dict[K, V].read_key_at(ei: U64) -> K
+routine Dict[K, V].read_key_at(ei: U64) -> ?K
   danger!
     return me.keys.offset(K.data_size() * ei).extract()
 
 @readonly
-routine Dict[K, V].read_val_at(ei: U64) -> V
+routine Dict[K, V].read_val_at(ei: U64) -> ?V
   danger!
     return me.vals.offset(V.data_size() * ei).extract()
 
@@ -321,7 +321,7 @@ routine Dict[K, V].remove(key: K) -> Bool
   return true
 
 @readonly
-routine Dict[K, V].get_or_default(key: K, default_value: V) -> V
+routine Dict[K, V].get_or_default(key: K, default_value: V) -> ?V
   var slot = me.find_slot(key)
   if slot >= me.capacity
     return default_value
@@ -332,7 +332,7 @@ routine Dict[K, V].get_or_default(key: K, default_value: V) -> V
 # ============================================================================
 
 @readonly
-routine Dict[K, V].$getitem!(key: K) -> V
+routine Dict[K, V].$getitem!(key: K) -> ?V
   var slot = me.find_slot(key)
   if slot >= me.capacity
     absent
@@ -352,7 +352,7 @@ routine Dict[K, V].$setitem!(key: K, value: V)
 ### Returns all live keys in insertion order.
 ### :returns: A {List[K]} of every key; order matches the sequence in which the keys were first added.
 @readonly
-routine Dict[K, V].keys() -> List[K]
+routine Dict[K, V].keys() -> ?List[K]
   var result = List[K](me.count)
   var i = 0u64
   while i < me.entries_used
@@ -365,7 +365,7 @@ routine Dict[K, V].keys() -> List[K]
 ### Returns all live values in insertion order.
 ### :returns: A {List[V]} of every value; order matches the corresponding `keys()` call.
 @readonly
-routine Dict[K, V].values() -> List[V]
+routine Dict[K, V].values() -> ?List[V]
   var result = List[V](me.count)
   var i = 0u64
   while i < me.entries_used
@@ -378,7 +378,7 @@ routine Dict[K, V].values() -> List[V]
 ### Returns all live entries in insertion order.
 ### :returns: A {List[DictEntry[K, V]]} of every key-value pair; order matches the sequence in which the keys were first added.
 @readonly
-routine Dict[K, V].entries() -> List[DictEntry[K, V]]
+routine Dict[K, V].entries() -> ?List[DictEntry[K, V]]
   var result = List[DictEntry[K, V]](me.count)
   var i = 0u64
   while i < me.entries_used
@@ -395,7 +395,7 @@ routine Dict[K, V].entries() -> List[DictEntry[K, V]]
 # ============================================================================
 
 @readonly
-routine Dict[K, V].$iter() -> DictIterator[K, V]
+routine Dict[K, V].$iter() -> ?DictIterator[K, V]
   danger!
     return DictIterator[K, V](
       keys: me.keys,
@@ -429,7 +429,7 @@ routine DictIterator[K, V].$next!() -> DictEntry[K, V]
 # ============================================================================
 
 @readonly
-routine Dict[K, V].$represent() -> Text
+routine Dict[K, V].$represent() -> ?Text
   if me.is_empty()
     return "{:}"
   var result = "{"
@@ -443,7 +443,7 @@ routine Dict[K, V].$represent() -> Text
   return steal result
 
 @readonly
-routine Dict[K, V].$diagnose() -> Text
+routine Dict[K, V].$diagnose() -> ?Text
   var result = me.type_name() + "(count: " + me.count().$represent() + ", {"
   var first = true
   for entry in me

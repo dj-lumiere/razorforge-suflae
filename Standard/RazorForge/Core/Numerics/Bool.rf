@@ -37,12 +37,12 @@ routine Bool.U8() -> U8
 # Diagnostics and Hashing
 # ============================================================================
 
-routine Bool.$diagnose() -> Text
+routine Bool.$diagnose() -> ?Text
   if me
     return "Bool(true)"
   return "Bool(false)"
 
-routine Bool.$represent() -> Text
+routine Bool.$represent() -> ?Text
   if me
     return "true"
   return "false"

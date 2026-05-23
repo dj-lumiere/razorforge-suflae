@@ -10,4 +10,4 @@ protocol UncheckedAddable
   ### :param you: The other value to add.
   ### :returns: The resulting `Me` value.
   @readonly
-  dangerous routine Me.$add_unchecked(you: Me) -> Me
+  dangerous routine Me.$add_unchecked(you: Me) -> ?Me

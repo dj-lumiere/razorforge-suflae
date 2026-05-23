@@ -19,13 +19,13 @@ routine Bytes.$destroy()
 
 ### Creates an empty byte sequence.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.$create() -> Bytes
+routine Bytes.$create() -> ?Bytes
   return Bytes(data: hijacked_none[Byte](), count: 0u64)
 
 ### Creates a byte sequence by copying the contents of `from_list`.
 ### :param from_list: The source list of bytes to copy.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.$create(from_list: List[Byte]) -> Bytes
+routine Bytes.$create(from_list: List[Byte]) -> ?Bytes
   var n = from_list.count()
   if n == 0u64
     return Bytes(data: hijacked_none[Byte](), count: 0u64)
@@ -42,7 +42,7 @@ routine Bytes.$create(from_list: List[Byte]) -> Bytes
 ### Creates a one-byte sequence from `from_byte`.
 ### :param from_byte: The single byte to store.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.$create(from_byte: Byte) -> Bytes
+routine Bytes.$create(from_byte: Byte) -> ?Bytes
   danger!
     var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size()))
     buf.inject(value: from_byte)
@@ -52,7 +52,7 @@ routine Bytes.$create(from_byte: Byte) -> Bytes
 ### Copying stops at the first null byte.
 ### :param ptr: The source pointer to read from.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.$create(ptr: Hijacked[Byte]) -> Bytes
+routine Bytes.$create(ptr: Hijacked[Byte]) -> ?Bytes
   danger!
     var len: U64 = 0u64
     loop
@@ -69,7 +69,7 @@ routine Bytes.$create(ptr: Hijacked[Byte]) -> Bytes
 ### No text decoding is performed.
 ### :param ptr: The source C string.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.$create(ptr: CStr) -> Bytes
+routine Bytes.$create(ptr: CStr) -> ?Bytes
   var len = rf_cstr_count(ptr)
   if len == 0u64
     return Bytes()
@@ -82,7 +82,7 @@ routine Bytes.$create(ptr: CStr) -> Bytes
 ### :param ptr: The source address.
 ### :param count: The number of bytes to copy.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.$create(ptr: Address, count: U64) -> Bytes
+routine Bytes.$create(ptr: Address, count: U64) -> ?Bytes
   if count == 0u64
     return Bytes()
   danger!
@@ -94,7 +94,7 @@ routine Bytes.$create(ptr: Address, count: U64) -> Bytes
 ### :param source: The source pointer.
 ### :param count: The number of bytes to copy.
 ### :returns: The resulting `Bytes` value.
-routine Bytes.$create(srcptr: Hijacked[Byte], count: U64) -> Bytes
+routine Bytes.$create(srcptr: Hijacked[Byte], count: U64) -> ?Bytes
   if count == 0u64
     return Bytes()
   danger!
@@ -159,7 +159,7 @@ routine Bytes.$getitem!(index: BackIndex) -> Byte
 ### :param end: The exclusive ending position.
 ### :returns: The resulting `Bytes` value.
 @readonly
-routine Bytes.$getslice(start: U64, end: U64) -> Bytes
+routine Bytes.$getslice(start: U64, end: U64) -> ?Bytes
   if start >= end or end > me.count
     return Bytes()
   var n = end - start
@@ -175,7 +175,7 @@ routine Bytes.$getslice(start: U64, end: U64) -> Bytes
 ### :param end: The exclusive ending position.
 ### :returns: The resulting `Bytes` value.
 @readonly
-routine Bytes.$getslice(start: BackIndex, end: BackIndex) -> Bytes
+routine Bytes.$getslice(start: BackIndex, end: BackIndex) -> ?Bytes
   var s = start.resolve(length: me.count)
   var e = end.resolve(length: me.count)
   if s >= e
@@ -194,7 +194,7 @@ routine Bytes.$getslice(start: BackIndex, end: BackIndex) -> Bytes
 ### :param other: The byte sequence to append.
 ### :returns: The resulting `Bytes` value.
 @readonly
-routine Bytes.concat(other: Referring[Bytes]) -> Bytes
+routine Bytes.concat(other: Referring[Bytes]) -> ?Bytes
   var n = me.count + other.count
   if n == 0u64
     return Bytes()
@@ -212,7 +212,7 @@ routine Bytes.concat(other: Referring[Bytes]) -> Bytes
 ### :param other: The byte sequence to append.
 ### :returns: The resulting `Bytes` value.
 @readonly
-routine Bytes.$add(other: Referring[Bytes]) -> Bytes
+routine Bytes.$add(other: Referring[Bytes]) -> ?Bytes
   return me.concat(other)
 
 ### Returns whether both values are equal.
@@ -302,7 +302,7 @@ routine Bytes.split(separator: Byte) -> ?List[Bytes]
 ### Bytes are reversed by position with no interpretation as text.
 ### :returns: The resulting `Bytes` value.
 @readonly
-routine Bytes.reverse() -> Bytes
+routine Bytes.reverse() -> ?Bytes
   var result = List[Byte]()
   var i = me.count
   loop
@@ -317,7 +317,7 @@ routine Bytes.reverse() -> Bytes
 ### :param times: The number of repetitions to produce.
 ### :returns: The resulting `Bytes` value.
 @readonly
-routine Bytes.repeat(times: U64) -> Bytes
+routine Bytes.repeat(times: U64) -> ?Bytes
   if times == 0u64 or me.count == 0u64
     return Bytes()
   var n = me.count * times
@@ -337,7 +337,7 @@ routine Bytes.repeat(times: U64) -> Bytes
 ### Creates a mutable byte list by copying the contents of `Bytes`.
 ### :param source: The byte sequence to convert.
 ### :returns: The resulting `List[Byte]` value.
-routine List[Byte].$create(source: Bytes) -> List[Byte]
+routine List[Byte].$create(source: Bytes) -> ?List[Byte]
   var result = List[Byte](source.count)
   var i: U64 = 0u64
   loop
@@ -361,7 +361,7 @@ entity BytesIterator
 ### The iterator starts at byte index `0`.
 ### :returns: The resulting `BytesIterator` value.
 @readonly
-routine Bytes.$iter() -> BytesIterator
+routine Bytes.$iter() -> ?BytesIterator
   return BytesIterator(bytes: me, index: 0u64)
 
 ### Returns the next byte from this iterator.
@@ -383,7 +383,7 @@ routine BytesIterator.$next!() -> Byte
 ### Each byte is rendered using its escaped `\\xHH` representation.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Bytes.$represent() -> Text
+routine Bytes.$represent() -> ?Text
   var result = List[Character]()
   var i: U64 = 0u64
   loop
@@ -403,7 +403,7 @@ routine Bytes.$represent() -> Text
 ### The diagnostic form includes both the byte count and the escaped payload.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Bytes.$diagnose() -> Text
+routine Bytes.$diagnose() -> ?Text
   return "Bytes(count: " + me.count.$represent() + ", " + me.$represent() + ")"
 
 # ============================================================================
@@ -413,7 +413,7 @@ routine Bytes.$diagnose() -> Text
 ### Encodes this text value as UTF-8 bytes.
 ### :returns: The resulting `Bytes` value.
 @readonly
-routine Text.encode_as_utf8() -> Bytes
+routine Text.encode_as_utf8() -> ?Bytes
   var result = List[Byte]()
   var len = me.count()
   for i in 0 til len
@@ -440,7 +440,7 @@ routine Text.encode_as_utf8() -> Bytes
 ### the Unicode replacement character.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Bytes.decode_as_utf8_lossy() -> Text
+routine Bytes.decode_as_utf8_lossy() -> ?Text
   var result = List[Character]()
   var len = me.count
   var i: U64 = 0u64
@@ -515,7 +515,7 @@ routine Bytes.decode_as_utf8_lossy() -> Text
 ### :returns: The resulting `Text` value.
 ### :throws: May throw {MalformedUtf8Error}.
 @readonly
-routine Bytes.decode_as_utf8!() -> Text
+routine Bytes.decode_as_utf8!() -> ?Text
   var result = List[Character]()
   var len = me.count
   var i: U64 = 0u64
@@ -620,13 +620,13 @@ routine Bytes.interpret_as_utf8_lossy() -> BytesUtf8LossyView
 ### Returns an iterator over this strict UTF-8 view.
 ### :returns: The resulting `BytesUtf8Iterator` value.
 @readonly
-routine BytesUtf8View.$iter() -> BytesUtf8Iterator
+routine BytesUtf8View.$iter() -> ?BytesUtf8Iterator
   return BytesUtf8Iterator(bytes: me.bytes, index: 0u64)
 
 ### Returns an iterator over this lossy UTF-8 view.
 ### :returns: The resulting `BytesUtf8LossyIterator` value.
 @readonly
-routine BytesUtf8LossyView.$iter() -> BytesUtf8LossyIterator
+routine BytesUtf8LossyView.$iter() -> ?BytesUtf8LossyIterator
   return BytesUtf8LossyIterator(bytes: me.bytes, index: 0u64)
 
 ### Returns the next decoded character from this strict UTF-8 iterator.
@@ -789,7 +789,7 @@ routine Text.to_cstr() -> CStr
 ### Encodes this text value as UTF-16 code units.
 ### :returns: The resulting `List[U16]` value.
 @readonly
-routine Text.encode_as_utf16() -> List[U16]
+routine Text.encode_as_utf16() -> ?List[U16]
   var result = List[U16]()
   var len = me.count()
   var i: U64 = 0u64
@@ -810,7 +810,7 @@ routine Text.encode_as_utf16() -> List[U16]
 ### Invalid surrogate structure is replaced with the Unicode replacement
 ### character.
 ### :returns: The resulting `Text` value.
-routine List[U16].decode_as_utf16() -> Text
+routine List[U16].decode_as_utf16() -> ?Text
   var result = List[Character]()
   var len = me.count()
   var i: U64 = 0u64

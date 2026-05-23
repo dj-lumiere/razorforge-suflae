@@ -432,13 +432,13 @@ routine D128.from_bits(low: U64, high: U64) -> D128
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-routine D128.$represent() -> Text
+routine D128.$represent() -> ?Text
   var cstr_result = rf_d128_to_string(low: me.low_bits(), high: me.high_bits())
   return Text(from: CStr(from_ptr: cstr_result))
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-routine D128.$diagnose() -> Text
+routine D128.$diagnose() -> ?Text
   return "D128(" + me.$represent() + ")"
 
 ### Parses a decimal literal into a `D128`.

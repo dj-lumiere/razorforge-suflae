@@ -10,4 +10,4 @@ protocol ClampingMultiplicable
   ### :param you: The other factor.
   ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.$mul_clamp(you: Me) -> Me
+  routine Me.$mul_clamp(you: Me) -> ?Me

@@ -8,4 +8,4 @@ protocol DurationSubtractable
   ### :param you: The duration to subtract.
   ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.$sub(you: Duration) -> Me
+  routine Me.$sub(you: Duration) -> ?Me

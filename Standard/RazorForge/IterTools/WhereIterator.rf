@@ -15,7 +15,7 @@ entity WhereIterator[T] obeys Iterable[T]
 ### Source values are examined only as the caller requests more output values.
 ### :returns: The resulting `WhereEmitter[T]` value.
 @readonly
-routine WhereIterator[T].$iter() -> WhereEmitter[T]
+routine WhereIterator[T].$iter() -> ?WhereEmitter[T]
   return WhereEmitter[T](source: me.source.$iter(), predicate: me.predicate, inverted: me.inverted)
 
 ### Iterates over a source sequence while yielding only values that satisfy the effective filter.
@@ -31,7 +31,7 @@ entity WhereEmitter[T] obeys Iterator[T]
 ### Returns the next value that satisfies the effective filter condition.
 ### Source values are consumed and discarded until one passes the filter.
 ### :returns: The resulting `T` value.
-routine WhereEmitter[T].$next!() -> T
+routine WhereEmitter[T].$next!() -> ?T
   loop
     var item = me.source.$next!()
     var matches = me.predicate(item)
@@ -45,7 +45,7 @@ routine WhereEmitter[T].$next!() -> T
 ### :param predicate: The filter predicate.
 ### :returns: The resulting `WhereIterator[T]` value.
 @readonly
-routine Iterable[T].where(predicate: Routine[(T,), Bool]) -> WhereIterator[T]
+routine Iterable[T].where(predicate: Routine[(T,), Bool]) -> ?WhereIterator[T]
   return WhereIterator[T](source: me, predicate: predicate, inverted: false)
 
 ### Returns a lazy adapter that keeps only values for which `predicate` returns
@@ -53,5 +53,5 @@ routine Iterable[T].where(predicate: Routine[(T,), Bool]) -> WhereIterator[T]
 ### :param predicate: The filter predicate.
 ### :returns: The resulting `WhereIterator[T]` value.
 @readonly
-routine Iterable[T].where_not(predicate: Routine[(T,), Bool]) -> WhereIterator[T]
+routine Iterable[T].where_not(predicate: Routine[(T,), Bool]) -> ?WhereIterator[T]
   return WhereIterator[T](source: me, predicate: predicate, inverted: true)

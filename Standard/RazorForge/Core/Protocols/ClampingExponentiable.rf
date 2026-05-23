@@ -11,4 +11,4 @@ protocol ClampingExponentiable
   ### :note: Clamp semantics apply only when the conforming type cannot
   ### represent the mathematical result exactly.
   @readonly
-  routine Me.$pow_clamp(you: Me) -> Me
+  routine Me.$pow_clamp(you: Me) -> ?Me

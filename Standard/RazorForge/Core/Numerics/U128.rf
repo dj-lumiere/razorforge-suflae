@@ -554,7 +554,7 @@ routine U128.low64() -> U64
 # Text Representation and Parsing
 # ============================================================================
 
-routine U128.$represent() -> Text
+routine U128.$represent() -> ?Text
   if me == 0u128
     return "0"
   var digits = List[Character]()
@@ -565,7 +565,7 @@ routine U128.$represent() -> Text
     digits.add_first(Character(0x0030u32 + U32(digit)))
   return Text(from_list: steal digits)
 
-routine U128.$diagnose() -> Text
+routine U128.$diagnose() -> ?Text
   return "U128(" + me.$represent() + ")"
 
 ### Parses a decimal string into a `U128`.

@@ -47,7 +47,7 @@ needs N is U64
 ### :returns: The element stored at that position.
 ### :throws: {IndexOutOfBoundsError} if `index >= N`.
 @readonly
-routine Array[T, N].$getitem!(index: U64) -> T
+routine Array[T, N].$getitem!(index: U64) -> ?T
   if index >= N
     throw IndexOutOfBoundsError(index: index, count: me.count())
   return element_at[Array[T, N], T](me, index)
@@ -71,7 +71,7 @@ routine Array[T, N].$setitem!(index: U64, value: T)
 ### :param index: The backward position to resolve.
 ### :returns: The element at the resolved position.
 @readonly
-routine Array[T, N].$getitem!(index: BackIndex) -> T
+routine Array[T, N].$getitem!(index: BackIndex) -> ?T
   var idx = index.resolve!(N)
   if idx >= N
     throw IndexOutOfBoundsError(index: idx, count: N)
@@ -98,7 +98,7 @@ routine Array[T, N].is_empty() -> Bool
 ### :returns: The element at index `0`.
 ### :absent: The array has zero elements (`N == 0`).
 @readonly
-routine Array[T, N].first!() -> T
+routine Array[T, N].first!() -> ?T
   if N == 0u64
     absent
   return element_at[Array[T, N], T](me, 0u64)
@@ -107,7 +107,7 @@ routine Array[T, N].first!() -> T
 ### :returns: The element at index `N - 1`.
 ### :absent: The array has zero elements (`N == 0`).
 @readonly
-routine Array[T, N].last!() -> T
+routine Array[T, N].last!() -> ?T
   if N == 0u64
     absent
   return element_at[Array[T, N], T](me, N - 1u64)
@@ -157,7 +157,7 @@ routine Array[T, N].$iter() -> ArrayIterator[T, N]
 ### Returns the next element from the iterator in ascending index order.
 ### :returns: The element at the current index.
 ### :absent: All `N` elements have been yielded.
-routine ArrayIterator[T, N].$next!() -> T
+routine ArrayIterator[T, N].$next!() -> ?T
   if me.index >= U64(N)
     absent
   var value = me.list[me.index]
@@ -168,7 +168,7 @@ routine ArrayIterator[T, N].$next!() -> T
 # Display
 # ============================================================================
 
-routine Array[T, N].$represent() -> Text
+routine Array[T, N].$represent() -> ?Text
   var result = "Array["
   for i in 0u64 til N
     if i > 0u64
@@ -177,7 +177,7 @@ routine Array[T, N].$represent() -> Text
   result = result + "]"
   return steal result
 
-routine Array[T, N].$diagnose() -> Text
+routine Array[T, N].$diagnose() -> ?Text
   var result = me.type_name() + "(count: " + N.$represent() + ", ["
   for i in 0u64 til N
     if i > 0u64

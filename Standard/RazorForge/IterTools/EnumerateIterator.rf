@@ -12,7 +12,7 @@ entity EnumerateIterator[T] obeys Iterable[Tuple[U64, T]]
 ### Returns the stateful iterator that produces indexed tuples lazily.
 ### :returns: The resulting `EnumerateEmitter[T]` value.
 @readonly
-routine EnumerateIterator[T].$iter() -> EnumerateEmitter[T]
+routine EnumerateIterator[T].$iter() -> ?EnumerateEmitter[T]
   return EnumerateEmitter[T](source: me.source.$iter(), index: me.start_index)
 
 ### Iterates over a source sequence, pairing each element with an incrementing index.
@@ -36,7 +36,7 @@ routine EnumerateEmitter[T].$next!() -> Tuple[U64, T]
 ### The first yielded index is `0`.
 ### :returns: The resulting `EnumerateIterator[T]` value.
 @readonly
-routine Iterable[T].enumerate() -> EnumerateIterator[T]
+routine Iterable[T].enumerate() -> ?EnumerateIterator[T]
   return EnumerateIterator[T](source: me, start_index: 0u64)
 
 ### Returns a lazy enumerating adapter over this iterable.
@@ -44,5 +44,5 @@ routine Iterable[T].enumerate() -> EnumerateIterator[T]
 ### :param start: The inclusive starting position.
 ### :returns: The resulting `EnumerateIterator[T]` value.
 @readonly
-routine Iterable[T].enumerate(start: U64) -> EnumerateIterator[T]
+routine Iterable[T].enumerate(start: U64) -> ?EnumerateIterator[T]
   return EnumerateIterator[T](source: me, start_index: start)

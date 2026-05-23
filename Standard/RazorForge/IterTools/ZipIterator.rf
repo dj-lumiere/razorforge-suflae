@@ -13,7 +13,7 @@ entity ZipIterator[T, U] obeys Iterable[Tuple[T, U]]
 ### Returns the stateful iterator that produces paired tuples lazily.
 ### :returns: The resulting `ZipEmitter[T, U]` value.
 @readonly
-routine ZipIterator[T, U].$iter() -> ZipEmitter[T, U]
+routine ZipIterator[T, U].$iter() -> ?ZipEmitter[T, U]
   return ZipEmitter[T, U](first: me.first.$iter(), second: me.second.$iter())
 
 ### Iterates over two source sequences simultaneously, pairing one element from each.
@@ -39,5 +39,5 @@ routine ZipEmitter[T, U].$next!() -> Tuple[T, U]
 ### :param other: The second source iterable to zip with.
 ### :returns: The resulting `ZipIterator[T, U]` value.
 @readonly
-routine Iterable[T].zip[U](other: Iterable[U]) -> ZipIterator[T, U]
+routine Iterable[T].zip[U](other: Iterable[U]) -> ?ZipIterator[T, U]
   return ZipIterator[T, U](first: me, second: other)

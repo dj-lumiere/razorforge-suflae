@@ -10,4 +10,4 @@ protocol Exponentiable
   ### :param you: The exponent value.
   ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.$pow(you: Me) -> Me
+  routine Me.$pow(you: Me) -> ?Me
