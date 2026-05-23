@@ -362,6 +362,88 @@ internal sealed class SignatureResolver
                     break;
             }
         }
+
+        CheckExternalSignatureConsistency(program: program);
+    }
+
+    /// <summary>
+    /// Verifies that all <c>external("C")</c> declarations sharing a C symbol name agree on
+    /// their resolved signature (calling convention, failability, variadicity, parameter types,
+    /// return type). Two decls of the same C symbol with divergent signatures would silently
+    /// pick one at link time and pass garbage at the other call site.
+    /// </summary>
+    private void CheckExternalSignatureConsistency(Program program)
+    {
+        var seen = new Dictionary<string, (ExternalDeclaration Decl, string Sig)>();
+
+        void Visit(ExternalDeclaration ext)
+        {
+            string sig = BuildExternalSignatureKey(ext: ext);
+            if (seen.TryGetValue(key: ext.Name, value: out var prior))
+            {
+                if (prior.Sig != sig)
+                {
+                    _sa.ReportError(code: SemanticDiagnosticCode.ExternalSignatureMismatch,
+                        message:
+                        $"external(\"{ext.CallingConvention ?? "C"}\") routine '{ext.Name}' is declared with " +
+                        $"conflicting signatures: '{prior.Sig}' (at {prior.Decl.Location.Line}:{prior.Decl.Location.Column}) " +
+                        $"vs '{sig}' (at {ext.Location.Line}:{ext.Location.Column}). " +
+                        "All declarations of the same C symbol must agree on ABI.",
+                        location: ext.Location);
+                }
+            }
+            else
+            {
+                seen[key: ext.Name] = (ext, sig);
+            }
+        }
+
+        foreach (ISyntaxTreeNode declaration in program.Declarations)
+        {
+            switch (declaration)
+            {
+                case ExternalDeclaration externalDecl:
+                    Visit(ext: externalDecl);
+                    break;
+
+                case ExternalBlockDeclaration block:
+                    foreach (SyntaxTree.Declaration decl in block.Declarations)
+                    {
+                        if (decl is ExternalDeclaration ext)
+                        {
+                            Visit(ext: ext);
+                        }
+                    }
+
+                    break;
+            }
+        }
+    }
+
+    private string BuildExternalSignatureKey(ExternalDeclaration ext)
+    {
+        string conv = ext.CallingConvention ?? "C";
+        string variadic = ext.IsVariadic ? "..." : "";
+        string failable = ext.Name.EndsWith(value: '!') ? "!" : "";
+        var parts = new List<string>();
+        foreach (Parameter p in ext.Parameters)
+        {
+            TypeSymbol t = p.Type != null
+                ? _typeResolver.ResolveType(typeExpr: p.Type)
+                : ErrorTypeInfo.Instance;
+            parts.Add(item: t.FullName);
+        }
+
+        string paramSig = string.Join(separator: ", ", values: parts);
+        if (variadic.Length > 0)
+        {
+            paramSig = paramSig.Length > 0 ? $"{paramSig}, {variadic}" : variadic;
+        }
+
+        string ret = ext.ReturnType != null
+            ? _typeResolver.ResolveType(typeExpr: ext.ReturnType).FullName
+            : "void";
+        return $"extern(\"{conv}\") {ext.Name}{failable}({paramSig}) -> {ret}";
     }
 
     /// <summary>

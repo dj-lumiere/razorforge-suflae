@@ -804,6 +804,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Suflae cannot use C interop directly.</summary>
     SuflaeNoCInterop = 810,
 
+    /// <summary>Two external("C") declarations for the same C symbol disagree on signature.</summary>
+    ExternalSignatureMismatch = 811,
+
     /// <summary>Invalid f-text format specifier.</summary>
     InvalidFTextFormatSpec = 816,
 
