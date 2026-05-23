@@ -1837,9 +1837,24 @@ internal partial class Program
     /// </summary>
     private static void CleanBuildAndRunOutputs(string llFile, string optFile, string exeFile)
     {
+        string outputDir = Path.GetDirectoryName(path: exeFile) ?? ".";
         string basePath = Path.Combine(
-            path1: Path.GetDirectoryName(path: exeFile) ?? ".",
+            path1: outputDir,
             path2: Path.GetFileNameWithoutExtension(path: exeFile));
+
+        // Sweep any leftover *.stale.* files from prior runs where TryRemoveBuildArtifact
+        // had to fall back to rename-aside because the original was locked.
+        try
+        {
+            foreach (string stale in Directory.EnumerateFiles(path: outputDir, searchPattern: "*.stale.*"))
+            {
+                TryRemoveBuildArtifact(path: stale);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DirectoryNotFoundException)
+        {
+            // Directory unreadable — non-fatal, just skip the sweep.
+        }
 
         string[] pathsToDelete =
         [
@@ -1857,16 +1872,46 @@ internal partial class Program
 
         foreach (string path in pathsToDelete.Distinct(comparer: StringComparer.OrdinalIgnoreCase))
         {
+            TryRemoveBuildArtifact(path: path);
+        }
+    }
+
+    /// <summary>
+    /// Best-effort delete with retry + rename-aside fallback. Windows frequently briefly locks
+    /// freshly-written PE files (Defender real-time scan, indexers, lingering child processes).
+    /// A short retry covers transient locks; renaming the file out of the way unblocks the next
+    /// link step even when the original handle is still open (works as long as the holder opened
+    /// with FILE_SHARE_DELETE, which Defender and most scanners do).
+    /// </summary>
+    private static void TryRemoveBuildArtifact(string path)
+    {
+        if (!File.Exists(path: path)) return;
+
+        int[] delaysMs = [0, 50, 100, 200];
+        foreach (int delay in delaysMs)
+        {
+            if (delay > 0) System.Threading.Thread.Sleep(millisecondsTimeout: delay);
             try
             {
-                if (File.Exists(path: path))
-                {
-                    File.Delete(path: path);
-                }
+                File.Delete(path: path);
+                return;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                Console.WriteLine(value: $"Warning: Could not remove stale build artifact '{path}': {ex.Message}");
+                if (delay == delaysMs[^1])
+                {
+                    // Last attempt failed — try renaming out of the way so the next build can write here.
+                    string aside = $"{path}.stale.{Guid.NewGuid():N}";
+                    try
+                    {
+                        File.Move(sourceFileName: path, destFileName: aside);
+                        return;
+                    }
+                    catch (Exception renameEx) when (renameEx is IOException or UnauthorizedAccessException)
+                    {
+                        Console.WriteLine(value: $"Warning: Could not remove or rename stale build artifact '{path}': {ex.Message}");
+                    }
+                }
             }
         }
     }
