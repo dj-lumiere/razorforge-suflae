@@ -43,7 +43,7 @@ routine Grasped[T].$exit()
 ### Yields the inner entity as an in-flight `?T` reference for read-only access.
 ### Inserted implicitly at call sites whose parameter is `Referring[T]`.
 ### :returns: The inner entity as `?T`.
-@readonly
+@[readonly, inline]
 routine Grasped[T].$refer() -> ?T
   danger!
     return Hijacked[T](me).reveal()
@@ -51,6 +51,7 @@ routine Grasped[T].$refer() -> ?T
 ### Yields the inner entity as an in-flight `?T` reference for read/write access.
 ### Inserted implicitly at call sites whose parameter is `Controlling[T]`.
 ### :returns: The inner entity as `?T`.
+@inline
 routine Grasped[T].$control() -> ?T
   danger!
     return Hijacked[T](me).reveal()
