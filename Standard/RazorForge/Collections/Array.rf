@@ -33,7 +33,7 @@ import BuilderService
 ### :see: {List[T]} for a heap-backed growable sequence.
 ### :see: {BitArray[N]} for a compact fixed-size bit sequence.
 @llvm("[{N} x {T}]")
-record Array[T, N]
+record Array[T, N] obeys Comparable
 needs N is U64
   # N elements of T stored inline by compiler - no explicit member variables needed
   pass
@@ -144,14 +144,14 @@ needs T obeys Equatable
 ### Because `Array` is a record type, the iterator holds its own copy of the array data.
 ### :typeparam T: The element type yielded by the iterator.
 ### :typeparam N: The compile-time element count.
-record ArrayIterator[T, N]
+entity ArrayIterator[T, N] obeys Iterator[T]
   ### Stores the array being iterated.
   list: Array[T, N]
   ### Stores the next logical index to read.
   index: U64
 
 @readonly
-routine Array[T, N].$iter() -> ArrayIterator[T, N]
+routine Array[T, N].$iter() -> ?ArrayIterator[T, N]
   return ArrayIterator[T, N](list: me, index: 0u64)
 
 ### Returns the next element from the iterator in ascending index order.
@@ -199,3 +199,18 @@ needs T obeys Equatable
     if me[i] != you[i]
       return false
   return true
+
+### Lexicographic comparison of two arrays of equal length.
+### Compares element by element from index 0 using `T.$cmp`; returns at the
+### first non-equal pair, or `SAME` when every pair is equal.
+### :param you: The other array to compare against.
+### :returns: `ME_SMALL`, `SAME`, or `ME_LARGE`.
+### :note: Requires `T` to obey `Comparable`.
+@readonly
+routine Array[T, N].$cmp(you: Array[T, N]) -> ComparisonSign
+needs T obeys Comparable
+  for i in 0u64 til N
+    var sign = me[i].$cmp(you[i])
+    if sign isnot SAME
+      return sign
+  return SAME

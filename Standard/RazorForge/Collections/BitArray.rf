@@ -33,7 +33,7 @@ import BuilderService
 ### :see: {BitList} for a heap-backed growable bit sequence.
 ### :see: {Array[T, N]} for a fixed-size inline array of typed elements.
 @llvm("[{(N+7)//8} x i8]")
-record BitArray[N]
+record BitArray[N] obeys Comparable
 needs N is U64
   pass
 
@@ -225,4 +225,61 @@ routine BitArray[N].$diagnose() -> ?Text
   result = result + "])"
   return steal result
 
-# Comparison (==, !=) is auto-generated using memcmp for records
+# ============================================================================
+# Iteration Support
+# ============================================================================
+
+### Walks the bits of a fixed-size `BitArray[N]` from index 0 to N - 1.
+### Because `BitArray` is a record type, the iterator holds its own copy of the packed bits.
+### :typeparam N: The compile-time bit count.
+entity BitArrayIterator[N] obeys Iterator[Bool]
+needs N is U64
+  ### Stores the bit array being iterated.
+  bits: BitArray[N]
+  ### Stores the next logical bit index to read.
+  index: U64
+
+@readonly
+routine BitArray[N].$iter() -> ?BitArrayIterator[N]
+  return BitArrayIterator[N](bits: me, index: 0u64)
+
+### Returns the next bit from the iterator in ascending index order.
+### :returns: The bit at the current index.
+### :absent: All `N` bits have been yielded.
+routine BitArrayIterator[N].$next!() -> ?Bool
+  if me.index >= N
+    absent
+  var value = me.bits[me.index]
+  me.index = me.index + 1u64
+  return value
+
+# ============================================================================
+# Equality and Comparison
+# ============================================================================
+
+### Returns true when both bit arrays contain equal bits at every position.
+### :param you: The other bit array to compare against.
+### :returns: `true` if every corresponding pair of bits is equal.
+### :note: Bit-by-bit comparison is required because the trailing bits of the
+###        last byte are unspecified — a raw `memcmp` would compare padding.
+@readonly
+routine BitArray[N].$eq(you: BitArray[N]) -> Bool
+  for i in 0u64 til N
+    if me[i] != you[i]
+      return false
+  return true
+
+### Lexicographic comparison of two bit arrays of equal length.
+### Compares bit by bit from index 0; `false` sorts before `true`.
+### :param you: The other bit array to compare against.
+### :returns: `ME_SMALL`, `SAME`, or `ME_LARGE`.
+@readonly
+routine BitArray[N].$cmp(you: BitArray[N]) -> ComparisonSign
+  for i in 0u64 til N
+    var a = me[i]
+    var b = you[i]
+    if a != b
+      if a
+        return ME_LARGE
+      return ME_SMALL
+  return SAME
