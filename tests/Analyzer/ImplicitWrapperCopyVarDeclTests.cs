@@ -120,4 +120,89 @@ public class ImplicitWrapperCopyVarDeclTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
     }
+
+    /// <summary>`var v = a.view()` is rejected: Viewed[T] is a scoped token that can't escape.</summary>
+    [Fact]
+    public void Analyze_VarDecl_ViewedFromCall_IsError()
+    {
+        string source = """
+                        entity Node
+                          value: S64
+
+                        routine start()
+                          var a = Node(value: 1)
+                          var v = a.view()
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy &&
+                e.Message.Contains(value: "Viewed",
+                    comparisonType: StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>`var g = a.grasp()` is rejected: Grasped[T] is a scoped token that can't escape.</summary>
+    [Fact]
+    public void Analyze_VarDecl_GraspedFromCall_IsError()
+    {
+        string source = """
+                        entity Node
+                          value: S64
+
+                        routine start()
+                          var a = Node(value: 1)
+                          var g = a.grasp()
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy &&
+                e.Message.Contains(value: "Grasped",
+                    comparisonType: StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Inline chained access `a.view().value` is accepted — desugars as a scoped `using`.</summary>
+    [Fact]
+    public void Analyze_InlineMemberAccess_OnViewedCall_IsAccepted()
+    {
+        string source = """
+                        import IO/Console
+
+                        entity Node
+                          value: S64
+
+                        routine start()
+                          var a = Node(value: 1)
+                          show(f"{a.view().value}")
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
+    }
+
+    /// <summary>`using a.view() as v` is the supported form — accepted.</summary>
+    [Fact]
+    public void Analyze_UsingBlock_ViewedFromCall_IsAccepted()
+    {
+        string source = """
+                        import IO/Console
+
+                        entity Node
+                          value: S64
+
+                        routine start()
+                          var a = Node(value: 1)
+                          using a.view() as v
+                            show(f"{v.value}")
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
+    }
 }
