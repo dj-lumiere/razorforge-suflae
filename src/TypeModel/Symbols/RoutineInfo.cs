@@ -197,6 +197,40 @@ public sealed class RoutineInfo
     /// <summary>For resolved generics, the type arguments used.</summary>
     public List<TypeSymbol>? TypeArguments { get; init; }
 
+    /// <summary>
+    /// Parameter indices whose declared type is a marker protocol (<c>Referring[T]</c> or
+    /// <c>Controlling[T]</c>). These slots participate in monomorphization: each concrete
+    /// argument type at a call site produces a distinct specialization, so the protocol
+    /// name never appears in mangled symbols or LLVM IR.
+    /// </summary>
+    public List<int> MarkerProtocolParameterIndices
+    {
+        get
+        {
+            var indices = new List<int>();
+            for (int i = 0; i < Parameters.Count; i++)
+            {
+                if (IsMarkerProtocolType(type: Parameters[index: i].Type))
+                {
+                    indices.Add(item: i);
+                }
+            }
+            return indices;
+        }
+    }
+
+    private static bool IsMarkerProtocolType(TypeSymbol type)
+    {
+        if (type is not ProtocolTypeInfo proto || proto.TypeArguments is not { Count: 1 })
+        {
+            return false;
+        }
+        string fullName = proto.GenericDefinition?.Name ?? proto.Name;
+        int bracket = fullName.IndexOf(value: '[');
+        string baseName = bracket >= 0 ? fullName[..bracket] : fullName;
+        return baseName is "Referring" or "Controlling";
+    }
+
     /// <summary>Visibility modifier.</summary>
     public VisibilityModifier Visibility { get; init; } = VisibilityModifier.Open;
 

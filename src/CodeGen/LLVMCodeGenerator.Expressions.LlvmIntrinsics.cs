@@ -328,7 +328,12 @@ public partial class LlvmCodeGenerator
         string toType = line.Substring(startIndex: toIdx + 4).Trim();
         if (toType != "ptr") return null;
         // Struct types in our IR are named %"Record.X" or %"Entity.X" or anonymous %Record.X.
-        if (!fromType.StartsWith(value: '%')) return null;
+        // Also handle non-pointer scalar value types that can't bitcast to ptr — e.g.
+        // `fp128` (used by F128's @llvm("fp128") layout). Integer→ptr is already rewritten
+        // to inttoptr upstream by FixIntPtrBitcast; ptr→ptr is a no-op and need not match.
+        bool isStruct = fromType.StartsWith(value: '%');
+        bool isFloat = fromType is "fp128" or "double" or "float" or "half" or "bfloat" or "x86_fp80" or "ppc_fp128";
+        if (!isStruct && !isFloat) return null;
         return (fromType, val, resultName);
     }
 

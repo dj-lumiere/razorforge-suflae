@@ -352,6 +352,15 @@ public sealed partial class SemanticVerifier
                     $"Argument '{param.Name}' of '{routine.Name}': cannot convert '{argType.Name}' to '{paramType.Name}'.",
                     location: argExpr.Location);
             }
+            else
+            {
+                // Implicit $refer/$control coercion for marker-protocol params.
+                // Wraps the argument expression as `arg.$refer()` / `arg.$control()` so
+                // codegen, reachability, and call-classification all see a fully resolved
+                // routine reference. The wrapper's $refer/$control method returns ?T (the
+                // inner entity), which matches the rewritten signature post-Phase 7.
+                TryInjectMarkerCoercion(routine, arguments, binding.Key, paramType, argType);
+            }
 
             // Phase 1: warn when a borrowed reference is passed where the parameter type is not
             // trivially copyable. Mirrors the var-decl / assignment rule — the same explicit
@@ -1207,4 +1216,94 @@ public sealed partial class SemanticVerifier
 
     #endregion
 
+    /// <summary>
+    /// If <paramref name="paramType"/> is a marker protocol (Referring[T]/Controlling[T])
+    /// and the argument isn't already an in-flight inner T, wraps the argument expression
+    /// as `arg.$refer()` or `arg.$control()`. The resulting CallExpression has
+    /// ResolvedRoutine and ResolvedType set so downstream passes (reachability, codegen,
+    /// CallOverloadResolutionPass) treat it as a normal resolved method call.
+    /// </summary>
+    private void TryInjectMarkerCoercion(RoutineInfo routine, List<Expression> arguments,
+        int paramIndex, TypeSymbol paramType, TypeSymbol argType)
+    {
+        if (paramType is not ProtocolTypeInfo { TypeArguments: { Count: > 0 } } proto)
+            return;
+
+        ProtocolTypeInfo def = proto.GenericDefinition ?? proto;
+        string baseName = GetBaseTypeName(typeName: def.Name);
+        string methodName;
+        if (baseName == "Controlling") methodName = "$control";
+        else if (baseName == "Referring") methodName = "$refer";
+        else return;
+
+        // Pass-through: the argument is already typed as the same marker protocol. No
+        // coercion call is needed — Referring[T] is layout-compatible with inner T, so
+        // the rewritten signature (T param) accepts it directly. Phase 7's expression
+        // ResolvedType sweep retags the argument to inner T so codegen sees no marker.
+        if (argType is ProtocolTypeInfo argProto
+            && ReferenceEquals(argProto.GenericDefinition ?? argProto, def))
+        {
+            return;
+        }
+
+        TypeSymbol innerT = proto.TypeArguments![0]!;
+
+        // Locate the argument slot in `arguments`.
+        int slotIndex = -1;
+        Expression slotExpr = null!;
+        for (int i = 0; i < arguments.Count; i++)
+        {
+            Expression a = arguments[i];
+            if (a is NamedArgumentExpression na && na.Name == routine.Parameters[paramIndex].Name)
+            {
+                slotIndex = i;
+                slotExpr = a;
+                break;
+            }
+        }
+        if (slotIndex < 0)
+        {
+            // Positional: argument position equals paramIndex when no named args precede it.
+            // Walk arguments to find the positional slot at paramIndex.
+            int pos = 0;
+            for (int i = 0; i < arguments.Count; i++)
+            {
+                if (arguments[i] is NamedArgumentExpression) continue;
+                if (pos == paramIndex) { slotIndex = i; slotExpr = arguments[i]; break; }
+                pos++;
+            }
+        }
+        if (slotIndex < 0) return;
+
+        Expression inner = slotExpr is NamedArgumentExpression nx ? nx.Value : slotExpr;
+
+        // Skip if already coerced.
+        if (inner is CallExpression { Callee: MemberExpression { PropertyName: "$refer" or "$control" } })
+            return;
+
+        // Resolve the method on the source argument type.
+        RoutineInfo? coercion = _registry.LookupMethodOverload(type: argType,
+            methodName: methodName, argTypes: []);
+        coercion ??= _registry.LookupMethod(type: argType, methodName: methodName);
+        if (coercion == null) return;
+
+        var memberCallee = new MemberExpression(
+            Object: inner,
+            PropertyName: methodName,
+            Location: inner.Location);
+        var coerced = new CallExpression(
+            Callee: memberCallee,
+            Arguments: [],
+            Location: inner.Location)
+        {
+            ResolvedRoutine = coercion,
+            ResolvedType = innerT,
+            IsInFlight = true,
+            LoweringKind = CallClassifier.ClassifyMethodCall(method: coercion)
+        };
+
+        arguments[slotIndex] = slotExpr is NamedArgumentExpression na2
+            ? na2 with { Value = coerced }
+            : coerced;
+    }
 }

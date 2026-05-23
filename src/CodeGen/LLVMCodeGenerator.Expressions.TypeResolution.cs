@@ -675,13 +675,23 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private static void TryGetTransparentProtocolTarget(TypeInfo? type, out TypeInfo? targetType)
     {
-        if (type is ProtocolTypeInfo { Methods.Count: 0, TypeArguments: { Count: > 0 } } proto)
+        if (type is ProtocolTypeInfo { TypeArguments: { Count: > 0 } } proto
+            && HasOnlyMarkerCoercionMethods(proto))
         {
             targetType = proto.TypeArguments![index: 0]!;
             return;
         }
 
         targetType = type;
+    }
+
+    private static bool HasOnlyMarkerCoercionMethods(ProtocolTypeInfo proto)
+    {
+        foreach (ProtocolMethodInfo m in proto.Methods)
+        {
+            if (m.Name != "$refer" && m.Name != "$control") return false;
+        }
+        return true;
     }
 
     /// <summary>

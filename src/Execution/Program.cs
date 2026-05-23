@@ -55,7 +55,7 @@ internal partial class Program
                         .TrimStart(trimChar: '-');
 
         // Check if first arg is a command or a file
-        bool isCommand = command is "parse" or "tokenize" or "codegen" or BuildCommand or "buildandrun" or "cleanbuildandrun" or "check" or "validate-stdlib" or "help";
+        bool isCommand = command is "parse" or "tokenize" or "codegen" or BuildCommand or "buildandrun" or "check" or "validate-stdlib" or "help";
 
         if (!isCommand)
         {
@@ -129,41 +129,8 @@ internal partial class Program
                     buildMode: buildMode3,
                     dumpAst: dumpAst3,
                     saTiming: saTiming3,
-                    cleanNativeRuntime: false,
                     requireStartRoutine: requireStart3,
                     showBuildStages: showStages3);
-            }
-
-            case "cleanbuildandrun":
-            {
-                // Stage 1: rebuild the C# compiler project, then re-exec the freshly-built
-                // exe so this run actually uses the new compiler. The stage-2 env var stops
-                // the spawned child from looping back into another rebuild.
-                if (Environment.GetEnvironmentVariable(variable: CleanBuildAndRunStage2EnvVar)
-                    != "1")
-                {
-                    int compilerRc = RebuildCompilerProject();
-                    if (compilerRc != 0) return compilerRc;
-                    return ReExecCleanBuildAndRun(args: args);
-                }
-
-                // Stage 2: running inside the freshly-built compiler. Do a clean native
-                // runtime rebuild and then the normal buildandrun.
-                (string? entryFile, string? projectRoot, _,
-                    RfBuildMode buildMode4, bool dumpAst4, bool saTiming4, bool requireStart4, bool showStages4) = ResolveEntryFile(args: args, needsOutputArg: false);
-                if (entryFile == null)
-                {
-                    return 1;
-                }
-
-                return BuildAndRun(entryFile: entryFile,
-                    projectRoot: projectRoot,
-                    buildMode: buildMode4,
-                    dumpAst: dumpAst4,
-                    saTiming: saTiming4,
-                    cleanNativeRuntime: true,
-                    requireStartRoutine: requireStart4,
-                    showBuildStages: showStages4);
             }
 
             case "check":
@@ -394,9 +361,6 @@ internal partial class Program
         Console.WriteLine(
             value:
             "  RazorForge buildandrun --target <name>          - Build and execute manifest target");
-        Console.WriteLine(
-            value:
-            "  RazorForge cleanbuildandrun [entry-file]        - Clean-rebuild native runtime, then build and execute");
         Console.WriteLine(
             value:
             "  RazorForge check [entry-file]                   - Type-check only (no codegen)");
@@ -770,169 +734,9 @@ internal partial class Program
             "Unable to locate 'native/build' relative to the RazorForge executable.");
     }
 
-    /// <summary>
-    /// Rebuilds the native runtime library via cmake --build and copies the fresh artifacts next
-    /// to the compiler executable so the linker and final binary observe the same runtime.
-    /// Returns 0 on success or 1 if the build fails.
-    /// </summary>
-    private const string CleanBuildAndRunStage2EnvVar = "RF_CLEAN_BUILDANDRUN_STAGE2";
-
-    /// <summary>
-    /// Rebuilds the RazorForge C# project via <c>dotnet build</c>. On Windows the running
-    /// apphost holds <c>RazorForge.dll</c> locked against overwrite, so we rename any
-    /// existing build outputs aside before invoking msbuild — Windows allows renaming a
-    /// loaded DLL even when it cannot be overwritten. After this returns 0, the on-disk
-    /// <c>RazorForge.dll</c> / <c>RazorForge.exe</c> reflect the freshly-compiled bits;
-    /// the *current* process keeps running the old code, so the caller must re-exec to
-    /// pick up the new compiler.
-    /// </summary>
-    private static int RebuildCompilerProject()
+    private static int BuildNativeRuntime(string exeDir, string nativeBuildDir)
     {
-        string? exeDir;
-        try
-        {
-            exeDir = ResolveExecutableDirectory();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine(value: $"Failed to resolve executable directory: {ex.Message}");
-            return 1;
-        }
-
-        string? csprojPath = FindRazorForgeCsproj(startDir: exeDir);
-        if (csprojPath == null)
-        {
-            Console.WriteLine(
-                value: "Error: could not locate RazorForge.csproj relative to the running executable.");
-            return 1;
-        }
-
-        // Move the locked .dll/.exe aside so msbuild can write fresh ones. The renamed
-        // copies remain mapped into this process; they're cleaned up on a future run.
-        foreach (string artifact in new[] { "RazorForge.dll", "RazorForge.exe" })
-        {
-            string path = Path.Combine(path1: exeDir, path2: artifact);
-            if (!File.Exists(path: path)) continue;
-            try
-            {
-                using FileStream probe =
-                    File.Open(path: path, mode: FileMode.Open, access: FileAccess.Write,
-                        share: FileShare.ReadWrite);
-                // Writable — leave it; msbuild will overwrite normally.
-            }
-            catch (IOException)
-            {
-                try
-                {
-                    string sidecar =
-                        $"{path}.stale-{Environment.ProcessId}-{DateTime.UtcNow.Ticks}";
-                    File.Move(sourceFileName: path, destFileName: sidecar);
-                    TryDeleteSidecars(targetPath: path);
-                }
-                catch (IOException ex)
-                {
-                    Console.WriteLine(
-                        value: $"Warning: could not move locked '{path}' aside ({ex.Message}).");
-                }
-            }
-        }
-
-        Console.WriteLine(value: "=== REBUILDING RAZORFORGE COMPILER ===");
-        var psi = new ProcessStartInfo
-        {
-            FileName = "dotnet",
-            Arguments = $"build \"{csprojPath}\" -c Debug --nologo",
-            UseShellExecute = false,
-            RedirectStandardOutput = false,
-            RedirectStandardError = false
-        };
-
-        try
-        {
-            using var process = Process.Start(startInfo: psi);
-            if (process == null)
-            {
-                Console.WriteLine(value: "Failed to start dotnet build.");
-                return 1;
-            }
-            process.WaitForExit();
-            if (process.ExitCode != 0)
-            {
-                Console.WriteLine(value: $"Compiler rebuild failed (dotnet exited with code {process.ExitCode}).");
-                return process.ExitCode;
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine(value: $"Failed to invoke dotnet build: {ex.Message}");
-            return 1;
-        }
-
-        return 0;
-    }
-
-    /// <summary>
-    /// Re-executes the freshly-built compiler with the original args, signalling stage 2 via
-    /// an environment variable so the child runs <c>cleanbuildandrun</c> directly without
-    /// looping into another compiler rebuild.
-    /// </summary>
-    private static int ReExecCleanBuildAndRun(string[] args)
-    {
-        string? exePath = Environment.ProcessPath;
-        if (exePath == null || !File.Exists(path: exePath))
-        {
-            Console.WriteLine(value: "Error: could not determine current executable path for re-exec.");
-            return 1;
-        }
-
-        var psi = new ProcessStartInfo
-        {
-            FileName = exePath,
-            UseShellExecute = false
-        };
-        foreach (string arg in args) psi.ArgumentList.Add(item: arg);
-        psi.EnvironmentVariables[CleanBuildAndRunStage2EnvVar] = "1";
-
-        try
-        {
-            using var process = Process.Start(startInfo: psi);
-            if (process == null)
-            {
-                Console.WriteLine(value: "Failed to re-exec freshly-built compiler.");
-                return 1;
-            }
-            process.WaitForExit();
-            return process.ExitCode;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine(value: $"Failed to re-exec freshly-built compiler: {ex.Message}");
-            return 1;
-        }
-    }
-
-    private static string? FindRazorForgeCsproj(string startDir)
-    {
-        string? current = startDir;
-        for (int i = 0; i < 8 && current != null; i++)
-        {
-            string candidate = Path.Combine(path1: current, path2: "RazorForge.csproj");
-            if (File.Exists(path: candidate)) return candidate;
-            current = Path.GetDirectoryName(path: current);
-        }
-        return null;
-    }
-
-    private static int BuildNativeRuntime(string exeDir, string nativeBuildDir,
-        bool cleanFirst = false)
-    {
-        // Scope a clean rebuild to the razorforge_runtime target only — the cmake project
-        // also builds heavy vendored dependencies (sqlite, mbedtls, libsodium, …) that take
-        // many minutes to compile from scratch and rarely need rebuilding. `cleanbuildandrun`
-        // wants confidence in our own runtime, not a vendored-libs purge.
-        string buildArgs = cleanFirst
-            ? $"--build \"{nativeBuildDir}\" --target razorforge_runtime --clean-first"
-            : $"--build \"{nativeBuildDir}\"";
+        string buildArgs = $"--build \"{nativeBuildDir}\"";
         var psi = new ProcessStartInfo
         {
             FileName = "cmake",
@@ -1548,7 +1352,7 @@ internal partial class Program
     /// </summary>
     private static int BuildAndRun(string entryFile, string? projectRoot = null,
         RfBuildMode buildMode = RfBuildMode.Debug, bool dumpAst = false, bool saTiming = false,
-        bool cleanNativeRuntime = false, bool requireStartRoutine = true,
+        bool requireStartRoutine = true,
         bool showBuildStages = false)
     {
         // Remove stale per-target outputs before rebuilding.
@@ -1585,7 +1389,7 @@ internal partial class Program
         }
 
         int nativeResult = BuildNativeRuntime(exeDir: exeDir,
-            nativeBuildDir: nativeBuildDir, cleanFirst: cleanNativeRuntime);
+            nativeBuildDir: nativeBuildDir);
         if (nativeResult != 0)
         {
             return nativeResult;

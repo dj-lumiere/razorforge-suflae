@@ -1499,55 +1499,48 @@ public sealed partial class TypeRegistry
                 else if (type.IsGenericDefinition && protocol.TypeArguments is { Count: > 0 })
                 {
                     // Resolve generic implementing type against protocol type arguments.
+                    // We can only synthesize a concrete obeyer instance when every one of the
+                    // obeyer's own generic parameters can be bound from the protocol's args.
+                    // For `entity BitArrayIterator[N] obeys Iterator[Bool]`, the obeys-clause
+                    // names no obeyer parameter — N is unbindable, so skip and let the obeyer
+                    // surface as a concrete implementer only via real `BitArrayIterator[8]`-style
+                    // instantiations elsewhere in the program.
                     ProtocolTypeInfo protoDef2 = protocol.GenericDefinition ?? protocol;
                     if (protoDef2.GenericParameters is not { Count: > 0 } ||
-                        type.GenericParameters is not { Count: > 0 })
+                        type.GenericParameters is not { Count: > 0 } ||
+                        impl.TypeArguments is not { Count: > 0 })
                     {
                         continue;
                     }
 
-                    var mapping = new Dictionary<string, TypeInfo>();
-                    for (int i = 0;
-                         i < protoDef2.GenericParameters.Count &&
-                         i < protocol.TypeArguments.Count;
-                         i++)
+                    // Walk the obeyer's `obeys Proto[...]` slots: wherever the obeyer wrote its
+                    // own generic parameter (e.g. `obeys Iterator[T]` with obeyer param `T`),
+                    // bind that obeyer-param to the protocol's concrete arg in the same slot.
+                    // Concrete entries in impl.TypeArguments (e.g. `Bool`) contribute no binding.
+                    var obeyerBindings = new Dictionary<string, TypeInfo>();
+                    int slots = Math.Min(val1: impl.TypeArguments.Count,
+                        val2: protocol.TypeArguments.Count);
+                    for (int slot = 0; slot < slots; slot++)
                     {
-                        mapping[key: protoDef2.GenericParameters[index: i]] =
-                            protocol.TypeArguments[index: i];
-                    }
-
-                    var typeArgs = new List<TypeInfo>();
-                    if (impl.TypeArguments is { Count: > 0 })
-                    {
-                        foreach (TypeInfo implArg in impl.TypeArguments)
+                        if (impl.TypeArguments[index: slot] is GenericParameterTypeInfo gp &&
+                            type.GenericParameters.Contains(item: gp.Name))
                         {
-                            if (implArg is GenericParameterTypeInfo gp &&
-                                mapping.TryGetValue(key: gp.Name, value: out TypeInfo? concrete))
-                            {
-                                typeArgs.Add(item: concrete);
-                            }
-                            else if (mapping.TryGetValue(key: implArg.Name,
-                                         value: out TypeInfo? concrete2))
-                            {
-                                typeArgs.Add(item: concrete2);
-                            }
-                            else
-                            {
-                                typeArgs.Add(item: implArg);
-                            }
+                            obeyerBindings[key: gp.Name] = protocol.TypeArguments[index: slot];
                         }
                     }
-                    else
+
+                    if (obeyerBindings.Count != type.GenericParameters.Count)
                     {
-                        typeArgs.AddRange(collection: protocol.TypeArguments);
+                        continue;
                     }
 
-                    if (typeArgs.Count == type.GenericParameters.Count)
-                    {
-                        TypeInfo resolved = GetOrCreateResolution(genericDef: type,
-                            typeArguments: typeArgs);
-                        result.Add(item: resolved);
-                    }
+                    var typeArgs = type.GenericParameters
+                                       .Select(selector: p => obeyerBindings[key: p])
+                                       .ToList();
+
+                    TypeInfo resolved = GetOrCreateResolution(genericDef: type,
+                        typeArguments: typeArgs);
+                    result.Add(item: resolved);
                 }
                 else
                 {

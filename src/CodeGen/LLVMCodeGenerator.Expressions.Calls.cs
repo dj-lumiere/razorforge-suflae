@@ -512,6 +512,26 @@ public partial class LlvmCodeGenerator
             }
         }
 
+        // Intercept `record.hijack()` -> emit the caller's lvalue address directly as the
+        // resulting `Hijacked[T]` (which is `@llvm("ptr")`). The stdlib body
+        // `Hijacked[T](me.get_address())` runs in a callee frame where `me` is a by-value
+        // copy of the record; the address it would capture dies as soon as `hijack` returns,
+        // making subsequent `.extract()`/`.inject()` operate on dead stack. Intercepting at
+        // the caller keeps the Hijacked bound to the caller's storage. Same lvalue-shape
+        // restrictions and pointer-shaped-record exclusion as the `get_address` intercept.
+        if (member.PropertyName == "hijack" && arguments.Count == 0)
+        {
+            TypeInfo? receiverTypeForHijack = GetExpressionType(expr: member.Object);
+            if (receiverTypeForHijack is RecordTypeInfo recordHijackReceiver
+                && !recordHijackReceiver.HasDirectBackendType
+                || receiverTypeForHijack is RecordTypeInfo { HasDirectBackendType: true } primShape
+                   && primShape.BackendType != "ptr")
+            {
+                string lvaluePtr = EmitLvalueAddress(sb: sb, expr: member.Object);
+                return lvaluePtr;
+            }
+        }
+
         (string receiver, TypeInfo? receiverType) = ResolveMemberRoutineCallReceiver(sb: sb,
             member: member);
 
@@ -578,7 +598,8 @@ public partial class LlvmCodeGenerator
                 loweringKind is CallLoweringKind.DirectMemberRoutine or CallLoweringKind.RuntimeDispatch:
                 throw new InvalidOperationException(
                     $"Method call .{member.PropertyName} on {receiverType.FullName} reached codegen " +
-                    $"with loweringKind={loweringKind} but no resolved method. SA must resolve this.");
+                    $"with loweringKind={loweringKind} but no resolved method. Semantic verifier" +
+                    $" must resolve this.");
             case null when arguments.Count == 0 &&
                            _registry.LookupType(name: conversionTypeName) != null:
             {

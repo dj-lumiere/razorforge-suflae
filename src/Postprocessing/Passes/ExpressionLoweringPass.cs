@@ -597,7 +597,8 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 if (resultType == null)
                     throw new InvalidOperationException(
                         $"ConditionalExpression reached ExpressionLoweringPass without a resolved type " +
-                        $"at {cond.Location}. SA must annotate all ConditionalExpression nodes.");
+                        $"at {cond.Location}. Semantic verifier must annotate all " +
+                        $"ConditionalExpression nodes.");
 
                 var (condH, loweredCond) = LowerExpr(cond.Condition);
                 var (trueH, loweredTrue) = LowerExpr(cond.TrueExpression);
@@ -802,7 +803,8 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 if (resolvedElem == null)
                     throw new InvalidOperationException(
                         $"RangeExpression at {range.Location} has no resolvable element type. " +
-                        "SA must annotate the start/end expressions before ExpressionLoweringPass runs.");
+                        "Semantic verifier must annotate the start/end expressions before " +
+                        "ExpressionLoweringPass runs.");
 
                 List<TypeExpression> typeArgs = [TypeInfoToExpr(type: resolvedElem, loc: loc)];
 
@@ -1561,6 +1563,30 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                     Right: constant,
                     Location: ipe.Location) { ResolvedType = boolType };
                 return (hoisted, cmpT);
+            }
+        }
+
+        // Choice type: `c is CASE` -> `c == CASE_value`; `c isnot CASE` -> `c != CASE_value`.
+        // ChoiceType is backed by an integer (default i32) with each case having a discrete
+        // ComputedValue; comparison lowers to a direct integer eq/ne against the case constant.
+        if (ipe.Pattern is TypePattern choiceTp && operandType is ChoiceTypeInfo choiceType)
+        {
+            ChoiceCaseInfo? choiceCase = choiceType.Cases.FirstOrDefault(
+                c => c.Name == choiceTp.Type.Name);
+            if (choiceCase != null && boolType != null)
+            {
+                TypeInfo underlying = choiceType.UnderlyingType
+                    ?? ctx.Registry.LookupType(name: "S32")!;
+                var caseLit = new LiteralExpression(
+                    Value: (long)choiceCase.ComputedValue,
+                    LiteralType: TokenType.S32Literal,
+                    Location: ipe.Location) { ResolvedType = underlying };
+                Expression cmpChoice = new BinaryExpression(
+                    Left: loweredExpr,
+                    Operator: ipe.IsNegated ? BinaryOperator.NotEqual : BinaryOperator.Equal,
+                    Right: caseLit,
+                    Location: ipe.Location) { ResolvedType = boolType };
+                return (hoisted, cmpChoice);
             }
         }
 

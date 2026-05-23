@@ -83,6 +83,22 @@ public sealed class EntityTypeInfo : TypeInfo
         string resolvedName = $"{Name}[{string.Join(separator: ", ",
             values: typeArguments.Select(selector: t => t.FullName))}]";
 
+        // Build the substitution map up front so it can be applied to ImplementedProtocols
+        // as well as member-variable types. Without substituting protocols, an obeys-clause
+        // referencing a concrete type that does not appear in the entity's own generic
+        // parameter list (e.g. `entity BitArrayIterator[N] obeys Iterator[Bool]`) leaves the
+        // protocol's own type arguments un-resolved on the concrete instance, and downstream
+        // positional matching collapses the protocol arg into the entity's first slot.
+        var substitution = new Dictionary<string, TypeInfo>();
+        for (int i = 0; i < GenericParameters.Count; i++)
+        {
+            substitution[key: GenericParameters[index: i]] = typeArguments[index: i];
+        }
+
+        var substitutedProtocols = ImplementedProtocols
+            .Select(selector: p => (TypeInfo)(ProtocolTypeInfo)RecordTypeInfo.SubstituteType(type: p, substitution: substitution))
+            .ToList();
+
         // Detect cycles from self-referential member types (e.g., BTreeListNode[T].children:
         // List[BTreeListNode[T]]). Return the in-progress entity so the recursive reference
         // points to the same object that will have its members filled in below.
@@ -97,7 +113,7 @@ public sealed class EntityTypeInfo : TypeInfo
                 : new EntityTypeInfo(name: resolvedName)
                 {
                     MemberVariables = [],
-                    ImplementedProtocols = ImplementedProtocols,
+                    ImplementedProtocols = substitutedProtocols,
                     TypeArguments = typeArguments,
                     GenericDefinition = this,
                     Visibility = Visibility,
@@ -112,7 +128,7 @@ public sealed class EntityTypeInfo : TypeInfo
         var entity = new EntityTypeInfo(name: resolvedName)
         {
             MemberVariables = [],
-            ImplementedProtocols = ImplementedProtocols,
+            ImplementedProtocols = substitutedProtocols,
             TypeArguments = typeArguments,
             GenericDefinition = this,
             Visibility = Visibility,
@@ -123,13 +139,6 @@ public sealed class EntityTypeInfo : TypeInfo
 
         try
         {
-            // Create type parameter substitution map
-            var substitution = new Dictionary<string, TypeInfo>();
-            for (int i = 0; i < GenericParameters.Count; i++)
-            {
-                substitution[key: GenericParameters[index: i]] = typeArguments[index: i];
-            }
-
             // Substitute types in member variables; self-referential inner types resolve to
             // `entity` via the cycle detection path above rather than an empty shell.
             entity.MemberVariables = MemberVariables

@@ -475,6 +475,31 @@ public sealed partial class SemanticVerifier
             target: _target,
             buildMode: _buildMode) { SaTiming = SaTiming };
 
+        // Rewrite Referring[T]/Controlling[T] params to inner T before reachability so
+        // the resulting RegistryKeys / mangled names captured downstream match codegen.
+        // Call-site $refer/$control coercion was already injected during SA argument binding.
+        var markerCtx = new PostprocessingContext(registry: _registry,
+            variantBodies: _variantBodies,
+            synthesizedBodies: _synthesizedBodies.ToDictionary(
+                keySelector: kvp => kvp.Key,
+                elementSelector: kvp => kvp.Value.Body),
+            target: _target,
+            buildMode: _buildMode);
+        var markerPass = new MarkerProtocolDesugarPass(markerCtx);
+        markerPass.RewriteAllSignatures();
+        foreach ((Program program, _, _) in _registry.UserPrograms)
+        {
+            MarkerProtocolDesugarPass.RewriteAstSignatures(program);
+            markerPass.Run(program);
+        }
+        foreach ((Program program, _, _) in _registry.StdlibPrograms)
+        {
+            MarkerProtocolDesugarPass.RewriteAstSignatures(program);
+            markerPass.Run(program);
+        }
+        markerPass.RunOnVariantBodies();
+        markerPass.RunOnSynthesizedBodies();
+
         if (SaTiming)
         {
             var sw = Stopwatch.StartNew();

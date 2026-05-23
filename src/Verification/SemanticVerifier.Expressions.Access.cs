@@ -17,7 +17,8 @@ public sealed partial class SemanticVerifier
 
     private static bool TryGetTransparentProtocolTarget(TypeSymbol type, out TypeSymbol targetType)
     {
-        if (type is ProtocolTypeInfo { Methods.Count: 0, TypeArguments: { Count: > 0 } } proto)
+        if (type is ProtocolTypeInfo { TypeArguments: { Count: > 0 } } proto
+            && HasOnlyMarkerCoercionMethods(proto))
         {
             targetType = proto.TypeArguments![index: 0]!;
             return true;
@@ -25,6 +26,20 @@ public sealed partial class SemanticVerifier
 
         targetType = type;
         return false;
+    }
+
+    /// <summary>
+    /// True if the protocol declares no methods other than the implicit-coercion markers
+    /// $refer/$control. Such protocols (Referring[T], Controlling[T]) are transparent for
+    /// member access — `param.member` falls through to the inner T.
+    /// </summary>
+    private static bool HasOnlyMarkerCoercionMethods(ProtocolTypeInfo proto)
+    {
+        foreach (ProtocolMethodInfo m in proto.Methods)
+        {
+            if (m.Name != "$refer" && m.Name != "$control") return false;
+        }
+        return true;
     }
 
     private static bool IsReadOnlyTransparentProtocol(TypeSymbol type)
