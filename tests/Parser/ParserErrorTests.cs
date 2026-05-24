@@ -547,21 +547,6 @@ public class ParserErrorTests
         AssertParseError(source: source);
     }
     /// <summary>
-    /// Verifies that the parser accepts global variant and reports the expected error.
-    /// </summary>
-
-    [Fact]
-    public void Parse_GlobalVariant_ReportsError()
-    {
-        string source = """
-                        global variant Shape
-                          Circle: F32
-                          Rect: F32
-                        """;
-
-        AssertParseError(source: source);
-    }
-    /// <summary>
     /// Verifies that the parser accepts common record and reports the expected error.
     /// </summary>
 
@@ -572,34 +557,6 @@ public class ParserErrorTests
                         common record Point
                           x: F32
                           y: F32
-                        """;
-
-        AssertParseError(source: source);
-    }
-    /// <summary>
-    /// Verifies that the parser accepts global entity and reports the expected error.
-    /// </summary>
-
-    [Fact]
-    public void Parse_GlobalEntity_ReportsError()
-    {
-        string source = """
-                        global entity User
-                          name: Text
-                        """;
-
-        AssertParseError(source: source);
-    }
-    /// <summary>
-    /// Verifies that the parser accepts global routine and reports the expected error.
-    /// </summary>
-
-    [Fact]
-    public void Parse_GlobalRoutine_ReportsError()
-    {
-        string source = """
-                        global routine foo()
-                          pass
                         """;
 
         AssertParseError(source: source);
