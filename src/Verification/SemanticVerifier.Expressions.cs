@@ -597,6 +597,7 @@ public sealed partial class SemanticVerifier
                 if (setItem is { IsFailable: true } && _currentRoutine != null)
                 {
                     _currentRoutine.HasFailableCalls = true;
+                    _currentRoutine.FailableCallees.Add(setItem);
                 }
 
                 if (IsReadOnlyTransparentProtocol(type: indexedObjectType))

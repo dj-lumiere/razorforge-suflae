@@ -168,6 +168,15 @@ public sealed class RoutineInfo
     public bool HasFailableCalls { get; set; }
 
     /// <summary>
+    /// Failable routines directly called by this routine. Populated during Phase 5 verification.
+    /// Used by <c>ErrorHandlingVariantPass</c> to propagate <see cref="HasThrow"/> /
+    /// <see cref="HasAbsent"/> / <see cref="ThrowableTypes"/> through the call graph so that
+    /// routines whose failability is purely propagated (e.g. <c>return Foo!(...)</c>) get the
+    /// right wrapper variants (<c>try_</c> / <c>check_</c> / <c>lookup_</c>) generated.
+    /// </summary>
+    public HashSet<RoutineInfo> FailableCallees { get; } = [];
+
+    /// <summary>
     /// Concrete crashable types directly thrown by this routine (or its corresponding
     /// <c>check_</c>/<c>lookup_</c> variant). Populated after Phase 5 body analysis.
     /// Does not include types thrown by called routines (propagated throws).

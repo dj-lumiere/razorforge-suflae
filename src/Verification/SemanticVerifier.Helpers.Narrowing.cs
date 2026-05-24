@@ -174,7 +174,9 @@ public sealed partial class SemanticVerifier
                 StatementAlwaysTerminates(statement: ifStmt.ThenStatement) &&
                 StatementAlwaysTerminates(statement: ifStmt.ElseStatement),
             WhenStatement whenStmt => whenStmt.Clauses.Count > 0 &&
-                                      _exhaustiveWhens.Contains(item: whenStmt) &&
+                                      (_exhaustiveWhens.Contains(item: whenStmt) ||
+                                       whenStmt.Clauses.Any(predicate: c =>
+                                           c.Pattern is ElsePattern or WildcardPattern)) &&
                                       whenStmt.Clauses.All(predicate: c =>
                                           StatementAlwaysTerminates(statement: c.Body)),
             DangerStatement danger => StatementAlwaysTerminates(statement: danger.Body),

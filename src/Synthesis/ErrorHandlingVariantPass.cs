@@ -4,6 +4,7 @@ using Compiler.Desugaring;
 using Compiler.Instantiation;
 using SyntaxTree;
 using TypeModel.Symbols;
+using TypeModel.Types;
 
 namespace Compiler.Synthesis;
 
@@ -33,6 +34,60 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
         // Snapshot before iteration -> registering variants adds new routines to the registry
         var routines = ctx.Registry.GetAllRoutines().ToList();
 
+        // Phase A: populate per-routine HasThrow/HasAbsent/ThrowableTypes from direct body
+        // scan. (Verifier sets HasThrow/HasAbsent for direct cases; we also need ThrowableTypes
+        // populated before propagation can fan them out through the call graph.)
+        foreach (RoutineInfo routine in routines)
+        {
+            if (!routine.IsFailable) continue;
+            if (!ctx.RoutineBodies.TryGetValue(key: routine.RegistryKey,
+                    value: out Statement? body)) continue;
+
+            ErrorHandlingAnalysis analysis = ErrorHandlingGenerator.AnalyzeBody(body);
+            if (analysis.HasThrow) routine.HasThrow = true;
+            if (analysis.HasAbsent) routine.HasAbsent = true;
+            foreach (TypeInfo t in analysis.ThrownTypes)
+            {
+                if (!routine.ThrowableTypes.Contains(t)) routine.ThrowableTypes.Add(t);
+            }
+        }
+
+        // Phase B: fixpoint propagation through FailableCallees. A routine whose failability
+        // is purely propagated (e.g. `routine S64_from_text!(t: Text) -> S64
+        // return S64!(from_text: t)`) has HasThrow=HasAbsent=false but FailableCallees={S64.$create!}.
+        // We OR the callees' state into the caller until no further change.
+        bool changed = true;
+        while (changed)
+        {
+            changed = false;
+            foreach (RoutineInfo routine in routines)
+            {
+                if (!routine.IsFailable) continue;
+                foreach (RoutineInfo callee in routine.FailableCallees)
+                {
+                    if (callee.HasThrow && !routine.HasThrow)
+                    {
+                        routine.HasThrow = true;
+                        changed = true;
+                    }
+                    if (callee.HasAbsent && !routine.HasAbsent)
+                    {
+                        routine.HasAbsent = true;
+                        changed = true;
+                    }
+                    foreach (TypeInfo t in callee.ThrowableTypes)
+                    {
+                        if (!routine.ThrowableTypes.Contains(t))
+                        {
+                            routine.ThrowableTypes.Add(t);
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Phase C: variant generation (now reads propagated HasThrow/HasAbsent/ThrowableTypes).
         foreach (RoutineInfo routine in routines)
         {
             if (!routine.IsFailable) continue;

@@ -69,20 +69,18 @@ public sealed partial class SemanticVerifier
                 continue;
             }
 
-            // Quick AST scan -> skip routines with no throw/absent nodes
-            if (!generator.BodyHasThrowOrAbsent(body: routineDecl.Body))
-            {
-                continue;
-            }
+            // AST scan: routines with direct throw/absent get precise variants;
+            // routines without any (propagated-failability via called `!` routines) get
+            // pessimistic try_+lookup_ stubs so callsites can resolve them during SA.
+            bool hasDirect = generator.BodyHasThrowOrAbsent(body: routineDecl.Body);
 
             RoutineInfo? routineInfo =
                 ResolveRoutineInfoForDeclaration(decl: routineDecl, moduleName: currentModule);
             if (routineInfo == null || !routineInfo.IsFailable) continue;
             if (routineInfo.Annotations.Any(predicate: a => a == "crash_only")) continue;
 
-            // Generate and register variants from the parsed body (AST scan, no SA errors)
-            ErrorHandlingResult result =
-                generator.GenerateVariants(routine: routineInfo, body: routineDecl.Body);
+            ErrorHandlingResult result = generator.GenerateVariants(
+                routine: routineInfo, body: routineDecl.Body, pessimistic: !hasDirect);
             if (result.Error != null) continue;
 
             foreach (GeneratedVariant variant in result.Variants)
@@ -110,15 +108,14 @@ public sealed partial class SemanticVerifier
                 if (node is not RoutineDeclaration decl || !decl.IsFailable || decl.Body == null)
                     continue;
 
-                if (!generator.BodyHasThrowOrAbsent(body: decl.Body))
-                    continue;
+                bool hasDirect = generator.BodyHasThrowOrAbsent(body: decl.Body);
 
                 RoutineInfo? routineInfo = ResolveRoutineInfoForDeclaration(decl: decl);
                 if (routineInfo == null || !routineInfo.IsFailable) continue;
                 if (routineInfo.Annotations.Any(predicate: a => a == "crash_only")) continue;
 
-                ErrorHandlingResult result =
-                    generator.GenerateVariants(routine: routineInfo, body: decl.Body);
+                ErrorHandlingResult result = generator.GenerateVariants(
+                    routine: routineInfo, body: decl.Body, pessimistic: !hasDirect);
                 if (result.Error != null) continue;
 
                 foreach (GeneratedVariant variant in result.Variants)

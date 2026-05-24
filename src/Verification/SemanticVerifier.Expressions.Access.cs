@@ -390,6 +390,7 @@ public sealed partial class SemanticVerifier
         if (getItem is { IsFailable: true } && _currentRoutine != null)
         {
             _currentRoutine.HasFailableCalls = true;
+            _currentRoutine.FailableCallees.Add(getItem);
         }
 
         if (getItem?.ReturnType != null)
@@ -1027,6 +1028,7 @@ public sealed partial class SemanticVerifier
         if (match.IsFailable && _currentRoutine != null)
         {
             _currentRoutine.HasFailableCalls = true;
+            _currentRoutine.FailableCallees.Add(match);
         }
 
         return true;

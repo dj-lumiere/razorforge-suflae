@@ -283,6 +283,7 @@ public sealed partial class SemanticVerifier
                         if (creator.IsFailable && _currentRoutine != null)
                         {
                             _currentRoutine.HasFailableCalls = true;
+                            _currentRoutine.FailableCallees.Add(creator);
                             if (!_currentRoutine.IsFailable &&
                                 _currentRoutine.Name != StartRoutineName &&
                                 !_currentRoutine.IsSynthesized)
@@ -320,6 +321,7 @@ public sealed partial class SemanticVerifier
                     if (routine.IsFailable && _currentRoutine != null)
                     {
                         _currentRoutine.HasFailableCalls = true;
+                        _currentRoutine.FailableCallees.Add(routine);
 
                         // Non-failable routine (except start/synthesized) cannot call failable routines
                         if (!_currentRoutine.IsFailable && _currentRoutine.Name != StartRoutineName &&
@@ -579,6 +581,7 @@ public sealed partial class SemanticVerifier
                     if (routine.IsFailable && _currentRoutine != null)
                     {
                         _currentRoutine.HasFailableCalls = true;
+                        _currentRoutine.FailableCallees.Add(routine);
 
                         if (!_currentRoutine.IsFailable && _currentRoutine.Name != StartRoutineName &&
                             !_currentRoutine.IsSynthesized)
@@ -791,6 +794,7 @@ public sealed partial class SemanticVerifier
                     if (method.IsFailable && _currentRoutine != null)
                     {
                         _currentRoutine.HasFailableCalls = true;
+                        _currentRoutine.FailableCallees.Add(method);
 
                         if (!_currentRoutine.IsFailable && _currentRoutine.Name != StartRoutineName &&
                             !_currentRoutine.IsSynthesized)
@@ -1192,6 +1196,7 @@ public sealed partial class SemanticVerifier
                         if (creator.IsFailable && _currentRoutine != null)
                         {
                             _currentRoutine.HasFailableCalls = true;
+                            _currentRoutine.FailableCallees.Add(creator);
 
                             if (!_currentRoutine.IsFailable && _currentRoutine.Name != StartRoutineName &&
                                 !_currentRoutine.IsSynthesized)

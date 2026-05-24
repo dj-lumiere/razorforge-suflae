@@ -57,7 +57,18 @@ public sealed class ErrorHandlingGenerator
     /// <param name="routine">The routine to analyze.</param>
     /// <param name="body">The routine's body statement.</param>
     /// <returns>The result containing generated variants and any errors.</returns>
-    public ErrorHandlingResult GenerateVariants(RoutineInfo routine, Statement body)
+    public ErrorHandlingResult GenerateVariants(RoutineInfo routine, Statement body) =>
+        GenerateVariants(routine: routine, body: body, pessimistic: false);
+
+    /// <summary>
+    /// Generates wrapper variants. When <paramref name="pessimistic"/> is true, the analysis is
+    /// forced to <c>HasThrow=true, HasAbsent=true</c> regardless of body contents — used by
+    /// pre-registration for failable routines whose body has no direct <c>throw</c>/<c>absent</c>
+    /// (failability is propagated from called <c>!</c> routines) so that <c>try_</c>/<c>lookup_</c>
+    /// stub variants exist by name for SA resolution. <see cref="ErrorHandlingVariantPass"/>
+    /// later refines them after fixpoint propagation.
+    /// </summary>
+    public ErrorHandlingResult GenerateVariants(RoutineInfo routine, Statement body, bool pessimistic)
     {
         if (!routine.IsFailable)
         {
@@ -67,9 +78,28 @@ public sealed class ErrorHandlingGenerator
         // Phase 1: Keyword Detection
         ErrorHandlingAnalysis analysis = AnalyzeBody(body: body);
 
-        // Propagated failability: calling other failable functions counts as HasThrow
-        // because their throws propagate through this function
-        if (routine.HasFailableCalls)
+        if (pessimistic)
+        {
+            analysis.HasThrow = true;
+            analysis.HasAbsent = true;
+        }
+
+        // Propagated failability: callees' HasThrow/HasAbsent/ThrowableTypes are merged in
+        // here. ErrorHandlingVariantPass runs a fixpoint over FailableCallees beforehand
+        // so by the time we land here, routine.HasThrow/HasAbsent already reflect the
+        // transitive closure for routines whose failability is purely propagated
+        // (e.g. `routine S64_from_text!(t: Text) -> S64 return S64!(from_text: t)`).
+        if (routine.HasThrow) analysis.HasThrow = true;
+        if (routine.HasAbsent) analysis.HasAbsent = true;
+        foreach (TypeInfo t in routine.ThrowableTypes)
+        {
+            if (!analysis.ThrownTypes.Contains(t)) analysis.ThrownTypes.Add(t);
+        }
+
+        // If no direct or propagated throw/absent info but the routine calls failable
+        // routines, conservatively assume throw (legacy behavior for arithmetic-overflow
+        // crashable calls etc.).
+        if (!analysis.HasThrow && !analysis.HasAbsent && routine.HasFailableCalls)
         {
             analysis.HasThrow = true;
         }
@@ -130,7 +160,7 @@ public sealed class ErrorHandlingGenerator
     /// </summary>
     /// <param name="body">The statement body to analyze.</param>
     /// <returns>Analysis result with throw/absent flags.</returns>
-    private static ErrorHandlingAnalysis AnalyzeBody(Statement body)
+    public static ErrorHandlingAnalysis AnalyzeBody(Statement body)
     {
         var analysis = new ErrorHandlingAnalysis();
         AnalyzeStatementRecursive(statement: body, analysis: analysis);

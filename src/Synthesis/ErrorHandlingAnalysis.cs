@@ -6,7 +6,7 @@ namespace Compiler.Synthesis;
 /// <summary>
 /// Result of analyzing throw/absent keywords in a failable function body.
 /// </summary>
-internal sealed class ErrorHandlingAnalysis
+public sealed class ErrorHandlingAnalysis
 {
     /// <summary>Whether the body contains any throw statements.</summary>
     public bool HasThrow { get; set; }
