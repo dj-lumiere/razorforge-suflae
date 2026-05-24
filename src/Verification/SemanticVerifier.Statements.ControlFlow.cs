@@ -275,13 +275,21 @@ public sealed partial class SemanticVerifier
             bool hasCatchAll = whenStmt.Clauses.Any(predicate: c =>
                 c.Pattern is WildcardPattern or ElsePattern or IdentifierPattern);
 
-            if (!hasCatchAll)
+            if (hasCatchAll)
+            {
+                _exhaustiveWhens.Add(item: whenStmt);
+            }
+            else
             {
                 ExhaustivenessResult exhaustiveness = CheckExhaustiveness(
                     clauses: whenStmt.Clauses,
                     matchedType: matchedType);
 
-                if (!exhaustiveness.IsExhaustive)
+                if (exhaustiveness.IsExhaustive)
+                {
+                    _exhaustiveWhens.Add(item: whenStmt);
+                }
+                else
                 {
                     string missing = exhaustiveness.MissingCases.Count > 0
                         ? $" Missing cases: {string.Join(separator: ", ", values: exhaustiveness.MissingCases)}."

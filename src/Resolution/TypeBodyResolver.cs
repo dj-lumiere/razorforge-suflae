@@ -154,12 +154,17 @@ internal sealed class TypeBodyResolver
                     ? _typeResolver.ResolveType(typeExpr: memberVariable.Type)
                     : ErrorTypeInfo.Instance;
 
-                // Records can only contain value types + storable wrappers (Hijacked, Retained, Shared, Tracked, Marked)
-                // Scoped tokens (Viewed, Grasped, Inspected, Claimed), entities, and reference tuples are not allowed
+                // Records can contain: value types, bound entities/crashables (pointer-shaped when bound),
+                // generic parameters, and storable wrappers (Hijacked, Retained, Shared, Tracked, Marked, Owned).
+                // Scoped tokens (Viewed, Grasped, Inspected, Claimed) are wrappers NOT in the storable set.
+                bool isBoundReference =
+                    memberVariableType?.Category == TypeCategory.Entity ||
+                    memberVariableType?.Category == TypeCategory.Crashable;
                 if (memberVariableType != null &&
                     memberVariableType is not ErrorTypeInfo &&
                     memberVariableType is not GenericParameterTypeInfo &&
                     !TypeRegistry.IsValueType(type: memberVariableType) &&
+                    !isBoundReference &&
                     !(memberVariableType is WrapperTypeInfo wrapper &&
                       StorableWrapperTypes.Contains(item: GetBaseTypeName(typeName: wrapper.Name))))
                 {
@@ -522,15 +527,9 @@ internal sealed class TypeBodyResolver
                              "Use failable routines (!) instead of storing Result/Lookup in variants.",
                     location: member.Location);
             }
-            // #207: RazorForge only — bare entities are banned in variants (ownership undefined)
-            else if (_sa._registry.Language == Language.RazorForge &&
-                     memberType.Category is TypeCategory.Entity or TypeCategory.Crashable)
-            {
-                _sa.ReportError(code: SemanticDiagnosticCode.BareEntityInCarrierType,
-                    message: $"Variant member '{memberTypeName}' is a bare entity type. " +
-                             "Use an RC wrapper (Retained[T], Shared[T], Tracked[T]) or T to make ownership explicit.",
-                    location: member.Location);
-            }
+            // Post-Owned-retirement: bare entity T IS the bound/lvalue form (record-shaped
+            // pointer), so a variant member of type T owns the bound entity directly.
+            // Variant copyability derives from all members being Assignable.
 
             members.Add(item: new VariantMemberInfo(type: memberType)
             {

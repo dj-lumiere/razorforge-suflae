@@ -373,7 +373,7 @@ public partial class Tokenizer
                     AddToken(type: TokenType.Dot);
                     break;
                 case '+':
-                    AddToken(type: TokenType.Plus);
+                    ScanPlusOperator();
                     break;
                 case '-':
                     if (Match(expected: '>'))
@@ -382,34 +382,18 @@ public partial class Tokenizer
                     }
                     else
                     {
-                        AddToken(type: TokenType.Minus);
+                        ScanMinusOperator();
                     }
 
                     break;
                 case '*':
-                    if (Match(expected: '*'))
-                    {
-                        AddToken(type: TokenType.Power);
-                    }
-                    else
-                    {
-                        AddToken(type: TokenType.Star);
-                    }
-
+                    ScanStarOperator();
                     break;
                 case '/':
-                    if (Match(expected: '/'))
-                    {
-                        AddToken(type: TokenType.Divide);
-                    }
-                    else
-                    {
-                        AddToken(type: TokenType.Slash);
-                    }
-
+                    ScanSlashOperator();
                     break;
                 case '%':
-                    AddToken(type: TokenType.Percent);
+                    ScanPercentOperator();
                     break;
                 case ':':
                     // Note: `:` at entry depth was already handled above as a
@@ -420,20 +404,17 @@ public partial class Tokenizer
                     AddToken(type: TokenType.Colon);
                     break;
                 case '=':
-                    if (Match(expected: '='))
-                    {
-                        AddToken(type: TokenType.Equal);
-                    }
-                    else
-                    {
-                        AddToken(type: TokenType.Assign);
-                    }
-
+                    AddToken(type: Match(expected: '=') ? TokenType.Equal :
+                        Match(expected: '>') ? TokenType.FatArrow : TokenType.Assign);
                     break;
                 case '!':
                     if (Match(expected: '='))
                     {
                         AddToken(type: TokenType.NotEqual);
+                    }
+                    else if (Match(expected: '!'))
+                    {
+                        AddToken(type: TokenType.BangBang);
                     }
                     else
                     {
@@ -442,24 +423,43 @@ public partial class Tokenizer
 
                     break;
                 case '<':
-                    if (Match(expected: '='))
-                    {
-                        AddToken(type: TokenType.LessEqual);
-                    }
-                    else
-                    {
-                        AddToken(type: TokenType.Less);
-                    }
-
+                    ScanLessThanOperator();
                     break;
                 case '>':
-                    if (Match(expected: '='))
+                    ScanGreaterThanOperator();
+                    break;
+                case '&':
+                    AddToken(type: Match(expected: '=')
+                        ? TokenType.AmpersandAssign
+                        : TokenType.Ampersand);
+                    break;
+                case '|':
+                    AddToken(type: Match(expected: '=')
+                        ? TokenType.PipeAssign
+                        : TokenType.Pipe);
+                    break;
+                case '^':
+                    AddToken(type: Match(expected: '=')
+                        ? TokenType.CaretAssign
+                        : TokenType.Caret);
+                    break;
+                case '~':
+                    AddToken(type: TokenType.Tilde);
+                    break;
+                case '?':
+                    if (Match(expected: '.'))
                     {
-                        AddToken(type: TokenType.GreaterEqual);
+                        AddToken(type: TokenType.QuestionDot);
+                    }
+                    else if (Match(expected: '?'))
+                    {
+                        AddToken(type: Match(expected: '=')
+                            ? TokenType.NoneCoalesceAssign
+                            : TokenType.NoneCoalesce);
                     }
                     else
                     {
-                        AddToken(type: TokenType.Greater);
+                        AddToken(type: TokenType.Question);
                     }
 
                     break;
@@ -469,8 +469,44 @@ public partial class Tokenizer
                 case '\'':
                     ScanCharacter();
                     break;
+                // Prefixed string literals (b"..", r"..", f"..", rf"..", br"..") —
+                // mirror Tokenizer.Scanning so nested literals work inside f-string
+                // interpolation holes, e.g. f"{try_parse(bytes: b\"42\")}".
+                case 'r' or 'f':
+                    if (!TryParseTextPrefix())
+                    {
+                        ScanIdentifier();
+                    }
+
+                    break;
+                case 'b':
+                    if (!TryParseTextPrefix() && !TryParseByteLiteralPrefix())
+                    {
+                        ScanIdentifier();
+                    }
+
+                    break;
                 default:
-                    if (char.IsDigit(c: c))
+                    if (c == '0' && (Peek() == 'x' || Peek() == 'X'))
+                    {
+                        Advance(); // consume 'x'/'X'
+                        ScanPrefixedNumber(isHex: true);
+                    }
+                    else if (c == '0' && (Peek() == 'b' || Peek() == 'B') &&
+                             (Peek(offset: 1) == '0' || Peek(offset: 1) == '1' ||
+                              Peek(offset: 1) == '_'))
+                    {
+                        Advance(); // consume 'b'/'B'
+                        ScanPrefixedNumber(isHex: false);
+                    }
+                    else if (c == '0' && (Peek() == 'o' || Peek() == 'O') &&
+                             ((Peek(offset: 1) >= '0' && Peek(offset: 1) <= '7') ||
+                              Peek(offset: 1) == '_'))
+                    {
+                        Advance(); // consume 'o'/'O'
+                        ScanOctalNumber();
+                    }
+                    else if (char.IsDigit(c: c))
                     {
                         ScanNumber();
                     }

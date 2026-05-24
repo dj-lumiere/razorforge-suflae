@@ -291,10 +291,15 @@ public sealed partial class SemanticVerifier
                         $"Operator '{binary.Operator.ToStringRepresentation()}' cannot be used with choice type '{leftType.Name}'. Use 'is' for case matching.",
                         location: binary.Location);
                     return ErrorTypeInfo.Instance;
-                case FlagsTypeInfo:
+                case FlagsTypeInfo
+                    when binary.Operator is not (BinaryOperator.Equal or BinaryOperator.NotEqual):
                     ReportError(code: SemanticDiagnosticCode.ArithmeticOnFlagsType,
                         message:
-                        $"Operator '{binary.Operator.ToStringRepresentation()}' cannot be used with flags type '{leftType.Name}'. Use 'is'/'isnot'/'but' for flag operations.",
+                        $"Operator '{binary.Operator.ToStringRepresentation()}' cannot be used " +
+                        $"with flags type '{leftType.Name}'. Use 'is'/'isnot'/'but'/'isonly' for " +
+                        $"" +
+                        $"flag" +
+                        $" operations.",
                         location: binary.Location);
                     return ErrorTypeInfo.Instance;
             }
@@ -661,15 +666,9 @@ public sealed partial class SemanticVerifier
                 location: location);
         }
 
-        // Variant reassignment prohibition: variants cannot be reassigned
-        // Variants must be dismantled immediately with pattern matching
-        if (valueType is VariantTypeInfo)
-        {
-            ReportError(code: SemanticDiagnosticCode.VariantReassignmentNotAllowed,
-                message: $"Variant type '{valueType.Name}' cannot be reassigned. " +
-                         "Variants must be dismantled immediately with pattern matching.",
-                location: location);
-        }
+        // Variant reassignment is gated by Assignability (variant is Assignable iff every
+        // member is). The general AssignmentTypeMismatch/Assignable checks above already
+        // enforce this through the structural rule — no variant-specific check needed.
 
         // #42: ??= narrowing — `a ??= b` is expanded to `a = a ?? b`
         // When assigning `target = target ?? default` where target is Maybe[T],

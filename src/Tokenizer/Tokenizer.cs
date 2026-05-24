@@ -151,7 +151,6 @@ public partial class Tokenizer
             // Access modifiers
             [key: "secret"] = TokenType.Secret,
             [key: "posted"] = TokenType.Posted,
-            [key: "global"] = TokenType.Global,
             [key: "common"] = TokenType.Common,
 
             // Self references

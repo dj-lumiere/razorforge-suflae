@@ -125,13 +125,7 @@ public partial class LlvmCodeGenerator
     /// <summary>Map of C string values to their global constant names (for deduplication).</summary>
     private readonly Dictionary<string, string> _cstrConstants = new(StringComparer.Ordinal);
 
-    /// <summary>Map of global variable names to their types (module-level 'global' declarations).</summary>
-    private readonly Dictionary<string, TypeInfo> _globalVariables = new();
-
-    /// <summary>Map of global variable names to their LLVM global symbol names (e.g. "@MyMod.x").</summary>
-    private readonly Dictionary<string, string> _globalVariableLlvmNames = new();
-
-    /// <summary>Map of local variable names to their types for the current function.</summary>
+/// <summary>Map of local variable names to their types for the current function.</summary>
     private readonly Dictionary<string, TypeInfo> _localVariables = new();
 
     /// <summary>Map of source variable names to unique LLVM variable names (handles shadowing).</summary>
@@ -417,10 +411,6 @@ public partial class LlvmCodeGenerator
         GenerateTypeDeclarations();
         Mark(label: "Phase 1 TypeDeclarations");
 
-        // Phase 1b: Emit module-level global variable slots
-        GenerateGlobalVariableDeclarations();
-        Mark(label: "Phase 1b GlobalVariables");
-
         // Phase 2: Generate function declarations (signatures)
         GenerateRoutineDeclarations();
         Mark(label: "Phase 2 RoutineDeclarations");
@@ -442,86 +432,6 @@ public partial class LlvmCodeGenerator
     #endregion
 
     #region Code Generation Phases
-
-    /// <summary>
-    /// Emits module-level LLVM global variable declarations for all top-level
-    /// <c>global var</c> declarations in user programs.
-    /// Entity globals are emitted as <c>ptr</c>-typed globals initialized to null.
-    /// Declarations annotated with <c>@thread_local</c> use the <c>thread_local</c> prefix.
-    /// Initializer expressions (if any) are collected and emitted in a private
-    /// <c>@.rf_global_init</c> constructor registered via <c>@llvm.global_ctors</c>.
-    /// </summary>
-    private void GenerateGlobalVariableDeclarations() // NOSONAR S3776
-    {
-        var initStmts = new List<(string LlvmName, TypeInfo Type, Expression Init)>();
-
-        foreach ((Program userProgram, string _, string module) in _userPrograms)
-        {
-            foreach (ISyntaxTreeNode decl in userProgram.Declarations)
-            {
-                if (decl is not VariableDeclaration varDecl ||
-                    varDecl.Storage != StorageClass.Global)
-                    continue;
-
-                TypeInfo? varType = varDecl.Type != null
-                    ? ResolveTypeExpression(typeExpr: varDecl.Type)
-                    : null;
-                if (varType == null) continue;
-
-                bool isThreadLocal = varDecl.Annotations?.Any(a => a == "thread_local") == true;
-                string prefix = isThreadLocal
-                    ? "thread_local global"
-                    : "global";
-
-                // Use module-qualified LLVM name to avoid collisions.
-                // Q() quotes names that contain '/' or other non-identifier characters.
-                string rawGlobalName = string.IsNullOrEmpty(value: module)
-                    ? varDecl.Name
-                    : $"{module}.{varDecl.Name}";
-                string llvmName = $"@{Q(name: rawGlobalName)}";
-
-                // Entity globals are ptr-typed (heap-allocated); value-type globals use their
-                // concrete LLVM type with zeroinitializer (only valid with @thread_local).
-                string llvmVarType = varType is EntityTypeInfo
-                    ? "ptr"
-                    : GetLlvmType(type: varType);
-                string llvmInit = varType is EntityTypeInfo
-                    ? "null"
-                    : "zeroinitializer";
-                EmitLine(sb: _globalDeclarations,
-                    line: $"{llvmName} = {prefix} {llvmVarType} {llvmInit}");
-
-                _globalVariables[key: varDecl.Name] = varType;
-                _globalVariableLlvmNames[key: varDecl.Name] = llvmName;
-
-                if (varDecl.Initializer != null)
-                    initStmts.Add((LlvmName: llvmName, Type: varType, Init: varDecl.Initializer));
-            }
-        }
-
-        if (initStmts.Count == 0) return;
-
-        // Emit @.rf_global_init function that runs all global initializers
-        EmitLine(sb: _globalDeclarations,
-            line: "@llvm.global_ctors = appending global [1 x { i32, ptr, ptr }] " +
-                  "[{ i32, ptr, ptr } { i32 65535, ptr @.rf_global_init, ptr null }]");
-
-        var sb = _functionDefinitions;
-        EmitLine(sb: sb, line: "define private void @.rf_global_init() {");
-        EmitLine(sb: sb, line: EntryLabel);
-        foreach ((string llvmName, TypeInfo type, Expression init) in initStmts)
-        {
-            string val = EmitExpression(sb: sb, expr: init);
-            string storeType = type is EntityTypeInfo
-                ? "ptr"
-                : GetLlvmType(type: type);
-            EmitLine(sb: sb, line: $"  store {storeType} {val}, ptr {llvmName}");
-        }
-
-        EmitLine(sb: sb, line: RetVoidInstruction);
-        EmitLine(sb: sb, line: "}");
-        EmitLine(sb: sb, line: "");
-    }
 
     /// <summary>
     /// Generates LLVM type declarations for all types in the registry.

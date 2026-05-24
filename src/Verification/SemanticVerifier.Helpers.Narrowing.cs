@@ -160,7 +160,7 @@ public sealed partial class SemanticVerifier
     /// Unlike <see cref="HasDefiniteExit"/>, this does not count break/continue as terminating,
     /// since they exit loops but don't return a value from the routine.
     /// </summary>
-    private static bool StatementAlwaysTerminates(Statement statement)
+    private bool StatementAlwaysTerminates(Statement statement)
     {
         return statement switch
         {
@@ -174,8 +174,7 @@ public sealed partial class SemanticVerifier
                 StatementAlwaysTerminates(statement: ifStmt.ThenStatement) &&
                 StatementAlwaysTerminates(statement: ifStmt.ElseStatement),
             WhenStatement whenStmt => whenStmt.Clauses.Count > 0 &&
-                                      whenStmt.Clauses.Any(predicate: c =>
-                                          c.Pattern is ElsePattern or WildcardPattern) &&
+                                      _exhaustiveWhens.Contains(item: whenStmt) &&
                                       whenStmt.Clauses.All(predicate: c =>
                                           StatementAlwaysTerminates(statement: c.Body)),
             DangerStatement danger => StatementAlwaysTerminates(statement: danger.Body),

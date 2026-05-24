@@ -109,6 +109,13 @@ public sealed partial class SemanticVerifier
     /// <summary>Tracks the last variant variable declared, for immediate dismantling check (#58).</summary>
     private (string Name, SourceLocation Location)? _lastDeclaredVariantVar;
 
+    /// <summary>
+    /// When statements determined to be exhaustive (either via catch-all or full type coverage).
+    /// Consulted by control-flow termination analysis so that an exhaustive `when` whose every
+    /// arm terminates also terminates.
+    /// </summary>
+    private readonly HashSet<WhenStatement> _exhaustiveWhens = [];
+
     /// <summary>Tracks Lookup variables that must be dismantled before scope exit (#161).</summary>
     private readonly List<(string Name, SourceLocation Location)> _pendingLookupVars = [];
 

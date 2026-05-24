@@ -442,23 +442,16 @@ public partial class Parser
             Token op = PeekToken(offset: -1);
             SourceLocation location = GetLocation(token: op);
 
-            // Handle 'isonly' -- always a flags test (exact match)
+            // 'isonly' is exact equality on a flags value. Parse the RHS as a full
+            // expression so qualified flag names (Permission.READ), parenthesised flag
+            // combinations ((READ and WRITE)), and flag-valued variables (rw) all work.
+            // Desugars to `subject == rhs` — SA/lowering already handles `==` on flags.
             if (op.Type == TokenType.IsOnly)
             {
-                string firstFlag =
-                    ConsumeIdentifier(errorMessage: "Expected flag name after 'isonly'");
-                var flags = new List<string> { firstFlag };
-                while (Match(type: TokenType.And))
-                {
-                    flags.Add(
-                        item: ConsumeIdentifier(errorMessage: "Expected flag name after 'and'"));
-                }
-
-                expr = new FlagsTestExpression(Subject: expr,
-                    Kind: FlagsTestKind.IsOnly,
-                    TestFlags: flags,
-                    Connective: FlagsTestConnective.And,
-                    ExcludedFlags: null,
+                Expression rhs = ParseBitwiseOr();
+                expr = new BinaryExpression(Left: expr,
+                    Operator: BinaryOperator.Equal,
+                    Right: rhs,
                     Location: location);
                 continue;
             }
@@ -478,6 +471,17 @@ public partial class Parser
                 else
                 {
                     type = ParseType();
+
+                    // Accept qualified choice/variant cases: `is Color.RED`, `isnot HttpStatus.OK`.
+                    // Mirrors ParseTypePattern's dotted-name handling so f-string holes like
+                    // `f"{c is Color.RED}"` parse — without this, `.RED` leaks out of the hole
+                    // and the f-string parser sees a stray Dot before the closing brace.
+                    while (Match(type: TokenType.Dot))
+                    {
+                        string member = ConsumeIdentifier(
+                            errorMessage: "Expected identifier after '.' in 'is' pattern");
+                        type = type with { Name = type.Name + "." + member };
+                    }
                 }
 
                 // Check if this is a flags test chain: identifier followed by and/or/but

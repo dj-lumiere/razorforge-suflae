@@ -474,39 +474,10 @@ public sealed partial class SemanticVerifier
 
         foreach (Statement stmt in block.Statements)
         {
-            // #58: Check if previous statement declared a variant that hasn't been dismantled
-            if (_lastDeclaredVariantVar is { } pendingVariant)
-            {
-                bool isDismantling = stmt is WhenStatement when &&
-                                     when.Expression is IdentifierExpression id &&
-                                     id.Name == pendingVariant.Name;
-
-                if (!isDismantling)
-                {
-                    ReportError(code: SemanticDiagnosticCode.VariantNotDismantled,
-                        message:
-                        $"Variant variable '{pendingVariant.Name}' must be dismantled immediately with 'when'. " +
-                        "Variants cannot be used after other statements.",
-                        location: pendingVariant.Location);
-                }
-
-                _lastDeclaredVariantVar = null;
-            }
-
             AnalyzeStatement(statement: stmt);
         }
 
-        // #58: Check if the last statement declared a variant without a subsequent when
-        if (_lastDeclaredVariantVar is { } trailingVariant)
-        {
-            ReportError(code: SemanticDiagnosticCode.VariantNotDismantled,
-                message:
-                $"Variant variable '{trailingVariant.Name}' must be dismantled immediately with 'when'. " +
-                "Variants cannot be used after other statements.",
-                location: trailingVariant.Location);
-            _lastDeclaredVariantVar = null;
-        }
-
+        _lastDeclaredVariantVar = null;
         _registry.ExitScope();
     }
 
@@ -687,30 +658,7 @@ public sealed partial class SemanticVerifier
             }
         }
 
-        // #57: The 'global' keyword is only valid for entity types, unless @thread_local is present
-        // (thread-local globals may hold value types for per-thread state like counters).
-        bool isThreadLocalAnnotated = varDecl.Annotations?.Any(a => a == "thread_local") == true;
-        if (varDecl.Storage == StorageClass.Global && varType is not EntityTypeInfo &&
-            varType is not ErrorTypeInfo && !isThreadLocalAnnotated)
-        {
-            ReportError(code: SemanticDiagnosticCode.GlobalOnlyForEntities,
-                message:
-                $"The 'global' keyword is only valid for entity type variables, not for type '{varType.Name}'. " +
-                "Use '@thread_local global' for per-thread value type storage.",
-                location: varDecl.Location);
-        }
-
-        // @thread_local is only valid on global variable declarations
-        if (varDecl.Annotations != null &&
-            varDecl.Annotations.Any(a => a == "thread_local") &&
-            varDecl.Storage != StorageClass.Global)
-        {
-            ReportError(code: SemanticDiagnosticCode.ThreadLocalOnNonGlobal,
-                message: "'@thread_local' is only valid on global variable declarations.",
-                location: varDecl.Location);
-        }
-
-        // Register variable in current scope
+// Register variable in current scope
         // A new declaration shadows any prior steal of the same name in this scope.
         _deadrefVariables.Remove(item: varDecl.Name);
 
@@ -731,12 +679,6 @@ public sealed partial class SemanticVerifier
         {
             _variableLockPolicies[key: varDecl.Name] = _lastSharePolicy.Value.Policy;
             _lastSharePolicy = null;
-        }
-
-        // #58: Track variant variable declaration for immediate dismantling check
-        if (varType is VariantTypeInfo && varDecl.Initializer is not IdentifierExpression)
-        {
-            _lastDeclaredVariantVar = (varDecl.Name, varDecl.Location);
         }
 
         // #161: Track Lookup variables that must be dismantled before scope exit

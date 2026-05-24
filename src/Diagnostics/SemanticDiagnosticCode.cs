@@ -722,10 +722,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Result/Lookup stored in variable beyond immediate dismantling.</summary>
     ErrorHandlingTypeStoredInVariable = 758,
 
-    /// <summary>The 'global' keyword is only valid for entity type variables.</summary>
-    GlobalOnlyForEntities = 760,
-
-    /// <summary>Variant member cannot be a nested variant, Result[T], Lookup[T], token, or duplicate type.</summary>
+/// <summary>Variant member cannot be a nested variant, Result[T], Lookup[T], token, or duplicate type.</summary>
     VariantCaseContainsInvalidType = 764,
 
     /// <summary>Index operators ($getitem/$setitem) are only valid on entities.</summary>
@@ -859,9 +856,6 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Routine declaration body could not be matched to a registered routine.</summary>
     UnresolvedRoutineBody = 951,
-
-    /// <summary>'@thread_local' annotation is only valid on global variable declarations.</summary>
-    ThreadLocalOnNonGlobal = 952,
 
     /// <summary>Bare entity type used as type argument to Maybe/Result/Lookup. Wrap in Retained[T], Shared[T], or use Owned[T?] for unique ownership.</summary>
     BareEntityInCarrierType = 953,

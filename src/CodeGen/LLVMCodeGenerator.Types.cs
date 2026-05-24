@@ -374,6 +374,7 @@ public partial class LlvmCodeGenerator
             "double" => 8,
             "fp128" => 16,
             "ptr" => _pointerSizeBytes,
+            "void" => 0,
             _ => throw new InvalidOperationException(
                 message: $"Unknown LLVM type for size calculation: {llvmType}")
         };

@@ -93,17 +93,6 @@ public partial class LlvmCodeGenerator
                 $"Preset identifier '{identifier.Name}' reached LLVM codegen. PresetInliningPass must inline presets before backend entry.");
         }
 
-        // Check if this is a module-level global variable
-        if (_globalVariables.TryGetValue(key: identifier.Name, value: out TypeInfo? globalType) &&
-            _globalVariableLlvmNames.TryGetValue(key: identifier.Name,
-                value: out string? globalLlvm))
-        {
-            string globalLlvmType = GetLlvmType(type: globalType);
-            string tmp2 = NextTemp();
-            EmitLine(sb: sb, line: $"  {tmp2} = load {globalLlvmType}, ptr {globalLlvm}");
-            return tmp2;
-        }
-
         if (identifier.ResolvedType is RoutineTypeInfo routineType && TryResolveRoutineReference(
                 name: identifier.Name,
                 routineType: routineType,

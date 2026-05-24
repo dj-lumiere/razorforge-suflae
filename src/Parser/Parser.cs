@@ -376,17 +376,6 @@ public partial class Parser
         }
         if (Match(TokenType.Var, TokenType.Preset))
         {
-            // 'global var' is no longer accepted — use 'global name: Type' directly
-            if (storage == StorageClass.Global)
-            {
-                throw new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
-                    message: "'var' is not valid after 'global'. Use 'global name: Type = value' directly.",
-                    fileName: FileName,
-                    line: CurrentToken.Line,
-                    column: CurrentToken.Column,
-                    language: _language);
-            }
-
             // In type bodies (record, entity), var/preset are not allowed
             // MemberVariables use 'name: Type' syntax without var keywords
             if (_parsingTypeBody)
@@ -402,15 +391,6 @@ public partial class Parser
 
             return ParseVariableDeclaration(visibility: visibility, storage: storage,
                 annotations: annotations, isLateInit: declLateInit);
-        }
-
-        // 'global name: Type = value' — no 'var' required for global declarations.
-        if (storage == StorageClass.Global
-            && Check(type: TokenType.Identifier)
-            && PeekToken(offset: 1).Type == TokenType.Colon)
-        {
-            return ParseVariableDeclaration(visibility: visibility, storage: storage,
-                annotations: annotations);
         }
 
         // Pass statement/declaration (empty placeholder)
@@ -438,18 +418,6 @@ public partial class Parser
         // Routine (function) declaration
         if (Match(type: TokenType.Routine))
         {
-            // Validate: global storage is not allowed for routines
-            if (storage == StorageClass.Global)
-            {
-                throw new GrammarException(code: GrammarDiagnosticCode.InvalidDeclarationInBody,
-                    message: "'global' storage class is not valid for routines. " +
-                             "'global' can only be used for file-scope static variables",
-                    fileName: FileName,
-                    line: CurrentToken.Line,
-                    column: CurrentToken.Column,
-                    language: _language);
-            }
-
             return ParseRoutineDeclaration(visibility: visibility,
                 annotations: annotations,
                 storage: storage,

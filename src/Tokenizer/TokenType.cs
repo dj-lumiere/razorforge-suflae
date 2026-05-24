@@ -327,10 +327,7 @@ public enum TokenType
     /// <summary>Dangerous modifier - marks unsafe/dangerous routines or blocks</summary>
     Dangerous,
 
-    /// <summary>Global scope modifier - declares module-level global variable</summary>
-    Global,
-
-    /// <summary>
+/// <summary>
     /// Static/class-level routine modifier.
     /// No receiver (no 'me'), accessed via Type.method() syntax.
     /// </summary>

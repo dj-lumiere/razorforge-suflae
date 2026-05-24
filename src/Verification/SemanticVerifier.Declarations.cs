@@ -215,15 +215,9 @@ public sealed partial class SemanticVerifier
             memberVariableName: memberVariable.Name,
             location: memberVariable.Location);
 
-        // Validate that variant types cannot be stored in member variables
-        if (memberVariableType is VariantTypeInfo)
-        {
-            ReportError(code: SemanticDiagnosticCode.VariantMemberVariableNotAllowed,
-                message:
-                $"Variant type '{memberVariableType.Name}' cannot be stored in member variable '{memberVariable.Name}'. " +
-                "Variants must be dismantled immediately with pattern matching.",
-                location: memberVariable.Location);
-        }
+        // Variants ARE valid member-variable types — they're first-class values.
+        // Copyability is gated separately by the Assignable derivation rule (a variant
+        // is Assignable iff every member is).
 
         // Validate that Result<T> and Lookup<T> are not used as member variable types
         if (IsCarrierType(type: memberVariableType) && !IsMaybeType(type: memberVariableType))

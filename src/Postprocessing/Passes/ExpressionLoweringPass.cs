@@ -1546,8 +1546,13 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         // ComputedValue; comparison lowers to a direct integer eq/ne against the case constant.
         if (ipe.Pattern is TypePattern choiceTp && operandType is ChoiceTypeInfo choiceType)
         {
+            // Pattern name may be qualified (`Color.RED`) from f-string holes or bare (`RED`)
+            // from when-clause arms. Match on the trailing segment either way.
+            string choiceCaseName = choiceTp.Type.Name;
+            int choiceDot = choiceCaseName.LastIndexOf('.');
+            if (choiceDot >= 0) choiceCaseName = choiceCaseName.Substring(choiceDot + 1);
             ChoiceCaseInfo? choiceCase = choiceType.Cases.FirstOrDefault(
-                c => c.Name == choiceTp.Type.Name);
+                c => c.Name == choiceCaseName);
             if (choiceCase != null && boolType != null)
             {
                 TypeInfo underlying = choiceType.UnderlyingType
@@ -1574,22 +1579,41 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             {
                 FlagsMemberInfo? member = flagsType2.Members.FirstOrDefault(
                     m => m.Name == flagsTp.Type.Name);
-                ulong mask = member != null ? 1UL << member.BitPosition : 0UL;
-                var maskLit2 = new LiteralExpression(
-                    Value: mask, LiteralType: TokenType.U64Literal, Location: ipe.Location)
-                    { ResolvedType = u64Type2 };
-                var zeroLit2 = new LiteralExpression(
-                    Value: 0UL, LiteralType: TokenType.U64Literal, Location: ipe.Location)
-                    { ResolvedType = u64Type2 };
-                Expression bitAnd = new BinaryExpression(
+                if (member != null)
+                {
+                    ulong mask = 1UL << member.BitPosition;
+                    var maskLit2 = new LiteralExpression(
+                        Value: mask, LiteralType: TokenType.U64Literal, Location: ipe.Location)
+                        { ResolvedType = u64Type2 };
+                    var zeroLit2 = new LiteralExpression(
+                        Value: 0UL, LiteralType: TokenType.U64Literal, Location: ipe.Location)
+                        { ResolvedType = u64Type2 };
+                    Expression bitAnd = new BinaryExpression(
+                        Left: loweredExpr, Operator: BinaryOperator.BitwiseAnd,
+                        Right: maskLit2, Location: ipe.Location) { ResolvedType = u64Type2 };
+                    Expression cmpFlags = new BinaryExpression(
+                        Left: bitAnd,
+                        Operator: ipe.IsNegated ? BinaryOperator.Equal : BinaryOperator.NotEqual,
+                        Right: zeroLit2,
+                        Location: ipe.Location) { ResolvedType = boolType2 };
+                    return (hoisted, cmpFlags);
+                }
+
+                // Option A: `subj is <expr>` on flags-typed LHS where the name is not a
+                // member — treat as variable reference, lower to subset check
+                // `(subj & rhs) == rhs` (or `!= rhs` for isnot).
+                var rhsRef = new IdentifierExpression(
+                    Name: flagsTp.Type.Name, Location: ipe.Location)
+                    { ResolvedType = flagsType2 };
+                Expression bitAnd2 = new BinaryExpression(
                     Left: loweredExpr, Operator: BinaryOperator.BitwiseAnd,
-                    Right: maskLit2, Location: ipe.Location) { ResolvedType = u64Type2 };
-                Expression cmpFlags = new BinaryExpression(
-                    Left: bitAnd,
-                    Operator: ipe.IsNegated ? BinaryOperator.Equal : BinaryOperator.NotEqual,
-                    Right: zeroLit2,
+                    Right: rhsRef, Location: ipe.Location) { ResolvedType = flagsType2 };
+                Expression cmpSubset = new BinaryExpression(
+                    Left: bitAnd2,
+                    Operator: ipe.IsNegated ? BinaryOperator.NotEqual : BinaryOperator.Equal,
+                    Right: rhsRef,
                     Location: ipe.Location) { ResolvedType = boolType2 };
-                return (hoisted, cmpFlags);
+                return (hoisted, cmpSubset);
             }
         }
 

@@ -126,6 +126,15 @@ public sealed partial class SemanticVerifier
                         break;
                     }
 
+                    // Option A: `subj is <name>` where <name> is a variable of the same
+                    // flags type — lowered to subset check `(subj & rhs) == rhs`.
+                    var flagVar = _registry.CurrentScope.LookupVariable(name: flagName);
+                    if (flagVar?.Type is FlagsTypeInfo varFlagsType &&
+                        varFlagsType.Name == flagsForIs.Name)
+                    {
+                        break;
+                    }
+
                     ReportError(code: SemanticDiagnosticCode.FlagsMemberNotFound,
                         message:
                         $"Flags type '{flagsForIs.Name}' does not have a member named '{flagName}'.",
@@ -531,6 +540,20 @@ public sealed partial class SemanticVerifier
         if (IsCarrierType(type: matchedType))
         {
             return true;
+        }
+
+        // Variant: `is <MemberType>` matches if MemberType is one of the variant's members.
+        if (matchedType is VariantTypeInfo variantMatched)
+        {
+            foreach (VariantMemberInfo member in variantMatched.Members)
+            {
+                if (member.Type != null &&
+                    (member.Type.Name == patternType.Name ||
+                     member.Type.FullName == patternType.FullName))
+                {
+                    return true;
+                }
+            }
         }
 
         // If pattern type is a protocol, check if matched type implements it

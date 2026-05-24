@@ -138,14 +138,9 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Emits code for a variable declaration.
     /// Creates stack allocation and optionally stores initial value.
-    /// Global declarations (Storage == Global) are emitted at module level in
-    /// GenerateGlobalVariableDeclarations and are skipped here.
     /// </summary>
     private void EmitVariableDeclaration(StringBuilder sb, VariableDeclaration varDecl) // NOSONAR S3776
     {
-        // Global variables are declared at module level -> no local alloca needed.
-        if (varDecl.Storage == StorageClass.Global) return;
-
         // Determine the type
         TypeInfo? varType = ResolveVariableDeclType(varDecl: varDecl);
 
@@ -485,15 +480,6 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private void EmitVariableAssignment(StringBuilder sb, string varName, string value)
     {
-        // Check if this is a module-level global variable
-        if (_globalVariables.TryGetValue(key: varName, value: out TypeInfo? globalType) &&
-            _globalVariableLlvmNames.TryGetValue(key: varName, value: out string? globalLlvm))
-        {
-            string globalLlvmType = GetLlvmType(type: globalType);
-            EmitLine(sb: sb, line: $"  store {globalLlvmType} {value}, ptr {globalLlvm}");
-            return;
-        }
-
         if (!_localVariables.TryGetValue(key: varName, value: out TypeInfo? varType))
         {
             throw new InvalidOperationException(message: $"Variable '{varName}' not found");

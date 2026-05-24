@@ -496,6 +496,22 @@ public sealed partial class SemanticVerifier
             return true;
         }
 
+        // Variant auto-wrap: any value whose type matches a variant member type is
+        // implicitly coerced to the variant (the tag is set automatically). This is
+        // how variants are constructed — there is no explicit `Variant.of(...)` form.
+        if (target is VariantTypeInfo variantTarget)
+        {
+            foreach (VariantMemberInfo member in variantTarget.Members)
+            {
+                if (member.Type != null &&
+                    (member.Type.Name == source.Name ||
+                     member.Type.FullName == source.FullName))
+                {
+                    return true;
+                }
+            }
+        }
+
         // Generic type matching - check if resolution matches definition
         if (target.IsGenericDefinition && source.IsGenericResolution)
         {

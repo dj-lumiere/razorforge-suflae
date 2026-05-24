@@ -454,11 +454,6 @@ public partial class Parser
                 storage = StorageClass.Common;
                 hasStorage = true;
             }
-            else if (!hasStorage && Match(type: TokenType.Global))
-            {
-                storage = StorageClass.Global;
-                hasStorage = true;
-            }
             else
             {
                 break; // No more modifiers

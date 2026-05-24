@@ -176,15 +176,8 @@ internal sealed class SignatureResolver
                 }
             }
 
-            // Validate that variant types cannot be used as parameter types
-            if (paramType is VariantTypeInfo)
-            {
-                _sa.ReportError(code: SemanticDiagnosticCode.VariantParameterNotAllowed,
-                    message:
-                    $"Variant type '{paramType.Name}' cannot be used as a parameter type. " +
-                    "Return variants from routines and dismantle them with pattern matching.",
-                    location: param.Location);
-            }
+            // Variants ARE valid parameter types — pass-by-value transfers ownership of
+            // the payload (same rule as records containing entity fields).
 
             // Validate that Result<T> and Lookup<T> are not used as parameter types
             if (IsCarrierType(type: paramType) && !IsMaybeType(type: paramType))
