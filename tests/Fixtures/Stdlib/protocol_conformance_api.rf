@@ -3,22 +3,22 @@ import IO/Console
 
 # User-defined protocol + record conformance via `obeys`.
 protocol Greetable
-  routine Me.greet() -> Text
+  routine Me.greet() -> ?Text
 
 record Cat obeys Greetable
   name: Text
 
-routine Cat.greet() -> Text
+routine Cat.greet() -> ?Text
   return "Meow, I am " + me.name
 
 record Dog obeys Greetable
   name: Text
 
-routine Dog.greet() -> Text
+routine Dog.greet() -> ?Text
   return "Woof, I am " + me.name
 
 # Generic free function constrained by the protocol.
-routine introduce[T](thing: T) -> Text
+routine introduce[T](thing: T) -> ?Text
 needs T obeys Greetable
   return thing.greet()
 

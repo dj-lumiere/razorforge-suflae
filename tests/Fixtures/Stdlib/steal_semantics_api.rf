@@ -8,7 +8,7 @@ import IO/Console
 entity Resource
   tag: S64
 
-routine Resource.$create(tag: S64) -> Resource
+routine Resource.$create(tag: S64) -> ?Resource
   show(f"  create({tag})")
   return Resource(tag: tag)
 
@@ -16,7 +16,7 @@ routine Resource.$destroy()
   show(f"  destroy({me.tag})")
   return
 
-routine make_box() -> Resource
+routine make_box() -> ?Resource
   show(" make_box: create")
   return Resource(tag: 7)
   # ownership transferred to caller — no destroy at make_box exit

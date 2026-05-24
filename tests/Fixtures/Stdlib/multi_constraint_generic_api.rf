@@ -12,7 +12,7 @@ needs T obeys Equatable, Hashable
     discard s.add(value: x)
   return target in s
 
-routine min_of_three[T](a: T, b: T, c: T) -> T
+routine min_of_three[T](a: T, b: T, c: T) -> ?T
 needs T obeys Ordered
   return a.min(you: b).min(you: c)
 

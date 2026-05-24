@@ -77,8 +77,8 @@ routine start()
 
 # Helpers so we can call the failable `to_digit_bytes!` from a non-failable
 # routine via the auto-generated `try_*` variant.
-routine to_digit_bytes_s64!(v: S64) -> Bytes
+routine to_digit_bytes_s64!(v: S64) -> ?Bytes
   return v.to_digit_bytes!()
 
-routine to_digit_bytes_u64!(v: U64) -> Bytes
+routine to_digit_bytes_u64!(v: U64) -> ?Bytes
   return v.to_digit_bytes!()

@@ -9,7 +9,7 @@ record Point
 entity Counter
   value: S64
 
-routine Counter.$create(value: S64) -> Counter
+routine Counter.$create(value: S64) -> ?Counter
   return Counter(value: value)
 
 routine start()

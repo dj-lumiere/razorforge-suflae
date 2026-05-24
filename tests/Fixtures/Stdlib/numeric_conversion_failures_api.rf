@@ -1,6 +1,5 @@
 module Tests/Stdlib/NumericConversionFailuresApi
 import IO/Console
-import Core/Errors/Common
 
 # Conversion paths between numeric types. Narrowing conversions that overflow
 # should be observable; text-to-number parses should fail cleanly via try_/check_

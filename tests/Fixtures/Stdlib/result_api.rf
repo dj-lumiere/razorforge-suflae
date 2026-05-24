@@ -1,7 +1,5 @@
 module Tests/Stdlib/ResultApi
 import IO/Console
-import Core/Errors/Common
-import Core/Errors/DivisionByZeroError
 import BuilderService
 
 # Failable routine using throw only -> exposes check_ variant returning Result[T]

@@ -3,16 +3,16 @@ import IO/Console
 
 # Same-name routines with different param types/counts. Resolution picks by
 # argument types.
-routine describe(n: S64) -> Text
+routine describe(n: S64) -> ?Text
   return f"int:{n}"
 
-routine describe(t: Text) -> Text
+routine describe(t: Text) -> ?Text
   return f"text:{t}"
 
-routine describe(b: Bool) -> Text
+routine describe(b: Bool) -> ?Text
   return f"bool:{b}"
 
-routine describe(a: S64, b: S64) -> Text
+routine describe(a: S64, b: S64) -> ?Text
   return f"pair:{a},{b}"
 
 routine start()

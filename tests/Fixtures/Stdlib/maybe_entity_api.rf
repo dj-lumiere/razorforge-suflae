@@ -1,10 +1,8 @@
 module Tests/Stdlib/MaybeEntityApi
 import IO/Console
-import Core/Errors/Common
-import Core/Errors/DivisionByZeroError
 
 # Bare-entity return — compiler auto-wraps to Maybe[Text] in the try_ variant.
-routine get_text!(n: S64) -> Text
+routine get_text!(n: S64) -> ?Text
   when n
     == 0 => throw DivisionByZeroError()
     == 1 => return "hello"

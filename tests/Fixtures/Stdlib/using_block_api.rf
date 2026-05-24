@@ -8,7 +8,7 @@ import IO/Console
 entity Resource
   tag: S64
 
-routine Resource.$create(tag: S64) -> Resource
+routine Resource.$create(tag: S64) -> ?Resource
   show(f"  create({tag})")
   return Resource(tag: tag)
 

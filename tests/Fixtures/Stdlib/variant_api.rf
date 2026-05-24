@@ -8,7 +8,7 @@ variant Number
   Text
   Blank
 
-routine describe(n: Number) -> Text
+routine describe(n: Number) -> ?Text
   when n
     is S64 v  => return f"int:{v}"
     is F64 v  => return f"float:{v}"

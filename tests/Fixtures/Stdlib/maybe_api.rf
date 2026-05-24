@@ -1,6 +1,5 @@
 module Tests/Stdlib/MaybeApi
 import IO/Console
-import Core/Errors/Common
 
 # Record return type — exercises Maybe[Record] (no Owned auto-wrap).
 record Point

@@ -4,7 +4,7 @@ import IO/Console
 entity Box
   value: S64
 
-routine Box.$create(value: S64) -> Box
+routine Box.$create(value: S64) -> ?Box
   return Box(value: value)
 
 routine Box.set(value: S64)

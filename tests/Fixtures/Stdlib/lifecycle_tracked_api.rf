@@ -7,7 +7,7 @@ import IO/Console
 entity Tracer
   tag: S64
 
-routine Tracer.$create(tag: S64) -> Tracer
+routine Tracer.$create(tag: S64) -> ?Tracer
   return Tracer(tag: tag)
 
 routine Tracer.$destroy()

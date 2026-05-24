@@ -1,7 +1,5 @@
 module Tests/Stdlib/ErrorPathsApi
 import IO/Console
-import Core/Errors/Common
-import Core/Errors/DivisionByZeroError
 
 # Each common stdlib crashable should be constructible, expose crash_title /
 # crash_message, and be catchable via `when` on a check_/try_ variant.

@@ -23,7 +23,7 @@ routine start()
   show("--- overflow ---")
 
   # checked: catch via stdlib try_add
-  show(f"try_add S64_MAX + 1: {try_add(a: S64_MAX, b: 1_s64)}")
+  show(f"try_add S64_MAX + 1: {S64_MAX.try_add(1_s64)}")
 
   # wrap: S64_MAX + 1 = S64_MIN
   show(f"S64_MAX +% 1: {S64_MAX +% 1_s64}")
@@ -36,20 +36,20 @@ routine start()
 
   # --- Underflow ---
   show("--- underflow ---")
-  show(f"try_sub S64_MIN - 1: {try_sub(a: S64_MIN, b: 1_s64)}")
+  show(f"try_sub S64_MIN - 1: {S64_MIN.try_sub(1_s64)}")
   show(f"S64_MIN -% 1: {S64_MIN -% 1_s64}")
   show(f"S64_MIN -^ 1: {S64_MIN -^ 1_s64}")
 
   # --- Multiplication overflow ---
   show("--- mul overflow ---")
-  show(f"try_mul S64_MAX * 2: {try_mul(a: S64_MAX, b: 2_s64)}")
+  show(f"try_mul S64_MAX * 2: {S64_MAX.try_mul(2_s64)}")
   show(f"S64_MAX *% 2: {S64_MAX *% 2_s64}")
   show(f"S64_MAX *^ 2: {S64_MAX *^ 2_s64}")
 
   # --- Exponent overflow ---
   show("--- pow overflow ---")
-  show(f"try_pow 2 ** 62: {try_pow(a: 2_s64, b: 62_s64)}")
-  show(f"try_pow 2 ** 63 (overflow): {try_pow(a: 2_s64, b: 63_s64)}")
+  show(f"try_pow 2 ** 62: {2_s64.try_pow(62_s64)}")
+  show(f"try_pow 2 ** 63 (overflow): {2_s64.try_pow(63_s64)}")
 
   # --- Unary -: always checked-throw ---
   show("--- unary - ---")
@@ -58,7 +58,7 @@ routine start()
 
   # --- U64 underflow (unsigned) ---
   show("--- U64 underflow ---")
-  show(f"try_sub 0u64 - 1: {try_sub(a: 0_u64, b: 1_u64)}")
+  show(f"try_sub 0u64 - 1: {0_u64.try_sub(1_u64)}")
   show(f"0u64 -% 1: {0_u64 -% 1_u64}")
   show(f"0u64 -^ 1: {0_u64 -^ 1_u64}")
 

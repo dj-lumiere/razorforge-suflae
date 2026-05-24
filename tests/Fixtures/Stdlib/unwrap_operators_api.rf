@@ -1,7 +1,5 @@
 module Tests/Stdlib/UnwrapOperatorsApi
 import IO/Console
-import Core/Errors/Common
-import Core/Errors/DivisionByZeroError
 
 # Exercises the unwrap-or operator `??` and force-unwrap `!!` on Maybe/Result.
 

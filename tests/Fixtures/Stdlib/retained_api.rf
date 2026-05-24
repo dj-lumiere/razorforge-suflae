@@ -5,7 +5,7 @@ import BuilderService
 entity Node
   payload: S64
 
-routine Node.$create(payload: S64) -> Node
+routine Node.$create(payload: S64) -> ?Node
   return Node(payload: payload)
 
 routine start()
