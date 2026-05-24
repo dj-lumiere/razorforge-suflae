@@ -3,7 +3,7 @@ import IO/Console
 
 # Module-level `global var` — repurposed for entity-only globals per memory notes.
 # Records/primitives at module scope follow the same shape but aren't entity.
-global var counter: S64 = 0
+global counter: S64 = 0
 
 routine inc()
   counter = counter + 1

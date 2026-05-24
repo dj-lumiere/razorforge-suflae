@@ -1,7 +1,7 @@
-new ba: [false, false, false, false, false, false, false, false]
+new ba: BitArray([false, false, false, false, false, false, false, false])
 count: 8
 is_empty: false
-after setting 0,2,7: [true, false, true, false, false, false, false, true]
+after setting 0,2,7: BitArray([true, false, true, false, false, false, false, true])
 ba[0]: true
 ba[1]: false
 ba[2]: true
