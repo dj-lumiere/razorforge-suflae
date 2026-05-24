@@ -6,10 +6,10 @@ namespace RazorForge.Tests.Analyzer;
 using static TestHelpers;
 
 /// <summary>
-/// `$iter` is dunder-private to the iterator protocol — only the for-loop lowering
-/// (ControlFlowLoweringPass) may emit `xs.$iter()`. User code must use `for ... in ...`
-/// or iterable combinators (skip, take, map, ...). Defining `$iter` is allowed; calling
-/// it from user code is a compile error to prevent iterator-invalidation footguns.
+/// `$iter`, `$refer`, and `$control` are dunder-private — only the compiler's lowering
+/// passes may emit them (for-loop → $iter; argument coercion → $refer/$control). User
+/// code calling them directly is a compile error; otherwise the borrow / iterator could
+/// be stored in a var and outlive its source. Defining the dunder is still allowed.
 /// </summary>
 public class IterPrivacyTests
 {
@@ -41,6 +41,66 @@ public class IterPrivacyTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
+    }
+
+    [Fact]
+    public void UserCode_CallsDollarRefer_OnOwnedEntity_Rejected()
+    {
+        string source = """
+                        entity Counter
+                          value: S64
+
+                        routine start()
+                          var c = Counter(value: 1)
+                          var r = c.$refer()
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.DirectWiredRoutineCall);
+    }
+
+    [Fact]
+    public void UserCode_CallsDollarControl_OnOwnedEntity_Rejected()
+    {
+        string source = """
+                        entity Counter
+                          value: S64
+
+                        routine start()
+                          var c = Counter(value: 1)
+                          var w = c.$control()
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.DirectWiredRoutineCall);
+    }
+
+    [Fact]
+    public void ReferringParam_CallSiteCoercion_Resolves()
+    {
+        // The compiler injects `.$refer()` automatically at the Referring[T] param.
+        // No user-visible $refer call appears in source; the check must not fire on the
+        // synthesized coercion.
+        string source = """
+                        record Box
+                          n: S64
+
+                        routine echo(b: Referring[Box]) -> S64
+                          return 0_s64
+
+                        routine start()
+                          var b = Box(n: 1)
+                          var r = echo(b: b)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.DirectWiredRoutineCall);
     }
 
     [Fact]

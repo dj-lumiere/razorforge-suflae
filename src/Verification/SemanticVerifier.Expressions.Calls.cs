@@ -623,17 +623,24 @@ public sealed partial class SemanticVerifier
             {
                 TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
 
-                // $iter is dunder-private to the iterator protocol — only the for-loop lowering
-                // (ControlFlowLoweringPass) may emit it. User code must use `for ... in ...`
-                // or iterable combinators (skip, take, map, etc.) instead. Stdlib iterator
-                // implementations are exempt — they legitimately chain `me.source.$iter()`.
-                if (member.PropertyName == "$iter"
+                // $iter / $refer / $control are dunder-private to their protocols — only the
+                // corresponding lowering passes may emit them (for-loop → $iter; argument
+                // coercion → $refer/$control). Forbidding user calls prevents storing the
+                // result in a variable, which would let a borrow / iterator outlive its source.
+                // Stdlib is exempt — its iterator implementations and wrapper bodies chain these
+                // dunders directly (e.g., `me.source.$iter()`, wrapper `$refer` forwarders).
+                if ((member.PropertyName == "$iter"
+                     || member.PropertyName == "$refer"
+                     || member.PropertyName == "$control")
                     && !call.IsSynthesizedLowering
                     && !IsStdlibFile(filePath: call.Location.FileName))
                 {
+                    string hint = member.PropertyName == "$iter"
+                        ? "use a 'for' loop or iterable combinators (skip, take, map, etc.) instead."
+                        : "pass the value to a routine whose parameter is typed " +
+                          "Referring[T] / Controlling[T] — the compiler coerces it for you.";
                     ReportError(code: SemanticDiagnosticCode.DirectWiredRoutineCall,
-                        message: "Method '$iter' is internal to the iterator protocol — " +
-                                 "use a 'for' loop or iterable combinators (skip, take, map, etc.) instead.",
+                        message: $"Method '{member.PropertyName}' is internal to the compiler — {hint}",
                         location: call.Location);
                     return ErrorTypeInfo.Instance;
                 }

@@ -1299,6 +1299,7 @@ public sealed partial class SemanticVerifier
             ResolvedRoutine = coercion,
             ResolvedType = innerT,
             IsInFlight = true,
+            IsSynthesizedLowering = true,
             LoweringKind = CallClassifier.ClassifyMethodCall(method: coercion)
         };
 

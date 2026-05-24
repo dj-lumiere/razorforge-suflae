@@ -402,7 +402,8 @@ internal sealed class MarkerProtocolDesugarPass
                 Location: valueExpr.Location)
             {
                 ResolvedType = mk.InnerType,
-                IsInFlight = true
+                IsInFlight = true,
+                IsSynthesizedLowering = true
             };
 
             if (arg is NamedArgumentExpression na)
