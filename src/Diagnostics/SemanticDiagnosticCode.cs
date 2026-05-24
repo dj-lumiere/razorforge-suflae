@@ -773,6 +773,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Annotation arguments must be compile-time constant literals or identifiers.</summary>
     AnnotationArgNotLiteral = 784,
 
+    /// <summary>'with' expression base must obey the Assignable protocol.</summary>
+    WithBaseNotAssignable = 785,
+
     /// <summary>Deprecated — ValueTuple distinction removed, all tuples are inline structs.</summary>
     ValueTupleContainmentViolation = 779,
 

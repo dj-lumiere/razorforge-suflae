@@ -335,9 +335,15 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 break;
             }
 
-            // `$copy` synthesis removed: records are either trivially copyable (bitwise store)
-            // or non-copyable (must reconstruct with explicit verbs). See
-            // RazorForge-Wiki/docs/Records.md#copy-semantics.
+            case "$copy":
+            {
+                // For Assignable records: `return me` lowers to a structural bitwise copy
+                // via the return value. Raw-ptr wrappers (Hijacked/CPtr) and records that
+                // opt in with a custom $copy body keep their user-written version — this
+                // branch only fires when the routine was registered as a synth stub.
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildReturnMeBody(ownerType: record);
+                break;
+            }
 
             case RepresentMethodName:
                 // Generic definitions allowed: monomorphization substitutes type params.
@@ -522,6 +528,10 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildBreachStatement(logicBreachedErrorType: logicBreachedErrorType);
                 break;
+
+            case "$copy":
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildReturnMeBody(ownerType: choice);
+                break;
         }
     }
 
@@ -611,6 +621,20 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Builds the body: <c>return true</c> for zero-field entity types.
     /// Zero-field entities have no distinguishing state, so any two instances are structurally equal.
     /// </summary>
+    /// <summary>
+    /// Builds the body: <c>return me</c>. Used for synthesized <c>$copy()</c> on
+    /// Assignable types. Codegen emits a bitwise copy of the receiver into the
+    /// return slot — no method dispatch overhead at the call site.
+    /// </summary>
+    private static ReturnStatement BuildReturnMeBody(TypeInfo ownerType)
+    {
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+        {
+            ResolvedType = ownerType
+        };
+        return new ReturnStatement(Value: meRef, Location: _synthLoc);
+    }
+
     private static ReturnStatement BuildReturnTrueBody(TypeInfo boolType)
     {
         return new ReturnStatement(
@@ -1280,6 +1304,10 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     MakeLiteralReturn(value: unchecked((long)mask), returnType: routine.ReturnType ?? flags);
                 break;
             }
+
+            case "$copy":
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildReturnMeBody(ownerType: flags);
+                break;
         }
     }
 

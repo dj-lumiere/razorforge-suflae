@@ -52,6 +52,7 @@ public sealed partial class TypeRegistry
             ["$eq"] = ("Equatable", "$eq"),
             ["$ne"] = ("Equatable", "$eq"),
             ["$hash"] = ("Hashable", "$hash"),
+            ["$fast_hash"] = ("FastHashable", "$fast_hash"),
             ["$cmp"] = (ComparableProtocolName, "$cmp"),
             ["$lt"] = (ComparableProtocolName, "$cmp"),
             ["$le"] = (ComparableProtocolName, "$cmp"),
@@ -111,6 +112,7 @@ public sealed partial class TypeRegistry
             ["$floordiv_unchecked"] = ("UncheckedFloorDivisible", "$floordiv_unchecked"),
             ["$mod_unchecked"] = ("UncheckedFloorDivisible", "$floordiv_unchecked"),
             ["$pow_unchecked"] = ("UncheckedExponentiable", "$pow_unchecked"),
+            ["$copy"] = ("Assignable", "$copy"),
         };
 
     /// <summary>
@@ -234,6 +236,40 @@ public sealed partial class TypeRegistry
         if (TypeObeysProtocol(type: type, protocolName: protocol)) return true;
 
         return false;
+    }
+
+    /// <summary>
+    /// Returns true iff <paramref name="type"/> can auto-derive <c>Assignable</c>:
+    /// its LLVM layout contains no <c>ptr</c> (and is not zero-sized in a way that
+    /// indicates a managed reference). Concretely:
+    /// <list type="bullet">
+    ///   <item><description>Records: <see cref="RecordTypeInfo.LlvmType"/> contains no "ptr" substring.</description></item>
+    ///   <item><description>Choice/Flags: always (tag-only layout).</description></item>
+    ///   <item><description>Tuples: every element is auto-deriveable.</description></item>
+    ///   <item><description>Entities, wrappers, variants, crashables, protocols, routines: never (always ptr-shaped).</description></item>
+    ///   <item><description>Generic parameters: false (decision deferred to instantiation).</description></item>
+    /// </list>
+    /// Raw-pointer types like <c>Hijacked[T]</c> and <c>CPtr</c> are ptr-shaped and
+    /// therefore must opt in manually with a trivial <c>$copy() -> Me  return me</c>.
+    /// </summary>
+    public bool CanAutoDeriveAssignable(TypeInfo type)
+    {
+        return type switch
+        {
+            ChoiceTypeInfo => true,
+            FlagsTypeInfo => true,
+            TupleTypeInfo tuple => tuple.ElementTypes.All(predicate: CanAutoDeriveAssignable),
+            RecordTypeInfo record => !record.IsGenericDefinition && !LayoutContainsPtr(layout: record.LlvmType),
+            _ => false
+        };
+    }
+
+    private static bool LayoutContainsPtr(string layout)
+    {
+        // "void" (zero-sized) and any layout without "ptr" auto-derives.
+        // Substring check is safe: LLVM type syntax uses "ptr" only as a literal type
+        // token; no primitive scalar contains the substring (i8, i64, f32, [N x T], etc.).
+        return layout.Contains(value: "ptr", comparisonType: StringComparison.Ordinal);
     }
 
     private bool TypeObeysProtocol(TypeInfo type, string protocolName) // NOSONAR S3776

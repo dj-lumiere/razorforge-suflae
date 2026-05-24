@@ -1371,10 +1371,12 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
     /// they fall through unchanged for <c>EmitIsPattern</c> in codegen.
     /// </summary>
     /// <summary>
-    /// Lowers <c>base with .field1 = v1, .field2 = v2</c> into a record constructor call
-    /// <c>RecordType(field1: v1, field2: base.field1_copy, ...)</c>.
+    /// Lowers <c>base with .field1 = v1, .field2 = v2</c> into
+    /// <c>var tmp = base.$copy(); tmp.field1 = v1; tmp.field2 = v2; tmp</c>. The
+    /// <c>$copy</c> dispatch carries any per-field semantics (e.g. retains on
+    /// <c>Retained[T]</c> fields) that a field-by-field constructor rebuild would skip.
+    /// SA gates this in <c>AnalyzeWithExpression</c> (base type must obey Assignable).
     /// Only handles simple (non-nested, non-index) updates on RecordTypeInfo.
-    /// Falls through unchanged for unsupported shapes.
     /// </summary>
     private (List<Statement> Hoisted, Expression Expr) LowerWithExpression(WithExpression withExpr) // NOSONAR S3776
     {
@@ -1402,8 +1404,8 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 { ResolvedType = baseType };
         }
 
-        // Build a dictionary of simple (single-segment path) overrides.
-        var overrides = new Dictionary<string, Expression>(StringComparer.Ordinal);
+        // Lower each override expression up front.
+        var loweredOverrides = new List<(string Field, Expression Value)>();
         bool allSimple = true;
         foreach ((List<string>? path, Expression? idx, Expression value) in withExpr.Updates)
         {
@@ -1411,7 +1413,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             {
                 var (valH, loweredVal) = LowerExpr(value);
                 hoisted.AddRange(valH);
-                overrides[singleField] = loweredVal;
+                loweredOverrides.Add((singleField, loweredVal));
             }
             else
             {
@@ -1426,48 +1428,33 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             return (hoisted, withExpr with { Base = baseRef });
         }
 
-        // Build CreatorExpression with all record fields, overrides take priority.
-        var members = new List<(string Name, Expression Value)>(
-            capacity: recordType.MemberVariables.Count);
-        foreach (MemberVariableInfo field in recordType.MemberVariables)
-        {
-            if (overrides.TryGetValue(key: field.Name, value: out Expression? overrideVal))
-            {
-                members.Add((field.Name, overrideVal));
-            }
-            else
-            {
-                var fieldAccess = new MemberExpression(
-                    Object: baseRef, PropertyName: field.Name, Location: loc)
-                    { ResolvedType = field.Type };
-                members.Add((field.Name, fieldAccess));
-            }
-        }
+        // var with_copy = baseRef.$copy()
+        var copyCall = new CallExpression(
+            Callee: new MemberExpression(
+                Object: baseRef, PropertyName: "$copy", Location: loc)
+                { ResolvedType = baseType },
+            Arguments: [],
+            Location: loc) { ResolvedType = baseType };
 
-        // Determine type name and type arguments for the creator.
-        string typeName = recordType.GenericDefinition?.Name ?? recordType.Name;
-        List<TypeExpression>? typeArgs = null;
-        if (recordType.GenericDefinition != null)
-        {
-            // Build type arguments from the concrete substitutions.
-            var genericDef = recordType.GenericDefinition;
-            typeArgs = [];
-            foreach (string paramName in genericDef.GenericParameters ?? [])
-            {
-                // Fallback: just emit the concrete record type as-is
-                typeArgs = null;
-                break;
-            }
-        }
-
-        var creator = new CreatorExpression(
-            TypeName: typeName,
-            TypeArguments: typeArgs,
-            MemberVariables: members,
-            Location: loc)
+        string copyTempName = NextTempName(prefix: "with_copy");
+        AddTempVar(hoisted: hoisted, name: copyTempName, typeHint: baseType,
+            initializer: copyCall, loc: loc);
+        var copyRef = new IdentifierExpression(Name: copyTempName, Location: loc)
             { ResolvedType = baseType };
 
-        return (hoisted, creator);
+        // with_copy.field = value
+        foreach ((string fieldName, Expression value) in loweredOverrides)
+        {
+            MemberVariableInfo? memberInfo =
+                recordType.LookupMemberVariable(memberVariableName: fieldName);
+            var target = new MemberExpression(
+                Object: copyRef, PropertyName: fieldName, Location: loc)
+                { ResolvedType = memberInfo?.Type };
+            hoisted.Add(item: new AssignmentStatement(
+                Target: target, Value: value, Location: loc));
+        }
+
+        return (hoisted, copyRef);
     }
 
     private (List<Statement> Hoisted, Expression Expr) LowerIsPatternExpression(

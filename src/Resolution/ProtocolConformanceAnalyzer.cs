@@ -90,6 +90,50 @@ internal sealed class ProtocolConformanceAnalyzer
                 UpdateTypeProtocols(type: type, protocols: merged);
             }
         }
+
+        ApplyAutoAssignableConformance();
+    }
+
+    /// <summary>
+    /// Auto-derives <c>Assignable</c> conformance for any type whose LLVM layout
+    /// contains no <c>ptr</c>. Runs after marker-protocol conformance so the new
+    /// entry sits alongside <c>RecordType</c>/<c>EntityType</c>/etc. in the
+    /// type's <c>ImplementedProtocols</c>. Types that already declare
+    /// <c>obeys Assignable</c> (whether user-written for opt-in records, or
+    /// trivially for raw-pointer wrappers like <c>Hijacked[T]</c>/<c>CPtr</c>)
+    /// are left untouched — <see cref="TypeRegistry.CanAutoDeriveAssignable"/>
+    /// is only consulted when the type does not already obey the protocol.
+    /// </summary>
+    private void ApplyAutoAssignableConformance()
+    {
+        TypeSymbol? assignableType = _sa._registry.LookupType(name: "Assignable");
+        if (assignableType is not ProtocolTypeInfo assignable)
+        {
+            return;
+        }
+
+        foreach (TypeSymbol type in _sa._registry.GetTypesWithMethods())
+        {
+            if (type.IsGenericDefinition)
+            {
+                continue;
+            }
+
+            List<TypeSymbol> existing = GetImplementedProtocols(type: type);
+            if (existing.Any(predicate: p => p.Name == "Assignable"))
+            {
+                continue;
+            }
+
+            if (!_sa._registry.CanAutoDeriveAssignable(type: type))
+            {
+                continue;
+            }
+
+            var merged = new List<TypeSymbol>(collection: existing) { assignable };
+            _sa._implicitProtocolConformances.Add(item: (type.FullName, assignable.Name));
+            UpdateTypeProtocols(type: type, protocols: merged);
+        }
     }
 
     /// <summary>

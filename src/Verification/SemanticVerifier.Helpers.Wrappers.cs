@@ -239,14 +239,15 @@ public sealed partial class SemanticVerifier
         };
 
     /// <summary>
-    /// Returns true when the type can be copied with a bitwise <c>store</c> with no
-    /// observable side-effects (no reference-count bump, no ownership transfer, no
-    /// scoped-token escape). Used by the implicit-copy diagnostic in
-    /// <see cref="SemanticVerifier.AnalyzeVariableDeclaration"/> and assignment analysis.
+    /// Returns true when the type can appear in an implicit-copy position (var binding,
+    /// non-<c>steal</c> argument pass, non-<c>?T</c> return, <c>with</c> base). The check
+    /// is "obeys <c>Assignable</c>" — auto-derived for records whose @llvm layout has no
+    /// <c>ptr</c>, explicitly opt-in for raw-pointer wrappers (<c>Hijacked</c>, <c>CPtr</c>),
+    /// never auto-derived for ownership-bearing wrappers (<c>Owned</c>, <c>Retained</c>,
+    /// <c>Tracked</c>, scoped tokens). The recursive structural walk that this used to do
+    /// is now subsumed by the protocol's auto-derivation rule.
     /// </summary>
-    /// <param name="type">Type to classify.</param>
-    /// <param name="visited">Cycle guard for self-referential record definitions.</param>
-    private static bool IsTriviallyCopyable(TypeSymbol type, HashSet<string>? visited = null)
+    private static bool IsTriviallyCopyable(TypeSymbol type)
     {
         if (type is ErrorTypeInfo or GenericParameterTypeInfo || type.IsBlank)
         {
@@ -254,56 +255,38 @@ public sealed partial class SemanticVerifier
             return true;
         }
 
-        string baseName = GetBaseTypeName(typeName: type.Name);
-        if (NonTriviallyCopyableWrappers.ContainsKey(key: baseName))
+        // Generic-definition wrappers / records (no concrete type args) appear when SA walks
+        // generic-def bodies. The concrete instantiations are re-analysed via monomorphisation,
+        // so suppress here to avoid duplicate / placeholder-shaped diagnostics on stdlib.
+        if (type is RecordTypeInfo { IsGenericDefinition: true, TypeArguments: null or { Count: 0 } })
         {
-            // A wrapper without concrete type arguments is the generic definition itself —
-            // encountered when SA walks a generic-def body. The actual concrete instantiations
-            // are re-analysed via monomorphisation, so suppressing the warning here avoids
-            // duplicate / placeholder-shaped diagnostics on stdlib internals.
-            if (type.TypeArguments is not { Count: > 0 })
-            {
-                return true;
-            }
-            return false;
+            return true;
         }
 
-        // Hijacked[T], primitives, @llvm("...") records — trivially copyable bitwise.
-        if (type is RecordTypeInfo record)
-        {
-            // Generic-definition records (no concrete type args) have no member type info worth
-            // walking — treat as trivially copyable. Concrete instances re-enter via the member
-            // walk below.
-            if (record.IsGenericDefinition && record.TypeArguments is not { Count: > 0 })
-            {
-                return true;
-            }
-
-            // Cycle guard: a record that recursively contains itself (only possible through a
-            // wrapper / entity field) would loop here without it.
-            visited ??= new HashSet<string>(StringComparer.Ordinal);
-            if (!visited.Add(item: record.FullName))
-            {
-                return true;
-            }
-
-            return record.MemberVariables.All(member => IsTriviallyCopyable(type: member.Type, visited: visited));
-        }
-
-        // Tuples — anonymous records; mirror the per-field walk.
+        // Tuples — anonymous; auto-derive cascades only when every element does.
         if (type is TupleTypeInfo tuple)
         {
-            visited ??= new HashSet<string>(StringComparer.Ordinal);
-            if (!visited.Add(item: tuple.FullName))
-            {
-                return true;
-            }
-            return tuple.ElementTypes.All(element => IsTriviallyCopyable(type: element, visited: visited));
+            return tuple.ElementTypes.All(predicate: IsTriviallyCopyable);
         }
 
-        // Entities (raw `T`) cannot appear in copy positions — separate diagnostics catch them.
-        // Anything we did not recognise falls back to trivially copyable so this pass does not
-        // become noisy during the Phase 1 rollout.
+        // Records / choices / flags / entities carry ImplementedProtocols populated by
+        // ProtocolConformanceAnalyzer (explicit + auto-derived Assignable).
+        List<TypeSymbol>? implemented = type switch
+        {
+            ChoiceTypeInfo c => c.ImplementedProtocols,
+            FlagsTypeInfo f => f.ImplementedProtocols,
+            RecordTypeInfo r => r.ImplementedProtocols,
+            EntityTypeInfo e => e.ImplementedProtocols,
+            _ => null
+        };
+
+        if (implemented != null)
+        {
+            return implemented.Any(predicate: p => p.Name == "Assignable");
+        }
+
+        // Anything we did not recognise falls back to trivially copyable so this pass does
+        // not become noisy on unexpected shapes.
         return true;
     }
 

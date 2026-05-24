@@ -152,10 +152,18 @@ internal sealed class AutoWiredRegistrationPass
                                 existingMethods: existingMethods);
                         }
 
-                        // No implicit `$copy` is synthesized. Records that hold ownership-bearing
-                        // wrapper fields are non-copyable; trivially-copyable records emit a
-                        // bitwise store at codegen time without a method call. Users who want
-                        // explicit cloning obey `Copyable` and define their own `copy()`.
+                        // Synthesize `$copy() -> Me` for Assignable records (auto-derived when the
+                        // @llvm layout contains no `ptr`, or explicit via `obeys Assignable`).
+                        // Body is `return me`, which lowers to a structural bitwise copy via the
+                        // return value. Records with custom $copy (raw-ptr wrappers, opt-in records
+                        // with managed-pointer fields) keep their user-written body.
+                        if (ObeysProtocol(type: type, protocolName: "Assignable"))
+                        {
+                            MaybeRegisterWired(owner: type,
+                                name: "$copy",
+                                returnType: type,
+                                existingMethods: existingMethods);
+                        }
                     }
 
                     break;
@@ -238,6 +246,12 @@ internal sealed class AutoWiredRegistrationPass
                             returnType: boolType,
                             existingMethods: existingMethods);
                     }
+
+                    // Choices auto-derive Assignable (scalar tag layout).
+                    MaybeRegisterWired(owner: type,
+                        name: "$copy",
+                        returnType: type,
+                        existingMethods: existingMethods);
 
                     // S64.$create(from: ChoiceType) — choice_val.S64() desugars to S64.$create(from: choice_val)
                     if (s64Type != null && !type.IsGenericDefinition &&
@@ -348,6 +362,12 @@ internal sealed class AutoWiredRegistrationPass
                             returnType: boolType,
                             existingMethods: existingMethods);
                     }
+
+                    // Flags auto-derive Assignable (scalar bitset layout).
+                    MaybeRegisterWired(owner: type,
+                        name: "$copy",
+                        returnType: type,
+                        existingMethods: existingMethods);
 
                     // U64.$create(from: FlagsType) — flags_val.U64() desugars to U64.$create(from: flags_val)
                     if (u64Type != null && !type.IsGenericDefinition &&
@@ -625,7 +645,7 @@ internal sealed class AutoWiredRegistrationPass
     }
 
     /// <summary>
-    /// Registers a failable wired routine if not already defined (for copy!, $create!).
+    /// Registers a failable wired routine if not already defined (for clone, $create!).
     /// </summary>
     private void MaybeRegisterWiredFailable(TypeSymbol owner, string name, TypeSymbol returnType,
         List<RoutineInfo> existingMethods, (string name, TypeSymbol type)? param = null,

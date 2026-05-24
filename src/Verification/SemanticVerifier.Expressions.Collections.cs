@@ -479,6 +479,16 @@ public sealed partial class SemanticVerifier
                 message: $"'with' expression requires a record type, got '{baseType.Name}'.",
                 location: with.Location);
         }
+        else if (!IsTriviallyCopyable(type: baseType))
+        {
+            // `with` lowers to `tmp = base.$copy(); tmp.field = v` — so the base must obey
+            // Assignable. Records with ownership-bearing fields that don't opt in are rejected
+            // here rather than producing a broken lowered AST.
+            ReportError(code: SemanticDiagnosticCode.WithBaseNotAssignable,
+                message: $"'with' expression base of type '{baseType.Name}' must obey 'Assignable'. " +
+                         "Add 'obeys Assignable' and define '$copy() -> Me', or reconstruct the value explicitly.",
+                location: with.Location);
+        }
 
         // Analyze update expressions
         foreach ((List<string>? fieldPath, Expression? index, Expression value) in with.Updates)
