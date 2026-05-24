@@ -52,6 +52,22 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
             }
         }
 
+        // Phase A2: stdlib bodies are stored by CollectStdlibBodiesForVariantGeneration
+        // without running SA, so propagated-failability routines (e.g. stdlib
+        // `common routine S64.from_digit_bytes!` returning `S64.from_digit_bytes_at!`) have
+        // empty FailableCallees and no direct throw/absent. Detect them and mark pessimistic
+        // so variant generation produces try_ + lookup_ — matching what the pre-register
+        // pass registered as stubs.
+        foreach (RoutineInfo routine in routines)
+        {
+            if (!routine.IsFailable) continue;
+            if (routine.HasThrow || routine.HasAbsent) continue;
+            if (routine.FailableCallees.Count > 0) continue;
+            if (!ctx.RoutineBodies.ContainsKey(key: routine.RegistryKey)) continue;
+            routine.HasThrow = true;
+            routine.HasAbsent = true;
+        }
+
         // Phase B: fixpoint propagation through FailableCallees. A routine whose failability
         // is purely propagated (e.g. `routine S64_from_text!(t: Text) -> S64
         // return S64!(from_text: t)`) has HasThrow=HasAbsent=false but FailableCallees={S64.$create!}.
