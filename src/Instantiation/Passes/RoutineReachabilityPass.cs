@@ -150,6 +150,10 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     {
         // Display / hash
         RepresentMethodName, DiagnoseMethodName, "$hash",
+        // Implicit copy (Assignable). The `with` lowering emits `base.$copy()`, and
+        // codegen elides the call for trivially-Assignable types, but reachability
+        // still needs to seed the synth body so the link symbol exists.
+        "$copy",
         // Equality / comparison
         "$eq", "$ne",
         "$cmp", "$lt", "$le", "$gt", "$ge",
@@ -185,10 +189,6 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // bare form to match what LookupMethod compares against (m.Name == "$getitem", not
         // "$getitem!"). See TypeRegistry.MethodLookup.cs:236.
         "$getitem", "$setitem",
-        // Slicing — failable on stdlib containers (List/Text). Lowered from SliceExpression
-        // (`obj[a to b]`) by OperatorLoweringPass; without this seed the routine body
-        // never gets monomorphized for the concrete owner.
-        "$getslice",
     };
 
     private void BuildAstIndices()

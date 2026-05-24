@@ -308,58 +308,6 @@ routine List[T].set_raw(index: U64, value: T)
     me.data.offset(T.data_size() * index).inject(value)
   return
 
-# ============================================================================
-# Slicing with [a to b] syntax (forward index)
-# ============================================================================
-
-### Returns a new list containing elements from `start` (inclusive) to `end` (exclusive).
-### :param start: The inclusive starting position.
-### :param end: The exclusive ending position.
-### :returns: A new `List[T]` holding the selected elements.
-### :throws: {IndexOutOfBoundsError} if either bound exceeds `count()`.
-@readonly
-routine List[T].$getslice!(start: U64, end: U64) -> ?List[T]
-  if start > me.count or end > me.count
-    throw IndexOutOfBoundsError(index: end, count: me.count)
-
-  var result = List[T]()
-  var i = start
-  danger!
-    loop
-      if i >= end
-        break
-      var byte_offset = T.data_size() * i
-      result.add_last(me.data.offset(byte_offset).extract())
-      i = i + 1u64
-
-  return steal result
-
-# ============================================================================
-# Slicing with [a to b] syntax (backward index using ^)
-# ============================================================================
-
-### Returns a new list containing elements between two back indices.
-### Both bounds are resolved against the current length before slicing.
-### :param start: The inclusive starting back index.
-### :param end: The exclusive ending back index.
-### :returns: A new `List[T]` holding the selected elements.
-@readonly
-routine List[T].$getslice!(start: BackIndex, end: BackIndex) -> ?List[T]
-  var s = start.resolve(me.count)
-  var e = end.resolve(me.count)
-
-  var result = List[T]()
-  var i = s
-  danger!
-    loop
-      if i >= e
-        break
-      var byte_offset = T.data_size() * i
-      result.add_last(me.data.offset(byte_offset).extract())
-      i = i + 1u64
-
-  return steal result
-
 ### Ensures the backing allocation holds at least `new_capacity` elements.
 ### Does nothing if the current capacity already meets or exceeds `new_capacity`.
 ### :param new_capacity: The minimum slot count to guarantee.

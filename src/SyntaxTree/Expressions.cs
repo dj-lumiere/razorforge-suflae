@@ -389,6 +389,14 @@ public record CallExpression(
     /// Null for calls with no method-level type args.
     /// </summary>
     public List<TypeExpression>? TypeArguments { get; set; }
+
+    /// <summary>
+    /// True when this call was synthesized by a compiler lowering pass (e.g.
+    /// <c>ControlFlowLoweringPass</c> emitting <c>iter.$iter()</c> / <c>iter.try_next()</c>
+    /// for a for-loop). SA uses this to skip checks meant to gate user code from invoking
+    /// dunder-private methods directly.
+    /// </summary>
+    public bool IsSynthesizedLowering { get; set; }
 }
 
 /// <summary>
@@ -591,28 +599,6 @@ public record IndexExpression(Expression Object, Expression Index, SourceLocatio
     /// monomorphized entry.
     /// </summary>
     public RoutineInfo? ResolvedSetItem { get; set; }
-}
-
-/// <summary>
-/// Slice expression: obj[start to end]
-/// Desugars to obj.$getslice(from: start, to: end).
-/// Returns Sequence&lt;T&gt; (lazy). Both bounds required, exclusive end.
-/// </summary>
-/// <param name="Object">The collection being sliced</param>
-/// <param name="Start">Start index expression</param>
-/// <param name="End">End index expression (exclusive)</param>
-/// <param name="Location">Source location for error reporting</param>
-public record SliceExpression(
-    Expression Object,
-    Expression Start,
-    Expression End,
-    SourceLocation Location) : Expression(Location: Location)
-{
-    /// <summary>Accepts a visitor for AST traversal and transformation</summary>
-    public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
-    {
-        return visitor.VisitSliceExpression(node: this);
-    }
 }
 
 /// <summary>

@@ -18,9 +18,5 @@ routine start()
   var b = "hello".encode_as_utf8()
   show(f"b[^1]: {b[^1]}")
 
-  # Slice with back-index (range form)
-  show(f"l[^3 to ^1]: {l[^3 to ^1]}")
-  show(f"t[^3 to ^1]: {t[^3 to ^1]}")
-
   show("DONE")
   return

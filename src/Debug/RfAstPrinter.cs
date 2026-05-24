@@ -429,11 +429,6 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
 
 
     /// <inheritdoc/>
-    public string VisitSliceExpression(SliceExpression node) =>
-        $"{node.Object.Accept(this)}[{node.Start.Accept(this)} to {node.End.Accept(this)}]";
-
-
-    /// <inheritdoc/>
     public string VisitConditionalExpression(ConditionalExpression node) =>
         $"{node.TrueExpression.Accept(this)} if {node.Condition.Accept(this)} else {node.FalseExpression.Accept(this)}";
 

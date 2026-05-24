@@ -345,6 +345,13 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 break;
             }
 
+            case "clone":
+            {
+                // Assignable obeys Cloneable: synth clone() as `return me.$copy()`.
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildCloneViaCopyBody(ownerType: record);
+                break;
+            }
+
             case RepresentMethodName:
                 // Generic definitions allowed: monomorphization substitutes type params.
                 ctx.VariantBodies[key: routine.RegistryKey] =
@@ -532,10 +539,12 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             case "$copy":
                 ctx.VariantBodies[key: routine.RegistryKey] = BuildReturnMeBody(ownerType: choice);
                 break;
+
+            case "clone":
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildCloneViaCopyBody(ownerType: choice);
+                break;
         }
     }
-
-    //  $eq
 
     /// <summary>
     /// Builds the body: <c>return me == you</c> for choice and flags types.
@@ -633,6 +642,34 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             ResolvedType = ownerType
         };
         return new ReturnStatement(Value: meRef, Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Builds the body: <c>return me.$copy()</c>. Used for synthesized <c>clone()</c>
+    /// on Assignable types — clone is an Assignable-implied alias for the explicit
+    /// copy verb, so it just forwards.
+    /// </summary>
+    private static ReturnStatement BuildCloneViaCopyBody(TypeInfo ownerType)
+    {
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+        {
+            ResolvedType = ownerType
+        };
+        var copyMember = new MemberExpression(
+            Object: meRef,
+            PropertyName: "$copy",
+            Location: _synthLoc)
+        {
+            ResolvedType = ownerType
+        };
+        var copyCall = new CallExpression(
+            Callee: copyMember,
+            Arguments: [],
+            Location: _synthLoc)
+        {
+            ResolvedType = ownerType
+        };
+        return new ReturnStatement(Value: copyCall, Location: _synthLoc);
     }
 
     private static ReturnStatement BuildReturnTrueBody(TypeInfo boolType)
@@ -1307,6 +1344,10 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
             case "$copy":
                 ctx.VariantBodies[key: routine.RegistryKey] = BuildReturnMeBody(ownerType: flags);
+                break;
+
+            case "clone":
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildCloneViaCopyBody(ownerType: flags);
                 break;
         }
     }

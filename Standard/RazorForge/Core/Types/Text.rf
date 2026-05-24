@@ -156,40 +156,6 @@ routine Text.$getitem!(index: BackIndex) -> Character
   danger!
     return me.data.stride(count: S64(i)).extract()
 
-### Returns the substring between `start` and `end`.
-### The slice uses an inclusive start and exclusive end, matching the standard range conventions.
-### :param start: The inclusive starting position.
-### :param end: The exclusive ending position.
-### :returns: The resulting `Text` value.
-@readonly
-routine Text.$getslice!(start: U64, end: U64) -> ?Text
-  if start >= end or end > me.count
-    absent
-  var n = end - start
-  danger!
-    var buf = Hijacked[Character](rf_allocate_dynamic(size: Character.data_size() * n))
-    var src_ptr = me.data.stride(count: S64(start))
-    rf_copy_bytes_at(dest: buf.address(), src: src_ptr.address(), size: Character.data_size() * n)
-    return Text(data: buf, count: n)
-
-### Returns the substring between two back indices.
-### Both bounds are resolved against the current text length before slicing.
-### :param start: The inclusive starting position.
-### :param end: The exclusive ending position.
-### :returns: The resulting `Text` value.
-@readonly
-routine Text.$getslice!(start: BackIndex, end: BackIndex) -> ?Text
-  var s = start.resolve(length: me.count)
-  var e = end.resolve(length: me.count)
-  if s >= e
-    absent
-  var n = e - s
-  danger!
-    var buf = Hijacked[Character](rf_allocate_dynamic(size: Character.data_size() * n))
-    var src_ptr = me.data.stride(count: S64(s))
-    rf_copy_bytes_at(dest: buf.address(), src: src_ptr.address(), size: Character.data_size() * n)
-    return Text(data: buf, count: n)
-
 # String operations
 
 ### Returns a new value with `other` appended.

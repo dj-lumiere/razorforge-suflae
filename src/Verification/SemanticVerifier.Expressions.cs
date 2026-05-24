@@ -39,7 +39,6 @@ public sealed partial class SemanticVerifier
             OptionalMemberExpression optMember => AnalyzeOptionalMemberExpression(
                 optMember: optMember),
             IndexExpression index => AnalyzeIndexExpression(index: index),
-            SliceExpression slice => AnalyzeSliceExpression(slice: slice),
             ConditionalExpression cond => AnalyzeConditionalExpression(cond: cond),
             LambdaExpression lambda => AnalyzeLambdaExpression(lambda: lambda,
                 expectedType: expectedType),

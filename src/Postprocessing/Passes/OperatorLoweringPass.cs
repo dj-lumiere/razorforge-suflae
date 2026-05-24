@@ -18,8 +18,6 @@ namespace Compiler.Postprocessing.Passes;
 /// <list type="bullet">
 ///   <item><see cref="IndexExpression"/> (<c>obj[i]</c>) ??
 ///         <c>obj.$getitem!(i)</c> -> failable method call.</item>
-///   <item><see cref="SliceExpression"/> (<c>obj[a..b]</c>) ??
-///         <c>obj.$getslice(from: a, to: b)</c>.</item>
 ///   <item><see cref="GenericMemberExpression"/> (<c>obj.field[i]</c>, parser quirk) ??
 ///         <c>MemberExpression(obj, field)</c> + <c>IndexExpression</c> ??<c>$getitem!</c>.</item>
 ///   <item><see cref="BinaryExpression"/> with an overloadable operator ??
@@ -396,77 +394,6 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     ResolvedRoutine = resolvedGetItem,
                     ResolvedType = idx.ResolvedType,
                     LoweringKind = getitemKind
-                };
-            }
-
-            //  SliceExpression -> obj.$getslice[!](from: a, to: b)
-            case SliceExpression slice:
-            {
-                Expression loweredObj = LowerExpression(slice.Object);
-                Expression loweredStart = LowerExpression(slice.Start);
-                Expression loweredEnd = LowerExpression(slice.End);
-                RoutineInfo? resolvedGetSlice = null;
-                // Default to "!" (failable) — all stdlib collections use failable $getslice!.
-                // Mirror the $getitem! lowering path so reachability/codegen can resolve the
-                // correct symbol name when the LookupMethod-by-bare-name path returns null.
-                string slicePropertyName = "$getslice!";
-                TypeInfo? targetType = slice.Object.ResolvedType;
-                if (targetType != null)
-                {
-                    resolvedGetSlice =
-                        ctx.Registry.LookupMethod(type: targetType, methodName: "$getslice");
-                    if (resolvedGetSlice != null)
-                    {
-                        var argTypes = new List<TypeInfo>();
-                        TypeInfo? startType = loweredStart.ResolvedType ?? slice.Start.ResolvedType;
-                        if (startType != null)
-                        {
-                            argTypes.Add(item: startType);
-                        }
-
-                        TypeInfo? endType = loweredEnd.ResolvedType ?? slice.End.ResolvedType;
-                        if (endType != null)
-                        {
-                            argTypes.Add(item: endType);
-                        }
-
-                        resolvedGetSlice = ResolveMethodGenericRoutine(routine: resolvedGetSlice,
-                            argTypes: argTypes);
-                        slicePropertyName = resolvedGetSlice.IsFailable ? "$getslice!" : "$getslice";
-                    }
-                }
-
-                CallLoweringKind getsliceKind;
-                if (resolvedGetSlice != null)
-                    getsliceKind = ClassifyMethod(resolvedGetSlice);
-                else if (targetType is GenericParameterTypeInfo)
-                    getsliceKind = CallLoweringKind.RuntimeDispatch;
-                else if (targetType != null)
-                    getsliceKind = CallLoweringKind.DirectMemberRoutine;
-                else
-                    getsliceKind = CallLoweringKind.Unknown;
-                var member = new MemberExpression(
-                    Object: loweredObj,
-                    PropertyName: slicePropertyName,
-                    Location: slice.Location);
-                return new CallExpression(
-                    Callee: member,
-                    Arguments:
-                    [
-                        new NamedArgumentExpression(
-                            Name: "from",
-                            Value: loweredStart,
-                            Location: slice.Location),
-                        new NamedArgumentExpression(
-                            Name: "to",
-                            Value: loweredEnd,
-                            Location: slice.Location)
-                    ],
-                    Location: slice.Location)
-                {
-                    ResolvedRoutine = resolvedGetSlice,
-                    ResolvedType = slice.ResolvedType,
-                    LoweringKind = getsliceKind
                 };
             }
 

@@ -623,6 +623,21 @@ public sealed partial class SemanticVerifier
             {
                 TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
 
+                // $iter is dunder-private to the iterator protocol — only the for-loop lowering
+                // (ControlFlowLoweringPass) may emit it. User code must use `for ... in ...`
+                // or iterable combinators (skip, take, map, etc.) instead. Stdlib iterator
+                // implementations are exempt — they legitimately chain `me.source.$iter()`.
+                if (member.PropertyName == "$iter"
+                    && !call.IsSynthesizedLowering
+                    && !IsStdlibFile(filePath: call.Location.FileName))
+                {
+                    ReportError(code: SemanticDiagnosticCode.DirectWiredRoutineCall,
+                        message: "Method '$iter' is internal to the iterator protocol — " +
+                                 "use a 'for' loop or iterable combinators (skip, take, map, etc.) instead.",
+                        location: call.Location);
+                    return ErrorTypeInfo.Instance;
+                }
+
                 // Choice types cannot use any operator wired methods
                 if (objectType is ChoiceTypeInfo && IsOperatorWired(name: member.PropertyName))
                 {

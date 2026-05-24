@@ -741,13 +741,6 @@ internal static class GenericAstRewriter
                 Index = RewriteExpression(expr: idx.Index, ctx: ctx)
             },
 
-            SliceExpression slice => slice with
-            {
-                Object = RewriteExpression(expr: slice.Object, ctx: ctx),
-                Start = RewriteExpression(expr: slice.Start, ctx: ctx),
-                End = RewriteExpression(expr: slice.End, ctx: ctx)
-            },
-
             BinaryExpression bin => bin with
             {
                 Left = RewriteExpression(expr: bin.Left, ctx: ctx),

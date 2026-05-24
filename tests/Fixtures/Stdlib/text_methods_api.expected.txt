@@ -19,8 +19,5 @@ join: 'a-glue-b-glue-c-glue-d'
   line: line one
   line: line two
   line: line three
-slice [0 til 5]: 'hello'
-slice [6 til 11]: 'world'
-slice [0 to 4]: 'hello'
 find 'world' in 'hello world': 6
 DONE

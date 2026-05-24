@@ -153,40 +153,6 @@ routine Bytes.$getitem!(index: BackIndex) -> Byte
   danger!
     return me.data.stride(count: S64(i)).extract()
 
-### Returns the slice between `start` and `end`.
-### The slice uses an inclusive start and exclusive end.
-### :param start: The inclusive starting position.
-### :param end: The exclusive ending position.
-### :returns: The resulting `Bytes` value.
-@readonly
-routine Bytes.$getslice(start: U64, end: U64) -> ?Bytes
-  if start >= end or end > me.count
-    return Bytes()
-  var n = end - start
-  danger!
-    var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * n))
-    var src_ptr = me.data.stride(count: S64(start))
-    rf_copy_bytes_at(dest: buf.address(), src: src_ptr.address(), size: Byte.data_size() * n)
-    return Bytes(data: buf, count: n)
-
-### Returns the slice between two back indices.
-### Both bounds are resolved against the current sequence length before slicing.
-### :param start: The inclusive starting position.
-### :param end: The exclusive ending position.
-### :returns: The resulting `Bytes` value.
-@readonly
-routine Bytes.$getslice(start: BackIndex, end: BackIndex) -> ?Bytes
-  var s = start.resolve(length: me.count)
-  var e = end.resolve(length: me.count)
-  if s >= e
-    return Bytes()
-  var n = e - s
-  danger!
-    var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * n))
-    var src_ptr = me.data.stride(count: S64(s))
-    rf_copy_bytes_at(dest: buf.address(), src: src_ptr.address(), size: Byte.data_size() * n)
-    return Bytes(data: buf, count: n)
-
 # String operations
 
 ### Returns a new value with `other` appended.

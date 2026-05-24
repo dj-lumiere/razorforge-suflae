@@ -293,11 +293,6 @@ internal sealed class MarkerProtocolDesugarPass
                 WalkExpression(idx.Object);
                 WalkExpression(idx.Index);
                 break;
-            case SliceExpression slc:
-                WalkExpression(slc.Object);
-                WalkExpression(slc.Start);
-                WalkExpression(slc.End);
-                break;
             case TypeConversionExpression conv:
                 WalkExpression(conv.Expression);
                 break;

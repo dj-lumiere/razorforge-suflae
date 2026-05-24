@@ -272,16 +272,6 @@ internal sealed class LiteralLoweringPass
                 rewritten.ResolvedSetItem = idx.ResolvedSetItem;
                 return rewritten;
             }
-            case SliceExpression slice:
-            {
-                Expression o = LowerExpression(slice.Object);
-                Expression s = LowerExpression(slice.Start);
-                Expression e = LowerExpression(slice.End);
-                bool changed = !ReferenceEquals(o, slice.Object)
-                               || !ReferenceEquals(s, slice.Start)
-                               || !ReferenceEquals(e, slice.End);
-                return changed ? slice with { Object = o, Start = s, End = e } : expr;
-            }
             case TypeConversionExpression conv:
             {
                 Expression e = LowerExpression(conv.Expression);

@@ -304,19 +304,6 @@ public sealed partial class SemanticVerifier
             ownerType: getItem.OwnerType);
     }
 
-    /// <summary>
-    /// Resolves a slice-bound parameter type at <paramref name="paramIndex"/> on `$getslice`
-    /// (0 = start, 1 = end), with owner generics substituted. `me` is implicit, not in Parameters.
-    /// </summary>
-    private TypeSymbol? ResolveSliceBoundParameterType(RoutineInfo? getSlice, TypeSymbol lookupType,
-        int paramIndex)
-    {
-        if (getSlice == null || getSlice.Parameters.Count <= paramIndex) return null;
-        TypeSymbol paramType = getSlice.Parameters[index: paramIndex].Type;
-        return SubstituteOwnerGenerics(paramType: paramType, lookupType: lookupType,
-            ownerType: getSlice.OwnerType);
-    }
-
     private TypeSymbol? SubstituteOwnerGenerics(TypeSymbol paramType, TypeSymbol lookupType,
         TypeSymbol? ownerType)
     {
@@ -414,64 +401,6 @@ public sealed partial class SemanticVerifier
                 TypeSymbol? lookupGenericDef = GetGenericDefinition(resolution: lookupType);
                 ownerGenericParams = lookupGenericDef?.GenericParameters ??
                                      getItem.OwnerType?.GenericParameters;
-            }
-
-            if (lookupType.TypeArguments is { Count: > 0 } &&
-                ownerGenericParams is { Count: > 0 })
-            {
-                var substitutions = new Dictionary<string, TypeSymbol>();
-                for (int i = 0; i < ownerGenericParams.Count &&
-                                i < lookupType.TypeArguments.Count; i++)
-                {
-                    substitutions[key: ownerGenericParams[index: i]] =
-                        lookupType.TypeArguments[index: i];
-                }
-
-                if (substitutions.Count > 0)
-                {
-                    returnType = SubstituteWithMapping(type: returnType,
-                        substitutions: substitutions);
-                }
-            }
-
-            return returnType;
-        }
-
-        // For generic types like List<T>, return the element type
-        if (lookupType.TypeArguments is { Count: > 0 })
-        {
-            return lookupType.TypeArguments[index: 0];
-        }
-
-        return ErrorTypeInfo.Instance;
-    }
-
-    private TypeSymbol AnalyzeSliceExpression(SliceExpression slice)
-    {
-        TypeSymbol objectType = AnalyzeExpression(expression: slice.Object);
-        TryGetTransparentProtocolTarget(type: objectType, targetType: out TypeSymbol lookupType);
-
-        // Look for $getslice method — LookupMethod handles generic resolutions
-        RoutineInfo? getSlice = _registry.LookupMethod(type: lookupType, methodName: "$getslice");
-
-        // Plumb expected type into start/end so integer literals retype to the slice indexer's
-        // bound type. $getslice is `me, start, end` — start = Parameters[1], end = Parameters[2].
-        TypeSymbol? startExpected = ResolveSliceBoundParameterType(getSlice: getSlice,
-            lookupType: lookupType, paramIndex: 1);
-        TypeSymbol? endExpected = ResolveSliceBoundParameterType(getSlice: getSlice,
-            lookupType: lookupType, paramIndex: 2);
-        AnalyzeExpression(expression: slice.Start, expectedType: startExpected);
-        AnalyzeExpression(expression: slice.End, expectedType: endExpected);
-
-        if (getSlice?.ReturnType != null)
-        {
-            TypeSymbol returnType = getSlice.ReturnType;
-            List<string>? ownerGenericParams = null;
-            if (lookupType.TypeArguments is { Count: > 0 })
-            {
-                TypeSymbol? lookupGenericDef = GetGenericDefinition(resolution: lookupType);
-                ownerGenericParams = lookupGenericDef?.GenericParameters ??
-                                     getSlice.OwnerType?.GenericParameters;
             }
 
             if (lookupType.TypeArguments is { Count: > 0 } &&
@@ -777,12 +706,6 @@ public sealed partial class SemanticVerifier
             case IndexExpression index:
                 CollectIdentifiersRecursive(expression: index.Object, identifiers: identifiers);
                 CollectIdentifiersRecursive(expression: index.Index, identifiers: identifiers);
-                break;
-
-            case SliceExpression slice:
-                CollectIdentifiersRecursive(expression: slice.Object, identifiers: identifiers);
-                CollectIdentifiersRecursive(expression: slice.Start, identifiers: identifiers);
-                CollectIdentifiersRecursive(expression: slice.End, identifiers: identifiers);
                 break;
 
             case ConditionalExpression cond:

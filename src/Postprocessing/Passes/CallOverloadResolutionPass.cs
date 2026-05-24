@@ -221,12 +221,6 @@ internal sealed class CallOverloadResolutionPass
                 WalkExpression(idx.Index);
                 break;
 
-            case SliceExpression slice:
-                WalkExpression(slice.Object);
-                WalkExpression(slice.Start);
-                WalkExpression(slice.End);
-                break;
-
             case TypeConversionExpression conv:
                 WalkExpression(conv.Expression);
                 break;

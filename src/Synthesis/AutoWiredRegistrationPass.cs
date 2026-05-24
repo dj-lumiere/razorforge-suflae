@@ -163,6 +163,12 @@ internal sealed class AutoWiredRegistrationPass
                                 name: "$copy",
                                 returnType: type,
                                 existingMethods: existingMethods);
+                            // Assignable obeys Cloneable: any type with auto-$copy also gets
+                            // `clone() -> ?Me`. Return type uses the rvalue mark; body is `return me`.
+                            MaybeRegisterWired(owner: type,
+                                name: "clone",
+                                returnType: type,
+                                existingMethods: existingMethods);
                         }
                     }
 
@@ -250,6 +256,10 @@ internal sealed class AutoWiredRegistrationPass
                     // Choices auto-derive Assignable (scalar tag layout).
                     MaybeRegisterWired(owner: type,
                         name: "$copy",
+                        returnType: type,
+                        existingMethods: existingMethods);
+                    MaybeRegisterWired(owner: type,
+                        name: "clone",
                         returnType: type,
                         existingMethods: existingMethods);
 
@@ -366,6 +376,10 @@ internal sealed class AutoWiredRegistrationPass
                     // Flags auto-derive Assignable (scalar bitset layout).
                     MaybeRegisterWired(owner: type,
                         name: "$copy",
+                        returnType: type,
+                        existingMethods: existingMethods);
+                    MaybeRegisterWired(owner: type,
+                        name: "clone",
                         returnType: type,
                         existingMethods: existingMethods);
 

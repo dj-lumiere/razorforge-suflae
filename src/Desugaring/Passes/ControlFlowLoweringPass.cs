@@ -248,7 +248,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
                         PropertyName: "$iter",
                         Location: loc),
                     Arguments: [],
-                    Location: loc),
+                    Location: loc) { IsSynthesizedLowering = true },
                 Visibility: VisibilityModifier.Secret,
                 Location: loc),
             Location: loc);
@@ -260,7 +260,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
                 PropertyName: "try_next",
                 Location: loc),
             Arguments: [],
-            Location: loc);
+            Location: loc) { IsSynthesizedLowering = true };
 
         // When running after SA (stdlib/variant bodies), annotate ResolvedType, ResolvedRoutine,
         // and LoweringKind on the try_next call so CallOverloadResolutionPass doesn't need to

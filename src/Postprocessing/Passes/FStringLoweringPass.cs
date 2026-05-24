@@ -326,18 +326,6 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
                 return rewritten;
             }
 
-            case SliceExpression slice:
-            {
-                Expression obj = LowerExpression(slice.Object);
-                Expression start = LowerExpression(slice.Start);
-                Expression end = LowerExpression(slice.End);
-                return ReferenceEquals(obj, slice.Object)
-                       && ReferenceEquals(start, slice.Start)
-                       && ReferenceEquals(end, slice.End)
-                    ? expr
-                    : slice with { Object = obj, Start = start, End = end };
-            }
-
             case CreatorExpression creator:
             {
                 var members = new List<(string Name, Expression Value)>(

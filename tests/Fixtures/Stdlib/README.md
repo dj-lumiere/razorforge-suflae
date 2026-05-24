@@ -83,7 +83,7 @@ Covered today (see `*.rf` files in this directory):
 - Recursion: `recursion` — factorial, fibonacci, mutual
 - Numeric constants: `numeric_constants` — `S64_MIN`/`MAX`, `F64_EPSILON`, abs/min/max instance methods
 - Lambda captures: `lambda_captures` — closure over outer bindings, function-returning routines
-- Back-indexing: `backindex` — `[^N]` on List/Text/Bytes/Array; slice via `[^a to ^b]`
+- Back-indexing: `backindex` — `[^N]` on List/Text/Bytes/Array
 - Multi-constraint generics: `multi_constraint_generic` — `T obeys Equatable, Hashable`
 - Tuple destructuring in loops: `tuple_in_loops` — `for (i, x) in enumerate()`, zip
 - Module-level state: `global_var`

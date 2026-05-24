@@ -574,18 +574,6 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 return (hoisted, ftext with { Parts = parts });
             }
 
-            case SliceExpression slice:
-            {
-                var (startH, loweredStart) = LowerExpr(slice.Start);
-                var (endH, loweredEnd) = LowerExpr(slice.End);
-                var hoisted = Concat(startH, endH);
-                if (hoisted.Count == 0
-                    && ReferenceEquals(loweredStart, slice.Start)
-                    && ReferenceEquals(loweredEnd, slice.End))
-                    return ([], expr);
-                return (hoisted, slice with { Start = loweredStart, End = loweredEnd });
-            }
-
             case ConditionalExpression cond:
             {
                 // D-AST-6: hoist to var _cif_N: T; if cond { _cif_N = a } else { _cif_N = b }

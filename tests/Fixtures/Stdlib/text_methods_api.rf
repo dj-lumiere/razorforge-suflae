@@ -39,11 +39,6 @@ routine start()
   for l in multi.lines()
     show(f"  line: {l}")
 
-  # Slicing uses range form
-  show(f"slice [0 til 5]: '{"hello world"[0_u64 til 5_u64]}'")
-  show(f"slice [6 til 11]: '{"hello world"[6_u64 til 11_u64]}'")
-  show(f"slice [0 to 4]: '{"hello world"[0_u64 to 4_u64]}'")
-
   # Find
   show(f"find 'world' in 'hello world': {"hello world".find!(other: "world")}")
 

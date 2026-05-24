@@ -8,12 +8,12 @@ module Core
 ### payloads (entities, `Retained[T]`, `Tracked[T]`, etc.) must opt in by writing
 ### `obeys Assignable` and a `$copy` body that spells out each field's verb,
 ### centralising the cost in one visible place.
-protocol Assignable
+protocol Assignable obeys Cloneable
   ### Returns a copy of this value suitable for binding into the destination slot.
   ### For auto-derived types this is a bitwise duplicate. For opt-in types the body
   ### performs whatever per-field work is required (refcount bump, deep clone,
   ### ownership transfer) so the cost is visible at one location instead of every
   ### call site.
   ### :returns: A copy of this value.
-  @readonly
+  @[readonly, inline]
   routine Me.$copy() -> Me

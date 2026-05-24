@@ -62,10 +62,6 @@ internal sealed class MeReferenceScanner : ISyntaxTreeVisitor<bool>
         node.Object.Accept(visitor: this);
     public bool VisitIndexExpression(IndexExpression node) =>
         node.Object.Accept(visitor: this) || node.Index.Accept(visitor: this);
-    public bool VisitSliceExpression(SliceExpression node) =>
-        node.Object.Accept(visitor: this) ||
-        node.Start.Accept(visitor: this) ||
-        node.End.Accept(visitor: this);
     public bool VisitConditionalExpression(ConditionalExpression node) =>
         node.Condition.Accept(visitor: this) ||
         node.TrueExpression.Accept(visitor: this) ||

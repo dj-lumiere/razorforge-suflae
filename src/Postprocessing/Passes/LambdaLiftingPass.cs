@@ -489,26 +489,6 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
                         includeMe: includeMe)
                 }, index);
 
-            case SliceExpression slice:
-                return CopyResolvedType(slice with
-                {
-                    Object = RewriteExpression(slice.Object,
-                        scope: scope,
-                        inheritedGenericParameters: inheritedGenericParameters,
-                        inheritedGenericConstraints: inheritedGenericConstraints,
-                        includeMe: includeMe),
-                    Start = RewriteExpression(slice.Start,
-                        scope: scope,
-                        inheritedGenericParameters: inheritedGenericParameters,
-                        inheritedGenericConstraints: inheritedGenericConstraints,
-                        includeMe: includeMe),
-                    End = RewriteExpression(slice.End,
-                        scope: scope,
-                        inheritedGenericParameters: inheritedGenericParameters,
-                        inheritedGenericConstraints: inheritedGenericConstraints,
-                        includeMe: includeMe)
-                }, slice);
-
             case ConditionalExpression conditional:
                 return CopyResolvedType(conditional with
                 {
@@ -1153,11 +1133,6 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
                 yield return i.Object;
                 yield return i.Index;
                 break;
-            case SliceExpression s:
-                yield return s.Object;
-                yield return s.Start;
-                yield return s.End;
-                break;
             case ConditionalExpression c:
                 yield return c.Condition;
                 yield return c.TrueExpression;
@@ -1472,12 +1447,6 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
             case IndexExpression index:
                 CollectLocalCapturesRecursive(index.Object, outerScope, parameterNames, captures);
                 CollectLocalCapturesRecursive(index.Index, outerScope, parameterNames, captures);
-                break;
-
-            case SliceExpression slice:
-                CollectLocalCapturesRecursive(slice.Object, outerScope, parameterNames, captures);
-                CollectLocalCapturesRecursive(slice.Start, outerScope, parameterNames, captures);
-                CollectLocalCapturesRecursive(slice.End, outerScope, parameterNames, captures);
                 break;
 
             case ConditionalExpression conditional:

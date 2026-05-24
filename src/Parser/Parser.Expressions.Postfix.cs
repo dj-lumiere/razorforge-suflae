@@ -103,30 +103,19 @@ public partial class Parser
                 Expression index = ParseExpression();
                 Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after index");
 
-                if (index is RangeExpression range)
+                if (index is RangeExpression)
                 {
-                    // [a to b] or [a til b] -> SliceExpression (desugars to $getslice)
-                    if (range.Step != null)
-                    {
-                        throw new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
-                            message: "Step ('by') is not supported in slice syntax.",
-                            fileName: FileName,
-                            line: CurrentToken.Line,
-                            column: CurrentToken.Column,
-                            language: _language);
-                    }
+                    throw new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
+                        message: "Slice syntax 'xs[a to b]' is not supported.",
+                        fileName: FileName,
+                        line: CurrentToken.Line,
+                        column: CurrentToken.Column,
+                        language: _language);
+                }
 
-                    expr = new SliceExpression(Object: expr,
-                        Start: range.Start,
-                        End: range.End,
-                        Location: expr.Location);
-                }
-                else
-                {
-                    expr = new IndexExpression(Object: expr,
-                        Index: index,
-                        Location: expr.Location);
-                }
+                expr = new IndexExpression(Object: expr,
+                    Index: index,
+                    Location: expr.Location);
             }
             else if (Match(type: TokenType.QuestionDot))
             {
