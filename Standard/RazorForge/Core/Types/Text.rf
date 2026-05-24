@@ -433,7 +433,10 @@ routine Text.trim() -> ?Text
     if not me[end_idx - 1u64].is_whitespace()
       break
     end_idx -= 1u64
-  return me[start til end_idx]
+  var result = List[Character]()
+  for i in start til end_idx
+    result.add_last(me[i])
+  return Text(from_list: steal result)
 
 ### Returns a copy with leading whitespace removed.
 ### Trailing content is preserved unchanged.
@@ -447,7 +450,10 @@ routine Text.trim_start() -> ?Text
     if not me[start].is_whitespace()
       break
     start += 1u64
-  return me[start til me.count]
+  var result = List[Character]()
+  for i in start til me.count
+    result.add_last(me[i])
+  return Text(from_list: steal result)
 
 ### Returns a copy with trailing whitespace removed.
 ### Leading content is preserved unchanged.
@@ -463,7 +469,10 @@ routine Text.trim_end() -> ?Text
     if not me[end_idx - 1u64].is_whitespace()
       break
     end_idx -= 1u64
-  return me[0 til end_idx]
+  var result = List[Character]()
+  for i in 0u64 til end_idx
+    result.add_last(me[i])
+  return Text(from_list: steal result)
 
 ### Returns a copy with each `old` value replaced by `new`.
 ### Replacement is performed left to right and does not re-scan newly inserted text.
@@ -504,7 +513,10 @@ routine Text.replace(old: Referring[Text], new: Referring[Text]) -> ?Text
 @readonly
 routine Text.remove_prefix(prefix: Referring[Text]) -> ?Text
   if me.starts_with(prefix)
-    return me[prefix.count() til me.count]
+    var result = List[Character]()
+    for i in prefix.count() til me.count
+      result.add_last(me[i])
+    return Text(from_list: steal result)
   return me
 
 ### Returns a copy without the matching suffix.
@@ -514,7 +526,11 @@ routine Text.remove_prefix(prefix: Referring[Text]) -> ?Text
 @readonly
 routine Text.remove_suffix(suffix: Referring[Text]) -> ?Text
   if me.ends_with(suffix)
-    return me[0 til me.count - suffix.count()]
+    var result = List[Character]()
+    var end_idx = me.count - suffix.count()
+    for i in 0u64 til end_idx
+      result.add_last(me[i])
+    return Text(from_list: steal result)
   return me
 
 ### Returns a repeated copy of this value.
@@ -616,12 +632,18 @@ routine Text.split(separator: Referring[Text]) -> ?List[Text]
         found = false
         break
     if found
-      parts.add_last(me[start til i])
+      var seg = List[Character]()
+      for k in start til i
+        seg.add_last(me[k])
+      parts.add_last(Text(from_list: steal seg))
       i += separator_count
       start = i
     else
       i += 1u64
-  parts.add_last(me[start til me.count])
+  var tail = List[Character]()
+  for k in start til me.count
+    tail.add_last(me[k])
+  parts.add_last(Text(from_list: steal tail))
   return steal parts
 
 ### Returns a new text formed by joining `parts` with this separator.
