@@ -203,7 +203,7 @@ routine BitArray[N].$contains(value: Bool) -> Bool
 
 @readonly
 routine BitArray[N].$represent() -> ?Text
-  var result = me.type_name() + "(["
+  var result = "BitArray(["
   var i = 0u64
   while i < N
     if i > 0u64

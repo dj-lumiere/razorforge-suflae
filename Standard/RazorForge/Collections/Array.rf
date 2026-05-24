@@ -169,7 +169,7 @@ routine ArrayIterator[T, N].$next!() -> ?T
 # ============================================================================
 
 routine Array[T, N].$represent() -> ?Text
-  var result = me.type_name() + "(["
+  var result = "Array(["
   for i in 0u64 til N
     if i > 0u64
       result = result + ", "
