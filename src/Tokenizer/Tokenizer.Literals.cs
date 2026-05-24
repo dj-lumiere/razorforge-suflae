@@ -474,8 +474,12 @@ public partial class Tokenizer
                     {
                         ScanNumber();
                     }
-                    else if (char.IsLetter(c: c) || c == '_')
+                    else
                     {
+                        // Permissive fallback: anything that isn't a recognised
+                        // bracket/punct/operator above is treated as identifier
+                        // start. Lets sigils like `$` (and future ones) flow
+                        // through without per-char allow-listing.
                         ScanIdentifier();
                     }
 
