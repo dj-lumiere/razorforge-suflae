@@ -41,25 +41,25 @@ routine ByteSize.$create(bytes: U64) -> ByteSize
 ### Returns a decimal terabyte size.
 ### :param n: The number of terabytes.
 ### :returns: The resulting `ByteSize` value.
-routine ByteSize.terabytes(n: U64) -> ByteSize
+common routine ByteSize.terabytes(n: U64) -> ByteSize
   return reinterpret_bits[U64, ByteSize](n *% BYTES_PER_TB)
 
 ### Returns a binary tebibyte size.
 ### :param n: The number of tebibytes.
 ### :returns: The resulting `ByteSize` value.
-routine ByteSize.tebibytes(n: U64) -> ByteSize
+common routine ByteSize.tebibytes(n: U64) -> ByteSize
   return reinterpret_bits[U64, ByteSize](n *% BYTES_PER_TIB)
 
 ### Returns a decimal petabyte size.
 ### :param n: The number of petabytes.
 ### :returns: The resulting `ByteSize` value.
-routine ByteSize.petabytes(n: U64) -> ByteSize
+common routine ByteSize.petabytes(n: U64) -> ByteSize
   return reinterpret_bits[U64, ByteSize](n *% BYTES_PER_PB)
 
 ### Returns a binary pebibyte size.
 ### :param n: The number of pebibytes.
 ### :returns: The resulting `ByteSize` value.
-routine ByteSize.pebibytes(n: U64) -> ByteSize
+common routine ByteSize.pebibytes(n: U64) -> ByteSize
   return reinterpret_bits[U64, ByteSize](n *% BYTES_PER_PIB)
 
 # ============================================================================

@@ -588,7 +588,7 @@ routine BitList.to_u64!() -> U64
 ### The least-significant bit of `value` becomes the first element in the list.
 ### :param value: The packed byte to unpack.
 ### :returns: An eight-bit `BitList` representing `value`.
-routine BitList.from_u8(value: U8) -> ?BitList
+common routine BitList.from_u8(value: U8) -> ?BitList
   # Create BitList from U8 (8 bits)
   var result = BitList(8u64)
   var i = 0u8
@@ -601,7 +601,7 @@ routine BitList.from_u8(value: U8) -> ?BitList
 ### The least-significant bit of `value` becomes the first element in the list.
 ### :param value: The packed 16-bit value to unpack.
 ### :returns: A sixteen-bit `BitList` representing `value`.
-routine BitList.from_u16(value: U16) -> ?BitList
+common routine BitList.from_u16(value: U16) -> ?BitList
   # Create BitList from U16 (16 bits)
   var result = BitList(16u64)
   var i = 0u16
@@ -614,7 +614,7 @@ routine BitList.from_u16(value: U16) -> ?BitList
 ### The least-significant bit of `value` becomes the first element in the list.
 ### :param value: The packed 32-bit value to unpack.
 ### :returns: A thirty-two-bit `BitList` representing `value`.
-routine BitList.from_u32(value: U32) -> ?BitList
+common routine BitList.from_u32(value: U32) -> ?BitList
   # Create BitList from U32 (32 bits)
   var result = BitList(32u64)
   var i = 0u32
@@ -655,7 +655,7 @@ routine BitList.$diagnose() -> ?Text
 ### The least-significant bit of `value` becomes the first element in the list.
 ### :param value: The packed 64-bit value to unpack.
 ### :returns: A sixty-four-bit `BitList` representing `value`.
-routine BitList.from_u64(value: U64) -> ?BitList
+common routine BitList.from_u64(value: U64) -> ?BitList
   # Create BitList from U64 (64 bits)
   var result = BitList(64u64)
   var i = 0u64

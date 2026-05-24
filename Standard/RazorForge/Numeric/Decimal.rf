@@ -23,13 +23,13 @@ entity Decimal obeys Numeric, Ordered
 ###
 ### :param digits: The desired number of decimal digits.
 ### :note: Call once in `start()` to configure the whole program's behavior.
-routine Decimal.set_precision(digits: S32)
+common routine Decimal.set_precision(digits: S32)
   rf_bigdec_set_precision(digits)
   return
 
 ### Returns the current global working precision (decimal digits).
 ### :returns: The current default precision used by add/sub/mul/etc.
-routine Decimal.get_precision() -> S32
+common routine Decimal.get_precision() -> S32
   return rf_bigdec_get_precision()
 
 # ============================================================================
@@ -442,7 +442,7 @@ routine Decimal.$represent(decimal_places: S32 = 10) -> ?Text
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.pi(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
+common routine Decimal.pi(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_pi(result.handle, precision)
   return result
@@ -451,7 +451,7 @@ routine Decimal.pi(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.e(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
+common routine Decimal.e(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
   var result = Decimal(handle: rf_bigdec_new())
   rf_bigdec_e(result.handle, precision)
   return result
@@ -475,13 +475,13 @@ routine Decimal.$create!(text: Referring[Text]) -> ?Decimal
 ### Returns the additive identity for `Decimal`.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.zero() -> ?Decimal
+common routine Decimal.zero() -> ?Decimal
   return Decimal(0_s64)
 
 ### Returns the multiplicative identity for `Decimal`.
 ### :returns: The resulting `Decimal` value.
 @readonly
-routine Decimal.one() -> ?Decimal
+common routine Decimal.one() -> ?Decimal
   return Decimal(1_s64)
 
 # ============================================================================

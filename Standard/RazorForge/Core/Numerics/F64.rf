@@ -370,7 +370,7 @@ routine F64.to_bits() -> U64
 ### Reinterprets a raw IEEE 754 bit pattern as an `F64`.
 ### :param bits: The exact double-precision encoding to decode.
 ### :returns: The `F64` value with that bit pattern.
-routine F64.from_bits(bits: U64) -> F64
+common routine F64.from_bits(bits: U64) -> F64
   return reinterpret_bits[U64, F64](bits)
 
 # ============================================================================

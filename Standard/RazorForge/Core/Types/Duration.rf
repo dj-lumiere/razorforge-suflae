@@ -80,19 +80,19 @@ routine Duration.$create(seconds: S64, nanoseconds: U32) -> Duration
 
 ### Returns the zero duration.
 ### :returns: The resulting `Duration` value.
-routine Duration.zero() -> Duration
+common routine Duration.zero() -> Duration
   return Duration(seconds: 0_s64, nanoseconds: 0_u32)
 
 ### Creates a value from nanoseconds.
 ### :param ns: The duration in nanoseconds.
 ### :returns: The resulting `Duration` value.
-routine Duration.from_nanoseconds(ns: S64) -> Duration
+common routine Duration.from_nanoseconds(ns: S64) -> Duration
   return normalize_duration(seconds: 0_s64, nanoseconds: ns)
 
 ### Creates a value from microseconds.
 ### :param us: The duration in microseconds.
 ### :returns: The resulting `Duration` value.
-routine Duration.from_microseconds(us: S64) -> Duration
+common routine Duration.from_microseconds(us: S64) -> Duration
   var s = signed_div[S64](us, 1_000_000_s64)
   var ns = signed_rem[S64](us, 1_000_000_s64) *% NS_PER_MICROSECOND
   return normalize_duration(seconds: s, nanoseconds: ns)
@@ -100,7 +100,7 @@ routine Duration.from_microseconds(us: S64) -> Duration
 ### Creates a value from milliseconds.
 ### :param ms: The duration in milliseconds.
 ### :returns: The resulting `Duration` value.
-routine Duration.from_milliseconds(ms: S64) -> Duration
+common routine Duration.from_milliseconds(ms: S64) -> Duration
   var s = signed_div[S64](ms, 1_000_s64)
   var ns = signed_rem[S64](ms, 1_000_s64) *% NS_PER_MILLISECOND
   return normalize_duration(seconds: s, nanoseconds: ns)
@@ -108,31 +108,31 @@ routine Duration.from_milliseconds(ms: S64) -> Duration
 ### Creates a value from seconds.
 ### :param s: The duration in seconds.
 ### :returns: The resulting `Duration` value.
-routine Duration.from_seconds(s: S64) -> Duration
+common routine Duration.from_seconds(s: S64) -> Duration
   return Duration(seconds: s, nanoseconds: 0_u32)
 
 ### Creates a value from minutes.
 ### :param m: The duration in minutes.
 ### :returns: The resulting `Duration` value.
-routine Duration.from_minutes(m: S64) -> Duration
+common routine Duration.from_minutes(m: S64) -> Duration
   return Duration(seconds: m *% SECONDS_PER_MINUTE, nanoseconds: 0_u32)
 
 ### Creates a value from hours.
 ### :param h: The duration in hours.
 ### :returns: The resulting `Duration` value.
-routine Duration.from_hours(h: S64) -> Duration
+common routine Duration.from_hours(h: S64) -> Duration
   return Duration(seconds: h *% SECONDS_PER_HOUR, nanoseconds: 0_u32)
 
 ### Creates a value from days.
 ### :param d: The duration in days.
 ### :returns: The resulting `Duration` value.
-routine Duration.from_days(d: S64) -> Duration
+common routine Duration.from_days(d: S64) -> Duration
   return Duration(seconds: d *% SECONDS_PER_DAY, nanoseconds: 0_u32)
 
 ### Creates a value from weeks.
 ### :param w: The duration in weeks.
 ### :returns: The resulting `Duration` value.
-routine Duration.from_weeks(w: S64) -> Duration
+common routine Duration.from_weeks(w: S64) -> Duration
   return Duration(seconds: w *% SECONDS_PER_WEEK, nanoseconds: 0_u32)
 
 # ============================================================================

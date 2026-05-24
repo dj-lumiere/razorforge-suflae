@@ -337,7 +337,7 @@ routine D64.to_bits() -> U64
 ### Reinterprets a raw decimal64 bit pattern as `D64`.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `D64` value.
-routine D64.from_bits(bits: U64) -> D64
+common routine D64.from_bits(bits: U64) -> D64
   return reinterpret_bits[U64, D64](bits)
 
 # ============================================================================

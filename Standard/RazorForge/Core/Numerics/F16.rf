@@ -325,7 +325,7 @@ routine F16.to_bits() -> U16
 ### Reinterprets a raw IEEE 754 bit pattern as an `F16`.
 ### :param bits: The exact half-precision encoding to decode.
 ### :returns: The `F16` value with that bit pattern.
-routine F16.from_bits(bits: U16) -> F16
+common routine F16.from_bits(bits: U16) -> F16
   return reinterpret_bits[U16, F16](bits)
 
 # ============================================================================

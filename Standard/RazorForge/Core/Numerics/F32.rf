@@ -366,7 +366,7 @@ routine F32.to_bits() -> U32
 ### Reinterprets a raw IEEE 754 bit pattern as an `F32`.
 ### :param bits: The exact single-precision encoding to decode.
 ### :returns: The `F32` value with that bit pattern.
-routine F32.from_bits(bits: U32) -> F32
+common routine F32.from_bits(bits: U32) -> F32
   return reinterpret_bits[U32, F32](bits)
 
 # ============================================================================

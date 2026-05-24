@@ -45,7 +45,7 @@ routine Complex.$create(real: Decimal, imag: Decimal) -> ?Complex
 ### :param precision: The decimal precision to use.
 ### :returns: The resulting `Complex` value.
 @readonly
-routine Complex.from_polar(r: Decimal, theta: Decimal, precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
+common routine Complex.from_polar(r: Decimal, theta: Decimal, precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
   return Complex(real: r * theta.cos(precision), imag: r * theta.sin(precision))
 
 # ============================================================================

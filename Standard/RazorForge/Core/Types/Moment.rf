@@ -131,18 +131,18 @@ routine Moment.$create(year: S64, month: S64, day: S64, hour: S64, minute: S64, 
 ### Returns the Unix epoch.
 ### This is `1970-01-01 00:00:00 UTC`.
 ### :returns: The resulting `Moment` value.
-routine Moment.epoch() -> Moment
+common routine Moment.epoch() -> Moment
   return Moment(seconds: 0_s64, nanoseconds: 0_u32)
 
 ### Creates a value from timestamp.
 ### :param seconds: The whole-second component.
 ### :returns: The resulting `Moment` value.
-routine Moment.from_timestamp(seconds: S64) -> Moment
+common routine Moment.from_timestamp(seconds: S64) -> Moment
   return Moment(seconds: seconds, nanoseconds: 0_u32)
 
 ### Returns the current UTC instant from the runtime clock.
 ### :returns: The resulting `Moment` value.
-routine Moment.now() -> Moment
+common routine Moment.now() -> Moment
   # Implemented by compiler intrinsic / native runtime
   return rf_moment_now()
 

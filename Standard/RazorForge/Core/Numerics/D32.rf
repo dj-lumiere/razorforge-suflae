@@ -348,7 +348,7 @@ routine D32.to_bits() -> U32
 ### Reinterprets a raw decimal32 bit pattern as `D32`.
 ### :param bits: The encoded bit pattern.
 ### :returns: The resulting `D32` value.
-routine D32.from_bits(bits: U32) -> D32
+common routine D32.from_bits(bits: U32) -> D32
   return reinterpret_bits[U32, D32](bits)
 
 # ============================================================================

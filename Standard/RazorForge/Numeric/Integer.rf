@@ -338,7 +338,7 @@ routine Integer.$create!(text: Referring[Text]) -> ?Integer
 ### :returns: The resulting `Integer` value.
 ### :throws: May throw {ParseError}.
 @readonly
-routine Integer.from_binary!(text: Referring[Text]) -> ?Integer
+common routine Integer.from_binary!(text: Referring[Text]) -> ?Integer
   var int = Integer(handle: rf_bigint_new())
   var result = rf_bigint_set_str(int.handle, text.to_cstr(), 2)
   if result != 0
@@ -351,7 +351,7 @@ routine Integer.from_binary!(text: Referring[Text]) -> ?Integer
 ### :returns: The resulting `Integer` value.
 ### :throws: May throw {ParseError}.
 @readonly
-routine Integer.from_hex!(text: Referring[Text]) -> ?Integer
+common routine Integer.from_hex!(text: Referring[Text]) -> ?Integer
   var int = Integer(handle: rf_bigint_new())
   var result = rf_bigint_set_str(int.handle, text.to_cstr(), 16)
   if result != 0
@@ -362,13 +362,13 @@ routine Integer.from_hex!(text: Referring[Text]) -> ?Integer
 ### Returns the additive identity for `Integer`.
 ### :returns: The resulting `Integer` value.
 @readonly
-routine Integer.zero() -> ?Integer
+common routine Integer.zero() -> ?Integer
   return Integer(0_s64)
 
 ### Returns the multiplicative identity for `Integer`.
 ### :returns: The resulting `Integer` value.
 @readonly
-routine Integer.one() -> ?Integer
+common routine Integer.one() -> ?Integer
   return Integer(1_s64)
 
 # ============================================================================

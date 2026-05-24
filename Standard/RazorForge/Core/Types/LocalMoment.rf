@@ -35,14 +35,14 @@ routine LocalMoment.$create(moment: Moment, offset: Duration) -> LocalMoment
 ### :param second: The local second.
 ### :param offset: The UTC offset associated with the local civil time.
 ### :returns: The resulting `LocalMoment` value.
-routine LocalMoment.from_local(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64, offset: Duration) -> LocalMoment
+common routine LocalMoment.from_local(year: S64, month: S64, day: S64, hour: S64, minute: S64, second: S64, offset: Duration) -> LocalMoment
   var local_moment = Moment.$create(year: year, month: month, day: day, hour: hour, minute: minute, second: second)
   var utc_moment = local_moment.subtract_duration(offset)
   return LocalMoment(moment: utc_moment, offset: offset)
 
 ### Returns the current instant with a zero UTC offset.
 ### :returns: The resulting `LocalMoment` value.
-routine LocalMoment.now_utc() -> LocalMoment
+common routine LocalMoment.now_utc() -> LocalMoment
   return LocalMoment(moment: Moment.now(), offset: Duration.zero())
 
 # ============================================================================

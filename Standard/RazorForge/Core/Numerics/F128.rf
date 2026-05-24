@@ -447,7 +447,7 @@ routine F128.high_bits() -> U64
 ### Reinterprets a raw IEEE 754 bit pattern as an `F128`.
 ### :param bits: The exact quadruple-precision encoding to decode.
 ### :returns: The `F128` value with that bit pattern.
-routine F128.from_bits(bits: U128) -> F128
+common routine F128.from_bits(bits: U128) -> F128
   return reinterpret_bits[U128, F128](bits)
 
 # ============================================================================
