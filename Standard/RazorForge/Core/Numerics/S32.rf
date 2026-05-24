@@ -676,7 +676,7 @@ routine S32.$create!(from_text: Text) -> S32
 
 ### Returns an xxHash64-based hash of this value.
 ### :returns: A `U64` hash of the zero-extended 32-bit representation.
-routine S32.$hash() -> U64
+routine S32.$fast_hash() -> U64
   return __hash_leaf(v: zero_extend[S32, U64](me))
 
 ### Returns a SipHash-2-4 keyed hash of this value.

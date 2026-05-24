@@ -666,7 +666,7 @@ routine S64.$create!(from_text: Text) -> S64
 
 ### Returns an xxHash64-based hash of this value.
 ### :returns: The 64-bit hash.
-routine S64.$hash() -> U64
+routine S64.$fast_hash() -> U64
   return __hash_leaf(v: reinterpret_bits[S64, U64](me))
 
 ### Returns a SipHash-2-4 keyed hash of this value.

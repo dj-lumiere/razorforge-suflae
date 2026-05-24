@@ -659,7 +659,7 @@ routine S8.$create!(from_text: Text) -> S8
 
 ### Returns an xxHash64-based hash of this value.
 ### :returns: A `U64` hash of the zero-extended 8-bit representation.
-routine S8.$hash() -> U64
+routine S8.$fast_hash() -> U64
   return __hash_leaf(v: zero_extend[S8, U64](me))
 
 ### Returns a SipHash-2-4 keyed hash of this value.

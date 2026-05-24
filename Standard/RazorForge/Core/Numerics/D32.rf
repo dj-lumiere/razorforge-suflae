@@ -437,7 +437,7 @@ routine D32.$create!(from_text: Text) -> D32
 
 ### Returns an xxHash64-based hash of this value, derived from its raw bit pattern.
 ### :returns: A `U64` hash of the decimal32 encoding.
-routine D32.$hash() -> U64
+routine D32.$fast_hash() -> U64
   return __hash_leaf(v: zero_extend[U32, U64](reinterpret_bits[D32, U32](me)))
 
 # ============================================================================

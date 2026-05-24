@@ -409,9 +409,9 @@ routine Duration.$diagnose() -> ?Text
 
 ### Returns an xxHash64-based hash of this duration.
 ### :returns: A `U64` hash combining the seconds and nanoseconds components.
-routine Duration.$hash() -> U64
-  var acc = __hash_round(acc: 0_u64, h: me.seconds.$hash())
-  acc = __hash_round(acc: acc, h: me.nanoseconds.$hash())
+routine Duration.$fast_hash() -> U64
+  var acc = __hash_round(acc: 0_u64, h: me.seconds.$fast_hash())
+  acc = __hash_round(acc: acc, h: me.nanoseconds.$fast_hash())
   return __hash_finalize(h: acc)
 
 ### Returns a SipHash-2-4 keyed hash of this duration.

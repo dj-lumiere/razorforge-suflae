@@ -12,7 +12,7 @@ module Core
 ###
 ### :see: {Hijacked[T]} for the typed raw-pointer concept used in RF-internal plumbing.
 @llvm("ptr")
-record CPtr
+record CPtr obeys Assignable
   pass
 
 ### Returns the raw address stored in this pointer.
@@ -21,6 +21,15 @@ record CPtr
 @readonly
 dangerous routine CPtr.get_address() -> Address
   return pointer_to_int[CPtr, Address](me)
+
+### Returns a bitwise duplicate of this raw pointer.
+### `CPtr` is `@llvm("ptr")` so it does not auto-derive `Assignable`; this trivial
+### opt-in body makes `=` and `with` legal at the cost of one line. Aliasing is
+### the user's problem — the same FFI contract that lets `CPtr` exist at all.
+### :returns: A bitwise duplicate of this pointer.
+@readonly
+routine CPtr.$copy() -> Me
+  return me
 
 ### Reinterprets a raw address as `CPtr`.
 ### This does not validate ownership or liveness of the pointed runtime object.

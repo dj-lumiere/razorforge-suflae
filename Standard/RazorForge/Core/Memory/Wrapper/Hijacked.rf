@@ -8,7 +8,7 @@ import BuilderService
 ### :typeparam T: The pointee type.
 ### :see: {Address}, {Grasped[T]}, {Viewed[T]}, {Memory-Types}
 @llvm("ptr")
-record Hijacked[T]
+record Hijacked[T] obeys Assignable
   pass
 
 ### Returns the raw address carried by this pointer.
@@ -16,6 +16,15 @@ record Hijacked[T]
 @readonly
 dangerous routine Hijacked[T].get_address() -> Address
   return pointer_to_int[T, Address](me)
+
+### Returns a bitwise duplicate of this raw pointer.
+### `Hijacked[T]` is `@llvm("ptr")` so it does not auto-derive `Assignable`; this
+### trivial opt-in body lets `=` and `with` work, with aliasing left to the user
+### just like every other operation on this type.
+### :returns: A bitwise duplicate of this pointer.
+@readonly
+routine Hijacked[T].$copy() -> Me
+  return me
 
 ### Returns the raw address of a bare value when it is reinterpreted as a pointer slot.
 ### :returns: The address of this value viewed as a pointer-sized slot.
@@ -165,7 +174,7 @@ routine Hijacked[T].$cmp(you: Hijacked[T]) -> ComparisonSign
 
 ### Returns an xxHash64 hash of this pointer's address.
 ### :returns: An xxHash64 hash of this pointer's address.
-routine Hijacked[T].$hash() -> U64
+routine Hijacked[T].$fast_hash() -> U64
   danger!
     return __hash_leaf(v: U64(me.address()))
 

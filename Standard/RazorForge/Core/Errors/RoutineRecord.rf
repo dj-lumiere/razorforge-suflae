@@ -23,13 +23,13 @@ record RoutineRecord
 
 ### Returns an xxHash64-based hash of this routine record.
 ### :returns: A `U64` hash combining all identifier fields.
-routine RoutineRecord.$hash() -> U64
-  var acc = __hash_round(acc: 0_u64, h: me.file_id.$hash())
-  acc = __hash_round(acc: acc, h: me.routine_id.$hash())
-  acc = __hash_round(acc: acc, h: me.module_id.$hash())
-  acc = __hash_round(acc: acc, h: me.type_id.$hash())
-  acc = __hash_round(acc: acc, h: me.line_no.$hash())
-  acc = __hash_round(acc: acc, h: me.column_no.$hash())
+routine RoutineRecord.$fast_hash() -> U64
+  var acc = __hash_round(acc: 0_u64, h: me.file_id.$fast_hash())
+  acc = __hash_round(acc: acc, h: me.routine_id.$fast_hash())
+  acc = __hash_round(acc: acc, h: me.module_id.$fast_hash())
+  acc = __hash_round(acc: acc, h: me.type_id.$fast_hash())
+  acc = __hash_round(acc: acc, h: me.line_no.$fast_hash())
+  acc = __hash_round(acc: acc, h: me.column_no.$fast_hash())
   return __hash_finalize(h: acc)
 
 ### Returns a SipHash-2-4 keyed hash of this routine record.

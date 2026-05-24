@@ -276,9 +276,9 @@ routine LocalMoment.$diagnose() -> ?Text
 
 ### Returns an xxHash64-based hash of this local moment.
 ### :returns: A `U64` hash combining the underlying moment and offset.
-routine LocalMoment.$hash() -> U64
-  var acc = __hash_round(acc: 0_u64, h: me.moment.$hash())
-  acc = __hash_round(acc: acc, h: me.offset.$hash())
+routine LocalMoment.$fast_hash() -> U64
+  var acc = __hash_round(acc: 0_u64, h: me.moment.$fast_hash())
+  acc = __hash_round(acc: acc, h: me.offset.$fast_hash())
   return __hash_finalize(h: acc)
 
 ### Returns a SipHash-2-4 keyed hash of this local moment.

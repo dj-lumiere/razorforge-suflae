@@ -53,7 +53,7 @@ routine Bool.$represent() -> ?Text
 
 ### Returns an xxHash64-based hash of this value.
 ### :returns: A `U64` hash — `0` maps to a hash of `0`, `1` maps to a hash of `1`.
-routine Bool.$hash() -> U64
+routine Bool.$fast_hash() -> U64
   return __hash_leaf(v: zero_extend[Bool, U64](me))
 
 ### Returns a SipHash-2-4 keyed hash of this value.

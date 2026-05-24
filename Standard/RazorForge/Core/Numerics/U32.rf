@@ -593,7 +593,7 @@ routine U32.$create!(from_text: Text) -> U32
 
 ### Returns an xxHash64-based hash of this value.
 ### :returns: A `U64` hash of the 32-bit value.
-routine U32.$hash() -> U64
+routine U32.$fast_hash() -> U64
   return __hash_leaf(v: zero_extend[U32, U64](me))
 
 ### Returns a SipHash-2-4 keyed hash of this value.

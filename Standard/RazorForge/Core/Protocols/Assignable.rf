@@ -1,0 +1,19 @@
+module Core
+
+### Represents the protocol for implicit copy at assignment sites.
+### `Assignable` gates the `=` operator and every position that implicitly copies a
+### value: `var x = a`, passing as a non-`steal` argument, returning a non-`?T`
+### value, and `with` lens-copy. Auto-derived for any type whose `@llvm` layout
+### contains no `ptr` (and for `@llvm("void")`). Types with managed-pointer
+### payloads (entities, `Retained[T]`, `Tracked[T]`, etc.) must opt in by writing
+### `obeys Assignable` and a `$copy` body that spells out each field's verb,
+### centralising the cost in one visible place.
+protocol Assignable
+  ### Returns a copy of this value suitable for binding into the destination slot.
+  ### For auto-derived types this is a bitwise duplicate. For opt-in types the body
+  ### performs whatever per-field work is required (refcount bump, deep clone,
+  ### ownership transfer) so the cost is visible at one location instead of every
+  ### call site.
+  ### :returns: A copy of this value.
+  @readonly
+  routine Me.$copy() -> Me

@@ -22,7 +22,7 @@ common routine SecureHashKey.random() -> SecureHashKey
 
 ### Returns an xxHash64-based hash of this key.
 ### :returns: A `U64` hash combining both 64-bit key words.
-routine SecureHashKey.$hash() -> U64
+routine SecureHashKey.$fast_hash() -> U64
   var acc = __hash_round(acc: 0_u64, h: __hash_leaf(v: me.k0))
   acc = __hash_round(acc: acc, h: __hash_leaf(v: me.k1))
   return __hash_finalize(h: acc)

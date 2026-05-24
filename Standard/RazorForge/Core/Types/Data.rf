@@ -18,10 +18,10 @@ record Data
 
 ### Returns an xxHash64-based hash of this boxed value's identity.
 ### :returns: A `U64` hash combining the type id, address, and size.
-routine Data.$hash() -> U64
-  var acc = __hash_round(acc: 0_u64, h: me.type_id.$hash())
-  acc = __hash_round(acc: acc, h: U64(me.data_address).$hash())
-  acc = __hash_round(acc: acc, h: me.data_size.$hash())
+routine Data.$fast_hash() -> U64
+  var acc = __hash_round(acc: 0_u64, h: me.type_id.$fast_hash())
+  acc = __hash_round(acc: acc, h: U64(me.data_address).$fast_hash())
+  acc = __hash_round(acc: acc, h: me.data_size.$fast_hash())
   return __hash_finalize(h: acc)
 
 ### Returns a SipHash-2-4 keyed hash of this boxed value's identity.

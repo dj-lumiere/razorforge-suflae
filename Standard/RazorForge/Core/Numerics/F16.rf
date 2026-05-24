@@ -410,7 +410,7 @@ routine F16.$create!(from_text: Text) -> F16
 
 ### Returns an xxHash64-based hash of this value, derived from its raw bit pattern.
 ### :returns: A `U64` hash of the 16-bit float encoding.
-routine F16.$hash() -> U64
+routine F16.$fast_hash() -> U64
   return __hash_leaf(v: zero_extend[U16, U64](reinterpret_bits[F16, U16](me)))
 
 # ============================================================================

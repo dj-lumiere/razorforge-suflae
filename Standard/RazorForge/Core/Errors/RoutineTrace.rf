@@ -20,14 +20,14 @@ record RoutineTrace
 
 ### Returns an xxHash64-based hash of this routine trace.
 ### :returns: A `U64` hash combining all valid frames, depth, and truncation flag.
-routine RoutineTrace.$hash() -> U64
+routine RoutineTrace.$fast_hash() -> U64
   var acc = 0_u64
   var i = 0_u64
   while i < 10_u64
-    acc = __hash_round(acc: acc, h: me.frames[i].$hash())
+    acc = __hash_round(acc: acc, h: me.frames[i].$fast_hash())
     i = i + 1_u64
-  acc = __hash_round(acc: acc, h: me.depth.$hash())
-  acc = __hash_round(acc: acc, h: me.truncated.$hash())
+  acc = __hash_round(acc: acc, h: me.depth.$fast_hash())
+  acc = __hash_round(acc: acc, h: me.truncated.$fast_hash())
   return __hash_finalize(h: acc)
 
 ### Returns a SipHash-2-4 keyed hash of this routine trace.

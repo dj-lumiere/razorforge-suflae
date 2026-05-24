@@ -163,7 +163,7 @@ routine Byte.$diagnose() -> ?Text
 ### Returns a hash of this value.
 ### :returns: The resulting `U64` value.
 @readonly
-routine Byte.$hash() -> U64
+routine Byte.$fast_hash() -> U64
   return __hash_leaf(v: zero_extend[Byte, U64](me))
 
 ### Returns a keyed hash of this value using SipHash-2-4.

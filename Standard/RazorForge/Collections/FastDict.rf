@@ -139,14 +139,14 @@ routine FastDict[K, V].$destroy()
 # ============================================================================
 
 ### Extracts the 7-bit control-byte fingerprint from a raw hash value.
-### :param hash: The raw hash output from `$hash`.
+### :param hash: The raw hash output from `$fast_hash`.
 ### :returns: The low 7 bits of `hash`, used to filter candidate probe slots before a full key comparison.
 @readonly
 routine FastDict[K, V].h2(hash: U64) -> U8
   return U8(hash & U64(CTRL_H2_MASK))
 
 ### Derives the primary probe slot index from a raw hash value.
-### :param hash: The raw hash output from `$hash`.
+### :param hash: The raw hash output from `$fast_hash`.
 ### :returns: The upper bits of `hash`, used as the starting slot before masking to the table size.
 @readonly
 routine FastDict[K, V].h1(hash: U64) -> U64
@@ -191,7 +191,7 @@ routine FastDict[K, V].write_val_at(ei: U64, val: V)
 ### :returns: The probe slot index of `key` if found, or `capacity` if the key is absent.
 @readonly
 routine FastDict[K, V].find_slot(key: K) -> U64
-  var h = key.$hash()
+  var h = key.$fast_hash()
   var target = me.h2(h)
   var mask = me.capacity -% 1u64
   var i = me.h1(h) & mask
@@ -290,7 +290,7 @@ routine FastDict[K, V].rehash()
         me.vals.offset(V.data_size() * new_ei).inject(v)
         me.entry_live.offset(ByteSize(bytes: new_ei)).inject(ENTRY_LIVE)
         me.entries_used = me.entries_used +% 1u64
-        me.insert_index_raw(h: k.$hash(), entry_index: new_ei)
+        me.insert_index_raw(h: k.$fast_hash(), entry_index: new_ei)
         me.count = me.count +% 1u64
     i = i +% 1u64
 
@@ -362,7 +362,7 @@ routine FastDict[K, V].add(key: K, value: V) -> Bool
     me.vals.offset(V.data_size() * ei).inject(value)
     me.entry_live.offset(ByteSize(bytes: ei)).inject(ENTRY_LIVE)
   me.entries_used = me.entries_used +% 1u64
-  me.insert_index_raw(h: key.$hash(), entry_index: ei)
+  me.insert_index_raw(h: key.$fast_hash(), entry_index: ei)
   me.count = me.count +% 1u64
   return true
 

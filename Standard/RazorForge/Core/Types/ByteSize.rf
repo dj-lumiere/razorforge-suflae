@@ -261,7 +261,7 @@ routine ByteSize.$diagnose() -> ?Text
 
 ### Returns an xxHash64-based hash of this byte size.
 ### :returns: A `U64` hash of the underlying byte count.
-routine ByteSize.$hash() -> U64
+routine ByteSize.$fast_hash() -> U64
   return __hash_leaf(v: reinterpret_bits[ByteSize, U64](me))
 
 ### Returns a SipHash-2-4 keyed hash of this byte size.

@@ -680,7 +680,7 @@ routine F128.$create!(from_text: Text) -> F128
 
 ### Returns a hash of this value.
 ### :returns: The resulting `U64` value.
-routine F128.$hash() -> U64
+routine F128.$fast_hash() -> U64
   return __hash_u128(v: reinterpret_bits[F128, U128](me))
 
 # ============================================================================

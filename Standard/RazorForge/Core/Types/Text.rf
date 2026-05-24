@@ -288,7 +288,7 @@ routine Text.$cmp(other: Referring[Text]) -> ComparisonSign
 ### Hashing combines character code points using the xxHash64 round function.
 ### :returns: The resulting `U64` hash value.
 @readonly
-routine Text.$hash() -> U64
+routine Text.$fast_hash() -> U64
   var h = __hash_leaf(v: me.count)
   for i in 0u64 til me.count
     h = __hash_round(acc: h, h: __hash_leaf(v: U64(me[i].codepoint())))

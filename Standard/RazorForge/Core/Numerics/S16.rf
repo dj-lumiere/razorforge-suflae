@@ -656,7 +656,7 @@ routine S16.$create!(from_text: Text) -> S16
 
 ### Returns an xxHash64-based hash of this value.
 ### :returns: A `U64` hash of the zero-extended 16-bit representation.
-routine S16.$hash() -> U64
+routine S16.$fast_hash() -> U64
   return __hash_leaf(v: zero_extend[S16, U64](me))
 
 ### Returns a SipHash-2-4 keyed hash of this value.
