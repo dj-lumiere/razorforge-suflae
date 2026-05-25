@@ -492,7 +492,9 @@ public partial class LlvmCodeGenerator
         static bool ShouldDisambiguateByParameterTypes(RoutineInfo candidate) =>
             candidate.Parameters.Count > 0;
 
-        // Lambda closures: [lambda]filename:line:col(paramTypes)
+        static string Bang(string name, bool failable) => failable ? name + "!" : name;
+
+        // Lambda closures: [lambda]filename:line:col!(paramTypes)
         if (routine.IsLambda)
         {
             string fileName =
@@ -501,24 +503,26 @@ public partial class LlvmCodeGenerator
             int col = routine.Location?.Column ?? 0;
             string paramTypes = string.Join(separator: ",",
                 values: routine.Parameters.Select(selector: p => p.Type.Name));
-            return Q(name: DecorateRoutineSymbolName(
-                baseName: $"[lambda]{fileName}:{line}:{col}({paramTypes})",
-                isFailable: routine.IsFailable));
+            string lambdaName = Bang(name: $"[lambda]{fileName}:{line}:{col}", failable: routine.IsFailable);
+            return Q(name: $"{lambdaName}({paramTypes})");
         }
 
         // External("C") functions use the raw C symbol name — no module prefix,
         // so that LLVM IR symbols match the actual C linker symbols.
         if (routine.CallingConvention == "C")
         {
-            return Q(name: DecorateRoutineSymbolName(baseName: SanitizeLlvmName(name: routine.Name),
-                isFailable: routine.IsFailable));
+            return Q(name: Bang(name: SanitizeLlvmName(name: routine.Name),
+                failable: routine.IsFailable));
         }
 
         string name = SanitizeLlvmName(name: routine.Name);
         if (routine.OwnerType == null)
         {
-            // Top-level: Module.Name (BaseName preserves the old FullName format)
-            string fullName = SanitizeLlvmName(name: routine.BaseName);
+            // Top-level: Module.Name!#(typeargs)(paramTypes)
+            // BaseName preserves the module-qualified form. `!` sits on the routine name
+            // itself, before generic-arg and parameter-type suffixes.
+            string fullName = Bang(name: SanitizeLlvmName(name: routine.BaseName),
+                failable: routine.IsFailable);
 
             // Generic instance: append type arguments (e.g., IO.show -> IO.show#S64)
             if (routine.TypeArguments is { Count: > 0 })
@@ -539,24 +543,23 @@ public partial class LlvmCodeGenerator
                 fullName = $"{fullName}({paramTypes})";
             }
 
-            return Q(name: DecorateRoutineSymbolName(baseName: fullName,
-                isFailable: routine.IsFailable));
+            return Q(name: fullName);
         }
 
-        // Common (type-level static) routines: [common]Module.Type.name(paramTypes)
+        // Common (type-level static) routines: [common]Module.Type.name!(paramTypes)
         if (routine.IsCommon)
         {
             string typeName = routine.OwnerType.FullName;
             string paramTypes = string.Join(separator: ",",
                 values: routine.Parameters.Select(selector: p => p.Type.FullName));
-            return Q(name: DecorateRoutineSymbolName(
-                baseName: $"[common]{typeName}.{name}({paramTypes})",
-                isFailable: routine.IsFailable));
+            string commonName = Bang(name: $"[common]{typeName}.{name}",
+                failable: routine.IsFailable);
+            return Q(name: $"{commonName}({paramTypes})");
         }
 
-        // Method: Module.OwnerType.Name (OwnerType.FullName includes module)
+        // Method: Module.OwnerType.Name! (OwnerType.FullName includes module)
         string ownerTypeName = routine.OwnerType.FullName;
-        string baseName = $"{ownerTypeName}.{name}";
+        string baseName = Bang(name: $"{ownerTypeName}.{name}", failable: routine.IsFailable);
 
         // Method-level type arguments (e.g., Hijacked[U64].recast_as[BTreeListNode[S64]]).
         // Distinct from owner type args already in OwnerType.FullName.
@@ -587,8 +590,7 @@ public partial class LlvmCodeGenerator
             baseName = $"{baseName}({paramTypes})";
         }
 
-        return Q(name: DecorateRoutineSymbolName(baseName: baseName,
-            isFailable: routine.IsFailable));
+        return Q(name: baseName);
     }
 
     /// <summary>

@@ -101,7 +101,7 @@ public sealed partial class SemanticVerifier
     {
         var generator = new ErrorHandlingGenerator(registry: _registry);
 
-        foreach ((Program program, _, _) in _registry.StdlibPrograms)
+        foreach ((Program program, _, string module) in _registry.StdlibPrograms)
         {
             foreach (ISyntaxTreeNode node in program.Declarations)
             {
@@ -110,7 +110,7 @@ public sealed partial class SemanticVerifier
 
                 bool hasDirect = generator.BodyHasThrowOrAbsent(body: decl.Body);
 
-                RoutineInfo? routineInfo = ResolveRoutineInfoForDeclaration(decl: decl);
+                RoutineInfo? routineInfo = ResolveRoutineInfoForDeclaration(decl: decl, moduleName: module);
                 if (routineInfo == null || !routineInfo.IsFailable) continue;
                 if (routineInfo.Annotations.Any(predicate: a => a == "crash_only")) continue;
 
@@ -136,7 +136,7 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private void CollectStdlibBodiesForVariantGeneration()
     {
-        foreach ((Program program, _, _) in _registry.StdlibPrograms)
+        foreach ((Program program, _, string module) in _registry.StdlibPrograms)
         {
             foreach (ISyntaxTreeNode node in program.Declarations)
             {
@@ -147,7 +147,7 @@ public sealed partial class SemanticVerifier
                 if (!decl.Name.Contains('.'))
                     continue;
 
-                RoutineInfo? routineInfo = ResolveRoutineInfoForDeclaration(decl: decl);
+                RoutineInfo? routineInfo = ResolveRoutineInfoForDeclaration(decl: decl, moduleName: module);
                 if (routineInfo == null) continue;
 
                 if (!_routineBodies.ContainsKey(key: routineInfo.RegistryKey))
@@ -177,8 +177,11 @@ public sealed partial class SemanticVerifier
             var candidates = new List<RoutineInfo>();
             _registry.CollectMemberRoutineCandidates(type: ownerType, methodName: methodName,
                 candidates: candidates);
+            // For member-routine decls, prefer the decl's actual module (passed in) over the
+            // owner type's module: common routines for built-in types (e.g. `S64.from_digit_bytes`
+            // declared in `IO/BytesIO`) live in a different module from the owner.
             return MatchRoutineDeclaration(candidates: candidates, decl: decl,
-                moduleName: ownerType.Module);
+                moduleName: moduleName ?? ownerType.Module);
         }
 
         string bareName = decl.Name;
