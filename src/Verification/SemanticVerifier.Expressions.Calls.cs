@@ -1260,9 +1260,6 @@ public sealed partial class SemanticVerifier
         if (method.IsSynthesized && BuilderInfoProvider.IsBuilderServiceRoutine(name: method.Name))
             return CallLoweringKind.BuilderIntrinsic;
 
-        if (method.OwnerType is ProtocolTypeInfo or GenericParameterTypeInfo)
-            return CallLoweringKind.RuntimeDispatch;
-
         return CallLoweringKind.DirectMemberRoutine;
     }
 

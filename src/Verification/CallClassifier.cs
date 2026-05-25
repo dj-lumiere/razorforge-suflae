@@ -1,5 +1,4 @@
 using TypeModel.Symbols;
-using TypeModel.Types;
 
 namespace Verification;
 
@@ -35,9 +34,6 @@ internal static class CallClassifier
 
         if (method.IsSynthesized && BuilderInfoProvider.IsBuilderServiceRoutine(name: method.Name))
             return CallLoweringKind.BuilderIntrinsic;
-
-        if (method.OwnerType is ProtocolTypeInfo or GenericParameterTypeInfo)
-            return CallLoweringKind.RuntimeDispatch;
 
         return CallLoweringKind.DirectMemberRoutine;
     }
