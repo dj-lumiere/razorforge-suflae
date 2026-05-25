@@ -825,12 +825,6 @@ public partial class LlvmCodeGenerator
                 EmitEntryAlloca(llvmName: varAddr, llvmType: "ptr");
                 EmitLine(sb: sb, line: $"  store ptr {handleVal}, ptr {varAddr}");
 
-                // Also store the type_id so runtime dispatch can select the right implementer.
-                string typeIdAddr = $"%{crashable.VariableName}.typeid.addr";
-                EmitEntryAlloca(llvmName: typeIdAddr, llvmType: "i64");
-                EmitLine(sb: sb, line: $"  store i64 {tag}, ptr {typeIdAddr}");
-                _protocolTypeIdAllocas[key: crashable.VariableName] = typeIdAddr;
-
                 // The bound variable is an opaque error pointer -> type it as Crashable (protocol)
                 // so subsequent method calls (e.g., err.crash_message()) resolve correctly.
                 TypeInfo errVarType = _registry.LookupType(name: "Crashable") ?? subjectType;

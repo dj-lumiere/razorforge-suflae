@@ -606,8 +606,7 @@ public partial class LlvmCodeGenerator
             : member.PropertyName;
         switch (method)
         {
-            case null when
-                loweringKind is CallLoweringKind.DirectMemberRoutine or CallLoweringKind.CrashableDispatch:
+            case null when loweringKind is CallLoweringKind.DirectMemberRoutine:
                 throw new InvalidOperationException(
                     $"Method call .{member.PropertyName} on {receiverType.FullName} reached codegen " +
                     $"with loweringKind={loweringKind} but no resolved method. Semantic verifier" +
@@ -873,52 +872,6 @@ public partial class LlvmCodeGenerator
             GenerateRoutineDeclaration(routine: method);
         }
 
-        bool isCrashableDispatch = loweringKind == CallLoweringKind.CrashableDispatch ||
-                                  (loweringKind == CallLoweringKind.Unknown &&
-                                   method?.OwnerType is ProtocolTypeInfo);
-        if (isCrashableDispatch && method?.OwnerType is ProtocolTypeInfo)
-        {
-            if (!_pendingCrashableDispatches.ContainsKey(mangledName))
-            {
-                throw new InvalidOperationException(
-                    $"runtime dispatch stub '{mangledName}' reached codegen without pre-registration. " +
-                    $"CrashableDispatchRegistrationPass must scan all call sites before codegen.");
-            }
-
-            // Append the runtime type_id as the last argument so the dispatch stub can
-            // switch to the right concrete implementation.
-            // Lookup order for an IdentifierExpression receiver:
-            //   1. Lowered when-binding: PatternLoweringPass emits a sibling "<name>__typeid: U64"
-            //      local alongside the protocol-typed binding. Read it as a normal local alloca.
-            //   2. Codegen-fallback when-binding: EmitCrashablePatternMatch records the type_id
-            //      alloca address in _protocolTypeIdAllocas (used when the enclosing when-stmt
-            //      contains other unlowerable clauses and bypasses PatternLoweringPass).
-            //   3. Otherwise: 0 (unknown — runtime dispatch routes to unreachable).
-            string typeIdToPass = "0";
-            if (member.Object is IdentifierExpression protocolVarExpr)
-            {
-                string siblingTypeIdName = protocolVarExpr.Name + "__typeid";
-                if (_localVarLlvmNames.TryGetValue(key: siblingTypeIdName,
-                        value: out string? typeIdLlvmName))
-                {
-                    string typeIdTemp = NextTemp();
-                    EmitLine(sb: sb,
-                        line: $"  {typeIdTemp} = load i64, ptr %{typeIdLlvmName}.addr");
-                    typeIdToPass = typeIdTemp;
-                }
-                else if (_protocolTypeIdAllocas.TryGetValue(key: protocolVarExpr.Name,
-                             value: out string? typeIdAlloca))
-                {
-                    string typeIdTemp = NextTemp();
-                    EmitLine(sb: sb, line: $"  {typeIdTemp} = load i64, ptr {typeIdAlloca}");
-                    typeIdToPass = typeIdTemp;
-                }
-            }
-
-            argValues.Add(item: typeIdToPass);
-            argTypes.Add(item: "i64");
-        }
-
         // Use the semantic-layer-resolved return type.
         // Universal method (OwnerType = GenericParameterTypeInfo "T"): substitute T -> receiverType
         // BEFORE applying outer _typeSubstitutions -> the outer context may map T to something else
@@ -945,17 +898,6 @@ public partial class LlvmCodeGenerator
             if (method != null)
             {
                 GenerateRoutineDeclaration(routine: method, nameOverride: mangledName);
-                // runtime dispatch stubs take an extra i64 type_id parameter at the end.
-                // GenerateFunctionDeclaration only uses the method's own Parameters, so the
-                // stored declaration omits the type_id. Overwrite it with the full argTypes
-                // (which already includes the appended i64) so declare and define match.
-                if (method.OwnerType is ProtocolTypeInfo)
-                {
-                    string retType2 = resolvedReturnType != null
-                        ? GetLlvmType(type: resolvedReturnType) : "void";
-                    _rfRoutineDeclarations[key: mangledName] =
-                        $"declare {retType2} @{mangledName}({string.Join(separator: ", ", values: argTypes)})";
-                }
             }
             else
             {

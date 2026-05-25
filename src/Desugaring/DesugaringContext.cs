@@ -11,18 +11,6 @@ using TypeModel.Types;
 namespace Compiler.Desugaring;
 
 /// <summary>
-/// Pre-computed data for one runtime dispatch stub, registered at Phase 6b.
-/// Codegen reads KnownImplementers and ReturnTypeLlvm directly — no TypeRegistry access needed.
-/// </summary>
-/// <param name="Protocol">The protocol.</param>
-/// <param name="MethodName">The method name.</param>
-/// <param name="KnownImplementers">The known implementers.</param>
-public sealed record CrashableDispatchEntry(
-    ProtocolTypeInfo Protocol,
-    string MethodName,
-    List<TypeInfo> KnownImplementers);
-
-/// <summary>
 /// Shared context for all desugaring passes.
 /// </summary>
 public sealed class DesugaringContext
@@ -57,13 +45,6 @@ public sealed class DesugaringContext
 
     /// <summary>Build mode — drives BuilderService.build_mode.</summary>
     public RfBuildMode BuildMode { get; }
-
-    /// <summary>
-    /// Runtime dispatch stubs pre-registered by <c>CrashableDispatchRegistrationPass</c>
-    /// (Phase 6b). Key: <c>"{protocol.FullName}.{methodName}"</c> (raw, not LLVM-quoted).
-    /// Codegen reads this instead of discovering dispatch stubs lazily during emit.
-    /// </summary>
-    public Dictionary<string, CrashableDispatchEntry> PendingCrashableDispatches { get; } = new();
 
     /// <summary>When true, diagnostic passes print per-iteration timings to stderr.</summary>
     public bool SaTiming { get; set; }

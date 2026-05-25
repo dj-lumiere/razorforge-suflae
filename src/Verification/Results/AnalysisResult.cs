@@ -22,9 +22,6 @@ namespace Verification.Results;
 /// <see cref="GenericMonomorphizationPass"/>, keyed by the concrete
 /// RoutineInfo.RegistryKey. Codegen uses these to skip AST search and re-rewriting
 /// for all generic instantiations visible during semantic analysis.</param>
-/// <param name="PendingCrashableDispatches">runtime dispatch stubs pre-registered by Phase 6b,
-/// keyed by <c>"{protocol.FullName}.{methodName}"</c>. Codegen reads from this instead of
-/// discovering dispatch stubs lazily during IR emit.</param>
 /// <param name="LiveRoutineKeys">Reachable routine RegistryKeys computed by
 /// <see cref="RoutineReachabilityPass"/>. Codegen Phase A uses this to gate stdlib
 /// body emission so unreachable routines are not emitted.</param>
@@ -37,7 +34,6 @@ public sealed record AnalysisResult(
     IReadOnlyDictionary<SourceLocation, ParsedLiteral> ParsedLiterals,
     IReadOnlyDictionary<string, Statement> SynthesizedBodies,
     IReadOnlyDictionary<string, MonomorphizedBody> InstantiatedGenericBodies,
-    IReadOnlyDictionary<string, CrashableDispatchEntry> PendingCrashableDispatches,
     IReadOnlyCollection<string> LiveRoutineKeys,
     IReadOnlyCollection<string> LiveOwnerTypeNames)
 {

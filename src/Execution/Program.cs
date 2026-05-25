@@ -669,7 +669,6 @@ internal partial class Program
                 buildMode: buildMode,
                 synthesizedBodies: result.SynthesizedBodies,
                 instantiatedGenericBodies: result.InstantiatedGenericBodies,
-                pendingCrashableDispatches: result.PendingCrashableDispatches,
                 liveRoutineKeys: result.LiveRoutineKeys,
                 liveOwnerTypeNames: result.LiveOwnerTypeNames) { Timing = saTiming };
             string llvmIr = generator.Generate();
@@ -1151,7 +1150,6 @@ internal partial class Program
                 buildMode: buildMode,
                 synthesizedBodies: result.SynthesizedBodies,
                 instantiatedGenericBodies: result.InstantiatedGenericBodies,
-                pendingCrashableDispatches: result.PendingCrashableDispatches,
                 liveRoutineKeys: result.LiveRoutineKeys,
                 liveOwnerTypeNames: result.LiveOwnerTypeNames) { Timing = saTiming };
             string llvmIr = generator.Generate();

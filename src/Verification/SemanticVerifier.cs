@@ -179,14 +179,6 @@ public sealed partial class SemanticVerifier
     private IReadOnlyCollection<string> _liveRoutineKeys = Array.Empty<string>();
     private IReadOnlyCollection<string> _liveOwnerTypeNames = Array.Empty<string>();
 
-    /// <summary>
-    /// runtime dispatch stubs pre-registered by Phase 6b
-    /// <see cref="Compiler.Postprocessing.Passes.CrashableDispatchRegistrationPass"/>.
-    /// Forwarded to <see cref="AnalysisResult"/> and then to codegen.
-    /// </summary>
-    private IReadOnlyDictionary<string, CrashableDispatchEntry> _pendingCrashableDispatches =
-        new Dictionary<string, CrashableDispatchEntry>();
-
     #endregion
 
     #region Constructor
@@ -361,7 +353,6 @@ public sealed partial class SemanticVerifier
             ParsedLiterals: _parsedLiterals,
             SynthesizedBodies: allSynthesized,
             InstantiatedGenericBodies: _instantiatedGenericBodies,
-            PendingCrashableDispatches: _pendingCrashableDispatches,
             LiveRoutineKeys: _liveRoutineKeys,
             LiveOwnerTypeNames: _liveOwnerTypeNames);
     }
@@ -621,11 +612,6 @@ public sealed partial class SemanticVerifier
             }
         }
 
-        // Phase 6b: pre-register all runtime dispatch stubs so codegen never discovers them lazily.
-        _pendingCrashableDispatches = new CrashableDispatchRegistrationPass(registry: _registry)
-            .Run(userPrograms: _registry.UserPrograms,
-                variantBodies: _variantBodies,
-                instantiatedGenericBodies: _instantiatedGenericBodies);
     }
 
     /// <summary>
@@ -885,7 +871,6 @@ public sealed partial class SemanticVerifier
                 ParsedLiterals: _parsedLiterals,
                 SynthesizedBodies: new Dictionary<string, Statement>(),
                 InstantiatedGenericBodies: _instantiatedGenericBodies,
-                PendingCrashableDispatches: _pendingCrashableDispatches,
                 LiveRoutineKeys: _liveRoutineKeys,
             LiveOwnerTypeNames: _liveOwnerTypeNames);
         }
@@ -945,7 +930,6 @@ public sealed partial class SemanticVerifier
             ParsedLiterals: _parsedLiterals,
             SynthesizedBodies: allSynthesized2,
             InstantiatedGenericBodies: _instantiatedGenericBodies,
-            PendingCrashableDispatches: _pendingCrashableDispatches,
             LiveRoutineKeys: _liveRoutineKeys,
             LiveOwnerTypeNames: _liveOwnerTypeNames);
     }

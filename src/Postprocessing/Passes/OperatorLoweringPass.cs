@@ -373,15 +373,11 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     }
                 }
 
-                CallLoweringKind getitemKind;
-                if (resolvedGetItem != null)
-                    getitemKind = ClassifyMethod(resolvedGetItem);
-                else if (targetType is GenericParameterTypeInfo)
-                    getitemKind = CallLoweringKind.CrashableDispatch;
-                else if (targetType != null)
-                    getitemKind = CallLoweringKind.DirectMemberRoutine;
-                else
-                    getitemKind = CallLoweringKind.Unknown;
+                CallLoweringKind getitemKind = resolvedGetItem != null
+                    ? ClassifyMethod(resolvedGetItem)
+                    : targetType != null
+                        ? CallLoweringKind.DirectMemberRoutine
+                        : CallLoweringKind.Unknown;
                 var member = new MemberExpression(
                     Object: loweredObj,
                     PropertyName: propertyName,
@@ -652,7 +648,6 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
 
                 CallLoweringKind lk = resolvedMethod != null
                     ? ClassifyMethod(resolvedMethod)
-                    : receiverType is GenericParameterTypeInfo ? CallLoweringKind.CrashableDispatch
                     : receiverType != null ? CallLoweringKind.DirectMemberRoutine
                     : CallLoweringKind.Unknown;
 
@@ -677,15 +672,11 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 RoutineInfo? unwrapMethod = operandType != null
                     ? ctx.Registry.LookupMethod(type: operandType, methodName: "$unwrap")
                     : null;
-                CallLoweringKind unwrapKind;
-                if (unwrapMethod != null)
-                    unwrapKind = ClassifyMethod(unwrapMethod);
-                else if (operandType is GenericParameterTypeInfo)
-                    unwrapKind = CallLoweringKind.CrashableDispatch;
-                else if (operandType != null)
-                    unwrapKind = CallLoweringKind.DirectMemberRoutine;
-                else
-                    unwrapKind = CallLoweringKind.Unknown;
+                CallLoweringKind unwrapKind = unwrapMethod != null
+                    ? ClassifyMethod(unwrapMethod)
+                    : operandType != null
+                        ? CallLoweringKind.DirectMemberRoutine
+                        : CallLoweringKind.Unknown;
                 return new CallExpression(
                     Callee: new MemberExpression(
                         Object: operand,
@@ -747,15 +738,11 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     PropertyName: callName,
                     Location: unary.Location);
 
-                CallLoweringKind unaryKind;
-                if (resolvedUnaryMethod != null)
-                    unaryKind = ClassifyMethod(resolvedUnaryMethod);
-                else if (operandType is GenericParameterTypeInfo)
-                    unaryKind = CallLoweringKind.CrashableDispatch;
-                else if (operandType != null)
-                    unaryKind = CallLoweringKind.DirectMemberRoutine;
-                else
-                    unaryKind = CallLoweringKind.Unknown;
+                CallLoweringKind unaryKind = resolvedUnaryMethod != null
+                    ? ClassifyMethod(resolvedUnaryMethod)
+                    : operandType != null
+                        ? CallLoweringKind.DirectMemberRoutine
+                        : CallLoweringKind.Unknown;
 
                 return new CallExpression(
                     Callee: unaryCallee,
@@ -1067,8 +1054,6 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
     private static CallLoweringKind ClassifyMethod(RoutineInfo method)
     {
         if (method.LlvmIrTemplate != null) return CallLoweringKind.LlvmIntrinsic;
-        if (method.OwnerType is ProtocolTypeInfo or GenericParameterTypeInfo)
-            return CallLoweringKind.CrashableDispatch;
         return CallLoweringKind.DirectMemberRoutine;
     }
 

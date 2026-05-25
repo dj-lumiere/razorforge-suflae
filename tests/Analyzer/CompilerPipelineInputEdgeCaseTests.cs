@@ -170,8 +170,7 @@ public class CompilerPipelineInputEdgeCaseTests
             stdlibPrograms: result.Registry.StdlibPrograms,
             buildMode: RfBuildMode.ReleaseSpace,
             synthesizedBodies: result.SynthesizedBodies,
-            instantiatedGenericBodies: result.InstantiatedGenericBodies,
-            pendingCrashableDispatches: result.PendingCrashableDispatches);
+            instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         return generator.Generate();
     }

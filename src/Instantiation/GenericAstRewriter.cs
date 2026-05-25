@@ -718,7 +718,7 @@ internal static class GenericAstRewriter
                        TypeArguments = null
                    },
 
-            CallExpression call => ReclassifyIfNeeded(CloneCall(call, ctx), ctx),
+            CallExpression call => CloneCall(call, ctx),
 
             MemberExpression me => CloneMember(me, ctx),
 
@@ -1183,37 +1183,6 @@ internal static class GenericAstRewriter
                 Expression = RewriteExpression(expr: ep.Expression, ctx: ctx)
             },
             _ => part // TextPart has no expressions
-        };
-    }
-
-    private static CallExpression ReclassifyIfNeeded(CallExpression call, RewriteContext ctx)
-    {
-        if (call.LoweringKind != CallLoweringKind.CrashableDispatch) return call;
-        if (call.Callee is not MemberExpression { Object.ResolvedType: var rt, PropertyName: var methodName })
-            return call;
-        if (rt is null or GenericParameterTypeInfo or ProtocolTypeInfo) return call;
-
-        // Const-generic values (e.g. N=4 in Array[T, 4]) are not in _routinesByOwner.
-        // Resolve to the underlying numeric type (default U64) before looking up the method.
-        TypeInfo lookupType = rt;
-        if (rt is ConstGenericValueTypeInfo constVal)
-        {
-            string underlyingName = constVal.ExplicitTypeName ?? "U64";
-            TypeInfo? resolvedUnderlying = ctx.Registry?.LookupType(name: underlyingName);
-            if (resolvedUnderlying == null) return call;
-            lookupType = resolvedUnderlying;
-        }
-
-        // Try the non-failable form first, then the failable form.
-        // Numeric types like U64 only define $sub! (underflow is UB); $sub is absent.
-        RoutineInfo? resolved = ctx.Registry?.LookupMethod(type: lookupType, methodName: methodName);
-        if (resolved == null && !methodName.EndsWith('!'))
-            resolved = ctx.Registry?.LookupMethod(type: lookupType, methodName: methodName + "!");
-
-        return call with
-        {
-            LoweringKind = CallLoweringKind.DirectMemberRoutine,
-            ResolvedRoutine = resolved ?? call.ResolvedRoutine
         };
     }
 

@@ -161,29 +161,6 @@ public partial class LlvmCodeGenerator
     /// <summary>Type parameter substitution map for generic monomorphization (e.g., "T" -> Character).</summary>
     private Dictionary<string, TypeInfo>? _typeSubstitutions;
 
-    /// <summary>
-    /// Pending runtime dispatch stubs: mangled name -> info needed to generate forwarding stub.
-    /// Populated by EmitMemberRoutineCall when a call targets a protocol-typed receiver.
-    /// </summary>
-    private readonly Dictionary<string, CrashableDispatchInfo> _pendingCrashableDispatches = new();
-
-    /// <summary>
-    /// Entry for a pending runtime dispatch stub.
-    /// All fields are computed at registration time so the stub generation loop
-    /// needs no TypeRegistry queries.
-    /// </summary>
-    private record CrashableDispatchInfo(
-        string MemberRoutineName,
-        string ReturnType,
-        List<TypeInfo> KnownImplementers);
-
-    /// <summary>
-    /// Maps local variable names that were bound via "when is Protocol x" pattern matching
-    /// to their type_id alloca name (e.g., "err" -> "%err.typeid.addr").
-    /// Used by EmitMemberRoutineCall to pass the type_id for runtime runtime dispatch.
-    /// </summary>
-    private readonly Dictionary<string, string> _protocolTypeIdAllocas = new();
-
     /// <summary>Target platform configuration (triple, data layout, page size, etc.).</summary>
     private readonly TargetConfig _target;
 
@@ -220,7 +197,6 @@ public partial class LlvmCodeGenerator
     /// <param name="stdlibPrograms">Optional stdlib programs for intrinsic routine definitions.</param>
     /// <param name="target">Target platform configuration (defaults to current host).</param>
     /// <param name="buildMode">Build optimization mode (defaults to Debug).</param>
-    /// <param name="pendingCrashableDispatches">The pending runtime dispatches.</param>
     /// <param name="instantiatedGenericBodies">The instantiated generic bodies.</param>
     /// <param name="synthesizedBodies">The synthesized bodies.</param>
     /// <param name="liveRoutineKeys">Reachable routine keys from RoutineReachabilityPass; empty disables filtering.</param>
@@ -230,7 +206,6 @@ public partial class LlvmCodeGenerator
         TargetConfig? target = null, RfBuildMode buildMode = RfBuildMode.Debug,
         IReadOnlyDictionary<string, Statement>? synthesizedBodies = null,
         IReadOnlyDictionary<string, MonomorphizedBody>? instantiatedGenericBodies = null,
-        IReadOnlyDictionary<string, CrashableDispatchEntry>? pendingCrashableDispatches = null,
         IReadOnlyCollection<string>? liveRoutineKeys = null,
         IReadOnlyCollection<string>? liveOwnerTypeNames = null) :
         this(userPrograms:
@@ -241,7 +216,6 @@ public partial class LlvmCodeGenerator
             buildMode: buildMode,
             synthesizedBodies: synthesizedBodies,
             instantiatedGenericBodies: instantiatedGenericBodies,
-            pendingCrashableDispatches: pendingCrashableDispatches,
             liveRoutineKeys: liveRoutineKeys,
             liveOwnerTypeNames: liveOwnerTypeNames)
     {
@@ -255,7 +229,6 @@ public partial class LlvmCodeGenerator
     /// <param name="stdlibPrograms">Optional stdlib programs for intrinsic routine definitions.</param>
     /// <param name="target">Target platform configuration (defaults to current host).</param>
     /// <param name="buildMode">Build optimization mode (defaults to Debug).</param>
-    /// <param name="pendingCrashableDispatches">The pending runtime dispatches.</param>
     /// <param name="instantiatedGenericBodies">The instantiated generic bodies.</param>
     /// <param name="synthesizedBodies">The synthesized bodies.</param>
     /// <param name="liveRoutineKeys">Reachable routine keys from RoutineReachabilityPass; empty disables filtering.</param>
@@ -267,7 +240,6 @@ public partial class LlvmCodeGenerator
         TargetConfig? target = null, RfBuildMode buildMode = RfBuildMode.Debug,
         IReadOnlyDictionary<string, Statement>? synthesizedBodies = null,
         IReadOnlyDictionary<string, MonomorphizedBody>? instantiatedGenericBodies = null,
-        IReadOnlyDictionary<string, CrashableDispatchEntry>? pendingCrashableDispatches = null,
         IReadOnlyCollection<string>? liveRoutineKeys = null,
         IReadOnlyCollection<string>? liveOwnerTypeNames = null)
     {
@@ -292,18 +264,6 @@ public partial class LlvmCodeGenerator
         if (liveOwnerTypeNames != null && liveOwnerTypeNames.Count > 0)
             _liveOwnerTypeNames = new HashSet<string>(collection: liveOwnerTypeNames,
                 comparer: StringComparer.Ordinal);
-        if (pendingCrashableDispatches != null)
-        {
-            foreach ((string key, CrashableDispatchEntry entry) in pendingCrashableDispatches)
-            {
-                _pendingCrashableDispatches[key] = new CrashableDispatchInfo(
-                    MemberRoutineName: entry.MethodName,
-                    ReturnType: ComputeCrashableDispatchReturnType(protocol: entry.Protocol,
-                        methodName: entry.MethodName),
-                    KnownImplementers: entry.KnownImplementers);
-            }
-        }
-
         _buildMode = buildMode;
         _pointerBitWidth = _target.PointerBitWidth;
         _pointerSizeBytes = _target.PointerBitWidth / 8;
@@ -1099,9 +1059,6 @@ public partial class LlvmCodeGenerator
                     _generatedRoutines.Remove(item: synthFuncName);
                 }
             }
-
-            // Phase D: Generate runtime dispatch stubs (forwarding from protocol method names to concrete implementations)
-            GenerateCrashableDispatchStubs();
 
             iterations++;
             if (iterations >= maxIterations)
