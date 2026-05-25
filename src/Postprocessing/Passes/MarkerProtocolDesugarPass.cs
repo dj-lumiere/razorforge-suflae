@@ -127,6 +127,13 @@ internal sealed class MarkerProtocolDesugarPass
     /// </summary>
     public void RewriteAllSignatures()
     {
+        // Variants share their Parameters list reference with the original routine, so
+        // mutating the original also mutates the variant's params (and thus its computed
+        // RegistryKey). Capture old keys up front, mutate, then re-key downstream tables.
+        var oldKeys = new Dictionary<RoutineInfo, string>(capacity: _snapshot.Count);
+        foreach (RoutineInfo r in _snapshot.Keys)
+            oldKeys[r] = r.RegistryKey;
+
         foreach ((RoutineInfo r, List<ParamInfo> markers) in _snapshot)
         {
             foreach (ParamInfo m in markers)
@@ -137,6 +144,26 @@ internal sealed class MarkerProtocolDesugarPass
                 r.Parameters[m.Index] = p.WithSubstitutedType(m.InnerType);
             }
         }
+
+        // Re-key downstream tables whose keys depended on pre-mutation parameter types:
+        // VariantBodies / SynthesizedBodies, and the registry's `_routines` index (so
+        // codegen's LookupRoutine(newKey) finds the routine in Phase C).
+        foreach ((RoutineInfo r, string oldKey) in oldKeys)
+        {
+            string newKey = r.RegistryKey;
+            if (oldKey == newKey) continue;
+            ReKey(_variantBodies, oldKey, newKey);
+            ReKey(_synthesizedBodies, oldKey, newKey);
+            _registry.RegisterRoutine(routine: r);
+        }
+    }
+
+    private static void ReKey(Dictionary<string, Statement>? dict, string oldKey, string newKey)
+    {
+        if (dict == null) return;
+        if (!dict.TryGetValue(oldKey, out Statement? body)) return;
+        dict.Remove(oldKey);
+        dict[newKey] = body;
     }
 
     /// <summary>

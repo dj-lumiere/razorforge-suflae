@@ -485,8 +485,10 @@ public sealed partial class SemanticVerifier
         // Rewrite Referring[T]/Controlling[T] params to inner T before reachability so
         // the resulting RegistryKeys / mangled names captured downstream match codegen.
         // Call-site $refer/$control coercion was already injected during SA argument binding.
+        // Pass mergedVariantBodies (not _variantBodies) so the dict used by reachability/GMP
+        // gets re-keyed to the post-mutation form.
         var markerCtx = new PostprocessingContext(registry: _registry,
-            variantBodies: _variantBodies,
+            variantBodies: mergedVariantBodies,
             synthesizedBodies: _synthesizedBodies.ToDictionary(
                 keySelector: kvp => kvp.Key,
                 elementSelector: kvp => kvp.Value.Body),
