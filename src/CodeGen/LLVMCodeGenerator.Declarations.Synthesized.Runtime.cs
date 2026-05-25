@@ -21,7 +21,7 @@ public partial class LlvmCodeGenerator
     private void EmitSynthesizedBodyFromAst(RoutineInfo routine, string funcName, Statement body)
     {
         var paramList = new List<string>();
-        if (routine.OwnerType != null && !IsCreatorRoutine(routine: routine))
+        if (routine.OwnerType != null && !IsCreatorRoutine(routine: routine) && !routine.IsCommon)
         {
             string meType =
                 GetImplicitMeParameterDeclaration(routine: routine, includeName: true);
