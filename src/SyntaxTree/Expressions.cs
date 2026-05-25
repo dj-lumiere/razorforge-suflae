@@ -227,6 +227,13 @@ public record TupleLiteralExpression(List<Expression> Elements, SourceLocation L
 public record IdentifierExpression(string Name, SourceLocation Location)
     : Expression(Location: Location)
 {
+    /// <summary>
+    /// When set, this identifier resolved as a flag member in flag-context (e.g. bare
+    /// `READ` inside `p isonly READ`). The bit position lets ExpressionLoweringPass emit
+    /// the bitmask literal without re-doing the lookup.
+    /// </summary>
+    public int? ResolvedFlagsBit { get; set; }
+
     /// <summary>Accepts a visitor for AST traversal and transformation</summary>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {

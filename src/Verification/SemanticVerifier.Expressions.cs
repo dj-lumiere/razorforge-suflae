@@ -120,6 +120,24 @@ public sealed partial class SemanticVerifier
                 return _registry.LookupType(name: "Maybe") ?? ErrorTypeInfo.Instance;
         }
 
+        // Flag-context resolution: when analyzing the RHS of `p isonly READ` (where p: Perm),
+        // bare `READ` resolves against `Perm`'s flag members. The matching FlagsMemberInfo
+        // bit is stashed on the identifier so ExpressionLoweringPass can emit the bitmask.
+        if (_flagsContextStack.Count > 0 && id.Name.Length > 0 && !id.Name.Contains(value: '.'))
+        {
+            TypeSymbol flagsCtx = _flagsContextStack.Peek();
+            if (flagsCtx is FlagsTypeInfo flagsTypeCtx)
+            {
+                FlagsMemberInfo? memberInfo = flagsTypeCtx.Members
+                    .FirstOrDefault(predicate: m => m.Name == id.Name);
+                if (memberInfo != null)
+                {
+                    id.ResolvedFlagsBit = memberInfo.BitPosition;
+                    return flagsTypeCtx;
+                }
+            }
+        }
+
         // Try to look up as variable first
         VariableInfo? varInfo = _registry.LookupVariable(name: id.Name);
         // Try current module prefix for presets (e.g., "MY_CONST" -> "MyModule.MY_CONST")
@@ -214,6 +232,49 @@ public sealed partial class SemanticVerifier
         if (binary is { Operator: BinaryOperator.Assign, Left: IdentifierExpression rebindId })
         {
             _deadrefVariables.Remove(item: rebindId.Name);
+        }
+
+        // `p isonly RHS` — analyze LHS first, then analyze RHS with flag-context so bare flag
+        // names (READ, WRITE) and bare-name combinations (READ and WRITE) resolve against the
+        // LHS flags type without needing the type qualifier.
+        if (binary.Operator == BinaryOperator.IsOnly)
+        {
+            TypeSymbol lhsType = AnalyzeExpression(expression: binary.Left);
+            TypeSymbol rhsType;
+            if (lhsType is FlagsTypeInfo)
+            {
+                _flagsContextStack.Push(item: lhsType);
+                try
+                {
+                    rhsType = AnalyzeExpression(expression: binary.Right);
+                }
+                finally
+                {
+                    _flagsContextStack.Pop();
+                }
+            }
+            else
+            {
+                rhsType = AnalyzeExpression(expression: binary.Right);
+                if (lhsType is not ErrorTypeInfo)
+                {
+                    ReportError(code: SemanticDiagnosticCode.FlagsTypeMismatch,
+                        message:
+                        $"'isonly' requires a flags value on the left side, but got '{lhsType.Name}'.",
+                        location: binary.Location);
+                }
+            }
+
+            if (lhsType is FlagsTypeInfo && rhsType is not ErrorTypeInfo &&
+                rhsType.Name != lhsType.Name)
+            {
+                ReportError(code: SemanticDiagnosticCode.FlagsTypeMismatch,
+                    message:
+                    $"'isonly' requires both operands to be the same flags type, but got '{lhsType.Name}' and '{rhsType.Name}'.",
+                    location: binary.Location);
+            }
+
+            return _registry.LookupType(name: "Bool") ?? ErrorTypeInfo.Instance;
         }
 
         // TODO: This should be done with not operator, but with member routines.

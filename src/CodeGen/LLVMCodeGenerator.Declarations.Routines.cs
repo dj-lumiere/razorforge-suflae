@@ -564,9 +564,14 @@ public partial class LlvmCodeGenerator
         {
             // Only include type args that aren't already in the owner's type arg list to
             // avoid duplicating owner generics (method.TypeArguments may be a superset).
+            // Also drop bare GenericParameterTypeInfo entries: when SignatureResolver leaves
+            // an owner-level param (e.g. T) in routine.TypeArguments and the owner is already
+            // monomorphized to a concrete type, the bare T would survive the name-based
+            // dedup and mangle as `Type[Concrete].method[T]` — producing an undefined symbol.
             var ownerArgs = routine.OwnerType.TypeArguments ?? [];
             var methodOnlyArgs = methodTypeArgs
-                .Where(predicate: a => !ownerArgs.Any(predicate: o => o.FullName == a.FullName))
+                .Where(predicate: a => a is not GenericParameterTypeInfo
+                    && !ownerArgs.Any(predicate: o => o.FullName == a.FullName))
                 .ToList();
             if (methodOnlyArgs.Count > 0)
             {

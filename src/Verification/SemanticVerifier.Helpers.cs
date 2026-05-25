@@ -103,14 +103,14 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// Checks if a pattern is the absent arm for a carrier type.
-    /// Maybe[T] uses None. Result[T]/Lookup[T] use Blank in the type_id carrier model.
+    /// Maybe[T] and Lookup[T] use `is None`. Result[T] has no absent state
+    /// (only Crashable | T); when T == Blank, success matches `is Blank` in value position.
     /// </summary>
     private static bool IsAbsentPattern(Pattern pattern, TypeSymbol carrierType)
     {
         return GetCarrierBaseName(type: carrierType) switch
         {
-            MaybeTypeName => IsNonePattern(pattern: pattern),
-            "Result" or "Lookup" => IsBlankPattern(pattern: pattern),
+            MaybeTypeName or "Lookup" => IsNonePattern(pattern: pattern),
             _ => false
         };
     }

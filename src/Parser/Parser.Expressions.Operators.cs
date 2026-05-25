@@ -443,14 +443,18 @@ public partial class Parser
             SourceLocation location = GetLocation(token: op);
 
             // 'isonly' is exact equality on a flags value. Parse the RHS as a full
-            // expression so qualified flag names (Permission.READ), parenthesised flag
-            // combinations ((READ and WRITE)), and flag-valued variables (rw) all work.
-            // Desugars to `subject == rhs` — SA/lowering already handles `==` on flags.
+            // expression; semantic analysis resolves bare identifiers in the RHS against
+            // the LHS flags type (so `p isonly READ`, `p isonly READ and WRITE`, and
+            // `p isonly (Perm.READ and Perm.WRITE)` all work). After SA, codegen treats
+            // BinaryOperator.IsOnly identically to BinaryOperator.Equal on flags.
             if (op.Type == TokenType.IsOnly)
             {
-                Expression rhs = ParseBitwiseOr();
+                // ParseLogicalAnd so `p isonly READ and WRITE` greedily consumes the
+                // `and READ` as a flag-combination on the RHS, producing
+                // IsOnly(p, And(READ, WRITE)) instead of And(IsOnly(p, READ), WRITE).
+                Expression rhs = ParseLogicalAnd();
                 expr = new BinaryExpression(Left: expr,
-                    Operator: BinaryOperator.Equal,
+                    Operator: BinaryOperator.IsOnly,
                     Right: rhs,
                     Location: location);
                 continue;

@@ -321,6 +321,16 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             case OptionalMemberExpression optMember:
                 return LowerOptionalMember(optMember);
 
+            // -- Step 1d-2: isonly -> equality on flags ----------------------------
+            // `p isonly RHS` parsed/typed as IsOnly. Rewrite to Equal so downstream
+            // (codegen icmp eq, flag-context bare-name lowering) treats it normally.
+            case BinaryExpression { Operator: BinaryOperator.IsOnly } isOnlyBin:
+            {
+                var rewritten = isOnlyBin with { Operator = BinaryOperator.Equal };
+                rewritten.ResolvedType = isOnlyBin.ResolvedType;
+                return LowerExpr(rewritten);
+            }
+
             // -- Step 1e: flags combination (and/but on FlagsTypeInfo) -------------
             case BinaryExpression { Operator: BinaryOperator.And or BinaryOperator.But, Left.ResolvedType: FlagsTypeInfo } flagsBin:
                 return LowerFlagsCombination(flagsBin);
@@ -867,6 +877,16 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
 
             case IdentifierExpression id:
             {
+                // Fold bare flag-context identifiers (e.g. `READ` inside `p isonly READ`)
+                // -> bitmask literal. SA stamps ResolvedFlagsBit when it resolves a bare
+                // identifier against a flag context.
+                if (id.ResolvedFlagsBit is int bit && id.ResolvedType is FlagsTypeInfo)
+                    return ([], new LiteralExpression(
+                        Value: 1UL << bit,
+                        LiteralType: TokenType.U64Literal,
+                        Location: id.Location)
+                        { ResolvedType = id.ResolvedType });
+
                 // Fold standalone choice case identifiers (e.g. ME_SMALL) -> int literal
                 var choiceCase = ctx.Registry.LookupChoiceCase(caseName: id.Name);
                 if (choiceCase != null)
