@@ -193,6 +193,30 @@ routine D32.$truediv!(you: D32) -> D32
     throw NumericOverflowError(description: f"D32 division produced non-finite result: {me} / {you}")
   return reinterpret_bits[U32, D32](result)
 
+### Adds `me + you` without finiteness checking (raw IEEE 754-2008 decimal).
+dangerous routine D32.$add_unchecked(you: D32) -> D32
+  var a_bits = reinterpret_bits[D32, U32](me)
+  var b_bits = reinterpret_bits[D32, U32](you)
+  return reinterpret_bits[U32, D32](rf_d32_add(a: a_bits, b: b_bits))
+
+### Subtracts `me - you` without finiteness checking (raw IEEE 754-2008 decimal).
+dangerous routine D32.$sub_unchecked(you: D32) -> D32
+  var a_bits = reinterpret_bits[D32, U32](me)
+  var b_bits = reinterpret_bits[D32, U32](you)
+  return reinterpret_bits[U32, D32](rf_d32_sub(a: a_bits, b: b_bits))
+
+### Multiplies `me * you` without finiteness checking (raw IEEE 754-2008 decimal).
+dangerous routine D32.$mul_unchecked(you: D32) -> D32
+  var a_bits = reinterpret_bits[D32, U32](me)
+  var b_bits = reinterpret_bits[D32, U32](you)
+  return reinterpret_bits[U32, D32](rf_d32_mul(a: a_bits, b: b_bits))
+
+### Divides `me / you` without finiteness checking (raw IEEE 754-2008 decimal).
+dangerous routine D32.$truediv_unchecked(you: D32) -> D32
+  var a_bits = reinterpret_bits[D32, U32](me)
+  var b_bits = reinterpret_bits[D32, U32](you)
+  return reinterpret_bits[U32, D32](rf_d32_div(a: a_bits, b: b_bits))
+
 ### Returns `true` when this decimal value is finite.
 ### :returns: Whether the runtime encoding represents a finite number.
 routine D32.is_finite() -> Bool

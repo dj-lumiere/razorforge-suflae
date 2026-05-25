@@ -243,6 +243,12 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private static string EmitFloatLiteral(string numericValue, TokenType literalType)
     {
+        // Special float literals: inf/nan (NaN uses IEEE 754 quiet-NaN bit patterns)
+        if (numericValue == "inf" || numericValue == "nan")
+        {
+            return EmitSpecialFloatLiteral(name: numericValue, literalType: literalType);
+        }
+
         // F128: use native parser for full 128-bit precision
         if (literalType == TokenType.F128Literal)
         {
@@ -267,6 +273,18 @@ public partial class LlvmCodeGenerator
         }
 
         return numericValue;
+    }
+
+    private static string EmitSpecialFloatLiteral(string name, TokenType literalType)
+    {
+        // F128 quiet-NaN: exp=all-ones, MSB of mantissa set; F128 inf: exp=all-ones, mantissa=0.
+        if (literalType == TokenType.F128Literal)
+        {
+            ulong hi = name == "nan" ? 0x7FFF800000000000UL : 0x7FFF000000000000UL;
+            return $"0xL0000000000000000{hi:X16}";
+        }
+        double d = name == "nan" ? double.NaN : double.PositiveInfinity;
+        return EmitDoubleAsLlvmHex(d: d, literalType: literalType);
     }
 
     /// <summary>
@@ -369,6 +387,30 @@ public partial class LlvmCodeGenerator
     private string EmitDecimalFloatLiteral(StringBuilder sb, string numericValue,
         TokenType literalType)
     {
+        // IEEE 754-2008 decimal: bit-pattern combination-field encodes special values.
+        // Common-form: top 5 bits 11110 = inf, 11111 = NaN (quiet NaN: payload MSB 0).
+        if (numericValue == "inf" || numericValue == "nan")
+        {
+            bool isNan = numericValue == "nan";
+            switch (literalType)
+            {
+                case TokenType.D32Literal:
+                    return (isNan ? 0x7C000000U : 0x78000000U).ToString();
+                case TokenType.D64Literal:
+                    return (isNan ? 0x7C00000000000000UL : 0x7800000000000000UL).ToString();
+                case TokenType.D128Literal:
+                {
+                    ulong hi = isNan ? 0x7C00000000000000UL : 0x7800000000000000UL;
+                    string tmp1 = NextTemp();
+                    string tmp2 = NextTemp();
+                    EmitLine(sb: sb,
+                        line: $"  {tmp1} = insertvalue %Record.D128 zeroinitializer, i64 0, 0");
+                    EmitLine(sb: sb,
+                        line: $"  {tmp2} = insertvalue %Record.D128 {tmp1}, i64 {hi}, 1");
+                    return tmp2;
+                }
+            }
+        }
         switch (literalType)
         {
             case TokenType.D32Literal:

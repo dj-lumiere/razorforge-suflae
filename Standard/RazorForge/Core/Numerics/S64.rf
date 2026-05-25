@@ -657,7 +657,9 @@ routine S64.$create!(from_text: Text) -> S64
       throw InvalidValueError(input: from_text, target: "S64")
     i = i + 1u64
   if negative
-    return S64(0u64 - result)
+    if result > 9223372036854775808_u64
+      throw IntegerOverflowError()
+    return reinterpret_bits[U64, S64](0u64 -% result)
   return S64(result)
 
 # ============================================================================

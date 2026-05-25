@@ -180,6 +180,18 @@ routine F128.$neg() -> F128
 dangerous routine F128.$truediv_unchecked(you: F128) -> F128
   return float_div_fast[F128](a: me, b: you)
 
+### Adds `me + you` without finiteness checking (raw IEEE 754).
+dangerous routine F128.$add_unchecked(you: F128) -> F128
+  return float_add[F128](a: me, b: you)
+
+### Subtracts `me - you` without finiteness checking (raw IEEE 754).
+dangerous routine F128.$sub_unchecked(you: F128) -> F128
+  return float_sub[F128](a: me, b: you)
+
+### Multiplies `me * you` without finiteness checking (raw IEEE 754).
+dangerous routine F128.$mul_unchecked(you: F128) -> F128
+  return float_mul[F128](a: me, b: you)
+
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)
 # ============================================================================

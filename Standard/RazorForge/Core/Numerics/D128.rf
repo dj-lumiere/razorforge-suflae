@@ -170,6 +170,22 @@ routine D128.$truediv!(you: D128) -> D128
     throw NumericOverflowError(description: f"D128 division produced non-finite result: {me} / {you}")
   return result
 
+### Adds `me + you` without finiteness checking (raw IEEE 754-2008 decimal).
+dangerous routine D128.$add_unchecked(you: D128) -> D128
+  return rf_d128_add(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
+
+### Subtracts `me - you` without finiteness checking (raw IEEE 754-2008 decimal).
+dangerous routine D128.$sub_unchecked(you: D128) -> D128
+  return rf_d128_sub(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
+
+### Multiplies `me * you` without finiteness checking (raw IEEE 754-2008 decimal).
+dangerous routine D128.$mul_unchecked(you: D128) -> D128
+  return rf_d128_mul(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
+
+### Divides `me / you` without finiteness checking (raw IEEE 754-2008 decimal).
+dangerous routine D128.$truediv_unchecked(you: D128) -> D128
+  return rf_d128_div(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
+
 ### Returns the negated value.
 ### :returns: The resulting `D128` value.
 routine D128.$neg() -> D128

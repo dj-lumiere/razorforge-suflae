@@ -22,8 +22,8 @@ preset F64_MIN: F64 = 2.2250738585072014e-308_f64
 preset F64_MAX: F64 = 1.7976931348623157e+308_f64
 preset F64_ZERO: F64 = 0.0_f64
 preset F64_ONE: F64 = 1.0_f64
-preset F64_NAN: F64 = 0.0_f64 / 0.0_f64  # TODO: Proper NaN constant
-preset F64_INFINITY: F64 = 1.0_f64 / 0.0_f64  # TODO: Proper infinity constant
+preset F64_NAN: F64 = nan_f64
+preset F64_INFINITY: F64 = inf_f64
 
 # ============================================================================
 # Creators
@@ -193,6 +193,18 @@ routine F64.$neg() -> F64
 ### :returns: The double-precision quotient, possibly infinity or NaN.
 dangerous routine F64.$truediv_unchecked(you: F64) -> F64
   return float_div_fast[F64](a: me, b: you)
+
+### Adds `me + you` without finiteness checking (raw IEEE 754).
+dangerous routine F64.$add_unchecked(you: F64) -> F64
+  return float_add[F64](a: me, b: you)
+
+### Subtracts `me - you` without finiteness checking (raw IEEE 754).
+dangerous routine F64.$sub_unchecked(you: F64) -> F64
+  return float_sub[F64](a: me, b: you)
+
+### Multiplies `me * you` without finiteness checking (raw IEEE 754).
+dangerous routine F64.$mul_unchecked(you: F64) -> F64
+  return float_mul[F64](a: me, b: you)
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)

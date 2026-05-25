@@ -667,7 +667,9 @@ routine S32.$create!(from_text: Text) -> S32
       throw InvalidValueError(input: from_text, target: "S32")
     i = i + 1u64
   if negative
-    return S32(0u32 - result)
+    if result > 2147483648u32
+      throw IntegerOverflowError()
+    return reinterpret_bits[U32, S32](0u32 -% result)
   return S32(result)
 
 # ============================================================================

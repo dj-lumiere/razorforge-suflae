@@ -647,7 +647,9 @@ routine S16.$create!(from_text: Text) -> S16
       throw InvalidValueError(input: from_text, target: "S16")
     i = i + 1u64
   if negative
-    return S16(0u32 - result)
+    if result > 32768u32
+      throw IntegerOverflowError()
+    return reinterpret_bits[U16, S16](int_truncate[U32, U16](0u32 -% result))
   return S16(result)
 
 # ============================================================================

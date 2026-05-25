@@ -418,6 +418,10 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static ParsedF128 ParseF128Literal(LiteralExpression literal, string rawValue)
     {
+        if (rawValue == "inf")
+            return new ParsedF128(literal.Location, Lo: 0UL, Hi: 0x7FFF000000000000UL);
+        if (rawValue == "nan")
+            return new ParsedF128(literal.Location, Lo: 0UL, Hi: 0x7FFF800000000000UL);
         NumericLiteralParser.F128 result = NumericLiteralParser.ParseF128(str: rawValue);
         return new ParsedF128(Location: literal.Location, Lo: result.Lo, Hi: result.Hi);
     }
@@ -427,6 +431,10 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static ParsedD32 ParseD32Literal(LiteralExpression literal, string rawValue)
     {
+        if (rawValue == "inf")
+            return new ParsedD32(literal.Location, Value: 0x78000000U);
+        if (rawValue == "nan")
+            return new ParsedD32(literal.Location, Value: 0x7C000000U);
         NumericLiteralParser.D32 result = NumericLiteralParser.ParseD32(str: rawValue);
         return new ParsedD32(Location: literal.Location, Value: result.Value);
     }
@@ -436,6 +444,10 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static ParsedD64 ParseD64Literal(LiteralExpression literal, string rawValue)
     {
+        if (rawValue == "inf")
+            return new ParsedD64(literal.Location, Value: 0x7800000000000000UL);
+        if (rawValue == "nan")
+            return new ParsedD64(literal.Location, Value: 0x7C00000000000000UL);
         NumericLiteralParser.D64 result = NumericLiteralParser.ParseD64(str: rawValue);
         return new ParsedD64(Location: literal.Location, Value: result.Value);
     }
@@ -445,6 +457,10 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static ParsedD128 ParseD128Literal(LiteralExpression literal, string rawValue)
     {
+        if (rawValue == "inf")
+            return new ParsedD128(literal.Location, Lo: 0UL, Hi: 0x7800000000000000UL);
+        if (rawValue == "nan")
+            return new ParsedD128(literal.Location, Lo: 0UL, Hi: 0x7C00000000000000UL);
         NumericLiteralParser.D128 result = NumericLiteralParser.ParseD128(str: rawValue);
         return new ParsedD128(Location: literal.Location, Lo: result.Lo, Hi: result.Hi);
     }
@@ -692,6 +708,10 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private ParsedFloat? ParseF16Literal(LiteralExpression literal, string rawValue)
     {
+        if (rawValue == "inf")
+            return new ParsedFloat(literal.Location, "F16", double.PositiveInfinity);
+        if (rawValue == "nan")
+            return new ParsedFloat(literal.Location, "F16", double.NaN);
         string numericPart = ExtractNumericPart(rawValue: rawValue, suffix: "f16");
         string cleanedValue = CleanNumericLiteral(value: numericPart);
 
@@ -726,6 +746,10 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private ParsedFloat? ParseF32Literal(LiteralExpression literal, string rawValue)
     {
+        if (rawValue == "inf")
+            return new ParsedFloat(literal.Location, "F32", double.PositiveInfinity);
+        if (rawValue == "nan")
+            return new ParsedFloat(literal.Location, "F32", double.NaN);
         string numericPart = ExtractNumericPart(rawValue: rawValue, suffix: "f32");
         string cleanedValue = CleanNumericLiteral(value: numericPart);
 
@@ -758,6 +782,10 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private ParsedFloat? ParseF64Literal(LiteralExpression literal, string rawValue)
     {
+        if (rawValue == "inf")
+            return new ParsedFloat(literal.Location, "F64", double.PositiveInfinity);
+        if (rawValue == "nan")
+            return new ParsedFloat(literal.Location, "F64", double.NaN);
         string numericPart = ExtractNumericPart(rawValue: rawValue, suffix: "f64");
         string cleanedValue = CleanNumericLiteral(value: numericPart);
 

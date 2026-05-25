@@ -640,7 +640,9 @@ routine S128.$create!(from_text: Text) -> S128
       throw InvalidValueError(input: from_text, target: "S128")
     i = i + 1u64
   if negative
-    return S128(0u128 - result)
+    if result > 170141183460469231731687303715884105728u128
+      throw IntegerOverflowError()
+    return reinterpret_bits[U128, S128](0u128 -% result)
   return S128(result)
 
 # ============================================================================

@@ -18,7 +18,8 @@ preset F16_MAX: F16 = 65504.0_f16
 preset F16_MIN_POSITIVE: F16 = 6.103515625e-5_f16
 preset F16_ZERO: F16 = 0.0_f16
 preset F16_ONE: F16 = 1.0_f16
-preset F16_INFINITY: F16 = F16.from_bits(0x7C00_u16)
+preset F16_INFINITY: F16 = inf_f16
+preset F16_NAN: F16 = nan_f16
 
 # Mathematical constants
 preset F16_PI: F16 = 3.140625_f16
@@ -185,6 +186,18 @@ routine F16.$neg() -> F16
 ### :returns: The half-precision quotient, possibly infinity or NaN.
 dangerous routine F16.$truediv_unchecked(you: F16) -> F16
   return float_div_fast[F16](a: me, b: you)
+
+### Adds `me + you` without finiteness checking (raw IEEE 754).
+dangerous routine F16.$add_unchecked(you: F16) -> F16
+  return float_add[F16](a: me, b: you)
+
+### Subtracts `me - you` without finiteness checking (raw IEEE 754).
+dangerous routine F16.$sub_unchecked(you: F16) -> F16
+  return float_sub[F16](a: me, b: you)
+
+### Multiplies `me * you` without finiteness checking (raw IEEE 754).
+dangerous routine F16.$mul_unchecked(you: F16) -> F16
+  return float_mul[F16](a: me, b: you)
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)

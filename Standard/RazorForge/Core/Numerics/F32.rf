@@ -187,6 +187,18 @@ routine F32.$neg() -> F32
 dangerous routine F32.$truediv_unchecked(you: F32) -> F32
   return float_div_fast[F32](a: me, b: you)
 
+### Adds `me + you` without finiteness checking (raw IEEE 754).
+dangerous routine F32.$add_unchecked(you: F32) -> F32
+  return float_add[F32](a: me, b: you)
+
+### Subtracts `me - you` without finiteness checking (raw IEEE 754).
+dangerous routine F32.$sub_unchecked(you: F32) -> F32
+  return float_sub[F32](a: me, b: you)
+
+### Multiplies `me * you` without finiteness checking (raw IEEE 754).
+dangerous routine F32.$mul_unchecked(you: F32) -> F32
+  return float_mul[F32](a: me, b: you)
+
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)
 # ============================================================================

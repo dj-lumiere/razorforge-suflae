@@ -650,7 +650,9 @@ routine S8.$create!(from_text: Text) -> S8
       throw InvalidValueError(input: from_text, target: "S8")
     i = i + 1u64
   if negative
-    return S8(0u32 - result)
+    if result > 128u32
+      throw IntegerOverflowError()
+    return reinterpret_bits[U8, S8](int_truncate[U32, U8](0u32 -% result))
   return S8(result)
 
 # ============================================================================

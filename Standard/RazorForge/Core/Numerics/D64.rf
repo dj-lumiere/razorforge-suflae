@@ -186,6 +186,30 @@ routine D64.$truediv!(you: D64) -> D64
     throw NumericOverflowError(description: f"D64 division produced non-finite result: {me} / {you}")
   return reinterpret_bits[U64, D64](result)
 
+### Adds `me + you` without finiteness checking (raw IEEE 754-2008 decimal).
+dangerous routine D64.$add_unchecked(you: D64) -> D64
+  var a_bits = reinterpret_bits[D64, U64](me)
+  var b_bits = reinterpret_bits[D64, U64](you)
+  return reinterpret_bits[U64, D64](rf_d64_add(a: a_bits, b: b_bits))
+
+### Subtracts `me - you` without finiteness checking (raw IEEE 754-2008 decimal).
+dangerous routine D64.$sub_unchecked(you: D64) -> D64
+  var a_bits = reinterpret_bits[D64, U64](me)
+  var b_bits = reinterpret_bits[D64, U64](you)
+  return reinterpret_bits[U64, D64](rf_d64_sub(a: a_bits, b: b_bits))
+
+### Multiplies `me * you` without finiteness checking (raw IEEE 754-2008 decimal).
+dangerous routine D64.$mul_unchecked(you: D64) -> D64
+  var a_bits = reinterpret_bits[D64, U64](me)
+  var b_bits = reinterpret_bits[D64, U64](you)
+  return reinterpret_bits[U64, D64](rf_d64_mul(a: a_bits, b: b_bits))
+
+### Divides `me / you` without finiteness checking (raw IEEE 754-2008 decimal).
+dangerous routine D64.$truediv_unchecked(you: D64) -> D64
+  var a_bits = reinterpret_bits[D64, U64](me)
+  var b_bits = reinterpret_bits[D64, U64](you)
+  return reinterpret_bits[U64, D64](rf_d64_div(a: a_bits, b: b_bits))
+
 ### Returns `true` when this decimal value is finite.
 ### :returns: Whether the runtime encoding represents a finite number.
 routine D64.is_finite() -> Bool
