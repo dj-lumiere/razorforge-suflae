@@ -200,3 +200,21 @@ routine Iterable[T].last_or_default(default: T) -> ?T
   for item in me
     latest = item
   return latest
+
+### Joins the produced `Text` values into a single `Text`, inserting `separator`
+### between successive parts. The separator is not added before the first or
+### after the last element.
+### :param separator: The text inserted between successive parts.
+### :returns: The resulting `Text` value.
+@readonly
+routine Iterable[Text].join(separator: Text) -> ?Text
+  var result = List[Character]()
+  var first = true
+  for part in me
+    if not first
+      for i in 0u64 til separator.count()
+        result.add_last(separator[i])
+    for i in 0u64 til part.count()
+      result.add_last(part[i])
+    first = false
+  return Text(from_list: steal result)
