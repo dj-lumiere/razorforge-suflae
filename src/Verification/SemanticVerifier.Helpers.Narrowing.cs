@@ -70,8 +70,10 @@ public sealed partial class SemanticVerifier
         // Check for existing narrowing
         TypeSymbol varType = _registry.GetNarrowedType(name: id.Name) ?? varInfo.Type;
 
-        bool eliminateNone = IsMaybeType(type: varType) && IsNonePattern(pattern: isPat.Pattern);
-        bool eliminateBlank = !IsMaybeType(type: varType) && IsBlankPattern(pattern: isPat.Pattern);
+        string? carrierBase = GetCarrierBaseName(type: varType);
+        bool carrierUsesNoneForAbsent = carrierBase is "Maybe" or "Lookup";
+        bool eliminateNone = carrierUsesNoneForAbsent && IsNonePattern(pattern: isPat.Pattern);
+        bool eliminateBlank = carrierBase == "Result" && IsBlankPattern(pattern: isPat.Pattern);
         bool eliminateCrashable = IsCrashablePattern(pattern: isPat.Pattern);
 
         if (!eliminateNone && !eliminateBlank && !eliminateCrashable)
@@ -146,8 +148,8 @@ public sealed partial class SemanticVerifier
             // Result<T>: eliminate Crashable -> T
             "Result" when eliminateCrashable => valueType,
 
-            // Lookup<T>: must eliminate both absent (Blank) and Crashable -> T
-            "Lookup" when eliminateBlank && eliminateCrashable => valueType,
+            // Lookup<T>: must eliminate both absent (None) and Crashable -> T
+            "Lookup" when eliminateNone && eliminateCrashable => valueType,
 
             // Partial elimination on Lookup is not sufficient
             _ => null

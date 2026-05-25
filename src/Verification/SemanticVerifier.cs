@@ -500,6 +500,18 @@ public sealed partial class SemanticVerifier
         markerPass.RunOnVariantBodies();
         markerPass.RunOnSynthesizedBodies();
 
+        // Expand `is Crashable err` clauses BEFORE reachability so that the new
+        // per-crashable `err.crash_message()` calls participate in liveness analysis.
+        // Without this, the fanout happens in Phase 7 and the crash_message method on
+        // each concrete crashable is never marked reachable -> linker errors.
+        {
+            var crashablePass = new Compiler.Postprocessing.Passes.CrashableExpansionPass(markerCtx);
+            foreach ((Program program, _, _) in _registry.UserPrograms)
+                crashablePass.Run(program);
+            foreach ((Program program, _, _) in _registry.StdlibPrograms)
+                crashablePass.Run(program);
+        }
+
         if (SaTiming)
         {
             var sw = Stopwatch.StartNew();

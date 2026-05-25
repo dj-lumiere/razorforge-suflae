@@ -371,23 +371,18 @@ public partial class LlvmCodeGenerator
         TypeInfo? errType = variantRet.Value != null ? GetExpressionType(expr: variantRet.Value) : null;
         bool isEmptyRec = errType is null or RecordTypeInfo { MemberVariables.Count: 0 }
             or CrashableTypeInfo { MemberVariables.Count: 0 };
-        string errorVal = isEmptyRec || variantRet.Value == null
-            ? "zeroinitializer"
+        string? errorVal = isEmptyRec || variantRet.Value == null
+            ? null
             : EmitExpression(sb: sb, expr: variantRet.Value!);
 
         ulong errTypeId = errType != null ? TypeIdHelper.ComputeTypeId(fullName: errType.FullName) : 0;
-        string errDataAddr = EmitErrorDataAddress(sb: sb, errorType: errType ?? innerType,
-            errorVal: errorVal, isEmptyRecord: isEmptyRec);
 
         EmitRcRecordCleanup(sb: sb);
         if (_traceCurrentRoutine)
             EmitLine(sb: sb, line: TracePop);
 
-        string v0 = NextTemp();
-        EmitLine(sb: sb, line: $"  {v0} = insertvalue {carrier} zeroinitializer, i64 {errTypeId}, 0");
-        string v1 = NextTemp();
-        EmitLine(sb: sb, line: $"  {v1} = insertvalue {carrier} {v0}, i64 {errDataAddr}, 1");
-        EmitLine(sb: sb, line: $"  ret {carrier} {v1}");
+        EmitInlineCarrierReturn(sb: sb, carrier: carrier, typeId: errTypeId,
+            payloadType: errType, payloadVal: errorVal);
     }
 
     // Shared by Lookup.FromReturn and Check.FromReturn — only the carrier type string differs.
@@ -395,45 +390,76 @@ public partial class LlvmCodeGenerator
         TypeInfo innerType, string carrier)
     {
         TypeInfo? retType = variantRet.Value != null ? GetExpressionType(expr: variantRet.Value) : null;
-        bool isCrashable = retType is CrashableTypeInfo;
         string? returnedVarName = variantRet.Value is IdentifierExpression retId &&
                                   _localEntityVars.Any(predicate: e => e.Name == retId.Name)
             ? retId.Name
             : null;
+        bool isBlank = variantRet.Value is IdentifierExpression { Name: "Blank" };
+
+        if (variantRet.Value == null || isBlank)
+        {
+            EmitRcRecordCleanup(sb: sb);
+            EmitEntityCleanup(sb: sb, returnedVarName: returnedVarName);
+            if (_traceCurrentRoutine)
+                EmitLine(sb: sb, line: TracePop);
+            EmitLine(sb: sb, line: $"  ret {carrier} zeroinitializer");
+            return;
+        }
+
+        string value = EmitExpression(sb: sb, expr: variantRet.Value);
+        bool isCrashable = retType is CrashableTypeInfo;
+        TypeInfo payloadType = isCrashable ? retType! : innerType;
+        ulong typeId = TypeIdHelper.ComputeTypeId(
+            fullName: (isCrashable ? retType! : innerType).FullName);
+
         EmitRcRecordCleanup(sb: sb);
         EmitEntityCleanup(sb: sb, returnedVarName: returnedVarName);
         if (_traceCurrentRoutine)
             EmitLine(sb: sb, line: TracePop);
 
-        bool isBlank = variantRet.Value is IdentifierExpression { Name: "Blank" };
+        EmitInlineCarrierReturn(sb: sb, carrier: carrier, typeId: typeId,
+            payloadType: payloadType, payloadVal: value);
+    }
 
-        if (isCrashable)
+    // Builds an inline-payload carrier ({ i64 type_id, [P x i8] payload }) and emits the ret.
+    // payloadVal == null OR payloadType == null OR empty record => skip payload store; rely on
+    // zeroinitializer for those bytes.
+    private void EmitInlineCarrierReturn(StringBuilder sb, string carrier, ulong typeId,
+        TypeInfo? payloadType, string? payloadVal)
+    {
+        string carrierSlot = NextTemp();
+        EmitLine(sb: sb, line: $"  {carrierSlot} = alloca {carrier}");
+        EmitLine(sb: sb,
+            line: $"  store {carrier} zeroinitializer, ptr {carrierSlot}");
+
+        string tagPtr = NextTemp();
+        EmitLine(sb: sb,
+            line: $"  {tagPtr} = getelementptr {carrier}, ptr {carrierSlot}, i32 0, i32 0");
+        EmitLine(sb: sb, line: $"  store i64 {typeId}, ptr {tagPtr}");
+
+        // Empty payload = no value to store (Blank, empty crashable) — distinguished from
+        // primitive @llvm-annotated records (S64, U64, Bool) which have no member variables
+        // but DO carry a value via their BackendType.
+        bool isEmptyRecord = payloadType is RecordTypeInfo
+            { MemberVariables.Count: 0, HasDirectBackendType: false };
+        bool isEmptyCrashable = payloadType is CrashableTypeInfo { MemberVariables.Count: 0 };
+        bool hasPayload = payloadVal != null && payloadType != null
+            && !isEmptyRecord && !isEmptyCrashable;
+
+        if (hasPayload)
         {
-            string errorVal = EmitExpression(sb: sb, expr: variantRet.Value!);
-            ulong errTypeId = TypeIdHelper.ComputeTypeId(fullName: retType!.FullName);
-            string errDataAddr = EmitErrorDataAddress(sb: sb, errorType: retType,
-                errorVal: errorVal, isEmptyRecord: false);
-            string v0 = NextTemp();
-            EmitLine(sb: sb, line: $"  {v0} = insertvalue {carrier} zeroinitializer, i64 {errTypeId}, 0");
-            string v1 = NextTemp();
-            EmitLine(sb: sb, line: $"  {v1} = insertvalue {carrier} {v0}, i64 {errDataAddr}, 1");
-            EmitLine(sb: sb, line: $"  ret {carrier} {v1}");
+            string payloadPtr = NextTemp();
+            EmitLine(sb: sb,
+                line: $"  {payloadPtr} = getelementptr {carrier}, ptr {carrierSlot}, i32 0, i32 1");
+            string storeType = payloadType is EntityTypeInfo or CrashableTypeInfo
+                ? "ptr"
+                : GetLlvmType(type: payloadType!);
+            EmitLine(sb: sb, line: $"  store {storeType} {payloadVal}, ptr {payloadPtr}");
         }
-        else if (variantRet.Value == null || isBlank)
-        {
-            EmitLine(sb: sb, line: $"  ret {carrier} zeroinitializer");
-        }
-        else
-        {
-            string value = EmitExpression(sb: sb, expr: variantRet.Value);
-            ulong validId = TypeIdHelper.ComputeTypeId(fullName: innerType.FullName);
-            string v0 = NextTemp();
-            EmitLine(sb: sb, line: $"  {v0} = insertvalue {carrier} zeroinitializer, i64 {validId}, 0");
-            string v1 = NextTemp();
-            string dataVal = EmitSuccessDataAddress(sb: sb, innerType: innerType, value: value);
-            EmitLine(sb: sb, line: $"  {v1} = insertvalue {carrier} {v0}, i64 {dataVal}, 1");
-            EmitLine(sb: sb, line: $"  ret {carrier} {v1}");
-        }
+
+        string loaded = NextTemp();
+        EmitLine(sb: sb, line: $"  {loaded} = load {carrier}, ptr {carrierSlot}");
+        EmitLine(sb: sb, line: $"  ret {carrier} {loaded}");
     }
 
     private void EmitThrow(StringBuilder sb, ThrowStatement throwStmt)
@@ -505,92 +531,6 @@ public partial class LlvmCodeGenerator
             line:
             $"  call void @rf_crash(i64 {typeNameAsInt}, i64 {typeName.Length}, i64 {fileAsInt}, i64 {throwStmt.Location.FileName.Length}, i32 {throwStmt.Location.Line}, i32 {throwStmt.Location.Column}, i64 {msgDataAsInt}, i64 {msgLen})");
         EmitLine(sb: sb, line: "  unreachable");
-    }
-
-    private string EmitSuccessDataAddress(StringBuilder sb, TypeInfo innerType, string value)
-    {
-        if (innerType is EntityTypeInfo)
-        {
-            string asInt = NextTemp();
-            EmitLine(sb: sb, line: $"  {asInt} = ptrtoint ptr {value} to i64");
-            return asInt;
-        }
-
-        string innerLlvm = GetLlvmType(type: innerType);
-        if (innerLlvm == "i64") return value;
-
-        // Pointer-typed values (wrapper types like T, Retained[T], etc.) must use
-        // ptrtoint, not zext -- zext is only valid for integer types.
-        if (innerLlvm == "ptr")
-        {
-            string asInt = NextTemp();
-            EmitLine(sb: sb, line: $"  {asInt} = ptrtoint ptr {value} to i64");
-            return asInt;
-        }
-
-        bool needsHeapAlloc = innerLlvm.StartsWith(value: '%')
-                              || innerLlvm.StartsWith(value: '{')
-                              || innerLlvm is "i128" or "fp128";
-        if (needsHeapAlloc)
-        {
-            string sizePtr = NextTemp();
-            string sizeVal = NextTemp();
-            EmitLine(sb: sb, line: $"  {sizePtr} = getelementptr {innerLlvm}, ptr null, i32 1");
-            EmitLine(sb: sb, line: $"  {sizeVal} = ptrtoint ptr {sizePtr} to i64");
-            string heapPtr = NextTemp();
-            EmitLine(sb: sb, line: $"  {heapPtr} = call ptr @rf_allocate_dynamic(i64 {sizeVal})");
-            EmitLine(sb: sb, line: $"  store {innerLlvm} {value}, ptr {heapPtr}");
-            string asInt = NextTemp();
-            EmitLine(sb: sb, line: $"  {asInt} = ptrtoint ptr {heapPtr} to i64");
-            return asInt;
-        }
-
-        if (innerLlvm is "double" or "float" or "half")
-        {
-            int bits = innerLlvm switch { "double" => 64, "float" => 32, _ => 16 };
-            string intType = $"i{bits}";
-            string bc = NextTemp();
-            EmitLine(sb: sb, line: $"  {bc} = bitcast {innerLlvm} {value} to {intType}");
-            if (bits == 64) return bc;
-            string ze = NextTemp();
-            EmitLine(sb: sb, line: $"  {ze} = zext {intType} {bc} to i64");
-            return ze;
-        }
-
-        string zext = NextTemp();
-        EmitLine(sb: sb, line: $"  {zext} = zext {innerLlvm} {value} to i64");
-        return zext;
-    }
-
-    private string EmitErrorDataAddress(StringBuilder sb, TypeInfo errorType, string errorVal,
-        bool isEmptyRecord)
-    {
-        if (isEmptyRecord)
-        {
-            return "0";
-        }
-
-        if (errorType is EntityTypeInfo or CrashableTypeInfo)
-        {
-            string addrInt = NextTemp();
-            EmitLine(sb: sb, line: $"  {addrInt} = ptrtoint ptr {errorVal} to i64");
-            return addrInt;
-        }
-
-        string llvmErrType = GetLlvmType(type: errorType);
-
-        string sizePtr = NextTemp();
-        string sizeVal = NextTemp();
-        EmitLine(sb: sb, line: $"  {sizePtr} = getelementptr {llvmErrType}, ptr null, i32 1");
-        EmitLine(sb: sb, line: $"  {sizeVal} = ptrtoint ptr {sizePtr} to i64");
-
-        string heapPtr = NextTemp();
-        EmitLine(sb: sb, line: $"  {heapPtr} = call ptr @rf_allocate_dynamic(i64 {sizeVal})");
-        EmitLine(sb: sb, line: $"  store {llvmErrType} {errorVal}, ptr {heapPtr}");
-
-        string addrInt2 = NextTemp();
-        EmitLine(sb: sb, line: $"  {addrInt2} = ptrtoint ptr {heapPtr} to i64");
-        return addrInt2;
     }
 
     private void EmitAbsent(StringBuilder sb, AbsentStatement absentStmt)

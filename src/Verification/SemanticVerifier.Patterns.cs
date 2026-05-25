@@ -55,11 +55,15 @@ public sealed partial class SemanticVerifier
                 // None is a keyword, not a registered type — handle it directly
                 if (typePat.Type.Name == "None")
                 {
-                    if (matchedType is not ErrorTypeInfo && !IsMaybeType(type: matchedType))
+                    bool allowsNone = matchedType is ErrorTypeInfo
+                        || IsMaybeType(type: matchedType)
+                        || GetCarrierBaseName(type: matchedType) == "Lookup"
+                        || matchedType is VariantTypeInfo;
+                    if (!allowsNone)
                     {
                         ReportError(code: SemanticDiagnosticCode.PatternTypeMismatch,
                             message:
-                            $"Type pattern 'is None' can only match Maybe[T], not '{matchedType.Name}'.",
+                            $"Type pattern 'is None' can only match Maybe[T], Lookup[T], or a variant type — not '{matchedType.Name}'.",
                             location: typePat.Location);
                     }
 
@@ -840,7 +844,7 @@ public sealed partial class SemanticVerifier
             case "Lookup":
                 if (!hasAbsent)
                 {
-                    missing.Add(item: "Blank");
+                    missing.Add(item: "None");
                 }
 
                 if (!hasCrashableCatchAll)

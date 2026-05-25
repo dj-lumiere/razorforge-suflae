@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using TypeModel.Enums;
 using TypeModel.Symbols;
 using TypeModel.Types;
 
@@ -154,6 +155,28 @@ public partial class LlvmCodeGenerator
         // Skip if already generated
         if (!_generatedTypes.Add(item: typeName))
         {
+            return;
+        }
+
+        // Result[T] / Lookup[T] use a codegen-owned inline-payload layout:
+        //   { i64 type_id, [max(sizeof(T), 8) x i8] payload }
+        // The stdlib record's declared fields (type_id + data_address) are ignored
+        // here: codegen owns the carrier layout, so the success T or crashable ptr
+        // is stored inline (like Maybe[T] and VariantTypeInfo). type_id == 0 is the
+        // Blank/None state with don't-care payload bytes.
+        if (record.CarrierKind is CarrierKind.Result or CarrierKind.Lookup
+            && record.TypeArguments is { Count: 1 } resOrLkpArgs)
+        {
+            TypeInfo innerT = resOrLkpArgs[index: 0];
+            EnsureTypeGenerated(type: innerT, visited: new HashSet<string>());
+            int payloadBytes = Math.Max(val1: GetTypeSize(type: innerT), val2: 8);
+            var rlDecl = new StringBuilder();
+            rlDecl.AppendLine(
+                value: $"{typeName} = type {{ i64, [{payloadBytes} x i8] }}");
+            rlDecl.AppendLine(
+                handler:
+                $"; {typeName} carrier: 0=type_id, 1=payload[{payloadBytes}]");
+            _typeDeclarationsRecord[key: typeName] = rlDecl.ToString();
             return;
         }
 

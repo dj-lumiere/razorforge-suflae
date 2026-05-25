@@ -221,12 +221,16 @@ public sealed partial class SemanticVerifier
         {
             _registry.EnterScope(kind: ScopeKind.Block, name: "when_clause");
 
-            // Track which patterns are handled (before the else clause)
-            if (IsMaybeType(type: matchedType) && IsNonePattern(pattern: clause.Pattern))
+            // Track which patterns are handled (before the else clause).
+            // Maybe[T] and Lookup[T] absent state is matched by `is None`.
+            // Result[T] has no absent state; only Crashable | T.
+            string? carrierBase = GetCarrierBaseName(type: matchedType);
+            bool carrierUsesNoneForAbsent = carrierBase is "Maybe" or "Lookup";
+            if (carrierUsesNoneForAbsent && IsNonePattern(pattern: clause.Pattern))
             {
                 handledNone = true;
             }
-            else if (!IsMaybeType(type: matchedType) && IsBlankPattern(pattern: clause.Pattern))
+            else if (carrierBase == "Result" && IsBlankPattern(pattern: clause.Pattern))
             {
                 handledBlank = true;
             }

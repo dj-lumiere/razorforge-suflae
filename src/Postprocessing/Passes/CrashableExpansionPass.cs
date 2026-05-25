@@ -6,6 +6,7 @@ using SyntaxTree;
 
 using Compiler.Postprocessing;
 using Compiler.Synthesis;
+using Compiler.Instantiation;
 
 namespace Compiler.Postprocessing.Passes;
 
@@ -191,25 +192,59 @@ internal sealed class CrashableExpansionPass(PostprocessingContext ctx)
 
         foreach (WhenClause clause in when.Clauses)
         {
-            if (clause.Pattern is CrashablePattern cp)
+            // The parser emits `is Crashable err` as TypePattern with Type.Name == "Crashable"
+            // (it's a protocol-style match, not a special pattern node). Older AST paths still
+            // produce CrashablePattern — handle both shapes uniformly here.
+            string? bangBindName = null;
+            SourceLocation bangLoc = default;
+            bool isCrashableShape = false;
+            switch (clause.Pattern)
+            {
+                case CrashablePattern cp:
+                    bangBindName = cp.VariableName;
+                    bangLoc = cp.Location;
+                    isCrashableShape = true;
+                    break;
+                case TypePattern { Type.Name: "Crashable" } tp:
+                    bangBindName = tp.VariableName;
+                    bangLoc = tp.Location;
+                    isCrashableShape = true;
+                    break;
+            }
+
+            if (isCrashableShape)
             {
                 changed = true;
-                // Replace one CrashablePattern clause with N TypePattern clauses.
+                // Replace one Crashable-shaped clause with N TypePattern clauses, one per
+                // registered CrashableTypeInfo. Each arm gets its own deep-clone of the
+                // body where the bound name `err` is rewired to the concrete crashable
+                // type, so `err.crash_message()` etc. dispatches against a real method
+                // instead of the bodyless protocol stub.
+                var emptySubs = new Dictionary<string, string>();
                 foreach (CrashableTypeInfo crashable in crashableTypes)
                 {
                     var typeExpr = new TypeExpression(
                         Name: crashable.Name,
                         GenericArguments: null,
-                        Location: cp.Location)
+                        Location: bangLoc)
                     {
                         ResolvedType = crashable
                     };
                     var newPattern = new TypePattern(
                         Type: typeExpr,
-                        VariableName: cp.VariableName,
+                        VariableName: bangBindName,
                         Bindings: null,
-                        Location: cp.Location);
-                    expanded.Add(item: clause with { Pattern = newPattern });
+                        Location: bangLoc);
+
+                    Statement clonedBody = GenericAstRewriter.RewriteStatement(
+                        stmt: clause.Body, subs: emptySubs);
+                    if (!string.IsNullOrEmpty(value: bangBindName))
+                    {
+                        BindingTypeRewriter.Apply(body: clonedBody,
+                            bindingName: bangBindName!, concreteType: crashable,
+                            registry: ctx.Registry);
+                    }
+                    expanded.Add(item: clause with { Pattern = newPattern, Body = clonedBody });
                 }
             }
             else

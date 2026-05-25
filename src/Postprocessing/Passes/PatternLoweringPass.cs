@@ -335,9 +335,12 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
             }
             else
             {
-                bool seenBlank = loweredClauses.Any(
-                    c => c.Pattern is TypePattern { Type.Name: "Blank" });
-                isElseNarrowed = seenBlank && crashableCovered;
+                // Lookup's absent state is matched by `is None` only
+                // (NonePattern from `??`/`?.` desugar OR parser-emitted TypePattern("None")).
+                bool seenAbsent = loweredClauses.Any(
+                    c => c.Pattern is TypePattern { Type.Name: "None" }
+                      || c.Pattern is NonePattern);
+                isElseNarrowed = seenAbsent && crashableCovered;
             }
         }
         else if (IsMaybeRecord(subjectType) || IsMaybeEntity(subjectType))
@@ -671,8 +674,8 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
                 TypeInfo? targetType = tp.Type.ResolvedType
                     ?? ctx.Registry.LookupType(name: tp.Type.Name);
 
-                // Blank: type_id == 0
-                if (tp.Type.Name == "Blank" || targetType?.Name == "Blank")
+                // `is None`  on Lookup/Variant carriers tests type_id == 0.
+                if (tp.Type.Name is "None")
                     return (MakeTypeIdIsZero(subject: subject, loc: loc, boolType: boolType,
                         u64Type: u64Type), null);
 

@@ -335,6 +335,11 @@ public partial class LlvmCodeGenerator
         {
             RecordTypeInfo { HasDirectBackendType: true, IsGenericDefinition: false } record =>
                 GetTypeSizeFromLlvmType(llvmType: record.BackendType!),
+            RecordTypeInfo
+            {
+                CarrierKind: CarrierKind.Result or CarrierKind.Lookup,
+                TypeArguments: { Count: 1 } rlArgs
+            } => 8 + Math.Max(val1: GetTypeSize(type: rlArgs[index: 0]), val2: 8),
             RecordTypeInfo record => CalculateRecordSize(record: record),
             EntityTypeInfo => _pointerSizeBytes, // Entities are heap-allocated, stored as pointers
             CrashableTypeInfo => _pointerSizeBytes, // Crashable types are heap-allocated entities

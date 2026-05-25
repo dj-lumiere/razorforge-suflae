@@ -621,14 +621,13 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Emits code for a <see cref="CarrierPayloadExpression"/>: extracts field 1 (the data i64)
-    /// from a Result/Lookup carrier and reinterprets it as the concrete type.
+    /// Emits code for a <see cref="CarrierPayloadExpression"/>: loads the inline payload
+    /// (field 1 — a [P x i8] buffer where P = max(sizeof(T), 8)) from a Result/Lookup carrier
+    /// as the concrete type.
     ///
     /// <list type="bullet">
-    /// <item>Entity types: <c>inttoptr i64 -> ptr</c> (pointer stored as i64).</item>
-    /// <item>Value types wider than i64: not expected (carrier stores -> 64-bit values).</item>
-    /// <item>Value types narrower than i64: truncate from i64 to the target LLVM type.</item>
-    /// <item>i64-sized value types: load directly.</item>
+    /// <item>Entity / crashable types: payload slot holds a ptr — <c>load ptr</c>.</item>
+    /// <item>Record / primitive types: payload slot holds the value inline — <c>load &lt;type&gt;</c>.</item>
     /// </list>
     /// </summary>
     private string EmitCarrierPayloadExpression(StringBuilder sb, CarrierPayloadExpression payload)
@@ -647,37 +646,16 @@ public partial class LlvmCodeGenerator
         TypeInfo? concreteType = payload.ResolvedType ?? payload.ConcreteType.ResolvedType ??
             _registry.LookupType(name: payload.ConcreteType.Name);
 
-        // GEP field 1 (the data/address i64) from the carrier struct.
-        string dataPtr = NextTemp();
+        string payloadPtr = NextTemp();
         EmitLine(sb: sb,
-            line: $"  {dataPtr} = getelementptr {carrierLlvmType}, ptr {spillAddr}, i32 0, i32 1");
-        string dataI64 = NextTemp();
-        EmitLine(sb: sb, line: $"  {dataI64} = load i64, ptr {dataPtr}");
+            line: $"  {payloadPtr} = getelementptr {carrierLlvmType}, ptr {spillAddr}, i32 0, i32 1");
 
-        if (concreteType is EntityTypeInfo or CrashableTypeInfo)
-        {
-            // Entity / crashable: payload is a heap pointer stored as i64 -> inttoptr
-            string ptrVal = NextTemp();
-            EmitLine(sb: sb, line: $"  {ptrVal} = inttoptr i64 {dataI64} to ptr");
-            return ptrVal;
-        }
+        string loadType = concreteType is EntityTypeInfo or CrashableTypeInfo
+            ? "ptr"
+            : (concreteType != null ? GetLlvmType(type: concreteType) : "i64");
 
-        // Value type: zero-extend stored as i64; truncate/bitcast to target type.
-        string llvmType = concreteType != null
-            ? GetLlvmType(type: concreteType)
-            : "i64";
-        if (llvmType == "i64") return dataI64;
-
-        // If the LLVM type is a pointer (protocol, opaque handle), use inttoptr -> not trunc.
-        if (llvmType == "ptr")
-        {
-            string ptrVal2 = NextTemp();
-            EmitLine(sb: sb, line: $"  {ptrVal2} = inttoptr i64 {dataI64} to ptr");
-            return ptrVal2;
-        }
-
-        string truncated = NextTemp();
-        EmitLine(sb: sb, line: $"  {truncated} = trunc i64 {dataI64} to {llvmType}");
-        return truncated;
+        string loaded = NextTemp();
+        EmitLine(sb: sb, line: $"  {loaded} = load {loadType}, ptr {payloadPtr}");
+        return loaded;
     }
 }
