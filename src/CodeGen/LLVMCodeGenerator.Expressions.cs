@@ -173,15 +173,6 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private string EmitCall(StringBuilder sb, CallExpression call)
     {
-        // C29: Safety guard -> semantic analyzer already errors on runtime dispatch in RF mode,
-        // but if we somehow reach codegen with Runtime dispatch, trap instead of emitting bad code
-        if (call.ResolvedDispatch == DispatchStrategy.Runtime)
-        {
-            EmitLine(sb: sb, line: "  call void @llvm.trap()");
-            EmitLine(sb: sb, line: "  unreachable");
-            return "undef";
-        }
-
         EmitTraceLocUpdate(sb: sb, location: call.Location);
 
         return call.Callee switch

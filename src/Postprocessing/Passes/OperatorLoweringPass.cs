@@ -377,7 +377,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 if (resolvedGetItem != null)
                     getitemKind = ClassifyMethod(resolvedGetItem);
                 else if (targetType is GenericParameterTypeInfo)
-                    getitemKind = CallLoweringKind.RuntimeDispatch;
+                    getitemKind = CallLoweringKind.CrashableDispatch;
                 else if (targetType != null)
                     getitemKind = CallLoweringKind.DirectMemberRoutine;
                 else
@@ -652,7 +652,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
 
                 CallLoweringKind lk = resolvedMethod != null
                     ? ClassifyMethod(resolvedMethod)
-                    : receiverType is GenericParameterTypeInfo ? CallLoweringKind.RuntimeDispatch
+                    : receiverType is GenericParameterTypeInfo ? CallLoweringKind.CrashableDispatch
                     : receiverType != null ? CallLoweringKind.DirectMemberRoutine
                     : CallLoweringKind.Unknown;
 
@@ -681,7 +681,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 if (unwrapMethod != null)
                     unwrapKind = ClassifyMethod(unwrapMethod);
                 else if (operandType is GenericParameterTypeInfo)
-                    unwrapKind = CallLoweringKind.RuntimeDispatch;
+                    unwrapKind = CallLoweringKind.CrashableDispatch;
                 else if (operandType != null)
                     unwrapKind = CallLoweringKind.DirectMemberRoutine;
                 else
@@ -751,7 +751,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 if (resolvedUnaryMethod != null)
                     unaryKind = ClassifyMethod(resolvedUnaryMethod);
                 else if (operandType is GenericParameterTypeInfo)
-                    unaryKind = CallLoweringKind.RuntimeDispatch;
+                    unaryKind = CallLoweringKind.CrashableDispatch;
                 else if (operandType != null)
                     unaryKind = CallLoweringKind.DirectMemberRoutine;
                 else
@@ -1068,7 +1068,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
     {
         if (method.LlvmIrTemplate != null) return CallLoweringKind.LlvmIntrinsic;
         if (method.OwnerType is ProtocolTypeInfo or GenericParameterTypeInfo)
-            return CallLoweringKind.RuntimeDispatch;
+            return CallLoweringKind.CrashableDispatch;
         return CallLoweringKind.DirectMemberRoutine;
     }
 

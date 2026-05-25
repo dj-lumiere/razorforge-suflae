@@ -310,7 +310,6 @@ internal sealed class GenericCallLoweringPass
                 var rewritten = call with { Callee = callee, Arguments = args };
                 // ResolvedRoutine/ResolvedType/etc. are mutable {get;set;} props — `with` drops them.
                 rewritten.ResolvedRoutine = call.ResolvedRoutine;
-                rewritten.ResolvedDispatch = call.ResolvedDispatch;
                 rewritten.LoweringKind = call.LoweringKind;
                 rewritten.ConstructedType = call.ConstructedType;
                 rewritten.IsCollectionLiteral = call.IsCollectionLiteral;

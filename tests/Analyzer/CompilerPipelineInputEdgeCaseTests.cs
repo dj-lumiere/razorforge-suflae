@@ -171,7 +171,7 @@ public class CompilerPipelineInputEdgeCaseTests
             buildMode: RfBuildMode.ReleaseSpace,
             synthesizedBodies: result.SynthesizedBodies,
             instantiatedGenericBodies: result.InstantiatedGenericBodies,
-            pendingRuntimeDispatches: result.PendingRuntimeDispatches);
+            pendingCrashableDispatches: result.PendingCrashableDispatches);
 
         return generator.Generate();
     }

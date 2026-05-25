@@ -13,8 +13,8 @@ public enum CallLoweringKind
     /// <summary>Direct method call on a concrete receiver type.</summary>
     DirectMemberRoutine,
 
-    /// <summary>Protocol- or witness-dispatch call selected semantically.</summary>
-    RuntimeDispatch,
+    /// <summary>Closed-set typeid switch over Crashable types (Result/Lookup error arms).</summary>
+    CrashableDispatch,
 
     /// <summary>Type construction through a creator or constructor-style call.</summary>
     TypeConstructor,

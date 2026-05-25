@@ -15,24 +15,24 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Carries runtime dispatch target data between compiler phases.
     /// </summary>
-    private readonly record struct RuntimeDispatchTarget(TypeInfo ConcreteType, string FuncName);
+    private readonly record struct CrashableDispatchTarget(TypeInfo ConcreteType, string FuncName);
 
     /// <summary>
     /// Performs the generate runtime dispatch stubs step for this compiler phase.
     /// </summary>
-    private void GenerateRuntimeDispatchStubs()
+    private void GenerateCrashableDispatchStubs()
     {
-        foreach ((string mangledName, RuntimeDispatchInfo info) in _pendingRuntimeDispatches)
+        foreach ((string mangledName, CrashableDispatchInfo info) in _pendingCrashableDispatches)
         {
-            if (ShouldDeferRuntimeDispatchStub(mangledName: mangledName,
+            if (ShouldDeferCrashableDispatchStub(mangledName: mangledName,
                     info: info,
                     out string? returnType,
-                    out List<RuntimeDispatchTarget>? implementers))
+                    out List<CrashableDispatchTarget>? implementers))
             {
                 continue;
             }
 
-            EmitRuntimeDispatchStub(mangledName: mangledName,
+            EmitCrashableDispatchStub(mangledName: mangledName,
                 returnType: returnType!,
                 implementers: implementers!);
             _generatedRoutineDefs.Add(item: mangledName);
@@ -42,8 +42,8 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Emit runtime dispatch stub as part of this compiler phase.
     /// </summary>
-    private void EmitRuntimeDispatchStub(string mangledName, string returnType,
-        List<RuntimeDispatchTarget> implementers)
+    private void EmitCrashableDispatchStub(string mangledName, string returnType,
+        List<CrashableDispatchTarget> implementers)
     {
         string defaultLabel = NextLabel(prefix: "dispatch_default");
         var caseLabels = implementers
@@ -53,14 +53,14 @@ public partial class LlvmCodeGenerator
         EmitLine(sb: _functionDefinitions,
             line: $"define {returnType} @{mangledName}(ptr %self, i64 %type_id) {{");
         EmitLine(sb: _functionDefinitions, line: "entry:");
-        EmitRuntimeDispatchSwitch(sb: _functionDefinitions,
+        EmitCrashableDispatchSwitch(sb: _functionDefinitions,
             implementers: implementers,
             defaultLabel: defaultLabel,
             caseLabels: caseLabels);
 
         for (int i = 0; i < implementers.Count; i++)
         {
-            EmitRuntimeDispatchCase(sb: _functionDefinitions,
+            EmitCrashableDispatchCase(sb: _functionDefinitions,
                 target: implementers[i],
                 caseLabel: caseLabels[index: i],
                 returnType: returnType);
@@ -75,8 +75,8 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Emit runtime dispatch switch as part of this compiler phase.
     /// </summary>
-    private void EmitRuntimeDispatchSwitch(StringBuilder sb,
-        List<RuntimeDispatchTarget> implementers, string defaultLabel,
+    private void EmitCrashableDispatchSwitch(StringBuilder sb,
+        List<CrashableDispatchTarget> implementers, string defaultLabel,
         List<string> caseLabels)
     {
         var switchSb = new StringBuilder();
@@ -95,23 +95,23 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Emit runtime dispatch case as part of this compiler phase.
     /// </summary>
-    private void EmitRuntimeDispatchCase(StringBuilder sb, RuntimeDispatchTarget target,
+    private void EmitCrashableDispatchCase(StringBuilder sb, CrashableDispatchTarget target,
         string caseLabel, string returnType)
     {
         EmitLine(sb: sb, line: $"{caseLabel}:");
         if (target.ConcreteType is RecordTypeInfo)
         {
-            EmitRecordRuntimeDispatchCase(sb: sb, target: target, returnType: returnType);
+            EmitRecordCrashableDispatchCase(sb: sb, target: target, returnType: returnType);
             return;
         }
 
-        EmitEntityRuntimeDispatchCase(sb: sb, target: target, returnType: returnType);
+        EmitEntityCrashableDispatchCase(sb: sb, target: target, returnType: returnType);
     }
 
     /// <summary>
     /// Emit record runtime dispatch case as part of this compiler phase.
     /// </summary>
-    private void EmitRecordRuntimeDispatchCase(StringBuilder sb, RuntimeDispatchTarget target,
+    private void EmitRecordCrashableDispatchCase(StringBuilder sb, CrashableDispatchTarget target,
         string returnType)
     {
         string llvmType = GetLlvmType(type: target.ConcreteType);
@@ -134,7 +134,7 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Emit entity runtime dispatch case as part of this compiler phase.
     /// </summary>
-    private void EmitEntityRuntimeDispatchCase(StringBuilder sb, RuntimeDispatchTarget target,
+    private void EmitEntityCrashableDispatchCase(StringBuilder sb, CrashableDispatchTarget target,
         string returnType)
     {
         if (returnType == "void")
@@ -152,8 +152,8 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Returns whether should defer runtime dispatch stub applies in the current compiler context.
     /// </summary>
-    private bool ShouldDeferRuntimeDispatchStub(string mangledName, RuntimeDispatchInfo info,
-        out string? returnType, out List<RuntimeDispatchTarget>? implementers)
+    private bool ShouldDeferCrashableDispatchStub(string mangledName, CrashableDispatchInfo info,
+        out string? returnType, out List<CrashableDispatchTarget>? implementers)
     {
         returnType = null;
         implementers = null;
@@ -182,9 +182,9 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// Computes the LLVM return type for a runtime dispatch stub.
-    /// Called once at registration time; result stored in RuntimeDispatchInfo.ReturnType.
+    /// Called once at registration time; result stored in CrashableDispatchInfo.ReturnType.
     /// </summary>
-    private string ComputeRuntimeDispatchReturnType(ProtocolTypeInfo protocol, string methodName)
+    private string ComputeCrashableDispatchReturnType(ProtocolTypeInfo protocol, string methodName)
     {
         ProtocolMethodInfo? protoMethod =
             protocol.Methods.FirstOrDefault(predicate: m => m.Name == methodName && !m.IsFailable);
@@ -198,9 +198,9 @@ public partial class LlvmCodeGenerator
     /// Returns all concrete implementers that have the named method already compiled
     /// (present in _generatedRoutineDefs). Uses the pre-computed KnownImplementers list.
     /// </summary>
-    private List<RuntimeDispatchTarget> FindAllCompiledImplementers(RuntimeDispatchInfo info)
+    private List<CrashableDispatchTarget> FindAllCompiledImplementers(CrashableDispatchInfo info)
     {
-        var result = new List<RuntimeDispatchTarget>();
+        var result = new List<CrashableDispatchTarget>();
         foreach (TypeInfo type in info.KnownImplementers)
         {
             if (type.IsGenericDefinition)
@@ -212,7 +212,7 @@ public partial class LlvmCodeGenerator
                 Q(name: $"{type.FullName}.{SanitizeLlvmName(name: info.MemberRoutineName)}");
             if (_generatedRoutineDefs.Contains(item: candidateName))
             {
-                result.Add(item: new RuntimeDispatchTarget(type, candidateName));
+                result.Add(item: new CrashableDispatchTarget(type, candidateName));
             }
         }
 
@@ -224,7 +224,7 @@ public partial class LlvmCodeGenerator
     /// Returns the number of new declarations triggered.
     /// Uses the pre-computed KnownImplementers list.
     /// </summary>
-    private int TriggerAllImplementerCompilations(RuntimeDispatchInfo info)
+    private int TriggerAllImplementerCompilations(CrashableDispatchInfo info)
     {
         int count = 0;
         foreach (TypeInfo concreteType in info.KnownImplementers)
@@ -245,13 +245,13 @@ public partial class LlvmCodeGenerator
             // Only count an implementer as "in-progress" if THIS call actually triggered new
             // state (a fresh declaration). Without this gate, count stays > 0 forever for
             // implementers whose bodies will never be emitted (unreachable Crashable types
-            // declared on demand), and ShouldDeferRuntimeDispatchStub never returns false →
+            // declared on demand), and ShouldDeferCrashableDispatchStub never returns false →
             // the dispatch stub never gets generated and the linker reports it as undefined.
             // Newly-declared implementers still get their type prepared via Ensure*.
             if (!_generatedRoutines.Contains(item: candidateName))
             {
                 GenerateRoutineDeclaration(routine: concreteMethod);
-                EnsureRuntimeDispatchConcreteTypeReady(concreteType: concreteType);
+                EnsureCrashableDispatchConcreteTypeReady(concreteType: concreteType);
                 count++;
             }
         }
@@ -262,7 +262,7 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Ensure runtime dispatch concrete type ready as part of this compiler phase.
     /// </summary>
-    private void EnsureRuntimeDispatchConcreteTypeReady(TypeInfo concreteType)
+    private void EnsureCrashableDispatchConcreteTypeReady(TypeInfo concreteType)
     {
         if (concreteType is EntityTypeInfo entityType)
             GenerateEntityType(entity: entityType);

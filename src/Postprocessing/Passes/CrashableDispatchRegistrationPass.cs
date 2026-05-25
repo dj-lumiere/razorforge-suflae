@@ -13,17 +13,17 @@ namespace Compiler.Postprocessing.Passes;
 /// Running this before codegen means codegen discovers NO new stubs during emit — stub
 /// registration is owned by this phase, not the IR emitter.
 /// </summary>
-public sealed class RuntimeDispatchRegistrationPass(TypeRegistry registry)
+public sealed class CrashableDispatchRegistrationPass(TypeRegistry registry)
 {
     /// <summary>
     /// Dispatch stubs keyed by protocol full name and method name.
     /// </summary>
-    private readonly Dictionary<string, RuntimeDispatchEntry> _result = new();
+    private readonly Dictionary<string, CrashableDispatchEntry> _result = new();
 
     /// <summary>
     /// Scans user, stdlib, synthesized, and monomorphized bodies for protocol-dispatch call sites.
     /// </summary>
-    public IReadOnlyDictionary<string, RuntimeDispatchEntry> Run(
+    public IReadOnlyDictionary<string, CrashableDispatchEntry> Run(
         IEnumerable<(Program Program, string Path, string Module)> userPrograms,
         IReadOnlyDictionary<string, Statement> variantBodies,
         IReadOnlyDictionary<string, MonomorphizedBody> instantiatedGenericBodies)
@@ -54,7 +54,7 @@ public sealed class RuntimeDispatchRegistrationPass(TypeRegistry registry)
             {
                 // Skip generic-template bodies: their call sites carry unresolved generic
                 // receiver types (e.g. `me.alg.apply(...)` where `me.alg: M`), which SA
-                // classifies as RuntimeDispatch on the protocol. The monomorphized clones
+                // classifies as CrashableDispatch on the protocol. The monomorphized clones
                 // in instantiatedGenericBodies are scanned separately and have their
                 // dispatch reclassified to DirectMemberRoutine by GenericAstRewriter —
                 // so registering the protocol stub here would emit a spurious dispatch
@@ -134,7 +134,7 @@ public sealed class RuntimeDispatchRegistrationPass(TypeRegistry registry)
         switch (expr)
         {
             case CallExpression call:
-                if (call.LoweringKind == CallLoweringKind.RuntimeDispatch &&
+                if (call.LoweringKind == CallLoweringKind.CrashableDispatch &&
                     call.ResolvedRoutine?.OwnerType is ProtocolTypeInfo proto)
                 {
                     Register(proto, call.ResolvedRoutine.Name);
@@ -208,7 +208,7 @@ public sealed class RuntimeDispatchRegistrationPass(TypeRegistry registry)
     {
         string key = $"{protocol.FullName}.{methodName}";
         _result.TryAdd(key: key,
-            value: new RuntimeDispatchEntry(
+            value: new CrashableDispatchEntry(
                 Protocol: protocol,
                 MethodName: methodName,
                 KnownImplementers: registry.GetProtocolImplementors(protocol: protocol)));

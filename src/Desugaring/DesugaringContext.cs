@@ -17,7 +17,7 @@ namespace Compiler.Desugaring;
 /// <param name="Protocol">The protocol.</param>
 /// <param name="MethodName">The method name.</param>
 /// <param name="KnownImplementers">The known implementers.</param>
-public sealed record RuntimeDispatchEntry(
+public sealed record CrashableDispatchEntry(
     ProtocolTypeInfo Protocol,
     string MethodName,
     List<TypeInfo> KnownImplementers);
@@ -59,11 +59,11 @@ public sealed class DesugaringContext
     public RfBuildMode BuildMode { get; }
 
     /// <summary>
-    /// Runtime dispatch stubs pre-registered by <c>RuntimeDispatchRegistrationPass</c>
+    /// Runtime dispatch stubs pre-registered by <c>CrashableDispatchRegistrationPass</c>
     /// (Phase 6b). Key: <c>"{protocol.FullName}.{methodName}"</c> (raw, not LLVM-quoted).
     /// Codegen reads this instead of discovering dispatch stubs lazily during emit.
     /// </summary>
-    public Dictionary<string, RuntimeDispatchEntry> PendingRuntimeDispatches { get; } = new();
+    public Dictionary<string, CrashableDispatchEntry> PendingCrashableDispatches { get; } = new();
 
     /// <summary>When true, diagnostic passes print per-iteration timings to stderr.</summary>
     public bool SaTiming { get; set; }

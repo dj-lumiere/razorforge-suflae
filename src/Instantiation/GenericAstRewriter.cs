@@ -1045,7 +1045,6 @@ internal static class GenericAstRewriter
                                  .ToList()
         };
         rewritten.ResolvedRoutine = call.ResolvedRoutine;
-        rewritten.ResolvedDispatch = call.ResolvedDispatch;
         rewritten.LoweringKind = call.LoweringKind;
         rewritten.ConstructedType = call.ConstructedType;
         rewritten.IsCollectionLiteral = call.IsCollectionLiteral;
@@ -1189,7 +1188,7 @@ internal static class GenericAstRewriter
 
     private static CallExpression ReclassifyIfNeeded(CallExpression call, RewriteContext ctx)
     {
-        if (call.LoweringKind != CallLoweringKind.RuntimeDispatch) return call;
+        if (call.LoweringKind != CallLoweringKind.CrashableDispatch) return call;
         if (call.Callee is not MemberExpression { Object.ResolvedType: var rt, PropertyName: var methodName })
             return call;
         if (rt is null or GenericParameterTypeInfo or ProtocolTypeInfo) return call;

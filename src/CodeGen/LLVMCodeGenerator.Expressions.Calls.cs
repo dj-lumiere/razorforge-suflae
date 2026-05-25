@@ -607,7 +607,7 @@ public partial class LlvmCodeGenerator
         switch (method)
         {
             case null when
-                loweringKind is CallLoweringKind.DirectMemberRoutine or CallLoweringKind.RuntimeDispatch:
+                loweringKind is CallLoweringKind.DirectMemberRoutine or CallLoweringKind.CrashableDispatch:
                 throw new InvalidOperationException(
                     $"Method call .{member.PropertyName} on {receiverType.FullName} reached codegen " +
                     $"with loweringKind={loweringKind} but no resolved method. Semantic verifier" +
@@ -873,16 +873,16 @@ public partial class LlvmCodeGenerator
             GenerateRoutineDeclaration(routine: method);
         }
 
-        bool isRuntimeDispatch = loweringKind == CallLoweringKind.RuntimeDispatch ||
+        bool isCrashableDispatch = loweringKind == CallLoweringKind.CrashableDispatch ||
                                   (loweringKind == CallLoweringKind.Unknown &&
                                    method?.OwnerType is ProtocolTypeInfo);
-        if (isRuntimeDispatch && method?.OwnerType is ProtocolTypeInfo)
+        if (isCrashableDispatch && method?.OwnerType is ProtocolTypeInfo)
         {
-            if (!_pendingRuntimeDispatches.ContainsKey(mangledName))
+            if (!_pendingCrashableDispatches.ContainsKey(mangledName))
             {
                 throw new InvalidOperationException(
                     $"runtime dispatch stub '{mangledName}' reached codegen without pre-registration. " +
-                    $"RuntimeDispatchRegistrationPass must scan all call sites before codegen.");
+                    $"CrashableDispatchRegistrationPass must scan all call sites before codegen.");
             }
 
             // Append the runtime type_id as the last argument so the dispatch stub can

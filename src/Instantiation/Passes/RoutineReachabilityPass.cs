@@ -1074,7 +1074,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     }
 
     /// <summary>
-    /// When SA classified a call as RuntimeDispatch because the receiver is a generic param
+    /// When SA classified a call as CrashableDispatch because the receiver is a generic param
     /// constrained by a protocol (e.g. <c>me.alg.apply(...)</c> where <c>me.alg: M</c> and
     /// <c>M obeys LazyMonoid</c>), <c>ResolvedRoutine</c> points to the protocol's method.
     /// In a monomorphized frame the param is bound to a concrete impl record, so the call
