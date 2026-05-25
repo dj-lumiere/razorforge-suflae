@@ -872,7 +872,15 @@ public enum VariantSiteKind
     FromAbsent,
 
     /// <summary>Transformed from a <see cref="ReturnStatement"/>.</summary>
-    FromReturn
+    FromReturn,
+
+    /// <summary>
+    /// <c>Value</c> is already a variant carrier of the right type (rewritten by
+    /// <see cref="Compiler.Synthesis.ErrorHandlingVariantPass"/> when the original wrapper body
+    /// tail-returned a call to a failable routine, e.g. <c>return F!(x)</c> -> <c>return try_F(x)</c>).
+    /// Codegen returns <c>Value</c> directly without wrapping it in Some/Ok/Found.
+    /// </summary>
+    FromVariantPassthrough
 }
 
 /// <summary>

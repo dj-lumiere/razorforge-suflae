@@ -103,56 +103,54 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
             }
         }
 
-        // Phase C: variant generation (now reads propagated HasThrow/HasAbsent/ThrowableTypes).
+        // Phase C: register all variants first (no body transformation yet) — so the body
+        // rewriter in Phase D can find variants of callees regardless of iteration order.
+        var pending = new List<(RoutineInfo routine, Statement body, List<GeneratedVariant> variants)>();
         foreach (RoutineInfo routine in routines)
         {
             if (!routine.IsFailable) continue;
-
             if (!ctx.RoutineBodies.TryGetValue(key: routine.RegistryKey, value: out Statement? body))
                 continue;
 
-            GenerateVariantsForRoutine(generator: generator, routine: routine, body: body);
+            // @crash_only: still analyze throw/absent but suppress safe variant generation
+            if (routine.Annotations.Any(predicate: a => a == "crash_only"))
+            {
+                ErrorHandlingResult crashOnlyResult =
+                    generator.GenerateVariants(routine: routine, body: body);
+                routine.HasThrow = crashOnlyResult.HasThrow;
+                routine.HasAbsent = crashOnlyResult.HasAbsent;
+                continue;
+            }
+
+            ErrorHandlingResult result = generator.GenerateVariants(routine: routine, body: body);
+            if (result.Error != null) continue;
+
+            routine.HasThrow = result.HasThrow;
+            routine.HasAbsent = result.HasAbsent;
+            routine.ThrowableTypes = result.ThrownTypes;
+
+            foreach (GeneratedVariant variant in result.Variants)
+            {
+                ctx.Registry.RegisterRoutine(routine: variant.Routine);
+                variant.Routine.ThrowableTypes = result.ThrownTypes;
+            }
+
+            pending.Add((routine, body, result.Variants));
         }
-    }
 
-    private void GenerateVariantsForRoutine(ErrorHandlingGenerator generator,
-        RoutineInfo routine, Statement body)
-    {
-        // @crash_only: still analyze throw/absent but suppress safe variant generation
-        if (routine.Annotations.Any(predicate: a => a == "crash_only"))
+        // Phase D: now that all variants are registered, transform each body — rewriter can
+        // find variants of inner failable calls and substitute them.
+        foreach ((RoutineInfo routine, Statement body, List<GeneratedVariant> variants) in pending)
         {
-            ErrorHandlingResult crashOnlyResult =
-                generator.GenerateVariants(routine: routine, body: body);
-            routine.HasThrow = crashOnlyResult.HasThrow;
-            routine.HasAbsent = crashOnlyResult.HasAbsent;
-            return;
-        }
-
-        ErrorHandlingResult result = generator.GenerateVariants(routine: routine, body: body);
-
-        // If generation fails (e.g., @llvm_ir routines with no throw/absent AST nodes),
-        // skip -> no error reported. External implementations don't need generated variants.
-        if (result.Error != null) return;
-
-        routine.HasThrow = result.HasThrow;
-        routine.HasAbsent = result.HasAbsent;
-        routine.ThrowableTypes = result.ThrownTypes;
-
-        foreach (GeneratedVariant variant in result.Variants)
-        {
-            ctx.Registry.RegisterRoutine(routine: variant.Routine);
-            // Propagate thrown types to check_/lookup_ variants so the
-            // CrashableExpansionPass can enumerate them at the call site.
-            variant.Routine.ThrowableTypes = result.ThrownTypes;
-
-            // Build a pre-transformed body for this variant so codegen can emit carrier
-            // construction without relying on mutable _currentVariantIs* flags.
-            ErrorHandlingVariantKind kind = DetermineVariantKind(variant: variant);
-            Statement variantSourceBody = GenericAstRewriter.RewriteStatement(
-                stmt: body,
-                subs: new Dictionary<string, string>());
-            Statement variantBody = TransformBody(body: variantSourceBody, kind: kind);
-            ctx.VariantBodies[key: variant.Routine.RegistryKey] = variantBody;
+            foreach (GeneratedVariant variant in variants)
+            {
+                ErrorHandlingVariantKind kind = DetermineVariantKind(variant: variant);
+                Statement variantSourceBody = GenericAstRewriter.RewriteStatement(
+                    stmt: body,
+                    subs: new Dictionary<string, string>());
+                Statement variantBody = TransformBody(body: variantSourceBody, kind: kind, rewriter: TryRewriteToVariantCall);
+                ctx.VariantBodies[key: variant.Routine.RegistryKey] = variantBody;
+            }
         }
     }
 
@@ -171,11 +169,21 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     }
 
     /// <summary>
+    /// Signature for an optional rewriter that may convert a tail-return value into a passthrough
+    /// call against the corresponding try_/check_/lookup_ variant of an inner failable callee.
+    /// </summary>
+    public delegate bool VariantCallRewriter(Expression? value, ErrorHandlingVariantKind kind, out Expression? rewritten);
+
+    /// <summary>
     /// Recursively walks a routine body and replaces throw/absent/return statements with
     /// <see cref="VariantReturnStatement"/> nodes appropriate for the given variant kind.
     /// All other statements are passed through unchanged (structurally cloned via record-with).
+    /// When <paramref name="rewriter"/> succeeds on a tail-position return value, the value is
+    /// emitted as <see cref="VariantSiteKind.FromVariantPassthrough"/> so codegen returns the
+    /// already-carrier-shaped expression directly.
     /// </summary>
-    internal static Statement TransformBody(Statement body, ErrorHandlingVariantKind kind)
+    internal static Statement TransformBody(Statement body, ErrorHandlingVariantKind kind,
+        VariantCallRewriter? rewriter = null)
     {
         return body switch
         {
@@ -185,37 +193,40 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
             AbsentStatement abs =>
                 new VariantReturnStatement(kind, VariantSiteKind.FromAbsent, null, abs.Location),
 
+            ReturnStatement ret when rewriter != null && rewriter(ret.Value, kind, out Expression? vcall) =>
+                new VariantReturnStatement(kind, VariantSiteKind.FromVariantPassthrough, vcall, ret.Location),
+
             ReturnStatement ret =>
                 new VariantReturnStatement(kind, VariantSiteKind.FromReturn, ret.Value, ret.Location),
 
             BlockStatement block => block with
             {
                 Statements = block.Statements
-                                  .Select(selector: s => TransformBody(body: s, kind: kind))
+                                  .Select(selector: s => TransformBody(body: s, kind: kind, rewriter: rewriter))
                                   .ToList()
             },
 
             IfStatement ifs => ifs with
             {
-                ThenStatement = TransformBody(body: ifs.ThenStatement, kind: kind),
+                ThenStatement = TransformBody(body: ifs.ThenStatement, kind: kind, rewriter: rewriter),
                 ElseStatement = ifs.ElseStatement != null
-                    ? TransformBody(body: ifs.ElseStatement, kind: kind)
+                    ? TransformBody(body: ifs.ElseStatement, kind: kind, rewriter: rewriter)
                     : null
             },
 
             WhileStatement ws => ws with
             {
-                Body = TransformBody(body: ws.Body, kind: kind),
+                Body = TransformBody(body: ws.Body, kind: kind, rewriter: rewriter),
                 ElseBranch = ws.ElseBranch != null
-                    ? TransformBody(body: ws.ElseBranch, kind: kind)
+                    ? TransformBody(body: ws.ElseBranch, kind: kind, rewriter: rewriter)
                     : null
             },
 
             ForStatement fs => fs with
             {
-                Body = TransformBody(body: fs.Body, kind: kind),
+                Body = TransformBody(body: fs.Body, kind: kind, rewriter: rewriter),
                 ElseBranch = fs.ElseBranch != null
-                    ? TransformBody(body: fs.ElseBranch, kind: kind)
+                    ? TransformBody(body: fs.ElseBranch, kind: kind, rewriter: rewriter)
                     : null
             },
 
@@ -224,22 +235,109 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
                 Clauses = ws.Clauses
                             .Select(selector: c => c with
                              {
-                                 Body = TransformBody(body: c.Body, kind: kind)
+                                 Body = TransformBody(body: c.Body, kind: kind, rewriter: rewriter)
                              })
                             .ToList()
             },
 
             UsingStatement us => us with
             {
-                Body = TransformBody(body: us.Body, kind: kind)
+                Body = TransformBody(body: us.Body, kind: kind, rewriter: rewriter)
             },
 
             DangerStatement danger => danger with
             {
-                Body = (BlockStatement)TransformBody(body: danger.Body, kind: kind)
+                Body = (BlockStatement)TransformBody(body: danger.Body, kind: kind, rewriter: rewriter)
             },
 
             _ => body // All other statements pass through unchanged
         };
+    }
+
+    /// <summary>
+    /// If <paramref name="value"/> is a tail-position call to a failable routine and a matching
+    /// variant exists in the registry, returns a rewritten call that targets the variant.
+    /// The rewritten call's resolved routine is the variant (non-failable) so codegen does not
+    /// emit a throw-propagating call site.
+    /// </summary>
+    private bool TryRewriteToVariantCall(Expression? value, ErrorHandlingVariantKind kind, out Expression? rewritten)
+    {
+        rewritten = null;
+        if (value == null) return false;
+
+        string? prefix = kind switch
+        {
+            ErrorHandlingVariantKind.Try => "try",
+            ErrorHandlingVariantKind.Check => "check",
+            ErrorHandlingVariantKind.Lookup => "lookup",
+            _ => null
+        };
+        if (prefix == null) return false;
+
+        if (value is CallExpression call && call.ResolvedRoutine is { IsFailable: true } callee)
+        {
+            RoutineInfo? variant = FindVariant(original: callee, prefix: prefix);
+            if (variant == null) return false;
+
+            CallExpression newCall = call with { ResolvedRoutine = variant };
+            newCall = newCall.Callee switch
+            {
+                IdentifierExpression idCallee => newCall with { Callee = idCallee with { Name = variant.Name } },
+                MemberExpression memCallee => newCall with { Callee = memCallee with { PropertyName = variant.Name } },
+                _ => newCall
+            };
+            rewritten = newCall;
+            return true;
+        }
+
+        if (value is CreatorExpression creator && creator.ResolvedCreatorRoutine is { IsFailable: true } cCallee)
+        {
+            RoutineInfo? variant = FindVariant(original: cCallee, prefix: prefix);
+            if (variant == null) return false;
+
+            var typeId = new IdentifierExpression(Name: creator.TypeName, Location: creator.Location);
+            var member = new MemberExpression(Object: typeId, PropertyName: variant.Name, Location: creator.Location);
+            var args = creator.MemberVariables
+                .Select(selector: mv => (Expression)new NamedArgumentExpression(
+                    Name: mv.Name, Value: mv.Value, Location: creator.Location))
+                .ToList();
+            var newCall = new CallExpression(Callee: member, Arguments: args, Location: creator.Location)
+            {
+                ResolvedRoutine = variant
+            };
+            rewritten = newCall;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Finds the variant routine for <paramref name="original"/> with the given prefix
+    /// (try/check/lookup). Matches by <see cref="RoutineInfo.OriginalName"/> + owner identity.
+    /// </summary>
+    private RoutineInfo? FindVariant(RoutineInfo original, string prefix)
+    {
+        string baseName = original.Name.TrimStart(trimChar: '$');
+        string variantName = $"{prefix}_{baseName}";
+        foreach (RoutineInfo r in ctx.Registry.GetAllRoutines())
+        {
+            if (r.Name != variantName) continue;
+            if (r.OriginalName != original.Name) continue;
+            if (!ReferenceEquals(objA: r.OwnerType, objB: original.OwnerType)) continue;
+            if (r.Parameters.Count != original.Parameters.Count) continue;
+            bool allMatch = true;
+            for (int i = 0; i < r.Parameters.Count; i++)
+            {
+                if (r.Parameters[index: i].Type.FullName != original.Parameters[index: i].Type.FullName)
+                {
+                    allMatch = false;
+                    break;
+                }
+            }
+            if (!allMatch) continue;
+            return r;
+        }
+        return null;
     }
 }

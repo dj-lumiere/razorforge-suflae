@@ -715,10 +715,13 @@ public partial class LlvmCodeGenerator
         // Owned[List[S64]] -> inner List[S64].$setitem!(i64)). The inline mangled-name path
         // would emit a call to the wrapper's symbol which doesn't exist, so escape to the
         // standard method-dispatch path that handles wrapper forwarding correctly.
+        // Skip when the last type-arg is a const-generic value (e.g. BitArray[N] where N=8),
+        // since const-generic owners are never wrapper forwarders.
         bool isWrapperForwardingSetItem =
             setItem != null &&
             setItem.Parameters.Count >= 2 &&
             targetType?.TypeArguments is { Count: 1 } &&
+            targetType.TypeArguments[^1] is not ConstGenericValueTypeInfo &&
             setItem.Parameters[^1].Type.FullName != targetType.TypeArguments[^1].FullName;
 
         // Record $setitem!: the receiver must be the alloca pointer so mutations persist in the

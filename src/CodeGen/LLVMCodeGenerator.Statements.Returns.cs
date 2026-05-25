@@ -165,6 +165,19 @@ public partial class LlvmCodeGenerator
     private void EmitVariantReturn(StringBuilder sb, VariantReturnStatement variantRet)
     {
         TypeInfo returnType = _currentEmittingRoutine!.ReturnType!;
+
+        // Passthrough: Value already has the variant carrier type — emit and return as-is.
+        if (variantRet.SiteKind == VariantSiteKind.FromVariantPassthrough)
+        {
+            string passVal = EmitExpression(sb: sb, expr: variantRet.Value!);
+            EmitRcRecordCleanup(sb: sb);
+            EmitEntityCleanup(sb: sb, returnedVarName: null);
+            if (_traceCurrentRoutine)
+                EmitLine(sb: sb, line: TracePop);
+            EmitLine(sb: sb, line: $"  ret {GetLlvmType(type: returnType)} {passVal}");
+            return;
+        }
+
         TypeInfo innerType = (variantRet.VariantKind == ErrorHandlingVariantKind.Try
                               || IsCarrierType(type: returnType))
             ? returnType.TypeArguments![index: 0]
