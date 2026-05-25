@@ -211,8 +211,7 @@ public sealed partial class SemanticVerifier
     {
         // Re-binding (lhs = rhs) revives a stolen-from identifier: clear deadref
         // BEFORE analyzing the LHS so the deadref-read check at line ~135 doesn't fire.
-        if (binary.Operator == BinaryOperator.Assign &&
-            binary.Left is IdentifierExpression rebindId)
+        if (binary is { Operator: BinaryOperator.Assign, Left: IdentifierExpression rebindId })
         {
             _deadrefVariables.Remove(item: rebindId.Name);
         }
@@ -223,14 +222,12 @@ public sealed partial class SemanticVerifier
 
         // Re-infer unsuffixed integer literals against the typed peer so
         // comparisons like 'me.strong_count == 0' don't default the literal to S64.
-        if (binary.Right is LiteralExpression rightLit &&
-            rightLit.LiteralType is TokenType.IntegerLiteral or TokenType.S64Literal or TokenType.UndecidedInteger &&
+        if (binary.Right is LiteralExpression { LiteralType: TokenType.IntegerLiteral or TokenType.S64Literal or TokenType.UndecidedInteger } &&
             IsFixedWidthIntegerType(type: leftType) && leftType.Name != rightType.Name)
         {
             rightType = AnalyzeExpression(expression: binary.Right, expectedType: leftType);
         }
-        else if (binary.Left is LiteralExpression leftLit &&
-                 leftLit.LiteralType is TokenType.IntegerLiteral or TokenType.S64Literal or TokenType.UndecidedInteger &&
+        else if (binary.Left is LiteralExpression { LiteralType: TokenType.IntegerLiteral or TokenType.S64Literal or TokenType.UndecidedInteger } &&
                  IsFixedWidthIntegerType(type: rightType) && leftType.Name != rightType.Name)
         {
             leftType = AnalyzeExpression(expression: binary.Left, expectedType: rightType);
@@ -406,8 +403,8 @@ public sealed partial class SemanticVerifier
         // bypassing the checked dispatch path.
         bool isIntegerCheckedOp = method is { IsFailable: true } && leftType is RecordTypeInfo
                                   {
-                                      HasDirectBackendType: true
-                                  } ltRec && ltRec.LlvmType is { } ltIr &&
+                                      HasDirectBackendType: true, LlvmType: { } ltIr
+                                  } &&
                                   ltIr.StartsWith('i') && ltIr != "i1";
         if (isIntegerCheckedOp && _currentRoutine != null)
         {
@@ -439,8 +436,7 @@ public sealed partial class SemanticVerifier
 
         // Contextually infer unsuffixed integer literals against the operator
         // parameter type so stdlib/operator lowering does not inherit a stale S64.
-        if (binary.Right is LiteralExpression rightLiteral &&
-            rightLiteral.LiteralType is TokenType.IntegerLiteral or TokenType.S64Literal &&
+        if (binary.Right is LiteralExpression { LiteralType: TokenType.IntegerLiteral or TokenType.S64Literal } &&
             IsFixedWidthIntegerType(type: paramType))
         {
             rightType = AnalyzeExpression(expression: binary.Right, expectedType: paramType);

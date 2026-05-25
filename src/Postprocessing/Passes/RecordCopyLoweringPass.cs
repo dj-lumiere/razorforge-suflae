@@ -115,8 +115,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
                 return changed ? block with { Statements = newStmts } : block;
             }
 
-            case DeclarationStatement { Declaration: VariableDeclaration vd } ds
-                when vd.Initializer != null:
+            case DeclarationStatement { Declaration: VariableDeclaration { Initializer: not null } vd } ds:
             {
                 Expression lowered = LowerOwnership(expr: vd.Initializer);
                 if (ReferenceEquals(lowered, vd.Initializer)) return stmt;

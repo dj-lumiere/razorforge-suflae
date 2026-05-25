@@ -220,7 +220,7 @@ internal sealed class GenericCallLoweringPass
                 return ReferenceEquals(val, r.Value) ? stmt : r with { Value = val };
             }
 
-            case VariantReturnStatement vrs when vrs.Value != null:
+            case VariantReturnStatement { Value: not null } vrs:
             {
                 Expression val = LowerExpression(vrs.Value);
                 return ReferenceEquals(val, vrs.Value) ? stmt : vrs with { Value = val };

@@ -99,7 +99,7 @@ public sealed class ErrorHandlingGenerator
         // If no direct or propagated throw/absent info but the routine calls failable
         // routines, conservatively assume throw (legacy behavior for arithmetic-overflow
         // crashable calls etc.).
-        if (!analysis.HasThrow && !analysis.HasAbsent && routine.HasFailableCalls)
+        if (analysis is { HasThrow: false, HasAbsent: false } && routine.HasFailableCalls)
         {
             analysis.HasThrow = true;
         }

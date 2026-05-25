@@ -543,7 +543,7 @@ public sealed partial class SemanticVerifier
                     $"Using target of type '{resourceType.Name}' must implement '$enter' and '$exit' for resource management.",
                     location: usingStmt.Location);
             }
-            else if (enterMethod.ReturnType != null && !enterMethod.ReturnType.IsBlank)
+            else if (enterMethod.ReturnType is { IsBlank: false })
             {
                 boundType = enterMethod.ReturnType;
             }

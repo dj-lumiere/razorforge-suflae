@@ -20,7 +20,7 @@ public partial class LlvmCodeGenerator
     private static TypeInfo UnwrapCollectionStorageType(TypeInfo type)
     {
         TypeInfo current = type;
-        while (current is WrapperTypeInfo wrapper && wrapper.Name == "Owned")
+        while (current is WrapperTypeInfo { Name: "Owned" } wrapper)
         {
             current = wrapper.InnerType;
         }
@@ -254,7 +254,7 @@ public partial class LlvmCodeGenerator
             ? null
             : ResolveMemberRoutine(receiverType: resolvedType, methodName: "$create");
 
-        if (resolved != null && resolved.Routine.Parameters.Count > 0)
+        if (resolved is { Routine.Parameters.Count: > 0 })
             resolved = null;
 
         if (resolved == null)
@@ -262,7 +262,7 @@ public partial class LlvmCodeGenerator
             string createName = $"{resolvedType.FullName}.$create";
             RoutineInfo? creator =
                 _registry.LookupRoutineOverload(baseName: createName, argTypes: new List<TypeInfo>());
-            if (creator != null && creator.Parameters.Count > 0)
+            if (creator is { Parameters.Count: > 0 })
                 creator = null;
 
             if (creator == null)
@@ -279,7 +279,7 @@ public partial class LlvmCodeGenerator
                     creator = _registry.LookupRoutineOverload(baseName: genCreateName,
                         argTypes: new List<TypeInfo>());
                     creator ??= _registry.LookupRoutine(fullName: genCreateName);
-                    if (creator != null && creator.Parameters.Count > 0)
+                    if (creator is { Parameters.Count: > 0 })
                         creator = null;
                 }
             }

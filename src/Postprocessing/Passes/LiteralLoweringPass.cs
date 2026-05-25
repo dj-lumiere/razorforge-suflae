@@ -168,7 +168,7 @@ internal sealed class LiteralLoweringPass
                 Expression val = LowerExpression(assign.Value);
                 return ReferenceEquals(val, assign.Value) ? stmt : assign with { Value = val };
             }
-            case DeclarationStatement { Declaration: VariableDeclaration vd } ds when vd.Initializer != null:
+            case DeclarationStatement { Declaration: VariableDeclaration { Initializer: not null } vd } ds:
             {
                 Expression init = LowerExpression(vd.Initializer);
                 if (ReferenceEquals(init, vd.Initializer)) return stmt;

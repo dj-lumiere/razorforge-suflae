@@ -1334,8 +1334,7 @@ public sealed partial class TypeRegistry
     public IEnumerable<TypeInfo> AllConcreteGenericInstances =>
         _resolutions.Values
                     .Where(predicate: t =>
-                         t is EntityTypeInfo or RecordTypeInfo && !t.IsGenericDefinition &&
-                         t.TypeArguments is { Count: > 0 } args && args.All(predicate: IsFullyConcrete) &&
+                         t is EntityTypeInfo or RecordTypeInfo && t is { IsGenericDefinition: false, TypeArguments: { Count: > 0 } args } && args.All(predicate: IsFullyConcrete) &&
                          IsConcreteTypeLive(t) && !t.IsStdlibLazy)
                     .Distinct(); // dual-index stores the same TypeInfo under two keys; deduplicate by reference.
 
@@ -1348,8 +1347,7 @@ public sealed partial class TypeRegistry
     public IEnumerable<TypeInfo> AllConcreteGenericInstancesUnfiltered =>
         _resolutions.Values
                     .Where(predicate: t =>
-                         t is EntityTypeInfo or RecordTypeInfo && !t.IsGenericDefinition &&
-                         t.TypeArguments is { Count: > 0 } args && args.All(predicate: IsFullyConcrete) &&
+                         t is EntityTypeInfo or RecordTypeInfo && t is { IsGenericDefinition: false, TypeArguments: { Count: > 0 } args } && args.All(predicate: IsFullyConcrete) &&
                          !t.IsStdlibLazy)
                     .Distinct();
 

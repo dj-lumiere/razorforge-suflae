@@ -95,8 +95,7 @@ public partial class LlvmCodeGenerator
         if (expr is CallExpression { Callee: MemberExpression calleeMember })
         {
             TypeInfo? rcvrType = GetExpressionType(expr: calleeMember.Object);
-            if (rcvrType is ProtocolTypeInfo { Methods.Count: 0 } protoRcvr2 &&
-                protoRcvr2.TypeArguments is { Count: > 0 })
+            if (rcvrType is ProtocolTypeInfo { Methods.Count: 0, TypeArguments.Count: > 0 })
             {
                 skipSaResolved = true;
             }
@@ -274,8 +273,9 @@ public partial class LlvmCodeGenerator
             case EntityTypeInfo
             {
                 IsGenericResolution: true, MemberVariables.Count: 0,
-                GenericDefinition: { MemberVariables.Count: > 0 } genDef
-            } staleEntity when staleEntity.TypeArguments != null:
+                GenericDefinition: { MemberVariables.Count: > 0 } genDef,
+                TypeArguments: not null
+            } staleEntity:
             {
                 var refreshed = genDef.CreateInstance(typeArguments: staleEntity.TypeArguments) as EntityTypeInfo;
                 if (refreshed is { MemberVariables.Count: > 0 })
@@ -553,7 +553,7 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private TypeInfo? ResolveTypeArgument(TypeExpression ta) // NOSONAR S3776
     {
-        if (ta.ResolvedType is { } resolvedType && resolvedType is not ErrorTypeInfo)
+        if (ta.ResolvedType is { } resolvedType and not ErrorTypeInfo)
         {
             return ApplyTypeSubstitutions(type: resolvedType);
         }
@@ -734,9 +734,9 @@ public partial class LlvmCodeGenerator
         {
             TypeInfo? lookupGenericDef = lookupType switch
             {
-                RecordTypeInfo r when r.IsGenericResolution => r.GenericDefinition,
-                EntityTypeInfo e when e.IsGenericResolution => e.GenericDefinition,
-                ProtocolTypeInfo p when p.IsGenericResolution => p.GenericDefinition,
+                RecordTypeInfo { IsGenericResolution: true } r => r.GenericDefinition,
+                EntityTypeInfo { IsGenericResolution: true } e => e.GenericDefinition,
+                ProtocolTypeInfo { IsGenericResolution: true } p => p.GenericDefinition,
                 _ => null
             };
             ownerGenericParams = lookupGenericDef?.GenericParameters ??

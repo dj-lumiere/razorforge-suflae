@@ -163,13 +163,13 @@ public static class ManifestLoader
             context: $"target '{name}'");
 
         if (table.TryGetValue(key: "dump-ast", value: out object? dumpAst))
-            target.DumpAst = dumpAst is bool b && b;
+            target.DumpAst = dumpAst is bool and true;
 
         if (table.TryGetValue(key: "sa-timing", value: out object? saTiming))
-            target.SaTiming = saTiming is bool bs && bs;
+            target.SaTiming = saTiming is bool and true;
 
         if (table.TryGetValue(key: "show-build-stages", value: out object? showStages))
-            target.ShowBuildStages = showStages is bool bShow && bShow;
+            target.ShowBuildStages = showStages is bool and true;
 
         // Resolve module name to file path
         if (!moduleIndex.TryGetValue(key: target.Entry, value: out string? resolvedFile))

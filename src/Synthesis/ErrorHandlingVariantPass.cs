@@ -274,7 +274,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
         };
         if (prefix == null) return false;
 
-        if (value is CallExpression call && call.ResolvedRoutine is { IsFailable: true } callee)
+        if (value is CallExpression { ResolvedRoutine: { IsFailable: true } callee } call)
         {
             RoutineInfo? variant = FindVariant(original: callee, prefix: prefix);
             if (variant == null) return false;
@@ -290,7 +290,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
             return true;
         }
 
-        if (value is CreatorExpression creator && creator.ResolvedCreatorRoutine is { IsFailable: true } cCallee)
+        if (value is CreatorExpression { ResolvedCreatorRoutine: { IsFailable: true } cCallee } creator)
         {
             RoutineInfo? variant = FindVariant(original: cCallee, prefix: prefix);
             if (variant == null) return false;

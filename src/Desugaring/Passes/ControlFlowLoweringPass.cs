@@ -266,7 +266,7 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
         // and LoweringKind on the try_next call so CallOverloadResolutionPass doesn't need to
         // re-classify it (which fails for instantiated bodies where the receiver variable has
         // no SA-annotated type). Skip ErrorTypeInfo: SA suppresses stdlib errors.
-        if (forStmt.Iterable.ResolvedType is { } iterType && iterType is not ErrorTypeInfo)
+        if (forStmt.Iterable.ResolvedType is { } iterType and not ErrorTypeInfo)
         {
             RoutineInfo? iterMethod = ctx.Registry.LookupMethod(type: iterType, methodName: "$iter");
             if (iterMethod?.ReturnType is { } iteratorType)

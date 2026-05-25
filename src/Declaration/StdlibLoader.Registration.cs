@@ -15,7 +15,7 @@ public sealed partial class StdlibLoader
     {
         foreach (ISyntaxTreeNode node in program.Declarations)
         {
-            if (node is ProtocolDeclaration protocol && protocol.ParentProtocols.Count > 0)
+            if (node is ProtocolDeclaration { ParentProtocols.Count: > 0 } protocol)
             {
                 // Look up the registered protocol to get its FullName
                 TypeInfo? registeredProto = registry.LookupType(name: protocol.Name);
@@ -191,7 +191,7 @@ public sealed partial class StdlibLoader
         {
             switch (node)
             {
-                case EntityDeclaration entity when entity.Protocols.Count > 0:
+                case EntityDeclaration { Protocols.Count: > 0 } entity:
                 {
                     var existing = registry.LookupType(name: entity.Name) as EntityTypeInfo;
                     if (existing == null ||
@@ -210,7 +210,7 @@ public sealed partial class StdlibLoader
 
                     break;
                 }
-                case RecordDeclaration record when record.Protocols.Count > 0:
+                case RecordDeclaration { Protocols.Count: > 0 } record:
                 {
                     var existing = registry.LookupType(name: record.Name) as RecordTypeInfo;
                     if (existing == null ||
@@ -660,9 +660,7 @@ public sealed partial class StdlibLoader
         // separately so GetOrCreateResolution can select the right definition.
         string? entityConstraintParam = record.GenericConstraints?
             .Where(predicate: c =>
-                c.ConstraintType == ConstraintKind.ConstGeneric &&
-                c.ConstraintTypes?.Count == 1 &&
-                c.ConstraintTypes[index: 0].Name == "EntityType")
+                c is { ConstraintType: ConstraintKind.ConstGeneric, ConstraintTypes: [{ Name: "EntityType" }] })
             .Select(selector: c => c.ParameterName)
             .FirstOrDefault();
         bool isEntitySpecialization = entityConstraintParam != null;

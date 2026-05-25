@@ -1599,7 +1599,7 @@ public class ExpressionTests
         List<Token> tokens = Tokenize(source: source);
 
         // Find the LeftParen and RightParen for f(...)
-        int leftParenIndex = tokens.FindIndex(match: t => t.Type == TokenType.LeftParen && t.Text == "(");
+        int leftParenIndex = tokens.FindIndex(match: t => t is { Type: TokenType.LeftParen, Text: "(" });
         // Skip the first LeftParen (routine params), find the second one
         int callParenIndex = tokens.FindIndex(startIndex: leftParenIndex + 1, match: t => t.Type == TokenType.LeftParen);
         int rightParenIndex = tokens.FindIndex(startIndex: callParenIndex, match: t => t.Type == TokenType.RightParen);

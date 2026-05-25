@@ -288,7 +288,7 @@ public sealed partial class SemanticVerifier
         // `steal` always produces an rvalue `?T` — it consumes an lvalue binding and yields
         // an in-flight entity that must be re-bound (or consumed) at the use site.
         steal.IsInFlight = true;
-        if (isOwned && operandType is WrapperTypeInfo owned && owned.InnerType != null)
+        if (isOwned && operandType is WrapperTypeInfo { InnerType: not null } owned)
         {
             steal.ResolvedType = owned.InnerType;
             return owned.InnerType;

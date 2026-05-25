@@ -429,8 +429,7 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
                         includeMe: includeMe)
                 }, unary);
 
-            case CallExpression call when call.Callee is LambdaExpression capLambda
-                                         && capLambda.Captures is { Count: > 0 }:
+            case CallExpression { Callee: LambdaExpression { Captures.Count: > 0 } capLambda } call:
                 return LiftCapturingLambdaIife(call, capLambda,
                     scope: scope,
                     inheritedGenericParameters: inheritedGenericParameters,

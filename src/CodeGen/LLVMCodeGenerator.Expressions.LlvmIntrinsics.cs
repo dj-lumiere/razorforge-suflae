@@ -490,7 +490,7 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private string ResolveTypeExpressionToLlvm(TypeExpression typeExpr) // NOSONAR S3776
     {
-        if (typeExpr.ResolvedType is { } resolvedType && resolvedType is not ErrorTypeInfo)
+        if (typeExpr.ResolvedType is { } resolvedType and not ErrorTypeInfo)
         {
             return GetLlvmType(type: ApplyTypeSubstitutions(type: resolvedType));
         }

@@ -310,7 +310,7 @@ public sealed partial class SemanticVerifier
                 return (baseName, prefix.Length == 0 ? "<value>" : prefix);
             }
             if (type is RecordTypeInfo record &&
-                !(record.IsGenericDefinition && record.TypeArguments is not { Count: > 0 }))
+                !(record is { IsGenericDefinition: true, TypeArguments: not { Count: > 0 } }))
             {
                 if (!visited.Add(item: record.FullName))
                     return null;

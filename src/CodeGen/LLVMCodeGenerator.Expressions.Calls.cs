@@ -105,14 +105,20 @@ public partial class LlvmCodeGenerator
                     arg: arguments[index: 0],
                     resolvedRoutine: resolvedRoutine):
                 return EmitRecordConstruction(sb: sb, record: directRecord, arguments: arguments);
-            case CallLoweringKind.TypeConstructor or CallLoweringKind.WrapperConstruction when constructedType is RecordTypeInfo ctorRecord && ctorRecord.MemberVariables.Count > 0 &&
+            case CallLoweringKind.TypeConstructor or CallLoweringKind.WrapperConstruction when constructedType is RecordTypeInfo
+                {
+                    MemberVariables.Count: > 0
+                } ctorRecord &&
                 arguments.Count == ctorRecord.MemberVariables.Count && arguments.All(
                     predicate: a =>
                         a is NamedArgumentExpression namedArg &&
                         ctorRecord.MemberVariables.Any(
                             predicate: mv => mv.Name == namedArg.Name)):
                 return EmitRecordConstruction(sb: sb, record: ctorRecord, arguments: arguments);
-            case CallLoweringKind.TypeConstructor or CallLoweringKind.WrapperConstruction when constructedType is EntityTypeInfo ctorEntity && ctorEntity.MemberVariables.Count > 0 &&
+            case CallLoweringKind.TypeConstructor or CallLoweringKind.WrapperConstruction when constructedType is EntityTypeInfo
+                {
+                    MemberVariables.Count: > 0
+                } ctorEntity &&
                 arguments.Count == ctorEntity.MemberVariables.Count && arguments.All(
                     predicate: a =>
                         a is NamedArgumentExpression namedArg &&
@@ -151,7 +157,7 @@ public partial class LlvmCodeGenerator
                 // Direct named-field construction: when all arg names match field names exactly,
                 // emit struct construction directly (avoids $create infinite recursion).
                 // e.g., CStr(ptr: from_ptr) inside CStr.$create body
-                if (calledType is RecordTypeInfo record && record.MemberVariables.Count > 0 &&
+                if (calledType is RecordTypeInfo { MemberVariables.Count: > 0 } record &&
                     arguments.Count == record.MemberVariables.Count && arguments.All(
                         predicate: a =>
                             a is NamedArgumentExpression named &&
@@ -160,7 +166,7 @@ public partial class LlvmCodeGenerator
                     return EmitRecordConstruction(sb: sb, record: record, arguments: arguments);
                 }
 
-                if (calledType is EntityTypeInfo entity && entity.MemberVariables.Count > 0 &&
+                if (calledType is EntityTypeInfo { MemberVariables.Count: > 0 } entity &&
                     arguments.Count == entity.MemberVariables.Count && arguments.All(
                         predicate: a =>
                             a is NamedArgumentExpression named2 &&
@@ -186,7 +192,7 @@ public partial class LlvmCodeGenerator
                     string createName = $"{calledType.Name}.$create";
                     RoutineInfo? creator = _registry.LookupRoutineOverload(baseName: createName,
                         argTypes: new List<TypeInfo>());
-                    if (!(creator != null && creator.Parameters.Count == 0))
+                    if (!(creator is { Parameters.Count: 0 }))
                     {
                         throw new InvalidOperationException(
                             $"No zero-arg '$create' found for entity type '{calledType.Name}'. " +
@@ -234,9 +240,7 @@ public partial class LlvmCodeGenerator
                     _registry.LookupRoutineOverload(baseName: $"{calledType.Name}.{CreateMethodName}",
                         argTypes: semanticArgTypes);
                 if (routine == null &&
-                    calledType is RecordTypeInfo singleRecord &&
-                    singleRecord.MemberVariables.Count == 1 && arguments.Count == 1 &&
-                    arguments[index: 0] is NamedArgumentExpression)
+                    calledType is RecordTypeInfo { MemberVariables.Count: 1 } singleRecord && arguments is [NamedArgumentExpression])
                 {
                     // For single-field records where arg name doesn't match field name
                     // (e.g., Character(codepoint: val) where field is 'value')
@@ -305,8 +309,7 @@ public partial class LlvmCodeGenerator
         // Inside monomorphized bodies, an unresolved generic parameter on a non-generic
         // routine's expected parameter type indicates the pipeline failed to substitute.
         // Plain wrapper coercions (e.g. Text → Referring[Text]) are not pipeline bugs.
-        if (_typeSubstitutions != null && routine != null && routine.GenericDefinition == null &&
-            !routine.IsGenericDefinition && argValues.Count > 0 && routine.Parameters.Count > 0)
+        if (_typeSubstitutions != null && routine is { GenericDefinition: null, IsGenericDefinition: false } && argValues.Count > 0 && routine.Parameters.Count > 0)
         {
             TypeInfo? expectedType = routine.Parameters[index: 0].Type;
             if (expectedType != null)
@@ -513,8 +516,7 @@ public partial class LlvmCodeGenerator
             // (@llvm("ptr") records like CPtr, Hijacked[T], Viewed[T], Grasped[T]) have
             // their own working bodies that return the wrapped pointer value, not the
             // storage address of the wrapper itself.
-            if (receiverTypeForIntercept is RecordTypeInfo recordReceiver
-                && !recordReceiver.HasDirectBackendType)
+            if (receiverTypeForIntercept is RecordTypeInfo { HasDirectBackendType: false })
             {
                 string lvaluePtr = EmitLvalueAddress(sb: sb, expr: member.Object);
                 string addrTemp = NextTemp();
@@ -534,9 +536,7 @@ public partial class LlvmCodeGenerator
         if (member.PropertyName == "hijack" && arguments.Count == 0)
         {
             TypeInfo? receiverTypeForHijack = GetExpressionType(expr: member.Object);
-            if (receiverTypeForHijack is RecordTypeInfo recordHijackReceiver
-                && !recordHijackReceiver.HasDirectBackendType
-                || receiverTypeForHijack is RecordTypeInfo { HasDirectBackendType: true } primShape
+            if (receiverTypeForHijack is RecordTypeInfo { HasDirectBackendType: false } || receiverTypeForHijack is RecordTypeInfo { HasDirectBackendType: true } primShape
                    && primShape.BackendType != "ptr")
             {
                 string lvaluePtr = EmitLvalueAddress(sb: sb, expr: member.Object);
@@ -771,10 +771,7 @@ public partial class LlvmCodeGenerator
             _ => null
         };
 
-        if (genericMethodForInference != null &&
-            genericMethodForInference.OwnerType is not GenericParameterTypeInfo &&
-            genericMethodForInference.OwnerType is not ProtocolTypeInfo &&
-            genericMethodForInference.OwnerType is not null &&
+        if (genericMethodForInference is { OwnerType: not GenericParameterTypeInfo and not ProtocolTypeInfo and not null } &&
             !genericMethodForInference.OwnerType.IsGenericDefinition)
         {
             var mArgTypes = argTypeInfos.Skip(count: receiverSkip).ToList();
@@ -809,8 +806,7 @@ public partial class LlvmCodeGenerator
         string mangledName;
         if (typeArguments is { Count: > 0 } && method != null)
         {
-            if (method.IsGenericDefinition &&
-                method.GenericParameters is { Count: > 0 } gParams &&
+            if (method is { IsGenericDefinition: true, GenericParameters: { Count: > 0 } gParams } &&
                 gParams.Count == typeArguments.Count)
             {
                 var resolvedTypeArgs = typeArguments
@@ -867,7 +863,7 @@ public partial class LlvmCodeGenerator
         // Ensure the method is declared (so the multi-pass stdlib loop can compile its body)
         // Skip for protocol-owned methods -> they can't be declared with protocol types in LLVM IR
         // the monomorphized version (with concrete receiver type) will generate its own declaration.
-        if (method != null && method.OwnerType is not ProtocolTypeInfo)
+        if (method is { OwnerType: not ProtocolTypeInfo })
         {
             GenerateRoutineDeclaration(routine: method);
         }
@@ -1080,8 +1076,7 @@ public partial class LlvmCodeGenerator
             }
         }
 
-        if (routine is { Name: CreateMethodName } &&
-            routine.OwnerType is { IsGenericDefinition: true } genOwner &&
+        if (routine is { Name: CreateMethodName, OwnerType: { IsGenericDefinition: true } genOwner } &&
             typeArguments is { Count: > 0 })
         {
             var resolvedOwnerArgs = typeArguments

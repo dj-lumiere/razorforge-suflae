@@ -472,8 +472,7 @@ public sealed partial class TypeRegistry
         // single type argument, recurse on the inner type. Without this, for-loops over
         // `Referring[Iterable[T]]` parameters can't resolve $iter at SA time, leading
         // to "no resolved method" warnings during generic monomorphization.
-        if (type is ProtocolTypeInfo markerProto &&
-            markerProto.TypeArguments is { Count: 1 } markerArgs)
+        if (type is ProtocolTypeInfo { TypeArguments: { Count: 1 } markerArgs } markerProto)
         {
             string markerBase = markerProto.GenericDefinition?.Name ?? markerProto.Name;
             int markerBracket = markerBase.IndexOf(value: '[');
@@ -624,9 +623,9 @@ public sealed partial class TypeRegistry
         // controller pointer, reading controller's strong+weak counts as if they were T's first
         // fields. The forwarder-synthesis path emits the correct double-indirection body
         // (Hijacked[RetainController[T]](me).reveal().borrow_data().reveal().method(...)).
-        if (type is WrapperTypeInfo forwardingWrapper &&
-            forwardingWrapper.Name is "Owned" or "Viewed"
-                or "Grasped" or "Inspected" or "Claimed" or "Shared" or "Marked")
+        if (type is WrapperTypeInfo { Name: "Owned" or "Viewed"
+                or "Grasped" or "Inspected" or "Claimed" or "Shared" or "Marked"
+            } forwardingWrapper)
         {
             return LookupMethod(type: forwardingWrapper.InnerType,
                 methodName: methodName, isFailable: isFailable);
@@ -688,8 +687,7 @@ public sealed partial class TypeRegistry
         // CallOverloadResolutionPass walking f-string-lowered $represent calls on a
         // `Referring[Text]` receiver) lands on Text's method instead of synthesizing a
         // protocol-dispatch stub on Referring that has no implementers registered.
-        if (type is ProtocolTypeInfo markerProto &&
-            markerProto.TypeArguments is { Count: 1 } markerArgs)
+        if (type is ProtocolTypeInfo { TypeArguments: { Count: 1 } markerArgs } markerProto)
         {
             string markerBase = markerProto.GenericDefinition?.Name ?? markerProto.Name;
             int markerBracket = markerBase.IndexOf(value: '[');

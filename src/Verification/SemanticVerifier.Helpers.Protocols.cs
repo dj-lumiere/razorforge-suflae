@@ -100,8 +100,7 @@ public sealed partial class SemanticVerifier
         {
             if (_currentRoutine?.GenericConstraints != null &&
                 _currentRoutine.GenericConstraints.Any(c =>
-                    c.ParameterName == type.Name && c.ConstraintType == ConstraintKind.Obeys &&
-                    c.ConstraintTypes != null &&
+                    c.ParameterName == type.Name && c is { ConstraintType: ConstraintKind.Obeys, ConstraintTypes: not null } &&
                     c.ConstraintTypes.Any(ct => ct.Name == protocolName)))
                 return true;
 
@@ -112,8 +111,7 @@ public sealed partial class SemanticVerifier
             }
 
             return ownerType.GenericConstraints.Any(c =>
-                c.ParameterName == type.Name && c.ConstraintType == ConstraintKind.Obeys &&
-                c.ConstraintTypes != null &&
+                c.ParameterName == type.Name && c is { ConstraintType: ConstraintKind.Obeys, ConstraintTypes: not null } &&
                 c.ConstraintTypes.Any(ct => ct.Name == protocolName));
         }
 

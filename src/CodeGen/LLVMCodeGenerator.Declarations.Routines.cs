@@ -71,16 +71,13 @@ public partial class LlvmCodeGenerator
         // Ensure record type definitions exist for parameter and return types
         foreach (ParameterInfo param in routine.Parameters)
         {
-            if (param.Type is RecordTypeInfo paramRecord && !paramRecord.HasDirectBackendType &&
-                !paramRecord.IsGenericDefinition)
+            if (param.Type is RecordTypeInfo { HasDirectBackendType: false, IsGenericDefinition: false } paramRecord)
             {
                 GenerateRecordType(record: paramRecord);
             }
         }
 
-        if (routine.ReturnType is RecordTypeInfo returnRecord &&
-            !returnRecord.HasDirectBackendType &&
-            !returnRecord.IsGenericDefinition)
+        if (routine.ReturnType is RecordTypeInfo { HasDirectBackendType: false, IsGenericDefinition: false } returnRecord)
         {
             GenerateRecordType(record: returnRecord);
         }
@@ -315,7 +312,7 @@ public partial class LlvmCodeGenerator
             // their synthesized body from WiredRoutinePass via _synthesizedBodies. The parser
             // produces an empty BlockStatement for missing bodies, so check both null and empty.
             bool isStubBody = effectiveBody is null
-                || (effectiveBody is BlockStatement bs && bs.Statements.Count == 0);
+                || effectiveBody is BlockStatement { Statements.Count: 0 };
             if (isStubBody
                 && _synthesizedBodies.TryGetValue(key: routineInfo.RegistryKey,
                     value: out Statement? synthStub))
@@ -604,8 +601,7 @@ public partial class LlvmCodeGenerator
     {
         if (routine.WrapperForwarderInnerGenericDef?.GenericParameters
                 is { Count: > 0 } innerParamNames
-            && routine.OwnerType?.TypeArguments is { Count: > 0 } ownerArgs
-            && ownerArgs.Count == 1
+            && routine.OwnerType?.TypeArguments is { Count: > 0 and 1 } ownerArgs
             && ownerArgs[index: 0].TypeArguments is { } innerArgs
             && innerArgs.Count == innerParamNames.Count)
         {

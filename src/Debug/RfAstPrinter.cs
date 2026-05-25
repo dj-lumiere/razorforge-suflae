@@ -305,7 +305,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
     /// <inheritdoc/>
     public string VisitCreatorExpression(CreatorExpression node)
     {
-        string typeArgs = node.TypeArguments != null && node.TypeArguments.Count > 0
+        string typeArgs = node.TypeArguments is { Count: > 0 }
             ? $"[{string.Join(", ", node.TypeArguments.Select(t => t.Accept(this)))}]"
             : "";
         string members = string.Join(", ",

@@ -66,7 +66,7 @@ public sealed partial class SemanticVerifier
         _currentType = ownerType;
         foreach (Declaration member in members)
         {
-            if (member is RoutineDeclaration method && method.Body is not PassStatement)
+            if (member is RoutineDeclaration { Body: not PassStatement } method)
             {
                 AnalyzeFunctionBody(routine: method);
             }
@@ -547,8 +547,7 @@ public sealed partial class SemanticVerifier
         // #16: Plain `var x: T` without an initializer is disallowed (uninitialized memory).
         // Use `lateinit var x: T` (deferred-init pledge) or `var x: T = uninit` (explicit UB).
         if (_registry.Language == Language.RazorForge &&
-            varDecl is { Type: not null, Initializer: null } &&
-            !varDecl.IsLateInit)
+            varDecl is { Type: not null, Initializer: null, IsLateInit: false })
         {
             ReportError(code: SemanticDiagnosticCode.VariableNeedsTypeOrInitializer,
                 message:

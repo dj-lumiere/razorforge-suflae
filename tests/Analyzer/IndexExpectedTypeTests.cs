@@ -118,7 +118,7 @@ public class IndexExpectedTypeTests
             {
                 Collect(node: value, sink: sink);
             }
-            else if (value is System.Collections.IEnumerable en && value is not string)
+            else if (value is System.Collections.IEnumerable en and not string)
             {
                 foreach (object? item in en)
                 {

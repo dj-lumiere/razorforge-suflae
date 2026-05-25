@@ -332,8 +332,7 @@ public sealed partial class SemanticVerifier
         // resolved type `NumericSumAdd[T]`, not run $getitem on the gen-def.
         if (index.Object is IdentifierExpression typeRefId &&
             _registry.LookupVariable(name: typeRefId.Name) == null &&
-            LookupTypeWithImports(name: typeRefId.Name) is { } typeRef &&
-            typeRef.GenericParameters is { Count: > 0 })
+            LookupTypeWithImports(name: typeRefId.Name) is { GenericParameters.Count: > 0 } typeRef)
         {
             var typeArgs = new List<TypeSymbol>();
             List<Expression> argExprs = index.Index is TupleLiteralExpression tup

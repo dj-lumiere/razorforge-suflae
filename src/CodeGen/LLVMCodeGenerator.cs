@@ -258,10 +258,10 @@ public partial class LlvmCodeGenerator
         if (synthesizedBodies != null) _synthesizedBodies = synthesizedBodies;
         if (instantiatedGenericBodies != null)
             _instantiatedGenericBodies = instantiatedGenericBodies;
-        if (liveRoutineKeys != null && liveRoutineKeys.Count > 0)
+        if (liveRoutineKeys is { Count: > 0 })
             _liveRoutineKeys = new HashSet<string>(collection: liveRoutineKeys,
                 comparer: StringComparer.Ordinal);
-        if (liveOwnerTypeNames != null && liveOwnerTypeNames.Count > 0)
+        if (liveOwnerTypeNames is { Count: > 0 })
             _liveOwnerTypeNames = new HashSet<string>(collection: liveOwnerTypeNames,
                 comparer: StringComparer.Ordinal);
         _buildMode = buildMode;
@@ -1382,7 +1382,7 @@ public partial class LlvmCodeGenerator
         var sb = new StringBuilder();
         foreach (byte b in utf8)
         {
-            if (b >= 0x20 && b < 0x7F && b != (byte)'\\' && b != (byte)'"')
+            if (b is >= 0x20 and < 0x7F && b != (byte)'\\' && b != (byte)'"')
             {
                 sb.Append(value: (char)b);
             }

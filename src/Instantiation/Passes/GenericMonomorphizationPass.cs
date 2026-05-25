@@ -842,8 +842,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             }
         }
 
-        if (type is { IsGenericDefinition: true, GenericParameters: not null } &&
-            type.TypeArguments == null)
+        if (type is { IsGenericDefinition: true, GenericParameters: not null, TypeArguments: null })
         {
             var typeArgs = type.GenericParameters
                 .Select(gp => subs.TryGetValue(key: gp, value: out TypeInfo? s)
@@ -980,8 +979,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                     // Explicitly instantiate the generic def with pVal so we get a concrete type
                     // (e.g. T->BTreeListNode[T] + method T->BuildMode -> T->BTreeListNode[BuildMode]).
                     TypeInfo newVal;
-                    if (existingOwnerValue.IsGenericDefinition &&
-                        existingOwnerValue.GenericParameters is { Count: > 0 } innerParams &&
+                    if (existingOwnerValue is { IsGenericDefinition: true, GenericParameters: { Count: > 0 } innerParams } &&
                         innerParams.Any(predicate: p => p == pName))
                     {
                         var newArgs = innerParams
@@ -1295,8 +1293,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             case CallExpression call:
             {
                 // Check if this call targets a method with unresolved method-level generic params
-                if (call.ResolvedRoutine is { IsGenericDefinition: true } method &&
-                    method.GenericParameters is { Count: > 0 } genParams)
+                if (call.ResolvedRoutine is { IsGenericDefinition: true, GenericParameters: { Count: > 0 } genParams } method)
                 {
                     TypeInfo?[] inferred = InferMethodTypeArgsFromCall(method, genParams, call);
                     if (inferred.Length == genParams.Count && inferred.All(t => t != null))
@@ -1333,8 +1330,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 // OperatorLoweringPass doesn't run on InstantiatedGenericBodies, so $getitem/$setitem
                 // calls in those bodies are still IndexExpression rather than CallExpression.
                 if (idx.Object.ResolvedType is { } idxObjType &&
-                    idx.Index.ResolvedType is { } idxIdxType &&
-                    idxIdxType is not GenericParameterTypeInfo)
+                    idx.Index.ResolvedType is { } idxIdxType and not GenericParameterTypeInfo)
                 {
                     RoutineInfo? getItem = ctx.Registry.LookupMethod(
                         type: idxObjType, methodName: "$getitem!", isFailable: true);

@@ -21,12 +21,13 @@ public partial class LlvmCodeGenerator
         if (entity is
             {
                 IsGenericResolution: true, MemberVariables.Count: 0,
-                GenericDefinition: { MemberVariables.Count: > 0 } genDef
-            } && entity.TypeArguments != null)
+                GenericDefinition: { MemberVariables.Count: > 0 } genDef,
+                TypeArguments: not null
+            })
         {
             var refreshed =
                 genDef.CreateInstance(typeArguments: entity.TypeArguments) as EntityTypeInfo;
-            if (refreshed != null && refreshed.MemberVariables.Count > 0)
+            if (refreshed is { MemberVariables.Count: > 0 })
             {
                 entity = refreshed;
             }
@@ -36,8 +37,7 @@ public partial class LlvmCodeGenerator
         {
             TypeInfo? refreshed = _registry.LookupType(name: entity.FullName) ??
                                   _registry.LookupType(name: entity.Name);
-            if (refreshed is EntityTypeInfo resolvedEntity &&
-                resolvedEntity.MemberVariables.Count > 0)
+            if (refreshed is EntityTypeInfo { MemberVariables.Count: > 0 } resolvedEntity)
             {
                 entity = resolvedEntity;
             }
@@ -161,12 +161,13 @@ public partial class LlvmCodeGenerator
         if (record is
             {
                 IsGenericResolution: true, MemberVariables.Count: 0,
-                GenericDefinition: { MemberVariables.Count: > 0 } genDef
-            } && record.TypeArguments != null)
+                GenericDefinition: { MemberVariables.Count: > 0 } genDef,
+                TypeArguments: not null
+            })
         {
             var refreshed =
                 genDef.CreateInstance(typeArguments: record.TypeArguments) as RecordTypeInfo;
-            if (refreshed != null && refreshed.MemberVariables.Count > 0)
+            if (refreshed is { MemberVariables.Count: > 0 })
             {
                 record = refreshed;
             }

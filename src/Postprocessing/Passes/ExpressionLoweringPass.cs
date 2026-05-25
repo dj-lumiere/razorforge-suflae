@@ -193,8 +193,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 return (hoisted, asgn with { Value = loweredVal });
             }
 
-            case DeclarationStatement { Declaration: VariableDeclaration vd } decl
-                when vd.Initializer != null:
+            case DeclarationStatement { Declaration: VariableDeclaration { Initializer: not null } vd } decl:
             {
                 var (hoisted, loweredInit) = LowerExpr(vd.Initializer);
                 if (hoisted.Count == 0 && ReferenceEquals(loweredInit, vd.Initializer))
@@ -323,8 +322,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 return LowerOptionalMember(optMember);
 
             // -- Step 1e: flags combination (and/but on FlagsTypeInfo) -------------
-            case BinaryExpression { Operator: BinaryOperator.And or BinaryOperator.But } flagsBin
-                when flagsBin.Left.ResolvedType is FlagsTypeInfo:
+            case BinaryExpression { Operator: BinaryOperator.And or BinaryOperator.But, Left.ResolvedType: FlagsTypeInfo } flagsBin:
                 return LowerFlagsCombination(flagsBin);
 
             // -- Step 1f: carrier absence checks (is None / is Blank) -------------
@@ -335,15 +333,13 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             // Variant subjects: x is S64 -> x.type_id == FNV("S64")
             //                   x isnot S64 -> x.type_id != FNV("S64")
             // Choice subjects fall through -- codegen's EmitChoiceIs (icmp eq i32) handles them.
-            case BinaryExpression { Operator: BinaryOperator.Is or BinaryOperator.IsNot } isBin
-                when isBin.Left.ResolvedType is VariantTypeInfo:
+            case BinaryExpression { Operator: BinaryOperator.Is or BinaryOperator.IsNot, Left.ResolvedType: VariantTypeInfo } isBin:
                 return LowerVariantIsExpression(isBin);
 
             // -- Step 1g: boolean short-circuit And -> ConditionalExpression --------
             // a and b  ->  if a { _cif = b } else { _cif = false }
             // Flags And (union of active bits) is handled by Step 1e above.
-            case BinaryExpression { Operator: BinaryOperator.And } boolAnd
-                when boolAnd.Left.ResolvedType is not FlagsTypeInfo:
+            case BinaryExpression { Operator: BinaryOperator.And, Left.ResolvedType: not FlagsTypeInfo } boolAnd:
                 return LowerBooleanAnd(boolAnd);
 
             // -- Step 1h: boolean short-circuit Or -> ConditionalExpression ---------
@@ -1103,8 +1099,7 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         // they surface as RecordTypeInfo, not WrapperTypeInfo. Match by base name + single
         // TypeArgument and return the inner collection so downstream lowering sees the actual
         // base (BitList, SortedSet, …) instead of the Owned envelope.
-        if (type is RecordTypeInfo rec
-            && rec.TypeArguments is { Count: 1 } recArgs
+        if (type is RecordTypeInfo { TypeArguments: { Count: 1 } recArgs } rec
             && (rec.GenericDefinition?.Name is "Owned" or "Retained" or "Tracked"
                 || GetCollectionBaseName(rec) is "Owned" or "Retained" or "Tracked"))
         {

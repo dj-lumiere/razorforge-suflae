@@ -384,8 +384,7 @@ public partial class LlvmCodeGenerator
             return routine?.ReturnType;
         }
 
-        if (routine.IsGenericDefinition &&
-            routine.GenericParameters is { Count: > 0 } genericParams &&
+        if (routine is { IsGenericDefinition: true, GenericParameters: { Count: > 0 } genericParams } &&
             explicitTypeArgs.Count == genericParams.Count)
         {
             var resolvedTypeArgs = explicitTypeArgs
@@ -550,8 +549,7 @@ public partial class LlvmCodeGenerator
         else if (targetType is RecordTypeInfo wrapperRecOfRec &&
                  GetGenericBaseName(type: wrapperRecOfRec) is { } wrapRecBaseName &&
                  WrapperTypeNames.Contains(item: wrapRecBaseName) &&
-                 wrapperRecOfRec.HasDirectBackendType &&
-                 wrapperRecOfRec.TypeArguments is { Count: > 0 } &&
+                 wrapperRecOfRec is { HasDirectBackendType: true, TypeArguments.Count: > 0 } &&
                  wrapperRecOfRec.TypeArguments[index: 0] is RecordTypeInfo innerRecord &&
                  !wrapperRecOfRec.MemberVariables.Any(predicate: mv => mv.Name == member.PropertyName))
         {
@@ -630,8 +628,8 @@ public partial class LlvmCodeGenerator
                 {
                     if (wrapperRecord.MemberVariables[index: fi].Type is WrapperTypeInfo
                         {
-                            Name: "Hijacked"
-                        } hijacked && hijacked.TypeArguments is { Count: > 0 } &&
+                            Name: "Hijacked", TypeArguments.Count: > 0
+                        } hijacked &&
                         hijacked.TypeArguments[index: 0] is EntityTypeInfo fieldInner &&
                         fieldInner.FullName == innerEntity.FullName)
                     {
@@ -653,7 +651,7 @@ public partial class LlvmCodeGenerator
                 valueType: valueType);
         }
         // Plain record field write: load current value, insertvalue, store back to alloca
-        else if (targetType is RecordTypeInfo plainRecord && !plainRecord.HasDirectBackendType &&
+        else if (targetType is RecordTypeInfo { HasDirectBackendType: false } plainRecord &&
                  member.Object is IdentifierExpression recIdExpr)
         {
             string llvmName =
@@ -718,10 +716,8 @@ public partial class LlvmCodeGenerator
         // Skip when the last type-arg is a const-generic value (e.g. BitArray[N] where N=8),
         // since const-generic owners are never wrapper forwarders.
         bool isWrapperForwardingSetItem =
-            setItem != null &&
-            setItem.Parameters.Count >= 2 &&
-            targetType?.TypeArguments is { Count: 1 } &&
-            targetType.TypeArguments[^1] is not ConstGenericValueTypeInfo &&
+            setItem is { Parameters.Count: >= 2 } &&
+            targetType?.TypeArguments is [not ConstGenericValueTypeInfo] &&
             setItem.Parameters[^1].Type.FullName != targetType.TypeArguments[^1].FullName;
 
         // Record $setitem!: the receiver must be the alloca pointer so mutations persist in the
@@ -755,8 +751,7 @@ public partial class LlvmCodeGenerator
             // unresolved generic parameter (rare; should not happen for IsGenericResolution targets).
             // Falling through to TypeArguments[^1] is wrong for single-arg wrappers like
             // Owned[List[S64]], where the last type-arg is List[S64], not the element type S64.
-            if (setItem.Parameters.Count >= 2 &&
-                setItem.Parameters[^1].Type is not GenericParameterTypeInfo)
+            if (setItem.Parameters is [.., _, { Type: not GenericParameterTypeInfo }])
             {
                 valueLlvm = GetLlvmType(type: setItem.Parameters[^1].Type);
             }

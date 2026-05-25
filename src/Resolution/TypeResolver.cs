@@ -115,8 +115,7 @@ internal sealed class TypeResolver
         // Protocol contexts use ProtocolSelfTypeInfo via ResolveProtocolType; concrete owners
         // resolve directly to the owner TypeInfo so callers see Me as a normal nominal type.
         if (typeExpr is { Name: "Me", GenericArguments: not { Count: > 0 } } &&
-            _sa._currentRoutine?.OwnerType is { } meOwner &&
-            meOwner is not GenericParameterTypeInfo)
+            _sa._currentRoutine?.OwnerType is { } meOwner and not GenericParameterTypeInfo)
         {
             return meOwner;
         }
@@ -141,7 +140,7 @@ internal sealed class TypeResolver
             TypeExpression returnTypeExpr = typeExpr.GenericArguments[index: 1];
 
             var paramTypes = new List<TypeInfo>();
-            if (paramTupleExpr.Name == "Tuple" && paramTupleExpr.GenericArguments != null)
+            if (paramTupleExpr is { Name: "Tuple", GenericArguments: not null })
             {
                 foreach (TypeExpression paramTypeExpr in paramTupleExpr.GenericArguments)
                 {
@@ -517,8 +516,7 @@ internal sealed class TypeResolver
         // Wrapper types (Hijacked[T].foo) carry the inner-type binding via
         // InnerType rather than GenericParameters. If the inner type is
         // itself a generic-parameter placeholder, accept that name.
-        if (_sa._currentRoutine?.OwnerType is WrapperTypeInfo wrap &&
-            wrap.InnerType is GenericParameterTypeInfo wgp &&
+        if (_sa._currentRoutine?.OwnerType is WrapperTypeInfo { InnerType: GenericParameterTypeInfo wgp } &&
             wgp.Name == name)
         {
             return true;

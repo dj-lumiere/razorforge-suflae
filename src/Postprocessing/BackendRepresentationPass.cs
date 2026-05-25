@@ -51,10 +51,7 @@ public sealed class BackendRepresentationPass
     /// </summary>
     private void Walk(ISyntaxTreeNode node)
     {
-        if (node is Expression expression &&
-            expression is not TypeExpression &&
-            expression.ResolvedType is { } resolvedType &&
-            resolvedType is not ErrorTypeInfo)
+        if (node is Expression { ResolvedType: { } resolvedType and not ErrorTypeInfo } expression and not TypeExpression)
         {
             expression.ResolvedRepr = BackendReprResolver.Resolve(type: resolvedType,
                 registry: _registry,

@@ -37,8 +37,10 @@ public sealed partial class SemanticVerifier
 
         // Check if this is a generic type constructor call (e.g., Hijacked[U8](addr))
         // The parser creates GenericMethodCallExpression for both Type[Args](args) and obj.method[Args](args)
-        if (generic.Object is IdentifierExpression typeId && objectType is TypeInfo typeInfo &&
-            typeInfo.IsGenericDefinition && typeId.Name == generic.MethodName)
+        if (generic.Object is IdentifierExpression typeId && objectType is TypeInfo
+            {
+                IsGenericDefinition: true
+            } typeInfo && typeId.Name == generic.MethodName)
         {
             // Resolve the generic type with the provided type arguments
             TypeInfo resolvedType = _registry.GetOrCreateResolution(genericDef: typeInfo,

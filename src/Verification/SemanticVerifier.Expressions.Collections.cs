@@ -30,8 +30,7 @@ public sealed partial class SemanticVerifier
             // (PriorityQueue, SortedSet, etc.) from the expected type even when LHS is
             // `Owned[SortedSet[S64]]` etc. Use base-name extraction since instantiated record
             // types have Name like "Foo", not bare "Owned".
-            if (current is RecordTypeInfo recRT
-                && recRT.TypeArguments is { Count: 1 } recArgs
+            if (current is RecordTypeInfo { TypeArguments: { Count: 1 } recArgs } recRT
                 && GetTypeBaseName(recRT) is "Owned" or "Retained" or "Tracked")
             {
                 current = recArgs[0];
@@ -599,7 +598,7 @@ public sealed partial class SemanticVerifier
                         location: clause.Body.Location);
                 }
             }
-            else if (clause.Body is ReturnStatement ret && ret.Value != null)
+            else if (clause.Body is ReturnStatement { Value: not null } ret)
             {
                 // Allow return statements in when expressions
                 TypeSymbol branchType = AnalyzeExpression(expression: ret.Value);

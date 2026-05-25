@@ -127,7 +127,7 @@ public sealed partial class SemanticVerifier
                 // returns a routine with a different arity than the call site. This handles the case
                 // where a zero-arg overload was registered first but the call has arguments, or where
                 // a same-first-param overload was registered first but the call has different arity.
-                if (routine != null && !routine.IsGenericDefinition && !routine.IsVariadic &&
+                if (routine is { IsGenericDefinition: false, IsVariadic: false } &&
                     call.Arguments.Count != routine.Parameters.Count)
                 {
                     var arityArgTypes = new List<TypeSymbol>();
@@ -237,7 +237,7 @@ public sealed partial class SemanticVerifier
 
                 // Variadic fallback: if resolved routine is non-variadic but has too many args,
                 // try a variadic generic overload (e.g., show("a","b","c") -> show[T](values...: T))
-                if (routine != null && !routine.IsVariadic &&
+                if (routine is { IsVariadic: false } &&
                     call.Arguments.Count > routine.Parameters.Count)
                 {
                     RoutineInfo? variadicGeneric =
@@ -407,8 +407,7 @@ public sealed partial class SemanticVerifier
                         TypeSymbol argType = argTypes[index: 0];
                         if ((IsCarrierType(type: argType) && !IsMaybeType(type: argType)) || argType is VariantTypeInfo
                                 or WrapperTypeInfo { IsReadOnly: true } // Viewed, Inspected
-                            || argType is WrapperTypeInfo wrapper && wrapper.InnerType != null &&
-                            wrapper.Name is "Grasped" or "Claimed")
+                            || argType is WrapperTypeInfo { InnerType: not null, Name: "Grasped" or "Claimed" })
                         {
                             ReportError(code: SemanticDiagnosticCode.DataBoxingProhibited,
                                 message: $"Type '{argType.Name}' cannot be boxed to Data. " +
@@ -474,7 +473,7 @@ public sealed partial class SemanticVerifier
                 routine = LookupRoutineWithImports(name: callName);
 
                 // Overload resolution for import-resolved routines (e.g., show[T] from IO/Console)
-                if (routine != null && !routine.IsGenericDefinition && call.Arguments.Count > 0 &&
+                if (routine is { IsGenericDefinition: false } && call.Arguments.Count > 0 &&
                     routine.Parameters.Count > 0)
                 {
                     Expression firstArgImport =
@@ -532,7 +531,7 @@ public sealed partial class SemanticVerifier
                 }
 
                 // Variadic fallback for import-resolved routines
-                if (routine != null && !routine.IsVariadic &&
+                if (routine is { IsVariadic: false } &&
                     call.Arguments.Count > routine.Parameters.Count)
                 {
                     RoutineInfo? variadicGeneric =
@@ -699,7 +698,7 @@ public sealed partial class SemanticVerifier
                         constraints: constraints);
                 }
 
-                if (method != null && !method.IsGenericDefinition && call.Arguments.Count > 0)
+                if (method is { IsGenericDefinition: false } && call.Arguments.Count > 0)
                 {
                     var resolvedArgTypes = new List<TypeSymbol>(capacity: call.Arguments.Count);
                     int posIdx = 0;
@@ -1038,8 +1037,7 @@ public sealed partial class SemanticVerifier
                     }
 
                     // #104/#23: Channel send() makes source variable a deadref
-                    if (member.PropertyName == "send" &&
-                        member.Object is IdentifierExpression sendSource)
+                    if (member is { PropertyName: "send", Object: IdentifierExpression sendSource })
                     {
                         string baseObjType = GetBaseTypeName(typeName: objectType.Name);
                         if (baseObjType == "Channel")

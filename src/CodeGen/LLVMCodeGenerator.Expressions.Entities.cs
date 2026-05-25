@@ -178,7 +178,7 @@ public partial class LlvmCodeGenerator
                 RoutineInfo? createOverload = _registry.LookupRoutineOverload(
                     baseName: $"{record.FullName}.$create",
                     argTypes: argTypes);
-                if (createOverload != null && createOverload.OwnerType != null)
+                if (createOverload is { OwnerType: not null })
                 {
                     string argVal = EmitExpression(sb: sb, expr: expr.MemberVariables[index: 0].Value);
                     string paramLlvm = GetLlvmType(type: createOverload.Parameters[index: 0].Type);
@@ -408,8 +408,7 @@ public partial class LlvmCodeGenerator
         if (targetType is RecordTypeInfo wrapperRecOfRec &&
             GetGenericBaseName(type: wrapperRecOfRec) is { } wrapRecBaseName &&
             WrapperTypeNames.Contains(item: wrapRecBaseName) &&
-            wrapperRecOfRec.HasDirectBackendType &&
-            wrapperRecOfRec.TypeArguments is { Count: > 0 } &&
+            wrapperRecOfRec is { HasDirectBackendType: true, TypeArguments.Count: > 0 } &&
             wrapperRecOfRec.TypeArguments[index: 0] is RecordTypeInfo innerRecord &&
             !wrapperRecOfRec.MemberVariables.Any(predicate: mv => mv.Name == propertyName))
         {
@@ -490,8 +489,8 @@ public partial class LlvmCodeGenerator
                 for (int fi = 0; fi < wrapperRecord.MemberVariables.Count; fi++)
                 {
                     if (wrapperRecord.MemberVariables[index: fi].Type is WrapperTypeInfo
-                            { Name: "Hijacked" } hijacked
-                        && hijacked.TypeArguments is { Count: > 0 }
+                        { Name: "Hijacked", TypeArguments.Count: > 0
+                        } hijacked
                         && hijacked.TypeArguments[index: 0] is EntityTypeInfo fieldInner
                         && fieldInner.FullName == innerEntity.FullName)
                     {

@@ -19,7 +19,7 @@ public sealed partial class SemanticVerifier
         {
             foreach (ISyntaxTreeNode node in program.Declarations)
             {
-                if (node is ImportDeclaration imp && imp.ModulePath == "BuilderService")
+                if (node is ImportDeclaration { ModulePath: "BuilderService" })
                 {
                     builderServiceImported = true;
                     break;

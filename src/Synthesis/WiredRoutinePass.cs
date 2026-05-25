@@ -192,7 +192,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                         HandleEntityGenericDefWired(routine: routine, entity: entity,
                             textType: textType, boolType: boolType, u64Type: u64Type);
                         break;
-                    case RecordTypeInfo record when !record.HasDirectBackendType:
+                    case RecordTypeInfo { HasDirectBackendType: false } record:
                         HandleRecordGenericDefWired(routine: routine, record: record,
                             textType: textType, boolType: boolType,
                             s32Type: s32Type, u64Type: u64Type);
@@ -282,7 +282,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         // Numeric $create bodies for @llvm-typed primitive records.
         // S64.$create(from: Choice) -> sign_extend; U64.$create(from: Flags) -> reinterpret_bits.
         // Must be checked before the HasDirectBackendType guard because these live on S64/U64.
-        if (routine.Name == "$create" && routine.Parameters.Count == 1)
+        if (routine is { Name: "$create", Parameters.Count: 1 })
         {
             TypeInfo paramType = routine.Parameters[index: 0].Type;
             string paramName = routine.Parameters[index: 0].Name;
@@ -2168,7 +2168,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         type switch
         {
             TupleTypeInfo t => (ulong)(t.ElementTypes.Count * 8),
-            RecordTypeInfo r when r.HasDirectBackendType => LlvmBackendTypeSize(r.BackendType!),
+            RecordTypeInfo { HasDirectBackendType: true } r => LlvmBackendTypeSize(r.BackendType!),
             RecordTypeInfo r => (ulong)(r.MemberVariables.Count * 8),
             EntityTypeInfo => 8,   // heap-allocated; stored as pointer (8 bytes on 64-bit)
             CrashableTypeInfo => 8, // same -> stored as pointer

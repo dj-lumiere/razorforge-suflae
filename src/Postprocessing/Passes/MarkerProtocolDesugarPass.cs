@@ -261,7 +261,7 @@ internal sealed class MarkerProtocolDesugarPass
                 WalkExpression(assign.Target);
                 WalkExpression(assign.Value);
                 break;
-            case DeclarationStatement { Declaration: VariableDeclaration vd } when vd.Initializer != null:
+            case DeclarationStatement { Declaration: VariableDeclaration { Initializer: not null } vd }:
                 WalkExpression(vd.Initializer);
                 break;
             case ExpressionStatement es:

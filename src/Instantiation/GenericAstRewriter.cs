@@ -172,8 +172,7 @@ internal static class GenericAstRewriter
             // This arises when SA annotates `me.ResolvedType = List[T]` (the generic def) and the
             // rewriter encounters it while building a concrete body. Substitute all params from
             // TypeSubs and look up the concrete resolution so downstream scanners see the right owner.
-            if (original is { IsGenericDefinition: true, GenericParameters: not null } &&
-                original.TypeArguments == null)
+            if (original is { IsGenericDefinition: true, GenericParameters: not null, TypeArguments: null })
             {
                 var typeArgs = new List<TypeInfo>(capacity: original.GenericParameters.Count);
                 bool complete = true;
@@ -248,8 +247,7 @@ internal static class GenericAstRewriter
                     // routine (e.g., Array[T,N].$getitem[I]), monomorphize it using the
                     // substituted argument types so codegen gets a concrete routine, not a
                     // generic-def one.
-                    if (resolvedMethod.IsGenericDefinition &&
-                        resolvedMethod.GenericParameters is { Count: > 0 })
+                    if (resolvedMethod is { IsGenericDefinition: true, GenericParameters.Count: > 0 })
                     {
                         RoutineInfo? methodResolved = TryResolveMethodGeneric(
                             routine: resolvedMethod,
@@ -913,7 +911,7 @@ internal static class GenericAstRewriter
             TypeInfo? routineResultType = resolvedType ?? result.ResolvedType ?? expr.ResolvedType;
             switch (result)
             {
-                case CallExpression call when call.ResolvedRoutine != null:
+                case CallExpression { ResolvedRoutine: not null } call:
                 {
                     call.ConstructedType =
                         ctx.ResolveType(original: call.ConstructedType) ??
@@ -993,7 +991,7 @@ internal static class GenericAstRewriter
                             : null);
                     break;
 
-                case GenericMethodCallExpression genericCall when genericCall.ResolvedRoutine != null:
+                case GenericMethodCallExpression { ResolvedRoutine: not null } genericCall:
                     genericCall.ConstructedType =
                         ctx.ResolveType(original: genericCall.ConstructedType) ??
                         genericCall.ConstructedType ??
@@ -1083,8 +1081,7 @@ internal static class GenericAstRewriter
         // the RF parser may produce either depending on context.
         string? typeName = callee.Object switch
         {
-            IdentifierExpression id when id.Name == "me" &&
-                ctx.ParamTypes.TryGetValue(key: "me", value: out TypeInfo? meType) => meType.FullName,
+            IdentifierExpression { Name: "me" } when ctx.ParamTypes.TryGetValue(key: "me", value: out TypeInfo? meType) => meType.FullName,
             IdentifierExpression id when ctx.StringSubs.TryGetValue(
                 key: id.Name, value: out string? sub) => sub,
             IdentifierExpression id => id.Name,
@@ -1211,7 +1208,7 @@ internal static class GenericAstRewriter
             return true;
         }
 
-        if (type.IsGenericDefinition && type.TypeArguments is not { Count: > 0 })
+        if (type is { IsGenericDefinition: true, TypeArguments: not { Count: > 0 } })
         {
             return true;
         }

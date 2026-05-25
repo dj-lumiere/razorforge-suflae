@@ -184,8 +184,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 return ReferenceEquals(val, asgn.Value) ? stmt : asgn with { Value = val };
             }
 
-            case DeclarationStatement { Declaration: VariableDeclaration vd } decl
-                when vd.Initializer != null:
+            case DeclarationStatement { Declaration: VariableDeclaration { Initializer: not null } vd } decl:
             {
                 Expression init = LowerExpression(vd.Initializer);
                 return ReferenceEquals(init, vd.Initializer)
@@ -335,8 +334,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                     VariantTypeInfo { GenericDefinition: { } d } => d.Name,
                     _ => null
                 };
-                if (idx.Object is IdentifierExpression typeObjId &&
-                    idx.ResolvedType is { IsGenericResolution: true } resolvedTy &&
+                if (idx is { Object: IdentifierExpression typeObjId, ResolvedType: { IsGenericResolution: true } resolvedTy } &&
                     (resolvedTy.Name == typeObjId.Name
                      || GendefName(resolvedTy) == typeObjId.Name))
                 {
@@ -401,8 +399,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
             // is parsed as GenericMemberExpression(Ident, Ident.Name, [T]) — Object.Name == MemberName.
             // Those are real type args, not indices; lower to a plain MemberExpression so the
             // typewise receiver flows through codegen normally.
-            case GenericMemberExpression gme when gme.TypeArguments.Count > 0 &&
-                !(gme.Object is IdentifierExpression idObj && idObj.Name == gme.MemberName):
+            case GenericMemberExpression { TypeArguments.Count: > 0 } gme when !(gme.Object is IdentifierExpression idObj && idObj.Name == gme.MemberName):
             {
                 Expression loweredObj = LowerExpression(gme.Object);
                 var memberExpr = new MemberExpression(
@@ -437,8 +434,7 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
             // Collapse to a bare IdentifierExpression carrying the resolved type so the outer
             // MemberExpression (e.g. `.identity_lazy()`) sees an identifier with ResolvedType set
             // — that is how codegen detects typewise/common calls.
-            case GenericMemberExpression gme when gme.TypeArguments.Count > 0 &&
-                gme.Object is IdentifierExpression typeIdent && typeIdent.Name == gme.MemberName:
+            case GenericMemberExpression { TypeArguments.Count: > 0, Object: IdentifierExpression typeIdent } gme when typeIdent.Name == gme.MemberName:
             {
                 return new IdentifierExpression(
                     Name: gme.MemberName,

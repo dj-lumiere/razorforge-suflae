@@ -1689,7 +1689,7 @@ public class CompilerPipelineLoweringTests
             return true;
         }
 
-        if (type.IsGenericDefinition && type.TypeArguments is not { Count: > 0 })
+        if (type is { IsGenericDefinition: true, TypeArguments: not { Count: > 0 } })
         {
             return true;
         }

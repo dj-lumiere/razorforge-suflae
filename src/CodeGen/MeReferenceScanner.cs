@@ -106,7 +106,7 @@ internal sealed class MeReferenceScanner : ISyntaxTreeVisitor<bool>
     public bool VisitExpressionStatement(ExpressionStatement node) =>
         node.Expression.Accept(visitor: this);
     public bool VisitDeclarationStatement(DeclarationStatement node) =>
-        node.Declaration is VariableDeclaration v && v.Initializer != null &&
+        node.Declaration is VariableDeclaration { Initializer: not null } v &&
         v.Initializer.Accept(visitor: this);
     public bool VisitAssignmentStatement(AssignmentStatement node) =>
         node.Target.Accept(visitor: this) || node.Value.Accept(visitor: this);

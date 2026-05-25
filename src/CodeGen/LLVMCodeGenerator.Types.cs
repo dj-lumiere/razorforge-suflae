@@ -428,7 +428,7 @@ public partial class LlvmCodeGenerator
         int maxPayloadAlignment = 1;
         foreach (VariantMemberInfo member in variant.Members)
         {
-            if (!member.IsNone && member.Type != null)
+            if (member is { IsNone: false, Type: not null })
             {
                 int payloadSize = GetTypeSize(type: member.Type);
                 int payloadAlignment =
@@ -789,9 +789,8 @@ public partial class LlvmCodeGenerator
         string lookupMethodName = GetMemberRoutineLookupName(routine);
 
         bool ownerMismatch = receiverType != null &&
-            routine.OwnerType is { } ownerType &&
-            ownerType is not ProtocolTypeInfo &&
-            NormalizeRoutineLookupType(type: ownerType)?.FullName != receiverType.FullName;
+                             routine.OwnerType is { } ownerType and not ProtocolTypeInfo &&
+                             NormalizeRoutineLookupType(type: ownerType)?.FullName != receiverType.FullName;
 
         if (receiverType != null &&
             (ownerMismatch ||

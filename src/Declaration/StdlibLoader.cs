@@ -560,7 +560,7 @@ public sealed partial class StdlibLoader
 
             // Parameter types live in the first arg's GenericArguments (parsed as Tuple)
             var paramTypes = new List<TypeInfo>();
-            if (paramTupleExpr.Name == "Tuple" && paramTupleExpr.GenericArguments != null)
+            if (paramTupleExpr is { Name: "Tuple", GenericArguments: not null })
             {
                 foreach (TypeExpression paramTypeExpr in paramTupleExpr.GenericArguments)
                 {

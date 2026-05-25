@@ -525,8 +525,7 @@ public sealed partial class SemanticVerifier
         // Reverse: generic definition assignable to its parameterized form within generic context.
         // e.g., 'me' has type 'Total' (generic def) but return expects 'Total[T]'.
         // Only allowed when all type args are unresolved generic parameters (not concrete types).
-        if (source.IsGenericDefinition && target.IsGenericResolution &&
-            target.TypeArguments != null &&
+        if (source.IsGenericDefinition && target is { IsGenericResolution: true, TypeArguments: not null } &&
             target.TypeArguments.All(predicate: t => t is GenericParameterTypeInfo))
         {
             string baseName = GetBaseTypeName(typeName: target.Name);
@@ -582,7 +581,7 @@ public sealed partial class SemanticVerifier
             return true;
 
         // None (Maybe generic def) is assignable to any Maybe[T]
-        if (source.IsGenericDefinition && source.Name == MaybeTypeName && IsMaybeType(type: target))
+        if (source is { IsGenericDefinition: true, Name: MaybeTypeName } && IsMaybeType(type: target))
             return true;
 
         // Entity, record, or wrapper type is implicitly assignable to Maybe[SameType].
@@ -639,7 +638,7 @@ public sealed partial class SemanticVerifier
         if (baseName is "Owned" or "Retained" or "Tracked" or "Grasped" or "Viewed"
             or "Controlling" or "Referring" or "Hijacked")
         {
-            if (type is WrapperTypeInfo w && w.InnerType != null)
+            if (type is WrapperTypeInfo { InnerType: not null } w)
             {
                 wrapperBase = baseName;
                 inner = w.InnerType;
@@ -805,7 +804,7 @@ public sealed partial class SemanticVerifier
         {
             foreach (GenericConstraintDeclaration c in ActiveConstraintsFor(paramName: type.Name))
             {
-                if (c.ConstraintType == ConstraintKind.Obeys && c.ConstraintTypes != null)
+                if (c is { ConstraintType: ConstraintKind.Obeys, ConstraintTypes: not null })
                 {
                     foreach (TypeExpression protocolExpr in c.ConstraintTypes)
                     {
@@ -816,7 +815,7 @@ public sealed partial class SemanticVerifier
                     }
                 }
                 // `needs N is U64` — operator support follows the underlying value type.
-                else if (c.ConstraintType == ConstraintKind.ConstGeneric && c.ConstraintTypes != null)
+                else if (c is { ConstraintType: ConstraintKind.ConstGeneric, ConstraintTypes: not null })
                 {
                     foreach (TypeExpression ct in c.ConstraintTypes)
                     {
@@ -860,7 +859,7 @@ public sealed partial class SemanticVerifier
     private bool ConstGenericMatches(string paramName, string otherTypeName)
     {
         return ActiveConstraintsFor(paramName: paramName)
-            .Where(c => c.ConstraintType == ConstraintKind.ConstGeneric && c.ConstraintTypes != null)
+            .Where(c => c is { ConstraintType: ConstraintKind.ConstGeneric, ConstraintTypes: not null })
             .Any(c => c.ConstraintTypes!.Any(ct => ct.Name == otherTypeName));
     }
 

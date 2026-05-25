@@ -121,7 +121,7 @@ internal sealed class AutoWiredRegistrationPass
                                                ?? type.Name);
                     // @llvm("ptr")-backed opaque handles (BigIntHandle, BigDecHandle, etc.)
                     // have no semantic equality / hash — they're raw pointers. Skip auto-derivation.
-                    bool isOpaqueBackend = type is RecordTypeInfo r && r.HasDirectBackendType;
+                    bool isOpaqueBackend = type is RecordTypeInfo { HasDirectBackendType: true };
                     if (!type.IsBlank && !isWrapper && !isOpaqueBackend)
                     {
                         // $hash / $eq are opt-in: only auto-derived when the record explicitly
@@ -610,7 +610,7 @@ internal sealed class AutoWiredRegistrationPass
     private void MaybeRegisterKeyedHash(TypeSymbol owner, TypeSymbol u64Type,
         List<RoutineInfo> existingMethods)
     {
-        if (existingMethods.Any(predicate: m => m.Name == "$hash" && m.Parameters.Count == 2))
+        if (existingMethods.Any(predicate: m => m is { Name: "$hash", Parameters.Count: 2 }))
         {
             return;
         }
@@ -753,7 +753,7 @@ internal sealed class AutoWiredRegistrationPass
             gParams.Count == typeArgs.Count)
         {
             RoutineInfo? defEq = _registry.LookupMethod(type: genericDef, methodName: "$eq");
-            if (defEq != null && defEq.GenericConstraints is { } constraints)
+            if (defEq is { GenericConstraints: { } constraints })
             {
                 foreach (GenericConstraintDeclaration c in constraints)
                 {

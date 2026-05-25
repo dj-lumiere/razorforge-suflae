@@ -312,7 +312,7 @@ internal sealed class SignatureResolver
         // A user-written routine is allowed to shadow a synthesized (builder-generated) one
         // with the same signature — RegisterRoutine handles the overwrite precedence.
         RoutineInfo? existingByKey = _sa._registry.LookupRoutine(fullName: finalRoutine.RegistryKey);
-        if (existingByKey != null && !existingByKey.IsSynthesized)
+        if (existingByKey is { IsSynthesized: false })
         {
             _sa.ReportError(code: SemanticDiagnosticCode.DuplicateRoutineDefinition,
                 message: $"Routine '{pending.RoutineName}' is already defined.",

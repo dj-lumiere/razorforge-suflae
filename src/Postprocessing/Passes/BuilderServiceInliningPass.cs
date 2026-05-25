@@ -127,11 +127,11 @@ internal sealed class BuilderServiceInliningPass
                     break;
                 }
 
-                case EntityDeclaration e when e.GenericParameters is not { Count: > 0 }:
+                case EntityDeclaration { GenericParameters: not { Count: > 0 } } e:
                     LowerMemberList(e.Members, programModule);
                     break;
 
-                case RecordDeclaration rec when rec.GenericParameters is not { Count: > 0 }:
+                case RecordDeclaration { GenericParameters: not { Count: > 0 } } rec:
                     LowerMemberList(rec.Members, programModule);
                     break;
 
@@ -285,8 +285,7 @@ internal sealed class BuilderServiceInliningPass
                     : assign with { Value = val };
             }
 
-            case DeclarationStatement { Declaration: VariableDeclaration vd } ds
-                when vd.Initializer != null:
+            case DeclarationStatement { Declaration: VariableDeclaration { Initializer: not null } vd } ds:
             {
                 Expression init = LowerExpression(vd.Initializer);
                 if (ReferenceEquals(init, vd.Initializer)) return stmt;
@@ -643,7 +642,7 @@ internal sealed class BuilderServiceInliningPass
     private TypeInfo? ResolveReceiverType(Expression receiver)
     {
         // 1. Use the expression's ResolvedType if it's a concrete (non-generic-param) type.
-        if (receiver.ResolvedType is { } rt && rt is not GenericParameterTypeInfo)
+        if (receiver.ResolvedType is { } rt and not GenericParameterTypeInfo)
             return rt;
 
         // 1b. ResolvedType is a generic param -> look it up in the current body's TypeSubs

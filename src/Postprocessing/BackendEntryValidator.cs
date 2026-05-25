@@ -72,9 +72,7 @@ public sealed class BackendEntryValidator
             return errors;
         }
 
-        if (!body.IsSynthesized &&
-            !body.Info.IsSynthesized &&
-            body.Ast.Body is BlockStatement { Statements.Count: 0 })
+        if (body is { IsSynthesized: false, Info.IsSynthesized: false, Ast.Body: BlockStatement { Statements.Count: 0 } })
         {
             errors.Add(item: new SemanticError(
                 Code: SemanticDiagnosticCode.MissingMonomorphizedBody,
@@ -182,11 +180,7 @@ public sealed class BackendEntryValidator
             return true;
         }
 
-        if (node is Expression exprWithRepr &&
-            exprWithRepr is not TypeExpression &&
-            exprWithRepr.ResolvedType is { } reprResolvedType &&
-            reprResolvedType is not ErrorTypeInfo &&
-            exprWithRepr.ResolvedRepr == null)
+        if (node is Expression { ResolvedType: { } reprResolvedType and not ErrorTypeInfo, ResolvedRepr: null } exprWithRepr and not TypeExpression)
         {
             error = new SemanticError(
                 Code: SemanticDiagnosticCode.MissingBackendRepresentation,
@@ -233,7 +227,7 @@ public sealed class BackendEntryValidator
             return true;
         }
 
-        if (type.IsGenericDefinition && type.TypeArguments is not { Count: > 0 })
+        if (type is { IsGenericDefinition: true, TypeArguments: not { Count: > 0 } })
         {
             return true;
         }

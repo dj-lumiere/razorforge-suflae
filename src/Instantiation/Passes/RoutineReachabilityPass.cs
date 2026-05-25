@@ -132,7 +132,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             // f-string `:?`/`?` interpolations of in-flight entity values, to inject the
             // `?` mark before the short type name. Seed Text.replace once Text is live so
             // the synthesized call resolves.
-            if (type.Name == "Text" && type.Module == "Core")
+            if (type is { Name: "Text", Module: "Core" })
             {
                 RoutineInfo? replace = ctx.Registry.LookupMethod(type: type, methodName: "replace");
                 if (replace != null) EnqueueCallee(callee: replace);
@@ -473,7 +473,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // Prefer LookupMethod's substituted routine for generic owners. Only accept it when
         // its arity matches (LookupMethod is first-match and may return $create(capacity)).
         RoutineInfo? routine = ctx.Registry.LookupMethod(type: owner, methodName: CreateMethodName);
-        if (routine != null && routine.Parameters.Count == 0)
+        if (routine is { Parameters.Count: 0 })
         {
             EnqueueCallee(callee: routine);
             return;
@@ -492,7 +492,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         {
             foreach (RoutineInfo m in ctx.Registry.GetMethodsForType(type: genDef))
             {
-                if (m.Name == CreateMethodName && m.Parameters.Count == 0)
+                if (m is { Name: CreateMethodName, Parameters.Count: 0 })
                 {
                     RoutineInfo substituted = ctx.Registry.SubstituteMethodForOwner(
                         method: m, resolvedOwner: owner)!;
@@ -722,10 +722,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // TypeSubs, the body walker can't resolve `T.$represent` to `ConcreteType.$represent`,
         // leaving the concrete method out of the live set. Codegen then emits a call to it
         // but never the definition → linker error.
-        if (callee.OwnerType == null && callee.GenericDefinition is { } freeGenDef
-            && freeGenDef.GenericParameters is { Count: > 0 } freeParams
-            && callee.TypeArguments is { Count: > 0 } freeArgs
-            && freeParams.Count == freeArgs.Count)
+        if (callee.OwnerType == null && callee is { GenericDefinition: { GenericParameters: { Count: > 0 } freeParams }, TypeArguments: { Count: > 0 } freeArgs }
+                                     && freeParams.Count == freeArgs.Count)
         {
             for (int i = 0; i < freeParams.Count; i++)
             {
@@ -951,7 +949,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             }
 
             // (3) Wrapper transparency: forward to inner T's same-named method.
-            if (owner is WrapperTypeInfo wrapper && wrapper.InnerType != null)
+            if (owner is WrapperTypeInfo { InnerType: not null } wrapper)
             {
                 RoutineInfo? inner = ctx.Registry.LookupMethod(type: wrapper.InnerType, methodName: name);
                 if (inner != null) EnqueueCallee(callee: inner);
@@ -1049,7 +1047,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         if (ct == null) return null;
         foreach (RoutineInfo m in ctx.Registry.GetMethodsForType(type: ct))
         {
-            if (m.Name == CreateMethodName && m.Parameters.Count == 0) return m;
+            if (m is { Name: CreateMethodName, Parameters.Count: 0 }) return m;
         }
         // Method-chain constructor: text.S32!() lowers to S32.$create(receiver). The call
         // has zero positional arguments but the member-receiver is the conversion source.
@@ -1283,7 +1281,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         Type nt = node.GetType();
         if (nt.IsPrimitive || node is string || nt.IsEnum) return;
 
-        if (node is IEnumerable e2 && node is not string)
+        if (node is IEnumerable e2 and not string)
         {
             foreach (object? item in e2)
                 if (item != null) CollectLocalVarTypes(node: item, map: map);
@@ -1300,7 +1298,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             if (val == null) continue;
             if (val is Expression || val is Statement || val is SyntaxTree.Declaration)
                 CollectLocalVarTypes(node: val, map: map);
-            else if (val is IEnumerable list && val is not string)
+            else if (val is IEnumerable list and not string)
             {
                 foreach (object? item in list)
                     if (item != null) CollectLocalVarTypes(node: item, map: map);
@@ -1596,7 +1594,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // If owner is a generic def (e.g. List[T]) referencing T from the frame, build the
         // concrete instantiation List[ConcreteT] and look up the method on it.
         List<string>? gParams = owner.GenericParameters;
-        if (gParams != null && gParams.Count > 0 && owner.IsGenericDefinition)
+        if (gParams is { Count: > 0 } && owner.IsGenericDefinition)
         {
             var concreteArgs = new List<TypeInfo>(capacity: gParams.Count);
             bool allResolved = true;
@@ -1646,7 +1644,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         // ResolvedRoutine for a method-generic call). The generic-def itself is
         // "uninstantiated" relative to the enclosing routine's typeSubs and needs the
         // same substitution treatment a `T` argument would.
-        if (type.IsGenericDefinition && type.GenericParameters is { Count: > 0 }) return true;
+        if (type is { IsGenericDefinition: true, GenericParameters.Count: > 0 }) return true;
         return type.TypeArguments is { Count: > 0 } args &&
                args.Any(a => ContainsAnyGenericParameter(type: a));
     }
@@ -1661,8 +1659,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// </summary>
     private TypeInfo SubstituteIncludingGenericDef(TypeInfo type, Dictionary<string, TypeInfo> typeSubs)
     {
-        if (type.IsGenericDefinition
-            && type.GenericParameters is { Count: > 0 } gParams)
+        if (type is { IsGenericDefinition: true, GenericParameters: { Count: > 0 } gParams })
         {
             var concreteArgs = new List<TypeInfo>(capacity: gParams.Count);
             bool allOk = true;
@@ -1841,7 +1838,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 Console.Error.WriteLine($"[trace]{indent}  .{prop.Name}=");
                 DumpAstInline(node: value, indent: indent + "    ", depth: depth + 1, maxDepth: maxDepth);
             }
-            else if (value is IEnumerable enumerable && value is not string)
+            else if (value is IEnumerable enumerable and not string)
             {
                 int i = 0;
                 foreach (object? item in enumerable)
@@ -1914,7 +1911,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             {
                 CollectCalls(node: value, sink: sink);
             }
-            else if (value is IEnumerable enumerable && value is not string)
+            else if (value is IEnumerable enumerable and not string)
             {
                 foreach (object? item in enumerable)
                 {

@@ -194,8 +194,7 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
                 return ReferenceEquals(val, asgn.Value) ? stmt : asgn with { Value = val };
             }
 
-            case DeclarationStatement { Declaration: VariableDeclaration vd } decl
-                when vd.Initializer != null:
+            case DeclarationStatement { Declaration: VariableDeclaration { Initializer: not null } vd } decl:
             {
                 Expression init = LowerExpression(vd.Initializer);
                 return ReferenceEquals(init, vd.Initializer)
@@ -468,7 +467,7 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
         {
             switch (part)
             {
-                case TextPart tp when tp.Text.Length > 0:
+                case TextPart { Text.Length: > 0 } tp:
                     exprs.Add(new LiteralExpression(
                         Value: tp.Text, LiteralType: TokenType.TextLiteral, Location: tp.Location)
                         { ResolvedType = textType });
@@ -506,8 +505,7 @@ internal sealed class FStringLoweringPass(PostprocessingContext ctx)
                     // text is post-processed via `Text.replace` because the type-name
                     // prefix is compile-time known and appears verbatim at the head of
                     // `$diagnose` / `$represent` output.
-                    if (ep.Expression.IsInFlight &&
-                        ep.Expression.ResolvedType is EntityTypeInfo entityType)
+                    if (ep.Expression is { IsInFlight: true, ResolvedType: EntityTypeInfo entityType })
                     {
                         string fullName = entityType.FullName;
                         int dot = fullName.LastIndexOf('.');

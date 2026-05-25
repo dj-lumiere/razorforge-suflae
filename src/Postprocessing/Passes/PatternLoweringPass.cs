@@ -325,7 +325,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
         {
             int totalCrashable = ctx.Registry.GetAllTypes().OfType<CrashableTypeInfo>().Count();
             int seenCrashablePatterns = loweredClauses.Count(
-                c => c.Pattern is TypePattern tp2 && tp2.Type.ResolvedType is CrashableTypeInfo);
+                c => c.Pattern is TypePattern { Type.ResolvedType: CrashableTypeInfo });
             bool crashableCovered = seenCrashablePatterns >= totalCrashable;
             // Lookup has a Blank state; Result does not. Result narrows on crashable coverage
             // alone; Lookup additionally requires the Blank arm.
@@ -960,7 +960,7 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
     /// </summary>
     private static bool IsAllNamedSimpleBindings(List<DestructuringBinding> bindings) =>
         bindings.All(predicate: b =>
-            b.MemberVariableName != null && b.BindingName != null && b.NestedPattern == null);
+            b is { MemberVariableName: not null, BindingName: not null, NestedPattern: null });
 
     // -----------------------------------------------------------------------------
 
