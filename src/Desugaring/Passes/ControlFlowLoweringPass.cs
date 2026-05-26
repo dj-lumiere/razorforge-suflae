@@ -123,6 +123,9 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
             case ForStatement f:
                 return LowerFor(forStmt: f);
 
+            case DestructuringStatement ds:
+                return LowerDestructuring(destruct: ds);
+
             case BlockStatement b:
             {
                 bool changed = false;
@@ -226,6 +229,56 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
             : new BlockStatement(Statements: [guardBreak, loweredBody], Location: loc);
 
         return new LoopStatement(Body: loopBody, Location: loc);
+    }
+
+    /// <summary>
+    /// Lowers <c>var (a, b, c) = expr</c> to a block:
+    /// <code>
+    /// var _ld_tmp_N = expr
+    /// var a = _ld_tmp_N.item0
+    /// var b = _ld_tmp_N.item1
+    /// var c = _ld_tmp_N.item2
+    /// </code>
+    /// Tuple-only: positional bindings map by index to <c>itemI</c>. Wildcards (<c>_</c>) are skipped.
+    /// </summary>
+    private BlockStatement LowerDestructuring(DestructuringStatement destruct)
+    {
+        SourceLocation loc = destruct.Location;
+        int n = _iterCount++;
+        string tmpName = $"_ld_tmp_{n}";
+
+        var stmts = new List<Statement>(capacity: destruct.Pattern.Bindings.Count + 1)
+        {
+            new DeclarationStatement(
+                Declaration: new VariableDeclaration(
+                    Name: tmpName,
+                    Type: null,
+                    Initializer: destruct.Initializer,
+                    Visibility: VisibilityModifier.Secret,
+                    Location: loc),
+                Location: loc)
+        };
+
+        for (int i = 0; i < destruct.Pattern.Bindings.Count; i++)
+        {
+            DestructuringBinding binding = destruct.Pattern.Bindings[index: i];
+            string bindName = binding.BindingName ?? binding.MemberVariableName ?? $"_ld_b{i}";
+            if (bindName == "_") continue;
+
+            stmts.Add(item: new DeclarationStatement(
+                Declaration: new VariableDeclaration(
+                    Name: bindName,
+                    Type: null,
+                    Initializer: new MemberExpression(
+                        Object: new IdentifierExpression(Name: tmpName, Location: loc),
+                        PropertyName: $"item{i}",
+                        Location: loc),
+                    Visibility: VisibilityModifier.Secret,
+                    Location: loc),
+                Location: loc));
+        }
+
+        return new BlockStatement(Statements: stmts, Location: loc);
     }
 
     /// <summary>
