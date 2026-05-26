@@ -214,9 +214,13 @@ internal sealed class MarkerProtocolDesugarPass
         var keyMap = new Dictionary<string, string>();
         var pending = new List<(string OldKey, RoutineInfo Info)>();
         foreach ((string key, MonomorphizedBody body) in bodies)
-            if (HasMarkerParam(body.Info)) pending.Add((key, body.Info));
-
-        foreach ((string oldKey, RoutineInfo info) in pending) RewriteParams(info);
+        {
+            // Peel any leaked marker params first, then check key drift. Some bodies
+            // arrive here already peeled (their Info.Parameters were mutated in place by
+            // earlier passes) but their dict key was computed pre-peel — re-key those too.
+            if (HasMarkerParam(body.Info)) RewriteParams(body.Info);
+            if (body.Info.RegistryKey != key) pending.Add((key, body.Info));
+        }
 
         foreach ((string oldKey, RoutineInfo info) in pending)
         {
