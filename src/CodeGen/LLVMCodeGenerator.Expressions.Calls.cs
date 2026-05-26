@@ -1257,10 +1257,19 @@ public partial class LlvmCodeGenerator
     private RoutineInfo? ResolveInitialMemberRoutineCall(TypeInfo receiverType, string methodName,
         bool isFailableMethodCall, RoutineInfo? resolvedRoutine)
     {
-        return resolvedRoutine ??
-               _registry.LookupMethod(type: receiverType,
-                   methodName: methodName,
-                   isFailable: isFailableMethodCall);
+        if (resolvedRoutine != null) return resolvedRoutine;
+        RoutineInfo? m = _registry.LookupMethod(type: receiverType,
+            methodName: methodName,
+            isFailable: isFailableMethodCall);
+        // U64.$sub etc. only define the failable form; retry when the operator-lowered call
+        // came in non-failable. Comment at the call site says codegen retries here.
+        if (m == null && !isFailableMethodCall && methodName.StartsWith('$'))
+        {
+            m = _registry.LookupMethod(type: receiverType,
+                methodName: methodName,
+                isFailable: true);
+        }
+        return m;
     }
 }
 
