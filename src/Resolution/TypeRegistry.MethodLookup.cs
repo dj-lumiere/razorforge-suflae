@@ -1102,6 +1102,15 @@ public sealed partial class TypeRegistry
     public RoutineInfo RegisterRoutineResolution(RoutineInfo resolvedMethod)
         => CacheResolvedOwnerMethod(resolvedMethod: resolvedMethod);
 
+    /// <summary>
+    /// Removes a routine resolution entry by its (current) registry key. Used when a
+    /// resolution's parameter types have been mutated in-place (e.g.
+    /// MarkerProtocolDesugarPass rewriting Referring[T] → T) so the resolution needs to
+    /// be re-inserted under its new <see cref="RoutineInfo.RegistryKey"/>.
+    /// </summary>
+    public bool UnregisterRoutineResolution(string oldKey)
+        => _routineResolutions.Remove(key: oldKey);
+
     private RoutineInfo CacheResolvedOwnerMethod(RoutineInfo resolvedMethod)
     {
         // A universal method substituted onto a generic-def owner (e.g. `Node.retain()`) produces

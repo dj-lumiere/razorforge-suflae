@@ -40,6 +40,7 @@ public sealed partial class SemanticVerifier
 
     /// <summary>Call graph for modification inference.</summary>
     private readonly CallGraph _callGraph = new();
+    private MarkerProtocolDesugarPass? _markerPass;
 
     /// <summary>Errors collected during analysis.</summary>
     private readonly List<SemanticError> _errors = [];
@@ -333,6 +334,7 @@ public sealed partial class SemanticVerifier
             Mark(label: "Phase 6 Instantiation");
             RunPhase7Postprocessing(program: program);
             Mark(label: "Phase 7 Postprocessing");
+            SurveyMarkerProtocolLeaks();
             RunPhase5bPostDesugarChecks();
             Mark(label: "Phase 5b PostDesugarChecks");
             FinalizeReturnTypes();
@@ -490,6 +492,7 @@ public sealed partial class SemanticVerifier
             target: _target,
             buildMode: _buildMode);
         var markerPass = new MarkerProtocolDesugarPass(markerCtx);
+        _markerPass = markerPass;
         markerPass.RewriteAllSignatures();
         foreach ((Program program, _, _) in _registry.UserPrograms)
         {
@@ -579,6 +582,77 @@ public sealed partial class SemanticVerifier
             target: _target,
             buildMode: _buildMode);
         new PostprocessingPipeline(ctx: ctx).Run(program: program);
+    }
+
+    /// <summary>
+    /// Diagnostic survey: after Phase 6/7 monomorphization, walks every routine in the
+    /// registry and reports any RoutineInfo whose Parameters still contain
+    /// Referring[T]/Controlling[T]. Such routines indicate a creation path that bypassed
+    /// MarkerProtocolDesugarPass.RewriteAllSignatures — call-site mangling will then
+    /// diverge from definition-site mangling and produce LINKERRs.
+    /// </summary>
+    private void SurveyMarkerProtocolLeaks()
+    {
+        static bool IsMarker(TypeInfo? t)
+        {
+            if (t is not ProtocolTypeInfo p) return false;
+            string n = (p.GenericDefinition ?? p).Name;
+            return n is "Referring" or "Controlling";
+        }
+
+        static bool ContainsMarker(TypeInfo? t, HashSet<TypeInfo> seen)
+        {
+            if (t == null) return false;
+            if (!seen.Add(t)) return false;
+            if (IsMarker(t)) return true;
+            if (t.TypeArguments is { Count: > 0 } args)
+                foreach (TypeInfo a in args)
+                    if (ContainsMarker(a, seen)) return true;
+            return false;
+        }
+
+        int leakCount = 0;
+        void Check(IEnumerable<RoutineInfo> rs, string bucket)
+        {
+            foreach (RoutineInfo r in rs)
+            {
+                for (int i = 0; i < r.Parameters.Count; i++)
+                {
+                    if (ContainsMarker(r.Parameters[i].Type, new HashSet<TypeInfo>()))
+                    {
+                        leakCount++;
+                        Console.Error.WriteLine(
+                            $"[MARKER-LEAK] bucket={bucket} routine={r.RegistryKey} " +
+                            $"param[{i}]={r.Parameters[i].Name}:{r.Parameters[i].Type?.FullName} " +
+                            $"isGenericDef={r.IsGenericDefinition} owner={r.OwnerType?.FullName}");
+                        break;
+                    }
+                }
+            }
+        }
+
+        _markerPass?.RescanLateResolutions();
+
+        // GMP creates body.Info entries in Phase 6 whose params still wear Referring/Controlling;
+        // RescanLateResolutions cleans the registry but not the codegen-side instantiated-body cache.
+        // Rewrite those param types and re-key the dict + live-set so definition emission and
+        // call-site mangling agree.
+        if (_markerPass != null
+            && _instantiatedGenericBodies is Dictionary<string, Compiler.Instantiation.MonomorphizedBody> bodyDict)
+        {
+            Dictionary<string, string> bodyKeyMap = _markerPass.RewriteInstantiatedBodyInfos(bodyDict);
+            if (bodyKeyMap.Count > 0)
+            {
+                _liveRoutineKeys = _liveRoutineKeys
+                    .Select(selector: k => bodyKeyMap.TryGetValue(k, value: out string? newK) ? newK : k)
+                    .ToArray();
+            }
+        }
+
+        Check(_registry.GetAllRoutines(), "routines");
+        Check(_registry.GetAllRoutineResolutions(), "resolutions");
+        if (leakCount > 0)
+            Console.Error.WriteLine($"[MARKER-LEAK] total={leakCount}");
     }
 
     /// <summary>
@@ -926,6 +1000,7 @@ public sealed partial class SemanticVerifier
             }
             Mark(label: "Phase 7 per-file -> type-aware postprocessing");
 
+            SurveyMarkerProtocolLeaks();
             RunPhase5bPostDesugarChecks();
             Mark(label: "Phase 5b -> PostDesugarChecks");
             FinalizeReturnTypes();

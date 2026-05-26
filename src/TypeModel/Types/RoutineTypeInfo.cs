@@ -37,14 +37,20 @@ public sealed class RoutineTypeInfo : TypeInfo
 
     /// <summary>
     /// Builds the display name for a function type.
-    /// Examples: "(S32, S32) -> S32", "() -> Bool", "(Text) -> Blank"
+    /// Examples: "Routine[(S32, S32), S32]", "Routine[(), Bool]", "Routine[(Text,), Blank]"
     /// </summary>
     private static string BuildName(List<TypeInfo> parameterTypes, TypeInfo? returnType)
     {
-        string paramList = string.Join(separator: ", ",
-            values: parameterTypes.Select(selector: p => p.Name));
+        string paramList = parameterTypes.Count switch
+        {
+            0 => "Blank",
+            1 => "(" + parameterTypes[index: 0].Name + ",)",
+            _ => "(" + string.Join(separator: ", ",
+                values: parameterTypes.Select(selector: p => p.Name)) + ")"
+        };
+
         string returnName = returnType?.Name ?? "Blank";
-        return $"({paramList}) -> {returnName}";
+        return $"Routine[{paramList}, {returnName}]";
     }
 
     /// <summary>
@@ -127,8 +133,9 @@ public sealed class RoutineTypeInfo : TypeInfo
         if (type is { IsGenericResolution: true, TypeArguments: not null })
         {
             var newArgs = type.TypeArguments
-                .Select(selector: arg => SubstituteType(type: arg, substitution: substitution))
-                .ToList();
+                              .Select(selector: arg =>
+                                   SubstituteType(type: arg, substitution: substitution))
+                              .ToList();
             return type.CreateInstance(typeArguments: newArgs);
         }
 

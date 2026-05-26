@@ -568,10 +568,25 @@ public partial class LlvmCodeGenerator
             // an owner-level param (e.g. T) in routine.TypeArguments and the owner is already
             // monomorphized to a concrete type, the bare T would survive the name-based
             // dedup and mangle as `Type[Concrete].method[T]` — producing an undefined symbol.
+            //
+            // Additionally drop entries whose Name matches one of the owner gen-def's
+            // GenericParameters (e.g. "T" for SortedSet[T]). When TransferSubstitutedTypeArguments
+            // or SubstituteMethodForOwner forwards a stale leftover TypeInfo named "T" that is
+            // *not* a GenericParameterTypeInfo (some passes wrap the owner-leak in a non-GPTI),
+            // the GPTI check above doesn't catch it. Matching by name closes that hole.
             var ownerArgs = routine.OwnerType.TypeArguments ?? [];
+            TypeInfo? ownerGenDef = routine.OwnerType switch
+            {
+                RecordTypeInfo r => r.GenericDefinition ?? r,
+                EntityTypeInfo e => e.GenericDefinition ?? e,
+                ProtocolTypeInfo p => p.GenericDefinition ?? p,
+                _ => routine.OwnerType
+            };
+            List<string> ownerGenDefParamNames = ownerGenDef?.GenericParameters ?? [];
             var methodOnlyArgs = methodTypeArgs
                 .Where(predicate: a => a is not GenericParameterTypeInfo
-                    && !ownerArgs.Any(predicate: o => o.FullName == a.FullName))
+                    && !ownerArgs.Any(predicate: o => o.FullName == a.FullName)
+                    && !ownerGenDefParamNames.Contains(item: a.Name))
                 .ToList();
             if (methodOnlyArgs.Count > 0)
             {

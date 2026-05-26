@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Compiler.Instantiation;
 using Compiler.Resolution;
 using SyntaxTree;
 using TypeModel.Symbols;
@@ -155,6 +156,97 @@ internal sealed class MarkerProtocolDesugarPass
             ReKey(_variantBodies, oldKey, newKey);
             ReKey(_synthesizedBodies, oldKey, newKey);
             _registry.RegisterRoutine(routine: r);
+        }
+    }
+
+    /// <summary>
+    /// Catches routine resolutions created AFTER the initial snapshot (e.g. by
+    /// GenericMonomorphizationPass during Phase 6/7). Walks the live registry, rewrites
+    /// any surviving Referring[T]/Controlling[T] params in-place to inner T, and re-keys
+    /// the resolutions dict so callers can look up the routine under its new RegistryKey.
+    /// Safe to call multiple times — idempotent on already-rewritten routines.
+    /// </summary>
+    public void RescanLateResolutions()
+    {
+        var pendingResolutions = new List<(RoutineInfo Routine, string OldKey)>();
+        foreach (RoutineInfo r in _registry.GetAllRoutineResolutions())
+            if (HasMarkerParam(r)) pendingResolutions.Add((r, r.RegistryKey));
+
+        var pendingRoutines = new List<(RoutineInfo Routine, string OldKey)>();
+        foreach (RoutineInfo r in _registry.GetAllRoutines())
+            if (HasMarkerParam(r)) pendingRoutines.Add((r, r.RegistryKey));
+
+        foreach ((RoutineInfo r, string _) in pendingResolutions) RewriteParams(r);
+        foreach ((RoutineInfo r, string _) in pendingRoutines) RewriteParams(r);
+
+        foreach ((RoutineInfo r, string oldKey) in pendingResolutions)
+        {
+            string newKey = r.RegistryKey;
+            if (oldKey == newKey) continue;
+            _registry.UnregisterRoutineResolution(oldKey);
+            _registry.RegisterRoutineResolution(r);
+            ReKey(_variantBodies, oldKey, newKey);
+            ReKey(_synthesizedBodies, oldKey, newKey);
+        }
+        foreach ((RoutineInfo r, string oldKey) in pendingRoutines)
+        {
+            string newKey = r.RegistryKey;
+            if (oldKey == newKey) continue;
+            _registry.RegisterRoutine(routine: r);
+            ReKey(_variantBodies, oldKey, newKey);
+            ReKey(_synthesizedBodies, oldKey, newKey);
+        }
+    }
+
+    /// <summary>
+    /// Rewrites Referring[T]/Controlling[T] params on each MonomorphizedBody.Info in place
+    /// to their inner T. GMP creates these RoutineInfos in Phase 6 from the gen-def's param
+    /// types via plain `ResolveSubstitutedType` (which does not peel marker wrappers), so
+    /// the body.Info used at definition emission keeps wrappers — while call-site mangling
+    /// uses the registry's already-rewritten resolution, producing a name divergence and a
+    /// linker error. Rewriting body.Info here brings both ends back in sync.
+    /// Returns a map oldKey -> newKey for re-keying live-routine sets that referenced the
+    /// pre-rewrite RegistryKey.
+    /// </summary>
+    public Dictionary<string, string> RewriteInstantiatedBodyInfos(
+        Dictionary<string, MonomorphizedBody> bodies)
+    {
+        var keyMap = new Dictionary<string, string>();
+        var pending = new List<(string OldKey, RoutineInfo Info)>();
+        foreach ((string key, MonomorphizedBody body) in bodies)
+            if (HasMarkerParam(body.Info)) pending.Add((key, body.Info));
+
+        foreach ((string oldKey, RoutineInfo info) in pending) RewriteParams(info);
+
+        foreach ((string oldKey, RoutineInfo info) in pending)
+        {
+            string newKey = info.RegistryKey;
+            if (newKey == oldKey) continue;
+            MonomorphizedBody body = bodies[oldKey];
+            bodies.Remove(oldKey);
+            bodies[newKey] = body;
+            keyMap[oldKey] = newKey;
+        }
+
+        return keyMap;
+    }
+
+    private bool HasMarkerParam(RoutineInfo r)
+    {
+        for (int i = 0; i < r.Parameters.Count; i++)
+            if (ClassifyMarker(r.Parameters[i].Type) != MarkerKind.None) return true;
+        return false;
+    }
+
+    private void RewriteParams(RoutineInfo r)
+    {
+        for (int i = 0; i < r.Parameters.Count; i++)
+        {
+            ParameterInfo p = r.Parameters[i];
+            if (ClassifyMarker(p.Type) == MarkerKind.None) continue;
+            TypeInfo? inner = GetInnerT(p.Type);
+            if (inner == null) continue;
+            r.Parameters[i] = p.WithSubstitutedType(inner);
         }
     }
 
