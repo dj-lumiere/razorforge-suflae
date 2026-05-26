@@ -133,7 +133,12 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
                 foreach (Statement s in b.Statements)
                 {
                     Statement n = LowerStatement(stmt: s);
-                    stmts.Add(item: n);
+                    // Splice DestructuringStatement's lowered block into the parent scope
+                    // so its `var a = ...; var b = ...;` bindings are visible to later siblings.
+                    if (s is DestructuringStatement && n is BlockStatement ds)
+                        stmts.AddRange(collection: ds.Statements);
+                    else
+                        stmts.Add(item: n);
                     if (!ReferenceEquals(n, s)) changed = true;
                 }
                 return changed ? b with { Statements = stmts } : b;
