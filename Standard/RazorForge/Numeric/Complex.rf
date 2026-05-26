@@ -331,20 +331,34 @@ routine Complex.is_imaginary() -> Bool
 # Text Representation
 # ============================================================================
 
-### Formats this value as `a +/- bi`.
+### Formats this value as `a +/- bi` with the default fractional precision.
+### Standard `$represent` shape (no args) for f-string dispatch.
+### :returns: The resulting `Text` value.
+@readonly
+routine Complex.$represent() -> ?Text
+  return me.represent_with_places(decimal_places: 10_s32)
+
+### Formats this value as `a +/- bi` with the requested precision.
 ### :param decimal_places: The number of decimal places to render.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Complex.$represent(decimal_places: S32 = 10) -> ?Text
-  var real_text = me.real.$represent(decimal_places)
-  var imag_abs = me.imag.abs().$represent(decimal_places)
+routine Complex.represent_with_places(decimal_places: S32) -> ?Text
+  var real_text = me.real.represent_with_places(decimal_places: decimal_places)
+  var imag_abs = me.imag.abs().represent_with_places(decimal_places: decimal_places)
   if me.imag.is_negative()
     return real_text + " - " + imag_abs + "i"
   return real_text + " + " + imag_abs + "i"
 
 ### Returns a diagnostic string that includes the type name wrapper.
+### Standard `$diagnose` shape (no args) for f-string dispatch.
+### :returns: The resulting `Text` value.
+@readonly
+routine Complex.$diagnose() -> ?Text
+  return me.diagnose_with_places(decimal_places: 10_s32)
+
+### Returns a diagnostic string with the requested precision.
 ### :param decimal_places: The number of decimal places to render.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Complex.$diagnose(decimal_places: S32 = 10) -> ?Text
-  return "Complex(" + me.$represent(decimal_places) + ")"
+routine Complex.diagnose_with_places(decimal_places: S32) -> ?Text
+  return "Complex(" + me.represent_with_places(decimal_places: decimal_places) + ")"

@@ -232,6 +232,27 @@ routine List[T].remove_at!(index: U64) -> ?T
     me.count = me.count - 1u64
     return value
 
+### Returns the first element without removing it.
+### :returns: The current first element.
+### :absent: The list is empty.
+@readonly
+routine List[T].first!() -> ?T
+  if me.is_empty()
+    absent
+  danger!
+    return me.data.extract()
+
+### Returns the last element without removing it.
+### :returns: The current last element.
+### :absent: The list is empty.
+@readonly
+routine List[T].last!() -> ?T
+  if me.is_empty()
+    absent
+  var byte_offset = T.data_size() * (me.count - 1u64)
+  danger!
+    return me.data.offset(byte_offset).extract()
+
 # ============================================================================
 # Indexing with Integral (forward index)
 # ============================================================================

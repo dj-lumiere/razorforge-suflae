@@ -50,6 +50,19 @@ routine cptr_none() -> CPtr
 routine CPtr.is_none() -> Bool
   return int_eq[CPtr](me, cptr_none())
 
+### Formats this pointer as its raw address.
+### :returns: The resulting `Text` value.
+@readonly
+routine CPtr.$represent() -> ?Text
+  danger!
+    return me.get_address().$represent()
+
+### Diagnostic representation for debugging — same as `$represent`.
+### :returns: The resulting `Text` value.
+@readonly
+routine CPtr.$diagnose() -> ?Text
+  return "CPtr(" + me.$represent() + ")"
+
 ### Compatibility helper: alias of `cptr_none()` for legacy bigint-handle call sites.
 ### Deprecated — prefer `cptr_none()`.
 routine bigint_handle_none() -> CPtr

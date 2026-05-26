@@ -303,15 +303,21 @@ routine S64.$create!(from: Integer) -> S64
 routine U64.$create!(from: Integer) -> U64
   return rf_bigint_get_u64(from.handle)
 
+### Formats this value as base-10 text. Standard `$represent` shape (no args)
+### so the f-string machinery can dispatch without supplying a radix.
+### :returns: The resulting `Text` value.
+@readonly
+routine Integer.$represent() -> ?Text
+  return me.represent_radix(radix: 10_s32)
+
 ### Formats this value as text in the requested radix.
-### This routine is appropriate for user-facing numeric output and debugging
-### where base-10 is not sufficient.
+### Use when base-10 is not sufficient (e.g. hex/binary debugging).
 ### :param radix: The numeric base to use.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Integer.$represent(radix: S32 = 10) -> ?Text
+routine Integer.represent_radix(radix: S32) -> ?Text
   var CStr = rf_bigint_get_str(me.handle, radix)
-  var text = Text.from_cstr(CStr)
+  var text = Text(from: CStr)
   rf_invalidate(pointer_to_int[Byte, Address](CStr.ptr))
   return text
 
