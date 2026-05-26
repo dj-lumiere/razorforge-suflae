@@ -93,6 +93,7 @@ public partial class LlvmCodeGenerator
         {
             EntityTypeInfo entity => EmitEntityConstruction(sb: sb, entity: entity, expr: expr),
             RecordTypeInfo record => EmitRecordConstruction(sb: sb, record: record, expr: expr),
+            VariantTypeInfo variant => EmitVariantConstruction(sb: sb, variant: variant, expr: expr),
             // Crashable types are entity-like (heap-allocated, ptr semantics).
             CrashableTypeInfo crashable => EmitCrashableConstruction(
                 sb: sb,
@@ -104,6 +105,69 @@ public partial class LlvmCodeGenerator
             _ => throw new InvalidOperationException(
                 message: $"Cannot construct type: {type.Category}")
         };
+    }
+
+    /// <summary>
+    /// Emits construction of a variant value from the implicit auto-wrap rewrite
+    /// (e.g. <c>var a: Number = 42_s64</c> becomes <c>Number(S64: 42_s64)</c> at AST level).
+    /// The CreatorExpression carries one MemberVariable whose Name matches a variant member's
+    /// type name (or "Blank"/"None" for the zero-tag). Emits:
+    /// <code>
+    ///   %tmp = alloca %Variant.X
+    ///   %tag_ptr = getelementptr %Variant.X, ptr %tmp, i32 0, i32 0
+    ///   store i64 &lt;FNV-1a(member.FullName)&gt;, ptr %tag_ptr
+    ///   %pay_ptr = getelementptr %Variant.X, ptr %tmp, i32 0, i32 1
+    ///   store &lt;val_ty&gt; %val, ptr %pay_ptr     ; skipped for the None/Blank arm
+    ///   %result = load %Variant.X, ptr %tmp
+    /// </code>
+    /// </summary>
+    private string EmitVariantConstruction(StringBuilder sb, VariantTypeInfo variant,
+        CreatorExpression expr)
+    {
+        if (expr.MemberVariables.Count != 1)
+            throw new InvalidOperationException(
+                message:
+                $"Variant '{variant.Name}' construction expects exactly one tagged value, got {expr.MemberVariables.Count}.");
+
+        (string memberName, Expression valueExpr) = expr.MemberVariables[index: 0];
+        VariantMemberInfo? member = variant.Members.FirstOrDefault(predicate: m => m.Name == memberName);
+        if (member == null)
+            throw new InvalidOperationException(
+                message: $"Variant '{variant.Name}' has no member '{memberName}'.");
+
+        string variantLlvm = GetLlvmType(type: variant);
+        string slot = NextTemp();
+        EmitLine(sb: sb, line: $"  {slot} = alloca {variantLlvm}");
+
+        // type_id = FNV-1a(member.Type.FullName); 0 for None/Blank.
+        ulong typeId = member.IsNone
+            ? 0UL
+            : TypeIdHelper.ComputeTypeId(fullName: member.Type!.FullName);
+        string tagPtr = NextTemp();
+        EmitLine(sb: sb,
+            line: $"  {tagPtr} = getelementptr {variantLlvm}, ptr {slot}, i32 0, i32 0");
+        EmitLine(sb: sb, line: $"  store i64 {typeId}, ptr {tagPtr}");
+
+        // Blank arm (or any zero-sized payload type) carries no storable value — only the
+        // tag matters. Skip both value emission and the payload store. The user-level form
+        // `Blank()` parses as a CreatorExpression but has nothing to construct; treating it
+        // as a pure marker mirrors how the Blank type behaves elsewhere.
+        bool isBlankArm = member.IsNone
+            || (member.Type is not null
+                && (member.Type.Name == "Blank" || member.Type.FullName.EndsWith(value: ".Blank")));
+        if (!isBlankArm)
+        {
+            string val = EmitExpression(sb: sb, expr: valueExpr);
+            string valLlvm = GetLlvmType(type: valueExpr.ResolvedType ?? member.Type!);
+            string payPtr = NextTemp();
+            EmitLine(sb: sb,
+                line: $"  {payPtr} = getelementptr {variantLlvm}, ptr {slot}, i32 0, i32 1");
+            EmitLine(sb: sb, line: $"  store {valLlvm} {val}, ptr {payPtr}");
+        }
+
+        string result = NextTemp();
+        EmitLine(sb: sb, line: $"  {result} = load {variantLlvm}, ptr {slot}");
+        return result;
     }
 
     /// <summary>

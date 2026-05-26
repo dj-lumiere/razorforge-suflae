@@ -445,6 +445,11 @@ public sealed partial class SemanticVerifier
         // Phase 4.5: re-run wired-routine synthesis to catch tuple types (and any other
         // lazily-registered types) created during Phase 5 SA. The original Phase 4 sweep
         // could not see these because they did not yet exist in the registry.
+        // Re-run AutoRegisterWiredRoutines first so user variants (registered in Phase 3
+        // per-file via PreRegisterUserVariants, AFTER the Phase 3 global AutoRegister sweep)
+        // get their $represent/$diagnose stubs registered before WiredRoutinePass synthesizes
+        // bodies. MaybeRegisterWired is idempotent on existing methods.
+        AutoRegisterWiredRoutines();
         var lateCtx = new DesugaringContext(registry: _registry,
             routineBodies: _routineBodies,
             target: _target,

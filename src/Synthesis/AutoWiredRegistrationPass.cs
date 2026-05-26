@@ -422,6 +422,25 @@ internal sealed class AutoWiredRegistrationPass
                     }
 
                     break;
+
+                case TypeCategory.Variant:
+                    // Variants get auto-synthesized `$represent` / `$diagnose` so user-defined
+                    // tagged unions render in f-strings and `show()` without manual impls.
+                    // WiredRoutinePass.HandleVariant builds the bodies from the member list;
+                    // registration here makes the stubs visible to overload resolution and the
+                    // reachability sweep so the symbols actually get emitted by codegen.
+                    if (textType != null && !type.IsGenericDefinition)
+                    {
+                        MaybeRegisterWired(owner: type,
+                            name: "$represent",
+                            returnType: textType,
+                            existingMethods: existingMethods);
+                        MaybeRegisterWired(owner: type,
+                            name: "$diagnose",
+                            returnType: textType,
+                            existingMethods: existingMethods);
+                    }
+                    break;
             }
         }
 

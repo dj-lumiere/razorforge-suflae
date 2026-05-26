@@ -77,9 +77,15 @@ public partial class Parser
     /// </summary>
     /// <param name="errorMessage">Error message to show if token is not a valid method name.</param>
     /// <returns>The method name, possibly with '!' suffix for failable methods.</returns>
+    private static bool IsKeywordValidAsMethodName(TokenType type) =>
+        type == TokenType.NoneValue;
+
     private string ConsumeMethodName(string errorMessage)
     {
-        if (!Check(type: TokenType.Identifier))
+        // Accept keyword tokens that are also valid identifiers as method names
+        // (e.g. `BitArray[N].none()` — `none` is the absent-value keyword but reads
+        // fine as a member-access name in postfix position).
+        if (!Check(type: TokenType.Identifier) && !IsKeywordValidAsMethodName(CurrentToken.Type))
         {
             throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedIdentifier,
                 message: errorMessage);

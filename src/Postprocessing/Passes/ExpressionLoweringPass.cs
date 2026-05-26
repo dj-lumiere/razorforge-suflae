@@ -196,9 +196,10 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             case DeclarationStatement { Declaration: VariableDeclaration { Initializer: not null } vd } decl:
             {
                 var (hoisted, loweredInit) = LowerExpr(vd.Initializer);
-                if (hoisted.Count == 0 && ReferenceEquals(loweredInit, vd.Initializer))
+                Expression effectiveInit = TryWrapCarrier(vd.Type, loweredInit) ?? loweredInit;
+                if (hoisted.Count == 0 && ReferenceEquals(effectiveInit, vd.Initializer))
                     return ([], stmt);
-                return (hoisted, decl with { Declaration = vd with { Initializer = loweredInit } });
+                return (hoisted, decl with { Declaration = vd with { Initializer = effectiveInit } });
             }
 
             case ReturnStatement { Value: not null } ret:
@@ -1107,6 +1108,119 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
             TypeArguments: typeArgs,
             MemberVariables: [("key", loweredKey), ("value", loweredVal)],
             Location: dictEntry.Location) { ResolvedType = entryType });
+    }
+
+    // --- Carrier wrap lowering ----------------------------------------------------
+
+    /// <summary>
+    /// Implicit carrier-wrap rewrite for variable declarations:
+    /// <c>var m: Maybe[T] = expr</c> where <c>expr : T</c> is rewritten to
+    /// <c>var m: Maybe[T] = Maybe[T](present: true, value: expr)</c>.
+    /// Returns null when no wrap applies (init already matches the carrier, type
+    /// annotation is absent, or carrier isn't Maybe). Mirrors the SA assignability
+    /// rule that permits <c>T -&gt; Maybe[T]</c> in initializers.
+    /// </summary>
+    private Expression? TryWrapCarrier(TypeExpression? varType, Expression init)
+    {
+        if (varType is null) return null;
+        TypeInfo? targetType = varType.ResolvedType;
+        TypeInfo? initType = init.ResolvedType;
+        if (initType is null) return null;
+
+        // Variant auto-wrap: `var x: Number = 42_s64` where Number has an S64 arm
+        // becomes a CreatorExpression that codegen routes through EmitVariantConstruction.
+        // Skip when init's type IS the variant (passthrough) or is a generic def for it.
+        if (targetType is VariantTypeInfo variant)
+        {
+            if (initType is VariantTypeInfo) return null;
+
+            // `var x: Variant = none` → wrap as the variant's None arm if it has one.
+            if (init is LiteralExpression { LiteralType: TokenType.NoneValue })
+            {
+                VariantMemberInfo? noneArm = variant.Members.FirstOrDefault(m => m.IsNone);
+                if (noneArm is null) return null;
+                return new CreatorExpression(
+                    TypeName: variant.Name,
+                    TypeArguments: null,
+                    MemberVariables: [("None", init)],
+                    Location: init.Location)
+                {
+                    ResolvedType = variant,
+                    ConstructedType = variant,
+                };
+            }
+
+            VariantMemberInfo? member = FindVariantMember(variant, initType);
+            if (member is null) return null;
+            string memberName = member.IsNone ? "None" : member.Type!.Name;
+            var creator = new CreatorExpression(
+                TypeName: variant.Name,
+                TypeArguments: null,
+                MemberVariables: [(memberName, init)],
+                Location: init.Location)
+            {
+                ResolvedType = variant,
+                ConstructedType = variant,
+            };
+            return creator;
+        }
+
+        string carrierName = LastNameSegment(varType.Name);
+        // Only Maybe handled at this stage. Result/Lookup payloads need TypeLayoutPass
+        // to stamp byte sizes before their construction can be synthesized.
+        if (carrierName != "Maybe") return null;
+        if (varType.GenericArguments is not { Count: 1 } typeArgs) return null;
+
+        // Skip if init already produces the carrier itself (e.g. explicit Maybe[T](...)).
+        string initBase = CarrierBaseName(initType);
+        if (initBase == "Maybe") return null;
+
+        // Build `Maybe[T](present: true, value: init)`. The carrier is a stdlib record
+        // with named fields {present: Bool, value: T} — field-init lowering in codegen
+        // handles construction via the existing record-creator path.
+        var trueLit = new LiteralExpression(
+            Value: true,
+            LiteralType: TokenType.True,
+            Location: init.Location);
+        var maybeCreator = new CreatorExpression(
+            TypeName: "Maybe",
+            TypeArguments: typeArgs,
+            MemberVariables: [("present", trueLit), ("value", init)],
+            Location: init.Location)
+        {
+            ResolvedType = targetType,
+            ConstructedType = targetType,
+        };
+        return maybeCreator;
+    }
+
+    private static VariantMemberInfo? FindVariantMember(VariantTypeInfo variant, TypeInfo initType)
+    {
+        foreach (VariantMemberInfo m in variant.Members)
+        {
+            if (m.IsNone) continue;
+            if (m.Type is null) continue;
+            if (m.Type.Name == initType.Name || m.Type.FullName == initType.FullName)
+                return m;
+        }
+        return null;
+    }
+
+    private static string LastNameSegment(string name)
+    {
+        int dot = name.LastIndexOf('.');
+        return dot >= 0 ? name[(dot + 1)..] : name;
+    }
+
+    private static string CarrierBaseName(TypeInfo type)
+    {
+        string raw = type switch
+        {
+            RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition.Name,
+            EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition.Name,
+            _ => type.Name,
+        };
+        return LastNameSegment(raw);
     }
 
     // --- Collection lowering helpers ----------------------------------------------

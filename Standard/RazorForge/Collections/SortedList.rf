@@ -252,7 +252,7 @@ routine BTreeListNode[T].$create(is_leaf: Bool) -> ?BTreeListNode[T]
 
 routine SortedList[T].$create() -> ?SortedList[T]
   return SortedList[T](
-    root: None,
+    root: none,
     count: 0u64
   )
 
@@ -275,7 +275,7 @@ routine SortedList[T].is_empty() -> Bool
 
 ### Removes all elements, resetting the list to an empty state.
 routine SortedList[T].clear()
-  me.root = None
+  me.root = none
   me.count = 0u64
   return
 
@@ -480,7 +480,7 @@ routine SortedList[T].remove(value: T) -> Bool
     if me.root!!.keys_count() == 0u64 and not me.root!!.is_leaf
       me.root = me.root!!.children_get(0u64)
     if me.root!!.keys_count() == 0u64
-      me.root = None
+      me.root = none
   return removed
 
 ### Descends `node` to delete one occurrence of `value`, rebalancing on the way back up.

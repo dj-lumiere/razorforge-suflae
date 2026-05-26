@@ -25,10 +25,13 @@ public sealed partial class SemanticVerifier
         TypeSymbol? expectedType = null) // NOSONAR S3776
     {
         // Map token type to the corresponding type (PascalCase)
-        // None literal: return the expected Maybe type if known, otherwise generic Maybe def.
-        if (literal.LiteralType == TokenType.None)
+        // `none` value literal: needs a carrier-slot expected type
+        // (Maybe[T] / Lookup[T] / Result[Blank] / variant-with-None).
+        if (literal.LiteralType == TokenType.NoneValue)
         {
             if (expectedType != null && IsMaybeType(type: expectedType))
+                return expectedType;
+            if (expectedType is VariantTypeInfo variant && variant.Members.Any(m => m.IsNone))
                 return expectedType;
             return _registry.LookupType(name: "Maybe") ?? ErrorTypeInfo.Instance;
         }

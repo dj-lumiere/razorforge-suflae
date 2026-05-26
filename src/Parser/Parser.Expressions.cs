@@ -47,18 +47,11 @@ public partial class Parser
                 Location: location);
         }
 
-        if (Match(type: TokenType.None))
+        // `none` (lowercase) — the absent value literal. Carrier-slot-only (gated downstream).
+        if (Match(type: TokenType.NoneValue))
         {
             return new LiteralExpression(Value: null!,
-                LiteralType: TokenType.None,
-                Location: location);
-        }
-
-        // 'absent' as expression - evaluates to none (used in pattern matching arms)
-        if (Match(type: TokenType.Absent))
-        {
-            return new LiteralExpression(Value: null!,
-                LiteralType: TokenType.None,
+                LiteralType: TokenType.NoneValue,
                 Location: location);
         }
 

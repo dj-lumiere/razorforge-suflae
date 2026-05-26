@@ -41,8 +41,10 @@ public partial class LlvmCodeGenerator
                 return EmitStringLiteral(value: s);
         }
 
-        // None literal -> emit zeroinitializer for Maybe types ({ i64, ptr } with tag=0)
-        if (literal.LiteralType == TokenType.None)
+        // `none` value literal -> emit zeroinitializer (carriers are zero-tagged in the absent arm).
+        // ExpressionLoweringPass.TryWrapCarrier rewrites this into a typed CreatorExpression
+        // before codegen for most contexts; this is the fallback path.
+        if (literal.LiteralType == TokenType.NoneValue)
         {
             return "zeroinitializer";
         }

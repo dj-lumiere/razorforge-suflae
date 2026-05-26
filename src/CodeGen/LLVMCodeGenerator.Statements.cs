@@ -260,7 +260,13 @@ public partial class LlvmCodeGenerator
             if (initType != null)
             {
                 string initLlvm = GetLlvmType(type: initType);
-                if (initLlvm != llvmType)
+                // Primitive cast applies only between scalar @llvm-annotated records
+                // (e.g. S128 -> U32). For aggregates (carriers like Maybe[T], variants,
+                // multi-field records) the LLVM struct shape is identical on both sides
+                // — no cast needed, and EmitPrimitiveCast would crash on the struct name.
+                bool initIsScalar = initType is RecordTypeInfo { HasDirectBackendType: true };
+                bool varIsScalar = varType is RecordTypeInfo { HasDirectBackendType: true };
+                if (initLlvm != llvmType && initIsScalar && varIsScalar)
                     value = EmitPrimitiveCast(sb: sb,
                         value: value,
                         fromLlvm: initLlvm,

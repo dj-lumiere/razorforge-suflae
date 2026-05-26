@@ -263,7 +263,7 @@ routine BTreeSetNode[T].$create(is_leaf: Bool) -> ?BTreeSetNode[T]
 ### :returns: The resulting `SortedSet[T]` value.
 routine SortedSet[T].$create() -> ?SortedSet[T]
   return SortedSet[T](
-    root: None,
+    root: none,
     count: 0u64
   )
 
@@ -285,7 +285,7 @@ routine SortedSet[T].is_empty() -> Bool
 
 ### Removes every value from the set and discards the existing tree structure.
 routine SortedSet[T].clear()
-  me.root = None
+  me.root = none
   me.count = 0u64
   return
 
@@ -515,7 +515,7 @@ routine SortedSet[T].remove(value: T) -> Bool
 
     # If tree is completely empty, clear the root.
     if me.root!!.keys_count() == 0u64
-      me.root = None
+      me.root = none
 
   return removed
 

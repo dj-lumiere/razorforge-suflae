@@ -2365,7 +2365,11 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         foreach (VariantMemberInfo member in variant.Members)
         {
             string memberName = member.IsNone ? "None" : member.Type!.Name;
-            bool isZeroSized = member.IsNone || member.Type?.Name == "Blank";
+            // IsNone = the absent arm (rendered as "none"). Zero-sized types like Blank or
+            // an empty record are real values — render via the type's own $represent (or the
+            // type name when we can't bind a void payload).
+            bool isAbsentArm = member.IsNone;
+            bool isVoidPayload = !isAbsentArm && member.Type?.Name == "Blank";
 
             var typeExpr = new TypeExpression(
                 Name: memberName,
@@ -2375,7 +2379,18 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             Pattern pattern;
             Statement clauseBody;
 
-            if (isZeroSized)
+            if (isAbsentArm)
+            {
+                pattern = new TypePattern(
+                    Type: typeExpr, VariableName: null, Bindings: null, Location: _synthLoc);
+                clauseBody = new ReturnStatement(
+                    Value: new LiteralExpression(
+                        Value: "none",
+                        LiteralType: TokenType.TextLiteral,
+                        Location: _synthLoc) { ResolvedType = textType },
+                    Location: _synthLoc);
+            }
+            else if (isVoidPayload)
             {
                 pattern = new TypePattern(
                     Type: typeExpr, VariableName: null, Bindings: null, Location: _synthLoc);
@@ -2435,8 +2450,9 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         foreach (VariantMemberInfo member in variant.Members)
         {
             string memberName = member.IsNone ? "None" : member.Type!.Name;
-            bool isZeroSized = member.IsNone || member.Type?.Name == "Blank";
-            ulong typeId = isZeroSized ? 0UL : TypeIdHelper.ComputeTypeId(fullName: member.Type!.FullName);
+            bool isAbsentArm = member.IsNone;
+            bool isVoidPayload = !isAbsentArm && member.Type?.Name == "Blank";
+            ulong typeId = isAbsentArm ? 0UL : TypeIdHelper.ComputeTypeId(fullName: member.Type!.FullName);
 
             var typeExpr = new TypeExpression(
                 Name: memberName,
@@ -2446,11 +2462,23 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             Pattern pattern;
             Statement clauseBody;
 
-            if (isZeroSized)
+            if (isAbsentArm)
             {
                 pattern = new TypePattern(
                     Type: typeExpr, VariableName: null, Bindings: null, Location: _synthLoc);
-                string literal = $"{variant.FullName}(typeid=0, {memberName})";
+                string literal = $"{variant.FullName}(typeid=0, none)";
+                clauseBody = new ReturnStatement(
+                    Value: new LiteralExpression(
+                        Value: literal,
+                        LiteralType: TokenType.TextLiteral,
+                        Location: _synthLoc) { ResolvedType = textType },
+                    Location: _synthLoc);
+            }
+            else if (isVoidPayload)
+            {
+                pattern = new TypePattern(
+                    Type: typeExpr, VariableName: null, Bindings: null, Location: _synthLoc);
+                string literal = $"{variant.FullName}(typeid={typeId}, {memberName})";
                 clauseBody = new ReturnStatement(
                     Value: new LiteralExpression(
                         Value: literal,

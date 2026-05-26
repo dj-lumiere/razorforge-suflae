@@ -98,9 +98,14 @@
           "match": "\\b(true|false)\\b"
         },
         {
-          "comment": "None literal",
+          "comment": "None type (absent-arm type for variants and carriers)",
           "name": "constant.language.null.sf",
           "match": "\\b(None)\\b"
+        },
+        {
+          "comment": "none value literal (absent value for Maybe/Lookup/Result[Blank]/variant-with-None)",
+          "name": "constant.language.null.sf",
+          "match": "\\b(none)\\b"
         }
       ]
     },

@@ -519,8 +519,11 @@ public enum TokenType
     /// <summary>Boolean false literal keyword</summary>
     False,
 
-    /// <summary>Null/none literal keyword</summary>
+    /// <summary>`None` keyword — the absent-arm *type* (used in patterns: `is None`, and as variant member declaration).</summary>
     None,
+
+    /// <summary>`none` keyword — the absent *value* literal (only legal where the target type is Maybe[T] / Lookup[T] / Result[Blank] / a variant with a None arm).</summary>
+    NoneValue,
 
     #endregion
 

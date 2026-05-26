@@ -1401,7 +1401,7 @@ public sealed partial class TypeRegistry
     {
         IEnumerable<TypeInfo> namedTypes = _types.Values.Where(predicate: t =>
             t.Category is TypeCategory.Record or TypeCategory.Entity or TypeCategory.Choice
-                or TypeCategory.Flags or TypeCategory.Crashable);
+                or TypeCategory.Flags or TypeCategory.Crashable or TypeCategory.Variant);
 
         // Include tuple types from resolutions cache
         IEnumerable<TypeInfo> tupleTypes =

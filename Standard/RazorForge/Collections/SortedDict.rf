@@ -295,7 +295,7 @@ routine BTreeDictNode[K, V].$create(is_leaf: Bool) -> ?BTreeDictNode[K, V]
 
 routine SortedDict[K, V].$create() -> ?SortedDict[K, V]
   return SortedDict[K, V](
-    root: None,
+    root: none,
     count: 0u64
   )
 
@@ -318,7 +318,7 @@ routine SortedDict[K, V].is_empty() -> Bool
 
 ### Removes all entries, resetting the dictionary to an empty state.
 routine SortedDict[K, V].clear()
-  me.root = None
+  me.root = none
   me.count = 0u64
   return
 
@@ -535,7 +535,7 @@ routine SortedDict[K, V].remove(key: K) -> Bool
     if me.root!!.keys_count() == 0u64 and not me.root!!.is_leaf
       me.root = me.root!!.children_get(0u64)
     if me.root!!.keys_count() == 0u64
-      me.root = None
+      me.root = none
   return removed
 
 ### Descends `node` to delete the entry for `key`, rebalancing on the way back up.

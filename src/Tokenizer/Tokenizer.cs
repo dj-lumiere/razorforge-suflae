@@ -209,6 +209,7 @@ public partial class Tokenizer
             [key: "true"] = TokenType.True,
             [key: "false"] = TokenType.False,
             [key: "None"] = TokenType.None,
+            [key: "none"] = TokenType.NoneValue,
 
             // Generic constraints
             [key: "needs"] = TokenType.Needs,
