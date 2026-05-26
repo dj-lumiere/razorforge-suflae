@@ -442,6 +442,15 @@ public sealed partial class SemanticVerifier
         // the CallExpression nodes inside them (LoweringKind = Unknown otherwise).
         var synthesizedBodyStatements = _synthesizedBodies
             .ToDictionary(keySelector: kvp => kvp.Key, elementSelector: kvp => kvp.Value.Body);
+        // Phase 4.5: re-run wired-routine synthesis to catch tuple types (and any other
+        // lazily-registered types) created during Phase 5 SA. The original Phase 4 sweep
+        // could not see these because they did not yet exist in the registry.
+        var lateCtx = new DesugaringContext(registry: _registry,
+            routineBodies: _routineBodies,
+            target: _target,
+            buildMode: _buildMode) { VariantBodies = _variantBodies };
+        new WiredRoutinePass(ctx: lateCtx).RunGlobal();
+
         var p7ctx = new PostprocessingContext(registry: _registry,
             variantBodies: _variantBodies,
             synthesizedBodies: synthesizedBodyStatements,

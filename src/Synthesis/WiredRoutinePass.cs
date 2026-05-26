@@ -74,6 +74,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         {
             if (!routine.IsSynthesized) continue;
             if (ctx.RoutineBodies.ContainsKey(key: routine.RegistryKey)) continue;
+            if (ctx.VariantBodies.ContainsKey(key: routine.RegistryKey)) continue;
 
             // Skip if an explicit (non-synthesized) implementation already exists in the registry.
             // This prevents synthesized bodies from overriding custom stdlib implementations
@@ -133,6 +134,23 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 case VariantTypeInfo variant:
                     HandleVariant(routine: routine, variant: variant, textType: textType);
                     break;
+            }
+        }
+
+        // Tuple types appear only as local variable / expression types and never as routine
+        // signatures, so TypeLivenessPass cannot seed them — `GetAllRoutines()` filters them
+        // out via `IsConcreteTypeLive`. Iterate them directly from `_resolutions` (via
+        // `GetTypesWithMethods`) so their wired bodies are synthesized regardless of liveness.
+        foreach (TypeInfo type in ctx.Registry.GetTypesWithMethods())
+        {
+            if (type is not TupleTypeInfo tuple) continue;
+            foreach (RoutineInfo routine in ctx.Registry.GetMethodsForType(type))
+            {
+                if (!routine.IsSynthesized) continue;
+                if (ctx.RoutineBodies.ContainsKey(key: routine.RegistryKey)) continue;
+                if (ctx.VariantBodies.ContainsKey(key: routine.RegistryKey)) continue;
+                HandleTuple(routine: routine, tuple: tuple, textType: textType,
+                    s32Type: s32Type);
             }
         }
 

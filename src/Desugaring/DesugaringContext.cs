@@ -30,7 +30,7 @@ public sealed class DesugaringContext
     /// and consumed by codegen so that variant functions emit carrier construction without
     /// relying on mutable flag fields.
     /// </summary>
-    public Dictionary<string, Statement> VariantBodies { get; } = new();
+    public Dictionary<string, Statement> VariantBodies { get; init; } = new();
 
     /// <summary>
     /// Concrete generic bodies produced by <see cref="GenericMonomorphizationPass"/>,
