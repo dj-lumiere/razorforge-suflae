@@ -113,7 +113,7 @@ routine S64.to_digit_bytes!() -> ?Bytes
   if negative
     digits.add_last(value: Byte(from: 0x2D_u8))    # '-'
 
-  digits.reverse()
+  digits.reverse_in_place()
   return Bytes(from_list: digits)
 
 # ============================================================================
@@ -174,7 +174,7 @@ routine U64.to_digit_bytes!() -> ?Bytes
     digits.add_last(value: Byte(from: b))
     v = v // 10_u64
 
-  digits.reverse()
+  digits.reverse_in_place()
   return Bytes(from_list: digits)
 
 # ============================================================================
@@ -296,7 +296,7 @@ routine S128.to_digit_bytes!() -> ?Bytes
     abs_val = abs_val // 10_s128
   if negative
     digits.add_last(value: Byte(from: 0x2D_u8))
-  digits.reverse()
+  digits.reverse_in_place()
   return Bytes(from_list: digits)
 
 # ============================================================================
@@ -340,7 +340,7 @@ routine U128.to_digit_bytes!() -> ?Bytes
     var b: U8 = 0x30_u8 + U8(from: d)
     digits.add_last(value: Byte(from: b))
     v = v // 10_u128
-  digits.reverse()
+  digits.reverse_in_place()
   return Bytes(from_list: digits)
 
 # ============================================================================
@@ -396,7 +396,7 @@ routine Integer.to_digit_bytes!() -> ?Bytes
     abs_val = abs_val // ten
   if negative
     digits.add_last(value: Byte(from: 0x2D_u8))
-  digits.reverse()
+  digits.reverse_in_place()
   return Bytes(from_list: digits)
 
 # ============================================================================

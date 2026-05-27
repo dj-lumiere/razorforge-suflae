@@ -607,7 +607,7 @@ routine List[T].sorted_by(compare: Routine[(T, T), Bool]) -> ?List[T]
 
 ### Reverses the order of all elements in place.
 ### The first element becomes last, the last becomes first, and element count is unchanged.
-routine List[T].reverse()
+routine List[T].reverse_in_place()
   if me.count <= 1u64
     return
 
