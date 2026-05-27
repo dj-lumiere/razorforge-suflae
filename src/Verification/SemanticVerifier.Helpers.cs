@@ -347,10 +347,18 @@ public sealed partial class SemanticVerifier
 
             if (!IsAssignableTo(source: argType, target: paramType))
             {
-                ReportError(code: SemanticDiagnosticCode.ArgumentTypeMismatch,
-                    message:
-                    $"Argument '{param.Name}' of '{routine.Name}': cannot convert '{argType.Name}' to '{paramType.Name}'.",
-                    location: argExpr.Location);
+                // Skip mismatch when paramType still references an unresolved method-level generic
+                // (e.g. `Routine[(S64,), U]` for `select[U]`). The caller runs
+                // InferMethodGenericTypeArguments after AnalyzeCallArguments and substitutes the
+                // method; without this guard we'd report a spurious error before inference resolves U.
+                if (!ContainsUnresolvedMethodGeneric(type: paramType,
+                        genericParameters: routine.GenericParameters))
+                {
+                    ReportError(code: SemanticDiagnosticCode.ArgumentTypeMismatch,
+                        message:
+                        $"Argument '{param.Name}' of '{routine.Name}': cannot convert '{argType.Name}' to '{paramType.Name}'.",
+                        location: argExpr.Location);
+                }
             }
             else
             {
@@ -1321,5 +1329,57 @@ public sealed partial class SemanticVerifier
         arguments[slotIndex] = slotExpr is NamedArgumentExpression na2
             ? na2 with { Value = coerced }
             : coerced;
+    }
+
+    /// <summary>
+    /// True if `type` references any name listed in `genericParameters` via a
+    /// `GenericParameterTypeInfo` — i.e. an unresolved method-level generic param.
+    /// Used to suppress premature argument-type errors before generic inference runs.
+    /// </summary>
+    private static bool ContainsUnresolvedMethodGeneric(TypeSymbol type,
+        List<string>? genericParameters)
+    {
+        if (genericParameters is null || genericParameters.Count == 0)
+        {
+            return false;
+        }
+
+        if (type is GenericParameterTypeInfo gp && genericParameters.Contains(item: gp.Name))
+        {
+            return true;
+        }
+
+        if (type.TypeArguments is { Count: > 0 } args)
+        {
+            foreach (TypeSymbol arg in args)
+            {
+                if (ContainsUnresolvedMethodGeneric(type: arg,
+                        genericParameters: genericParameters))
+                {
+                    return true;
+                }
+            }
+        }
+
+        if (type is RoutineTypeInfo routine)
+        {
+            foreach (TypeSymbol pt in routine.ParameterTypes)
+            {
+                if (ContainsUnresolvedMethodGeneric(type: pt,
+                        genericParameters: genericParameters))
+                {
+                    return true;
+                }
+            }
+
+            if (routine.ReturnType is { } ret &&
+                ContainsUnresolvedMethodGeneric(type: ret,
+                    genericParameters: genericParameters))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

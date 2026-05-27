@@ -818,5 +818,28 @@ public sealed partial class SemanticVerifier
                     inferred: inferred);
             }
         }
+
+        // RoutineTypeInfo is structural: its parameter/return types live in ParameterTypes/ReturnType,
+        // not TypeArguments. Without this branch, `Routine[(T,), U]` would not unify against
+        // `Routine[(S64,), S64]` and method-level params (e.g. `select[U]`) would stay unresolved.
+        if (paramType is RoutineTypeInfo paramRoutine && argType is RoutineTypeInfo argRoutine &&
+            paramRoutine.ParameterTypes.Count == argRoutine.ParameterTypes.Count)
+        {
+            for (int i = 0; i < paramRoutine.ParameterTypes.Count; i++)
+            {
+                InferMethodTypeArgumentsFromTypes(paramType: paramRoutine.ParameterTypes[index: i],
+                    argType: argRoutine.ParameterTypes[index: i],
+                    genericParameters: genericParameters,
+                    inferred: inferred);
+            }
+
+            if (paramRoutine.ReturnType is { } paramRet && argRoutine.ReturnType is { } argRet)
+            {
+                InferMethodTypeArgumentsFromTypes(paramType: paramRet,
+                    argType: argRet,
+                    genericParameters: genericParameters,
+                    inferred: inferred);
+            }
+        }
     }
 }
