@@ -564,23 +564,16 @@ public sealed partial class TypeRegistry
             return;
         }
 
-        // Create updated record with member variables
-        var updatedRecord = new RecordTypeInfo(name: record.Name)
-        {
-            MemberVariables = memberVariables,
-            ImplementedProtocols = record.ImplementedProtocols,
-            GenericParameters = record.GenericParameters,
-            GenericConstraints = record.GenericConstraints,
-            TypeArguments = record.TypeArguments,
-            GenericDefinition = record.GenericDefinition,
-            Visibility = record.Visibility,
-            Location = record.Location,
-            Module = record.Module,
-            BackendType = record.BackendType
-        };
-
-        _types[key: recordName] = updatedRecord;
-        _typesByShortName.Remove(key: record.Name);
+        // Mutate in-place so that all existing references (pending routine OwnerType pointers,
+        // cached resolutions in _resolutions, etc.) see the updated member variable list.
+        // Creating a new object here would leave _resolutions entries (e.g. Maybe[Bool] created
+        // from the pre-registered carrier shell) with stale GenericDefinition pointers that have
+        // empty MemberVariables — causing "Member variable 'present' not found on record
+        // 'Core.Maybe[Core.Bool]'" errors during codegen of synthesized $represent bodies that
+        // iterate via for-loop (NonePattern lowering emits subject.present access).
+        // Mirrors the in-place strategy in UpdateEntityMemberVariables.
+        record.MemberVariables = memberVariables;
+        RefreshRecordResolutions(genericDef: record);
     }
 
     /// <summary>
@@ -1052,6 +1045,29 @@ public sealed partial class TypeRegistry
                     (EntityTypeInfo)genericDef.CreateInstance(
                         typeArguments: entityRes.TypeArguments);
                 entityRes.MemberVariables = fresh.MemberVariables;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Refreshes stale cached record resolutions whose member variable list is incomplete.
+    /// Called after <see cref="UpdateRecordMemberVariables"/> updates a generic record definition
+    /// (e.g. Maybe[T], Result[T]) with its full member list. Mirrors
+    /// <see cref="RefreshEntityResolutions"/>.
+    /// </summary>
+    public void RefreshRecordResolutions(RecordTypeInfo genericDef)
+    {
+        foreach (TypeInfo resolution in _resolutions.Values)
+        {
+            if (resolution is RecordTypeInfo recordRes &&
+                recordRes.GenericDefinition == genericDef &&
+                recordRes.MemberVariables.Count < genericDef.MemberVariables.Count &&
+                recordRes.TypeArguments != null)
+            {
+                var fresh =
+                    (RecordTypeInfo)genericDef.CreateInstance(
+                        typeArguments: recordRes.TypeArguments);
+                recordRes.MemberVariables = fresh.MemberVariables;
             }
         }
     }

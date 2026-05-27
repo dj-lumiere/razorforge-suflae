@@ -920,7 +920,16 @@ public partial class LlvmCodeGenerator
             {
                 RoutineInfo? synthInfo = _registry.LookupRoutine(fullName: key);
                 if (synthInfo == null || synthInfo.IsGenericDefinition) continue;
-                if (_liveRoutineKeys.Count > 0
+                // Wrapper-forwarder synthesized bodies are anchored on the generic-def owner
+                // (e.g. Retained[T].$eq). Reachability seeds the *concrete* monomorphizations
+                // (Retained[Text].$eq), not the gen-def routine itself, so the gen-def synth
+                // would always fail this gate. The inner per-concrete loop below has its own
+                // liveness check (_generatedRoutines.Contains), so it's safe to bypass here.
+                bool isWrapperForwarderGenDef =
+                    synthInfo is { IsSynthesized: true, WrapperForwarderInnerMethod: not null }
+                    && synthInfo.OwnerType?.IsGenericDefinition == true;
+                if (!isWrapperForwarderGenDef
+                    && _liveRoutineKeys.Count > 0
                     && !_liveRoutineKeys.Contains(item: synthInfo.RegistryKey))
                     continue;
                 // Skip routines whose owner type still has unresolved generic parameters

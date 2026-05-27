@@ -731,6 +731,25 @@ public partial class LlvmCodeGenerator
             }
         }
 
+        // Fallback: stale generic-instance resolutions (e.g. Maybe[Bool] cached from the
+        // pre-registered carrier shell before Maybe's source body was resolved) may have empty
+        // MemberVariables. Refresh from the GenericDefinition and retry.
+        if (memberVariableIndex < 0 && record.GenericDefinition is RecordTypeInfo gdef &&
+            record.TypeArguments != null && gdef.MemberVariables.Count > 0)
+        {
+            var fresh = (RecordTypeInfo)gdef.CreateInstance(typeArguments: record.TypeArguments);
+            record.MemberVariables = fresh.MemberVariables;
+            for (int i = 0; i < record.MemberVariables.Count; i++)
+            {
+                if (record.MemberVariables[index: i].Name == memberVariableName)
+                {
+                    memberVariableIndex = i;
+                    memberVariable = record.MemberVariables[index: i];
+                    break;
+                }
+            }
+        }
+
         if (memberVariableIndex < 0 || memberVariable == null)
         {
             throw new InvalidOperationException(

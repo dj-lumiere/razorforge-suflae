@@ -14,7 +14,7 @@ record Maybe[T]
 ### Present values are rendered using the wrapped value's text form.
 ### :returns: The resulting `Text` value.
 routine Maybe[T].$represent() -> ?Text
-  if not me.present
+  if not me.is_present()
     return "None"
   return f"{me.value}"
 
@@ -22,7 +22,7 @@ routine Maybe[T].$represent() -> ?Text
 ### This form keeps the `Maybe` wrapper visible for debugging and logs.
 ### :returns: The resulting `Text` value.
 routine Maybe[T].$diagnose() -> ?Text
-  if not me.present
+  if not me.is_present()
     return "Core.Maybe(None)"
   return f"Core.Maybe({me.value})"
 
@@ -32,7 +32,7 @@ routine Maybe[T].$diagnose() -> ?Text
 ### :returns: The contained `T` value.
 ### :throws: {AbsentValueError} if this `Maybe` is absent.
 routine Maybe[T].$unwrap!() -> ?T
-  if not me.present
+  if not me.is_present()
     throw AbsentValueError()
   return me.value
 
@@ -41,6 +41,9 @@ routine Maybe[T].$unwrap!() -> ?T
 ### :param fallback: The fallback value to return when absent.
 ### :returns: The contained `T` value, or `fallback` if this `Maybe` is absent.
 routine Maybe[T].$unwrap_or(fallback: T) -> ?T
-  if not me.present
+  if not me.is_present()
     return fallback
   return me.value
+
+routine Maybe[T].is_present() -> Bool
+  return me.present

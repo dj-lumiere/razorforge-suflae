@@ -256,10 +256,9 @@ internal sealed class WrapperForwardingPass
                 isFailable: isFailable);
         if (existingOnDef != null)
         {
-            var ret = _registry.LookupMethod(type: wrapperType,
+            return _registry.LookupMethod(type: wrapperType,
                 methodName: methodName,
                 isFailable: isFailable);
-            return ret;
         }
 
         // Filter out owner-level generics from the inner method's GenericParameters.
@@ -501,13 +500,40 @@ internal sealed class WrapperForwardingPass
                     Visibility: VisibilityModifier.Open,
                     Location: _synthLoc),
                 Location: _synthLoc);
+            // Build TypeInfo annotations so codegen's type-resolution gate accepts the
+            // synthesized AST. Mirror the pointer-wrapper branch below: ResolvedType on
+            // each `raw`/`ctrl` identifier and ResolvedRoutine + ResolvedType on each Call.
+            // The inner T may still be a GenericParameterTypeInfo at synth time; codegen's
+            // ApplyTypeSubstitutions substitutes T at monomorphization.
+            TypeSymbol? retainControllerType = _registry.LookupType(name: "RetainController");
+            TypeSymbol hijackedCtrlType = new WrapperTypeInfo(
+                wrapperName: "Hijacked",
+                innerType: retainControllerType ?? innerType,
+                isReadOnly: false);
+            TypeSymbol hijackedInnerType = new WrapperTypeInfo(
+                wrapperName: "Hijacked",
+                innerType: innerType,
+                isReadOnly: false);
+            RoutineInfo? ctrlRevealMethod = _registry.LookupMethod(
+                type: hijackedCtrlType, methodName: "reveal");
+            RoutineInfo? borrowDataMethod = retainControllerType != null
+                ? _registry.LookupMethod(type: retainControllerType, methodName: "borrow_data")
+                : null;
+            RoutineInfo? innerRevealMethod = _registry.LookupMethod(
+                type: hijackedInnerType, methodName: "reveal");
+
             var ctrlCall = new CallExpression(
                 Callee: new MemberExpression(
-                    Object: new IdentifierExpression(Name: "raw", Location: _synthLoc),
+                    Object: new IdentifierExpression(Name: "raw", Location: _synthLoc)
+                        { ResolvedType = hijackedCtrlType },
                     PropertyName: "reveal",
                     Location: _synthLoc),
                 Arguments: [],
-                Location: _synthLoc);
+                Location: _synthLoc)
+            {
+                ResolvedRoutine = ctrlRevealMethod,
+                ResolvedType = retainControllerType
+            };
             var ctrlDecl = new DeclarationStatement(
                 Declaration: new VariableDeclaration(
                     Name: "ctrl",
@@ -518,11 +544,16 @@ internal sealed class WrapperForwardingPass
                 Location: _synthLoc);
             var borrowCall = new CallExpression(
                 Callee: new MemberExpression(
-                    Object: new IdentifierExpression(Name: "ctrl", Location: _synthLoc),
+                    Object: new IdentifierExpression(Name: "ctrl", Location: _synthLoc)
+                        { ResolvedType = retainControllerType },
                     PropertyName: "borrow_data",
                     Location: _synthLoc),
                 Arguments: [],
-                Location: _synthLoc);
+                Location: _synthLoc)
+            {
+                ResolvedRoutine = borrowDataMethod,
+                ResolvedType = hijackedInnerType
+            };
             var innerRevealCall = new CallExpression(
                 Callee: new MemberExpression(
                     Object: borrowCall,
@@ -531,6 +562,7 @@ internal sealed class WrapperForwardingPass
                 Arguments: [],
                 Location: _synthLoc)
             {
+                ResolvedRoutine = innerRevealMethod,
                 ResolvedType = innerType
             };
             var innerCall = new CallExpression(
