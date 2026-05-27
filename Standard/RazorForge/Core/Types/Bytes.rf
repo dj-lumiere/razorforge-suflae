@@ -2,25 +2,55 @@ module Core
 
 import BuilderService
 
-### Represents the `Bytes` entity.
-### `Bytes` is an immutable owning byte sequence intended for binary data rather than text.
-entity Bytes obeys Iterable[Byte]
+### Represents an immutable byte sequence with value semantics.
+###
+### Layout:
+###   data:  Hijacked[Byte]                          — shared immutable byte buffer
+###   count: U64                                     — number of bytes in buffer
+###   ctrl:  Hijacked[ImmutableSharedController]     — atomic strong-count cell (or null)
+###
+### `Bytes` is a record (value semantics from the user's view) backed by an
+### atomic-refcounted handle to an immutable byte buffer. Copying a `Bytes`
+### bumps the underlying refcount via SeqCst atomic; the last drop frees the
+### buffer + controller. When `ctrl` is null (`hijacked_none[...]()`), the
+### value represents an empty or static-literal sequence and `$copy`/`$destroy`
+### are no-ops.
+record Bytes obeys Assignable, Iterable[Byte]
   ### Raw buffer of byte values.
   secret data: Hijacked[Byte]
   ### Number of bytes in the buffer.
   secret count: U64
+  ### Atomic strong-count controller (null for empty / static-literal values).
+  secret ctrl: Hijacked[ImmutableSharedController]
 
-### Frees the byte buffer.
-### This runs as part of destruction and releases the owned allocation.
+### Returns a copy of this value with the underlying refcount bumped.
+### The buffer is shared; no byte data is copied. For values with a null
+### controller (empty or static literals) the copy is a bitwise duplicate
+### with no atomic op.
+### :returns: The resulting `Bytes` value.
+@[readonly, inline]
+routine Bytes.$copy() -> Me
+  danger!
+    if not me.ctrl.is_none()
+      me.ctrl.reveal().increase_strong_count()
+  return Bytes(data: me.data, count: me.count, ctrl: me.ctrl)
+
+### Releases this value's reference. Frees the buffer + controller when this
+### was the last live ref. No-op when `ctrl` is null (empty / static literal).
 routine Bytes.$destroy()
   danger!
-    me.data.invalidate!()
+    if me.ctrl.is_none()
+      return
+    var prev = me.ctrl.reveal().decrease_strong_count()
+    if prev <= 1_u64
+      me.data.invalidate()
+      me.ctrl.invalidate()
   return
 
 ### Creates an empty byte sequence.
 ### :returns: The resulting `Bytes` value.
 routine Bytes.$create() -> ?Bytes
-  return Bytes(data: hijacked_none[Byte](), count: 0u64)
+  return Bytes(data: hijacked_none[Byte](), count: 0u64, ctrl: hijacked_none[ImmutableSharedController]())
 
 ### Creates a byte sequence by copying the contents of `from_list`.
 ### :param from_list: The source list of bytes to copy.
@@ -28,7 +58,7 @@ routine Bytes.$create() -> ?Bytes
 routine Bytes.$create(from_list: List[Byte]) -> ?Bytes
   var n = from_list.count()
   if n == 0u64
-    return Bytes(data: hijacked_none[Byte](), count: 0u64)
+    return Bytes(data: hijacked_none[Byte](), count: 0u64, ctrl: hijacked_none[ImmutableSharedController]())
   danger!
     var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * n))
     var i: U64 = 0u64
@@ -37,7 +67,7 @@ routine Bytes.$create(from_list: List[Byte]) -> ?Bytes
         break
       buf.stride(count: S64(i)).inject(value: from_list[i])
       i += 1u64
-    return Bytes(data: buf, count: n)
+    return Bytes(data: buf, count: n, ctrl: ImmutableSharedController().hijack())
 
 ### Creates a one-byte sequence from `from_byte`.
 ### :param from_byte: The single byte to store.
@@ -46,7 +76,7 @@ routine Bytes.$create(from_byte: Byte) -> ?Bytes
   danger!
     var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size()))
     buf.inject(value: from_byte)
-    return Bytes(data: buf, count: 1u64)
+    return Bytes(data: buf, count: 1u64, ctrl: ImmutableSharedController().hijack())
 
 ### Creates a byte sequence by copying a null-terminated byte buffer.
 ### Copying stops at the first null byte.
@@ -63,7 +93,7 @@ routine Bytes.$create(ptr: Hijacked[Byte]) -> ?Bytes
       return Bytes()
     var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * len))
     rf_copy_bytes_at(dest: buf.address(), src: ptr.address(), size: Byte.data_size() * len)
-    return Bytes(data: buf, count: len)
+    return Bytes(data: buf, count: len, ctrl: ImmutableSharedController().hijack())
 
 ### Creates a byte sequence by copying a null-terminated C string as raw bytes.
 ### No text decoding is performed.
@@ -76,7 +106,7 @@ routine Bytes.$create(ptr: CStr) -> ?Bytes
   danger!
     var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * len))
     rf_copy_bytes_at(dest: buf.address(), src: ptr.ptr.address(), size: Byte.data_size() * len)
-    return Bytes(data: buf, count: len)
+    return Bytes(data: buf, count: len, ctrl: ImmutableSharedController().hijack())
 
 ### Creates a byte sequence by copying `count` bytes from an address.
 ### :param ptr: The source address.
@@ -88,7 +118,7 @@ routine Bytes.$create(ptr: Address, count: U64) -> ?Bytes
   danger!
     var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * count))
     rf_copy_bytes_at(dest: buf.address(), src: ptr, size: Byte.data_size() * count)
-    return Bytes(data: buf, count: count)
+    return Bytes(data: buf, count: count, ctrl: ImmutableSharedController().hijack())
 
 ### Creates a byte sequence by copying `count` bytes from a hijacked pointer.
 ### :param source: The source pointer.
@@ -100,7 +130,7 @@ routine Bytes.$create(srcptr: Hijacked[Byte], count: U64) -> ?Bytes
   danger!
     var buf = Hijacked[Byte](rf_allocate_dynamic(size: Byte.data_size() * count))
     rf_copy_bytes_at(dest: buf.address(), src: srcptr.address(), size: Byte.data_size() * count)
-    return Bytes(data: buf, count: count)
+    return Bytes(data: buf, count: count, ctrl: ImmutableSharedController().hijack())
 
 # Core operations
 
@@ -160,7 +190,7 @@ routine Bytes.$getitem!(index: BackIndex) -> Byte
 ### :param other: The byte sequence to append.
 ### :returns: The resulting `Bytes` value.
 @readonly
-routine Bytes.concat(other: Referring[Bytes]) -> ?Bytes
+routine Bytes.concat(other: Bytes) -> ?Bytes
   var n = me.count + other.count
   if n == 0u64
     return Bytes()
@@ -171,14 +201,14 @@ routine Bytes.concat(other: Referring[Bytes]) -> ?Bytes
     if other.count > 0u64
       var dest = buf.stride(count: S64(me.count))
       rf_copy_bytes_at(dest: dest.address(), src: other.data.address(), size: Byte.data_size() * other.count)
-    return Bytes(data: buf, count: n)
+    return Bytes(data: buf, count: n, ctrl: ImmutableSharedController().hijack())
 
 ### Returns the sum of this value and the other value.
 ### This is the operator form of `concat`.
 ### :param other: The byte sequence to append.
 ### :returns: The resulting `Bytes` value.
 @readonly
-routine Bytes.$add(other: Referring[Bytes]) -> ?Bytes
+routine Bytes.$add(other: Bytes) -> ?Bytes
   return me.concat(other)
 
 ### Returns whether both values are equal.
@@ -186,11 +216,11 @@ routine Bytes.$add(other: Referring[Bytes]) -> ?Bytes
 ### :param other: The other byte sequence to compare against.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine Bytes.$eq(other: Referring[Bytes]) -> Bool
+routine Bytes.$eq(other: Bytes) -> Bool
   if me.count != other.count
     return false
   var i: U64 = 0u64
-  for i in 0 til me.count
+  for i in 0u64 til me.count
     if me[i] != other[i]
       return false
   return true
@@ -202,7 +232,7 @@ routine Bytes.$eq(other: Referring[Bytes]) -> Bool
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Bytes.contains(byte: Byte) -> Bool
-  for i in 0 til me.count
+  for i in 0u64 til me.count
     if me[i] == byte
       return true
   return false
@@ -211,10 +241,10 @@ routine Bytes.contains(byte: Byte) -> Bool
 ### :param prefix: The prefix to test.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine Bytes.starts_with(prefix: Referring[Bytes]) -> Bool
+routine Bytes.starts_with(prefix: Bytes) -> Bool
   if prefix.count > me.count
     return false
-  for i in 0 til prefix.count
+  for i in 0u64 til prefix.count
     if me[i] != prefix[i]
       return false
   return true
@@ -223,11 +253,11 @@ routine Bytes.starts_with(prefix: Referring[Bytes]) -> Bool
 ### :param suffix: The suffix to test.
 ### :returns: The resulting `Bool` value.
 @readonly
-routine Bytes.ends_with(suffix: Referring[Bytes]) -> Bool
+routine Bytes.ends_with(suffix: Bytes) -> Bool
   if suffix.count > me.count
     return false
   var offset = me.count - suffix.count
-  for i in 0_u64 til suffix.count
+  for i in 0u64 til suffix.count
     if me[offset + i] != suffix[i]
       return false
   return true
@@ -238,7 +268,7 @@ routine Bytes.ends_with(suffix: Referring[Bytes]) -> Bool
 ### :absent: Returns absent when the requested value is unavailable.
 @readonly
 routine Bytes.find!(byte: Byte) -> U64
-  for i in 0_u64 til me.count
+  for i in 0u64 til me.count
     if me[i] == byte
       return i
   absent
@@ -253,7 +283,7 @@ routine Bytes.find!(byte: Byte) -> U64
 routine Bytes.split(separator: Byte) -> ?List[Bytes]
   var parts = List[Bytes]()
   var current = List[Byte]()
-  for i in 0 til me.count
+  for i in 0u64 til me.count
     if me[i] == separator
       parts.add_last(Bytes(from_list: steal current))
       current = List[Byte]()
@@ -296,7 +326,7 @@ routine Bytes.repeat(times: U64) -> ?Bytes
       var dest = buf.stride(count: S64(t * me.count))
       rf_copy_bytes_at(dest: dest.address(), src: me.data.address(), size: Byte.data_size() * me.count)
       t += 1u64
-    return Bytes(data: buf, count: n)
+    return Bytes(data: buf, count: n, ctrl: ImmutableSharedController().hijack())
 
 # Conversion to modifiable list
 
@@ -382,7 +412,7 @@ routine Bytes.$diagnose() -> ?Text
 routine Text.encode_as_utf8() -> ?Bytes
   var result = List[Byte]()
   var len = me.count()
-  for i in 0 til len
+  for i in 0u64 til len
     var current_letter = me[i]
     var codepoint = current_letter.codepoint()
     when
@@ -823,7 +853,7 @@ routine BytesUtf8View.$hash(k0: U64, k1: U64) -> U64
 ### :returns: A `U64` hash combining the buffer address and the current index.
 routine BytesUtf8Iterator.$fast_hash() -> U64
   danger!
-    var acc = __hash_round(acc: 0_u64, h: __hash_leaf(v: U64(me.bytes.address())))
+    var acc = __hash_round(acc: 0u64, h: __hash_leaf(v: U64(me.bytes.address())))
     acc = __hash_round(acc: acc, h: me.index.$fast_hash())
     return __hash_finalize(h: acc)
 
@@ -833,6 +863,6 @@ routine BytesUtf8Iterator.$fast_hash() -> U64
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
 routine BytesUtf8Iterator.$hash(k0: U64, k1: U64) -> U64
   danger!
-    var acc = __hash_round(acc: 0_u64, h: __secure_hash_u64(v: U64(me.bytes.address()), k0: k0, k1: k1))
+    var acc = __hash_round(acc: 0u64, h: __secure_hash_u64(v: U64(me.bytes.address()), k0: k0, k1: k1))
     acc = __hash_round(acc: acc, h: me.index.$hash(k0: k0, k1: k1))
     return __hash_finalize(h: acc)

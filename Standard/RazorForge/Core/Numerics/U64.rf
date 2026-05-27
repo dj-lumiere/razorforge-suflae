@@ -7,9 +7,9 @@ record U64 obeys UnsignedIntegral, Ordered, ConstCompatible
   pass
 
 # Constants for U64 limits
-preset U64_MIN: U64 = 0_u64
+preset U64_MIN: U64 = 0u64
 preset U64_MAX: U64 = 18_446_744_073_709_551_615_u64
-preset U64_ZERO: U64 = 0_u64
+preset U64_ZERO: U64 = 0u64
 preset U64_ONE: U64 = 1_u64
 
 # ============================================================================
@@ -518,7 +518,7 @@ routine U64.swap_bytes() -> U64
 ### Returns true if this value is an exact power of two.
 ### :returns: `true` if `me != 0 and (me & (me - 1)) == 0`.
 routine U64.is_power_of_two() -> Bool
-  return me != 0_u64 and (me & (me -% 1_u64)) == 0_u64
+  return me != 0u64 and (me & (me -% 1_u64)) == 0u64
 
 ### Returns this value rotated left by `bits` positions.
 ### :param bits: The number of bit positions to rotate.
@@ -543,13 +543,13 @@ routine U64.rotate_right(bits: U32) -> U64
 ### Returns true if this value is zero.
 ### :returns: `true` when `me == 0`.
 routine U64.is_zero() -> Bool
-  return me == 0_u64
+  return me == 0u64
 
 ### Returns true if this value is even.
 ### :returns: `true` when the least significant bit is clear.
 routine U64.is_even() -> Bool
   var result = bit_and[U64](a: me, b: 1_u64)
-  return int_eq[U64](a: result, b: 0_u64)
+  return int_eq[U64](a: result, b: 0u64)
 
 ### Returns true if this value is odd.
 ### :returns: `true` when the least significant bit is set.

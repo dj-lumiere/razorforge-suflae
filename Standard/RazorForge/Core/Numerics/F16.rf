@@ -435,7 +435,7 @@ routine F16.$fast_hash() -> U64
 routine F16.to_bytes_le() -> Array[Byte, 2]
   var raw = reinterpret_bits[F16, U16](me)
   var result = Array[Byte, 2]()
-  result = set_byte_at(array: result, index: 0_u64, value: int_truncate[U16, U8](raw))
+  result = set_byte_at(array: result, index: 0u64, value: int_truncate[U16, U8](raw))
   result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U16, U8](shift_right_unsigned[U16](raw, 8_u16)))
   return result
 
@@ -444,7 +444,7 @@ routine F16.to_bytes_le() -> Array[Byte, 2]
 routine F16.to_bytes_be() -> Array[Byte, 2]
   var raw = byte_swap[U16](reinterpret_bits[F16, U16](me))
   var result = Array[Byte, 2]()
-  result = set_byte_at(array: result, index: 0_u64, value: int_truncate[U16, U8](raw))
+  result = set_byte_at(array: result, index: 0u64, value: int_truncate[U16, U8](raw))
   result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U16, U8](shift_right_unsigned[U16](raw, 8_u16)))
   return result
 

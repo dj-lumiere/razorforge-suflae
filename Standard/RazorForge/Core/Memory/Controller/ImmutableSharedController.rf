@@ -1,0 +1,40 @@
+module Core
+
+### Multi-threaded atomic reference-counting controller for immutable shared data.
+### Used by value-typed Text/Bytes/Integer/Decimal/Complex to share an immutable
+### payload across threads with O(1) refcount-bump copy semantics.
+###
+### Differs from `RetainController[T]`:
+###   - strong-only (no weak refs) — immutable shared data has no need for `Tracked`.
+###   - atomic counter — safe to copy/drop across threads.
+###   - no `data` field — the payload lives in the owning handle struct alongside
+###     a `Hijacked[ImmutableSharedController]` controller pointer. The handle
+###     decides what to deallocate when the count hits zero.
+entity ImmutableSharedController
+  ### Stores the atomic strong reference count.
+  secret strong_count: Atomic[U64]
+
+### Creates a new controller with one strong reference.
+### :returns: The resulting `ImmutableSharedController` value.
+dangerous routine ImmutableSharedController.$create() -> ?ImmutableSharedController
+  return ImmutableSharedController(
+    strong_count: Atomic[U64](initial: 1_u64)
+  )
+
+### Atomically increments the strong reference count when a handle is cloned.
+dangerous routine ImmutableSharedController.increase_strong_count()
+  discard me.strong_count.fetch_add(delta: 1_u64)
+  return
+
+### Atomically decrements the strong reference count when a handle is dropped.
+### :returns: The previous count. The caller deallocates the payload + controller
+###          when this returns `1` (i.e. the cell is now zero).
+dangerous routine ImmutableSharedController.decrease_strong_count() -> U64
+  return me.strong_count.fetch_sub(delta: 1_u64)
+
+### Returns the current number of live strong handles.
+### Snapshot only — value may have changed by the time the caller observes it.
+### :returns: The current strong reference count.
+@readonly
+dangerous routine ImmutableSharedController.strong_count() -> U64
+  return me.strong_count.load()

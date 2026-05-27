@@ -4,10 +4,20 @@ preset DECIMAL_DEFAULT_PRECISION: S32 = 50
 ### Represents an arbitrary-precision decimal floating-point value backed by decNumber.
 ### `Decimal` is intended for exact decimal-domain workloads such as finance, formatting, and high-precision analysis.
 ### It trades fixed-size machine arithmetic for controllable precision and decimal-oriented behavior.
+###
+### Layout:
+###   handle: CPtr                                  — decNumber handle
+###   ctrl:   Hijacked[ImmutableSharedController]   — atomic strong-count cell (or null)
+###
+### `Decimal` is a record (value semantics from the user's view) backed by an
+### atomic-refcounted decNumber handle. Copying bumps the underlying refcount
+### via SeqCst atomic; the last drop frees the handle + controller.
 ### :see: {Integer}, {Complex}, {Numeric-Types}
-entity Decimal obeys Numeric, Ordered
+record Decimal obeys Assignable, Numeric, Ordered
   ### Stores the native decimal handle managed by the runtime.
   secret handle: CPtr
+  ### Atomic strong-count controller.
+  secret ctrl: Hijacked[ImmutableSharedController]
 
 # ============================================================================
 # Precision control (global)
@@ -39,7 +49,7 @@ common routine Decimal.get_precision() -> S32
 ### Creates the decimal value `0`.
 ### :returns: The resulting `Decimal` value.
 routine Decimal.$create() -> ?Decimal
-  var dec = Decimal(handle: rf_bigdec_new())
+  var dec = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_set_s64(dec.handle, 0)
   return dec
 
@@ -49,7 +59,7 @@ routine Decimal.$create() -> ?Decimal
 ### :param value: The initial integer value.
 ### :returns: The resulting `Decimal` value.
 routine Decimal.$create(value: S64) -> ?Decimal
-  var dec = Decimal(handle: rf_bigdec_new())
+  var dec = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_set_s64(dec.handle, value)
   return dec
 
@@ -60,7 +70,7 @@ routine Decimal.$create(value: S64) -> ?Decimal
 ### :param value: The initial floating-point value.
 ### :returns: The resulting `Decimal` value.
 routine Decimal.$create(value: F64) -> ?Decimal
-  var dec = Decimal(handle: rf_bigdec_new())
+  var dec = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_set_f64(dec.handle, value)
   return dec
 
@@ -69,24 +79,32 @@ routine Decimal.$create(value: F64) -> ?Decimal
 ### exact decimal-domain input rather than binary floating-point notation rules.
 ### :param text: The textual decimal representation.
 ### :returns: The resulting `Decimal` value.
-routine Decimal.$create!(text: Referring[Text]) -> ?Decimal
-  var dec = Decimal(handle: rf_bigdec_new())
+routine Decimal.$create!(text: Text) -> ?Decimal
+  var dec = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_set_str(dec.handle, text.to_cstr())
   return dec
 
-### Releases the native decimal storage owned by this value.
-routine Decimal.$destroy()
-  rf_bigdec_free(me.handle)
-  return
-
-### Returns an independent copy of `other`.
-### The returned value owns its own runtime handle and precision state.
-### :param other: The decimal value to duplicate.
+### Returns a copy of this value with the underlying refcount bumped.
+### The handle is shared; no decimal data is copied.
 ### :returns: The resulting `Decimal` value.
-@readonly
-routine Decimal.$copy(other: Decimal) -> ?Decimal
-  var dec = Decimal(handle: rf_bigdec_copy(other.handle))
-  return dec
+@[readonly, inline]
+routine Decimal.$copy() -> Me
+  danger!
+    if not me.ctrl.is_none()
+      me.ctrl.reveal().increase_strong_count()
+  return Decimal(handle: me.handle, ctrl: me.ctrl)
+
+### Releases this value's reference. Frees the handle + controller when this
+### was the last live ref. No-op when `ctrl` is null.
+routine Decimal.$destroy()
+  danger!
+    if me.ctrl.is_none()
+      return
+    var prev = me.ctrl.reveal().decrease_strong_count()
+    if prev <= 1_u64
+      rf_bigdec_free(me.handle)
+      me.ctrl.invalidate()
+  return
 
 # ============================================================================
 # Arithmetic Operations
@@ -97,7 +115,7 @@ routine Decimal.$copy(other: Decimal) -> ?Decimal
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.$add(other: Decimal) -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_add(result.handle, me.handle, other.handle)
   return result
 
@@ -106,7 +124,7 @@ routine Decimal.$add(other: Decimal) -> ?Decimal
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.$sub(other: Decimal) -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_sub(result.handle, me.handle, other.handle)
   return result
 
@@ -115,7 +133,7 @@ routine Decimal.$sub(other: Decimal) -> ?Decimal
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.$mul(other: Decimal) -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_mul(result.handle, me.handle, other.handle)
   return result
 
@@ -125,7 +143,7 @@ routine Decimal.$mul(other: Decimal) -> ?Decimal
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.$truediv(other: Decimal) -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_div(result.handle, DECIMAL_DEFAULT_PRECISION, me.handle, other.handle)
   return result
 
@@ -137,7 +155,7 @@ routine Decimal.$truediv(other: Decimal) -> ?Decimal
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.divide(other: Decimal, precision: S32) -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_div(result.handle, precision, me.handle, other.handle)
   return result
 
@@ -145,7 +163,7 @@ routine Decimal.divide(other: Decimal, precision: S32) -> ?Decimal
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.$neg() -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_neg(result.handle, me.handle)
   return result
 
@@ -180,7 +198,7 @@ routine Decimal.$cmp(you: Decimal) -> ComparisonSign
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.abs() -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_abs(result.handle, me.handle)
   return result
 
@@ -189,7 +207,7 @@ routine Decimal.abs() -> ?Decimal
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.sqrt(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_sqrt(result.handle, precision, me.handle)
   return result
 
@@ -199,7 +217,7 @@ routine Decimal.sqrt(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.pow(exp: Decimal, precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_pow(result.handle, precision, me.handle, exp.handle)
   return result
 
@@ -208,7 +226,7 @@ routine Decimal.pow(exp: Decimal, precision: S32 = DECIMAL_DEFAULT_PRECISION) ->
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.exp(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_exp(result.handle, precision, me.handle)
   return result
 
@@ -217,7 +235,7 @@ routine Decimal.exp(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.log(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_log(result.handle, precision, me.handle)
   return result
 
@@ -226,7 +244,7 @@ routine Decimal.log(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.log10(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_log10(result.handle, precision, me.handle)
   return result
 
@@ -239,7 +257,7 @@ routine Decimal.log10(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.sin(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_sin(result.handle, precision, me.handle)
   return result
 
@@ -248,7 +266,7 @@ routine Decimal.sin(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.cos(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_cos(result.handle, precision, me.handle)
   return result
 
@@ -257,7 +275,7 @@ routine Decimal.cos(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.tan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_tan(result.handle, precision, me.handle)
   return result
 
@@ -266,7 +284,7 @@ routine Decimal.tan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.asin(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_asin(result.handle, precision, me.handle)
   return result
 
@@ -275,7 +293,7 @@ routine Decimal.asin(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.acos(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_acos(result.handle, precision, me.handle)
   return result
 
@@ -284,7 +302,7 @@ routine Decimal.acos(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.atan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_atan(result.handle, precision, me.handle)
   return result
 
@@ -315,7 +333,7 @@ routine Decimal.atan2(x: Decimal, precision: S32 = DECIMAL_DEFAULT_PRECISION) ->
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.sinh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_sinh(result.handle, precision, me.handle)
   return result
 
@@ -324,7 +342,7 @@ routine Decimal.sinh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.cosh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_cosh(result.handle, precision, me.handle)
   return result
 
@@ -333,7 +351,7 @@ routine Decimal.cosh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.tanh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_tanh(result.handle, precision, me.handle)
   return result
 
@@ -345,7 +363,7 @@ routine Decimal.tanh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.ceil() -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_ceil(result.handle, me.handle)
   return result
 
@@ -353,7 +371,7 @@ routine Decimal.ceil() -> ?Decimal
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.floor() -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_floor(result.handle, me.handle)
   return result
 
@@ -362,7 +380,7 @@ routine Decimal.floor() -> ?Decimal
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.round(decimal_places: S32 = 0) -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_round(result.handle, decimal_places, me.handle)
   return result
 
@@ -371,7 +389,7 @@ routine Decimal.round(decimal_places: S32 = 0) -> ?Decimal
 ### :returns: The resulting `Decimal` value.
 @readonly
 routine Decimal.int_truncate(decimal_places: S32 = 0) -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_trunc(result.handle, decimal_places, me.handle)
   return result
 
@@ -450,7 +468,7 @@ routine Decimal.represent_with_places(decimal_places: S32) -> ?Text
 ### :returns: The resulting `Decimal` value.
 @readonly
 common routine Decimal.pi(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_pi(result.handle, precision)
   return result
 
@@ -459,7 +477,7 @@ common routine Decimal.pi(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decima
 ### :returns: The resulting `Decimal` value.
 @readonly
 common routine Decimal.e(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
-  var result = Decimal(handle: rf_bigdec_new())
+  var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_e(result.handle, precision)
   return result
 
@@ -472,8 +490,8 @@ common routine Decimal.e(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
 ### rather than exceptions.
 ### :param text: The text to parse.
 ### :returns: The resulting `Maybe[Decimal]` value.
-routine Decimal.$create!(text: Referring[Text]) -> ?Decimal
-  var dec = Decimal(handle: rf_bigdec_new())
+routine Decimal.$create!(text: Text) -> ?Decimal
+  var dec = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigdec_set_str(dec.handle, text.to_cstr())
   if dec.handle == cptr_none()
     throw DecimalValueError()

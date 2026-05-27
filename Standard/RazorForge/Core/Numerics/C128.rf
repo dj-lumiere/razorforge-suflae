@@ -268,7 +268,7 @@ routine C128.is_imaginary() -> Bool
 ### Returns an xxHash64-based hash of this complex value.
 ### :returns: A `U64` hash combining both components.
 routine C128.$fast_hash() -> U64
-  var acc = __hash_round(acc: 0_u64, h: me.real.$fast_hash())
+  var acc = __hash_round(acc: 0u64, h: me.real.$fast_hash())
   acc = __hash_round(acc: acc, h: me.imag.$fast_hash())
   return __hash_finalize(h: acc)
 
@@ -277,6 +277,6 @@ routine C128.$fast_hash() -> U64
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
 routine C128.$hash(k0: U64, k1: U64) -> U64
-  var acc = __hash_round(acc: 0_u64, h: me.real.$hash(k0: k0, k1: k1))
+  var acc = __hash_round(acc: 0u64, h: me.real.$hash(k0: k0, k1: k1))
   acc = __hash_round(acc: acc, h: me.imag.$hash(k0: k0, k1: k1))
   return __hash_finalize(h: acc)

@@ -337,7 +337,7 @@ routine Moment.$diagnose() -> ?Text
 ### Returns an xxHash64-based hash of this moment.
 ### :returns: A `U64` hash combining the seconds and nanoseconds components.
 routine Moment.$fast_hash() -> U64
-  var acc = __hash_round(acc: 0_u64, h: me.seconds.$fast_hash())
+  var acc = __hash_round(acc: 0u64, h: me.seconds.$fast_hash())
   acc = __hash_round(acc: acc, h: me.nanoseconds.$fast_hash())
   return __hash_finalize(h: acc)
 
@@ -346,6 +346,6 @@ routine Moment.$fast_hash() -> U64
 ### :param k1: The second 64-bit key word.
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
 routine Moment.$hash(k0: U64, k1: U64) -> U64
-  var acc = __hash_round(acc: 0_u64, h: me.seconds.$hash(k0: k0, k1: k1))
+  var acc = __hash_round(acc: 0u64, h: me.seconds.$hash(k0: k0, k1: k1))
   acc = __hash_round(acc: acc, h: me.nanoseconds.$hash(k0: k0, k1: k1))
   return __hash_finalize(h: acc)

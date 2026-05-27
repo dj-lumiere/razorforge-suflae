@@ -39,6 +39,6 @@ secret routine __hash_finalize(h: U64) -> U64
 secret routine __hash_u128(v: U128) -> U64
   var lo = int_truncate[U128, U64](v)
   var hi = int_truncate[U128, U64](shift_right_unsigned[U128](v, 64_u128))
-  var acc = __hash_round(acc: 0_u64, h: lo)
+  var acc = __hash_round(acc: 0u64, h: lo)
   acc = __hash_round(acc: acc, h: hi)
   return __hash_finalize(h: acc)

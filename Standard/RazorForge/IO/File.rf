@@ -37,7 +37,7 @@ entity FileHandle
 ### :param mode: The mode to use for the opened file.
 ### :returns: The resulting `FileHandle` value.
 ### :throws: May throw {IOError}.
-routine open!(path: Referring[Text], mode: FileMode = FileMode.READ) -> ?FileHandle
+routine open!(path: Text, mode: FileMode = FileMode.READ) -> ?FileHandle
   var cstr = CStr(from: path)
   var mode_val = mode.S32()
   var fd = rf_file_open(cstr, cstr.count().S32(), mode_val)
@@ -82,7 +82,7 @@ routine FileHandle.read_bytes(count: U64) -> ?Bytes
 ### This is the text-oriented write helper used by the convenience overloads.
 ### :param value: The text to write.
 ### :param end: The trailing text to append after `value`.
-routine FileHandle.write(value: Referring[Text], end: Referring[Text] = "\n")
+routine FileHandle.write(value: Text, end: Text = "\n")
   var cstr = CStr(from: value)
   rf_file_write(me.fd, cstr.ptr, cstr.count())
   var end_cstr = CStr(from: end)
@@ -102,7 +102,7 @@ routine FileHandle.write[T](value: T, end: Text = "\n")
 ### Use this overload when the payload should not be formatted as text first.
 ### :param value: The byte sequence to write.
 ### :param end: The trailing text to append after `value`.
-routine FileHandle.write(value: Referring[Bytes], end: Referring[Text] = "")
+routine FileHandle.write(value: Bytes, end: Text = "")
   var val_cstr = CStr(from: value)
   rf_file_write(me.fd, val_cstr.ptr, val_cstr.count())
   if end.count() > 0
@@ -145,7 +145,7 @@ routine FileHandle.$exit()
 ### This is the simplest one-shot helper for whole-file text reads.
 ### :param path: The path to read.
 ### :returns: The resulting `Text` value.
-routine read_all!(path: Referring[Text]) -> ?Text
+routine read_all!(path: Text) -> ?Text
   var file = open!(path, mode: FileMode.READ)
   var content = file.read_all()
   file.close()
@@ -155,7 +155,7 @@ routine read_all!(path: Referring[Text]) -> ?Text
 ### Existing contents are discarded before the new text is written.
 ### :param path: The path to write.
 ### :param content: The text to write.
-routine write_all!(path: Referring[Text], content: Referring[Text])
+routine write_all!(path: Text, content: Text)
   var file = open!(path, mode: FileMode.WRITE)
   file.write(content, end: "")
   file.close()
@@ -165,7 +165,7 @@ routine write_all!(path: Referring[Text], content: Referring[Text])
 ### The file is created according to the runtime's append-open behavior if needed.
 ### :param path: The path to append to.
 ### :param content: The text to append.
-routine append_all!(path: Referring[Text], content: Referring[Text])
+routine append_all!(path: Text, content: Text)
   var file = open!(path, mode: FileMode.APPEND)
   file.write(content, end: "")
   file.close()

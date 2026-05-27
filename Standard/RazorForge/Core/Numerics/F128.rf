@@ -476,7 +476,7 @@ routine F128.is_nan() -> Bool
   var lo = int_truncate[U128, U64](bits)
   var exponent = bit_and[U64](shift_right_unsigned[U64](hi, 48_u32), 0x7FFF_u64)
   var hi_mantissa = bit_and[U64](a: hi, b: 0x0000_FFFF_FFFF_FFFF_u64)
-  return exponent == 0x7FFF_u64 and (hi_mantissa != 0_u64 or lo != 0_u64)
+  return exponent == 0x7FFF_u64 and (hi_mantissa != 0u64 or lo != 0u64)
 
 ### Returns `true` when this value encodes positive or negative infinity.
 ### :returns: Whether the bit pattern represents an infinity.
@@ -488,7 +488,7 @@ routine F128.is_infinite() -> Bool
   var lo = int_truncate[U128, U64](bits)
   var exponent = bit_and[U64](shift_right_unsigned[U64](hi, 48_u32), 0x7FFF_u64)
   var hi_mantissa = bit_and[U64](a: hi, b: 0x0000_FFFF_FFFF_FFFF_u64)
-  return exponent == 0x7FFF_u64 and hi_mantissa == 0_u64 and lo == 0_u64
+  return exponent == 0x7FFF_u64 and hi_mantissa == 0u64 and lo == 0u64
 
 ### Returns `true` when this value is neither NaN nor infinity.
 ### :returns: Whether the value is finite.
@@ -506,7 +506,7 @@ routine F128.is_subnormal() -> Bool
   var bits = me.to_bits()
   var hi = int_truncate[U128, U64](bits >>> 64u32)
   var exponent = bit_and[U64](shift_right_unsigned[U64](hi, 48_u32), 0x7FFF_u64)
-  return exponent == 0_u64 and not me.is_zero()
+  return exponent == 0u64 and not me.is_zero()
 
 # ============================================================================
 # Clamping Arithmetic
@@ -605,11 +605,11 @@ routine F128.hash() -> U64
   var lo = int_truncate[U128, U64](bits)
   var hi = int_truncate[U128, U64](bits >>> 64u32)
   if me.is_nan()
-    lo = 0_u64
-    hi = 0x7FFF800000000000_u64
-  if bits == shift_left[U128](zero_extend[U64, U128](0x8000000000000000_u64), 64_u128)
-    lo = 0_u64
-    hi = 0_u64
+    lo = 0u64
+    hi = 0x7FFF800000000000u64
+  if bits == shift_left[U128](zero_extend[U64, U128](0x8000000000000000u64), 64_u128)
+    lo = 0u64
+    hi = 0u64
   return bit_xor[U64](lo, mul[U64](a: hi, b: 1099511628211_u64))
 
 # ============================================================================
@@ -706,20 +706,20 @@ routine F128.to_bytes_le() -> Array[Byte, 16]
   var lo = int_truncate[U128, U64](raw)
   var hi = int_truncate[U128, U64](raw >>> 64u32)
   var result = Array[Byte, 16]()
-  result = set_byte_at(array: result, index: 0_u64, value: int_truncate[U64, U8](lo))
+  result = set_byte_at(array: result, index: 0u64, value: int_truncate[U64, U8](lo))
   result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 8_u64)))
   result = set_byte_at(array: result, index: 2_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 16_u64)))
   result = set_byte_at(array: result, index: 3_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 24_u64)))
   result = set_byte_at(array: result, index: 4_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 32_u64)))
-  result = set_byte_at(array: result, index: 5_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 40_u64)))
+  result = set_byte_at(array: result, index: 5_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 40u64)))
   result = set_byte_at(array: result, index: 6_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 48_u64)))
   result = set_byte_at(array: result, index: 7_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 56_u64)))
   result = set_byte_at(array: result, index: 8_u64, value: int_truncate[U64, U8](hi))
   result = set_byte_at(array: result, index: 9_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 8_u64)))
-  result = set_byte_at(array: result, index: 10_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 16_u64)))
+  result = set_byte_at(array: result, index: 10u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 16_u64)))
   result = set_byte_at(array: result, index: 11_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 24_u64)))
   result = set_byte_at(array: result, index: 12_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 32_u64)))
-  result = set_byte_at(array: result, index: 13_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 40_u64)))
+  result = set_byte_at(array: result, index: 13_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 40u64)))
   result = set_byte_at(array: result, index: 14_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 48_u64)))
   result = set_byte_at(array: result, index: 15_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 56_u64)))
   return result
@@ -733,20 +733,20 @@ routine F128.to_bytes_be() -> Array[Byte, 16]
   lo = byte_swap[U64](lo)
   hi = byte_swap[U64](hi)
   var result = Array[Byte, 16]()
-  result = set_byte_at(array: result, index: 0_u64, value: int_truncate[U64, U8](lo))
+  result = set_byte_at(array: result, index: 0u64, value: int_truncate[U64, U8](lo))
   result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 8_u64)))
   result = set_byte_at(array: result, index: 2_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 16_u64)))
   result = set_byte_at(array: result, index: 3_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 24_u64)))
   result = set_byte_at(array: result, index: 4_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 32_u64)))
-  result = set_byte_at(array: result, index: 5_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 40_u64)))
+  result = set_byte_at(array: result, index: 5_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 40u64)))
   result = set_byte_at(array: result, index: 6_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 48_u64)))
   result = set_byte_at(array: result, index: 7_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 56_u64)))
   result = set_byte_at(array: result, index: 8_u64, value: int_truncate[U64, U8](hi))
   result = set_byte_at(array: result, index: 9_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 8_u64)))
-  result = set_byte_at(array: result, index: 10_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 16_u64)))
+  result = set_byte_at(array: result, index: 10u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 16_u64)))
   result = set_byte_at(array: result, index: 11_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 24_u64)))
   result = set_byte_at(array: result, index: 12_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 32_u64)))
-  result = set_byte_at(array: result, index: 13_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 40_u64)))
+  result = set_byte_at(array: result, index: 13_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 40u64)))
   result = set_byte_at(array: result, index: 14_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 48_u64)))
   result = set_byte_at(array: result, index: 15_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 56_u64)))
   return result

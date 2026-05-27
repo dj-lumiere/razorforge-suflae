@@ -10,11 +10,11 @@ preset BYTES_PER_GIB: U64 = 1_073_741_824_u64
 preset BYTES_PER_TIB: U64 = 1_099_511_627_776_u64
 preset BYTES_PER_PIB: U64 = 1_125_899_906_842_624_u64
 
-preset BYTES_PER_KB: U64 = 1_000_u64
-preset BYTES_PER_MB: U64 = 1_000_000_u64
-preset BYTES_PER_GB: U64 = 1_000_000_000_u64
-preset BYTES_PER_TB: U64 = 1_000_000_000_000_u64
-preset BYTES_PER_PB: U64 = 1_000_000_000_000_000_u64
+preset BYTES_PER_KB: U64 = 1_000u64
+preset BYTES_PER_MB: U64 = 1_000_000u64
+preset BYTES_PER_GB: U64 = 1_000_000_000u64
+preset BYTES_PER_TB: U64 = 1_000_000_000_000u64
+preset BYTES_PER_PB: U64 = 1_000_000_000_000_000u64
 
 # ============================================================================
 # Record definition
@@ -209,7 +209,7 @@ routine ByteSize.$cmp(you: ByteSize) -> ComparisonSign
 ### :returns: The resulting `Text` value.
 routine ByteSize.$represent() -> ?Text
   var raw = reinterpret_bits[ByteSize, U64](me)
-  if raw == 0_u64
+  if raw == 0u64
     return "0B"
 
   var parts = ""
@@ -217,35 +217,35 @@ routine ByteSize.$represent() -> ?Text
 
   var pib = raw // BYTES_PER_PIB
   var rem = raw % BYTES_PER_PIB
-  if pib != 0_u64
+  if pib != 0u64
     parts = f"{parts}{sep}{pib}PiB"
     sep = " "
 
   var tib = rem // BYTES_PER_TIB
   rem = rem % BYTES_PER_TIB
-  if tib != 0_u64
+  if tib != 0u64
     parts = f"{parts}{sep}{tib}TiB"
     sep = " "
 
   var gib = rem // BYTES_PER_GIB
   rem = rem % BYTES_PER_GIB
-  if gib != 0_u64
+  if gib != 0u64
     parts = f"{parts}{sep}{gib}GiB"
     sep = " "
 
   var mib = rem // BYTES_PER_MIB
   rem = rem % BYTES_PER_MIB
-  if mib != 0_u64
+  if mib != 0u64
     parts = f"{parts}{sep}{mib}MiB"
     sep = " "
 
   var kib = rem // BYTES_PER_KIB
   rem = rem % BYTES_PER_KIB
-  if kib != 0_u64
+  if kib != 0u64
     parts = f"{parts}{sep}{kib}KiB"
     sep = " "
 
-  if rem != 0_u64
+  if rem != 0u64
     parts = f"{parts}{sep}{rem}B"
 
   return steal parts

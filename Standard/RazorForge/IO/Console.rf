@@ -7,7 +7,7 @@ module IO/Console
 ### `end` is appended after `value`.
 ### :param value: The text to write.
 ### :param end: The trailing text to append.
-routine show(value: Referring[Text], end: Referring[Text] = "\n")
+routine show(value: Text, end: Text = "\n")
   var value_cstr = CStr(from: value)
   rf_console_show(ptr: value_cstr.ptr, len: value_cstr.count())
   var end_cstr = CStr(from: end)
@@ -18,7 +18,7 @@ routine show(value: Referring[Text], end: Referring[Text] = "\n")
 ### `end` is appended after `value`.
 ### :param value: The bytes to write.
 ### :param end: The trailing text to append.
-routine show(value: Referring[Bytes], end: Referring[Text] = "\n")
+routine show(value: Bytes, end: Text = "\n")
   var value_cstr = CStr(from: value)
   rf_console_show(ptr: value_cstr.ptr, len: value_cstr.count())
   var end_cstr = CStr(from: end)
@@ -43,7 +43,7 @@ routine show[T](value: T, end: Text = "\n")
 ### Writes text to standard error.
 ### :param value: The text to write.
 ### :param end: The trailing text to append.
-routine alert(value: Referring[Text], end: Referring[Text] = "\n")
+routine alert(value: Text, end: Text = "\n")
   var value_cstr = CStr(from: value)
   rf_console_alert(ptr: value_cstr.ptr, len: value_cstr.count())
   var end_cstr = CStr(from: end)
@@ -53,7 +53,7 @@ routine alert(value: Referring[Text], end: Referring[Text] = "\n")
 ### Writes raw bytes to standard error.
 ### :param value: The bytes to write.
 ### :param end: The trailing text to append.
-routine alert(value: Referring[Bytes], end: Referring[Text] = "\n")
+routine alert(value: Bytes, end: Text = "\n")
   var value_cstr = CStr(from: value)
   rf_console_alert(ptr: value_cstr.ptr, len: value_cstr.count())
   var end_cstr = CStr(from: end)

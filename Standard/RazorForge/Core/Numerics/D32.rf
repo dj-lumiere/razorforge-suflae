@@ -473,7 +473,7 @@ routine D32.$fast_hash() -> U64
 routine D32.to_bytes_le() -> Array[Byte, 4]
   var raw = reinterpret_bits[D32, U32](me)
   var result = Array[Byte, 4]()
-  result = set_byte_at(array: result, index: 0_u64, value: int_truncate[U32, U8](raw))
+  result = set_byte_at(array: result, index: 0u64, value: int_truncate[U32, U8](raw))
   result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U32, U8](shift_right_unsigned[U32](raw, 8_u32)))
   result = set_byte_at(array: result, index: 2_u64, value: int_truncate[U32, U8](shift_right_unsigned[U32](raw, 16_u32)))
   result = set_byte_at(array: result, index: 3_u64, value: int_truncate[U32, U8](shift_right_unsigned[U32](raw, 24_u32)))
@@ -484,7 +484,7 @@ routine D32.to_bytes_le() -> Array[Byte, 4]
 routine D32.to_bytes_be() -> Array[Byte, 4]
   var raw = byte_swap[U32](reinterpret_bits[D32, U32](me))
   var result = Array[Byte, 4]()
-  result = set_byte_at(array: result, index: 0_u64, value: int_truncate[U32, U8](raw))
+  result = set_byte_at(array: result, index: 0u64, value: int_truncate[U32, U8](raw))
   result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U32, U8](shift_right_unsigned[U32](raw, 8_u32)))
   result = set_byte_at(array: result, index: 2_u64, value: int_truncate[U32, U8](shift_right_unsigned[U32](raw, 16_u32)))
   result = set_byte_at(array: result, index: 3_u64, value: int_truncate[U32, U8](shift_right_unsigned[U32](raw, 24_u32)))

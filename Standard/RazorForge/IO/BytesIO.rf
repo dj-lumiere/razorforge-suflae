@@ -44,8 +44,8 @@ routine __is_ascii_ws(b: Byte) -> Bool
 ### :param bytes: The buffer to read from.
 ### :returns: The parsed `S64` value.
 ### :throws: {InvalidValueError} if no digits were found after the optional sign.
-common routine S64.from_digit_bytes!(bytes: Referring[Bytes]) -> S64
-  var pair = S64.from_digit_bytes_at!(bytes: bytes, start: 0_u64)
+common routine S64.from_digit_bytes!(bytes: Bytes) -> S64
+  var pair = S64.from_digit_bytes_at!(bytes: bytes, start: 0u64)
   return pair.item0
 
 ### Streaming variant: parses a signed decimal integer starting at `start` and
@@ -57,7 +57,7 @@ common routine S64.from_digit_bytes!(bytes: Referring[Bytes]) -> S64
 ###               are treated as EOF and produce {InvalidValueError}.
 ### :returns: A tuple `(parsed_value, index_one_past_last_digit)`.
 ### :throws: {InvalidValueError} if no digits were found after the optional sign.
-common routine S64.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> Tuple[S64, U64]
+common routine S64.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[S64, U64]
   var i = start
 
   # Skip leading whitespace
@@ -77,10 +77,10 @@ common routine S64.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> 
   if i >= bytes.count() or not bytes[i].is_digit()
     throw InvalidValueError(input: "<bytes>", target: "S64")
 
-  var acc: U64 = 0_u64
+  var acc: U64 = 0u64
   while i < bytes.count() and bytes[i].is_digit()
     var d: U8 = bytes[i].digit_value!()
-    acc = acc * 10_u64 + U64(from: d)
+    acc = acc * 10u64 + U64(from: d)
     i = i + 1_u64
 
   var value: S64 = if negative then -S64(from: acc) else S64(from: acc)
@@ -127,12 +127,12 @@ routine S64.to_digit_bytes!() -> ?Bytes
 ### :param bytes: The buffer to read from.
 ### :returns: The parsed `U64` value.
 ### :throws: {InvalidValueError} if no digits were found or a `-` sign appeared.
-common routine U64.from_digit_bytes!(bytes: Referring[Bytes]) -> U64
-  var pair = U64.from_digit_bytes_at!(bytes: bytes, start: 0_u64)
+common routine U64.from_digit_bytes!(bytes: Bytes) -> U64
+  var pair = U64.from_digit_bytes_at!(bytes: bytes, start: 0u64)
   return pair.item0
 
 ### Streaming variant of `U64.from_digit_bytes!` — see that routine's doc.
-common routine U64.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> Tuple[U64, U64]
+common routine U64.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[U64, U64]
   var i = start
 
   while i < bytes.count() and __is_ascii_ws(b: bytes[i])
@@ -146,10 +146,10 @@ common routine U64.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> 
   if i >= bytes.count() or not bytes[i].is_digit()
     throw InvalidValueError(input: "<bytes>", target: "U64")
 
-  var acc: U64 = 0_u64
+  var acc: U64 = 0u64
   while i < bytes.count() and bytes[i].is_digit()
     var d: U8 = bytes[i].digit_value!()
-    acc = acc * 10_u64 + U64(from: d)
+    acc = acc * 10u64 + U64(from: d)
     i = i + 1_u64
 
   return (acc, i)
@@ -161,18 +161,18 @@ common routine U64.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> 
 ### `U8(from: U64)` narrowing is failable in general but unreachable here.
 ### :returns: A freshly allocated `Bytes` carrying the digit sequence.
 routine U64.to_digit_bytes!() -> ?Bytes
-  if me == 0_u64
+  if me == 0u64
     var buf: List[Byte] = []
     buf.add_last(value: Byte(from: 0x30_u8))
     return Bytes(from_list: buf)
 
   var v = me
   var digits: List[Byte] = []
-  while v > 0_u64
-    var d: U64 = v % 10_u64
+  while v > 0u64
+    var d: U64 = v % 10u64
     var b: U8 = 0x30_u8 + U8(from: d)
     digits.add_last(value: Byte(from: b))
-    v = v // 10_u64
+    v = v // 10u64
 
   digits.reverse_in_place()
   return Bytes(from_list: digits)
@@ -183,30 +183,30 @@ routine U64.to_digit_bytes!() -> ?Bytes
 # explicit `T(from: S64)` narrowing additionally throws on out-of-range values.
 # ============================================================================
 
-common routine S8.from_digit_bytes!(bytes: Referring[Bytes]) -> S8
+common routine S8.from_digit_bytes!(bytes: Bytes) -> S8
   return S8(from: S64.from_digit_bytes!(bytes: bytes))
 
-common routine S8.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> Tuple[S8, U64]
+common routine S8.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[S8, U64]
   var pair = S64.from_digit_bytes_at!(bytes: bytes, start: start)
   return (S8(from: pair.item0), pair.item1)
 
 routine S8.to_digit_bytes!() -> ?Bytes
   return S64(from: me).to_digit_bytes!()
 
-common routine S16.from_digit_bytes!(bytes: Referring[Bytes]) -> S16
+common routine S16.from_digit_bytes!(bytes: Bytes) -> S16
   return S16(from: S64.from_digit_bytes!(bytes: bytes))
 
-common routine S16.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> Tuple[S16, U64]
+common routine S16.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[S16, U64]
   var pair = S64.from_digit_bytes_at!(bytes: bytes, start: start)
   return (S16(from: pair.item0), pair.item1)
 
 routine S16.to_digit_bytes!() -> ?Bytes
   return S64(from: me).to_digit_bytes!()
 
-common routine S32.from_digit_bytes!(bytes: Referring[Bytes]) -> S32
+common routine S32.from_digit_bytes!(bytes: Bytes) -> S32
   return S32(from: S64.from_digit_bytes!(bytes: bytes))
 
-common routine S32.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> Tuple[S32, U64]
+common routine S32.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[S32, U64]
   var pair = S64.from_digit_bytes_at!(bytes: bytes, start: start)
   return (S32(from: pair.item0), pair.item1)
 
@@ -217,30 +217,30 @@ routine S32.to_digit_bytes!() -> ?Bytes
 # Narrower unsigned widths — delegate to U64 then narrow.
 # ============================================================================
 
-common routine U8.from_digit_bytes!(bytes: Referring[Bytes]) -> U8
+common routine U8.from_digit_bytes!(bytes: Bytes) -> U8
   return U8(from: U64.from_digit_bytes!(bytes: bytes))
 
-common routine U8.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> Tuple[U8, U64]
+common routine U8.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[U8, U64]
   var pair = U64.from_digit_bytes_at!(bytes: bytes, start: start)
   return (U8(from: pair.item0), pair.item1)
 
 routine U8.to_digit_bytes!() -> ?Bytes
   return U64(from: me).to_digit_bytes!()
 
-common routine U16.from_digit_bytes!(bytes: Referring[Bytes]) -> U16
+common routine U16.from_digit_bytes!(bytes: Bytes) -> U16
   return U16(from: U64.from_digit_bytes!(bytes: bytes))
 
-common routine U16.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> Tuple[U16, U64]
+common routine U16.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[U16, U64]
   var pair = U64.from_digit_bytes_at!(bytes: bytes, start: start)
   return (U16(from: pair.item0), pair.item1)
 
 routine U16.to_digit_bytes!() -> ?Bytes
   return U64(from: me).to_digit_bytes!()
 
-common routine U32.from_digit_bytes!(bytes: Referring[Bytes]) -> U32
+common routine U32.from_digit_bytes!(bytes: Bytes) -> U32
   return U32(from: U64.from_digit_bytes!(bytes: bytes))
 
-common routine U32.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> Tuple[U32, U64]
+common routine U32.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[U32, U64]
   var pair = U64.from_digit_bytes_at!(bytes: bytes, start: start)
   return (U32(from: pair.item0), pair.item1)
 
@@ -251,11 +251,11 @@ routine U32.to_digit_bytes!() -> ?Bytes
 # S128 — direct accumulation in S128 (won't fit in S64).
 # ============================================================================
 
-common routine S128.from_digit_bytes!(bytes: Referring[Bytes]) -> S128
-  var pair = S128.from_digit_bytes_at!(bytes: bytes, start: 0_u64)
+common routine S128.from_digit_bytes!(bytes: Bytes) -> S128
+  var pair = S128.from_digit_bytes_at!(bytes: bytes, start: 0u64)
   return pair.item0
 
-common routine S128.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> Tuple[S128, U64]
+common routine S128.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[S128, U64]
   var i = start
   while i < bytes.count() and __is_ascii_ws(b: bytes[i])
     i = i + 1_u64
@@ -303,11 +303,11 @@ routine S128.to_digit_bytes!() -> ?Bytes
 # U128 — direct accumulation in U128.
 # ============================================================================
 
-common routine U128.from_digit_bytes!(bytes: Referring[Bytes]) -> U128
-  var pair = U128.from_digit_bytes_at!(bytes: bytes, start: 0_u64)
+common routine U128.from_digit_bytes!(bytes: Bytes) -> U128
+  var pair = U128.from_digit_bytes_at!(bytes: bytes, start: 0u64)
   return pair.item0
 
-common routine U128.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> Tuple[U128, U64]
+common routine U128.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[U128, U64]
   var i = start
   while i < bytes.count() and __is_ascii_ws(b: bytes[i])
     i = i + 1_u64
@@ -347,11 +347,11 @@ routine U128.to_digit_bytes!() -> ?Bytes
 # Integer (arbitrary precision).
 # ============================================================================
 
-common routine Integer.from_digit_bytes!(bytes: Referring[Bytes]) -> ?Integer
-  var pair = Integer.from_digit_bytes_at!(bytes: bytes, start: 0_u64)
+common routine Integer.from_digit_bytes!(bytes: Bytes) -> ?Integer
+  var pair = Integer.from_digit_bytes_at!(bytes: bytes, start: 0u64)
   return pair.item0
 
-common routine Integer.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> Tuple[Integer, U64]
+common routine Integer.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[Integer, U64]
   var i = start
   while i < bytes.count() and __is_ascii_ws(b: bytes[i])
     i = i + 1_u64
@@ -419,8 +419,8 @@ routine Integer.to_digit_bytes!() -> ?Bytes
 # ship with the integer fast path users actually need.
 #
 # **API shape to fill in:**
-#   routine F64.from_digit_bytes!(bytes: Referring[Bytes]) -> F64
-#   routine F64.from_digit_bytes_at!(bytes: Referring[Bytes], start: U64) -> Tuple[F64, U64]
+#   routine F64.from_digit_bytes!(bytes: Bytes) -> F64
+#   routine F64.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[F64, U64]
 #   routine F64.to_digit_bytes!() -> ?Bytes
 #   (and identical signatures for every other floating-point + complex type)
 # ============================================================================

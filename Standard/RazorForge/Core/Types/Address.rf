@@ -166,7 +166,7 @@ routine Address.$create!(from_text: Text) -> Address
   # Parses hex format: 0xXXXX_XXXX_XXXX_XXXX
   if from_text.count() == 0u64
     throw InvalidValueError(input: from_text, target: "Address")
-  var result = 0_u64
+  var result = 0u64
   var i = 0u64
   # Skip optional "0x" prefix
   if from_text.count() > 1u64
