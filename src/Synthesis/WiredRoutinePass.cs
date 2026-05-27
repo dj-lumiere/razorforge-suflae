@@ -2385,7 +2385,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     Type: typeExpr, VariableName: null, Bindings: null, Location: _synthLoc);
                 clauseBody = new ReturnStatement(
                     Value: new LiteralExpression(
-                        Value: "none",
+                        Value: $"{variant.Name}(None)",
                         LiteralType: TokenType.TextLiteral,
                         Location: _synthLoc) { ResolvedType = textType },
                     Location: _synthLoc);
@@ -2396,7 +2396,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     Type: typeExpr, VariableName: null, Bindings: null, Location: _synthLoc);
                 clauseBody = new ReturnStatement(
                     Value: new LiteralExpression(
-                        Value: memberName,
+                        Value: $"{variant.Name}({memberName})",
                         LiteralType: TokenType.TextLiteral,
                         Location: _synthLoc) { ResolvedType = textType },
                     Location: _synthLoc);
@@ -2415,7 +2415,21 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                         Location: _synthLoc) { ResolvedType = textType },
                     Arguments: [],
                     Location: _synthLoc) { ResolvedType = textType };
-                clauseBody = new ReturnStatement(Value: representCall, Location: _synthLoc);
+
+                var parts = new List<InsertedTextPart>
+                {
+                    new TextPart(Text: $"{variant.Name}(", Location: _synthLoc),
+                    new ExpressionPart(
+                        Expression: representCall,
+                        FormatSpec: null,
+                        Location: _synthLoc),
+                    new TextPart(Text: ")", Location: _synthLoc)
+                };
+                var fstring = new InsertedTextExpression(
+                    Parts: parts,
+                    IsRaw: false,
+                    Location: _synthLoc) { ResolvedType = textType };
+                clauseBody = new ReturnStatement(Value: fstring, Location: _synthLoc);
             }
 
             clauses.Add(new WhenClause(
@@ -2428,7 +2442,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             Pattern: new ElsePattern(VariableName: null, Location: _synthLoc),
             Body: new ReturnStatement(
                 Value: new LiteralExpression(
-                    Value: "<variant>",
+                    Value: $"{variant.Name}(<error>)",
                     LiteralType: TokenType.TextLiteral,
                     Location: _synthLoc) { ResolvedType = textType },
                 Location: _synthLoc),
