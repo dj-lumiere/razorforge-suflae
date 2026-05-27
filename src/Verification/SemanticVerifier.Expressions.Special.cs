@@ -267,7 +267,13 @@ public sealed partial class SemanticVerifier
         // T is explicitly stealable — ownership transfer is its design purpose
         bool isOwned = operandType is WrapperTypeInfo { Name: "Owned" };
 
-        if (!isOwned && !IsRawEntityType(type: operandType))
+        // `steal` on a record is a no-op — records are value-typed and have no
+        // ownership to transfer. Returning the operand type as-is lets stdlib
+        // patterns like `return steal result` keep working when `result` is a
+        // record (e.g. Text after the refcounted-record migration).
+        bool isRecord = operandType is RecordTypeInfo;
+
+        if (!isOwned && !isRecord && !IsRawEntityType(type: operandType))
         {
             ReportError(code: SemanticDiagnosticCode.StealScopeBoundToken,
                 message: $"Cannot steal '{operandType.Name}' - only raw entities and T can be stolen.",

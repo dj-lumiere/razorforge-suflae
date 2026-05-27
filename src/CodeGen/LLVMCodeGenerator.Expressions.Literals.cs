@@ -35,10 +35,10 @@ public partial class LlvmCodeGenerator
                     numericValue: StripNumericSuffix(text: s),
                     literalType: literal.LiteralType);
             case string s when literal.LiteralType == TokenType.BytesLiteral:
-                return EmitBytesLiteral(value: s);
+                return EmitBytesLiteral(sb: sb, value: s);
             // Actual string literal
             case string s:
-                return EmitStringLiteral(value: s);
+                return EmitStringLiteral(sb: sb, value: s);
         }
 
         // `none` value literal -> emit zeroinitializer (carriers are zero-tagged in the absent arm).
@@ -99,7 +99,7 @@ public partial class LlvmCodeGenerator
     /// Bytes is `entity Bytes { data: Hijacked[Byte], count: U64 }` — LLVM layout `{ ptr, i64 }`.
     /// Returns a pointer to the Bytes struct.
     /// </summary>
-    private string EmitBytesLiteral(string value)
+    private string EmitBytesLiteral(StringBuilder sb, string value)
     {
         int idx = _stringCounter++;
         string constName = $"@.bytes.{idx}";
@@ -128,14 +128,19 @@ public partial class LlvmCodeGenerator
                 line: $"{dataName} = private unnamed_addr constant [0 x i8] zeroinitializer");
         }
 
-        // Bytes entity literal — must mirror the runtime layout `{ ptr, i64 }`.
-        // An older revision built a `List[Byte]`-shaped {ptr,i64,i64} indirection wrapped in a
-        // single-field {ptr} entity. That broke any code that read `count` off the entity
-        // directly: GEP at field 1 landed past the single-pointer literal and returned garbage.
+        // Bytes record literal — must mirror the runtime layout
+        // `{ ptr data, i64 count, ptr ctrl }`. The `ctrl` slot is null for static
+        // literals; `$copy`/`$destroy` treat null ctrl as a no-op so the literal
+        // is never freed and refcount ops are skipped.
         EmitLine(sb: _globalDeclarations,
-            line: $"{constName} = private unnamed_addr constant {{ ptr, i64 }} {{ ptr {dataName}, i64 {count} }}");
+            line: $"{constName} = private unnamed_addr constant {{ ptr, i64, ptr }} {{ ptr {dataName}, i64 {count}, ptr null }}");
 
-        return constName;
+        // Load the record value from the global. Bytes is now a value-typed
+        // record, so call sites expect the record by value, not a pointer. Use
+        // the named struct type so the SSA value matches the call signature.
+        string loaded = NextTemp();
+        EmitLine(sb: sb, line: $"{loaded} = load %Record.Bytes, ptr {constName}");
+        return loaded;
     }
 
     /// <summary>
@@ -448,9 +453,25 @@ public partial class LlvmCodeGenerator
     /// Text is entity { characters: List[Character] } where List is entity { data: ptr, count: U64, capacity: U64 }
     /// and Character is a U32 codepoint. Returns a pointer to the Text struct.
     /// </summary>
-    private string EmitStringLiteral(string value)
+    private string EmitStringLiteral(StringBuilder sb, string value)
     {
-        // Check if we've already emitted this string
+        string constName = EmitStringLiteralGlobal(value: value);
+        // Load the record value from the global. Text is now a value-typed
+        // record, so call sites expect the record by value, not a pointer.
+        // Use the named struct type so the SSA value matches the call signature.
+        // The optimizer collapses redundant loads of the same global.
+        string loaded = NextTemp();
+        EmitLine(sb: sb, line: $"{loaded} = load %Record.Text, ptr {constName}");
+        return loaded;
+    }
+
+    /// <summary>
+    /// Returns the name of the global constant that backs a string literal.
+    /// Use this when you need the literal's address (e.g. to ptrtoint or to GEP
+    /// directly into the data/count fields) rather than its value.
+    /// </summary>
+    private string EmitStringLiteralGlobal(string value)
+    {
         if (_stringConstants.TryGetValue(key: value, value: out string? existingName))
         {
             return existingName;
@@ -484,11 +505,11 @@ public partial class LlvmCodeGenerator
                 line: $"{dataName} = private unnamed_addr constant [0 x i32] zeroinitializer");
         }
 
-        // Layer 2: Text entity payload { ptr data, i64 count }.
-        // Text used to be emitted through an intermediate list-like wrapper, but the
-        // current runtime/entity layout is the raw pair (data, count).
+        // Layer 2: Text record payload `{ ptr data, i64 count, ptr ctrl }`.
+        // `ctrl` is null for static literals — $copy/$destroy short-circuit on
+        // null and never free the literal or touch the refcount.
         EmitLine(sb: _globalDeclarations,
-            line: $"{constName} = private unnamed_addr constant {{ ptr, i64 }} {{ ptr {dataName}, i64 {count} }}");
+            line: $"{constName} = private unnamed_addr constant {{ ptr, i64, ptr }} {{ ptr {dataName}, i64 {count}, ptr null }}");
 
         return constName;
     }
