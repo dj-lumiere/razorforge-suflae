@@ -1379,6 +1379,38 @@ public sealed partial class StdlibLoader
                 ReturnType = resolvedReturnType,
                 IsFailable = isFailable
             });
+
+            // For failable methods, also expose a `try_X` non-failable variant returning
+            // Maybe[T] (or Bool when T is Blank), so call sites typed against the bare
+            // protocol (e.g. for-loop desugaring's `iter.try_next()` where `iter: Iterator[T]`)
+            // can resolve. Mirrors ErrorHandlingGenerator.GenerateTryVariant's shape.
+            if (isFailable)
+            {
+                string tryName = "try_" + methodName.TrimStart(trimChar: '$');
+                TypeInfo? tryReturnType;
+                if (resolvedReturnType == null || resolvedReturnType.Name == "Blank")
+                {
+                    tryReturnType = registry.LookupType(name: "Bool");
+                }
+                else
+                {
+                    TypeInfo? maybeDef = registry.LookupType(name: "Maybe");
+                    tryReturnType = maybeDef != null
+                        ? registry.GetOrCreateResolution(
+                            genericDef: maybeDef,
+                            typeArguments: [resolvedReturnType])
+                        : null;
+                }
+
+                methods.Add(item: new ProtocolMethodInfo(name: tryName)
+                {
+                    IsInstanceMethod = isInstance,
+                    ParameterTypes = parameterTypes,
+                    ParameterNames = parameterNames,
+                    ReturnType = tryReturnType,
+                    IsFailable = false
+                });
+            }
         }
 
         existing.Methods = methods;

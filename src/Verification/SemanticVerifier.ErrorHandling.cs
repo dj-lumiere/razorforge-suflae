@@ -124,6 +124,7 @@ public sealed partial class SemanticVerifier
                 }
             }
         }
+
     }
 
     /// <summary>

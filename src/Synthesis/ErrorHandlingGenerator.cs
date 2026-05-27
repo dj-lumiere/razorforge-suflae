@@ -246,6 +246,14 @@ public sealed class ErrorHandlingGenerator
     /// </summary>
     /// <param name="original">The original routine.</param>
     /// <returns>The try_ variant routine info.</returns>
+    /// <summary>
+    /// Generates only a try_ variant for a failable routine. Used for bodyless protocol
+    /// methods (e.g. <c>Iterator[T].$next!</c>) so that for-loop desugaring's call to
+    /// <c>iter.try_next()</c> resolves when <c>iter</c> is typed as the bare protocol.
+    /// </summary>
+    public RoutineInfo GenerateTryVariantStub(RoutineInfo original) =>
+        GenerateTryVariant(original: original);
+
     private RoutineInfo GenerateTryVariant(RoutineInfo original)
     {
         TypeInfo blankType = _registry.LookupType(name: BlankMemberName) ??

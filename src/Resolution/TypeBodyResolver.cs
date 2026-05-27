@@ -513,14 +513,8 @@ internal sealed class TypeBodyResolver
                 caseName: memberTypeName,
                 location: member.Location);
 
-            // #59: Variant members cannot hold nested variants, Result[T], or Lookup[T]
-            if (memberType is VariantTypeInfo)
-            {
-                _sa.ReportError(code: SemanticDiagnosticCode.VariantCaseContainsInvalidType,
-                    message: $"Variant member '{memberTypeName}' cannot be a nested variant type.",
-                    location: member.Location);
-            }
-            else if (IsCarrierType(type: memberType) && !IsMaybeType(type: memberType))
+            // #59: Variant members cannot hold Result[T] or Lookup[T]. Nested variants are allowed.
+            if (IsCarrierType(type: memberType) && !IsMaybeType(type: memberType))
             {
                 _sa.ReportError(code: SemanticDiagnosticCode.VariantCaseContainsInvalidType,
                     message: $"Variant member '{memberTypeName}' cannot be '{memberType.Name}'. " +

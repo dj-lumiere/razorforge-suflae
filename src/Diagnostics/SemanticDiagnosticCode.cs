@@ -719,7 +719,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Result/Lookup stored in variable beyond immediate dismantling.</summary>
     ErrorHandlingTypeStoredInVariable = 758,
 
-/// <summary>Variant member cannot be a nested variant, Result[T], Lookup[T], token, or duplicate type.</summary>
+/// <summary>Variant member cannot be Result[T], Lookup[T], a token, or a duplicate type.</summary>
     VariantCaseContainsInvalidType = 764,
 
     /// <summary>Index operators ($getitem/$setitem) are only valid on entities.</summary>

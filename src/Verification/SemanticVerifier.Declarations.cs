@@ -444,15 +444,6 @@ public sealed partial class SemanticVerifier
             kind = RoutineKind.Function;
         }
 
-        // Validate that variants cannot have member routines
-        if (ownerType is VariantTypeInfo && kind == RoutineKind.MemberRoutine)
-        {
-            ReportError(code: SemanticDiagnosticCode.VariantMethodNotAllowed,
-                message: $"Variant type '{ownerType.Name}' cannot have member routines. " +
-                         "Variants only support 'is', 'isnot', and pattern matching with 'when'.",
-                location: routine.Location);
-        }
-
         // Validate that choice types cannot define any operator wired methods
         if (ownerType is ChoiceTypeInfo && kind == RoutineKind.MemberRoutine &&
             IsOperatorWired(name: routineName))
