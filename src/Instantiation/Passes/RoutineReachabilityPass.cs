@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Compiler.Resolution;
@@ -1270,40 +1269,14 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// </summary>
     private void CollectLocalVarTypes(object? node, Dictionary<string, TypeInfo> map)
     {
-        if (node == null) return;
-        if (node is VariableDeclaration vd)
+        AstWalker.Walk(root: node, visit: n =>
         {
+            if (n is not VariableDeclaration vd) return;
             TypeInfo? t = vd.Type != null
                 ? ResolveTypeExpression(typeExpr: vd.Type, typeSubs: null)
                 : (vd.Initializer != null ? InferExpressionType(e: vd.Initializer) : null);
             if (t != null) map[key: vd.Name] = t;
-        }
-        Type nt = node.GetType();
-        if (nt.IsPrimitive || node is string || nt.IsEnum) return;
-
-        if (node is IEnumerable e2 and not string)
-        {
-            foreach (object? item in e2)
-                if (item != null) CollectLocalVarTypes(node: item, map: map);
-            return;
-        }
-
-        foreach (System.Reflection.PropertyInfo prop in nt.GetProperties(
-            bindingAttr: System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
-        {
-            if (prop.GetIndexParameters().Length > 0) continue;
-            if (IsAstAliasProperty(ownerType: nt, propertyName: prop.Name)) continue;
-            object? val;
-            try { val = prop.GetValue(obj: node); } catch { continue; }
-            if (val == null) continue;
-            if (val is Expression || val is Statement || val is SyntaxTree.Declaration)
-                CollectLocalVarTypes(node: val, map: map);
-            else if (val is IEnumerable list and not string)
-            {
-                foreach (object? item in list)
-                    if (item != null) CollectLocalVarTypes(node: item, map: map);
-            }
-        }
+        });
     }
 
     /// <summary>
@@ -1815,127 +1788,26 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     }
 
     /// <summary>
-    /// Reflectively walks an AST node tree and collects every <see cref="CallExpression"/> and
-    /// <see cref="GenericMethodCallExpression"/> encountered. Robust to AST schema changes — any
-    /// property of a record type that holds Statements/Expressions (or lists thereof) is traversed.
+    /// Collects every node that implies a callee edge: explicit calls, creator/throw, the
+    /// collection literals + IndexExpression that Phase 7 lowers into method calls, and
+    /// operator BinaryExpressions whose operator maps to a method. ProcessFrame then
+    /// synthesizes the corresponding call edges.
     /// </summary>
-    private static void DumpAstInline(object? node, string indent, int depth, int maxDepth)
-    {
-        if (node == null || depth > maxDepth) return;
-        Type t = node.GetType();
-        if (t.IsPrimitive || node is string || t.IsEnum) return;
-        Console.Error.WriteLine($"[trace]{indent}{t.Name}");
-        foreach (System.Reflection.PropertyInfo prop in t.GetProperties(
-            bindingAttr: System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
-        {
-            if (prop.GetIndexParameters().Length > 0) continue;
-            object? value;
-            try { value = prop.GetValue(obj: node); }
-            catch { continue; }
-            if (value == null) continue;
-            if (value is Expression || value is Statement || value is SyntaxTree.Declaration)
-            {
-                Console.Error.WriteLine($"[trace]{indent}  .{prop.Name}=");
-                DumpAstInline(node: value, indent: indent + "    ", depth: depth + 1, maxDepth: maxDepth);
-            }
-            else if (value is IEnumerable enumerable and not string)
-            {
-                int i = 0;
-                foreach (object? item in enumerable)
-                {
-                    if (item == null) continue;
-                    Type it = item.GetType();
-                    if (it.IsPrimitive || item is string || it.IsEnum) continue;
-                    Console.Error.WriteLine($"[trace]{indent}  .{prop.Name}[{i}]=");
-                    DumpAstInline(node: item, indent: indent + "    ", depth: depth + 1, maxDepth: maxDepth);
-                    i++;
-                    if (i > 8) break;
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Property-name aliases on AST records that re-expose another property's value.
-    /// These must be skipped by reflection-based walkers, otherwise each nested occurrence
-    /// of the host node is walked twice — at depth N the deepest child is visited 2^N times.
-    /// Reference-equality dedupe is unsafe here because synthesized monomorphic bodies can
-    /// legitimately share child instances; name-based filtering only suppresses the known
-    /// alias definitions in `SyntaxTree/Statements.cs`.
-    /// </summary>
-    private static bool IsAstAliasProperty(Type ownerType, string propertyName)
-    {
-        return (ownerType.Name == "IfStatement" && (propertyName == "ThenBranch" || propertyName == "ElseBranch"))
-            || (ownerType.Name == "ReturnStatement" && propertyName == "Expression");
-    }
-
     private static void CollectCalls(object? node, List<object> sink)
     {
-        if (node == null) return;
-        // Collection-literal and index-access nodes are lowered into method calls
-        // (add_last/add/$getitem!/$setitem!) in Phase 7 — AFTER this pass runs.
-        // Collect them here so ProcessFrame can synthesize the equivalent call edges.
-        if (node is CallExpression || node is GenericMethodCallExpression || node is CreatorExpression
-            || node is ThrowStatement
-            || node is ListLiteralExpression || node is SetLiteralExpression
-            || node is DictLiteralExpression || node is IndexExpression
-            || node is InsertedTextExpression
-            || node is UsingStatement
-            || node is UnaryExpression { Operator: UnaryOperator.ForceUnwrap }
-            || node is BinaryExpression bin && bin.Operator.GetMethodName() != null) sink.Add(item: node);
-
-        Type t = node.GetType();
-        if (t.IsPrimitive || node is string || t.IsEnum) return;
-
-        // ValueTuples expose Item1/Item2 as fields; ITuple lets us index them uniformly.
-        if (node is System.Runtime.CompilerServices.ITuple tuple)
+        AstWalker.Walk(root: node, visit: n =>
         {
-            for (int i = 0; i < tuple.Length; i++)
+            if (n is CallExpression || n is GenericMethodCallExpression || n is CreatorExpression
+                || n is ThrowStatement
+                || n is ListLiteralExpression || n is SetLiteralExpression
+                || n is DictLiteralExpression || n is IndexExpression
+                || n is InsertedTextExpression
+                || n is UsingStatement
+                || n is UnaryExpression { Operator: UnaryOperator.ForceUnwrap }
+                || (n is BinaryExpression bin && bin.Operator.GetMethodName() != null))
             {
-                CollectCalls(node: tuple[i], sink: sink);
+                sink.Add(item: n);
             }
-            return;
-        }
-
-        foreach (System.Reflection.PropertyInfo prop in t.GetProperties(
-            bindingAttr: System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
-        {
-            if (prop.GetIndexParameters().Length > 0) continue;
-            if (IsAstAliasProperty(ownerType: t, propertyName: prop.Name)) continue;
-            object? value;
-            try { value = prop.GetValue(obj: node); }
-            catch { continue; }
-            if (value == null) continue;
-
-            if (value is Expression || value is Statement || value is SyntaxTree.Declaration)
-            {
-                CollectCalls(node: value, sink: sink);
-            }
-            else if (value is IEnumerable enumerable and not string)
-            {
-                foreach (object? item in enumerable)
-                {
-                    if (item == null) continue;
-                    if (item is Expression || item is Statement || item is SyntaxTree.Declaration)
-                    {
-                        CollectCalls(node: item, sink: sink);
-                    }
-                    else
-                    {
-                        // Walk tuple items / wrapper records — CreatorExpression.MemberVariables is
-                        // List<(string, Expression)>; the Expression hides inside an unrelated struct.
-                        Type it = item.GetType();
-                        if (!it.IsPrimitive && item is not string && !it.IsEnum)
-                        {
-                            CollectCalls(node: item, sink: sink);
-                        }
-                    }
-                }
-            }
-            else if (value is System.Runtime.CompilerServices.ITuple)
-            {
-                CollectCalls(node: value, sink: sink);
-            }
-        }
+        });
     }
 }

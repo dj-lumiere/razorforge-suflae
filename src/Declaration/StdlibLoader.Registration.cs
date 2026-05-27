@@ -574,7 +574,19 @@ public sealed partial class StdlibLoader
 
         if (routine.GenericParameters != null)
         {
-            genericContext.AddRange(collection: routine.GenericParameters);
+            // Filter out names that resolve to real registered types. The parser collects bracket
+            // contents from owner receivers like `Iterable[Text]` and stuffs them into
+            // routine.GenericParameters, but concrete args (Text) must not shadow the real type
+            // — otherwise `separator: Text` resolves to GenericParameterTypeInfo("Text")
+            // instead of Core.Text, breaking method lookup in the body.
+            foreach (string gp in routine.GenericParameters)
+            {
+                if (registry.LookupType(name: gp) is null &&
+                    registry.LookupType(name: $"{moduleName}.{gp}") is null)
+                {
+                    genericContext.Add(item: gp);
+                }
+            }
         }
 
         List<string>? ctx = genericContext.Count > 0

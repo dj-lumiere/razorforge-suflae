@@ -38,7 +38,26 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
             adapter.LiveOwnerTypeNames.Add(item: typeName);
         }
 
+        // Lower protocol-default-impl routines (e.g. Iterable[Text].join) to per-implementer
+        // routines BEFORE GMP, so the synthesized implementer-owned bodies flow through the
+        // normal monomorphization machinery.
+        new ProtocolDefaultImplLoweringPass(ctx: ctx).Run();
+        // Re-sync adapter with newly-synthesized entries.
+        foreach ((string key, MonomorphizedBody body) in ctx.InstantiatedGenericBodies)
+        {
+            adapter.InstantiatedGenericBodies[key] = body;
+        }
+        foreach (string key in ctx.LiveRoutineKeys)
+        {
+            adapter.LiveRoutineKeys.Add(item: key);
+        }
+
         new GenericMonomorphizationPass(ctx: adapter).RunGlobal();
+        // ControlFlowLowering for instantiated bodies: protocol-default-impl clones (from
+        // ProtocolDefaultImplLoweringPass above) carry raw `for` loops from the stdlib AST
+        // that never went through Phase 4 desugaring. Lower them before subsequent passes.
+        new Compiler.Desugaring.Passes.ControlFlowLoweringPass(ctx: adapter)
+            .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
         new GenericCallLoweringPass(ctx: adapter).RunOnInstantiatedGenericBodies();
         new BuilderServiceInliningPass(ctx: adapter).RunOnInstantiatedGenericBodies();
         // Operator lowering for instantiated bodies: GMP's clones inherit unlowered

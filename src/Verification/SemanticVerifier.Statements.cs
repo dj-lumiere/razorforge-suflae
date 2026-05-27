@@ -99,6 +99,18 @@ public sealed partial class SemanticVerifier
                 ? typeName[..typeName.IndexOf(value: '[')]
                 : typeName;
             TypeSymbol? ownerType = LookupTypeWithImports(name: lookupName);
+            // Protocol-extension decls like `Iterable[Text].join` should have `me` typed as the
+            // bracketed owner so the body's `for part in me` resolves `part` from
+            // Iterable[Text]'s try_next() return. Without this, `me` is the bare gen-def
+            // `Iterable` and body identifiers (parameters, loop vars) get ErrorTypeInfo.
+            // Only override for ProtocolTypeInfo: for records/entities like
+            // `List[PQEntry[TPriority, TElement]]` the gen-param resolution must happen through
+            // routine.GenericParameters, not via a bracketed-cache lookup that strips the params.
+            if (typeName.Contains(value: '[') && ownerType is ProtocolTypeInfo)
+            {
+                TypeSymbol? bracketed = _registry.LookupType(name: typeName);
+                if (bracketed is ProtocolTypeInfo) ownerType = bracketed;
+            }
             routineOwnerType = ownerType;
 
             baseName = ownerType != null

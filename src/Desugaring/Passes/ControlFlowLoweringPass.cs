@@ -487,4 +487,23 @@ internal sealed class ControlFlowLoweringPass(DesugaringContext ctx)
                 ctx.VariantBodies[key] = lowered;
         }
     }
+
+    /// <summary>
+    /// Lower ForStatement/DestructuringStatement etc. in monomorphized bodies that GMP
+    /// produced from stdlib originals (which never went through Phase 4 desugaring).
+    /// Notable consumer: <see cref="Compiler.Instantiation.Passes.ProtocolDefaultImplLoweringPass"/>,
+    /// which clones stdlib protocol-default-impl bodies (e.g. <c>Iterable[Text].join</c>) into
+    /// per-implementer routines; those clones contain raw `for` loops that codegen rejects.
+    /// </summary>
+    public void RunOnInstantiatedGenericBodies(
+        IDictionary<string, Compiler.Instantiation.MonomorphizedBody> bodies)
+    {
+        foreach (string key in bodies.Keys.ToList())
+        {
+            Compiler.Instantiation.MonomorphizedBody mb = bodies[key];
+            Statement lowered = LowerStatement(stmt: mb.Ast.Body);
+            if (!ReferenceEquals(lowered, mb.Ast.Body))
+                bodies[key] = mb with { Ast = mb.Ast with { Body = lowered } };
+        }
+    }
 }

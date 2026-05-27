@@ -127,12 +127,14 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Collects failable stdlib routine bodies into <c>_routineBodies</c> without running
-    /// full semantic analysis. Scans stdlib program ASTs for failable member routine declarations,
-    /// looks up their <see cref="RoutineInfo"/> in the registry, and stores the bodies so that
-    /// <see cref="ErrorHandlingVariantPass"/> can generate try_/check_/lookup_
-    /// variants for stdlib iterators (e.g., ListEmitter[T].$next!).
-    /// Called before RunPhase4GlobalDesugaring() so variants exist when for-loops are lowered.
+    /// Collects stdlib member-routine bodies into <c>_routineBodies</c> keyed by
+    /// <see cref="RoutineInfo.RegistryKey"/>. Stdlib routines aren't semantically analyzed
+    /// (only registered), so <c>_routineBodies</c> would otherwise contain only user-side
+    /// failable routines. Downstream passes need stdlib bodies too:
+    /// <see cref="ErrorHandlingVariantPass"/> for failable iterators (e.g.
+    /// <c>ListEmitter[T].$next!</c>) and <see cref="Compiler.Instantiation.Passes.ProtocolDefaultImplLoweringPass"/>
+    /// for protocol-extension routines (e.g. <c>Iterable[Text].join</c>).
+    /// Called before RunPhase4GlobalDesugaring() so the bodies are visible to both phases.
     /// </summary>
     private void CollectStdlibBodiesForVariantGeneration()
     {
@@ -140,10 +142,11 @@ public sealed partial class SemanticVerifier
         {
             foreach (ISyntaxTreeNode node in program.Declarations)
             {
-                if (node is not RoutineDeclaration decl || !decl.IsFailable || decl.Body == null)
+                if (node is not RoutineDeclaration decl || decl.Body == null)
                     continue;
 
-                // Only member routines -> standalone routines don't need $next variants
+                // Only member routines: standalone free routines aren't candidates for
+                // either variant generation or protocol-default-impl monomorphization.
                 if (!decl.Name.Contains('.'))
                     continue;
 
@@ -156,6 +159,23 @@ public sealed partial class SemanticVerifier
         }
     }
 
+    private static bool LooksLikeGenericParamArg(string ownerTypeName)
+    {
+        int lb = ownerTypeName.IndexOf('[');
+        int rb = ownerTypeName.LastIndexOf(']');
+        if (lb < 0 || rb < 0 || rb <= lb) return false;
+        string inside = ownerTypeName.Substring(lb + 1, rb - lb - 1);
+        foreach (string arg in inside.Split(','))
+        {
+            string a = arg.Trim();
+            if (a.Length == 0) return false;
+            if (a.Length > 2) return false; // T, K, V, N — single/double upper letters
+            if (!char.IsUpper(a[0])) return false;
+            if (a.Length == 2 && !char.IsLetterOrDigit(a[1])) return false;
+        }
+        return true;
+    }
+
     private RoutineInfo? ResolveRoutineInfoForDeclaration(RoutineDeclaration decl, string? moduleName = null)
     {
         if (decl.Name.Contains('.'))
@@ -164,24 +184,42 @@ public sealed partial class SemanticVerifier
             string ownerTypeName = decl.Name[..dotIdx];
             string methodName = decl.Name[(dotIdx + 1)..];
 
-            string lookupName = ownerTypeName.Contains('[')
+            // Stdlib protocol-extension decls like `Iterable[Text].join` register their routines
+            // under the bracketed-owner bucket (FullName = "Core.Iterable[Text]"). Try the
+            // bracketed form first, falling back to the gen-def name. Both lookups can succeed
+            // on different types: prefer the one that actually has the candidate method.
+            string bareLookupName = ownerTypeName.Contains('[')
                 ? ownerTypeName[..ownerTypeName.IndexOf('[')]
                 : ownerTypeName;
 
-            TypeSymbol? ownerType = _registry.LookupType(name: lookupName);
-            if (ownerType == null)
+            TypeSymbol? bareOwner = _registry.LookupType(name: bareLookupName);
+            if (bareOwner == null)
             {
                 return null;
             }
 
             var candidates = new List<RoutineInfo>();
-            _registry.CollectMemberRoutineCandidates(type: ownerType, methodName: methodName,
+            _registry.CollectMemberRoutineCandidates(type: bareOwner, methodName: methodName,
                 candidates: candidates);
+
+            // Protocol-extension decls like `Iterable[Text].join` register their routines under
+            // a bracketed-owner bucket (e.g. owner FullName="Core.Iterable[Text]") that the
+            // gen-def lookup misses. Scan all routines for owners whose name shape matches the
+            // bracketed form.
+            if (ownerTypeName.Contains('[') && !LooksLikeGenericParamArg(ownerTypeName))
+            {
+                TypeSymbol? bracketed = _registry.LookupType(name: ownerTypeName);
+                if (bracketed != null && !ReferenceEquals(bracketed, bareOwner))
+                {
+                    _registry.CollectMemberRoutineCandidates(type: bracketed, methodName: methodName,
+                        candidates: candidates);
+                }
+            }
             // For member-routine decls, prefer the decl's actual module (passed in) over the
             // owner type's module: common routines for built-in types (e.g. `S64.from_digit_bytes`
             // declared in `IO/BytesIO`) live in a different module from the owner.
             return MatchRoutineDeclaration(candidates: candidates, decl: decl,
-                moduleName: moduleName ?? ownerType.Module);
+                moduleName: moduleName ?? bareOwner.Module);
         }
 
         string bareName = decl.Name;
