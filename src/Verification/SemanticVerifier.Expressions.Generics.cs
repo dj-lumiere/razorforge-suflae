@@ -50,10 +50,40 @@ public sealed partial class SemanticVerifier
             generic.LoweringKind = ClassifyConstruction(type: resolvedType,
                 isCollectionLiteral: generic.IsCollectionLiteral);
 
+            // For field-init style (named args matching field names), pre-compute a
+            // field-name → field-type map so `none` and other literals see the field's
+            // declared type as their contextual expected type.
+            List<MemberVariableInfo>? resolvedFields = resolvedType switch
+            {
+                RecordTypeInfo r => r.MemberVariables,
+                EntityTypeInfo e => e.MemberVariables,
+                _ => null
+            };
+            Dictionary<string, TypeSymbol>? fieldTypeByName = null;
+            if (resolvedFields != null)
+            {
+                fieldTypeByName = new Dictionary<string, TypeSymbol>();
+                foreach (MemberVariableInfo mv in resolvedFields)
+                {
+                    TypeSymbol ft = mv.Type;
+                    if (resolvedType is { IsGenericResolution: true, TypeArguments: not null })
+                    {
+                        ft = SubstituteTypeParameters(type: ft, genericType: resolvedType);
+                    }
+                    fieldTypeByName[key: mv.Name] = ft;
+                }
+            }
+
             var argTypes = new List<TypeSymbol>();
             foreach (Expression arg in generic.Arguments)
             {
-                argTypes.Add(item: AnalyzeExpression(expression: arg));
+                TypeSymbol? expectedArgType = null;
+                if (fieldTypeByName != null && arg is NamedArgumentExpression named
+                    && fieldTypeByName.TryGetValue(key: named.Name, value: out TypeSymbol? ft2))
+                {
+                    expectedArgType = ft2;
+                }
+                argTypes.Add(item: AnalyzeExpression(expression: arg, expectedType: expectedArgType));
             }
 
             {

@@ -279,7 +279,11 @@ public sealed partial class SemanticVerifier
 
         // TODO: This should be done with not operator, but with member routines.
         TypeSymbol leftType = AnalyzeExpression(expression: binary.Left);
-        TypeSymbol rightType = AnalyzeExpression(expression: binary.Right);
+        // Pass leftType as expected for assignments so RHS literals like `none`
+        // see the target's carrier-slot type as their contextual expected type.
+        TypeSymbol rightType = binary.Operator == BinaryOperator.Assign
+            ? AnalyzeExpression(expression: binary.Right, expectedType: leftType)
+            : AnalyzeExpression(expression: binary.Right);
 
         // Re-infer unsuffixed integer literals against the typed peer so
         // comparisons like 'me.strong_count == 0' don't default the literal to S64.

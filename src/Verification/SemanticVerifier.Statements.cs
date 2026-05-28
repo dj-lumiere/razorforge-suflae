@@ -781,7 +781,7 @@ public sealed partial class SemanticVerifier
         }
 
         TypeSymbol targetType = AnalyzeExpression(expression: assign.Target);
-        TypeSymbol valueType = AnalyzeExpression(expression: assign.Value);
+        TypeSymbol valueType = AnalyzeExpression(expression: assign.Value, expectedType: targetType);
 
         // Check if target is assignable (variable, member variable, or index)
         if (!IsAssignableTarget(target: assign.Target))
