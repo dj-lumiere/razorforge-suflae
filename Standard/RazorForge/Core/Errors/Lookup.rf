@@ -10,3 +10,29 @@ module Core
 record Lookup[T]
   ### Identifies the stored payload type, or `0` for the absent state.
   secret type_id: U64
+
+### Returns the display form of this lookup result.
+### Absent renders as `"none"`; present/crashable arms delegate to the payload's
+### own `$represent`.
+### :returns: The resulting `Text` value.
+routine Lookup[T].$represent() -> Text
+  when me
+    is None =>
+      return "none"
+    is Crashable v =>
+      return v.$represent()
+    else v =>
+      return v.$represent()
+
+### Returns the diagnostic form of this lookup result.
+### Format: `f"{full_type_name}(type_id: {type_id}, {payload.$diagnose()})"`,
+### or `f"{full_type_name}(type_id: 0, none)"` for the absent state.
+### :returns: The resulting `Text` value.
+routine Lookup[T].$diagnose() -> Text
+  when me
+    is None =>
+      return f"{me.full_type_name()}(type_id: 0, none)"
+    is Crashable v =>
+      return f"{me.full_type_name()}(type_id: {me.type_id}, {v.$diagnose()})"
+    else v =>
+      return f"{me.full_type_name()}(type_id: {me.type_id}, {v.$diagnose()})"

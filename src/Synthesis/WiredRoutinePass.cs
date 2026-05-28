@@ -371,7 +371,6 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             }
 
             case RepresentMethodName:
-                // Generic definitions allowed: monomorphization substitutes type params.
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildTextBody(ownerType: record, fields: record.MemberVariables,
                         textType: textType, diagnose: false);
