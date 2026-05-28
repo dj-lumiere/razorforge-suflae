@@ -1798,7 +1798,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         {
             case "type_name":
                 ctx.VariantBodies[key: routine.RegistryKey] =
-                    MakeLiteralReturn(value: owner.Name, returnType: textType);
+                    MakeLiteralReturn(value: owner.ShortTypeName, returnType: textType);
                 return true;
 
             case "module_name":
@@ -1807,14 +1807,9 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 return true;
 
             case "full_type_name":
-            {
-                string fullName = string.IsNullOrEmpty(value: owner.Module)
-                    ? owner.Name
-                    : $"{owner.Module}.{owner.Name}";
                 ctx.VariantBodies[key: routine.RegistryKey] =
-                    MakeLiteralReturn(value: fullName, returnType: textType);
+                    MakeLiteralReturn(value: owner.QualifiedTypeName, returnType: textType);
                 return true;
-            }
 
             case "type_id" when u64Type != null:
             {
@@ -2287,11 +2282,8 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
         if (diagnose)
         {
-            string typeArgs = string.Join(
-                separator: ", ",
-                values: tuple.ElementTypes.Select(selector: t => t.Name));
             parts.Add(new TextPart(
-                Text: $"Tuple[{typeArgs}](",
+                Text: $"{tuple.QualifiedTypeName}(",
                 Location: _synthLoc));
         }
         else
@@ -2381,7 +2373,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     Type: typeExpr, VariableName: null, Bindings: null, Location: _synthLoc);
                 clauseBody = new ReturnStatement(
                     Value: new LiteralExpression(
-                        Value: $"{variant.Name}(None)",
+                        Value: $"{variant.ShortTypeName}(none)",
                         LiteralType: TokenType.TextLiteral,
                         Location: _synthLoc) { ResolvedType = textType },
                     Location: _synthLoc);
@@ -2392,7 +2384,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     Type: typeExpr, VariableName: null, Bindings: null, Location: _synthLoc);
                 clauseBody = new ReturnStatement(
                     Value: new LiteralExpression(
-                        Value: $"{variant.Name}({memberName})",
+                        Value: $"{variant.ShortTypeName}({memberName})",
                         LiteralType: TokenType.TextLiteral,
                         Location: _synthLoc) { ResolvedType = textType },
                     Location: _synthLoc);
@@ -2414,7 +2406,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
                 var parts = new List<InsertedTextPart>
                 {
-                    new TextPart(Text: $"{variant.Name}(", Location: _synthLoc),
+                    new TextPart(Text: $"{variant.ShortTypeName}(", Location: _synthLoc),
                     new ExpressionPart(
                         Expression: representCall,
                         FormatSpec: null,
@@ -2438,7 +2430,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             Pattern: new ElsePattern(VariableName: null, Location: _synthLoc),
             Body: new ReturnStatement(
                 Value: new LiteralExpression(
-                    Value: $"{variant.Name}(<error>)",
+                    Value: $"{variant.ShortTypeName}(<error>)",
                     LiteralType: TokenType.TextLiteral,
                     Location: _synthLoc) { ResolvedType = textType },
                 Location: _synthLoc),
@@ -2449,7 +2441,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
     /// <summary>
     /// Builds:
-    /// <c>when me { is Blank => return "Mod.V(typeid=0, Blank)", is T as v => return f"Mod.V(typeid=N, {v.$represent()})", ... }</c>.
+    /// <c>when me { is None => return "Mod.V(type_id: 0, none)", is T as v => return f"Mod.V(type_id: N, {v.$diagnose()})", ... }</c>.
     /// </summary>
     private static WhenStatement BuildVariantDiagnoseBody(VariantTypeInfo variant, TypeInfo textType)
     {
@@ -2476,7 +2468,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             {
                 pattern = new TypePattern(
                     Type: typeExpr, VariableName: null, Bindings: null, Location: _synthLoc);
-                string literal = $"{variant.FullName}(typeid=0, none)";
+                string literal = $"{variant.QualifiedTypeName}(type_id: 0, none)";
                 clauseBody = new ReturnStatement(
                     Value: new LiteralExpression(
                         Value: literal,
@@ -2488,7 +2480,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             {
                 pattern = new TypePattern(
                     Type: typeExpr, VariableName: null, Bindings: null, Location: _synthLoc);
-                string literal = $"{variant.FullName}(typeid={typeId}, {memberName})";
+                string literal = $"{variant.QualifiedTypeName}(type_id: {typeId}, {memberName})";
                 clauseBody = new ReturnStatement(
                     Value: new LiteralExpression(
                         Value: literal,
@@ -2503,20 +2495,20 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
                 var vRef = new IdentifierExpression(Name: "v", Location: _synthLoc)
                     { ResolvedType = member.Type };
-                var representCall = new CallExpression(
+                var diagnoseCall = new CallExpression(
                     Callee: new MemberExpression(
                         Object: vRef,
-                        PropertyName: RepresentMethodName,
+                        PropertyName: DiagnoseMethodName,
                         Location: _synthLoc) { ResolvedType = textType },
                     Arguments: [],
                     Location: _synthLoc) { ResolvedType = textType };
 
-                string prefix = $"{variant.FullName}(typeid={typeId}, ";
+                string prefix = $"{variant.QualifiedTypeName}(type_id: {typeId}, ";
                 var parts = new List<InsertedTextPart>
                 {
                     new TextPart(Text: prefix, Location: _synthLoc),
                     new ExpressionPart(
-                        Expression: representCall,
+                        Expression: diagnoseCall,
                         FormatSpec: null,
                         Location: _synthLoc),
                     new TextPart(Text: ")", Location: _synthLoc)
@@ -2538,7 +2530,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             Pattern: new ElsePattern(VariableName: null, Location: _synthLoc),
             Body: new ReturnStatement(
                 Value: new LiteralExpression(
-                    Value: $"{variant.FullName}(typeid=<error>)",
+                    Value: $"{variant.QualifiedTypeName}(type_id: <error>)",
                     LiteralType: TokenType.TextLiteral,
                     Location: _synthLoc) { ResolvedType = textType },
                 Location: _synthLoc),

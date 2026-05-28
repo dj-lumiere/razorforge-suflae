@@ -721,7 +721,8 @@ internal sealed class BuilderServiceInliningPass
             {
                 // Defer when receiver is still a generic definition (no type subs available):
                 // GenericMonomorphizationPass will fold per concrete instance later, producing
-                // the correct "List[Core.S64]" form. Folding here would bake the bare "List".
+                // the correct "List[S64]" form (full_type_name gives "Core.List[Core.S64]").
+                // Folding here would bake the bare "List".
                 if (type.IsGenericDefinition && _currentTypeSubs == null) return null;
                 return MakeLiteralText(inFlightPrefix + GetShortTypeName(type), _textType, loc);
             }
@@ -843,10 +844,10 @@ internal sealed class BuilderServiceInliningPass
             return _currentTypeSubs != null && _currentTypeSubs.TryGetValue(gp.Name, out TypeInfo? sub)
                 ? GetShortTypeName(sub)
                 : gp.Name;
-        if (type.TypeArguments is not { Count: > 0 } args || type.Name.Contains(value: '['))
-            return type.Name;
+        if (type.TypeArguments is not { Count: > 0 } args)
+            return type.BareName;
         string argList = string.Join(separator: ", ", values: args.Select(selector: GetShortTypeName));
-        return $"{type.Name}[{argList}]";
+        return $"{type.BareName}[{argList}]";
     }
 
     private static string InsertInFlightMark(string fullName, string mark)
@@ -862,10 +863,9 @@ internal sealed class BuilderServiceInliningPass
             return _currentTypeSubs != null && _currentTypeSubs.TryGetValue(gp.Name, out TypeInfo? sub)
                 ? GetFullTypeName(sub)
                 : gp.Name;
-        // If the name already contains '[', the type args are baked into Name — FullName is correct.
-        if (type.TypeArguments is not { Count: > 0 } args || type.Name.Contains(value: '['))
-            return type.FullName;
-        string baseName = string.IsNullOrEmpty(type.Module) ? type.Name : $"{type.Module}.{type.Name}";
+        string baseName = string.IsNullOrEmpty(type.Module) ? type.BareName : $"{type.Module}.{type.BareName}";
+        if (type.TypeArguments is not { Count: > 0 } args)
+            return baseName;
         string argList = string.Join(separator: ", ", values: args.Select(selector: GetFullTypeName));
         return $"{baseName}[{argList}]";
     }

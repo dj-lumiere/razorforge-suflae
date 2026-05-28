@@ -86,6 +86,44 @@ public abstract class TypeInfo
         }
     }
 
+    /// <summary>The bare name without any baked-in generic-arg suffix (e.g. "List" for "List[Core.S64]").</summary>
+    public string BareName
+    {
+        get
+        {
+            int idx = Name.IndexOf(value: '[');
+            return idx >= 0 ? Name[..idx] : Name;
+        }
+    }
+
+    /// <summary>
+    /// Unqualified name with generic args recursively rendered unqualified too
+    /// (e.g. <c>List[S64]</c>, <c>Dict[Text, S64]</c>). Built from the structural
+    /// <see cref="TypeArguments"/> rather than the baked <see cref="Name"/>, which may embed
+    /// fully-qualified inner args.
+    /// </summary>
+    public string ShortTypeName =>
+        TypeArguments is { Count: > 0 } args
+            ? $"{BareName}[{string.Join(separator: ", ",
+                values: args.Select(selector: t => t.ShortTypeName))}]"
+            : BareName;
+
+    /// <summary>
+    /// Module-qualified name with generic args recursively qualified too
+    /// (e.g. <c>Core.List[Core.S64]</c>, <c>Core.Dict[Core.Text, Core.S64]</c>).
+    /// </summary>
+    public string QualifiedTypeName
+    {
+        get
+        {
+            string qualified = string.IsNullOrEmpty(value: Module) ? BareName : $"{Module}.{BareName}";
+            return TypeArguments is { Count: > 0 } args
+                ? $"{qualified}[{string.Join(separator: ", ",
+                    values: args.Select(selector: t => t.QualifiedTypeName))}]"
+                : qualified;
+        }
+    }
+
     /// <summary>
     /// Initializes a new instance of the <see cref="TypeInfo"/> class.
     /// </summary>

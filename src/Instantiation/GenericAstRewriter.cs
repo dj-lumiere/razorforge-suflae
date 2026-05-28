@@ -1118,7 +1118,7 @@ internal static class GenericAstRewriter
 
             "type_name" when textType != null =>
                 new LiteralExpression(
-                    Value: typeInfo.Name,
+                    Value: typeInfo.ShortTypeName,
                     LiteralType: TokenType.TextLiteral,
                     Location: location) { ResolvedType = textType },
 
@@ -1130,9 +1130,7 @@ internal static class GenericAstRewriter
 
             "full_type_name" when textType != null =>
                 new LiteralExpression(
-                    Value: string.IsNullOrEmpty(typeInfo.Module)
-                        ? typeInfo.Name
-                        : $"{typeInfo.Module}.{typeInfo.Name}",
+                    Value: typeInfo.QualifiedTypeName,
                     LiteralType: TokenType.TextLiteral,
                     Location: location) { ResolvedType = textType },
 

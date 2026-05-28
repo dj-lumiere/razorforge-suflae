@@ -42,6 +42,7 @@ public sealed class TupleTypeInfo : RecordTypeInfo
     {
         ElementTypes = elementTypes;
         IsValueTuple = elementTypes.All(predicate: IsRecordLike);
+        Module = "Core";
 
         var memberVariables = new List<MemberVariableInfo>(capacity: elementTypes.Count);
         for (int i = 0; i < elementTypes.Count; i++)
