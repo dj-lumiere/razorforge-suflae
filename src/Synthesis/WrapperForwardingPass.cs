@@ -66,7 +66,7 @@ internal sealed class WrapperForwardingPass
 
     /// <summary>
     /// Wrapper types that transparently forward inner-type methods. Hijacked[T] is the
-    /// raw-pointer escape hatch — callers must explicitly use extract() / reveal() — so
+    /// raw-pointer escape hatch — callers must explicitly use extract() / as_entity() — so
     /// it is excluded here even though it is a wrapper for layout purposes.
     /// </summary>
     private static readonly HashSet<string> ForwardingWrapperTypes =
@@ -472,11 +472,11 @@ internal sealed class WrapperForwardingPass
             //
             //   danger!
             //     var raw  = Hijacked[RetainController[T]](me)
-            //     var ctrl = raw.reveal()              # RetainController[T] ptr
-            //     [return] ctrl.borrow_data().reveal().method(args...)
+            //     var ctrl = raw.as_entity()              # RetainController[T] ptr
+            //     [return] ctrl.borrow_data().as_entity().method(args...)
             //
             // Without this branch, the pointer-wrapper branch below would emit
-            // `Hijacked[T](me).reveal().method(...)`, treating the controller's strong+weak
+            // `Hijacked[T](me).as_entity().method(...)`, treating the controller's strong+weak
             // counts (first 8 bytes) as if they were T's first 8 bytes.
             var controllerTypeExpr = new TypeExpression(
                 Name: "RetainController",
@@ -515,18 +515,18 @@ internal sealed class WrapperForwardingPass
                 innerType: innerType,
                 isReadOnly: false);
             RoutineInfo? ctrlRevealMethod = _registry.LookupMethod(
-                type: hijackedCtrlType, methodName: "reveal");
+                type: hijackedCtrlType, methodName: "as_entity");
             RoutineInfo? borrowDataMethod = retainControllerType != null
                 ? _registry.LookupMethod(type: retainControllerType, methodName: "borrow_data")
                 : null;
             RoutineInfo? innerRevealMethod = _registry.LookupMethod(
-                type: hijackedInnerType, methodName: "reveal");
+                type: hijackedInnerType, methodName: "as_entity");
 
             var ctrlCall = new CallExpression(
                 Callee: new MemberExpression(
                     Object: new IdentifierExpression(Name: "raw", Location: _synthLoc)
                         { ResolvedType = hijackedCtrlType },
-                    PropertyName: "reveal",
+                    PropertyName: "as_entity",
                     Location: _synthLoc),
                 Arguments: [],
                 Location: _synthLoc)
@@ -557,7 +557,7 @@ internal sealed class WrapperForwardingPass
             var innerRevealCall = new CallExpression(
                 Callee: new MemberExpression(
                     Object: borrowCall,
-                    PropertyName: "reveal",
+                    PropertyName: "as_entity",
                     Location: _synthLoc),
                 Arguments: [],
                 Location: _synthLoc)
@@ -583,15 +583,15 @@ internal sealed class WrapperForwardingPass
         }
         else
         {
-            // Pointer wrapper: var raw = Hijacked[T](me); raw.reveal()/extract().method(...)
-            // Entity inner types: reveal() reinterprets the ptr directly as T (no dereference)
+            // Pointer wrapper: var raw = Hijacked[T](me); raw.as_entity()/extract().method(...)
+            // Entity inner types: as_entity() reinterprets the ptr directly as T (no dereference)
             //   — correct for T where me IS the entity ptr, not a slot holding one.
             // Record inner types: extract() dereferences the ptr to load the value — correct
             //   for Hijacked[RecordType] where the ptr points to a heap/stack slot.
             // innerIsEntity is determined from the concrete inner type at the call site so
             //   generic-def forwarder bodies (where innerType is GenericParameterTypeInfo)
             //   get the correct access method even before T is substituted.
-            string accessMethodName = innerIsEntity ? "reveal" : "extract";
+            string accessMethodName = innerIsEntity ? "as_entity" : "extract";
             var hijackedCall = new CreatorExpression(
                 TypeName: "Hijacked",
                 TypeArguments:
@@ -664,7 +664,7 @@ internal sealed class WrapperForwardingPass
 
     /// <summary>
     /// Checks if a type is a forwarding wrapper (Viewed, Grasped, Shared, etc.).
-    /// Hijacked is intentionally excluded — its API is the explicit extract/reveal/inject
+    /// Hijacked is intentionally excluded — its API is the explicit extract/as_entity/inject
     /// surface, not transparent forwarding of T's methods.
     /// </summary>
     private static bool IsWrapperType(TypeSymbol type)

@@ -616,13 +616,13 @@ public sealed partial class TypeRegistry
         // so the protocols loop above is skipped — without this fallback, the call dispatcher
         // would then synthesize a forwarder whose body is never emitted (LINKERR). Resolve
         // directly to InnerType as a last resort. Hijacked is intentionally excluded — its
-        // members must be reached via explicit extract()/reveal().
+        // members must be reached via explicit extract()/as_entity().
         //
         // Retained/Tracked are also excluded: they are `@llvm("ptr")` to a `RetainController[T]`,
         // NOT to T directly. Falling through here would dispatch an inner-T method with `me` =
         // controller pointer, reading controller's strong+weak counts as if they were T's first
         // fields. The forwarder-synthesis path emits the correct double-indirection body
-        // (Hijacked[RetainController[T]](me).reveal().borrow_data().reveal().method(...)).
+        // (Hijacked[RetainController[T]](me).as_entity().borrow_data().as_entity().method(...)).
         if (type is WrapperTypeInfo { Name: "Owned" or "Viewed"
                 or "Grasped" or "Inspected" or "Claimed" or "Shared" or "Marked"
             } forwardingWrapper)

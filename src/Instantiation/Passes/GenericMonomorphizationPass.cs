@@ -447,7 +447,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             // Skip wrapper types: their concrete instances are handled by ProcessConcreteType
             // (which substitutes T with the concrete inner type). Emitting the wrapper generic-def
             // version would attempt to lower a body that still contains unresolved T references
-            // (e.g. the reveal() call), causing Phase B codegen failures.
+            // (e.g. the as_entity() call), causing Phase B codegen failures.
             if (type is WrapperTypeInfo) continue;
 
             foreach (RoutineInfo routine in ctx.Registry.GetMethodsForType(type))
@@ -497,7 +497,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         bool skippedVariantBodyForStdlibFallback = false;
         if (ctx.VariantBodies.TryGetValue(key: genMethod.RegistryKey, out Statement? variantBody))
         {
-            // Wrapper forwarder bodies call reveal()/extract() on the inner type, which requires
+            // Wrapper forwarder bodies call as_entity()/extract() on the inner type, which requires
             // T is EntityType (entity layout). For wrapper types (Hijacked, Retained, Owned, etc.)
             // with a non-entity concrete T, skip the variant body (which may be a forwarder) and
             // fall through to the stdlib AST lookup below — the RF source handles all T without

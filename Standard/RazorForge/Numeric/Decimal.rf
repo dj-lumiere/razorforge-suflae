@@ -91,7 +91,7 @@ routine Decimal.$create!(text: Text) -> ?Decimal
 routine Decimal.$copy() -> Me
   danger!
     if not me.ctrl.is_none()
-      me.ctrl.reveal().increase_strong_count()
+      me.ctrl.as_entity().increase_strong_count()
   return Decimal(handle: me.handle, ctrl: me.ctrl)
 
 ### Releases this value's reference. Frees the handle + controller when this
@@ -100,7 +100,7 @@ routine Decimal.$destroy()
   danger!
     if me.ctrl.is_none()
       return
-    var prev = me.ctrl.reveal().decrease_strong_count()
+    var prev = me.ctrl.as_entity().decrease_strong_count()
     if prev <= 1_u64
       rf_bigdec_free(me.handle)
       me.ctrl.invalidate()

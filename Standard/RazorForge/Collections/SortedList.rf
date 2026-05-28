@@ -291,7 +291,7 @@ routine SortedList[T].$contains(value: T) -> Bool
   if me.root is None
     return false
   danger!
-    var root_ref = Hijacked[BTreeListNode[T]](me.root!!).reveal()
+    var root_ref = Hijacked[BTreeListNode[T]](me.root!!).as_entity()
     return me.search_node(node: root_ref, value: value)
 
 ### Descends the subtree rooted at `node` to find `value`.
@@ -316,7 +316,7 @@ routine SortedList[T].count_of(value: T) -> U64
   if me.root is None
     return 0u64
   danger!
-    var root_ref = Hijacked[BTreeListNode[T]](me.root!!).reveal()
+    var root_ref = Hijacked[BTreeListNode[T]](me.root!!).as_entity()
     return me.count_in_node(node: root_ref, value: value)
 
 ### Counts occurrences of `value` in the subtree rooted at `node`.
@@ -387,7 +387,7 @@ routine SortedList[T].add(value: T)
 
   if me.root!!.keys_count() >= B_LIST -% 1u64
     danger!
-      var old_root = Hijacked[BTreeListNode[T]](me.root!!).reveal()
+      var old_root = Hijacked[BTreeListNode[T]](me.root!!).as_entity()
       var new_root = BTreeListNode[T](is_leaf: false)
       new_root.children_add_last(value: steal old_root)
       me.split_child(parent_node: new_root, child_idx: 0u64)
@@ -395,7 +395,7 @@ routine SortedList[T].add(value: T)
       me.root = steal new_root
 
   danger!
-    var root_ref = Hijacked[BTreeListNode[T]](me.root!!).reveal()
+    var root_ref = Hijacked[BTreeListNode[T]](me.root!!).as_entity()
     me.insert_non_full(node: root_ref, value: value)
   me.count = me.count +% 1u64
   return
@@ -473,7 +473,7 @@ routine SortedList[T].remove(value: T) -> Bool
 
   var removed = false
   danger!
-    var root_ref = Hijacked[BTreeListNode[T]](me.root!!).reveal()
+    var root_ref = Hijacked[BTreeListNode[T]](me.root!!).as_entity()
     removed = me.remove_from_node(node: root_ref, value: value)
   if removed
     me.count = me.count -% 1u64
@@ -655,7 +655,7 @@ routine SortedList[T].$getitem!(index: U64) -> ?T
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   danger!
-    var root_ref = Hijacked[BTreeListNode[T]](me.root!!).reveal()
+    var root_ref = Hijacked[BTreeListNode[T]](me.root!!).as_entity()
     return me.get_by_rank(node: root_ref, rank: index)
 
 @readonly
@@ -664,7 +664,7 @@ routine SortedList[T].$getitem!(index: BackIndex) -> ?T
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   danger!
-    var root_ref = Hijacked[BTreeListNode[T]](me.root!!).reveal()
+    var root_ref = Hijacked[BTreeListNode[T]](me.root!!).as_entity()
     return me.get_by_rank(node: root_ref, rank: idx)
 
 ### Returns the element at zero-based sorted rank `rank` within `node`'s subtree.
@@ -706,7 +706,7 @@ routine SortedList[T].range(min_val: T, max_val: T) -> ?List[T]
     pass
   else
     danger!
-      var root_ref = Hijacked[BTreeListNode[T]](me.root!!).reveal()
+      var root_ref = Hijacked[BTreeListNode[T]](me.root!!).as_entity()
       me.range_collect(node: root_ref, min_val: min_val, max_val: max_val, result: result)
   return steal result
 
@@ -741,7 +741,7 @@ routine SortedList[T].min!() -> ?T
   if me.is_empty()
     absent
   danger!
-    var node = Hijacked[BTreeListNode[T]](me.root!!).reveal()
+    var node = Hijacked[BTreeListNode[T]](me.root!!).as_entity()
     while not node.is_leaf
       node = node.children_get(0u64)
     return node.keys_get(0u64)
@@ -754,7 +754,7 @@ routine SortedList[T].max!() -> ?T
   if me.is_empty()
     absent
   danger!
-    var node = Hijacked[BTreeListNode[T]](me.root!!).reveal()
+    var node = Hijacked[BTreeListNode[T]](me.root!!).as_entity()
     while not node.is_leaf
       node = node.children_get(node.children_count() -% 1u64)
     return node.keys_get(node.keys_count() -% 1u64)
@@ -790,7 +790,7 @@ routine List[T].$create(from: SortedList[T]) -> ?List[T]
     pass
   else
     danger!
-      var root_ref = Hijacked[BTreeListNode[T]](from.root!!).reveal()
+      var root_ref = Hijacked[BTreeListNode[T]](from.root!!).as_entity()
       from.collect_inorder(node: root_ref, result: result)
   return steal result
 

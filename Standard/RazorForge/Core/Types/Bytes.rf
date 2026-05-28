@@ -32,7 +32,7 @@ record Bytes obeys Assignable, Iterable[Byte]
 routine Bytes.$copy() -> Me
   danger!
     if not me.ctrl.is_none()
-      me.ctrl.reveal().increase_strong_count()
+      me.ctrl.as_entity().increase_strong_count()
   return Bytes(data: me.data, count: me.count, ctrl: me.ctrl)
 
 ### Releases this value's reference. Frees the buffer + controller when this
@@ -41,7 +41,7 @@ routine Bytes.$destroy()
   danger!
     if me.ctrl.is_none()
       return
-    var prev = me.ctrl.reveal().decrease_strong_count()
+    var prev = me.ctrl.as_entity().decrease_strong_count()
     if prev <= 1_u64
       me.data.invalidate()
       me.ctrl.invalidate()
@@ -569,26 +569,34 @@ routine Bytes.decode_as_utf8!() -> ?Text
 ### Represents a strict lazy UTF-8 view over a borrowed `Bytes` value.
 ### Iteration throws {MalformedUtf8Error} on the first ill-formed subsequence.
 record BytesUtf8View obeys Iterable[Character]
-  ### Raw pointer to the underlying `Bytes` entity. Caller guarantees lifetime.
-  secret bytes: Hijacked[Bytes]
+  ### Raw pointer to the underlying byte buffer. Caller guarantees lifetime.
+  secret data: Hijacked[Byte]
+  ### Number of bytes in the buffer.
+  secret byte_count: U64
 
 ### Represents the iterator backing {BytesUtf8View}.
 entity BytesUtf8Iterator
-  ### Raw pointer to the underlying `Bytes` entity. Caller guarantees lifetime.
-  secret bytes: Hijacked[Bytes]
+  ### Raw pointer to the underlying byte buffer. Caller guarantees lifetime.
+  secret data: Hijacked[Byte]
+  ### Number of bytes in the buffer.
+  secret byte_count: U64
   ### Stores the index.
   index: U64
 
 ### Represents a lossy lazy UTF-8 view over a borrowed `Bytes` value.
 ### Iteration substitutes U+FFFD for any ill-formed subsequence and never fails.
 record BytesUtf8LossyView obeys Iterable[Character]
-  ### Raw pointer to the underlying `Bytes` entity. Caller guarantees lifetime.
-  secret bytes: Hijacked[Bytes]
+  ### Raw pointer to the underlying byte buffer. Caller guarantees lifetime.
+  secret data: Hijacked[Byte]
+  ### Number of bytes in the buffer.
+  secret byte_count: U64
 
 ### Represents the iterator backing {BytesUtf8LossyView}.
 entity BytesUtf8LossyIterator
-  ### Raw pointer to the underlying `Bytes` entity. Caller guarantees lifetime.
-  secret bytes: Hijacked[Bytes]
+  ### Raw pointer to the underlying byte buffer. Caller guarantees lifetime.
+  secret data: Hijacked[Byte]
+  ### Number of bytes in the buffer.
+  secret byte_count: U64
   ### Stores the index.
   index: U64
 
@@ -601,8 +609,7 @@ entity BytesUtf8LossyIterator
 @readonly
 routine Bytes.interpret_as_utf8!() -> BytesUtf8View
   var validated = me.decode_as_utf8!()
-  danger!
-    return BytesUtf8View(bytes: me.hijack())
+  return BytesUtf8View(data: me.data, byte_count: me.count)
 
 ### Returns a lossy lazy UTF-8 view over this byte sequence.
 ### Malformed subsequences are surfaced as the Unicode replacement character
@@ -610,20 +617,19 @@ routine Bytes.interpret_as_utf8!() -> BytesUtf8View
 ### :returns: The resulting `BytesUtf8LossyView` value.
 @readonly
 routine Bytes.interpret_as_utf8_lossy() -> BytesUtf8LossyView
-  danger!
-    return BytesUtf8LossyView(bytes: me.hijack())
+  return BytesUtf8LossyView(data: me.data, byte_count: me.count)
 
 ### Returns an iterator over this strict UTF-8 view.
 ### :returns: The resulting `BytesUtf8Iterator` value.
 @readonly
 routine BytesUtf8View.$iter() -> ?BytesUtf8Iterator
-  return BytesUtf8Iterator(bytes: me.bytes, index: 0u64)
+  return BytesUtf8Iterator(data: me.data, byte_count: me.byte_count, index: 0u64)
 
 ### Returns an iterator over this lossy UTF-8 view.
 ### :returns: The resulting `BytesUtf8LossyIterator` value.
 @readonly
 routine BytesUtf8LossyView.$iter() -> ?BytesUtf8LossyIterator
-  return BytesUtf8LossyIterator(bytes: me.bytes, index: 0u64)
+  return BytesUtf8LossyIterator(data: me.data, byte_count: me.byte_count, index: 0u64)
 
 ### Returns the next decoded character from this strict UTF-8 iterator.
 ### :returns: The resulting `Character` value.
@@ -631,11 +637,10 @@ routine BytesUtf8LossyView.$iter() -> ?BytesUtf8LossyIterator
 ### :throws: {MalformedUtf8Error} on the first ill-formed subsequence.
 routine BytesUtf8Iterator.$next!() -> Character
   danger!
-    var bref = me.bytes.extract()
-    if me.index >= bref.count
+    if me.index >= me.byte_count
       absent
 
-    var b0 = U32(bref[me.index].codepoint())
+    var b0 = U32(me.data.stride(count: S64(me.index)).extract().codepoint())
     var codepoint: U32 = 0u32
 
     when
@@ -643,18 +648,18 @@ routine BytesUtf8Iterator.$next!() -> Character
         codepoint = b0
         me.index += 1u64
       (b0 & 0xE0u32) == 0xC0u32 =>
-        if me.index + 1u64 >= bref.count
+        if me.index + 1u64 >= me.byte_count
           throw MalformedUtf8Error(index: me.index, reason: "truncated 2-byte sequence")
-        var b1 = U32(bref[me.index + 1u64].codepoint())
+        var b1 = U32(me.data.stride(count: S64(me.index + 1u64)).extract().codepoint())
         if (b1 & 0xC0u32) != 0x80u32 or b0 < 0xC2u32
           throw MalformedUtf8Error(index: me.index, reason: "invalid 2-byte sequence")
         codepoint = ((b0 & 0x1Fu32) << 6u32) | (b1 & 0x3Fu32)
         me.index += 2u64
       (b0 & 0xF0u32) == 0xE0u32 =>
-        if me.index + 2u64 >= bref.count
+        if me.index + 2u64 >= me.byte_count
           throw MalformedUtf8Error(index: me.index, reason: "truncated 3-byte sequence")
-        var b1 = U32(bref[me.index + 1u64].codepoint())
-        var b2 = U32(bref[me.index + 2u64].codepoint())
+        var b1 = U32(me.data.stride(count: S64(me.index + 1u64)).extract().codepoint())
+        var b2 = U32(me.data.stride(count: S64(me.index + 2u64)).extract().codepoint())
         if (b1 & 0xC0u32) != 0x80u32 or (b2 & 0xC0u32) != 0x80u32
           throw MalformedUtf8Error(index: me.index, reason: "invalid 3-byte sequence")
         var candidate = ((b0 & 0x0Fu32) << 12u32) | ((b1 & 0x3Fu32) << 6u32) | (b2 & 0x3Fu32)
@@ -663,11 +668,11 @@ routine BytesUtf8Iterator.$next!() -> Character
         codepoint = candidate
         me.index += 3u64
       (b0 & 0xF8u32) == 0xF0u32 =>
-        if me.index + 3u64 >= bref.count
+        if me.index + 3u64 >= me.byte_count
           throw MalformedUtf8Error(index: me.index, reason: "truncated 4-byte sequence")
-        var b1 = U32(bref[me.index + 1u64].codepoint())
-        var b2 = U32(bref[me.index + 2u64].codepoint())
-        var b3 = U32(bref[me.index + 3u64].codepoint())
+        var b1 = U32(me.data.stride(count: S64(me.index + 1u64)).extract().codepoint())
+        var b2 = U32(me.data.stride(count: S64(me.index + 2u64)).extract().codepoint())
+        var b3 = U32(me.data.stride(count: S64(me.index + 3u64)).extract().codepoint())
         if (b1 & 0xC0u32) != 0x80u32 or (b2 & 0xC0u32) != 0x80u32 or (b3 & 0xC0u32) != 0x80u32
           throw MalformedUtf8Error(index: me.index, reason: "invalid 4-byte sequence")
         var candidate = ((b0 & 0x07u32) << 18u32) | ((b1 & 0x3Fu32) << 12u32) | ((b2 & 0x3Fu32) << 6u32) | (b3 & 0x3Fu32)
@@ -686,11 +691,10 @@ routine BytesUtf8Iterator.$next!() -> Character
 ### :absent: Returns absent when iteration is exhausted.
 routine BytesUtf8LossyIterator.$next!() -> Character
   danger!
-    var bref = me.bytes.extract()
-    if me.index >= bref.count
+    if me.index >= me.byte_count
       absent
 
-    var b0 = U32(bref[me.index].codepoint())
+    var b0 = U32(me.data.stride(count: S64(me.index)).extract().codepoint())
     var codepoint: U32 = 0u32
 
     when
@@ -698,8 +702,8 @@ routine BytesUtf8LossyIterator.$next!() -> Character
         codepoint = b0
         me.index += 1u64
       (b0 & 0xE0u32) == 0xC0u32 =>
-        if me.index + 1u64 < bref.count
-          var b1 = U32(bref[me.index + 1u64].codepoint())
+        if me.index + 1u64 < me.byte_count
+          var b1 = U32(me.data.stride(count: S64(me.index + 1u64)).extract().codepoint())
           if (b1 & 0xC0u32) == 0x80u32 and b0 >= 0xC2u32
             codepoint = ((b0 & 0x1Fu32) << 6u32) | (b1 & 0x3Fu32)
             me.index += 2u64
@@ -710,9 +714,9 @@ routine BytesUtf8LossyIterator.$next!() -> Character
           codepoint = 0xFFFDu32
           me.index += 1u64
       (b0 & 0xF0u32) == 0xE0u32 =>
-        if me.index + 2u64 < bref.count
-          var b1 = U32(bref[me.index + 1u64].codepoint())
-          var b2 = U32(bref[me.index + 2u64].codepoint())
+        if me.index + 2u64 < me.byte_count
+          var b1 = U32(me.data.stride(count: S64(me.index + 1u64)).extract().codepoint())
+          var b2 = U32(me.data.stride(count: S64(me.index + 2u64)).extract().codepoint())
           var is_valid = (b1 & 0xC0u32) == 0x80u32 and (b2 & 0xC0u32) == 0x80u32
           if is_valid
             var candidate = ((b0 & 0x0Fu32) << 12u32) | ((b1 & 0x3Fu32) << 6u32) | (b2 & 0x3Fu32)
@@ -729,10 +733,10 @@ routine BytesUtf8LossyIterator.$next!() -> Character
           codepoint = 0xFFFDu32
           me.index += 1u64
       (b0 & 0xF8u32) == 0xF0u32 =>
-        if me.index + 3u64 < bref.count
-          var b1 = U32(bref[me.index + 1u64].codepoint())
-          var b2 = U32(bref[me.index + 2u64].codepoint())
-          var b3 = U32(bref[me.index + 3u64].codepoint())
+        if me.index + 3u64 < me.byte_count
+          var b1 = U32(me.data.stride(count: S64(me.index + 1u64)).extract().codepoint())
+          var b2 = U32(me.data.stride(count: S64(me.index + 2u64)).extract().codepoint())
+          var b3 = U32(me.data.stride(count: S64(me.index + 3u64)).extract().codepoint())
           var is_valid = (b1 & 0xC0u32) == 0x80u32 and (b2 & 0xC0u32) == 0x80u32 and (b3 & 0xC0u32) == 0x80u32
           if is_valid
             var candidate = ((b0 & 0x07u32) << 18u32) | ((b1 & 0x3Fu32) << 12u32) | ((b2 & 0x3Fu32) << 6u32) | (b3 & 0x3Fu32)
@@ -839,7 +843,7 @@ routine List[U16].decode_as_utf16() -> ?Text
 ### :returns: A `U64` hash of this view.
 routine BytesUtf8View.$fast_hash() -> U64
   danger!
-    return __hash_leaf(v: U64(me.bytes.address()))
+    return __hash_leaf(v: U64(me.data.address()))
 
 ### Returns a SipHash-2-4 keyed hash of the underlying byte buffer's address.
 ### :param k0: The first 64-bit key word.
@@ -847,13 +851,13 @@ routine BytesUtf8View.$fast_hash() -> U64
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
 routine BytesUtf8View.$hash(k0: U64, k1: U64) -> U64
   danger!
-    return __secure_hash_u64(v: U64(me.bytes.address()), k0: k0, k1: k1)
+    return __secure_hash_u64(v: U64(me.data.address()), k0: k0, k1: k1)
 
 ### Returns an xxHash64 hash of this iterator's buffer address and current index.
 ### :returns: A `U64` hash combining the buffer address and the current index.
 routine BytesUtf8Iterator.$fast_hash() -> U64
   danger!
-    var acc = __hash_round(acc: 0u64, h: __hash_leaf(v: U64(me.bytes.address())))
+    var acc = __hash_round(acc: 0u64, h: __hash_leaf(v: U64(me.data.address())))
     acc = __hash_round(acc: acc, h: me.index.$fast_hash())
     return __hash_finalize(h: acc)
 
@@ -863,6 +867,6 @@ routine BytesUtf8Iterator.$fast_hash() -> U64
 ### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
 routine BytesUtf8Iterator.$hash(k0: U64, k1: U64) -> U64
   danger!
-    var acc = __hash_round(acc: 0u64, h: __secure_hash_u64(v: U64(me.bytes.address()), k0: k0, k1: k1))
+    var acc = __hash_round(acc: 0u64, h: __secure_hash_u64(v: U64(me.data.address()), k0: k0, k1: k1))
     acc = __hash_round(acc: acc, h: me.index.$hash(k0: k0, k1: k1))
     return __hash_finalize(h: acc)

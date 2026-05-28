@@ -564,7 +564,7 @@ public sealed partial class SemanticVerifier
             // Borrow protocols (Referring[T] / Controlling[T]) accept an ownership-carrying or
             // bare source whose inner type matches T. Owned/Retained/Grasped are accepted by
             // both; Viewed is readonly so accepted only by Referring; Hijacked needs explicit
-            // .reveal() — never accepted by implicit borrow coercion.
+            // .as_entity() — never accepted by implicit borrow coercion.
             string targetBase = GetBaseTypeName(typeName: target.Name);
             if ((targetBase == "Referring" || targetBase == "Controlling") &&
                 target.TypeArguments is { Count: 1 } borrowArgs)

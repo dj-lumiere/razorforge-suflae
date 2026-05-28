@@ -302,7 +302,7 @@ routine SortedSet[T].$contains(value: T) -> Bool
   if me.root is None
     return false
   danger!
-    var root_ref = Hijacked[BTreeSetNode[T]](me.root!!).reveal()
+    var root_ref = Hijacked[BTreeSetNode[T]](me.root!!).as_entity()
     return me.search_node(node: root_ref, value: value)
 
 ### Searches for `value` in the subtree rooted at `node`.
@@ -377,7 +377,7 @@ routine SortedSet[T].add(value: T) -> Bool
   # We must do this proactively so insert_non_full never encounters a full node.
   if me.root!!.keys_count() >= B -% 1u64
     danger!
-      var old_root = Hijacked[BTreeSetNode[T]](me.root!!).reveal()
+      var old_root = Hijacked[BTreeSetNode[T]](me.root!!).as_entity()
       var new_root = BTreeSetNode[T](is_leaf: false)
       new_root.children_add_last(value: steal old_root)
       me.split_child(parent_node: new_root, child_idx: 0u64)
@@ -389,7 +389,7 @@ routine SortedSet[T].add(value: T) -> Bool
   # Single-pass insert: returns false if duplicate found during descent.
   var inserted = false
   danger!
-    var root_ref = Hijacked[BTreeSetNode[T]](me.root!!).reveal()
+    var root_ref = Hijacked[BTreeSetNode[T]](me.root!!).as_entity()
     inserted = me.insert_non_full(node: root_ref, value: value)
   if inserted
     me.count = me.count +% 1u64
@@ -503,7 +503,7 @@ routine SortedSet[T].remove(value: T) -> Bool
   # Single-pass remove: returns true if value was found and removed.
   var removed = false
   danger!
-    var root_ref = Hijacked[BTreeSetNode[T]](me.root!!).reveal()
+    var root_ref = Hijacked[BTreeSetNode[T]](me.root!!).as_entity()
     removed = me.remove_from_node(node: root_ref, value: value)
 
   if removed
@@ -761,7 +761,7 @@ routine SortedSet[T].$getitem!(index: U64) -> ?T
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   danger!
-    var root_ref = Hijacked[BTreeSetNode[T]](me.root!!).reveal()
+    var root_ref = Hijacked[BTreeSetNode[T]](me.root!!).as_entity()
     return me.get_by_rank(node: root_ref, rank: index)
 
 ### Returns the element addressed by a back index in sorted order.
@@ -774,7 +774,7 @@ routine SortedSet[T].$getitem!(index: BackIndex) -> ?T
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   danger!
-    var root_ref = Hijacked[BTreeSetNode[T]](me.root!!).reveal()
+    var root_ref = Hijacked[BTreeSetNode[T]](me.root!!).as_entity()
     return me.get_by_rank(node: root_ref, rank: idx)
 
 ### Returns the element at the given in-order rank within the subtree rooted at `node`.
@@ -824,7 +824,7 @@ routine SortedSet[T].range(min_val: T, max_val: T) -> ?List[T]
     pass
   else
     danger!
-      var root_ref = Hijacked[BTreeSetNode[T]](me.root!!).reveal()
+      var root_ref = Hijacked[BTreeSetNode[T]](me.root!!).as_entity()
       me.range_collect(node: root_ref, min_val: min_val, max_val: max_val, result: result)
   return steal result
 
@@ -863,7 +863,7 @@ routine SortedSet[T].min!() -> ?T
   if me.is_empty()
     absent
   danger!
-    var node = Hijacked[BTreeSetNode[T]](me.root!!).reveal()
+    var node = Hijacked[BTreeSetNode[T]](me.root!!).as_entity()
     while not node.is_leaf
       node = node.children_get(0u64)
     return node.keys_get(0u64)
@@ -876,7 +876,7 @@ routine SortedSet[T].max!() -> ?T
   if me.is_empty()
     absent
   danger!
-    var node = Hijacked[BTreeSetNode[T]](me.root!!).reveal()
+    var node = Hijacked[BTreeSetNode[T]](me.root!!).as_entity()
     while not node.is_leaf
       node = node.children_get(node.children_count() -% 1u64)
     return node.keys_get(node.keys_count() -% 1u64)
@@ -914,7 +914,7 @@ routine List[T].$create(from: SortedSet[T]) -> ?List[T]
     pass
   else
     danger!
-      var root_ref = Hijacked[BTreeSetNode[T]](from.root!!).reveal()
+      var root_ref = Hijacked[BTreeSetNode[T]](from.root!!).as_entity()
       from.collect_inorder(node: root_ref, result: result)
   return steal result
 

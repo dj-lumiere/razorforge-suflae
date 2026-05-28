@@ -54,22 +54,32 @@ dangerous routine Hijacked[T].$create(from: Address) -> Hijacked[T]
 dangerous routine T.hijack() -> Hijacked[T]
   return Hijacked[T](me.get_address())
 
-### Loads the value stored at this pointer.
-### :returns: The value stored at the address this pointer references.
+### Reads the value stored at this address. This is `*ptr` — a raw `load`, no
+### `$copy`, no refcount bump.
+###
+### Mental model: the pointer addresses a slot that holds a `T`; `extract` reads
+### that slot.
+###
+### Refcount caveat: if `T` is a refcounted record (`Bytes`, `Text`, ...) the
+### returned local still runs `$destroy` on scope exit and will decrement the
+### shared control block. The load is a non-owning view that pretends to be
+### owned — keep its lifetime shorter than the real owner, or store the record's
+### underlying primitive fields directly instead of round-tripping through
+### `Hijacked[Record]`.
+### :returns: The value at this address (bitwise copy).
 dangerous routine Hijacked[T].extract() -> ?T
-needs T is RecordType
   return load[T](me)
 
-### Loads the entity value stored at this pointer.
-### :returns: The entity value stored at the address this pointer references.
-dangerous routine Hijacked[T].extract() -> ?T
-needs T is EntityType
-  return load[T](me)
-
-### Reinterprets this pointer as the entity {T} it directly points to (no dereference).
-### Use when the Hijacked[T] value IS the entity ptr, not a slot holding one.
-### :returns: The entity `T` at this address, without loading from a pointer slot.
-dangerous routine Hijacked[T].reveal() -> ?T
+### Treats this pointer's bit pattern as if it already *were* a `T`. No load,
+### no dereference — `Hijacked[T]` and the entity reference share a layout
+### (both `ptr`), so this is a pure reinterpretation.
+###
+### Mental model: the pointer doesn't *address* a `T`, the pointer *is* a `T`.
+### Use when you already hold the entity's pointer and just want it typed as
+### the entity (the typical case for `@llvm("ptr")` records' plumbing).
+### Contrast with `extract`, which reads the `T` stored *at* the address.
+### :returns: This pointer reinterpreted as `T`.
+dangerous routine Hijacked[T].as_entity() -> ?T
 needs T is EntityType
   return reinterpret_bits[Hijacked[T], T](me)
 

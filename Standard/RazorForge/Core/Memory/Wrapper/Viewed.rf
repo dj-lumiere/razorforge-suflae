@@ -45,7 +45,7 @@ routine Viewed[T].$exit()
 @[readonly, inline]
 routine Viewed[T].$refer() -> ?T
   danger!
-    return Hijacked[T](me).reveal()
+    return Hijacked[T](me).as_entity()
 
 # ============================================================================
 # Display (transparent - delegates to inner value)
@@ -57,7 +57,7 @@ routine Viewed[T].$refer() -> ?T
 routine Viewed[T].$represent() -> ?Text
   danger!
     var hijacked = Hijacked[T](me)
-    return hijacked.reveal().$represent()
+    return hijacked.as_entity().$represent()
 
 ### Returns the diagnostic form of the viewed entity.
 ### :returns: The resulting `Text` value.
@@ -65,4 +65,4 @@ routine Viewed[T].$represent() -> ?Text
 routine Viewed[T].$diagnose() -> ?Text
   danger!
     var hijacked = Hijacked[T](me)
-    return me.type_name() + "(" + hijacked.reveal().$diagnose() + ")"
+    return me.type_name() + "(" + hijacked.as_entity().$diagnose() + ")"
