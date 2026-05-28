@@ -631,7 +631,7 @@ routine BytesUtf8LossyView.$iter() -> ?BytesUtf8LossyIterator
 ### :throws: {MalformedUtf8Error} on the first ill-formed subsequence.
 routine BytesUtf8Iterator.$next!() -> Character
   danger!
-    var bref = me.bytes.reveal()
+    var bref = me.bytes.extract()
     if me.index >= bref.count
       absent
 
@@ -686,7 +686,7 @@ routine BytesUtf8Iterator.$next!() -> Character
 ### :absent: Returns absent when iteration is exhausted.
 routine BytesUtf8LossyIterator.$next!() -> Character
   danger!
-    var bref = me.bytes.reveal()
+    var bref = me.bytes.extract()
     if me.index >= bref.count
       absent
 
