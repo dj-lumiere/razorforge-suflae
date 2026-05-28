@@ -737,6 +737,17 @@ public sealed partial class SemanticVerifier
                 continue;
             }
 
+            // Skip auto-derived failable variants. These `try_X` / `check_X` / `lookup_X`
+            // entries are synthesized by FillProtocolMethods from the failable original
+            // (`$X!`) so call sites typed against the bare protocol can resolve them. The
+            // implementer only owes the failable original — ErrorHandlingVariantPass
+            // generates the variants on user types at synthesis time. A protocol-declared
+            // `try_X` written by hand (no auto-derivation flag) still produces an obligation.
+            if (requiredMethod.IsAutoDerivedVariant)
+            {
+                continue;
+            }
+
             // Look for the method on the type (not on its protocols — that would find the protocol's own declaration)
             IEnumerable<RoutineInfo> ownMethods = _registry.GetMethodsForType(type: type);
             RoutineInfo? typeMethod =

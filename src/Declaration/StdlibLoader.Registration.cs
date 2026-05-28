@@ -1408,7 +1408,8 @@ public sealed partial class StdlibLoader
                     ParameterTypes = parameterTypes,
                     ParameterNames = parameterNames,
                     ReturnType = tryReturnType,
-                    IsFailable = false
+                    IsFailable = false,
+                    IsAutoDerivedVariant = true
                 });
             }
         }

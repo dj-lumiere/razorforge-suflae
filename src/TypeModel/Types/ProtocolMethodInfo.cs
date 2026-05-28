@@ -39,6 +39,14 @@ public sealed class ProtocolMethodInfo
     /// <summary>Whether this method has a default implementation.</summary>
     public bool HasDefaultImplementation { get; init; }
 
+    /// <summary>
+    /// True when this entry is an auto-derived failable variant (`try_X`, `check_X`,
+    /// `lookup_X`) synthesized by <c>FillProtocolMethods</c> from a failable original
+    /// (`$X!`). Such entries exist for call-site resolution but are NOT conformance
+    /// obligations — the implementer only needs to provide the failable original.
+    /// </summary>
+    public bool IsAutoDerivedVariant { get; init; }
+
     /// <summary>Source location where this method is defined.</summary>
     public SourceLocation? Location { get; init; }
 
