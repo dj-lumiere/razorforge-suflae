@@ -952,38 +952,18 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private bool TryRouteCreatorToCreate(TypeSymbol type, CreatorExpression creator)
     {
-        List<MemberVariableInfo>? fields = type switch
-        {
-            RecordTypeInfo r => r.MemberVariables,
-            EntityTypeInfo e => e.MemberVariables,
-            _ => null
-        };
-
-        var fieldNames = fields != null
-            ? new HashSet<string>(collection: fields.Select(selector: f => f.Name))
-            : [];
         var providedNames = creator.MemberVariables.Select(selector: mv => mv.Name).ToList();
 
-        // Prefer existing field-init path only when this looks like a complete field-init:
-        // every provided name is a field AND every required field is provided. Otherwise the
-        // names may match a `$create(named:)` overload where some param names happen to coincide
-        // with field names (e.g. `List[T].$create(capacity:)` where `capacity` is also a field).
-        if (providedNames.All(predicate: n => fieldNames.Contains(item: n)) &&
-            fieldNames.SetEquals(other: providedNames))
-        {
-            return false;
-        }
-
-        // Name-only match against $create overloads. Iterate type's methods looking for ones
+        // Name-based match against $create overloads. Iterate type's methods looking for ones
         // named `$create` whose parameter names match the provided set exactly. If multiple
         // overloads share the same param names (e.g. `S64.$create(from: S8)` vs
         // `S64.$create(from: ComparisonSign)`), bail out — disambiguation by arg type is the
         // job of the legacy path and we don't want to silently pick the wrong overload.
-        var providedNameSet = new HashSet<string>(collection: providedNames);
-        var nameMatches = new List<RoutineInfo>();
         // Use CollectMemberRoutineCandidates: it walks the generic definition for
         // generic resolutions (e.g. List[V] → List[T]) and runs SubstituteMethodForOwner
         // so parameter types come back resolved to the receiver's concrete type args.
+        var providedNameSet = new HashSet<string>(collection: providedNames);
+        var nameMatches = new List<RoutineInfo>();
         var candidates = new List<RoutineInfo>();
         _registry.CollectMemberRoutineCandidates(type: type, methodName: "$create",
             candidates: candidates);
@@ -1001,7 +981,20 @@ public sealed partial class SemanticVerifier
             }
         }
 
-        if (nameMatches.Count != 1)
+        // The all-args creator `T(fields)` written *inside* T's own `$create` is the primitive
+        // field-init ("stuffing") base case — it must NOT route back to `$create` (infinite
+        // recursion). Detect that self-reference and fall through to inline field-init.
+        bool insideOwnCreate = _currentRoutine is { Name: "$create" or "$create!" } currentCreate
+            && currentCreate.OwnerType != null
+            && (currentCreate.OwnerType.FullName == type.FullName
+                || currentCreate.OwnerType.Name == type.Name);
+
+        // When a unique user-defined `$create` matches the provided args, route the construction
+        // through it (so its body/side-effects run). Otherwise — no match, ambiguous overloads,
+        // or self-reference inside the creator — fall back to inline field-init / standard
+        // validation. A complete field-init whose names all coincide with a `$create`'s params
+        // still prefers the `$create` so user constructors with field-named params are honoured.
+        if (nameMatches.Count != 1 || insideOwnCreate)
         {
             return false;
         }
