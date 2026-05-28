@@ -283,14 +283,6 @@ internal sealed class TypeResolver
             return ErrorTypeInfo.Instance;
         }
 
-        // Reject Maybe<Data> — Data already supports None
-        if (genericDefCarrierName == MaybeTypeName && typeArgs[index: 0] is { Name: "Data" })
-        {
-            _sa.ReportError(code: SemanticDiagnosticCode.NullableDataProhibited,
-                message: "'Data?' is not allowed. 'Data' already supports 'None' natively.",
-                location: typeExpr.Location);
-        }
-
         // Reject nested Maybe types (#83): Maybe[Maybe[T]] / T??
         if (genericDefCarrierName == MaybeTypeName && IsMaybeType(type: typeArgs[index: 0]))
         {

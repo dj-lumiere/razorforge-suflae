@@ -102,7 +102,7 @@ public class PatternMatchingTests
     public void Parse_WhenIsType()
     {
         string source = """
-                        routine test(value: Data)
+                        routine test[T](value: T)
                           when value
                             is S32 n => show(f"Integer: {n}")
                             is Text t => show(f"Text: {t}")
@@ -120,7 +120,7 @@ public class PatternMatchingTests
     public void Parse_WhenIsTypeWithoutBinding()
     {
         string source = """
-                        routine test(value: Data)
+                        routine test[T](value: T)
                           when value
                             is S32 => show("It's an integer")
                             is Text => show("It's text")
@@ -138,7 +138,7 @@ public class PatternMatchingTests
     public void Parse_WhenIsCustomType()
     {
         string source = """
-                        routine test(value: Data)
+                        routine test[T](value: T)
                           when value
                             is Point p => show(f"Point: ({p.x}, {p.y})")
                             is Circle c => show(f"Circle: r={c.radius}")

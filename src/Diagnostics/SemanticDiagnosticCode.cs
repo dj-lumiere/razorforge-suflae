@@ -779,9 +779,6 @@ public enum SemanticDiagnosticCode
     /// <summary>Deprecated — ValueTuple distinction removed, all tuples are inline structs.</summary>
     ValueTupleContainmentViolation = 779,
 
-    /// <summary>Result, Lookup, variants, and tokens cannot be boxed to Data.</summary>
-    DataBoxingProhibited = 781,
-
     // ═══════════════════════════════════════════════════════════════════════════
     // LANGUAGE RESTRICTION ERRORS (RF-S800 - RF-S849)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -800,9 +797,6 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Blank cannot be used as a generic type argument (it has no value).</summary>
     BlankAsTypeArgument = 805,
-
-    /// <summary>Data? / Maybe&lt;Data&gt; is not allowed — Data already holds None natively.</summary>
-    NullableDataProhibited = 806,
 
     /// <summary>Suflae cannot use C interop directly.</summary>
     SuflaeNoCInterop = 810,

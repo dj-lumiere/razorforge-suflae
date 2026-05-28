@@ -695,6 +695,36 @@ public partial class LlvmCodeGenerator
             return;
         }
 
+        // Choice subjects: `is Color.RED` compares the i32 value against the case's
+        // computed integer. ChoiceTypeInfo is a RecordTypeInfo subclass, so this must
+        // run before the generic record/entity handling below (which would otherwise
+        // optimistically emit an unconditional match).
+        if (subjectType is ChoiceTypeInfo choiceSubject)
+        {
+            string caseName = typePattern.Type.Name;
+            int dotIndex = caseName.LastIndexOf(value: '.');
+            if (dotIndex >= 0)
+                caseName = caseName[(dotIndex + 1)..];
+
+            ChoiceCaseInfo? matchedCase =
+                choiceSubject.Cases.FirstOrDefault(predicate: c => c.Name == caseName);
+            if (matchedCase != null)
+            {
+                string choiceLlvm = GetLlvmType(type: choiceSubject);
+                string cmp = NextTemp();
+                EmitLine(sb: sb,
+                    line: $"  {cmp} = icmp eq {choiceLlvm} {subject}, {matchedCase.ComputedValue}");
+                EmitLine(sb: sb,
+                    line: $"  br i1 {cmp}, label %{matchLabel}, label %{failLabel}");
+            }
+            else
+            {
+                EmitLine(sb: sb, line: $"  br label %{failLabel}");
+            }
+
+            return;
+        }
+
         // Determine the actual target label -> if we need to bind, use an extraction block
         bool needsBind = typePattern.VariableName != null && targetType != null;
         string branchTarget = needsBind

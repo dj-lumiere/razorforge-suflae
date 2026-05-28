@@ -172,9 +172,6 @@ public enum SemanticWarningCode
     /// <summary>Allocation in hot loop; consider hoisting.</summary>
     AllocationInLoop = 351,
 
-    /// <summary>Nested Data wrapping (Data(Data(x))) should be flattened.</summary>
-    NestedDataWrapping = 360,
-
     /// <summary>
     /// Implicit copy of a value whose type contains a non-trivially-copyable wrapper
     /// (`T`, `Retained[T]`, `Tracked[T]`, ...). Each ownership wrapper has its

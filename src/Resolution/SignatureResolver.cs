@@ -141,23 +141,9 @@ internal sealed class SignatureResolver
         {
             if (param.Type == null)
             {
-                // #36: Suflae untyped parameters default to Data
-                if (_sa._registry.Language == Language.Suflae)
-                {
-                    TypeSymbol dataType =
-                        _sa._registry.LookupType(name: "Data") ?? ErrorTypeInfo.Instance;
-                    parameters.Add(item: new ParameterInfo(name: param.Name, type: dataType)
-                    {
-                        IsVariadicParam = param.IsVariadic
-                    });
-                }
-                else
-                {
-                    // Type inference required - handle later
-                    parameters.Add(item: new ParameterInfo(name: param.Name,
-                        type: ErrorTypeInfo.Instance) { IsVariadicParam = param.IsVariadic });
-                }
-
+                // Type inference required - handle later
+                parameters.Add(item: new ParameterInfo(name: param.Name,
+                    type: ErrorTypeInfo.Instance) { IsVariadicParam = param.IsVariadic });
                 continue;
             }
 

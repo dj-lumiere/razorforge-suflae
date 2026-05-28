@@ -401,29 +401,6 @@ public sealed partial class SemanticVerifier
                         }
                     }
 
-                    // #115: Data boxing restrictions — certain types cannot be boxed to Data
-                    if (id.Name == "Data" && argTypes.Count > 0)
-                    {
-                        TypeSymbol argType = argTypes[index: 0];
-                        if ((IsCarrierType(type: argType) && !IsMaybeType(type: argType)) || argType is VariantTypeInfo
-                                or WrapperTypeInfo { IsReadOnly: true } // Viewed, Inspected
-                            || argType is WrapperTypeInfo { InnerType: not null, Name: "Grasped" or "Claimed" })
-                        {
-                            ReportError(code: SemanticDiagnosticCode.DataBoxingProhibited,
-                                message: $"Type '{argType.Name}' cannot be boxed to Data. " +
-                                         "Result, Lookup, variants, and access tokens (Viewed, Grasped, Inspected, Claimed) cannot be stored in Data.",
-                                location: call.Location);
-                        }
-
-                        // #116: Nested Data flattening — Data(Data(x)) should warn
-                        if (argType.Name == "Data")
-                        {
-                            ReportWarning(code: SemanticWarningCode.NestedDataWrapping,
-                                message:
-                                "Nested Data wrapping is redundant. Data(Data(x)) should be flattened to Data(x).",
-                                location: call.Location);
-                        }
-                    }
 
                     // S510: Type creators with 3+ fields require all named arguments.
                     // W258: For 2 fields, naming is recommended but only emits a warning.

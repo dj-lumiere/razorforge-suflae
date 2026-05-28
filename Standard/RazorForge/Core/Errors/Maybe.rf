@@ -26,7 +26,7 @@ routine Maybe[T].$represent() -> ?Text
 routine Maybe[T].$diagnose() -> ?Text
   if not me.is_present()
     return f"{me.full_type_name()}(none)"
-  return f"{me.full_type_name()}({me.value:?})"
+  return f"{me.full_type_name()}({me.value})"
 
 
 ### Returns the wrapped value.

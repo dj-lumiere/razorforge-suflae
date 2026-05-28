@@ -46,12 +46,10 @@ internal sealed class AutoWiredRegistrationPass
             : null;
 
         // BuilderService helper-type closures (List[FieldInfo], List[ProtocolInfo],
-        // List[RoutineInfo], Dict[Text,Data]) are only resolved when the user program
+        // List[RoutineInfo]) are only resolved when the user program
         // actually imports BuilderService. Otherwise GMP would drag in the full
         // BTreeListNode/Owned/Array/ArrayIterator closure for every type via the
         // metadata routines registered on each type.
-        // Data itself is needed unconditionally for the Data.$create auto-registration below.
-        TypeSymbol? dataType = _registry.LookupType(name: "Data");
         TypeSymbol? listFieldInfoType = null;
         TypeSymbol? listProtocolInfoType = null;
         TypeSymbol? listRoutineInfoType = null;
@@ -531,70 +529,6 @@ internal sealed class AutoWiredRegistrationPass
                 returnType: textType,
                 existingMethods: universalExisting);
         }
-
-        // Auto-register Data.$create(from: T) for all concrete storable types
-        // This enables type-erased boxing: Data(42), Data(my_entity), etc.
-        if (dataType != null)
-        {
-            var dataCreateMethods = _registry.GetMethodsForType(type: dataType)
-                                             .Where(predicate: m => m.Name == CreateMethodName)
-                                             .ToList();
-
-            foreach (TypeSymbol type in _registry.GetAllTypes())
-            {
-                // Include concrete storable types
-                if (type.Category is not (TypeCategory.Record or TypeCategory.Entity
-                    or TypeCategory.Choice or TypeCategory.Flags))
-                {
-                    continue;
-                }
-
-                // Skip non-boxable types
-                if (IsCarrierType(type: type) || type is VariantTypeInfo or WrapperTypeInfo)
-                {
-                    continue;
-                }
-
-                // Skip generic-definition types (same reason as Text loop above)
-                if (type.IsGenericDefinition)
-                {
-                    continue;
-                }
-
-                // Skip Data itself (no boxing Data in Data)
-                if (type.FullName == dataType.FullName)
-                {
-                    continue;
-                }
-
-                // Skip Blank -- void cannot be a parameter type in LLVM IR
-                if (type.IsBlank)
-                {
-                    continue;
-                }
-
-                bool alreadyDefined = dataCreateMethods.Any(predicate: m =>
-                    m.Parameters.Count == 1 &&
-                    m.Parameters[index: 0].Type.FullName == type.FullName);
-                if (alreadyDefined)
-                {
-                    continue;
-                }
-
-                _registry.RegisterRoutine(routine: new RoutineInfo(name: CreateMethodName)
-                {
-                    Kind = RoutineKind.Creator,
-                    OwnerType = dataType,
-                    Parameters = [new ParameterInfo(name: "from", type: type)],
-                    ReturnType = dataType,
-                    IsFailable = false,
-                    DeclaredModification = ModificationCategory.Readonly,
-                    ModificationCategory = ModificationCategory.Readonly,
-                    Visibility = VisibilityModifier.Open,
-                    IsSynthesized = true
-                });
-            }
-        }
     }
 
     /// <summary>
@@ -840,26 +774,4 @@ internal sealed class AutoWiredRegistrationPass
             return proto.ParentProtocols.Any(parent => CheckProtocol(parent, targetName, seen));
         return false;
     }
-
-    /// <summary>
-    /// Returns the base name ("Maybe", "Result", or "Lookup") for a carrier type,
-    /// or null if the type is not a carrier type.
-    /// </summary>
-    private static string? GetCarrierBaseName(TypeSymbol type)
-    {
-        if (type is not RecordTypeInfo r)
-        {
-            return null;
-        }
-
-        string baseName = r.GenericDefinition?.Name ?? r.Name;
-        return baseName is "Maybe" or "Result" or "Lookup"
-            ? baseName
-            : null;
-    }
-
-    /// <summary>
-    /// Returns true if the type is a carrier type (Maybe, Result, or Lookup).
-    /// </summary>
-    private static bool IsCarrierType(TypeSymbol type) => GetCarrierBaseName(type: type) != null;
 }

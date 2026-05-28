@@ -320,14 +320,6 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                         fromType: paramType, toType: u64Type, paramName: paramName);
                 return;
             }
-
-            if (record.Name == "Data")
-            {
-                Statement? body = BuildDataCreateBody(routine: routine, dataType: record);
-                if (body != null)
-                    ctx.VariantBodies[key: routine.RegistryKey] = body;
-                return;
-            }
         }
 
         if (record.HasDirectBackendType) return;
@@ -853,105 +845,6 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             TypeArguments = [typeArgFrom, typeArgTo]
         };
         return new ReturnStatement(Value: call, Location: _synthLoc);
-    }
-
-    //  Data.$create
-
-    /// <summary>
-    /// Builds the body for <c>Data.$create(from: T)</c>:
-    /// allocates <c>T.data_size()</c> bytes, stores <c>from</c>,
-    /// returns <c>Data(type_id, data_address, data_size)</c>.
-    /// </summary>
-    private BlockStatement? BuildDataCreateBody(RoutineInfo routine, TypeInfo dataType)
-    {
-        if (routine.Parameters.Count == 0) return null;
-        TypeInfo paramType = routine.Parameters[index: 0].Type;
-        string paramName = routine.Parameters[index: 0].Name;
-
-        TypeInfo? addressType = ctx.Registry.LookupType(name: "Address");
-        TypeInfo? byteSizeType = ctx.Registry.LookupType(name: "ByteSize");
-        TypeInfo? u64Type = ctx.Registry.LookupType(name: "U64");
-        TypeInfo? hijackedDef = ctx.Registry.LookupType(name: "Hijacked");
-        if (addressType == null || byteSizeType == null || u64Type == null) return null;
-
-        ulong dataSize = BuilderServiceInliningPass.CalculateDataSizeForType(type: paramType);
-        ulong typeId = TypeIdHelper.ComputeTypeId(fullName: paramType.FullName);
-
-        // 1. var addr = rf_allocate_dynamic(size: DATA_SIZE)
-        var u64SizeLit = new LiteralExpression(
-            Value: dataSize, LiteralType: TokenType.U64Literal, Location: _synthLoc)
-            { ResolvedType = u64Type };
-        var rfAllocCall = new CallExpression(
-            Callee: new IdentifierExpression(Name: "rf_allocate_dynamic", Location: _synthLoc)
-                { ResolvedType = addressType },
-            Arguments:
-            [new NamedArgumentExpression(Name: "size", Value: u64SizeLit, Location: _synthLoc)],
-            Location: _synthLoc)
-            { ResolvedType = addressType };
-        var addrDecl = new DeclarationStatement(
-            Declaration: new VariableDeclaration(
-                Name: "addr", Type: null, Initializer: rfAllocCall,
-                Visibility: VisibilityModifier.Open, Location: _synthLoc),
-            Location: _synthLoc);
-
-        // 2. store[T](address: Hijacked[T](from: addr), value: from)
-        var addrRef = new IdentifierExpression(Name: "addr", Location: _synthLoc)
-            { ResolvedType = addressType };
-        TypeInfo? hijackedParamType = hijackedDef != null
-            ? ctx.Registry.GetOrCreateResolution(genericDef: hijackedDef, typeArguments: [paramType])
-            : null;
-        var typeArgT = new TypeExpression(Name: paramType.Name, GenericArguments: null, Location: _synthLoc)
-            { ResolvedType = paramType };
-        var hijackedCreator = new CreatorExpression(
-            TypeName: "Hijacked",
-            TypeArguments: [typeArgT],
-            MemberVariables: [("from", (Expression)addrRef)],
-            Location: _synthLoc)
-            { ResolvedType = hijackedParamType };
-        var fromRef = new IdentifierExpression(Name: paramName, Location: _synthLoc)
-            { ResolvedType = paramType };
-        var storeCall = new CallExpression(
-            Callee: new IdentifierExpression(Name: "store", Location: _synthLoc),
-            Arguments:
-            [
-                new NamedArgumentExpression(Name: "address", Value: hijackedCreator, Location: _synthLoc),
-                new NamedArgumentExpression(Name: "value", Value: fromRef, Location: _synthLoc)
-            ],
-            Location: _synthLoc)
-        {
-            LoweringKind = CallLoweringKind.LlvmIntrinsic,
-            TypeArguments =
-            [
-                new TypeExpression(Name: paramType.Name, GenericArguments: null, Location: _synthLoc)
-                    { ResolvedType = paramType }
-            ]
-        };
-        var storeStmt = new ExpressionStatement(Expression: storeCall, Location: _synthLoc);
-
-        // 3. return Data(type_id: typeId, data_address: addr, data_size: ByteSize(dataSize))
-        var typeIdLit = new LiteralExpression(
-            Value: typeId, LiteralType: TokenType.U64Literal, Location: _synthLoc)
-            { ResolvedType = u64Type };
-        var addrRef2 = new IdentifierExpression(Name: "addr", Location: _synthLoc)
-            { ResolvedType = addressType };
-        var dataCreator = new CreatorExpression(
-            TypeName: "Data",
-            TypeArguments: null,
-            MemberVariables:
-            [
-                ("type_id", (Expression)typeIdLit),
-                ("data_address", addrRef2),
-                ("data_size",
-                    BuilderServiceInliningPass.MakeByteSizeCreatorPublic(
-                        value: dataSize, u64Type: u64Type, byteSizeType: byteSizeType, loc: _synthLoc))
-            ],
-            Location: _synthLoc)
-            { ResolvedType = dataType };
-        var returnStmt = new ReturnStatement(Value: dataCreator, Location: _synthLoc);
-
-        return new BlockStatement(
-            Statements: [addrDecl, storeStmt, returnStmt],
-            Location: _synthLoc);
     }
 
     //  keyed $hash(k0, k1)

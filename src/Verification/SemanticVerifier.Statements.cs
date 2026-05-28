@@ -541,19 +541,11 @@ public sealed partial class SemanticVerifier
         }
         else
         {
-            // #37: Suflae falls back to Data when type inference is not possible
-            if (_registry.Language == Language.Suflae)
-            {
-                varType = _registry.LookupType(name: "Data") ?? ErrorTypeInfo.Instance;
-            }
-            else
-            {
-                ReportError(code: SemanticDiagnosticCode.VariableNeedsTypeOrInitializer,
-                    message:
-                    $"Variable '{varDecl.Name}' requires either a type annotation or an initializer.",
-                    location: varDecl.Location);
-                varType = ErrorTypeInfo.Instance;
-            }
+            ReportError(code: SemanticDiagnosticCode.VariableNeedsTypeOrInitializer,
+                message:
+                $"Variable '{varDecl.Name}' requires either a type annotation or an initializer.",
+                location: varDecl.Location);
+            varType = ErrorTypeInfo.Instance;
         }
 
         // #16: Plain `var x: T` without an initializer is disallowed (uninitialized memory).
