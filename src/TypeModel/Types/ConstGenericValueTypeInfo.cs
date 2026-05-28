@@ -40,4 +40,7 @@ public sealed class ConstGenericValueTypeInfo : TypeInfo
         throw new InvalidOperationException(
             message: "Cannot create instance of a const generic value.");
     }
+
+    /// <inheritdoc/>
+    public override int SizeBytes(int pointerSize) => 8;
 }

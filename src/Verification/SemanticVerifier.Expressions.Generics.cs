@@ -563,7 +563,7 @@ public sealed partial class SemanticVerifier
     private ErrorTypeInfo HandleUnknownExpression(Expression expression)
     {
         ReportWarning(code: SemanticWarningCode.UnknownExpressionType,
-            message: $"Unknown expression type: {expression.GetType().Name}",
+            message: $"Internal: semantic analyzer has no handler for AST node '{expression.GetType().Name}'. This expression will be skipped; downstream type info may be incomplete. Please report as a compiler bug.",
             location: expression.Location);
         return ErrorTypeInfo.Instance;
     }

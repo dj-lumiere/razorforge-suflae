@@ -497,7 +497,7 @@ public partial class LlvmCodeGenerator
             string varName = member.Object is IdentifierExpression varId
                 ? varId.Name
                 : "<expr>";
-            return EmitSynthesizedStringLiteral(value: varName);
+            return EmitStringLiteral(sb: sb, value: varName);
         }
 
         // Intercept `record.get_address()` -> emit `ptrtoint ptr %<receiver-lvalue> to i64`

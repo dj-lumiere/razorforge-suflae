@@ -77,12 +77,15 @@ public partial class Tokenizer
             string suffix =
                 _source.Substring(startIndex: suffixStart, length: _position - suffixStart);
 
-            // Handle arbitrary precision suffix (n) - maps to Integer or Decimal based on decimal point
-            if (suffix == ArbitraryPrecisionSuffix)
+            // Arbitrary precision: `n` → Integer (integer syntax only),
+            // `dn` → Decimal (float syntax only).
+            if (!isFloat && suffix == ArbitraryIntegerSuffix)
             {
-                AddToken(type: isFloat
-                    ? TokenType.DecimalLiteral
-                    : TokenType.IntegerLiteral);
+                AddToken(type: TokenType.IntegerLiteral);
+            }
+            else if (isFloat && suffix == ArbitraryDecimalSuffix)
+            {
+                AddToken(type: TokenType.DecimalLiteral);
             }
             else if (_numericSuffixToTokenType.TryGetValue(key: suffix,
                          value: out TokenType numericType))
@@ -150,7 +153,8 @@ public partial class Tokenizer
                         string candidate = _source.Substring(startIndex: _position + 1,
                             length: lookAhead - 1);
                         if (_numericSuffixToTokenType.ContainsKey(key: candidate) ||
-                            candidate == ArbitraryPrecisionSuffix)
+                            candidate == ArbitraryIntegerSuffix ||
+                            candidate == ArbitraryDecimalSuffix)
                         {
                             Advance(); // consume the underscore
                             break; // suffix follows
@@ -214,12 +218,14 @@ public partial class Tokenizer
             string suffix =
                 _source.Substring(startIndex: suffixStart, length: _position - suffixStart);
 
-            // Handle arbitrary precision suffix (n)
-            if (suffix == ArbitraryPrecisionSuffix)
+            // Arbitrary precision: `n` for hex integers, `dn` for hex floats.
+            if (!isHexFloat && suffix == ArbitraryIntegerSuffix)
             {
-                AddToken(type: isHexFloat
-                    ? TokenType.DecimalLiteral
-                    : TokenType.IntegerLiteral);
+                AddToken(type: TokenType.IntegerLiteral);
+            }
+            else if (isHexFloat && suffix == ArbitraryDecimalSuffix)
+            {
+                AddToken(type: TokenType.DecimalLiteral);
             }
             else if (_numericSuffixToTokenType.TryGetValue(key: suffix,
                          value: out TokenType tokenType))
@@ -271,7 +277,7 @@ public partial class Tokenizer
                 _source.Substring(startIndex: suffixStart, length: _position - suffixStart);
 
             // Handle arbitrary precision suffix (n) - always Integer for octal
-            if (suffix == ArbitraryPrecisionSuffix)
+            if (suffix == ArbitraryIntegerSuffix)
             {
                 AddToken(type: TokenType.IntegerLiteral);
             }

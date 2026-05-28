@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using SyntaxTree;
@@ -98,4 +99,96 @@ public abstract class TypeInfo
     /// Creates a resolved version of this generic type with the given type arguments.
     /// </summary>
     public abstract TypeInfo CreateInstance(List<TypeInfo> typeArguments);
+
+    /// <summary>
+    /// Size in bytes of a value of this type at runtime (for allocation, GEP element strides,
+    /// etc.). Default is pointer-sized — appropriate for heap-allocated kinds (entities,
+    /// crashables, wrappers, protocols, routines). Records/variants/tuples override to sum
+    /// their members.
+    /// </summary>
+    public virtual int SizeBytes(int pointerSize) => pointerSize;
+
+    /// <summary>
+    /// Aligns <paramref name="size"/> up to the next multiple of <paramref name="alignment"/>.
+    /// </summary>
+    protected static int AlignTo(int size, int alignment) =>
+        (size + alignment - 1) / alignment * alignment;
+
+    /// <summary>
+    /// Computes the size of an LLVM type expressed as a string (e.g. an @llvm("…") backend
+    /// annotation after template substitution). Handles primitives, fixed-size arrays
+    /// (<c>[N x T]</c>), and inline struct literals (<c>{ T1, T2, … }</c>); the latter arise
+    /// when a record without a direct backend type is substituted into another record's
+    /// backend template (e.g. <c>Array[63, Text]</c> → <c>[63 x { ptr, i64, ptr }]</c>).
+    /// Struct literals apply the same per-field alignment + final natural-alignment rule
+    /// that <see cref="RecordTypeInfo.SizeBytes"/> uses.
+    /// </summary>
+    public static int SizeOfLlvmType(string llvmType, int pointerSize)
+    {
+        llvmType = llvmType.Trim();
+
+        if (llvmType.StartsWith('[') && llvmType.EndsWith(']') && llvmType.Contains(" x "))
+        {
+            string inner = llvmType[1..^1];
+            int sep = inner.IndexOf(value: " x ", comparisonType: StringComparison.Ordinal);
+            int count = int.Parse(s: inner[..sep].Trim());
+            int elemSize = SizeOfLlvmType(llvmType: inner[(sep + 3)..], pointerSize: pointerSize);
+            return count * elemSize;
+        }
+
+        if (llvmType.StartsWith('{') && llvmType.EndsWith('}'))
+        {
+            int size = 0;
+            int maxAlignment = 1;
+            foreach (string field in SplitTopLevelCommas(input: llvmType[1..^1]))
+            {
+                int fieldSize = SizeOfLlvmType(llvmType: field, pointerSize: pointerSize);
+                int alignment = Math.Max(val1: Math.Min(val1: fieldSize, val2: 16), val2: 1);
+                maxAlignment = Math.Max(val1: maxAlignment, val2: alignment);
+                size = AlignTo(size: size, alignment: alignment);
+                size += fieldSize;
+            }
+            return AlignTo(size: size, alignment: maxAlignment);
+        }
+
+        return llvmType switch
+        {
+            "i1" => 1,
+            "i8" => 1,
+            "i16" => 2,
+            "i32" => 4,
+            "i64" => 8,
+            "i128" => 16,
+            "half" => 2,
+            "float" => 4,
+            "double" => 8,
+            "fp128" => 16,
+            "ptr" => pointerSize,
+            "void" => 0,
+            _ => throw new InvalidOperationException(
+                message: $"Unknown LLVM type for size calculation: {llvmType}")
+        };
+    }
+
+    /// <summary>
+    /// Splits <paramref name="input"/> on commas at brace/bracket depth 0. Used to parse
+    /// the fields of an inline LLVM struct literal.
+    /// </summary>
+    private static IEnumerable<string> SplitTopLevelCommas(string input)
+    {
+        int depth = 0;
+        int start = 0;
+        for (int i = 0; i < input.Length; i++)
+        {
+            char c = input[index: i];
+            if (c is '{' or '[') depth++;
+            else if (c is '}' or ']') depth--;
+            else if (c == ',' && depth == 0)
+            {
+                yield return input[start..i];
+                start = i + 1;
+            }
+        }
+        if (start < input.Length) yield return input[start..];
+    }
 }

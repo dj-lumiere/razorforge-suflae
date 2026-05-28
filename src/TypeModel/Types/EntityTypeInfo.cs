@@ -26,6 +26,26 @@ public sealed class EntityTypeInfo : TypeInfo
     public List<TypeInfo> ImplementedProtocols { get; set; } = [];
 
     /// <summary>
+    /// Size of the underlying heap-allocated struct (sum of member sizes with alignment).
+    /// Distinct from <see cref="SizeBytes"/>, which returns the pointer-sized value used
+    /// to pass entities around at the SSA level.
+    /// </summary>
+    public int HeapBlockSize(int pointerSize)
+    {
+        int size = 0;
+        int maxAlignment = 1;
+        foreach (MemberVariableInfo mv in MemberVariables)
+        {
+            int memberSize = mv.Type.SizeBytes(pointerSize: pointerSize);
+            int alignment = Math.Max(val1: Math.Min(val1: memberSize, val2: 16), val2: 1);
+            maxAlignment = Math.Max(val1: maxAlignment, val2: alignment);
+            size = AlignTo(size: size, alignment: alignment);
+            size += memberSize;
+        }
+        return AlignTo(size: size, alignment: maxAlignment);
+    }
+
+    /// <summary>
     /// For generic definitions, the original generic type this was resolved from.
     /// </summary>
     public EntityTypeInfo? GenericDefinition { get; init; }

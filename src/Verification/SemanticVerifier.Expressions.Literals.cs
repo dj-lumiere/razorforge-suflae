@@ -26,14 +26,19 @@ public sealed partial class SemanticVerifier
     {
         // Map token type to the corresponding type (PascalCase)
         // `none` value literal: needs a carrier-slot expected type
-        // (Maybe[T] / Lookup[T] / Result[Blank] / variant-with-None).
+        // (Maybe[T] / Lookup[T] / variant-with-None). Anything else is a hard error —
+        // `none` has no standalone meaning outside an absence-carrying slot.
         if (literal.LiteralType == TokenType.NoneValue)
         {
-            if (expectedType != null && IsMaybeType(type: expectedType))
+            if (expectedType != null && IsNoneCarrierSlot(type: expectedType))
+            {
                 return expectedType;
-            if (expectedType is VariantTypeInfo variant && variant.Members.Any(m => m.IsNone))
-                return expectedType;
-            return _registry.LookupType(name: "Maybe") ?? ErrorTypeInfo.Instance;
+            }
+            ReportError(code: SemanticDiagnosticCode.NoneOutsideCarrierSlot,
+                message:
+                $"'none' is only valid where the expected type is Maybe[T], Lookup[T], or a variant with a None arm; got {(expectedType?.Name ?? "no contextual type")}.",
+                location: literal.Location);
+            return ErrorTypeInfo.Instance;
         }
 
         string? typeName = literal.LiteralType switch

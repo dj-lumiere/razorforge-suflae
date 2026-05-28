@@ -18,7 +18,7 @@ public partial class LlvmCodeGenerator
         List<string>? memberVariableValues = null)
     {
         string typeName = GetEntityTypeName(entity: entity);
-        int size = CalculateEntitySize(entity: entity);
+        int size = entity.HeapBlockSize(pointerSize: _pointerSizeBytes);
 
         // Allocate memory
         // TODO(C41): route through a typed allocator abstraction rather than calling rf_allocate_dynamic directly.

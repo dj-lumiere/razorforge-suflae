@@ -895,7 +895,7 @@ public sealed partial class SemanticVerifier
         if (type == null)
         {
             ReportError(code: SemanticDiagnosticCode.UnknownType,
-                message: $"Unknown type '{creator.TypeName}'.",
+                message: $"Unknown type '{creator.TypeName}'. Check the spelling, and make sure the module that defines it is imported.",
                 location: creator.Location);
             return ErrorTypeInfo.Instance;
         }

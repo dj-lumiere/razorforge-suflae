@@ -13,11 +13,6 @@ namespace Compiler.CodeGen;
 /// </summary>
 public partial class LlvmCodeGenerator
 {
-    private string EmitSynthesizedStringLiteral(string value)
-    {
-        return EmitStringLiteralGlobal(value: value);
-    }
-
     private void EmitSynthesizedBodyFromAst(RoutineInfo routine, string funcName, Statement body)
     {
         var paramList = new List<string>();

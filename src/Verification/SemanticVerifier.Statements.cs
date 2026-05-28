@@ -454,7 +454,7 @@ public sealed partial class SemanticVerifier
 
             default:
                 ReportWarning(code: SemanticWarningCode.UnknownStatementType,
-                    message: $"Unknown statement type: {statement.GetType().Name}",
+                    message: $"Internal: semantic analyzer has no handler for AST node '{statement.GetType().Name}'. This statement will be skipped; downstream analysis may be incomplete. Please report as a compiler bug.",
                     location: statement.Location);
                 break;
         }
@@ -787,7 +787,7 @@ public sealed partial class SemanticVerifier
         if (!IsAssignableTarget(target: assign.Target))
         {
             ReportError(code: SemanticDiagnosticCode.InvalidAssignmentTarget,
-                message: "Invalid assignment target.",
+                message: "Invalid assignment target. Only variables, member accesses (e.g. obj.field), and indexed expressions (e.g. list[i]) can be assigned to.",
                 location: assign.Target.Location);
             return;
         }

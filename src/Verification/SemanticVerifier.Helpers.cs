@@ -84,6 +84,21 @@ public sealed partial class SemanticVerifier
     private static bool IsMaybeType(TypeSymbol type) => GetCarrierBaseName(type: type) == MaybeTypeName;
 
     /// <summary>
+    /// Returns true if the type is a legal target for the value-position `none` literal:
+    /// Maybe[T] or Lookup[T] (both have an absent arm matched by `is None`), or a variant
+    /// that declares a None member. Result[T] is NOT included — Result's two arms are Ok/Err.
+    /// </summary>
+    private static bool IsNoneCarrierSlot(TypeSymbol type)
+    {
+        string? carrier = GetCarrierBaseName(type: type);
+        if (carrier is MaybeTypeName or "Lookup")
+        {
+            return true;
+        }
+        return type is VariantTypeInfo variant && variant.Members.Any(predicate: m => m.IsNone);
+    }
+
+    /// <summary>
     /// Checks if a pattern represents a None check.
     /// The parser creates TypePattern(type: "None") rather than NonePattern.
     /// </summary>

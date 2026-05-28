@@ -56,10 +56,15 @@ public partial class Tokenizer
     private readonly Dictionary<string, TokenType> _numericSuffixToTokenType;
 
     /// <summary>
-    /// The suffix for arbitrary precision numbers.
-    /// Maps to Integer (whole numbers) or Decimal (floating-point).
+    /// The suffix for arbitrary-precision Integer literals (e.g. `42n`).
     /// </summary>
-    private const string ArbitraryPrecisionSuffix = "n";
+    private const string ArbitraryIntegerSuffix = "n";
+
+    /// <summary>
+    /// The suffix for arbitrary-precision Decimal literals (e.g. `3.14dn`).
+    /// Mirrors the fixed-width Decimal suffix family `d32`/`d64`/`d128`.
+    /// </summary>
+    private const string ArbitraryDecimalSuffix = "dn";
 
     /// <summary>
     /// Maps ByteSize suffixes to their corresponding token types.

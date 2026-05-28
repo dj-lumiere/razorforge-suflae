@@ -57,6 +57,37 @@ public class RecordTypeInfo : TypeInfo
         }
     }
 
+    /// <inheritdoc/>
+    public override int SizeBytes(int pointerSize)
+    {
+        // @llvm-annotated record: backend string dictates the layout. Template holes are
+        // already substituted in generic resolutions (see ResolveBackendTypeTemplate).
+        if (BackendType != null && !IsGenericDefinition)
+        {
+            return SizeOfLlvmType(llvmType: BackendType, pointerSize: pointerSize);
+        }
+
+        // Result[T] / Lookup[T]: 8-byte type-id tag + max(payload, 8). Maybe is handled by
+        // the member-sum path since its layout is just {i1, T}.
+        if (CarrierKind is CarrierKind.Result or CarrierKind.Lookup
+            && TypeArguments is { Count: 1 } args)
+        {
+            return 8 + Math.Max(val1: args[index: 0].SizeBytes(pointerSize: pointerSize), val2: 8);
+        }
+
+        int size = 0;
+        int maxAlignment = 1;
+        foreach (MemberVariableInfo mv in MemberVariables)
+        {
+            int memberSize = mv.Type.SizeBytes(pointerSize: pointerSize);
+            int alignment = Math.Max(val1: Math.Min(val1: memberSize, val2: 16), val2: 1);
+            maxAlignment = Math.Max(val1: maxAlignment, val2: alignment);
+            size = AlignTo(size: size, alignment: alignment);
+            size += memberSize;
+        }
+        return AlignTo(size: size, alignment: maxAlignment);
+    }
+
     /// <summary>RC wrapper base names that need retain-on-copy / release-on-drop.</summary>
     private static readonly HashSet<string> RCWrapperBaseNames =
         ["Retained", "Shared", "Tracked", "Marked"];

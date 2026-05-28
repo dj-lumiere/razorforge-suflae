@@ -42,6 +42,28 @@ public sealed class VariantTypeInfo : TypeInfo
     }
 
     /// <inheritdoc/>
+    public override int SizeBytes(int pointerSize)
+    {
+        // Layout: { i64 type_id, [max-payload bytes] }, aligned to max(tag, payload).
+        int maxPayloadSize = 0;
+        int maxPayloadAlignment = 1;
+        foreach (VariantMemberInfo member in Members)
+        {
+            if (member is { IsNone: false, Type: not null })
+            {
+                int payloadSize = member.Type.SizeBytes(pointerSize: pointerSize);
+                int payloadAlignment = Math.Max(val1: Math.Min(val1: payloadSize, val2: 16), val2: 1);
+                maxPayloadSize = Math.Max(val1: maxPayloadSize, val2: payloadSize);
+                maxPayloadAlignment = Math.Max(val1: maxPayloadAlignment, val2: payloadAlignment);
+            }
+        }
+        const int tagSize = 8;
+        int structAlignment = Math.Max(val1: tagSize, val2: maxPayloadAlignment);
+        int size = AlignTo(size: tagSize, alignment: maxPayloadAlignment) + maxPayloadSize;
+        return AlignTo(size: size, alignment: structAlignment);
+    }
+
+    /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">Thrown if this is not a generic definition.</exception>
     /// <exception cref="ArgumentException">Thrown if the number of type arguments doesn't match.</exception>
     public override TypeInfo CreateInstance(List<TypeInfo> typeArguments)

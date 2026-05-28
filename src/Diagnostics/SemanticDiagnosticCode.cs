@@ -77,6 +77,12 @@ public enum SemanticDiagnosticCode
     /// <summary>Invalid base prefix in numeric literal (expected 0x, 0o, or 0b).</summary>
     InvalidNumericBase = 15,
 
+    /// <summary>
+    /// The value literal 'none' was used outside a carrier or variant slot.
+    /// Legal contexts: target type is Maybe[T], Lookup[T], or a variant with a None arm.
+    /// </summary>
+    NoneOutsideCarrierSlot = 16,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // BINARY AND UNARY OPERATOR ERRORS (RF-S050 - RF-S099)
     // ═══════════════════════════════════════════════════════════════════════════

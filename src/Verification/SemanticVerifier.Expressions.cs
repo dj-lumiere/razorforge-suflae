@@ -586,7 +586,7 @@ public sealed partial class SemanticVerifier
         if (!IsAssignableTarget(target: target))
         {
             ReportError(code: SemanticDiagnosticCode.InvalidAssignmentTarget,
-                message: "Invalid assignment target.",
+                message: "Invalid assignment target. Only variables, member accesses (e.g. obj.field), and indexed expressions (e.g. list[i]) can be assigned to.",
                 location: target.Location);
             return targetType;
         }
@@ -759,7 +759,7 @@ public sealed partial class SemanticVerifier
         if (!IsAssignableTarget(target: compound.Target))
         {
             ReportError(code: SemanticDiagnosticCode.InvalidAssignmentTarget,
-                message: "Invalid compound assignment target.",
+                message: "Invalid compound assignment target. Only variables, member accesses (e.g. obj.field), and indexed expressions (e.g. list[i]) can be the target of `+=`, `-=`, etc.",
                 location: compound.Target.Location);
             return targetType;
         }

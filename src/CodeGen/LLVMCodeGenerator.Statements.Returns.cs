@@ -489,22 +489,18 @@ public partial class LlvmCodeGenerator
             string mangledCrash = resolvedCrash.MangledName;
             string llvmReceiverType = GetLlvmType(type: errorType!);
 
-            string textPtr = NextTemp();
+            // Text is `record Text { data: Hijacked[Character], count: U64, ctrl: ... }` —
+            // returned by value as %Record.Text. Extract field 0 (codepoint ptr) and
+            // field 1 (count) directly from the SSA struct.
+            string textVal = NextTemp();
             EmitLine(sb: sb,
-                line: $"  {textPtr} = call ptr @{mangledCrash}({llvmReceiverType} {errorVal})");
-
-            // Text is `entity Text { data: Hijacked[Character], count: U64 }` — LLVM `{ ptr, i64 }`.
-            // Load `data` (field 0) for the codepoint buffer and `count` (field 1) for the length.
-            // A prior revision pretended Text wrapped a `List[Letter]` struct and chased an extra
-            // pointer hop through {ptr,i64,i64} — that read codepoint bytes as a list header and
-            // produced garbage that the rf_crash loop then iterated as an OOB read.
+                line: $"  {textVal} = call %Record.Text @{mangledCrash}({llvmReceiverType} {errorVal})");
             dataPtr = NextTemp();
-            EmitLine(sb: sb, line: $"  {dataPtr} = load ptr, ptr {textPtr}");
-            string countField = NextTemp();
             EmitLine(sb: sb,
-                line: $"  {countField} = getelementptr {{ptr, i64}}, ptr {textPtr}, i32 0, i32 1");
+                line: $"  {dataPtr} = extractvalue %Record.Text {textVal}, 0");
             msgLen = NextTemp();
-            EmitLine(sb: sb, line: $"  {msgLen} = load i64, ptr {countField}");
+            EmitLine(sb: sb,
+                line: $"  {msgLen} = extractvalue %Record.Text {textVal}, 1");
         }
 
         string typeCStr = EmitCStringConstant(value: typeName);
