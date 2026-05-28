@@ -969,6 +969,11 @@ public sealed partial class SemanticVerifier
             candidates: candidates);
         _registry.CollectMemberRoutineCandidates(type: type, methodName: "$create!",
             candidates: candidates);
+        // Also pull the concrete type's own routines directly — CollectMemberRoutineCandidates
+        // can miss a user-declared `$create` on an entity, while GetMethodsForType returns it
+        // (this is how the entity `$destroy` resolves correctly elsewhere).
+        candidates.AddRange(collection: _registry.GetMethodsForType(type: type)
+            .Where(predicate: m => m.Name is "$create" or "$create!"));
         foreach (RoutineInfo m in candidates)
         {
             if (m.Parameters.Count != creator.MemberVariables.Count) continue;
