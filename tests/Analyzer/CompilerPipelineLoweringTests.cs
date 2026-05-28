@@ -823,12 +823,12 @@ public class CompilerPipelineLoweringTests
 
         Assert.Contains(
             expectedSubstring:
-            "@\"Core.Hijacked[Collections.BTreeDictNode[Core.S64, Core.S64]].reveal\"",
+            "@\"Core.Hijacked[Collections.BTreeDictNode[Core.S64, Core.S64]].as_entity\"",
             actualString: forwarderBody);
         Assert.Contains(
             expectedSubstring: "@\"Collections.BTreeDictNode[Core.S64, Core.S64].key_get\"",
             actualString: forwarderBody);
-        Assert.DoesNotContain(expectedSubstring: "@\"Core.Hijacked[T].reveal\"",
+        Assert.DoesNotContain(expectedSubstring: "@\"Core.Hijacked[T].as_entity\"",
             actualString: forwarderBody);
         Assert.DoesNotContain(expectedSubstring: "@\"Collections.BTreeDictNode[K, V].key_get\"",
             actualString: forwarderBody);
