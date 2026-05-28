@@ -1150,7 +1150,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// <summary>
     /// Builds the body for <c>$represent</c> or <c>$diagnose</c> on a record or entity.
     /// <list type="bullet">
-    ///   <item><c>$represent</c>: <c>return f"TypeName({me.f1}, {me.f2})"</c> -> open+posted fields, positional.</item>
+    ///   <item><c>$represent</c>: <c>return f"TypeName(f1: {me.f1}, f2: {me.f2})"</c> -> open+posted fields, named.</item>
     ///   <item><c>$diagnose</c>:  <c>return f"Module.TypeName(f1: {me.f1}, [secret] f2: {me.f2})"</c> -> all fields named,
     ///         values via <c>$represent</c> (not <c>$diagnose</c>) to avoid cascading verbosity.</item>
     /// </list>
@@ -1194,15 +1194,12 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 parts.Add(new TextPart(Text: ", ", Location: _synthLoc));
             first = false;
 
-            if (diagnose)
-            {
-                string secretPrefix = field.Visibility == VisibilityModifier.Secret
-                    ? "[secret] "
-                    : "";
-                parts.Add(new TextPart(
-                    Text: secretPrefix + field.Name + ": ",
-                    Location: _synthLoc));
-            }
+            string secretPrefix = diagnose && field.Visibility == VisibilityModifier.Secret
+                ? "[secret] "
+                : "";
+            parts.Add(new TextPart(
+                Text: secretPrefix + field.Name + ": ",
+                Location: _synthLoc));
 
             var fieldExpr = new MemberExpression(
                 Object: new IdentifierExpression(Name: "me", Location: _synthLoc)
