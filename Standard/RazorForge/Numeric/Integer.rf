@@ -77,7 +77,7 @@ routine Integer.$copy() -> Me
 
 ### Releases this value's reference. Frees the handle + controller when this
 ### was the last live ref. No-op when `ctrl` is null.
-routine Integer.$destroy()
+dangerous routine Integer.$destroy()
   danger!
     if me.ctrl.is_none()
       return

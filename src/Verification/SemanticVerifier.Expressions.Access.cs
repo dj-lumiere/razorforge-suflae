@@ -981,25 +981,37 @@ public sealed partial class SemanticVerifier
             }
         }
 
+        // Prefer a user-defined (non-synthesized) `$create`. Entities/records also get an
+        // auto-synthesized all-args `$create` (AutoWiredRegistrationPass) whose only job is inline
+        // field-init ("stuffing") — when that's the sole match we fall through to inline
+        // construction below. A user `$create` with the same signature as the all-args creator
+        // (e.g. `Resource.$create(tag:)` where `tag` is the only field) is the real constructor
+        // and must be called so its body/side-effects run.
+        // Dedupe by registry key — CollectMemberRoutineCandidates can surface the same overload
+        // through more than one path (owner table + protocol/universal walk), which would make a
+        // single user `$create` look ambiguous and wrongly fall back to inline construction.
+        var userMatches = nameMatches.Where(predicate: m => !m.IsSynthesized)
+            .GroupBy(keySelector: m => m.RegistryKey)
+            .Select(selector: g => g.First())
+            .ToList();
+
         // The all-args creator `T(fields)` written *inside* T's own `$create` is the primitive
-        // field-init ("stuffing") base case — it must NOT route back to `$create` (infinite
-        // recursion). Detect that self-reference and fall through to inline field-init.
+        // field-init base case — it must NOT route back to `$create` (infinite recursion).
+        // Detect that self-reference and fall through to inline field-init.
         bool insideOwnCreate = _currentRoutine is { Name: "$create" or "$create!" } currentCreate
             && currentCreate.OwnerType != null
             && (currentCreate.OwnerType.FullName == type.FullName
                 || currentCreate.OwnerType.Name == type.Name);
 
-        // When a unique user-defined `$create` matches the provided args, route the construction
-        // through it (so its body/side-effects run). Otherwise — no match, ambiguous overloads,
-        // or self-reference inside the creator — fall back to inline field-init / standard
-        // validation. A complete field-init whose names all coincide with a `$create`'s params
-        // still prefers the `$create` so user constructors with field-named params are honoured.
-        if (nameMatches.Count != 1 || insideOwnCreate)
+        // Route through a unique user-defined `$create` (so its body runs). Otherwise — no
+        // user match, ambiguous user overloads, or self-reference inside the creator — fall back
+        // to inline field-init / standard validation.
+        if (userMatches.Count != 1 || insideOwnCreate)
         {
             return false;
         }
 
-        RoutineInfo match = nameMatches[index: 0];
+        RoutineInfo match = userMatches[index: 0];
 
         // Analyze each arg with the matching parameter's type as the expected type so integer
         // literals coerce correctly (e.g. `size: 10` → S8 if the param is S8, not default S32).

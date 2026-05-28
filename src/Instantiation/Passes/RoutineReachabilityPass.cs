@@ -99,6 +99,19 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 if (routine != null) EnqueueCallee(callee: routine);
             }
 
+            // Unified $destroy — stage 1: user-defined entity destructors are called implicitly by
+            // codegen at scope exit (EmitEntityCleanup). There's no call expression for reachability
+            // to walk, so seed it here. Restricted to non-synthesized destructors on plain entities:
+            // the wrapper (Owned/Retained/Tracked) $destroy still hits a separate
+            // Hijacked[T].invalidate! codegen bug and must stay unseeded (see RC-wrapper note below).
+            if (type is EntityTypeInfo)
+            {
+                RoutineInfo? userDestroy =
+                    ctx.Registry.LookupMethod(type: type, methodName: "$destroy");
+                if (userDestroy is { IsSynthesized: false })
+                    EnqueueCallee(callee: userDestroy);
+            }
+
             // RC wrappers (Owned/Retained/Tracked) have `release` called implicitly by codegen
             // at scope exit — no user-visible call expression for reachability to walk. Seed it
             // here so the body gets monomorphized for each concrete wrapper instance.

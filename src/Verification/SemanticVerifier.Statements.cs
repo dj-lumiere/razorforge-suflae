@@ -76,6 +76,19 @@ public sealed partial class SemanticVerifier
 
     private void AnalyzeFunctionBody(RoutineDeclaration routine)
     {
+        // A user-defined `$destroy` replaces the compiler-generated memory teardown (field
+        // recursion + invalidate `me`), so the author owns freeing `me` and its fields. Require
+        // `dangerous` so this opt-in to manual memory management is explicit at the declaration.
+        bool isDestroyDecl = routine.Name == "$destroy"
+            || routine.Name.EndsWith(value: ".$destroy", comparisonType: StringComparison.Ordinal);
+        if (isDestroyDecl && !routine.IsDangerous)
+        {
+            ReportError(code: SemanticDiagnosticCode.DestroyMustBeDangerous,
+                message: "A user-defined `$destroy` must be marked `dangerous` — overriding it " +
+                         "makes you responsible for freeing `me` and its owned fields.",
+                location: routine.Location);
+        }
+
         // Construct the base name matching how the routine was registered.
         string baseName;
         TypeSymbol? routineOwnerType = null;

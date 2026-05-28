@@ -152,10 +152,44 @@ public partial class LlvmCodeGenerator
 
             string loaded = NextTemp();
             EmitLine(sb: sb, line: $"  {loaded} = load ptr, ptr {llvmAddr}");
+
+            // A user-defined (dangerous) `$destroy` takes over the entire teardown — the author
+            // owns freeing `me`. When one exists, call it and do NOT emit the default
+            // `rf_invalidate` (that would double-free). Otherwise emit the trivial default
+            // teardown (invalidate the allocation).
+            bool userDestroyed = _localVariables.TryGetValue(key: name, value: out TypeInfo? varType)
+                && EmitUserDestroyCall(sb: sb, entityType: varType, entityPtr: loaded);
+            if (userDestroyed)
+                continue;
+
             string asInt = NextTemp();
             EmitLine(sb: sb, line: $"  {asInt} = ptrtoint ptr {loaded} to i64");
             EmitLine(sb: sb, line: $"  call void @rf_invalidate(i64 {asInt})");
         }
+    }
+
+    /// <summary>
+    /// Emits a call to a user-defined (non-synthesized) <c>$destroy</c> on an entity value, if one
+    /// exists. Returns <c>true</c> when a call was emitted (the user destructor owns the free, so
+    /// the caller must skip the default <c>rf_invalidate</c>); <c>false</c> otherwise.
+    /// </summary>
+    private bool EmitUserDestroyCall(StringBuilder sb, TypeInfo entityType, string entityPtr)
+    {
+        if (entityType is not EntityTypeInfo)
+            return false;
+
+        // Resolve the entity's OWN user-written `$destroy` directly, not via LookupMethod —
+        // the universal `$destroy` registered on the `T` type-parameter (so generic bodies can
+        // call `T.$destroy()`) would otherwise shadow it and look synthesized, suppressing the call.
+        RoutineInfo? destroy = _registry.GetMethodsForType(type: entityType)
+            .FirstOrDefault(predicate: m => m.Name == "$destroy" && !m.IsSynthesized);
+        if (destroy is null)
+            return false;
+
+        GenerateRoutineDeclaration(routine: destroy);
+        string mangled = MangleRoutineName(routine: destroy);
+        EmitLine(sb: sb, line: $"  call void @{mangled}(ptr {entityPtr})");
+        return true;
     }
 
     #endregion

@@ -66,3 +66,6 @@ routine Viewed[T].$diagnose() -> ?Text
   danger!
     var hijacked = Hijacked[T](me)
     return me.type_name() + "(" + hijacked.as_entity().$diagnose() + ")"
+
+dangerous routine Viewed[T].$destroy()
+  return

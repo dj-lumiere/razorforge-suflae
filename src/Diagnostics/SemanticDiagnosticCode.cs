@@ -798,6 +798,10 @@ public enum SemanticDiagnosticCode
     /// <summary>Blank cannot be used as a generic type argument (it has no value).</summary>
     BlankAsTypeArgument = 805,
 
+    /// <summary>A user-defined `$destroy` overrides the compiler's memory teardown, so it must be
+    /// marked `dangerous` — the author takes responsibility for freeing `me` and its fields.</summary>
+    DestroyMustBeDangerous = 807,
+
     /// <summary>Suflae cannot use C interop directly.</summary>
     SuflaeNoCInterop = 810,
 

@@ -6,9 +6,9 @@ module Core
 entity RetainController[T]
 needs T is EntityType
   ### Stores the strong count.
-  secret strong_count: S32
+  secret strong_count: U32
   ### Stores the weak count.
-  secret weak_count: S32
+  secret weak_count: U32
   ### Stores the raw pointer to the managed entity.
   secret data: Hijacked[T]
 
@@ -30,6 +30,12 @@ routine RetainController[T].increase_strong_count()
 ### Decrements the strong reference count when a `Retained` handle is dropped.
 routine RetainController[T].decrease_strong_count()
   me.strong_count = me.strong_count - 1
+  if me.should_deallocate_data()
+    danger!
+      me.drop_data()
+  if me.should_deallocate_controller()
+    danger!
+      me.$destroy()
   return
 
 ### Increments the weak reference count when a new `Tracked` handle is cloned.
@@ -40,16 +46,19 @@ routine RetainController[T].increase_weak_count()
 ### Decrements the weak reference count when a `Tracked` handle is dropped.
 routine RetainController[T].decrease_weak_count()
   me.weak_count = me.weak_count - 1
+  if me.should_deallocate_controller()
+    danger!
+      me.$destroy()
   return
 
 ### Returns the current number of live strong (`Retained`) handles.
 ### :returns: The strong reference count.
-routine RetainController[T].strong_count() -> S32
+routine RetainController[T].strong_count() -> U32
   return me.strong_count
 
 ### Returns the current number of live weak (`Tracked`) handles.
 ### :returns: The weak reference count.
-routine RetainController[T].weak_count() -> S32
+routine RetainController[T].weak_count() -> U32
   return me.weak_count
 
 ### Returns `true` when the strong count has reached zero and the managed entity should be destroyed.
@@ -70,4 +79,12 @@ dangerous routine RetainController[T].borrow_data() -> Hijacked[T]
 ### Destroys the managed entity. Call only when strong count reaches zero.
 dangerous routine RetainController[T].drop_data()
   me.data.invalidate()
+  return
+
+dangerous routine RetainController[T].$destroy()
+  if me.should_deallocate_controller()
+    me.strong_count.$destroy()
+    me.weak_count.$destroy()
+    me.hijack().invalidate()
+    return
   return

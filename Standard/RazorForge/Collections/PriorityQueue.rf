@@ -79,15 +79,6 @@ routine PriorityQueue[TPriority, TElement].$create(capacity: U64) -> ?PriorityQu
       capacity: capacity
     )
 
-### Releases the raw heap buffers owned by this queue.
-routine PriorityQueue[TPriority, TElement].$destroy()
-  danger!
-    if not me.priorities.is_none()
-      rf_invalidate(pointer_to_int[TPriority, Address](me.priorities))
-    if not me.elements.is_none()
-      rf_invalidate(pointer_to_int[TElement, Address](me.elements))
-  return
-
 # ============================================================================
 # Internal Helpers
 # ============================================================================
@@ -458,3 +449,8 @@ routine PriorityQueue[TPriority, TElement].$diagnose() -> ?Text
     i = i +% 1u64
   result = result + "])"
   return steal result
+
+dangerous routine PriorityQueue[TPriority, TElement].$destroy()
+  me.priorities.invalidate()
+  me.elements.invalidate()
+  return

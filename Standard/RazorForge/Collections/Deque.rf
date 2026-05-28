@@ -461,3 +461,7 @@ routine Deque[T].$eq(other: Deque[T]) -> Bool
       return false
     i = i +% 1u64
   return true
+
+dangerous routine Deque[T].$destroy()
+  me.data.invalidate()
+  return

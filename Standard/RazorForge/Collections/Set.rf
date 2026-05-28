@@ -107,18 +107,6 @@ routine Set[T].$create(key: SecureHashKey, capacity: U64) -> ?Set[T]
     set.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
   return steal set
 
-routine Set[T].$destroy()
-  danger!
-    if not me.ctrl.is_none()
-      rf_invalidate(pointer_to_int[U8, Address](me.ctrl))
-    if not me.indices.is_none()
-      rf_invalidate(pointer_to_int[U64, Address](me.indices))
-    if not me.slots.is_none()
-      rf_invalidate(pointer_to_int[T, Address](me.slots))
-    if not me.entry_live.is_none()
-      rf_invalidate(pointer_to_int[U8, Address](me.entry_live))
-  return
-
 # ============================================================================
 # Internal Helpers
 # ============================================================================
@@ -432,3 +420,10 @@ routine Set[T].$eq(other: Set[T]) -> Bool
     if val notin other
       return false
   return true
+
+dangerous routine Set[T].$destroy()
+  me.ctrl.invalidate()
+  me.indices.invalidate()
+  me.slots.invalidate()
+  me.entry_live.invalidate()
+  return

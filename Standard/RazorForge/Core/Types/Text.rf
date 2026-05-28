@@ -37,14 +37,13 @@ routine Text.$copy() -> Me
 
 ### Releases this value's reference. Frees the buffer + controller when this
 ### was the last live ref. No-op when `ctrl` is null (empty / static literal).
-routine Text.$destroy()
-  danger!
-    if me.ctrl.is_none()
-      return
-    var prev = me.ctrl.as_entity().decrease_strong_count()
-    if prev <= 1_u64
-      me.data.invalidate()
-      me.ctrl.invalidate()
+dangerous routine Text.$destroy()
+  if me.ctrl.is_none()
+    return
+  var prev = me.ctrl.as_entity().decrease_strong_count()
+  if prev <= 1_u64
+    me.data.invalidate()
+    me.ctrl.invalidate()
   return
 
 # Creators

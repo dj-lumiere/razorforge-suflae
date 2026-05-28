@@ -38,6 +38,7 @@ internal sealed class AutoWiredRegistrationPass
         TypeSymbol? u64Type = _registry.LookupType(name: "U64");
         TypeSymbol? s64Type = _registry.LookupType(name: "S64");
         TypeSymbol? byteSizeType = _registry.LookupType(name: "ByteSize");
+        TypeSymbol? blankType = _registry.LookupType(name: "Blank");
 
         // Look up List[T] for list-returning synthesized routines
         TypeSymbol? listDef = _registry.LookupType(name: "List");
@@ -87,6 +88,17 @@ internal sealed class AutoWiredRegistrationPass
                 MaybeRegisterWired(owner: type,
                     name: "$diagnose",
                     returnType: textType,
+                    existingMethods: existingMethods);
+            }
+
+            // Unified destructor: every non-wrapper type gets a `dangerous` `$destroy()`.
+            // RC wrappers (Owned/Retained/Tracked/...) supply their own custom `$destroy` that
+            // delegates to the controller, so they're excluded here. The generated body is a
+            // no-op for now (full field-recursion + invalidate-me lands with the codegen
+            // unification); registering it lets explicit `me.field.$destroy()` calls resolve.
+            if (blankType != null && !IsWrapperType(type: type))
+            {
+                MaybeRegisterDestroy(owner: type, blankType: blankType,
                     existingMethods: existingMethods);
             }
 
@@ -529,6 +541,14 @@ internal sealed class AutoWiredRegistrationPass
                 returnType: textType,
                 existingMethods: universalExisting);
         }
+
+        // `$destroy` as a universal method too — so `v.$destroy()` resolves on a generic `T`
+        // (e.g. element teardown loops in `List[T].$destroy`).
+        if (blankType != null)
+        {
+            MaybeRegisterDestroy(owner: tParam, blankType: blankType,
+                existingMethods: universalExisting);
+        }
     }
 
     /// <summary>
@@ -554,6 +574,49 @@ internal sealed class AutoWiredRegistrationPass
             Visibility = VisibilityModifier.Open,
             IsSynthesized = true
         });
+    }
+
+    /// <summary>
+    /// Registers the auto-derived <c>$destroy()</c> destructor if not already user-defined.
+    /// Marked <c>dangerous</c>: calling it (explicitly or overriding it) is manual memory
+    /// management. The body is synthesized by <see cref="WiredRoutinePass"/>.
+    /// </summary>
+    private void MaybeRegisterDestroy(TypeSymbol owner, TypeSymbol blankType,
+        List<RoutineInfo> existingMethods)
+    {
+        if (existingMethods.Any(predicate: m => m.Name == "$destroy"))
+        {
+            return;
+        }
+
+        _registry.RegisterRoutine(routine: new RoutineInfo(name: "$destroy")
+        {
+            Kind = RoutineKind.MemberRoutine,
+            OwnerType = owner,
+            Parameters = [],
+            ReturnType = blankType,
+            IsFailable = false,
+            IsDangerous = true,
+            DeclaredModification = ModificationCategory.Readonly,
+            ModificationCategory = ModificationCategory.Readonly,
+            Visibility = VisibilityModifier.Open,
+            IsSynthesized = true
+        });
+    }
+
+    /// <summary>
+    /// True for RC wrapper types (Owned/Retained/Tracked/Viewed/Grasped/Hijacked/...) — they
+    /// supply their own custom destructor / forwarders and are excluded from generated `$destroy`.
+    /// </summary>
+    private static bool IsWrapperType(TypeSymbol type)
+    {
+        string baseName = type switch
+        {
+            WrapperTypeInfo w => w.Name,
+            RecordTypeInfo { GenericDefinition: { } d } => d.Name,
+            _ => type.Name.Contains(value: '[') ? type.Name[..type.Name.IndexOf(value: '[')] : type.Name
+        };
+        return WrapperForwardingPass.WrapperTypeNames.Contains(item: baseName);
     }
 
     /// <summary>

@@ -663,3 +663,7 @@ common routine BitList.from_u64(value: U64) -> ?BitList
     result.add_last((value & (1u64 << i)) != 0u64)
     i = i +% 1u64
   return steal result
+
+dangerous routine BitList.$destroy()
+  me.data.invalidate()
+  return

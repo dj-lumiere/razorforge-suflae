@@ -89,12 +89,6 @@ needs T is Cloneable
       capacity: count
     )
 
-routine List[T].$destroy()
-  danger!
-    if not me.data.is_none()
-      rf_invalidate(pointer_to_int[T, Address](me.data))
-  return
-
 # Core operations
 
 ### Returns the number of elements currently stored in the list.
@@ -770,4 +764,14 @@ routine List[T].merge_into_by(left: U64, mid: U64, right: U64, buffer: Controlli
     me.set_raw(index: out, value: buffer.get_raw(b))
     b = b + 1u64
     out = out + 1u64
+  return
+
+### Destroys each live element (no-op for value-typed `T`), then frees the backing buffer.
+dangerous routine List[T].$destroy()
+  var elem_size = T.data_size()
+  var i: U64 = 0u64
+  while i < me.count
+    me.data.offset(elem_size * i).extract().$destroy()
+    i = i + 1u64
+  me.data.invalidate()
   return

@@ -119,21 +119,6 @@ routine FastDict[K, V].$create(capacity: U64) -> ?FastDict[K, V]
     dict.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
   return steal dict
 
-### Releases the raw probe, index, key, value, and entry-liveness buffers owned by this dictionary.
-routine FastDict[K, V].$destroy()
-  danger!
-    if not me.ctrl.is_none()
-      rf_invalidate(pointer_to_int[U8, Address](me.ctrl))
-    if not me.indices.is_none()
-      rf_invalidate(pointer_to_int[U64, Address](me.indices))
-    if not me.keys.is_none()
-      rf_invalidate(pointer_to_int[K, Address](me.keys))
-    if not me.vals.is_none()
-      rf_invalidate(pointer_to_int[V, Address](me.vals))
-    if not me.entry_live.is_none()
-      rf_invalidate(pointer_to_int[U8, Address](me.entry_live))
-  return
-
 # ============================================================================
 # Internal Helpers
 # ============================================================================
@@ -572,3 +557,11 @@ routine FastDict[K, V].$eq(other: FastDict[K, V]) -> Bool
           return false
     i = i +% 1u64
   return true
+
+dangerous routine FastDict[K, V].$destroy()
+  me.ctrl.invalidate()
+  me.indices.invalidate()
+  me.keys.invalidate()
+  me.vals.invalidate()
+  me.entry_live.invalidate()
+  return

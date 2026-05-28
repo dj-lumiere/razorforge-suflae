@@ -38,3 +38,10 @@ dangerous routine ImmutableSharedController.decrease_strong_count() -> U64
 @readonly
 dangerous routine ImmutableSharedController.strong_count() -> U64
   return me.strong_count.load()
+
+dangerous routine ImmutableSharedController.$destroy()
+  if me.strong_count() == 0
+    me.strong_count.$destroy()
+    me.hijack().invalidate()
+    return
+  return

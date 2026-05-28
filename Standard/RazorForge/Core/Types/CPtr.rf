@@ -72,3 +72,9 @@ routine bigint_handle_none() -> CPtr
 ### Deprecated — prefer `cptr_none()`.
 routine bigdec_handle_none() -> CPtr
   return cptr_none()
+
+dangerous routine CPtr.$destroy()
+  if me == cptr_none()
+    return
+  rf_invalidate(me.get_address())
+  return

@@ -1,0 +1,7 @@
+module Core
+
+### Represents the aggregate protocol for unsigned fixed-width integers.
+### `UnsignedIntegral` covers bounded machine integer types whose domain contains
+### only non-negative values.
+protocol UnsignedIntegral obeys FixedIntegral
+  pass

@@ -99,6 +99,19 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                     byteSizeType: byteSizeType))
                 continue;
 
+            // Unified destructor: synthesize the auto-derived `$destroy()` body. Composite
+            // record/entity/crashable types recurse into their owned fields; scalar kinds
+            // (choices, flags, `@llvm`-backed primitives, tuples, variants) are no-ops. The
+            // leaf RC/ptr behaviour (Hijacked → invalidate, Retained/Tracked → controller,
+            // Viewed/Grasped → no-op) lives in hand-written wrapper `$destroy`s, so those are
+            // never auto-derived (they already exist).
+            if (routine is { Name: "$destroy", Parameters.Count: 0 })
+            {
+                ctx.VariantBodies[key: routine.RegistryKey] =
+                    BuildDestroyBody(owner: routine.OwnerType);
+                continue;
+            }
+
             switch (routine.OwnerType)
             {
                 case TupleTypeInfo tuple:
@@ -2026,6 +2039,112 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 ElementType: null,
                 Location: _synthLoc) { ResolvedType = listTextType },
             Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Builds the auto-derived <c>$destroy()</c> body. Composite record/entity/crashable types
+    /// recurse into their owned fields (<c>me.field.$destroy()</c> for each); scalar kinds
+    /// (choices, flags, <c>@llvm</c>-backed primitives, tuples, variants) get a no-op return.
+    /// Leaf RC/ptr teardown (Hijacked, Retained/Tracked, Viewed/Grasped) lives in hand-written
+    /// wrapper destructors and is never reached here (those types keep their own <c>$destroy</c>).
+    /// </summary>
+    private Statement BuildDestroyBody(TypeInfo? owner)
+    {
+        var noop = new ReturnStatement(Value: null, Location: _synthLoc);
+
+        // Variants tear down the *active* arm only: pattern-match the tag and `$destroy` the
+        // bound payload. None/void arms (and any non-resource arms) fall through the else no-op.
+        if (owner is VariantTypeInfo variant)
+            return BuildVariantDestroyBody(variant: variant);
+
+        List<MemberVariableInfo>? fields = owner switch
+        {
+            EntityTypeInfo e => e.MemberVariables,
+            CrashableTypeInfo c => c.MemberVariables,
+            // Choices/flags/tuples are RecordTypeInfo subclasses with no owned references —
+            // exclude them; only plain composite records (no @llvm backend) recurse.
+            ChoiceTypeInfo or FlagsTypeInfo or TupleTypeInfo => null,
+            RecordTypeInfo { HasDirectBackendType: false } r => r.MemberVariables,
+            _ => null
+        };
+        if (fields is null or { Count: 0 })
+            return noop;
+
+        TypeInfo? blankType = ctx.Registry.LookupType(name: "Blank");
+        var statements = new List<Statement>(capacity: fields.Count + 1);
+        foreach (MemberVariableInfo field in fields)
+        {
+            var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+                { ResolvedType = owner };
+            var fieldRef = new MemberExpression(Object: meRef, PropertyName: field.Name,
+                Location: _synthLoc) { ResolvedType = field.Type };
+            var destroyCall = new CallExpression(
+                Callee: new MemberExpression(Object: fieldRef, PropertyName: "$destroy",
+                    Location: _synthLoc) { ResolvedType = blankType },
+                Arguments: [],
+                Location: _synthLoc) { ResolvedType = blankType };
+            statements.Add(item: new ExpressionStatement(Expression: destroyCall,
+                Location: _synthLoc));
+        }
+
+        statements.Add(item: noop);
+        return new BlockStatement(Statements: statements, Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Builds the variant <c>$destroy()</c>:
+    /// <c>when me { is None => ; is Blank => ; is T as v => v.$destroy(); ... }</c>.
+    /// Only the active arm's payload is torn down. The absent arm is matched with <c>is None</c>
+    /// (variants use <c>None</c> for their empty branch); void (<c>Blank</c>) and value arms are
+    /// no-ops (a value arm's <c>$destroy</c> is itself a no-op, kept for uniformity).
+    /// </summary>
+    private WhenStatement BuildVariantDestroyBody(VariantTypeInfo variant)
+    {
+        TypeInfo? blankType = ctx.Registry.LookupType(name: "Blank");
+        var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+            { ResolvedType = variant };
+
+        var clauses = new List<WhenClause>(capacity: variant.Members.Count + 1);
+        foreach (VariantMemberInfo member in variant.Members)
+        {
+            string memberName = member.IsNone ? "None" : member.Type!.Name;
+            bool isVoidPayload = member is { IsNone: false, Type.Name: "Blank" };
+            var typeExpr = new TypeExpression(Name: memberName, GenericArguments: null,
+                Location: _synthLoc) { ResolvedType = member.Type };
+
+            Pattern pattern;
+            Statement clauseBody;
+            if (member.IsNone || isVoidPayload)
+            {
+                // `is None` / `is Blank` — no payload to tear down.
+                pattern = new TypePattern(Type: typeExpr, VariableName: null, Bindings: null,
+                    Location: _synthLoc);
+                clauseBody = new ReturnStatement(Value: null, Location: _synthLoc);
+            }
+            else
+            {
+                pattern = new TypePattern(Type: typeExpr, VariableName: "v", Bindings: null,
+                    Location: _synthLoc);
+                var vRef = new IdentifierExpression(Name: "v", Location: _synthLoc)
+                    { ResolvedType = member.Type };
+                var destroyCall = new CallExpression(
+                    Callee: new MemberExpression(Object: vRef, PropertyName: "$destroy",
+                        Location: _synthLoc) { ResolvedType = blankType },
+                    Arguments: [],
+                    Location: _synthLoc) { ResolvedType = blankType };
+                clauseBody = new ExpressionStatement(Expression: destroyCall, Location: _synthLoc);
+            }
+
+            clauses.Add(item: new WhenClause(Pattern: pattern, Body: clauseBody,
+                Location: _synthLoc));
+        }
+
+        clauses.Add(item: new WhenClause(
+            Pattern: new ElsePattern(VariableName: null, Location: _synthLoc),
+            Body: new ReturnStatement(Value: null, Location: _synthLoc),
+            Location: _synthLoc));
+
+        return new WhenStatement(Expression: meRef, Clauses: clauses, Location: _synthLoc);
     }
 
     private static ReturnStatement MakeLiteralReturn(string value, TypeInfo returnType) =>

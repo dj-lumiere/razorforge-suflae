@@ -111,19 +111,6 @@ routine FastSet[T].$create(capacity: U64) -> ?FastSet[T]
     set.entry_live = Hijacked[U8](rf_allocate_dynamic_uninit(ecap))
   return steal set
 
-### Releases the raw probe, index, element, and entry-liveness buffers owned by this set.
-routine FastSet[T].$destroy()
-  danger!
-    if not me.ctrl.is_none()
-      rf_invalidate(pointer_to_int[U8, Address](me.ctrl))
-    if not me.indices.is_none()
-      rf_invalidate(pointer_to_int[U64, Address](me.indices))
-    if not me.slots.is_none()
-      rf_invalidate(pointer_to_int[T, Address](me.slots))
-    if not me.entry_live.is_none()
-      rf_invalidate(pointer_to_int[U8, Address](me.entry_live))
-  return
-
 # ============================================================================
 # Internal Helpers
 # ============================================================================
@@ -448,3 +435,10 @@ routine FastSet[T].$eq(other: FastSet[T]) -> Bool
   if me.count != other.count
     return false
   return me.is_subset(other)
+
+dangerous routine FastSet[T].$destroy()
+  me.ctrl.invalidate()
+  me.indices.invalidate()
+  me.slots.invalidate()
+  me.entry_live.invalidate()
+  return
