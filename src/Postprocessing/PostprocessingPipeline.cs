@@ -39,7 +39,7 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
         new PatternLoweringPass(ctx).Run(program);
         new ExpressionLoweringPass(ctx).Run(program);
         new OperatorLoweringPass(ctx).Run(program);
-        RecordCopyLoweringPass.Run(program);
+        new RecordCopyLoweringPass(ctx).Run(program);
         new BecomesLoweringPass(ctx).Run(program);
         new UsingLoweringPass(ctx).Run(program);
         new LambdaLiftingPass(ctx).Run(program);

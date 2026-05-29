@@ -235,11 +235,9 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
     }
 
     /// <summary>
-    /// Resolves the OWN <c>$destroy</c> of a type that requires teardown (entity, RC wrapper, or a
-    /// record with RC-wrapper fields). Returns false for types whose teardown is a guaranteed no-op
-    /// (primitives, plain value records, choices/flags/tuples). Uses GetMethodsForType — not
-    /// LookupMethod — so the universal <c>T.$destroy</c> registered on the type-parameter does not
-    /// shadow the concrete type's own destructor. Prefers the user-written destructor.
+    /// Resolves the OWN <c>$destroy</c> of a teardown-eligible type via GetMethodsForType (NOT
+    /// LookupMethod, which would surface the no-owner universal <c>T.$destroy</c> stub — that mangles
+    /// to a symbol nobody emits → undefined at link). Prefers the user-written destructor.
     /// </summary>
     private bool TryResolveDestroy(TypeInfo type, out RoutineInfo? destroy)
     {
@@ -255,50 +253,16 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
     }
 
     /// <summary>
-    /// True for types whose `$destroy` does real work (so it's worth inserting at scope exit).
-    /// Entities and every composite record qualify — every type has a `$destroy` now, and for a
-    /// record holding only trivial fields it's a cheap no-op. Excluded: scalar tag types
-    /// (choices/flags) and `@llvm`-backed primitives with no declared fields (S64/Bool/F64/…),
-    /// whose `$destroy` is a guaranteed no-op — inserting it would only add noise.
+    /// Every type has a `$destroy`, so by default it's called at scope exit (the per-type
+    /// `$destroy` is a cheap no-op when there's nothing to free). The ONLY exclusions are the
+    /// access/borrow tier — `Viewed`/`Grasped`/`Inspected`/`Claimed` views, the `Referring`/
+    /// `Controlling` access protocols, and the unmanaged `Hijacked` pointer — whose referent is
+    /// owned elsewhere, so destroying them here would free a caller's value. Abstract types
+    /// (generic params, protocols) likewise have no concrete destructor to call.
     /// </summary>
     internal static bool NeedsTeardown(TypeInfo type)
     {
-        switch (type)
-        {
-            case EntityTypeInfo:
-                return true;
-            // Scalar tag types carry no owned payload at the top level.
-            case ChoiceTypeInfo or FlagsTypeInfo:
-                return false;
-            // Abstract / unresolved — no concrete destructor; this also covers the access PROTOCOLS
-            // Referring[T] / Controlling[T] (a view onto something owned elsewhere).
-            case GenericParameterTypeInfo or ProtocolTypeInfo:
-                return false;
-            case RecordTypeInfo rec:
-            {
-                string baseName = rec.GenericDefinition?.Name ?? rec.Name;
-                // Access tier (read/write views, lock tokens) and unmanaged pointers: the referent
-                // is owned elsewhere (or unmanaged), so never torn down here.
-                if (baseName is "Viewed" or "Grasped" or "Inspected" or "Claimed" or "Hijacked")
-                    return false;
-                // RC ownership wrappers — release at scope exit. (Not Assignable; copying them is a
-                // refcount op, so they always have a real `$destroy`.)
-                if (baseName is "Retained" or "Tracked" or "Shared" or "Marked") return true;
-                // Records that directly hold RC-wrapper fields get their fields released.
-                //
-                // NOTE: plain value records (Text, tuples, user records, Array) are intentionally
-                // EXCLUDED. They have a `$destroy`, but auto-destroying value-record LOCALS/PARAMS
-                // double-frees: value records are copyable, and their copy/retain (`$copy`) is not
-                // yet balanced on every bind/param-pass, so a destructor call over-releases (e.g. a
-                // `Text` param isn't retained on the way in). Re-include once value-record copy
-                // semantics are airtight. (Collection element teardown is unaffected — that happens
-                // inside the collection's own `$destroy`, where the collection owns the elements.)
-                return rec.HasRCFields;
-            }
-            // WrapperTypeInfo (e.g. Hijacked) and everything else: not owned here.
-            default:
-                return false;
-        }
+        return type is not (GenericParameterTypeInfo or ProtocolTypeInfo);
     }
 
     private static string? ReturnedName(Statement stmt) => stmt switch
