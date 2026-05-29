@@ -22,6 +22,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     private const string CreateMethodName = "$create";
     private const string RepresentMethodName = "$represent";
     private const string DiagnoseMethodName = "$diagnose";
+    private const string DestroyMethodName = "$destroy";
 
     private readonly HashSet<string> _live = new(comparer: StringComparer.Ordinal);
     private readonly HashSet<string> _visited = new(comparer: StringComparer.Ordinal);
@@ -99,22 +100,15 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 if (routine != null) EnqueueCallee(callee: routine);
             }
 
-            // Unified $destroy — stage 1: user-defined entity destructors are called implicitly by
-            // codegen at scope exit (EmitEntityCleanup). There's no call expression for reachability
-            // to walk, so seed it here. Restricted to non-synthesized destructors on plain entities:
-            // the wrapper (Owned/Retained/Tracked) $destroy still hits a separate
-            // Hijacked[T].invalidate! codegen bug and must stay unseeded (see RC-wrapper note below).
-            if (type is EntityTypeInfo)
-            {
-                RoutineInfo? userDestroy =
-                    ctx.Registry.LookupMethod(type: type, methodName: "$destroy");
-                if (userDestroy is { IsSynthesized: false })
-                    EnqueueCallee(callee: userDestroy);
-            }
+            // Unified teardown needs NO `$destroy` seeding here: ScopeTeardownLoweringPass inserts
+            // the `local.$destroy()` calls BEFORE this pass runs (start of Phase 6), so reachability
+            // walks the real call expressions and emits exactly the destructors that are used — no
+            // hand-seeding, and no `$eq`→`$notcontains` cascade from marking types live abstractly.
 
-            // RC wrappers (Owned/Retained/Tracked) have `release` called implicitly by codegen
-            // at scope exit — no user-visible call expression for reachability to walk. Seed it
-            // here so the body gets monomorphized for each concrete wrapper instance.
+            // The copy verb (`retain`/`track`) IS still seeded: codegen calls it implicitly on
+            // RC-wrapper var bindings (and on PLP-synthesized ElsePattern bindings over
+            // Maybe[Wrapper[T]] that appear after Phase 6 reachability runs), with no AST call for
+            // reachability to walk. Seed per concrete wrapper so the body gets monomorphized.
             string ownerBase = type switch
             {
                 RecordTypeInfo { GenericDefinition: { } d } => d.Name,
@@ -122,19 +116,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 WrapperTypeInfo w => w.Name,
                 _ => type.Name.Contains('[') ? type.Name[..type.Name.IndexOf('[')] : type.Name
             };
-            // Only Retained/Tracked need release seeded — Owned's $destroy currently exposes
-            // a separate codegen bug (Hijacked[T].invalidate! resolution); seeding $destroy here
-            // breaks files that previously worked. Re-enable once that path is fixed.
             if (ownerBase is "Retained" or "Tracked")
             {
-                RoutineInfo? release = ctx.Registry.LookupMethod(type: type, methodName: "release");
-                if (release != null) EnqueueCallee(callee: release);
-
-                // Copy verb is also called implicitly by codegen on RC-wrapper var bindings
-                // (and by PLP-synthesized ElsePattern bindings on Maybe[Wrapper[T]] that
-                // appear after Phase 6 reachability runs). Seed per concrete wrapper so the
-                // body gets monomorphized — otherwise we get a "declared but never defined"
-                // LINKERR for instantiations only referenced via implicit codegen retain.
                 string copyVerb = ownerBase == "Retained" ? "retain" : "track";
                 RoutineInfo? copy = ctx.Registry.LookupMethod(type: type, methodName: copyVerb);
                 if (copy != null) EnqueueCallee(callee: copy);

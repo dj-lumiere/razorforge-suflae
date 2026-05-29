@@ -590,6 +590,7 @@ public partial class LlvmCodeGenerator
         string methodName = isFailableMethodCall
             ? member.PropertyName[..^1]
             : member.PropertyName;
+
         RoutineInfo? method = ResolveInitialMemberRoutineCall(receiverType: receiverType,
             methodName: methodName,
             isFailableMethodCall: isFailableMethodCall,
@@ -1271,6 +1272,7 @@ public partial class LlvmCodeGenerator
         }
         return m;
     }
+
 }
 
 /// <summary>

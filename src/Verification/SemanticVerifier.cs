@@ -505,6 +505,17 @@ public sealed partial class SemanticVerifier
                 elementSelector: kvp => kvp.Value.Body),
             target: _target,
             buildMode: _buildMode);
+        // Insert scope-exit `$destroy()` calls BEFORE reachability (so the calls drive liveness —
+        // no manual seeding needed) and BEFORE the marker pass (so Referring[T]/Controlling[T]
+        // params are still protocol-typed and excluded as access types, not yet stripped to the
+        // inner entity). Generic bodies are processed here too, then monomorphized with the calls.
+        var teardownPass = new Compiler.Postprocessing.Passes.ScopeTeardownLoweringPass(markerCtx);
+        foreach ((Program program, _, _) in _registry.UserPrograms)
+            teardownPass.Run(program: program);
+        foreach ((Program program, _, _) in _registry.StdlibPrograms)
+            teardownPass.Run(program: program);
+        teardownPass.RunOnVariantBodies();
+
         var markerPass = new MarkerProtocolDesugarPass(markerCtx);
         _markerPass = markerPass;
         markerPass.RewriteAllSignatures();

@@ -922,14 +922,16 @@ public partial class LlvmCodeGenerator
             EmitLine(sb: sb,
                 line: $"  {fieldVal} = extractvalue {llvmType} {loaded}, {field.Index}");
 
-            RoutineInfo? releaseMethod = _registry.LookupMethod(type: w, methodName: "release");
-            if (releaseMethod == null)
+            // Unified teardown: tear the RC-wrapper field down via its `$destroy` (which forwards
+            // to `release`→controller), not `release` directly — keeps every teardown on one verb.
+            RoutineInfo? destroyMethod = _registry.LookupMethod(type: w, methodName: "$destroy");
+            if (destroyMethod == null)
             {
                 continue;
             }
 
-            GenerateRoutineDeclaration(routine: releaseMethod);
-            string mangled = MangleRoutineName(routine: releaseMethod);
+            GenerateRoutineDeclaration(routine: destroyMethod);
+            string mangled = MangleRoutineName(routine: destroyMethod);
             string fieldLlvm = GetParameterLlvmType(type: w);
             EmitLine(sb: sb, line: $"  call void @{mangled}({fieldLlvm} {fieldVal})");
         }
@@ -947,15 +949,10 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private void EmitRcRecordCleanup(StringBuilder sb)
     {
-        foreach ((string _, string llvmAddr, RecordTypeInfo recordType) in _localRcRecordVars)
-        {
-            EmitRcRecordRelease(sb: sb, llvmAddr: llvmAddr, recordType: recordType);
-        }
-
-        foreach ((string _, string llvmAddr, RecordTypeInfo recordType) in _localRetainedVars)
-        {
-            EmitRetainedVarRelease(sb: sb, llvmAddr: llvmAddr, recordType: recordType);
-        }
+        // Teardown is now lowered into the AST as explicit `local.$destroy()` calls by
+        // ScopeTeardownLoweringPass (Phase 7) — RC wrapper vars and RC-field records get their
+        // `$destroy` (which forwards to `release`) inserted there. Codegen emits no teardown.
+        _ = sb;
     }
 
     /// <summary>Copy verb per RC wrapper (the method that bumps the appropriate count).</summary>
@@ -996,8 +993,8 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Decrements the count for an RC wrapper variable by calling release() on it.
-    /// Both Retained and Tracked expose `release` (Tracked.release is dangerous-marked).
+    /// Tears down an RC wrapper variable at scope exit by calling its <c>$destroy()</c> (which
+    /// forwards to <c>release()</c>→controller). Both Retained and Tracked expose <c>$destroy</c>.
     /// </summary>
     private void EmitRetainedVarRelease(StringBuilder sb, string llvmAddr,
         RecordTypeInfo recordType)
@@ -1009,7 +1006,7 @@ public partial class LlvmCodeGenerator
         }
 
         RoutineInfo? releaseMethod =
-            _registry.LookupMethod(type: recordType, methodName: "release");
+            _registry.LookupMethod(type: recordType, methodName: "$destroy");
         if (releaseMethod == null)
         {
             return;
@@ -1025,7 +1022,7 @@ public partial class LlvmCodeGenerator
 
         // Null-check guard: conditionally-declared RC wrapper bindings (e.g. a
         // `when`-arm `else r => ...`) have hoisted, zero-inited allocas that the
-        // function-exit cleanup walks even when their arm never ran. Skip release
+        // function-exit cleanup walks even when their arm never ran. Skip teardown
         // when the controller pointer is null.
         string isNull = NextTemp();
         string skipLabel = NextLabel(prefix: "rcwrap_rel_skip");

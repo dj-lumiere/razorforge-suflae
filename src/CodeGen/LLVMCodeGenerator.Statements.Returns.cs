@@ -143,53 +143,25 @@ public partial class LlvmCodeGenerator
 
     private void EmitEntityCleanup(StringBuilder sb, string? returnedVarName)
     {
-        foreach ((string name, string llvmAddr) in _localEntityVars)
+        // Scope-exit teardown of owned locals is now lowered into the AST as explicit
+        // `local.$destroy()` calls by ScopeTeardownLoweringPass (Phase 7), so codegen emits none.
+        _ = returnedVarName;
+
+        // The ONE thing that can't be expressed in `.rf`: a synthesized (auto-derived) entity
+        // `$destroy` is the sole free for its own `me`, so after its field-recursion body runs we
+        // free the backing allocation here. User-written `$destroy`s own their free (e.g.
+        // RetainController.$destroy calls `me.hijack().invalidate()`), so they are gated out to
+        // avoid a double-free. Runs at every exit of such a routine (its body has one return).
+        if (_currentEmittingRoutine is
+                { Name: "$destroy", IsSynthesized: true, OwnerType: EntityTypeInfo }
+            && _localVariables.ContainsKey(key: "me"))
         {
-            if (name == returnedVarName)
-            {
-                continue;
-            }
-
-            string loaded = NextTemp();
-            EmitLine(sb: sb, line: $"  {loaded} = load ptr, ptr {llvmAddr}");
-
-            // A user-defined (dangerous) `$destroy` takes over the entire teardown — the author
-            // owns freeing `me`. When one exists, call it and do NOT emit the default
-            // `rf_invalidate` (that would double-free). Otherwise emit the trivial default
-            // teardown (invalidate the allocation).
-            bool userDestroyed = _localVariables.TryGetValue(key: name, value: out TypeInfo? varType)
-                && EmitUserDestroyCall(sb: sb, entityType: varType, entityPtr: loaded);
-            if (userDestroyed)
-                continue;
-
+            string meLoaded = NextTemp();
+            EmitLine(sb: sb, line: $"  {meLoaded} = load ptr, ptr %me.addr");
             string asInt = NextTemp();
-            EmitLine(sb: sb, line: $"  {asInt} = ptrtoint ptr {loaded} to i64");
+            EmitLine(sb: sb, line: $"  {asInt} = ptrtoint ptr {meLoaded} to i64");
             EmitLine(sb: sb, line: $"  call void @rf_invalidate(i64 {asInt})");
         }
-    }
-
-    /// <summary>
-    /// Emits a call to a user-defined (non-synthesized) <c>$destroy</c> on an entity value, if one
-    /// exists. Returns <c>true</c> when a call was emitted (the user destructor owns the free, so
-    /// the caller must skip the default <c>rf_invalidate</c>); <c>false</c> otherwise.
-    /// </summary>
-    private bool EmitUserDestroyCall(StringBuilder sb, TypeInfo entityType, string entityPtr)
-    {
-        if (entityType is not EntityTypeInfo)
-            return false;
-
-        // Resolve the entity's OWN user-written `$destroy` directly, not via LookupMethod —
-        // the universal `$destroy` registered on the `T` type-parameter (so generic bodies can
-        // call `T.$destroy()`) would otherwise shadow it and look synthesized, suppressing the call.
-        RoutineInfo? destroy = _registry.GetMethodsForType(type: entityType)
-            .FirstOrDefault(predicate: m => m.Name == "$destroy" && !m.IsSynthesized);
-        if (destroy is null)
-            return false;
-
-        GenerateRoutineDeclaration(routine: destroy);
-        string mangled = MangleRoutineName(routine: destroy);
-        EmitLine(sb: sb, line: $"  call void @{mangled}(ptr {entityPtr})");
-        return true;
     }
 
     #endregion

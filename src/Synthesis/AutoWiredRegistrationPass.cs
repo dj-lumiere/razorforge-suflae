@@ -162,24 +162,22 @@ internal sealed class AutoWiredRegistrationPass
                                 existingMethods: existingMethods);
                         }
 
-                        // Synthesize `$copy() -> Me` for Assignable records (auto-derived when the
-                        // @llvm layout contains no `ptr`, or explicit via `obeys Assignable`).
-                        // Body is `return me`, which lowers to a structural bitwise copy via the
-                        // return value. Records with custom $copy (raw-ptr wrappers, opt-in records
-                        // with managed-pointer fields) keep their user-written body.
-                        if (ObeysProtocol(type: type, protocolName: "Assignable"))
-                        {
-                            MaybeRegisterWired(owner: type,
-                                name: "$copy",
-                                returnType: type,
-                                existingMethods: existingMethods);
-                            // Assignable obeys Cloneable: any type with auto-$copy also gets
-                            // `clone() -> ?Me`. Return type uses the rvalue mark; body is `return me`.
-                            MaybeRegisterWired(owner: type,
-                                name: "clone",
-                                returnType: type,
-                                existingMethods: existingMethods);
-                        }
+                    }
+
+                    // `$copy` / `clone` (Assignable): their bodies are `return me` /
+                    // `return me.$copy()` — NOT field-based — so they are safe even for @llvm-backed
+                    // opaque primitives (S64, Bool, F64, …), unlike the field-based $hash/$eq above.
+                    // Registering them for primitives lets explicit `clone()`/`$copy()` calls (e.g.
+                    // from `List.add_range`) link; the trivial body is inlined away by LLVM. Wrapper
+                    // types (Retained/Tracked/…) keep their own custom retain-aware copy, so excluded.
+                    if (!type.IsBlank && !isWrapper &&
+                        ObeysProtocol(type: type, protocolName: "Assignable"))
+                    {
+                        MaybeRegisterWired(owner: type, name: "$copy",
+                            returnType: type, existingMethods: existingMethods);
+                        // Assignable obeys Cloneable: auto-derive `clone() -> ?Me` (delegates to $copy).
+                        MaybeRegisterWired(owner: type, name: "clone",
+                            returnType: type, existingMethods: existingMethods);
                     }
 
                     break;

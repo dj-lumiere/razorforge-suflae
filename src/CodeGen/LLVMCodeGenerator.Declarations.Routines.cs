@@ -412,6 +412,19 @@ public partial class LlvmCodeGenerator
             EmitLine(sb: sb,
                 line: $"  store {llvmType} %{emittedParamName}, ptr {paramPtr}");
             _localVariables[key: param.Name] = param.Type;
+
+            // A bound-entity parameter is a consuming parameter: ownership was transferred in
+            // via `steal` at the call site (SA requires the verb — see the BareEntityAssignment
+            // check in AnalyzeCallArguments), so this routine is the new sole owner and must tear
+            // it down at scope exit, exactly like a local entity `var`. Borrows arrive as
+            // Referring/Controlling/Viewed/Grasped wrappers (RecordTypeInfo), never as bare
+            // EntityTypeInfo, so they are correctly excluded. If the body re-transfers ownership
+            // (`steal r` into a call/field), ConsumeTransferredLocalOwnership removes it from this
+            // set by name, preventing a double-free.
+            if (param.Type is EntityTypeInfo)
+            {
+                _localEntityVars.Add(item: (param.Name, paramPtr));
+            }
         }
 
         // Emit stack trace push.

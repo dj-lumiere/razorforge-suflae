@@ -415,6 +415,13 @@ public sealed partial class SemanticVerifier
                         location: argExpr.Location);
                 }
             }
+
+            // NOTE: a call-site "bare entity passed to a consuming param needs `steal`" check used
+            // to live here, but it false-positived on borrow parameters: a `Referring[T]` /
+            // `Controlling[T]` parameter binding has its ResolvedType stripped to the inner entity
+            // `T`, so the check could not distinguish a borrow param from a consuming one and
+            // flagged legitimate stdlib borrows (FastSet.is_subset, List.add_range). Re-add only
+            // with a reliable borrow-vs-consume signal (e.g. an unstripped declared-type marker).
         }
     }
 

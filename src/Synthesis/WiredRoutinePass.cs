@@ -335,6 +335,20 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             }
         }
 
+        // `$copy` / `clone` bodies are field-independent (`return me` / `return me.$copy()`), so
+        // synthesize them BEFORE the opaque-backend skip — @llvm primitives (S64, Bool, …) need real
+        // (trivial, LLVM-inlined) bodies so explicit `clone()`/`$copy()` calls link. Only synth stubs
+        // reach here; user-written copies (e.g. Text.$copy, which retains) keep their own body.
+        switch (routine.Name)
+        {
+            case "$copy":
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildReturnMeBody(ownerType: record);
+                return;
+            case "clone":
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildCloneViaCopyBody(ownerType: record);
+                return;
+        }
+
         if (record.HasDirectBackendType) return;
 
         switch (routine.Name)
@@ -358,22 +372,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 break;
             }
 
-            case "$copy":
-            {
-                // For Assignable records: `return me` lowers to a structural bitwise copy
-                // via the return value. Raw-ptr wrappers (Hijacked/CPtr) and records that
-                // opt in with a custom $copy body keep their user-written version — this
-                // branch only fires when the routine was registered as a synth stub.
-                ctx.VariantBodies[key: routine.RegistryKey] = BuildReturnMeBody(ownerType: record);
-                break;
-            }
-
-            case "clone":
-            {
-                // Assignable obeys Cloneable: synth clone() as `return me.$copy()`.
-                ctx.VariantBodies[key: routine.RegistryKey] = BuildCloneViaCopyBody(ownerType: record);
-                break;
-            }
+            // ($copy / clone handled above, before the opaque-backend skip.)
 
             case RepresentMethodName:
                 ctx.VariantBodies[key: routine.RegistryKey] =
