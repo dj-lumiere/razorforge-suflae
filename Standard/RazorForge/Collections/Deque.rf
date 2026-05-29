@@ -463,5 +463,13 @@ routine Deque[T].$eq(other: Deque[T]) -> Bool
   return true
 
 dangerous routine Deque[T].$destroy()
+  # Tear down each live element in logical front-to-back (ring) order before freeing the buffer
+  # (mirrors DequeEmitter.$next!). No-op for value types; frees owned entity elements.
+  var i = 0u64
+  while i < me.count
+    var physical = (me.start +% i) & (me.capacity -% 1u64)
+    me.data.offset(T.data_size() * physical).extract().$destroy()
+    i = i + 1u64
   me.data.invalidate()
+  me.hijack().invalidate()
   return

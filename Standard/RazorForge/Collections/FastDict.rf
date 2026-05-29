@@ -539,7 +539,7 @@ routine FastDict[K, V].$diagnose() -> ?Text
 ### :param other: The other dictionary to compare against.
 ### :returns: `true` if both have the same count and every key-value pair is equal.
 @readonly
-routine FastDict[K, V].$eq(other: FastDict[K, V]) -> Bool
+routine FastDict[K, V].$eq(other: Referring[FastDict[K, V]]) -> Bool
   if me.count != other.count
     return false
   var i = 0u64
@@ -559,9 +559,18 @@ routine FastDict[K, V].$eq(other: FastDict[K, V]) -> Bool
   return true
 
 dangerous routine FastDict[K, V].$destroy()
+  # Tear down each live key and value before freeing the buffers (mirrors FastDictIterator.$next!).
+  # No-op for value types; frees owned entity keys/values.
+  var p = 0u64
+  while p < me.entries_used
+    if me.entry_live.offset(ByteSize(bytes: p)).extract() == ENTRY_LIVE
+      me.keys.offset(K.data_size() * p).extract().$destroy()
+      me.vals.offset(V.data_size() * p).extract().$destroy()
+    p = p + 1u64
   me.ctrl.invalidate()
   me.indices.invalidate()
   me.keys.invalidate()
   me.vals.invalidate()
   me.entry_live.invalidate()
+  me.hijack().invalidate()
   return

@@ -437,23 +437,24 @@ routine List[T].$diagnose() -> ?Text
 ### :param count: The number of elements to copy.
 ### :throws: {IndexOutOfBoundsError} if `from + count` exceeds `source.count()`.
 @migratable
-routine List[T].add_range!(source: List[T], from: U64, count: U64)
+routine List[T].add_range!(source: Referring[List[T]], from: U64, count: U64)
+needs T obeys Cloneable
   if count == 0u64
     return
-  if from + count > source.count
-    throw IndexOutOfBoundsError(index: from + count, count: source.count)
+  if from + count > source.count()
+    throw IndexOutOfBoundsError(index: from + count, count: source.count())
 
   var new_count = me.count + count
   if new_count > me.capacity
     me.reserve(new_count * 2u64)
 
-  danger!
-    var elem_size = T.data_size()
-    var src_ptr = source.data.offset(elem_size * from)
-    var dst_ptr = me.data.offset(elem_size * me.count)
-    rf_copy_bytes_at(dest: dst_ptr.get_address(), src: src_ptr.get_address(), size: elem_size * count)
-
-  me.count = new_count
+  # Clone each element through the read-only borrow. `clone` is elided for trivially-copyable T
+  # (no symbol) and delegates to the retain-aware `$copy` for RC records like Text, so appended
+  # elements are owned independently. The prior bitwise copy aliased buffer pointers (double-free).
+  var i = 0u64
+  while i < count
+    me.add_last(value: source[from + i].clone())
+    i = i + 1u64
   return
 
 ### Shortens the list to `new_count` elements by discarding elements past the new boundary.
@@ -774,4 +775,5 @@ dangerous routine List[T].$destroy()
     me.data.offset(elem_size * i).extract().$destroy()
     i = i + 1u64
   me.data.invalidate()
+  me.hijack().invalidate()
   return

@@ -338,11 +338,15 @@ routine PriorityQueue[TPriority, TElement].peek_entry!() -> PQEntry[TPriority, T
 ### Only pairs up to the length of the shorter list are inserted; any extra values are ignored.
 ### :param elements: The elements to enqueue.
 ### :param priorities: The priorities to assign at matching positions.
-routine PriorityQueue[TPriority, TElement].add_all(elements: List[TElement], priorities: List[TPriority])
+routine PriorityQueue[TPriority, TElement].add_all(elements: Referring[List[TElement]], priorities: Referring[List[TPriority]])
+needs TElement obeys Cloneable
+needs TPriority obeys Cloneable
   var i = 0u64
   var limit = if elements.count() < priorities.count() then elements.count() else priorities.count()
   while i < limit
-    me.add(element: elements[i], priority: priorities[i])
+    # `clone` out of the read-only borrows (elided for trivial types; retain-aware via `$copy` for
+    # RC records) — `add` takes ownership, so aliasing would double-free when both queues drop.
+    me.add(element: elements[i].clone(), priority: priorities[i].clone())
     i = i +% 1u64
   return
 
@@ -451,6 +455,14 @@ routine PriorityQueue[TPriority, TElement].$diagnose() -> ?Text
   return steal result
 
 dangerous routine PriorityQueue[TPriority, TElement].$destroy()
+  # Tear down each stored priority and element before freeing the buffers. No-op for value
+  # types; frees owned entity priorities/elements.
+  var i = 0u64
+  while i < me.count
+    me.priorities.offset(TPriority.data_size() * i).extract().$destroy()
+    me.elements.offset(TElement.data_size() * i).extract().$destroy()
+    i = i + 1u64
   me.priorities.invalidate()
   me.elements.invalidate()
+  me.hijack().invalidate()
   return

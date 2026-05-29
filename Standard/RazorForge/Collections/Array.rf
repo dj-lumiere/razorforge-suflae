@@ -62,6 +62,17 @@ routine Array[T, N].$setitem!(index: U64, value: T)
   me = set_element_at[Array[T, N], T](me, index, value)
   return
 
+### Tears down each stored element. No-op for value-type elements; releases/frees owned record or
+### entity elements. Invoked through an owning entity's generated `$destroy` field-recursion when
+### the array is an entity field — all `N` inline slots are live, so the full range is visited.
+### (`Array` is a value record, so it has no separate allocation of its own to free.)
+dangerous routine Array[T, N].$destroy()
+  var i = 0u64
+  while i < N
+    element_at[Array[T, N], T](me, i).$destroy()
+    i = i + 1u64
+  return
+
 # ============================================================================
 # Indexing with BackIndex (backward index using ^)
 # ============================================================================

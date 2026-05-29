@@ -126,6 +126,22 @@ routine BTreeListNode[T].children_add_last(value: BTreeListNode[T])
   me.child_count = me.child_count +% 1u64
   return
 
+### Recursively frees this node's subtree (post-order): destroys each child node, tears down each
+### stored key, then frees this node's own allocation. Children/keys are visited inline (never bound
+### to a `var`) so scope-exit teardown doesn't double-free them.
+dangerous routine BTreeListNode[T].$destroy()
+  if not me.is_leaf
+    var ci = 0u64
+    while ci < me.child_count
+      me.children_get(ci).$destroy()
+      ci = ci + 1u64
+  var ki = 0u64
+  while ki < me.key_count
+    me.keys_get(ki).$destroy()
+    ki = ki + 1u64
+  me.hijack().invalidate()
+  return
+
 ### Inserts `value` at position `i` in the keys buffer, shifting later keys right by one.
 ### :param i: Zero-based insertion index.
 ### :param value: The key to insert.
@@ -277,6 +293,17 @@ routine SortedList[T].is_empty() -> Bool
 routine SortedList[T].clear()
   me.root = none
   me.count = 0u64
+  return
+
+### Frees the entire backing B-tree — every node and each stored element — when the list goes out
+### of scope. The root node is visited inline (never bound to a `var`) so scope-exit teardown
+### doesn't double-free it.
+dangerous routine SortedList[T].$destroy()
+  if me.root is None
+    me.hijack().invalidate()
+    return
+  Hijacked[BTreeListNode[T]](me.root!!).as_entity().$destroy()
+  me.hijack().invalidate()
   return
 
 # ============================================================================

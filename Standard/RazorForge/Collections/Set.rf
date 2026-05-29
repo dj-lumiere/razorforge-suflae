@@ -422,8 +422,17 @@ routine Set[T].$eq(other: Set[T]) -> Bool
   return true
 
 dangerous routine Set[T].$destroy()
+  # Tear down each live element before freeing the buffers (mirrors the live-entry scan in
+  # SetIterator.$next!). For value elements `$destroy` is a no-op; for owned entity elements
+  # this frees them. Must run before invalidating `slots`/`entry_live`.
+  var p = 0u64
+  while p < me.entries_used
+    if me.entry_live.offset(ByteSize(bytes: p)).extract() == ENTRY_LIVE
+      me.slots.offset(T.data_size() * p).extract().$destroy()
+    p = p + 1u64
   me.ctrl.invalidate()
   me.indices.invalidate()
   me.slots.invalidate()
   me.entry_live.invalidate()
+  me.hijack().invalidate()
   return

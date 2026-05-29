@@ -77,8 +77,11 @@ dangerous routine RetainController[T].borrow_data() -> Hijacked[T]
   return me.data
 
 ### Destroys the managed entity. Call only when strong count reaches zero.
+### Runs the entity's own `$destroy`, which IS the sole free under the unified-teardown model
+### (a synthesized entity `$destroy` self-invalidates its allocation; a user-written one owns its
+### own free). Do not also `invalidate` here — that would double-free self-freeing entities.
 dangerous routine RetainController[T].drop_data()
-  me.data.invalidate()
+  me.data.as_entity().$destroy()
   return
 
 dangerous routine RetainController[T].$destroy()

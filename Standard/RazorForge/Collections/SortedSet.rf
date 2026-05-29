@@ -74,6 +74,31 @@ routine BTreeSetNode[T].children_get(i: U64) -> ?BTreeSetNode[T]
   danger!
     return me.children_base().stride(count: i.S64()).extract()
 
+### Recursively frees this node's subtree (post-order): destroys each child node, tears down each
+### stored key, then frees this node's own allocation. Visited inline (never bound to a `var`) so
+### scope-exit teardown doesn't double-free.
+dangerous routine BTreeSetNode[T].$destroy()
+  if not me.is_leaf
+    var ci = 0u64
+    while ci < me.child_count
+      me.children_get(ci).$destroy()
+      ci = ci + 1u64
+  var ki = 0u64
+  while ki < me.key_count
+    me.keys_get(ki).$destroy()
+    ki = ki + 1u64
+  me.hijack().invalidate()
+  return
+
+### Frees the entire backing B-tree — every node and each stored element — at scope exit.
+dangerous routine SortedSet[T].$destroy()
+  if me.root is None
+    me.hijack().invalidate()
+    return
+  Hijacked[BTreeSetNode[T]](me.root!!).as_entity().$destroy()
+  me.hijack().invalidate()
+  return
+
 ### Writes `value` into the child buffer at position `i` without bounds checking.
 ### :param i: The zero-based position within the child buffer.
 ### :param value: The child node to store.

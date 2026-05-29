@@ -666,4 +666,5 @@ common routine BitList.from_u64(value: U64) -> ?BitList
 
 dangerous routine BitList.$destroy()
   me.data.invalidate()
+  me.hijack().invalidate()
   return

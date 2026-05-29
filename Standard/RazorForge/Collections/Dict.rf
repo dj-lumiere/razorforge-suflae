@@ -116,11 +116,20 @@ routine Dict[K, V].$create(key: SecureHashKey, capacity: U64) -> ?Dict[K, V]
 ### Frees the heap buffers owned by this dictionary. The element/key/value contents are
 ### not recursed into — only the backing arrays are released.
 dangerous routine Dict[K, V].$destroy()
+  # Tear down each live key and value before freeing the buffers (mirrors the live-entry scan
+  # in DictIterator.$next!). No-op for value types; frees owned entity keys/values.
+  var p = 0u64
+  while p < me.entries_used
+    if me.entry_live.offset(ByteSize(bytes: p)).extract() == ENTRY_LIVE
+      me.keys.offset(K.data_size() * p).extract().$destroy()
+      me.vals.offset(V.data_size() * p).extract().$destroy()
+    p = p + 1u64
   me.ctrl.invalidate()
   me.indices.invalidate()
   me.keys.invalidate()
   me.vals.invalidate()
   me.entry_live.invalidate()
+  me.hijack().invalidate()
   return
 
 # ============================================================================
