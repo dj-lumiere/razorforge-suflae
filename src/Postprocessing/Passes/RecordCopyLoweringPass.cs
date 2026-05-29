@@ -33,6 +33,10 @@ namespace Compiler.Postprocessing.Passes;
 /// </summary>
 internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
 {
+    // True while lowering the body of a `$copy` routine. Returning `me` there is the identity-copy
+    // primitive itself, so it must NOT be rewritten to `me.$copy()` (that would recurse forever).
+    private bool _inCopyRoutine;
+
     /// <summary>
     /// Runs this compiler phase over its configured input.
     /// </summary>
@@ -44,6 +48,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             {
                 case RoutineDeclaration r:
                 {
+                    _inCopyRoutine = r.Name.EndsWith(value: "$copy");
                     Statement newBody = LowerStatement(stmt: r.Body);
                     if (!ReferenceEquals(newBody, r.Body))
                         program.Declarations[i] = r with { Body = newBody };
@@ -73,6 +78,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         foreach (string key in ctx.VariantBodies.Keys.ToList())
         {
             Statement body = ctx.VariantBodies[key];
+            _inCopyRoutine = key.Contains(value: "$copy");
             Statement lowered = LowerStatement(stmt: body);
             if (!ReferenceEquals(lowered, body))
                 ctx.VariantBodies[key] = lowered;
@@ -88,6 +94,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         {
             if (members[i] is RoutineDeclaration mr)
             {
+                _inCopyRoutine = mr.Name.EndsWith(value: "$copy");
                 Statement newBody = LowerStatement(stmt: mr.Body);
                 if (!ReferenceEquals(newBody, mr.Body))
                     members[i] = mr with { Body = newBody };
@@ -262,9 +269,16 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
         if (expr is IdentifierExpression or MemberExpression
             && NeedsRetainingCopy(type: expr.ResolvedType, copyMethod: out RoutineInfo? copyMethod))
         {
-            // Returning a bare local moves it out; copying would leave the local's ref dangling.
-            if (isReturn && expr is IdentifierExpression)
-                return expr;
+            if (isReturn && expr is IdentifierExpression id)
+            {
+                // Returning the borrowed receiver `me` hands the caller an owned value, so it must
+                // be copied (retained) — except inside `$copy` itself, where `return me` is the
+                // identity primitive. Any other bare identifier is an owned local/param being moved
+                // out, so it is returned as-is.
+                bool returningBorrowedReceiver = id.Name == "me" && !_inCopyRoutine;
+                if (!returningBorrowedReceiver)
+                    return expr;
+            }
             return MakeCopyCall(expr: expr, copyMethod: copyMethod!);
         }
 
