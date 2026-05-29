@@ -28,7 +28,7 @@ dangerous routine CPtr.get_address() -> Address
 ### the user's problem — the same FFI contract that lets `CPtr` exist at all.
 ### :returns: A bitwise duplicate of this pointer.
 @readonly
-routine CPtr.$copy() -> Me
+routine CPtr.$copy() -> CPtr
   return me
 
 ### Reinterprets a raw address as `CPtr`.

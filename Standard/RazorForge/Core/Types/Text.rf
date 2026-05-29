@@ -29,7 +29,7 @@ record Text obeys Assignable, Addable, Ordered, FastHashable, Hashable, TextRepe
 ### no atomic op.
 ### :returns: The resulting `Text` value.
 @[readonly, inline]
-routine Text.$copy() -> Me
+routine Text.$copy() -> Text
   danger!
     if not me.ctrl.is_none()
       me.ctrl.as_entity().increase_strong_count()

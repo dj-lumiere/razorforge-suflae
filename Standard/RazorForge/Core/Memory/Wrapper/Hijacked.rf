@@ -23,7 +23,7 @@ dangerous routine Hijacked[T].get_address() -> Address
 ### just like every other operation on this type.
 ### :returns: A bitwise duplicate of this pointer.
 @readonly
-routine Hijacked[T].$copy() -> Me
+routine Hijacked[T].$copy() -> Hijacked[T]
   return me
 
 ### Returns the raw address of a bare value when it is reinterpreted as a pointer slot.

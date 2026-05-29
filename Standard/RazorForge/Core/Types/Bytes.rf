@@ -29,7 +29,7 @@ record Bytes obeys Assignable, Iterable[Byte]
 ### with no atomic op.
 ### :returns: The resulting `Bytes` value.
 @[readonly, inline]
-routine Bytes.$copy() -> Me
+routine Bytes.$copy() -> Bytes
   danger!
     if not me.ctrl.is_none()
       me.ctrl.as_entity().increase_strong_count()

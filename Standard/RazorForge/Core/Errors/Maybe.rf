@@ -28,6 +28,13 @@ routine Maybe[T].$diagnose() -> ?Text
     return f"{me.full_type_name()}(none)"
   return f"{me.full_type_name()}({me.value})"
 
+### Frees the wrapped value when present; a no-op when absent. Defined explicitly (rather than
+### auto-derived) so the per-instantiation body is monomorphized and emitted like the other carrier
+### routines, and so the `value` field is only touched when actually present.
+dangerous routine Maybe[T].$destroy()
+  if me.is_present()
+    me.value.$destroy()
+  return
 
 ### Returns the wrapped value.
 ### Use this when absence is a logic error rather than an expected branch.

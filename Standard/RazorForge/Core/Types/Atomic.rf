@@ -6,20 +6,21 @@ module Core
 ### and lock-free protocols.
 ### :typeparam T: The atomic-capable inner type (integer or pointer-sized).
 record Atomic[T] obeys Assignable
+needs T obeys AtomicType
   ### The atomically accessed storage cell.
   secret value: T
 
 ### Creates a new atomic with the given initial value.
 ### :param initial: The starting value for the atomic cell.
 ### :returns: The resulting `Atomic[T]` value.
-routine Atomic[T].$create(initial: T) -> ?Atomic[T]
+routine Atomic[T].$create(initial: T) -> Atomic[T]
   return Atomic[T](value: initial)
 
 ### Returns a bitwise duplicate of this atomic.
 ### Copying duplicates the cell — the new and old atomics are independent.
 ### :returns: A bitwise duplicate of this value.
 @[readonly, inline]
-routine Atomic[T].$copy() -> Me
+routine Atomic[T].$copy() -> Atomic[T]
   return Atomic[T](value: me.value)
 
 ### Atomically loads the current value with sequentially consistent ordering.
