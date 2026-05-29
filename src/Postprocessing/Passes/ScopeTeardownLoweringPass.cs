@@ -36,6 +36,7 @@ namespace Compiler.Postprocessing.Passes;
 internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
 {
     private readonly TypeInfo? _blankType = ctx.Registry.LookupType(name: "Blank");
+    private int _spillCounter;
 
     /// <summary>A live owned binding: its name, type, and resolved <c>$destroy</c> routine.</summary>
     private readonly record struct Owned(string Name, TypeInfo Type, RoutineInfo Destroy);
@@ -204,20 +205,63 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
     }
 
     /// <summary>
-    /// Wraps <paramref name="exit"/> in a block that first destroys live owned bindings at indices
-    /// <c>[from, live.Count)</c> in declaration order, skipping <paramref name="skip"/> (the returned name).
+    /// Wraps <paramref name="exit"/> in a block that destroys live owned bindings at indices
+    /// <c>[from, live.Count)</c>, skipping <paramref name="skip"/> (a returned bare local, which is
+    /// moved out).
+    ///
+    /// <para>When the exit returns a non-trivial EXPRESSION (e.g. <c>return me.concat(other)</c>),
+    /// that expression may still read owned locals/params. Destroying them first would free memory
+    /// the expression then reads (use-after-free). So the return value is evaluated into a temp
+    /// BEFORE the destroys, and the temp — which now owns the result — is returned and excluded from
+    /// teardown:
+    /// <code>var __td_ret = EXPR ; &lt;destroys&gt; ; return __td_ret</code></para>
     /// </summary>
     private Statement PrefixDestroys(Statement exit, List<Owned> live, int from, string? skip)
     {
-        var destroys = new List<Statement>();
+        var stmts = new List<Statement>();
+        Statement finalExit = exit;
+
+        // Spill a non-trivial returned expression so it's computed while its locals are still live.
+        // (A bare-identifier return is a move — `skip` already excludes it — and needs no spill.)
+        Expression? retVal = exit switch
+        {
+            ReturnStatement r => r.Value,
+            VariantReturnStatement vr => vr.Value,
+            _ => null
+        };
+        if (retVal is not null and not IdentifierExpression && WillDestroyAny(live, from, skip))
+        {
+            string tmp = $"__td_ret_{_spillCounter++}";
+            var decl = new VariableDeclaration(Name: tmp, Type: null, Initializer: retVal,
+                Visibility: VisibilityModifier.Secret, Location: exit.Location);
+            stmts.Add(item: new DeclarationStatement(Declaration: decl, Location: exit.Location));
+            var tmpRef = new IdentifierExpression(Name: tmp, Location: exit.Location)
+                { ResolvedType = retVal.ResolvedType };
+            finalExit = exit switch
+            {
+                ReturnStatement r => r with { Value = tmpRef },
+                VariantReturnStatement vr => vr with { Value = tmpRef },
+                _ => exit
+            };
+            skip = tmp; // the spilled value is moved out — never tear it down
+        }
+
         for (int i = from; i < live.Count; i++)
         {
             if (skip != null && live[index: i].Name == skip) continue;
-            destroys.Add(item: MakeDestroyStmt(live[index: i], exit.Location));
+            stmts.Add(item: MakeDestroyStmt(live[index: i], exit.Location));
         }
-        if (destroys.Count == 0) return exit;
-        destroys.Add(item: exit);
-        return new BlockStatement(Statements: destroys, Location: exit.Location);
+        if (stmts.Count == 0) return exit;
+        stmts.Add(item: finalExit);
+        return new BlockStatement(Statements: stmts, Location: exit.Location);
+    }
+
+    private bool WillDestroyAny(List<Owned> live, int from, string? skip)
+    {
+        for (int i = from; i < live.Count; i++)
+            if (skip == null || live[index: i].Name != skip)
+                return true;
+        return false;
     }
 
     private ExpressionStatement MakeDestroyStmt(Owned owned, SourceLocation loc)
