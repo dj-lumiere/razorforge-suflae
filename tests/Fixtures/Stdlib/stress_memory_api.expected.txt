@@ -1,7 +1,0 @@
-after 10000 add_last, list count: 10000
-after 10000 remove_first!, list count: 0
-is_empty: true
-set after 1000 add: 1000
-set after 1000 remove: 0
-set contains 500 after clear: false
-DONE

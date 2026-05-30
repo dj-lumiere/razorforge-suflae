@@ -1,7 +1,0 @@
-in_set 20: true
-in_set 99: false
-in_set 'bravo': true
-in_set 'delta': false
-min of (5, 3, 7) S64: 3
-min of (1.5, 0.5, 2.5) F64: 0.5
-DONE

@@ -1,9 +1,0 @@
-m0 type: Core.Maybe[Core.Owned[Core.Text]]
-m0: None
-m1: hello
-m2: world
-m0 (diagnose): Core.Maybe(None)
-m1 (diagnose): Core.Maybe(hello)
-  m1 => present: hello
-  m0 => absent
-DONE

@@ -1,8 +1,0 @@
-a: int:42
-b: float:3.14
-c: text:hello
-d: blank
-a represent: 42
-a diagnose: Tests/Stdlib/VariantApi.Number(typeid=1, 42)
-d diagnose: Tests/Stdlib/VariantApi.Number(typeid=0, Blank)
-DONE

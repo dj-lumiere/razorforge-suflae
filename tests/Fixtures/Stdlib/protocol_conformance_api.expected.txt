@@ -1,7 +1,0 @@
-Meow, I am Whiskers
-Woof, I am Rex
-Meow, I am Whiskers
-Woof, I am Rex
-c == c2: true
-c == c3: false
-DONE

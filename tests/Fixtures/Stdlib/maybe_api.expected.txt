@@ -1,8 +1,0 @@
-some type: Core.Maybe[Tests/Stdlib/MaybeApi.Point]
-some present: Point(3, 4)
-none present: None
-some diagnose: Core.Maybe(Tests/Stdlib/MaybeApi.Point(x: 3, y: 4))
-none diagnose: Core.Maybe(None)
-  m_some => present: x=3 y=4
-  m_none => absent
-DONE

@@ -1,6 +1,0 @@
---- inner() ---
- inner enter
- inner body
---- after inner() ---
---- start body ---
-DONE

@@ -1,6 +1,0 @@
-add5(10): 15
-add5(-3): 2
-above 4: [5, 6, 7, 8]
-sum via for: 36
-scaled by 3: [3, 6, 9, 12, 15, 18, 21, 24]
-DONE

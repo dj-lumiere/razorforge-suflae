@@ -1,9 +1,0 @@
-  0: a
-  1: b
-  2: c
-  a -> 10
-  b -> 20
-  c -> 30
-keys sum: 6
-vals sum: 600
-DONE
