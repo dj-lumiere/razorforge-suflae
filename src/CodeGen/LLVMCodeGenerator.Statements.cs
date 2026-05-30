@@ -282,15 +282,14 @@ public partial class LlvmCodeGenerator
             EmitRcRecordRetain(sb: sb, llvmAddr: varPtr, recordType: rcRecordInit);
         }
 
-        // For RC wrapper vars copied from another variable/field, bump the strong count.
-        // Calls that return Retained[T] (e.g. .retain()) already set count=1 for us.
-        if (varType is RecordTypeInfo rcWrapInit &&
-            GetGenericBaseName(type: rcWrapInit) is { } rcWrapInitBase &&
-            RcWrapperBaseNames.Contains(item: rcWrapInitBase) &&
-            varDecl.Initializer is not CallExpression)
-        {
-            EmitRetainedVarRetain(sb: sb, llvmAddr: varPtr, recordType: rcWrapInit);
-        }
+        // NOTE: no codegen strong-count bump for RC wrapper var bindings. Copying a Retained[T]/
+        // Tracked[T] handle requires an explicit verb (`.retain()`/`.track()`) — implicit copy
+        // (`var b = a`) is a COMPILE ERROR (ImplicitWrapperCopy; Retained/Tracked don't obey
+        // Assignable). So an init is always either a fresh handle from `.retain()`/`.track()`
+        // (already count=1) or a creator `Retained[T](ctrl)` (count=1) — never an implicit copy
+        // needing balance. The old bump (fired on `is not CallExpression`) wrongly counted the
+        // teardown return-spill `var __td_ret = Retained[T](ctrl)` (a CreatorExpression) as a copy,
+        // injecting a spurious retain → strong 1→2 → double-free at scope exit. Removed.
 
         ConsumeTransferredLocalOwnership(expr: varDecl.Initializer);
     }
@@ -518,13 +517,11 @@ public partial class LlvmCodeGenerator
             EmitRcRecordRetain(sb: sb, llvmAddr: varPtr, recordType: rcRecordNew);
         }
 
-        // Retain new RC wrapper value (call already returned with count set, but copies need bump)
-        if (varType is RecordTypeInfo rcWrapNew &&
-            GetGenericBaseName(type: rcWrapNew) is { } rcWrapNewBase &&
-            RcWrapperBaseNames.Contains(item: rcWrapNewBase))
-        {
-            EmitRetainedVarRetain(sb: sb, llvmAddr: varPtr, recordType: rcWrapNew);
-        }
+        // NOTE: no codegen strong-count bump for RC wrapper reassignment. Same reasoning as the
+        // var-binding site — implicit copy of a Retained/Tracked handle is a compile error, so the
+        // RHS is always a fresh count=1 handle (explicit `.retain()`/`.track()` or a creator), never
+        // an implicit copy needing balance. The old-value release above stays (reassignment-overwrite
+        // is not a scope exit, so ScopeTeardownLoweringPass does not cover it).
     }
 
     /// <summary>
