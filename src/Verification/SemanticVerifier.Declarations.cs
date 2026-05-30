@@ -281,6 +281,69 @@ public sealed partial class SemanticVerifier
         };
     }
 
+    /// <summary>
+    /// Rejects records that contain themselves by value (directly or transitively) — such a
+    /// record would need infinite storage, and the recursive size computation
+    /// (<c>RecordTypeInfo.SizeBytes</c>) would otherwise stack-overflow the compiler. Entities,
+    /// wrappers, and <c>@llvm</c>-backed records are pointer-sized, so they break the cycle.
+    /// </summary>
+    /// <returns><c>true</c> if any self-containing value record was found (and reported).</returns>
+    internal bool ValidateNoRecursiveValueRecords()
+    {
+        bool found = false;
+        foreach (TypeInfo t in _registry.GetAllTypes().ToList())
+        {
+            if (t is not RecordTypeInfo { HasDirectBackendType: false, IsGenericDefinition: false } rec
+                || rec is TupleTypeInfo)
+            {
+                continue;
+            }
+
+            var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
+            foreach (MemberVariableInfo mv in rec.MemberVariables)
+            {
+                if (!ValueAggregateReaches(target: rec, current: mv.Type, seen: seen))
+                {
+                    continue;
+                }
+                ReportError(code: SemanticDiagnosticCode.RecursiveValueRecord,
+                    message:
+                    $"Record '{rec.Name}' contains itself by value (directly or transitively), " +
+                    "which would require infinite storage. Store it behind an entity or a " +
+                    "pointer-like wrapper (e.g. Retained[...]) instead.",
+                    location: rec.Location ?? new SourceLocation(FileName: "", Line: 0, Column: 0, Position: 0));
+                found = true;
+                break;
+            }
+        }
+        return found;
+    }
+
+    /// <summary>
+    /// True when <paramref name="target"/> is reachable from <paramref name="current"/> by walking
+    /// only inline value-aggregate fields (records/tuples). Pointer-shaped types (entities,
+    /// <c>@llvm</c>-backed records, wrappers) stop the walk — they don't contribute inline storage.
+    /// </summary>
+    private static bool ValueAggregateReaches(RecordTypeInfo target, TypeInfo current,
+        HashSet<string> seen)
+    {
+        // Only inline value aggregates (plain records / tuples) propagate the cycle.
+        if (current is not RecordTypeInfo { HasDirectBackendType: false } rec)
+        {
+            return false;
+        }
+        if (string.Equals(a: rec.FullName, b: target.FullName, comparisonType: StringComparison.Ordinal))
+        {
+            return true;
+        }
+        if (!seen.Add(item: rec.FullName))
+        {
+            return false; // already explored from here, no cycle back to target through it
+        }
+        return rec.MemberVariables.Any(predicate: mv =>
+            ValueAggregateReaches(target: target, current: mv.Type, seen: seen));
+    }
+
     private void CollectRecordDeclaration(RecordDeclaration record)
     {
         var typeInfo = new RecordTypeInfo(name: record.Name)

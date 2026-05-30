@@ -397,6 +397,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Record member variable has a type that is not a value type (entities, wrappers, tokens cannot be stored in records).</summary>
     RecordContainsNonValueType = 412,
 
+    /// <summary>Record contains itself by value (directly or transitively) — infinite storage size.</summary>
+    RecursiveValueRecord = 960,
+
     /// <summary>Entity cannot be directly assigned from another variable. Must use .share() or steal.</summary>
     BareEntityAssignment = 413,
     /// <summary>

@@ -2190,12 +2190,18 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     private static ulong CalculateDataSizeForType(TypeInfo type) =>
         type switch
         {
-            TupleTypeInfo t => (ulong)(t.ElementTypes.Count * 8),
+            // Tuple is a RecordTypeInfo (item0/item1/... members) — delegate to SizeBytes like
+            // records. `element_count * 8` was wrong for tuples holding a non-8-byte element (Text=24).
+            TupleTypeInfo t => (ulong)t.SizeBytes(pointerSize: 8),
             RecordTypeInfo { HasDirectBackendType: true } r => LlvmBackendTypeSize(r.BackendType!),
-            RecordTypeInfo r => (ulong)(r.MemberVariables.Count * 8),
+            // Delegate to the SAME size function codegen uses (RecordTypeInfo.SizeBytes) so the
+            // List element stride matches the actual struct layout. `member_count * 8` was wrong
+            // for any record with a non-8-byte member (nested value-record like Text=24, or i32).
+            RecordTypeInfo r => (ulong)r.SizeBytes(pointerSize: 8),
             EntityTypeInfo => 8,   // heap-allocated; stored as pointer (8 bytes on 64-bit)
             CrashableTypeInfo => 8, // same -> stored as pointer
-            VariantTypeInfo v => (ulong)((v.Members.Count + 1) * 8), // tag + largest payload
+            // Variant is a tagged union: tag + MAX arm payload (not sum). Delegate to SizeBytes.
+            VariantTypeInfo v => (ulong)v.SizeBytes(pointerSize: 8),
             _ => 0
         };
 

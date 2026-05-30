@@ -375,7 +375,10 @@ public sealed partial class SemanticVerifier
         _typeBodyResolver.ResolveTypeBodies(program: program);
         _signatureResolver.ResolveAndRegisterPendingRoutines();
         _signatureResolver.ResolveExternalSignatures(program: program);
-        _conformanceAnalyzer.ApplyImplicitMarkerConformance();
+        // Reject self-containing value records BEFORE conformance analysis, which computes
+        // LlvmType/SizeBytes and would otherwise stack-overflow on the cycle.
+        if (!ValidateNoRecursiveValueRecords())
+            _conformanceAnalyzer.ApplyImplicitMarkerConformance();
     }
 
     /// <summary>
@@ -905,6 +908,21 @@ public sealed partial class SemanticVerifier
             _signatureResolver.ResolveExternalSignatures(program: program);
         }
         Mark(label: "Phase 2 -> Type/signature resolution");
+
+        // Reject self-containing value records (incl. cross-file mutual recursion) BEFORE conformance
+        // analysis, which computes LlvmType/SizeBytes and would otherwise stack-overflow on the cycle.
+        // Bail out entirely on a cycle — every downstream phase computes layout and would crash.
+        if (ValidateNoRecursiveValueRecords())
+        {
+            return new AnalysisResult(Registry: _registry,
+                Errors: _errors.ToList(),
+                Warnings: _warnings.ToList(),
+                ParsedLiterals: _parsedLiterals,
+                SynthesizedBodies: new Dictionary<string, Statement>(),
+                InstantiatedGenericBodies: _instantiatedGenericBodies,
+                LiveRoutineKeys: _liveRoutineKeys,
+                LiveOwnerTypeNames: _liveOwnerTypeNames);
+        }
 
         // Phase 2 global: once, registry-only -> no per-file import scoping needed
         _conformanceAnalyzer.ApplyImplicitMarkerConformance();
