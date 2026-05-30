@@ -11,37 +11,45 @@ module Core
 ###     a `Hijacked[ImmutableSharedController]` controller pointer. The handle
 ###     decides what to deallocate when the count hits zero.
 entity ImmutableSharedController
-  ### Stores the atomic strong reference count.
-  secret strong_count: Atomic[U64]
+  ### Stores the strong reference count. Accessed via SeqCst atomic intrinsics
+  ### driven directly on the field's live heap address (see note below).
+  secret strong_count: U64
 
 ### Creates a new controller with one strong reference.
 ### :returns: The resulting `ImmutableSharedController` value.
 dangerous routine ImmutableSharedController.$create() -> ?ImmutableSharedController
   return ImmutableSharedController(
-    strong_count: Atomic[U64](initial: 1_u64)
+    strong_count: 1_u64
   )
+
+# NOTE: We drive the SeqCst atomic intrinsics directly on `me.strong_count`'s
+# live heap address. Records are value types with no by-ref receiver, so a
+# value-typed atomic-cell method would receive `me` by value and operate on a
+# *stack copy* — the RMW would never reach the real counter (frozen at 1 →
+# double-free on every drop). `me` here is an entity (by-ref ptr), so
+# `me.strong_count.hijack()` yields the field's live lvalue address and the
+# intrinsics mutate the genuine shared counter.
 
 ### Atomically increments the strong reference count when a handle is cloned.
 dangerous routine ImmutableSharedController.increase_strong_count()
-  discard me.strong_count.fetch_add(delta: 1_u64)
+  discard atomic_add(ptr: me.strong_count.hijack(), value: 1_u64)
   return
 
 ### Atomically decrements the strong reference count when a handle is dropped.
 ### :returns: The previous count. The caller deallocates the payload + controller
 ###          when this returns `1` (i.e. the cell is now zero).
 dangerous routine ImmutableSharedController.decrease_strong_count() -> U64
-  return me.strong_count.fetch_sub(delta: 1_u64)
+  return atomic_sub[U64](ptr: me.strong_count.hijack(), value: 1_u64)
 
 ### Returns the current number of live strong handles.
 ### Snapshot only — value may have changed by the time the caller observes it.
 ### :returns: The current strong reference count.
 @readonly
 dangerous routine ImmutableSharedController.strong_count() -> U64
-  return me.strong_count.load()
+  return atomic_load[U64](ptr: me.strong_count.hijack())
 
 dangerous routine ImmutableSharedController.$destroy()
   if me.strong_count() == 0
-    me.strong_count.$destroy()
     me.hijack().invalidate()
     return
   return
