@@ -186,7 +186,7 @@ routine Array[T, N].$represent() -> ?Text
       result = result + ", "
     result = result + me[i].$represent()
   result = result + "])"
-  return steal result
+  return result
 
 routine Array[T, N].$diagnose() -> ?Text
   var result = me.full_type_name() + "(["
@@ -195,7 +195,7 @@ routine Array[T, N].$diagnose() -> ?Text
       result = result + ", "
     result = result + me[i].$represent()
   result = result + "])"
-  return steal result
+  return result
 
 ### Returns true when both arrays contain equal elements in the same order.
 ### :param you: The other array to compare against.

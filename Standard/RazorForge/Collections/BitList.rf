@@ -368,7 +368,7 @@ routine BitList.none() -> Bool
 ### :param other: The bit list to combine with this one.
 ### :returns: A new `BitList` whose bits are `me[i] and other[i]`.
 @readonly
-routine BitList.$bitand(other: BitList) -> ?BitList
+routine BitList.$bitand(other: Referring[BitList]) -> ?BitList
   # Bitwise AND - returns new BitList with shorter length
   var min_count = if me.count < other.count then me.count else other.count
   var result = BitList(min_count)
@@ -385,7 +385,7 @@ routine BitList.$bitand(other: BitList) -> ?BitList
 ### :param other: The bit list to combine with this one.
 ### :returns: A new `BitList` whose length matches the longer input.
 @readonly
-routine BitList.$bitor(other: BitList) -> ?BitList
+routine BitList.$bitor(other: Referring[BitList]) -> ?BitList
   # Bitwise OR - returns new BitList with longer length
   var max_count = if me.count > other.count then me.count else other.count
   var result = BitList(max_count)
@@ -403,7 +403,7 @@ routine BitList.$bitor(other: BitList) -> ?BitList
 ### :param other: The bit list to combine with this one.
 ### :returns: A new `BitList` whose bits are set where exactly one input bit is set.
 @readonly
-routine BitList.$bitxor(other: BitList) -> ?BitList
+routine BitList.$bitxor(other: Referring[BitList]) -> ?BitList
   # Bitwise XOR - returns new BitList with longer length
   var max_count = if me.count > other.count then me.count else other.count
   var result = BitList(max_count)

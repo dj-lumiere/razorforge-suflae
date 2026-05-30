@@ -230,7 +230,7 @@ routine BitArray[N].$contains(value: Bool) -> Bool
 # ============================================================================
 
 @readonly
-routine BitArray[N].$represent() -> ?Text
+routine BitArray[N].$represent() -> Text
   var result = "BitArray(["
   var i = 0u64
   while i < N
@@ -239,10 +239,10 @@ routine BitArray[N].$represent() -> ?Text
     result = result + me[i].$represent()
     i = i +% 1u64
   result = result + "])"
-  return steal result
+  return result
 
 @readonly
-routine BitArray[N].$diagnose() -> ?Text
+routine BitArray[N].$diagnose() -> Text
   var result = me.full_type_name() + "(["
   var i = 0u64
   while i < N
@@ -251,7 +251,7 @@ routine BitArray[N].$diagnose() -> ?Text
     result = result + me[i].$represent()
     i = i +% 1u64
   result = result + "])"
-  return steal result
+  return result
 
 # ============================================================================
 # Iteration Support
