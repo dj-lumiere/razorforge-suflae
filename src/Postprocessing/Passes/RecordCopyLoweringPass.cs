@@ -310,7 +310,26 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
                     args.Add(item: s);
                     if (!ReferenceEquals(s, arg)) changed = true;
                 }
-                return changed ? call with { Arguments = args } : call;
+
+                // Recurse into the receiver chain so nested-call arguments get their
+                // retain copies even when the inner call sits in *receiver* position.
+                // e.g. f-string lowering turns `f"{c1 == c2}"` into
+                // `(c1.$eq(c2)).$represent()`: the `$eq` whose argument `c2` must be
+                // copied lives in `Callee.Object`, not in any argument list. We recurse
+                // via StripStealFromExpr (not LowerOwnership) so the receiver itself
+                // stays borrowed — only nested argument positions get a `$copy`.
+                Expression callee = call.Callee;
+                if (callee is MemberExpression cm)
+                {
+                    Expression newObj = StripStealFromExpr(expr: cm.Object);
+                    if (!ReferenceEquals(newObj, cm.Object))
+                    {
+                        callee = cm with { Object = newObj };
+                        changed = true;
+                    }
+                }
+
+                return changed ? call with { Arguments = args, Callee = callee } : call;
             }
 
             case GenericMethodCallExpression gmc:
@@ -323,7 +342,12 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
                     args.Add(item: s);
                     if (!ReferenceEquals(s, arg)) changed = true;
                 }
-                return changed ? gmc with { Arguments = args } : gmc;
+
+                // Same receiver-chain recursion as CallExpression (see note above).
+                Expression newReceiver = StripStealFromExpr(expr: gmc.Object);
+                if (!ReferenceEquals(newReceiver, gmc.Object)) changed = true;
+
+                return changed ? gmc with { Arguments = args, Object = newReceiver } : gmc;
             }
 
             // All other expression types: steal cannot appear as a direct child in practice

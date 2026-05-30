@@ -2060,9 +2060,12 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         {
             EntityTypeInfo e => e.MemberVariables,
             CrashableTypeInfo c => c.MemberVariables,
-            // Choices/flags/tuples are RecordTypeInfo subclasses with no owned references —
-            // exclude them; only plain composite records (no @llvm backend) recurse.
-            ChoiceTypeInfo or FlagsTypeInfo or TupleTypeInfo => null,
+            // Tuples are RecordTypeInfo subclasses that CAN carry owned references (e.g. a
+            // `Text` element), so recurse into their item0/item1/... fields to tear those down.
+            TupleTypeInfo t => t.MemberVariables,
+            // Choices/flags are RecordTypeInfo subclasses with no owned references — exclude
+            // them; only plain composite records (no @llvm backend) recurse.
+            ChoiceTypeInfo or FlagsTypeInfo => null,
             RecordTypeInfo { HasDirectBackendType: false } r => r.MemberVariables,
             _ => null
         };
@@ -2239,6 +2242,14 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     {
         switch (routine.Name)
         {
+            case "$destroy" when routine.Parameters.Count == 0:
+                // Tuples are filtered out of the main routine loop (they never appear in routine
+                // signatures), so the unified `$destroy` synthesis at line ~108 never sees them.
+                // Build the field-recursing destructor here so owned elements (e.g. a `Text`) are
+                // torn down — otherwise the call emitted by ScopeTeardownLoweringPass is undefined.
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildDestroyBody(owner: tuple);
+                break;
+
             case RepresentMethodName:
                 ctx.VariantBodies[key: routine.RegistryKey] =
                     BuildTupleTextBody(tuple: tuple, textType: textType, diagnose: false);
