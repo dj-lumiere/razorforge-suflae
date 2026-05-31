@@ -679,11 +679,38 @@ internal sealed class PatternLoweringPass(PostprocessingContext ctx)
                     return (MakeTypeIdIsZero(subject: subject, loc: loc, boolType: boolType,
                         u64Type: u64Type), null);
 
-                // Specific type: type_id == FNV-1a(type.FullName)
-                string fullName = targetType?.FullName ?? tp.Type.Name;
-                ulong typeId = TypeIdHelper.ComputeTypeId(fullName: fullName);
-                Expression cond = MakeTypeIdEquals(subject: subject, typeId: typeId, loc: loc,
-                    boolType: boolType, u64Type: u64Type);
+                // Specific type: type_id == FNV-1a(type.FullName).
+                // GENERIC PARAM (e.g. `is T` in Result[T].$represent): a baked FNV("T") literal
+                // would never match after monomorphization (success stores FNV of the concrete type).
+                // The binding already substitutes correctly (CarrierPayloadExpression carries the
+                // type), but a frozen literal does not. Emit `<T>.type_id()` instead — a type-method
+                // call GenericAstRewriter folds via the T->concrete substitution map
+                // (TryFoldBsCallViaStringSubs) to ComputeTypeId(concrete.FullName), so the condition
+                // matches the success state once instantiated.
+                Expression typeIdRhs;
+                if (targetType is GenericParameterTypeInfo)
+                {
+                    typeIdRhs = new CallExpression(
+                        Callee: new MemberExpression(
+                            Object: new IdentifierExpression(Name: tp.Type.Name, Location: loc),
+                            PropertyName: TypeIdFieldName, Location: loc),
+                        Arguments: [],
+                        Location: loc) { ResolvedType = u64Type };
+                }
+                else
+                {
+                    string fullName = targetType?.FullName ?? tp.Type.Name;
+                    typeIdRhs = new LiteralExpression(
+                        Value: TypeIdHelper.ComputeTypeId(fullName: fullName),
+                        LiteralType: TokenType.U64Literal, Location: loc) { ResolvedType = u64Type };
+                }
+                Expression cond = new BinaryExpression(
+                    Left: MakeMemberAccess(subject: subject, field: TypeIdFieldName,
+                        fieldType: u64Type, loc: loc),
+                    Operator: BinaryOperator.Equal, Right: typeIdRhs, Location: loc)
+                {
+                    ResolvedType = boolType
+                };
 
                 Statement? binding = null;
                 if (tp.VariableName != null && targetType != null)
