@@ -23,8 +23,10 @@ routine Lookup[T].$represent() -> Text
       return "none"
     is Crashable v =>
       return v.$represent()
-    else v =>
+    is T v =>
       return v.$represent()
+    else =>
+      return me.type_name()
 
 ### Returns the diagnostic form of this lookup result.
 ### Format: `f"{full_type_name}(type_id: {type_id}, {payload.$diagnose()})"`,
@@ -36,8 +38,10 @@ routine Lookup[T].$diagnose() -> Text
       return f"{me.full_type_name()}(type_id: 0, none)"
     is Crashable v =>
       return f"{me.full_type_name()}(type_id: {me.type_id}, {v.$diagnose()})"
-    else v =>
+    is T v =>
       return f"{me.full_type_name()}(type_id: {me.type_id}, {v.$diagnose()})"
+    else =>
+      return f"{me.full_type_name()}(type_id: {me.type_id})"
 
 ### Frees the active payload. The absent arm is a no-op; the crashable arm delegates (a no-op for
 ### non-owning errors) and the success arm frees `T`. Defined explicitly (not auto-derived) so the
@@ -46,8 +50,8 @@ dangerous routine Lookup[T].$destroy()
   when me
     is None =>
       return
-    is Crashable v =>
+    is T v =>
       v.$destroy()
-    else v =>
-      v.$destroy()
+    else =>
+      return
   return

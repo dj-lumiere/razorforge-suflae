@@ -13,26 +13,30 @@ record Result[T]
   ### The runtime uses this to distinguish successful payloads from crashables.
   secret type_id: U64
 
-### Returns the display form of this result: the payload's own `$represent`.
-### Both the success (`T`) and crashable arms delegate to their payload — the
-### `Result[T]` wrapper does not add any framing of its own.
+### Returns the display form of this result: the payload's own `$represent` for both the success
+### (`T`) and crashable arms. `is T` matches the success state (type-id of the concrete `T`); the
+### `else` is an unreachable fallback (a `Result` is always `Crashable` or `T`).
 ### :returns: The resulting `Text` value.
 routine Result[T].$represent() -> Text
   when me
     is Crashable v =>
       return v.$represent()
-    else v =>
+    is T v =>
       return v.$represent()
+    else =>
+      return me.type_name()
 
 ### Returns the diagnostic form of this result.
-### Format: `f"{full_type_name}(type_id: {type_id}, {payload.$diagnose()})"`.
+### Format: `f"{full_type_name}(type_id: {type_id}, {payload.$diagnose()})"` for both arms.
 ### :returns: The resulting `Text` value.
 routine Result[T].$diagnose() -> Text
   when me
     is Crashable v =>
       return f"{me.full_type_name()}(type_id: {me.type_id}, {v.$diagnose()})"
-    else v =>
+    is T v =>
       return f"{me.full_type_name()}(type_id: {me.type_id}, {v.$diagnose()})"
+    else =>
+      return f"{me.full_type_name()}(type_id: {me.type_id})"
 
 ### Frees the active payload. Both arms delegate to the payload's own `$destroy`: the crashable
 ### arm is a no-op for non-owning errors, the success arm frees `T`. Defined explicitly (not
@@ -40,8 +44,8 @@ routine Result[T].$diagnose() -> Text
 ### `$represent`/`$diagnose`, and so only the active arm's payload is touched.
 dangerous routine Result[T].$destroy()
   when me
-    is Crashable v =>
+    is T v =>
       v.$destroy()
-    else v =>
-      v.$destroy()
+    else =>
+      pass
   return
