@@ -151,6 +151,15 @@ public record RoutineDeclaration(
     AsyncStatus Async = AsyncStatus.None,
     bool IsDangerous = false) : Declaration(Location: Location)
 {
+    /// <summary>
+    /// Variables taken out of scope within this routine via <c>steal</c> / consumption (SA's
+    /// per-routine deadref set, snapshotted after body analysis). The scope-exit teardown pass
+    /// merges these into its move-set so a stolen binding is NOT destroyed at scope exit — the
+    /// authoritative record of the explicit <c>steal</c> move, robust to the <c>steal</c> AST
+    /// wrapper being normalized away (e.g. <c>Text(from_list: steal digits)</c> → <c>Text(digits)</c>).
+    /// </summary>
+    public HashSet<string>? StolenVariableNames { get; set; }
+
     /// <inheritdoc/>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {

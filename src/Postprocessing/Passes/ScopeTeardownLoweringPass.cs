@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Compiler.Postprocessing;
+using Compiler.Resolution;
 using SyntaxTree;
 using TypeModel.Symbols;
 using TypeModel.Types;
@@ -92,6 +93,13 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
     {
         _movedNames.Clear();
         CollectMovedNames(r.Body);
+        // Merge SA's authoritative per-routine "stolen / out of scope" record. `steal` takes a
+        // binding out of scope (ownership moves to the callee, which destroys the content), but the
+        // `steal` AST wrapper is normalized away during arg lowering (e.g. `Text(from_list: steal
+        // digits)` → `Text(digits)`), so the AST move pre-scan above can miss it. SA recorded it via
+        // deadref tracking; trust that so a stolen binding is never torn down here (double-free).
+        if (r.StolenVariableNames is { Count: > 0 } stolen)
+            _movedNames.UnionWith(other: stolen);
 
         // Consuming entity parameters are owned by the routine and torn down at every exit, exactly
         // like a top-level local. (Borrows arrive as Referring/Controlling/Viewed/Grasped wrappers,
@@ -185,6 +193,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
                 stmts.Add(item: s);
                 TypeInfo? t = v.Type?.ResolvedType ?? v.Initializer?.ResolvedType;
                 if (t != null && !_movedNames.Contains(item: v.Name) && !IsUsingBinding(v: v)
+                    && !IsViewBinding(v: v)
                     && TryResolveDestroy(type: t, out RoutineInfo? d) && d != null)
                 {
                     live.Add(item: new Owned(Name: v.Name, Type: t, Destroy: d));
@@ -279,21 +288,19 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
     }
 
     /// <summary>
-    /// Resolves the OWN <c>$destroy</c> of a teardown-eligible type via GetMethodsForType (NOT
-    /// LookupMethod, which would surface the no-owner universal <c>T.$destroy</c> stub — that mangles
-    /// to a symbol nobody emits → undefined at link). Prefers the user-written destructor.
+    /// Resolves the <c>$destroy</c> to call at scope exit via the unified
+    /// <see cref="TypeRegistry.GetLifecycle"/> — the SAME decision the copy pass (<c>NeedsRetainingCopy</c>)
+    /// drives off, so a value is either both retaining-copied and balanced-destroyed or neither (the
+    /// asymmetry that double-freed before). <c>GetLifecycle</c> resolves through
+    /// <c>GetOwnMethodsResolved</c> (own-methods-only, generic-resolution aware), so it finds e.g.
+    /// <c>Retained[Tracer].$destroy</c> without surfacing the no-owner universal <c>T.$destroy</c> stub,
+    /// and excludes the abstract tier.
     /// </summary>
     private bool TryResolveDestroy(TypeInfo type, out RoutineInfo? destroy)
     {
-        destroy = null;
-        if (!NeedsTeardown(type: type)) return false;
-
-        List<RoutineInfo> candidates = ctx.Registry.GetMethodsForType(type: type)
-            .Where(predicate: m => m.Name == "$destroy" && m.Parameters.Count == 0)
-            .ToList();
-        destroy = candidates.FirstOrDefault(predicate: m => !m.IsSynthesized)
-                  ?? candidates.FirstOrDefault();
-        return destroy != null;
+        TypeRegistry.Lifecycle lc = ctx.Registry.GetLifecycle(type: type);
+        destroy = lc.Destroy;
+        return !lc.IsBorrow && destroy != null;
     }
 
     /// <summary>
@@ -335,6 +342,26 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
             _ => false
         };
     }
+
+    /// <summary>
+    /// The reference primitives that yield an in-flight <c>?T</c> view of a referent owned elsewhere:
+    /// <c>Hijacked[T].as_entity()</c> and the <c>$refer</c>/<c>$control</c> marker-protocol coercions.
+    /// A binding initialized by one of these owns nothing and must NOT be torn down.
+    /// </summary>
+    private static readonly System.Collections.Generic.HashSet<string> ViewVerbs =
+        new(comparer: System.StringComparer.Ordinal) { "as_entity", "$refer", "$control" };
+
+    /// <summary>
+    /// True for a binding that holds a borrowed <c>?T</c> view — <c>var ctrl = ptr.as_entity()</c>,
+    /// <c>var x = h.$refer()</c>, <c>var x = h.$control()</c>. These pervade the RC wrapper bodies
+    /// (e.g. <c>var ctrl = Hijacked[RetainController[T]](me).as_entity()</c> in <c>Retained.release</c>).
+    /// The binding's static type is the bare referent (<c>T</c>), so <c>GetLifecycle</c> would resolve
+    /// the referent's real <c>$destroy</c> and free a value owned elsewhere — hence we key on the
+    /// initializer VERB (a reference primitive), per the four-routine governance model, not the type.
+    /// </summary>
+    private static bool IsViewBinding(VariableDeclaration v) =>
+        v.Initializer is CallExpression { Callee: MemberExpression m } &&
+        ViewVerbs.Contains(item: m.PropertyName);
 
     // -----------------------------------------------------------------------------
     // Move pre-scan: a binding whose ownership leaves the routine is never torn down here.

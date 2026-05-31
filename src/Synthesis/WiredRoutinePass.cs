@@ -217,6 +217,20 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 if (!routine.IsSynthesized) continue;
                 if (ctx.VariantBodies.ContainsKey(key: routine.RegistryKey)) continue;
                 if (methods.Any(r => r.Name == routine.Name && !r.IsSynthesized)) continue;
+
+                // Unified destructor for generic-def entity/record types (e.g. ListEmitter[T],
+                // DictEntry[K,V]). The first loop's $destroy handler runs over GetAllRoutines(),
+                // which excludes generic-def owners, so without this their $destroy body is never
+                // synthesized — and GMP.BuildBody returns null for a synthesized method with no
+                // VariantBody, leaving scope-exit `emitter.$destroy()` calls (inserted once these
+                // helper locals exist, e.g. from for-loop iteration) undefined at link.
+                if (routine is { Name: "$destroy", Parameters.Count: 0 })
+                {
+                    ctx.VariantBodies[key: routine.RegistryKey] =
+                        BuildDestroyBody(owner: routine.OwnerType);
+                    continue;
+                }
+
                 switch (type)
                 {
                     case EntityTypeInfo entity:

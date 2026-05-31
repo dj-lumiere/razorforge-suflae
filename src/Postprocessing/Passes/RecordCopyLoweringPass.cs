@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Compiler.Resolution;
 using SyntaxTree;
 using TypeModel.Symbols;
 using TypeModel.Types;
@@ -380,11 +381,14 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
     private bool NeedsRetainingCopy(TypeInfo? type, out RoutineInfo? copyMethod)
     {
         copyMethod = null;
-        if (type is not RecordTypeInfo)
-            return false;
-        copyMethod = ctx.Registry.GetMethodsForType(type: type)
-            .FirstOrDefault(predicate: m => m.Name == "$copy" && m.Parameters.Count == 0 && !m.IsSynthesized);
-        return copyMethod != null;
+        if (type == null) return false;
+        // Same unified decision the teardown pass uses (TypeRegistry.GetLifecycle): a retaining copy
+        // is needed iff the type has a hand-written (non-synthesized) zero-arg `$copy` — restricted to
+        // records and excluding the borrow tier — resolved through GetOwnMethodsResolved so generic
+        // resolutions (e.g. Maybe[Text]) agree with what teardown sees for the same type.
+        TypeRegistry.Lifecycle lc = ctx.Registry.GetLifecycle(type: type);
+        copyMethod = lc.Copy;
+        return !lc.IsBorrow && copyMethod != null;
     }
 
     /// <summary>

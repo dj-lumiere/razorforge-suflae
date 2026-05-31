@@ -370,6 +370,12 @@ public sealed partial class SemanticVerifier
 
         _pendingLookupVars.Clear();
 
+        // Snapshot the per-routine "out of scope via steal/consumption" set onto the declaration so
+        // the scope-exit teardown pass can exclude these bindings from `$destroy` — `steal` takes the
+        // variable out of scope (the callee kills the content), and this deadref record survives even
+        // after the `steal` AST wrapper is normalized away during arg lowering.
+        routine.StolenVariableNames = [.. _deadrefVariables];
+
         _registry.ExitScope();
 
         _currentRoutine = previousRoutine;

@@ -1390,6 +1390,52 @@ public sealed partial class TypeRegistry
         return result;
     }
 
+    /// <summary>The owned-value lifecycle of a type, resolved through the single unified own-method
+    /// resolver (<see cref="GetOwnMethodsResolved"/>) so the teardown and copy passes agree about
+    /// generic resolutions like <c>Retained[Tracer]</c> / <c>Maybe[Text]</c>.</summary>
+    public readonly record struct Lifecycle(RoutineInfo? Copy, RoutineInfo? Destroy, bool IsBorrow);
+
+    /// <summary>
+    /// Lifecycle and reference are governed by the four wired routines
+    /// <c>$create</c>/<c>$refer</c>/<c>$control</c>/<c>$destroy</c> — the system is AGNOSTIC to
+    /// specific wrapper-type names (no hardcoded Viewed/Grasped/Hijacked list). Teardown simply calls
+    /// <c>$destroy</c> uniformly: it is a real destructor on owning types and a no-op on the
+    /// access/borrow wrappers, so firing it is always safe by construction. The only thing this gate
+    /// excludes is the ABSTRACT tier — generic parameters and protocols (the latter also covering the
+    /// <c>Referring</c>/<c>Controlling</c> access markers) — which have no concrete <c>$destroy</c> to
+    /// resolve. The one remaining hazard, a <c>?T</c> reference bound to the bare referent type via the
+    /// reference primitives <c>$refer</c>/<c>$control</c>/<c>as_entity</c>, is excluded at the binding
+    /// site by <c>ScopeTeardownLoweringPass.IsViewBinding</c> (keyed on the producing verb, since the
+    /// binding's static type is the referent itself, not a borrow wrapper).
+    /// </summary>
+    private static bool IsBorrowTier(TypeInfo type) =>
+        type is GenericParameterTypeInfo or ProtocolTypeInfo;
+
+    /// <summary>
+    /// Resolves a type's owned-value lifecycle: its retaining <c>$copy</c> (a hand-written, i.e.
+    /// non-synthesized, zero-arg <c>$copy</c> on a record — the managed-leaf retain hook), its
+    /// <c>$destroy</c> (preferring the user-written one), and whether it is a borrow-tier type. The
+    /// teardown and copy lowering passes both drive off THIS one decision, so a value is either both
+    /// retaining-copied and balanced-destroyed, or neither — never the asymmetry that double-freed
+    /// before. Resolved via <see cref="GetOwnMethodsResolved"/>, so it works for generic resolutions.
+    /// </summary>
+    public Lifecycle GetLifecycle(TypeInfo type)
+    {
+        if (IsBorrowTier(type: type))
+            return new Lifecycle(Copy: null, Destroy: null, IsBorrow: true);
+
+        List<RoutineInfo> own = GetOwnMethodsResolved(type: type).ToList();
+        RoutineInfo? destroy = own
+            .Where(predicate: m => m.Name == "$destroy" && m.Parameters.Count == 0)
+            .OrderBy(keySelector: m => m.IsSynthesized ? 1 : 0)
+            .FirstOrDefault();
+        RoutineInfo? copy = type is RecordTypeInfo
+            ? own.FirstOrDefault(predicate: m =>
+                m.Name == "$copy" && m.Parameters.Count == 0 && !m.IsSynthesized)
+            : null;
+        return new Lifecycle(Copy: copy, Destroy: destroy, IsBorrow: false);
+    }
+
     /// <summary>
     /// Gets or creates a resolved generic routine.
     /// </summary>

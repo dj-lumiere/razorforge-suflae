@@ -253,15 +253,18 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         }
     }
 
-    /// Routines reachable only through synthesized bodies (e.g., for-loop iteration in
-    /// auto-generated $represent / $diagnose) that ReachabilityPass cannot trace because the
-    /// owner type (ListEmitter[Byte], etc.) is created post-pass during GMP body rewriting.
-    /// Restricted to iteration-related names — broader sets cascade into derived-op chains
-    /// ($ne->$eq, $notcontains->$contains) where the "missing companion" is the actual culprit.
-    private static readonly HashSet<string> _gateBypassNames = new(StringComparer.Ordinal)
-    {
-        "try_next",
-    };
+    /// Routines emitted for every live owner regardless of call-site reachability. Two sources:
+    /// (1) the unified-teardown lifecycle routines (<c>$destroy</c>/<c>$copy</c>, from
+    /// <see cref="Compiler.Resolution.WiredRoutineCatalog.AlwaysLiveNames"/>) — scope-exit teardown
+    /// inserts <c>$destroy</c> calls that must always have a concrete body, and the matching
+    /// retaining <c>$copy</c> likewise; (2) <c>try_next</c>, reachable only through synthesized
+    /// for-loop iteration bodies whose owner type (ListEmitter[Byte], etc.) is created post-pass
+    /// during GMP body rewriting, so ReachabilityPass cannot trace it. Kept narrow otherwise —
+    /// broader sets cascade into derived-op chains ($ne->$eq) where the missing companion is the
+    /// actual culprit.
+    private static readonly HashSet<string> _gateBypassNames =
+        new(collection: Compiler.Resolution.WiredRoutineCatalog.AlwaysLiveNames,
+            comparer: StringComparer.Ordinal) { "try_next" };
 
     private static bool IsWiredRoutineName(string name) => _gateBypassNames.Contains(name);
 
