@@ -502,7 +502,12 @@ public partial class LlvmCodeGenerator
         static bool ShouldDisambiguateByParameterTypes(RoutineInfo candidate) =>
             candidate.Parameters.Count > 0;
 
-        static string Bang(string name, bool failable) => failable ? name + "!" : name;
+        // Failability is a routine PROPERTY (IsFailable), never part of the symbol name. The `!`
+        // is stripped from every mangled symbol — `foo()` and `foo!()` with the same params are a
+        // duplication error (RegistryKey excludes failability), so `owner.name(params)` is already
+        // a unique symbol and the bang would only be decorative. Kept as a no-op wrapper so the
+        // owner-case call sites below read uniformly.
+        static string Bang(string name, bool failable) => name;
 
         // Lambda closures: [lambda]filename:line:col!(paramTypes)
         if (routine.IsLambda)
@@ -676,11 +681,12 @@ public partial class LlvmCodeGenerator
         return type.FullName;
     }
 
+    // Failability is a routine PROPERTY, never part of the symbol — the `!` is not appended.
+    // (Retained as a pass-through for the unresolved/C-call fallback path so its call sites read
+    // uniformly with MangleRoutineName, which also strips the bang.)
     internal static string DecorateRoutineSymbolName(string baseName, bool isFailable)
     {
-        return isFailable
-            ? $"{baseName}!"
-            : baseName;
+        return baseName;
     }
 
     /// <summary>

@@ -1317,7 +1317,11 @@ public sealed partial class TypeRegistry
     public bool IsRoutinePruned(string baseName) => _prunedGenericBases.Contains(baseName);
 
     /// <summary>
-    /// Gets all methods for a type.
+    /// Gets the methods registered DIRECTLY on a type's own table (raw). Returns empty for a generic
+    /// resolution like <c>List[S64]</c> whose concrete owner is never written into
+    /// <c>_routinesByOwner</c>. Callers that need the resolved own-method set of a generic resolution
+    /// (e.g. unified teardown/copy lifecycle resolution) must use
+    /// <see cref="GetOwnMethodsResolved"/> instead.
     /// </summary>
     /// <param name="type">The type to get methods for.</param>
     /// <returns>An enumerable of all methods for the type.</returns>
@@ -1329,6 +1333,61 @@ public sealed partial class TypeRegistry
         }
 
         return [];
+    }
+
+    private readonly Dictionary<string, List<RoutineInfo>> _methodsForTypeCache =
+        new(comparer: StringComparer.Ordinal);
+
+    /// <summary>
+    /// The unified own-method resolver: returns the methods a type provides ITSELF, including — for a
+    /// generic resolution whose concrete owner is absent from <c>_routinesByOwner</c> — the generic
+    /// definition's own methods substituted for this owner (via <see cref="SubstituteMethodForOwner"/>).
+    /// This is the single source of truth the find-side and the lifecycle (teardown/copy) passes share,
+    /// so <c>GetMethodsForType</c> (raw) and <see cref="LookupMethod"/> can no longer disagree about
+    /// whether e.g. <c>Retained[Tracer]</c> has a <c>$destroy</c>.
+    ///
+    /// <para>Plain OWN-method enumeration only — no protocol-method synthesis, no universal-method
+    /// stub, no marker/wrapper unwrap (those are dispatch concerns). That keeps it from surfacing the
+    /// no-owner universal <c>T.$destroy</c> stub for a borrowed referent. Results are cached per
+    /// <c>FullName</c>; only fully-concrete resolutions are admitted to the cache.</para>
+    /// </summary>
+    public IEnumerable<RoutineInfo> GetOwnMethodsResolved(TypeInfo type)
+    {
+        if (_routinesByOwner.TryGetValue(key: type.FullName, value: out List<RoutineInfo>? methods))
+            return methods;
+
+        if (!type.IsGenericResolution ||
+            type.TypeArguments is null ||
+            type.TypeArguments.Any(predicate: a => a is GenericParameterTypeInfo or ErrorTypeInfo || a.IsBlank))
+            return [];
+
+        if (_methodsForTypeCache.TryGetValue(key: type.FullName, value: out List<RoutineInfo>? cached))
+            return cached;
+
+        var result = new List<RoutineInfo>();
+        TypeInfo? genericDef = type switch
+        {
+            RecordTypeInfo r => r.GenericDefinition,
+            EntityTypeInfo e => e.GenericDefinition,
+            ProtocolTypeInfo p => p.GenericDefinition,
+            WrapperTypeInfo wt => LookupType(name: wt.Name),
+            _ => null
+        };
+        if (genericDef != null && !ReferenceEquals(objA: genericDef, objB: type) &&
+            _routinesByOwner.TryGetValue(key: genericDef.FullName, value: out List<RoutineInfo>? defMethods))
+        {
+            foreach (RoutineInfo m in defMethods)
+            {
+                // Universal (T-owned) methods are not the type's OWN methods — skip them so the
+                // no-owner T.$destroy stub never leaks in for a borrowed referent.
+                if (m.OwnerType is GenericParameterTypeInfo) continue;
+                RoutineInfo? sub = SubstituteMethodForOwner(method: m, resolvedOwner: type);
+                if (sub != null) result.Add(item: sub);
+            }
+        }
+
+        _methodsForTypeCache[key: type.FullName] = result;
+        return result;
     }
 
     /// <summary>

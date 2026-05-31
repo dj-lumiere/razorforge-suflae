@@ -50,26 +50,21 @@ public sealed class WiredEntry
     /// Assignable for capability but not declared via a protocol-operator).</summary>
     public IReadOnlyList<string> Protocols { get; init; } = [];
 
-    /// <summary>The key under which this appears in the capability map. Defaults to <see cref="Name"/>;
-    /// overridden for the failable index/iter forms (<c>$getitem!</c>/<c>$setitem!</c>/<c>$next!</c>).</summary>
-    public string? CapabilityKeyOverride { get; init; }
-
     /// <summary>The canonical wired routine the capability gate looks up on the owner. Defaults to
-    /// <see cref="CapabilityKey"/>; overridden for derived operators that share a base
+    /// <see cref="Name"/>; overridden for derived operators that share a base
     /// (e.g. <c>$ne</c>→<c>$eq</c>, <c>$lt</c>→<c>$cmp</c>, <c>$mod</c>→<c>$floordiv</c>).</summary>
     public string? CapabilityWiredOverride { get; init; }
-
-    /// <summary>The exact token(s) seeded by reachability. Defaults to <c>[Name]</c>; overridden where
-    /// reachability uses the failable form (<c>$next!</c>) or seeds extra siblings (<c>$unwrap!</c>).</summary>
-    public IReadOnlyList<string>? ReachabilitySeedFormsOverride { get; init; }
 
     /// <summary>True for routines that must be emitted for every live owner regardless of call-site
     /// reachability — the unified-teardown lifecycle routines (<c>$destroy</c>/<c>$copy</c>).</summary>
     public bool AlwaysLive { get; init; }
 
-    public string CapabilityKey => CapabilityKeyOverride ?? Name;
-    public string CapabilityWired => CapabilityWiredOverride ?? CapabilityKey;
-    public IReadOnlyList<string> ReachabilitySeedForms => ReachabilitySeedFormsOverride ?? [Name];
+    /// <summary>True when this routine carries the failable `!` marker. Failability is a PROPERTY —
+    /// the `!` is never part of the name, key, or symbol (see <c>$getitem</c>/<c>$setitem</c>/<c>$next</c>).
+    /// Lookups resolve by the bare name and compare this property; they never key on a banged string.</summary>
+    public bool Failable { get; init; }
+
+    public string CapabilityWired => CapabilityWiredOverride ?? Name;
 }
 
 /// <summary>
@@ -118,14 +113,13 @@ public static class WiredRoutineCatalog
         new() { Name = "$contains",    Kind = WiredKind.Container, Views = Cap | Known | Proto | Seed, Protocols = ["Container"], CapabilityWiredOverride = "$contains" },
         new() { Name = "$notcontains", Kind = WiredKind.Container, Views = Cap | Known | Proto | Seed, Protocols = ["Container"], CapabilityWiredOverride = "$contains" },
         new() { Name = "$iter",        Kind = WiredKind.Iteration, Views = Cap | Known | Proto | Seed, Protocols = ["Iterable"] },
-        new() { Name = "$next",        Kind = WiredKind.Iteration, Views = Cap | Known | Proto | Seed, Protocols = ["Iterator"],
-                CapabilityKeyOverride = "$next!", ReachabilitySeedFormsOverride = ["$next!"] },
+        new() { Name = "$next",        Kind = WiredKind.Iteration, Views = Cap | Known | Proto | Seed, Protocols = ["Iterator"], Failable = true },
         new() { Name = "try_next",     Kind = WiredKind.Iteration, Views = Seed },
-        new() { Name = "$getitem",     Kind = WiredKind.Indexing, Views = Cap | Known | Proto | Seed, Protocols = ["Indexable"], CapabilityKeyOverride = "$getitem!" },
-        new() { Name = "$setitem",     Kind = WiredKind.Indexing, Views = Cap | Known | Proto | Seed, Protocols = ["Indexable"], CapabilityKeyOverride = "$setitem!" },
+        new() { Name = "$getitem",     Kind = WiredKind.Indexing, Views = Cap | Known | Proto | Seed, Protocols = ["Indexable"], Failable = true },
+        new() { Name = "$setitem",     Kind = WiredKind.Indexing, Views = Cap | Known | Proto | Seed, Protocols = ["Indexable"], Failable = true },
 
         // ---- Unwrap (Maybe / Result / Lookup) ----
-        new() { Name = "$unwrap",    Kind = WiredKind.Unwrap, Views = Known | Seed, ReachabilitySeedFormsOverride = ["$unwrap", "$unwrap!"] },
+        new() { Name = "$unwrap",    Kind = WiredKind.Unwrap, Views = Known | Seed, Failable = true },
         new() { Name = "$unwrap_or", Kind = WiredKind.Unwrap, Views = Known | Seed },
 
         // ---- Arithmetic (standard) ----
@@ -203,7 +197,7 @@ public static class WiredRoutineCatalog
     {
         var map = new Dictionary<string, (string, string)>(comparer: System.StringComparer.Ordinal);
         foreach (WiredEntry e in All.Where(predicate: e => e.Views.HasFlag(flag: Cap)))
-            map[key: e.CapabilityKey] = (e.Protocols[index: 0], e.CapabilityWired);
+            map[key: e.Name] = (e.Protocols[index: 0], e.CapabilityWired);
         return map;
     }
 
@@ -221,7 +215,7 @@ public static class WiredRoutineCatalog
     /// <c>RoutineReachabilityPass.WiredRoutineNames</c> (order-independent).</summary>
     public static string[] BuildReachabilitySeedNames() =>
         All.Where(predicate: e => e.Views.HasFlag(flag: Seed))
-           .SelectMany(selector: e => e.ReachabilitySeedForms)
+           .Select(selector: e => e.Name)
            .ToArray();
 
     // ---------------------------------------------------------------------------
@@ -305,9 +299,9 @@ public static class WiredRoutineCatalog
             ["$fast_hash"] = ("FastHashable", "$fast_hash"), ["$cmp"] = ("Comparable", "$cmp"),
             ["$lt"] = ("Comparable", "$cmp"), ["$le"] = ("Comparable", "$cmp"), ["$gt"] = ("Comparable", "$cmp"),
             ["$ge"] = ("Comparable", "$cmp"), ["$contains"] = ("Container", "$contains"),
-            ["$notcontains"] = ("Container", "$contains"), ["$getitem!"] = ("Indexable", "$getitem!"),
-            ["$setitem!"] = ("Indexable", "$setitem!"), ["$iter"] = ("Iterable", "$iter"),
-            ["$next!"] = ("Iterator", "$next!"), ["$represent"] = ("Representable", "$represent"),
+            ["$notcontains"] = ("Container", "$contains"), ["$getitem"] = ("Indexable", "$getitem"),
+            ["$setitem"] = ("Indexable", "$setitem"), ["$iter"] = ("Iterable", "$iter"),
+            ["$next"] = ("Iterator", "$next"), ["$represent"] = ("Representable", "$represent"),
             ["$diagnose"] = ("Diagnosable", "$diagnose"), ["$add"] = ("Addable", "$add"),
             ["$sub"] = ("Subtractable", "$sub"), ["$mul"] = ("Multiplicable", "$mul"),
             ["$truediv"] = ("Divisible", "$truediv"), ["$floordiv"] = ("FloorDivisible", "$floordiv"),
@@ -374,7 +368,7 @@ public static class WiredRoutineCatalog
     private static readonly string[] _legacyReachabilitySeed =
     [
         "$represent", "$diagnose", "$hash", "$copy", "$eq", "$ne", "$cmp", "$lt", "$le", "$gt", "$ge",
-        "$contains", "$notcontains", "$iter", "$next!", "try_next",
+        "$contains", "$notcontains", "$iter", "$next", "try_next",
         "$add", "$sub", "$mul", "$truediv", "$floordiv", "$mod", "$pow", "$neg",
         "$add_wrap", "$sub_wrap", "$mul_wrap", "$pow_wrap",
         "$add_unchecked", "$sub_unchecked", "$mul_unchecked", "$truediv_unchecked", "$floordiv_unchecked",
@@ -383,7 +377,7 @@ public static class WiredRoutineCatalog
         "$bitand", "$bitor", "$bitxor", "$bitnot", "$ashl", "$ashr", "$lshl", "$lshr",
         "$iadd", "$isub", "$imul", "$itruediv", "$ifloordiv", "$imod", "$ipow",
         "$ibitand", "$ibitor", "$ibitxor", "$iashl", "$iashr", "$ilshl", "$ilshr",
-        "$unwrap", "$unwrap!", "$unwrap_or", "$getitem", "$setitem",
+        "$unwrap", "$unwrap_or", "$getitem", "$setitem",
     ];
 
     // Declared LAST so its initializer runs after every _legacy* field above (textual order).

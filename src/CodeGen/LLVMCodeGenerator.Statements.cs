@@ -781,11 +781,10 @@ public partial class LlvmCodeGenerator
         RoutineInfo? dispatchSetItem = index.ResolvedSetItem ?? setItem;
         if (dispatchSetItem != null)
         {
-            string propName = dispatchSetItem.IsFailable
-                ? "$setitem!"
-                : "$setitem";
+            // Failability is a property, not part of the name — use the bare `$setitem`. Codegen
+            // dispatches via ResolvedRoutine (dispatchSetItem), which carries IsFailable.
             var member = new MemberExpression(Object: index.Object,
-                PropertyName: propName,
+                PropertyName: "$setitem",
                 Location: index.Location);
             var call = new CallExpression(Callee: member,
                 Arguments: [index.Index, rhs],

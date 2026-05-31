@@ -1333,7 +1333,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                     idx.Index.ResolvedType is { } idxIdxType and not GenericParameterTypeInfo)
                 {
                     RoutineInfo? getItem = ctx.Registry.LookupMethod(
-                        type: idxObjType, methodName: "$getitem!", isFailable: true);
+                        type: idxObjType, methodName: "$getitem", isFailable: true);
                     if (getItem is { IsGenericDefinition: true, GenericParameters.Count: > 0 })
                     {
                         ctx.Registry.GetOrCreateRoutineResolution(
@@ -1341,7 +1341,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                             typeArguments: [idxIdxType]);
                     }
                     RoutineInfo? setItem = ctx.Registry.LookupMethod(
-                        type: idxObjType, methodName: "$setitem!", isFailable: true);
+                        type: idxObjType, methodName: "$setitem", isFailable: true);
                     if (setItem is { IsGenericDefinition: true, GenericParameters.Count: > 0 })
                     {
                         ctx.Registry.GetOrCreateRoutineResolution(

@@ -394,11 +394,11 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 EnqueueMethodIfPresent(owner: collectionType, methodName: "$setitem");
                 break;
             case UnaryExpression { Operator: UnaryOperator.ForceUnwrap }:
-                // `expr!!` is lowered by OperatorLoweringPass (Phase 7) to `expr.$unwrap()` or
-                // `expr.$unwrap!()`. Seed both on the operand's resolved owner so Maybe/Result/
-                // Lookup carriers' unwrap bodies get monomorphized.
+                // `expr!!` is lowered by OperatorLoweringPass (Phase 7) to `expr.$unwrap()`.
+                // Failability is a property, not part of the name — seed the bare `$unwrap` on the
+                // operand's resolved owner so Maybe/Result/Lookup carriers' unwrap bodies get
+                // monomorphized (whether or not that `$unwrap` is failable).
                 EnqueueMethodIfPresent(owner: collectionType, methodName: "$unwrap");
-                EnqueueMethodIfPresent(owner: collectionType, methodName: "$unwrap!");
                 break;
             case UsingStatement:
                 // `using r.view() as v` lowers (in Phase 7 — after this pass) to

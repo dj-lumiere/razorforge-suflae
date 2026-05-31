@@ -349,9 +349,10 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 Expression loweredObj = LowerExpression(idx.Object);
                 Expression loweredIdx = LowerExpression(idx.Index);
 
-                // Determine failable suffix: look up $getitem on the target type.
-                // Default to "!" (failable) -> all stdlib collections use failable $getitem!.
-                string propertyName = "$getitem!";
+                // Failability is a property, not part of the name — the property name is always
+                // the bare `$getitem`; codegen dispatches via ResolvedRoutine (which carries
+                // IsFailable). Resolve the method to set ResolvedRoutine / lowering kind.
+                const string propertyName = "$getitem";
                 RoutineInfo? resolvedGetItem = null;
                 TypeInfo? targetType = idx.Object.ResolvedType;
                 if (targetType != null)
@@ -366,8 +367,6 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                             resolvedGetItem = ResolveMethodGenericRoutine(routine: resolvedGetItem,
                                 argTypes: [indexType]);
                         }
-
-                        propertyName = resolvedGetItem.IsFailable ? "$getitem!" : "$getitem";
                     }
                 }
 
