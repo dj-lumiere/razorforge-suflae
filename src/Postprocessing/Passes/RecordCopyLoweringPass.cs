@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Compiler.Instantiation;
 using Compiler.Resolution;
 using SyntaxTree;
 using TypeModel.Symbols;
@@ -83,6 +84,33 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
             Statement lowered = LowerStatement(stmt: body);
             if (!ReferenceEquals(lowered, body))
                 ctx.VariantBodies[key] = lowered;
+        }
+    }
+
+    /// <summary>
+    /// Injects retaining <c>$copy</c> into instantiated generic routine bodies. Phase 6's
+    /// <c>GenericMonomorphizationPass</c> populates <c>InstantiatedGenericBodies</c> AFTER the
+    /// Phase 7 RunGlobal sweep, so those bodies miss the regular per-program copy-lowering. Without
+    /// this, a monomorphized routine like <c>BTreeDictNode[Text, S64].entry_get</c> returns a
+    /// <c>DictEntry</c> whose <c>Text</c> key is a non-retained alias — torn down per use, then
+    /// freed again at container teardown (double-free). Mirrors
+    /// <see cref="OperatorLoweringPass.RunOnInstantiatedGenericBodies"/>.
+    /// Caller passes the map directly (PostprocessingContext doesn't hold it).
+    /// </summary>
+    public void RunOnInstantiatedGenericBodies(
+        Dictionary<string, MonomorphizedBody> instantiatedGenericBodies)
+    {
+        foreach (string key in instantiatedGenericBodies.Keys.ToList())
+        {
+            MonomorphizedBody entry = instantiatedGenericBodies[key];
+            if (entry.IsSynthesized) continue; // pure-synthesized: no AST to walk
+            _inCopyRoutine = key.Contains(value: "$copy");
+            Statement lowered = LowerStatement(stmt: entry.Ast.Body);
+            if (!ReferenceEquals(lowered, entry.Ast.Body))
+                instantiatedGenericBodies[key] = entry with
+                {
+                    Ast = entry.Ast with { Body = lowered }
+                };
         }
     }
 
@@ -331,6 +359,24 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
                 }
 
                 return changed ? call with { Arguments = args, Callee = callee } : call;
+            }
+
+            case CreatorExpression creator:
+            {
+                // A constructor's member-variable initializers are copy positions, exactly like call
+                // arguments: each becomes an independent field of the new aggregate, so a borrowed
+                // reference must be retained. Without this, `DictEntry(key: someText)` aliased the
+                // source's controller and double-freed when the entry was later torn down.
+                bool changed = false;
+                var members = new List<(string Name, Expression Value)>(capacity: creator.MemberVariables.Count);
+                foreach ((string Name, Expression Value) mv in creator.MemberVariables)
+                {
+                    Expression s = LowerOwnership(expr: mv.Value, isReturn: false);
+                    members.Add(item: (mv.Name, s));
+                    if (!ReferenceEquals(s, mv.Value)) changed = true;
+                }
+
+                return changed ? creator with { MemberVariables = members } : creator;
             }
 
             case GenericMethodCallExpression gmc:

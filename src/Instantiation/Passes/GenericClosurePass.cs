@@ -94,6 +94,13 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
         new Compiler.Postprocessing.Passes.OperatorLoweringPass(ctx: postCtx)
             .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
+        // Copy lowering for instantiated bodies: at generic-def time a field of generic type T looks
+        // borrow-tier (no retaining $copy), so a monomorphized body that returns/stores a value with
+        // a now-concrete refcounted field (e.g. DictEntry[Text, S64] from entry_get) never retained
+        // it — torn down per use then freed again at container teardown. Re-run here, post-mono, so
+        // GetLifecycle sees the concrete field types and injects the balancing $copy.
+        new Compiler.Postprocessing.Passes.RecordCopyLoweringPass(ctx: postCtx)
+            .RunOnInstantiatedGenericBodies(adapter.InstantiatedGenericBodies);
 
         ctx.VariantBodies.Clear();
         foreach ((string key, Statement body) in adapter.VariantBodies)
