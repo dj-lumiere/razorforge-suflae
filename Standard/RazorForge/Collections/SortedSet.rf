@@ -13,7 +13,7 @@ preset MIN_KEYS: U64 = 31u64  # B/2 - 1
 entity BTreeSetNode[T]
 needs T obeys Comparable
   keys: Array[T, 63]                           # Keys in this node (fixed capacity)
-  children: Array[BTreeSetNode[T], 64]  # Child pointers (empty for leaf)
+  children: Array[Hijacked[BTreeSetNode[T]], 64]  # Child pointers (empty for leaf)
   key_count: U64                               # Active key count (0 to 63)
   child_count: U64                             # Active child count (0 to 64)
   subtree_size: U64                            # Total elements in this subtree
@@ -47,8 +47,8 @@ dangerous routine BTreeSetNode[T].keys_base() -> Hijacked[T]
 
 ### Returns a raw pointer to the start of this node's child-pointer buffer.
 @readonly
-dangerous routine BTreeSetNode[T].children_base() -> Hijacked[BTreeSetNode[T]]
-  return me.hijack().recast_as[T]().stride(count: 63_s64).recast_as[BTreeSetNode[T]]()
+dangerous routine BTreeSetNode[T].children_base() -> Hijacked[Hijacked[BTreeSetNode[T]]]
+  return me.hijack().recast_as[T]().stride(count: 63_s64).recast_as[Hijacked[BTreeSetNode[T]]]()
 
 ### Returns the key at position `i` without bounds checking.
 ### :param i: The zero-based position within the key buffer.
@@ -70,7 +70,7 @@ routine BTreeSetNode[T].keys_set(i: U64, value: T)
 ### :param i: The zero-based position within the child buffer.
 ### :returns: The child node stored at that position.
 @readonly
-routine BTreeSetNode[T].children_get(i: U64) -> ?BTreeSetNode[T]
+routine BTreeSetNode[T].children_get(i: U64) -> ?Hijacked[BTreeSetNode[T]]
   danger!
     return me.children_base().stride(count: i.S64()).extract()
 
@@ -81,7 +81,7 @@ dangerous routine BTreeSetNode[T].$destroy()
   if not me.is_leaf
     var ci = 0u64
     while ci < me.child_count
-      me.children_get(ci).$destroy()
+      me.children_get(ci).as_entity().$destroy()
       ci = ci + 1u64
   var ki = 0u64
   while ki < me.key_count
@@ -95,14 +95,14 @@ dangerous routine SortedSet[T].$destroy()
   if me.root is None
     me.hijack().invalidate()
     return
-  Hijacked[BTreeSetNode[T]](me.root!!).as_entity().$destroy()
+  me.root!!.as_entity().$destroy()
   me.hijack().invalidate()
   return
 
 ### Writes `value` into the child buffer at position `i` without bounds checking.
 ### :param i: The zero-based position within the child buffer.
 ### :param value: The child node to store.
-routine BTreeSetNode[T].children_set(i: U64, value: BTreeSetNode[T])
+routine BTreeSetNode[T].children_set(i: U64, value: Hijacked[BTreeSetNode[T]])
   danger!
     me.children_base().stride(count: i.S64()).inject(value: value)
   return
@@ -117,7 +117,7 @@ routine BTreeSetNode[T].keys_add_last(value: T)
 
 ### Appends `value` to the end of the child buffer and increments the child count.
 ### :param value: The child node to append.
-routine BTreeSetNode[T].children_add_last(value: BTreeSetNode[T])
+routine BTreeSetNode[T].children_add_last(value: Hijacked[BTreeSetNode[T]])
   danger!
     me.children_base().stride(count: me.child_count.S64()).inject(value: value)
   me.child_count = me.child_count +% 1u64
@@ -142,7 +142,7 @@ routine BTreeSetNode[T].keys_add_at(i: U64, value: T)
 ### Inserts `value` at position `i` in the child buffer, shifting later children right.
 ### :param i: The zero-based insertion index.
 ### :param value: The child node to insert.
-routine BTreeSetNode[T].children_add_at(i: U64, value: BTreeSetNode[T])
+routine BTreeSetNode[T].children_add_at(i: U64, value: Hijacked[BTreeSetNode[T]])
   danger!
     var base = me.children_base()
     if i < me.child_count
@@ -259,7 +259,7 @@ routine BTreeSetNode[T].children_add_range_from(other: Referring[BTreeSetNode[T]
 ### :see: {SortedDict[K, V]} for a sorted mapping from keys to values.
 entity SortedSet[T] obeys Iterable[T]
 needs T obeys Comparable
-  secret root: BTreeSetNode[T]?
+  secret root: Hijacked[BTreeSetNode[T]]?
   secret count: U64
 
 # ============================================================================
@@ -273,7 +273,7 @@ needs T obeys Comparable
 routine BTreeSetNode[T].$create(is_leaf: Bool) -> ?BTreeSetNode[T]
   return BTreeSetNode[T](
     keys: zero_value[Array[T, 63]](),
-    children: zero_value[Array[BTreeSetNode[T], 64]](),
+    children: zero_value[Array[Hijacked[BTreeSetNode[T]], 64]](),
     key_count: 0u64,
     child_count: 0u64,
     subtree_size: 0u64,
@@ -327,7 +327,7 @@ routine SortedSet[T].$contains(value: T) -> Bool
   if me.root is None
     return false
   danger!
-    var root_ref = Hijacked[BTreeSetNode[T]](me.root!!).as_entity()
+    var root_ref = me.root!!.as_entity()
     return me.search_node(node: root_ref, value: value)
 
 ### Searches for `value` in the subtree rooted at `node`.
@@ -338,7 +338,7 @@ routine SortedSet[T].$contains(value: T) -> Bool
 ### :returns: `true` if `value` is found anywhere in the subtree; `false` otherwise.
 @readonly
 @inline
-routine SortedSet[T].search_node(node: Referring[BTreeSetNode[T]], value: T) -> Bool
+dangerous routine SortedSet[T].search_node(node: Referring[BTreeSetNode[T]], value: T) -> Bool
   # Binary search: find the first index where keys[i] >= value.
   var i = me.lower_bound(node: node, value: value)
 
@@ -352,7 +352,7 @@ routine SortedSet[T].search_node(node: Referring[BTreeSetNode[T]], value: T) -> 
 
   # Descend into the child that could contain value.
   # children[i] holds all keys between keys[i-1] and keys[i].
-  return me.search_node(node: node.children_get(i), value: value)
+  return me.search_node(node: node.children_get(i).as_entity(), value: value)
 
 # ============================================================================
 # Binary search helper
@@ -392,29 +392,33 @@ routine SortedSet[T].lower_bound(node: Referring[BTreeSetNode[T]], value: T) -> 
 routine SortedSet[T].add(value: T) -> Bool
   # Empty tree: create root with single key.
   if me.root is None
-    me.root = BTreeSetNode[T](is_leaf: true)
-    me.root!!.keys_add_last(value)
-    me.root!!.subtree_size = 1u64
+    danger!
+      me.root = BTreeSetNode[T](is_leaf: true).hijack()
+      me.root!!.as_entity().keys_add_last(value)
+      me.root!!.as_entity().subtree_size = 1u64
     me.count = 1u64
     return true
 
   # If root is full, split it before descending.
   # We must do this proactively so insert_non_full never encounters a full node.
-  if me.root!!.keys_count() >= B -% 1u64
+  var root_full = false
+  danger!
+    root_full = me.root!!.as_entity().keys_count() >= B -% 1u64
+  if root_full
     danger!
-      var old_root = Hijacked[BTreeSetNode[T]](me.root!!).as_entity()
-      var new_root = BTreeSetNode[T](is_leaf: false)
-      new_root.children_add_last(value: steal old_root)
+      var old_root = me.root!!
+      me.root = BTreeSetNode[T](is_leaf: false).hijack()
+      var new_root = me.root!!.as_entity()
+      new_root.children_add_last(value: old_root)
       me.split_child(parent_node: new_root, child_idx: 0u64)
       # Compute new root's subtree_size from its children before transferring ownership.
       # After a split, new_root has 1 key and 2 children.
-      new_root.subtree_size = new_root.children_get(0u64).subtree_size +% new_root.children_get(1u64).subtree_size +% 1u64
-      me.root = steal new_root
+      new_root.subtree_size = new_root.children_get(0u64).as_entity().subtree_size +% new_root.children_get(1u64).as_entity().subtree_size +% 1u64
 
   # Single-pass insert: returns false if duplicate found during descent.
   var inserted = false
   danger!
-    var root_ref = Hijacked[BTreeSetNode[T]](me.root!!).as_entity()
+    var root_ref = me.root!!.as_entity()
     inserted = me.insert_non_full(node: root_ref, value: value)
   if inserted
     me.count = me.count +% 1u64
@@ -428,7 +432,7 @@ routine SortedSet[T].add(value: T) -> Bool
 ### :param value: The value to insert.
 ### :returns: True if the value was inserted, false if it was a duplicate.
 @inline
-routine SortedSet[T].insert_non_full(node: Controlling[BTreeSetNode[T]], value: T) -> Bool
+dangerous routine SortedSet[T].insert_non_full(node: Controlling[BTreeSetNode[T]], value: T) -> Bool
   # Binary search for the insertion point.
   var i = me.lower_bound(node: node, value: value)
 
@@ -442,7 +446,7 @@ routine SortedSet[T].insert_non_full(node: Controlling[BTreeSetNode[T]], value: 
     return true
   else
     # Split child if full (proactive split on the way down).
-    if node.children_get(i).keys_count() >= B -% 1u64
+    if node.children_get(i).as_entity().keys_count() >= B -% 1u64
       me.split_child(parent_node: node, child_idx: i)
       # After split, the median key was promoted to keys[i].
       # Decide which side of the split our value belongs on.
@@ -453,7 +457,7 @@ routine SortedSet[T].insert_non_full(node: Controlling[BTreeSetNode[T]], value: 
         i = i +% 1u64
 
     # Recurse into the appropriate child.
-    var inserted = me.insert_non_full(node: node.children_get(i), value: value)
+    var inserted = me.insert_non_full(node: node.children_get(i).as_entity(), value: value)
     # Only increment subtree_size if the value was actually inserted.
     # If it was a duplicate, the tree is unchanged.
     if inserted
@@ -468,12 +472,13 @@ routine SortedSet[T].insert_non_full(node: Controlling[BTreeSetNode[T]], value: 
 ### :param parent_node: The parent node that owns the child to split.
 ### :param child_idx: The index of the child to split.
 @inline
-routine SortedSet[T].split_child(parent_node: Controlling[BTreeSetNode[T]], child_idx: U64)
-  var child = parent_node.children_get(child_idx)
+dangerous routine SortedSet[T].split_child(parent_node: Controlling[BTreeSetNode[T]], child_idx: U64)
+  var child = parent_node.children_get(child_idx).as_entity()
   var mid = unsigned_div[U64](B -% 1u64, 2u64)
 
-  # Create the right half node.
-  var new_node = BTreeSetNode[T](is_leaf: child.is_leaf)
+  # Create the right half node (manual Hijacked graph node; build via an entity view).
+  var new_node_ptr = BTreeSetNode[T](is_leaf: child.is_leaf).hijack()
+  var new_node = new_node_ptr.as_entity()
 
   # Copy the upper keys (indices mid+1 .. end) into the new node.
   new_node.keys_add_range_from(other: child, start: mid +% 1u64, count: child.keys_count() -% mid -% 1u64)
@@ -498,19 +503,19 @@ routine SortedSet[T].split_child(parent_node: Controlling[BTreeSetNode[T]], chil
     var left_size = child.keys_count()
     var i = 0u64
     while i < child.children_count()
-      left_size = left_size +% child.children_get(i).subtree_size
+      left_size = left_size +% child.children_get(i).as_entity().subtree_size
       i = i +% 1u64
     child.subtree_size = left_size
     var right_size = new_node.keys_count()
     i = 0u64
     while i < new_node.children_count()
-      right_size = right_size +% new_node.children_get(i).subtree_size
+      right_size = right_size +% new_node.children_get(i).as_entity().subtree_size
       i = i +% 1u64
     new_node.subtree_size = right_size
 
   # Insert promoted key and new child into parent in-place.
   parent_node.keys_add_at(i: child_idx, value: mid_key)
-  parent_node.children_add_at(i: child_idx +% 1u64, value: steal new_node)
+  parent_node.children_add_at(i: child_idx +% 1u64, value: new_node_ptr)
   return
 
 # ============================================================================
@@ -528,19 +533,19 @@ routine SortedSet[T].remove(value: T) -> Bool
   # Single-pass remove: returns true if value was found and removed.
   var removed = false
   danger!
-    var root_ref = Hijacked[BTreeSetNode[T]](me.root!!).as_entity()
+    var root_ref = me.root!!.as_entity()
     removed = me.remove_from_node(node: root_ref, value: value)
 
   if removed
     me.count = me.count -% 1u64
 
     # If root has no keys but has children, collapse one level.
-    if me.root!!.keys_count() == 0u64 and not me.root!!.is_leaf
-      me.root = me.root!!.children_get(0u64)
-
-    # If tree is completely empty, clear the root.
-    if me.root!!.keys_count() == 0u64
-      me.root = none
+    danger!
+      if me.root!!.as_entity().keys_count() == 0u64 and not me.root!!.as_entity().is_leaf
+        me.root = me.root!!.as_entity().children_get(0u64)
+      # If tree is completely empty, clear the root.
+      if me.root!!.as_entity().keys_count() == 0u64
+        me.root = none
 
   return removed
 
@@ -570,7 +575,7 @@ routine SortedSet[T].remove(value: T) -> Bool
 ### :param value: The value to remove.
 ### :returns: True if value was found and removed, false if not found.
 @inline
-routine SortedSet[T].remove_from_node(node: Controlling[BTreeSetNode[T]], value: T) -> Bool
+dangerous routine SortedSet[T].remove_from_node(node: Controlling[BTreeSetNode[T]], value: T) -> Bool
   # Binary search for the position where value could be.
   var i = me.lower_bound(node: node, value: value)
 
@@ -583,8 +588,8 @@ routine SortedSet[T].remove_from_node(node: Controlling[BTreeSetNode[T]], value:
     else
       # Internal node: replace keys[i] with predecessor or successor,
       # then delete that replacement from the appropriate child.
-      var left = node.children_get(i)
-      var right = node.children_get(i +% 1u64)
+      var left = node.children_get(i).as_entity()
+      var right = node.children_get(i +% 1u64).as_entity()
       if left.keys_count() > MIN_KEYS
         # Case 2a: left child has spare keys — use predecessor.
         var pred = me.get_predecessor(node: node, idx: i)
@@ -602,7 +607,7 @@ routine SortedSet[T].remove_from_node(node: Controlling[BTreeSetNode[T]], value:
       else
         # Case 2c: both children at minimum — merge them.
         me.merge_children_at(node: node, i: i)
-        var removed = me.remove_from_node(node: node.children_get(i), value: value)
+        var removed = me.remove_from_node(node: node.children_get(i).as_entity(), value: value)
         if removed
           node.subtree_size = node.subtree_size -% 1u64
         return removed
@@ -613,7 +618,7 @@ routine SortedSet[T].remove_from_node(node: Controlling[BTreeSetNode[T]], value:
 
     # Guarantee children[i] has spare keys before descending.
     i = me.fix_child(node: node, i: i)
-    var removed = me.remove_from_node(node: node.children_get(i), value: value)
+    var removed = me.remove_from_node(node: node.children_get(i).as_entity(), value: value)
     if removed
       node.subtree_size = node.subtree_size -% 1u64
     return removed
@@ -624,10 +629,10 @@ routine SortedSet[T].remove_from_node(node: Controlling[BTreeSetNode[T]], value:
 ### :param idx: Index into node.keys whose left subtree to descend.
 ### :returns: The in-order predecessor of keys[idx].
 @inline
-routine SortedSet[T].get_predecessor(node: Referring[BTreeSetNode[T]], idx: U64) -> ?T
-  var current = node.children_get(idx)
+dangerous routine SortedSet[T].get_predecessor(node: Referring[BTreeSetNode[T]], idx: U64) -> ?T
+  var current = node.children_get(idx).as_entity()
   while not current.is_leaf
-    current = current.children_get(current.children_count() -% 1u64)
+    current = current.children_get(current.children_count() -% 1u64).as_entity()
   return current.keys_get(current.keys_count() -% 1u64)
 
 ### Returns the smallest key in the right subtree of keys[idx].
@@ -636,10 +641,10 @@ routine SortedSet[T].get_predecessor(node: Referring[BTreeSetNode[T]], idx: U64)
 ### :param idx: Index into node.keys whose right subtree to descend.
 ### :returns: The in-order successor of keys[idx].
 @inline
-routine SortedSet[T].get_successor(node: Referring[BTreeSetNode[T]], idx: U64) -> ?T
-  var current = node.children_get(idx +% 1u64)
+dangerous routine SortedSet[T].get_successor(node: Referring[BTreeSetNode[T]], idx: U64) -> ?T
+  var current = node.children_get(idx +% 1u64).as_entity()
   while not current.is_leaf
-    current = current.children_get(0u64)
+    current = current.children_get(0u64).as_entity()
   return current.keys_get(0u64)
 
 ### Merges children[i] and children[i+1] into children[i], using keys[i] as
@@ -647,9 +652,9 @@ routine SortedSet[T].get_successor(node: Referring[BTreeSetNode[T]], idx: U64) -
 ### :param node: The parent node owning the two children to merge.
 ### :param i: Index of the separator key in node.keys.
 @inline
-routine SortedSet[T].merge_children_at(node: Controlling[BTreeSetNode[T]], i: U64)
-  var left = node.children_get(i)
-  var right = node.children_get(i +% 1u64)
+dangerous routine SortedSet[T].merge_children_at(node: Controlling[BTreeSetNode[T]], i: U64)
+  var left = node.children_get(i).as_entity()
+  var right = node.children_get(i +% 1u64).as_entity()
 
   # Step 1: pull separator key (keys[i]) down into left.
   left.keys_add_last(node.keys_get(i))
@@ -676,18 +681,18 @@ routine SortedSet[T].merge_children_at(node: Controlling[BTreeSetNode[T]], i: U6
 ### :param i: Index of the child that may need extra keys.
 ### :returns: The (possibly updated) index to descend into.
 @inline
-routine SortedSet[T].fix_child(node: Controlling[BTreeSetNode[T]], i: U64) -> U64
+dangerous routine SortedSet[T].fix_child(node: Controlling[BTreeSetNode[T]], i: U64) -> U64
   # Fast path: already sufficient.
-  if node.children_get(i).keys_count() > MIN_KEYS
+  if node.children_get(i).as_entity().keys_count() > MIN_KEYS
     return i
 
   # Try to borrow from the left sibling via right rotation.
-  if i > 0u64 and node.children_get(i -% 1u64).keys_count() > MIN_KEYS
+  if i > 0u64 and node.children_get(i -% 1u64).as_entity().keys_count() > MIN_KEYS
     me.rotate_right_at(node: node, i: i)
     return i
 
   # Try to borrow from the right sibling via left rotation.
-  if i +% 1u64 < node.children_count() and node.children_get(i +% 1u64).keys_count() > MIN_KEYS
+  if i +% 1u64 < node.children_count() and node.children_get(i +% 1u64).as_entity().keys_count() > MIN_KEYS
     me.rotate_left_at(node: node, i: i)
     return i
 
@@ -702,16 +707,16 @@ routine SortedSet[T].fix_child(node: Controlling[BTreeSetNode[T]], i: U64) -> U6
 ### :param node: The parent node.
 ### :param i: Index of the child that needs an extra key (must be > 0).
 @inline
-routine SortedSet[T].rotate_right_at(node: Controlling[BTreeSetNode[T]], i: U64)
-  var left = node.children_get(i -% 1u64)
-  var child = node.children_get(i)
+dangerous routine SortedSet[T].rotate_right_at(node: Controlling[BTreeSetNode[T]], i: U64)
+  var left = node.children_get(i -% 1u64).as_entity()
+  var child = node.children_get(i).as_entity()
 
   # Push parent separator to the front of child.keys.
   child.keys_add_at(i: 0u64, value: node.keys_get(i -% 1u64))
 
   # For internal nodes, move left's rightmost child to child's front.
   if not child.is_leaf
-    child.children_add_at(i: 0u64, value: left.children_get(left.children_count() -% 1u64))
+    child.children_add_at(i: 0u64, value: left.children_get(left.children_count() -% 1u64).as_entity().hijack())
     left.children_remove_last()
 
   # Promote left's rightmost key to become the new parent separator.
@@ -732,16 +737,16 @@ routine SortedSet[T].rotate_right_at(node: Controlling[BTreeSetNode[T]], i: U64)
 ### :param node: The parent node.
 ### :param i: Index of the child that needs an extra key.
 @inline
-routine SortedSet[T].rotate_left_at(node: Controlling[BTreeSetNode[T]], i: U64)
-  var right = node.children_get(i +% 1u64)
-  var child = node.children_get(i)
+dangerous routine SortedSet[T].rotate_left_at(node: Controlling[BTreeSetNode[T]], i: U64)
+  var right = node.children_get(i +% 1u64).as_entity()
+  var child = node.children_get(i).as_entity()
 
   # Push parent separator to end of child.keys.
   child.keys_add_last(node.keys_get(i))
 
   # For internal nodes, move right's leftmost child to child's end.
   if not child.is_leaf
-    child.children_add_last(right.children_get(0u64))
+    child.children_add_last(right.children_get(0u64).as_entity().hijack())
     right.children_remove_at(0u64)
 
   # Promote right's leftmost key to become the new parent separator.
@@ -760,14 +765,14 @@ routine SortedSet[T].rotate_left_at(node: Controlling[BTreeSetNode[T]], i: U64)
 ### so a fresh aggregate count is more reliable than incremental adjustment.
 ### :param node: The node whose cached subtree size should be recomputed.
 @inline
-routine SortedSet[T].update_subtree_size(node: Controlling[BTreeSetNode[T]])
+dangerous routine SortedSet[T].update_subtree_size(node: Controlling[BTreeSetNode[T]])
   if node.is_leaf
     node.subtree_size = node.keys_count()
   else
     var size = node.keys_count()
     var i = 0u64
     while i < node.children_count()
-      size = size +% node.children_get(i).subtree_size
+      size = size +% node.children_get(i).as_entity().subtree_size
       i = i +% 1u64
     node.subtree_size = size
   return
@@ -786,7 +791,7 @@ routine SortedSet[T].$getitem!(index: U64) -> ?T
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   danger!
-    var root_ref = Hijacked[BTreeSetNode[T]](me.root!!).as_entity()
+    var root_ref = me.root!!.as_entity()
     return me.get_by_rank(node: root_ref, rank: index)
 
 ### Returns the element addressed by a back index in sorted order.
@@ -799,7 +804,7 @@ routine SortedSet[T].$getitem!(index: BackIndex) -> ?T
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)
   danger!
-    var root_ref = Hijacked[BTreeSetNode[T]](me.root!!).as_entity()
+    var root_ref = me.root!!.as_entity()
     return me.get_by_rank(node: root_ref, rank: idx)
 
 ### Returns the element at the given in-order rank within the subtree rooted at `node`.
@@ -808,7 +813,7 @@ routine SortedSet[T].$getitem!(index: BackIndex) -> ?T
 ### :param rank: The zero-based in-order rank to resolve.
 ### :returns: The element at that in-order rank within the subtree.
 @readonly
-routine SortedSet[T].get_by_rank(node: Referring[BTreeSetNode[T]], rank: U64) -> ?T
+dangerous routine SortedSet[T].get_by_rank(node: Referring[BTreeSetNode[T]], rank: U64) -> ?T
   if node.is_leaf
     return node.keys_get(rank)
 
@@ -816,10 +821,10 @@ routine SortedSet[T].get_by_rank(node: Referring[BTreeSetNode[T]], rank: U64) ->
   var i = 0u64
 
   while i < node.children_count()
-    var child_size = node.children_get(i).subtree_size
+    var child_size = node.children_get(i).as_entity().subtree_size
 
     if remaining < child_size
-      return me.get_by_rank(node: node.children_get(i), rank: remaining)
+      return me.get_by_rank(node: node.children_get(i).as_entity(), rank: remaining)
 
     remaining = remaining -% child_size
 
@@ -849,7 +854,7 @@ routine SortedSet[T].range(min_val: T, max_val: T) -> ?List[T]
     pass
   else
     danger!
-      var root_ref = Hijacked[BTreeSetNode[T]](me.root!!).as_entity()
+      var root_ref = me.root!!.as_entity()
       me.range_collect(node: root_ref, min_val: min_val, max_val: max_val, result: result)
   return steal result
 
@@ -859,12 +864,12 @@ routine SortedSet[T].range(min_val: T, max_val: T) -> ?List[T]
 ### :param max_val: The inclusive upper bound.
 ### :param result: The destination list for matching values.
 @readonly
-routine SortedSet[T].range_collect(node: Referring[BTreeSetNode[T]], min_val: T, max_val: T, result: Controlling[List[T]])
+dangerous routine SortedSet[T].range_collect(node: Referring[BTreeSetNode[T]], min_val: T, max_val: T, result: Controlling[List[T]])
   var i = 0u64
 
   while i < node.keys_count()
     if not node.is_leaf and (i == 0u64 or node.keys_get(i -% 1u64) >= min_val)
-      me.range_collect(node: node.children_get(i), min_val: min_val, max_val: max_val, result: result)
+      me.range_collect(node: node.children_get(i).as_entity(), min_val: min_val, max_val: max_val, result: result)
 
     var key = node.keys_get(i)
     if key >= min_val and key <= max_val
@@ -873,7 +878,7 @@ routine SortedSet[T].range_collect(node: Referring[BTreeSetNode[T]], min_val: T,
     i = i +% 1u64
 
   if not node.is_leaf
-    me.range_collect(node: node.children_get(node.children_count() -% 1u64), min_val: min_val, max_val: max_val, result: result)
+    me.range_collect(node: node.children_get(node.children_count() -% 1u64).as_entity(), min_val: min_val, max_val: max_val, result: result)
   return
 
 # ============================================================================
@@ -888,9 +893,9 @@ routine SortedSet[T].min!() -> ?T
   if me.is_empty()
     absent
   danger!
-    var node = Hijacked[BTreeSetNode[T]](me.root!!).as_entity()
+    var node = me.root!!.as_entity()
     while not node.is_leaf
-      node = node.children_get(0u64)
+      node = node.children_get(0u64).as_entity()
     return node.keys_get(0u64)
 
 ### Returns the largest value currently stored in the set.
@@ -901,9 +906,9 @@ routine SortedSet[T].max!() -> ?T
   if me.is_empty()
     absent
   danger!
-    var node = Hijacked[BTreeSetNode[T]](me.root!!).as_entity()
+    var node = me.root!!.as_entity()
     while not node.is_leaf
-      node = node.children_get(node.children_count() -% 1u64)
+      node = node.children_get(node.children_count() -% 1u64).as_entity()
     return node.keys_get(node.keys_count() -% 1u64)
 
 ### Returns the first (smallest) element in the set; equivalent to `min!()`.
@@ -928,7 +933,8 @@ routine SortedSet[T].last!() -> ?T
 ### :returns: The resulting `SortedSetIterator[T]` value.
 @readonly
 routine SortedSet[T].$iter() -> ?SortedSetIterator[T]
-  return SortedSetIterator[T](set: me, index: 0u64)
+  danger!
+    return SortedSetIterator[T](set: me.hijack(), index: 0u64)
 
 ### Materializes the set as a list in ascending order.
 ### :param from: The set to copy values from.
@@ -939,7 +945,7 @@ routine List[T].$create(from: SortedSet[T]) -> ?List[T]
     pass
   else
     danger!
-      var root_ref = Hijacked[BTreeSetNode[T]](from.root!!).as_entity()
+      var root_ref = from.root!!.as_entity()
       from.collect_inorder(node: root_ref, result: result)
   return steal result
 
@@ -948,23 +954,23 @@ routine List[T].$create(from: SortedSet[T]) -> ?List[T]
 ### :param node: The subtree root to visit.
 ### :param result: The destination list for collected values.
 @readonly
-routine SortedSet[T].collect_inorder(node: Referring[BTreeSetNode[T]], result: Controlling[List[T]])
+dangerous routine SortedSet[T].collect_inorder(node: Referring[BTreeSetNode[T]], result: Controlling[List[T]])
   var i = 0u64
   while i < node.keys_count()
     if not node.is_leaf
-      me.collect_inorder(node: node.children_get(i), result: result)
+      me.collect_inorder(node: node.children_get(i).as_entity(), result: result)
     result.add_last(node.keys_get(i))
     i = i +% 1u64
   if not node.is_leaf
-    me.collect_inorder(node: node.children_get(node.children_count() -% 1u64), result: result)
+    me.collect_inorder(node: node.children_get(node.children_count() -% 1u64).as_entity(), result: result)
   return
 
 ### Walks the elements of a `SortedSet[T]` in ascending sorted order.
 ### Each call to `$next!` resolves the element at the current rank from the source set.
 ### :typeparam T: The element type yielded by the iterator.
 entity SortedSetIterator[T] obeys Iterator[T]
-  ### The source set being iterated.
-  set: SortedSet[T]
+  ### The source set being iterated (NON-OWNING borrow — a cursor borrows its container).
+  set: Hijacked[SortedSet[T]]
   ### The next sorted rank to yield.
   index: U64
 
@@ -972,11 +978,12 @@ entity SortedSetIterator[T] obeys Iterator[T]
 ### :returns: The element at the current sorted rank.
 ### :absent: All elements have been yielded.
 routine SortedSetIterator[T].$next!() -> ?T
-  if me.index >= me.set.count()
-    absent
-  var _result = me.set[me.index]
-  me.index = me.index + 1u64
-  return _result
+  danger!
+    if me.index >= me.set.as_entity().count()
+      absent
+    var _result = me.set.as_entity()[me.index]
+    me.index = me.index + 1u64
+    return _result
 
 # ============================================================================
 # Comparison
