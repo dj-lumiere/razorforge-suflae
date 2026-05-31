@@ -17,67 +17,13 @@ using TypeSymbol = TypeInfo;
 /// </summary>
 public sealed partial class SemanticVerifier
 {
-    private const string ComparableProtocolName = "Comparable";
-    private const string ShiftableProtocolName = "Shiftable";
-    private const string InPlaceShiftableProtocolName = "InPlaceShiftable";
-
     /// <summary>
-    /// Known wired methods that are valid operator/special methods.
+    /// Known wired methods that are valid operator/special methods. Derived from the single source
+    /// of truth <see cref="Compiler.Resolution.WiredRoutineCatalog"/> (entries flagged
+    /// <see cref="Compiler.Resolution.WiredView.KnownWired"/>).
     /// </summary>
     private static readonly HashSet<string> KnownWiredMethods =
-    [
-        // Creator
-        "$create",
-
-        // Arithmetic operators
-        "$add", "$sub", "$mul", "$truediv", "$floordiv", "$mod", "$pow",
-
-        // Wrapping arithmetic
-        "$add_wrap", "$sub_wrap", "$mul_wrap", "$pow_wrap",
-
-        // Clamping arithmetic
-        "$add_clamp", "$sub_clamp", "$mul_clamp", "$truediv_clamp", "$pow_clamp",
-
-        // Comparison operators
-        "$eq", "$ne", "$lt", "$le", "$gt", "$ge", "$cmp",
-
-        // Bitwise operators
-        "$bitand", "$bitor", "$bitxor",
-        "$ashl", "$ashr", "$lshl", "$lshr",
-
-        // Unary operators
-        "$neg", "$bitnot",
-
-        // Unwrap operators
-        "$unwrap", "$unwrap_or",
-
-        // Membership operators
-        "$contains", "$notcontains",
-
-        // Iteration
-        "$iter", "$next",
-
-        // Indexing
-        "$getitem", "$setitem",
-
-        // Context management
-        "$enter", "$exit",
-
-        // Destructor/cleanup
-        "$destroy",
-
-        // Display / text representation
-        "$represent", "$diagnose",
-
-        // Hashing
-        "$hash",
-
-        // In-place compound assignment operators
-        "$iadd", "$isub", "$imul", "$itruediv", "$ifloordiv", "$imod",
-        "$ipow",
-        "$ibitand", "$ibitor", "$ibitxor",
-        "$iashl", "$iashr", "$ilshl", "$ilshr"
-    ];
+        Compiler.Resolution.WiredRoutineCatalog.BuildKnownWiredMethods();
 
     /// <summary>
     /// Checks if a routine name uses the $ prefix but is not a known built-in method.
@@ -93,82 +39,13 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Maps operator wired methods to their required protocols.
-    /// Types must follow the protocol to define the operator method.
+    /// Maps operator wired methods to their required protocols. Types must follow the protocol to
+    /// define the operator method. Derived from the single source of truth
+    /// <see cref="Compiler.Resolution.WiredRoutineCatalog"/> (entries flagged
+    /// <see cref="Compiler.Resolution.WiredView.ProtocolDecl"/>).
     /// </summary>
-    private static readonly Dictionary<string, List<string>> WiredToProtocols = new()
-    {
-        // Arithmetic operators
-        [key: "$add"] = ["Addable", "DurationAddable"],
-        [key: "$sub"] = ["Subtractable", "DurationSubtractable"],
-        [key: "$mul"] = ["Multiplicable", "TextRepeatable", "Scalable"],
-        [key: "$truediv"] = ["Divisible", "ScalarDivisible"],
-        [key: "$floordiv"] = ["FloorDivisible", "ScalarFloorDivisible"],
-        [key: "$mod"] = ["FloorDivisible"],
-        [key: "$pow"] = ["Exponentiable"],
-
-        // Wrapping arithmetic
-        [key: "$add_wrap"] = ["WrappingAddable"],
-        [key: "$sub_wrap"] = ["WrappingSubtractable"],
-        [key: "$mul_wrap"] = ["WrappingMultiplicable"],
-        [key: "$pow_wrap"] = ["WrappingExponentiable"],
-
-        // Clamping arithmetic
-        [key: "$add_clamp"] = ["ClampingAddable"],
-        [key: "$sub_clamp"] = ["ClampingSubtractable"],
-        [key: "$mul_clamp"] = ["ClampingMultiplicable"],
-        [key: "$truediv_clamp"] = ["ClampingDivisible"],
-        [key: "$pow_clamp"] = ["ClampingExponentiable"],
-
-        // Comparison operators
-        [key: "$eq"] = ["Equatable"],
-        [key: "$ne"] = ["Equatable"],
-        [key: "$cmp"] = [ComparableProtocolName],
-        [key: "$lt"] = [ComparableProtocolName],
-        [key: "$le"] = [ComparableProtocolName],
-        [key: "$gt"] = [ComparableProtocolName],
-        [key: "$ge"] = [ComparableProtocolName],
-
-        // Bitwise operators
-        [key: "$bitand"] = ["Bitwiseable"],
-        [key: "$bitor"] = ["Bitwiseable"],
-        [key: "$bitxor"] = ["Bitwiseable"],
-
-        // Shift operators
-        [key: "$ashl"] = [ShiftableProtocolName],
-        [key: "$ashr"] = [ShiftableProtocolName],
-        [key: "$lshl"] = [ShiftableProtocolName],
-        [key: "$lshr"] = [ShiftableProtocolName],
-        // Unary operators
-        [key: "$neg"] = ["Negatable"],
-        [key: "$bitnot"] = ["Invertible"],
-
-        // Container operators
-        [key: "$contains"] = ["Container"],
-        [key: "$notcontains"] = ["Container"],
-        [key: "$getitem"] = ["Indexable"],
-        [key: "$setitem"] = ["Indexable"],
-
-        // Sequence operators
-        [key: "$iter"] = ["Iterable"],
-        [key: "$next"] = ["Iterator"],
-
-        // In-place compound assignment operators
-        [key: "$iadd"] = ["InPlaceAddable"],
-        [key: "$isub"] = ["InPlaceSubtractable"],
-        [key: "$imul"] = ["InPlaceMultiplicable"],
-        [key: "$itruediv"] = ["InPlaceDivisible"],
-        [key: "$ifloordiv"] = ["InPlaceFloorDivisible"],
-        [key: "$imod"] = ["InPlaceFloorDivisible"],
-        [key: "$ipow"] = ["InPlaceExponentiable"],
-        [key: "$ibitand"] = ["InPlaceBitwiseable"],
-        [key: "$ibitor"] = ["InPlaceBitwiseable"],
-        [key: "$ibitxor"] = ["InPlaceBitwiseable"],
-        [key: "$iashl"] = [InPlaceShiftableProtocolName],
-        [key: "$iashr"] = [InPlaceShiftableProtocolName],
-        [key: "$ilshl"] = [InPlaceShiftableProtocolName],
-        [key: "$ilshr"] = [InPlaceShiftableProtocolName]
-    };
+    private static readonly Dictionary<string, List<string>> WiredToProtocols =
+        Compiler.Resolution.WiredRoutineCatalog.BuildWiredToProtocols();
 
     /// <summary>
     /// Gets the required protocol for a wired method, or null if no protocol is required.

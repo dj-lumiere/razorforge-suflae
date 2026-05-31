@@ -135,56 +135,17 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
         }
     }
 
-    // Closed set of overloadable wired routines per RazorForge-Wiki/docs/Operators.md
-    // (operator -> wired-routine table). Operator-lowering may leave ResolvedRoutine = null on
-    // stdlib bodies whose receivers lack ResolvedType (e.g. CStr.$create's UTF-8 encoder uses
-    // cp & 0x3F, cp >> 6) — seeding these names per live owner backstops that.
-    // Excluded: $create/$destroy (driven by CreatorExpression / scope), and $getitem!/$setitem!
-    // (driven by index syntax) — those have dedicated reachability paths.
+    // Names seeded live on every live concrete owner so operator-lowered bodies keep their link
+    // symbols. Operator-lowering may leave ResolvedRoutine = null on stdlib bodies whose receivers
+    // lack ResolvedType (e.g. CStr.$create's UTF-8 encoder uses cp & 0x3F, cp >> 6) — seeding these
+    // names per live owner backstops that. Derived from the single source of truth
+    // WiredRoutineCatalog (entries flagged WiredView.ReachabilitySeed). Note: index forms use the
+    // bare name ($getitem not $getitem!) to match what LookupMethod compares against (the parser
+    // strips trailing '!' and tracks failability separately); the catalog encodes that. Excluded
+    // (not seeded here): $create/$destroy (driven by CreatorExpression / scope) and
+    // $getitem!/$setitem! bang-forms — those have dedicated reachability paths.
     private static readonly string[] WiredRoutineNames =
-    {
-        // Display / hash
-        RepresentMethodName, DiagnoseMethodName, "$hash",
-        // Implicit copy (Assignable). The `with` lowering emits `base.$copy()`, and
-        // codegen elides the call for trivially-Assignable types, but reachability
-        // still needs to seed the synth body so the link symbol exists.
-        "$copy",
-        // Equality / comparison
-        "$eq", "$ne",
-        "$cmp", "$lt", "$le", "$gt", "$ge",
-        // Containment
-        "$contains", "$notcontains",
-        // Iteration
-        "$iter", "$next!", "try_next",
-        // Arithmetic — standard
-        "$add", "$sub", "$mul", "$truediv", "$floordiv", "$mod", "$pow", "$neg",
-        // Arithmetic — wrapping
-        "$add_wrap", "$sub_wrap", "$mul_wrap", "$pow_wrap",
-        // Arithmetic — unchecked (undefined behavior on overflow / div-by-zero)
-        "$add_unchecked", "$sub_unchecked", "$mul_unchecked",
-        "$truediv_unchecked", "$floordiv_unchecked", "$mod_unchecked", "$pow_unchecked",
-        // Arithmetic — clamping
-        "$add_clamp", "$sub_clamp", "$mul_clamp", "$truediv_clamp", "$pow_clamp",
-        // Bitwise
-        "$bitand", "$bitor", "$bitxor", "$bitnot",
-        // Shift
-        "$ashl", "$ashr", "$lshl", "$lshr",
-        // In-place arithmetic
-        "$iadd", "$isub", "$imul", "$itruediv", "$ifloordiv", "$imod", "$ipow",
-        // In-place bitwise
-        "$ibitand", "$ibitor", "$ibitxor",
-        // In-place shift
-        "$iashl", "$iashr", "$ilshl", "$ilshr",
-        // Unwrap (Maybe / Result / Lookup)
-        "$unwrap", "$unwrap!", "$unwrap_or",
-        // Indexing — failable variants are the canonical form (every container ships them).
-        // Without these, `Dict[K,V].$getitem!` and friends slip past liveness when the index
-        // syntax was lowered before reachability scanned the body. The parser strips trailing
-        // '!' and tracks failability separately on the RoutineInfo, so these names use the
-        // bare form to match what LookupMethod compares against (m.Name == "$getitem", not
-        // "$getitem!"). See TypeRegistry.MethodLookup.cs:236.
-        "$getitem", "$setitem",
-    };
+        WiredRoutineCatalog.BuildReachabilitySeedNames();
 
     private void BuildAstIndices()
     {

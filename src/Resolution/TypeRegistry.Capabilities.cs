@@ -25,95 +25,21 @@ namespace Compiler.Resolution;
 /// </remarks>
 public sealed partial class TypeRegistry
 {
-    private const string ComparableProtocolName = "Comparable";
     private const string ContainsMethodName = "$contains";
-    private const string BitAndMethodName = "$bitand";
-    private const string ArithmeticShiftLeftMethodName = "$ashl";
-    private const string ShiftableProtocolName = "Shiftable";
-    private const string InPlaceBitAndMethodName = "$ibitand";
-    private const string InPlaceShiftableProtocolName = "InPlaceShiftable";
-    private const string InPlaceArithmeticShiftLeftMethodName = "$iashl";
 
     private readonly Dictionary<(string FullName, string Protocol), bool> _capabilityCache =
         new();
 
     /// <summary>
-    /// Single source of truth: wired routine name -> (protocol it requires the owner to obey,
-    /// canonical wired-routine name to look up on the owner). Used by both the constraint
-    /// walker (which receives a `T obeys P` constraint and must check T) and the routine-
-    /// applicability gate (which receives a routine and must check its owner).
-    ///
-    /// Keep this list aligned with `Standard/RazorForge/Core/Protocols/*.rf` — adding a new
-    /// protocol with a wired routine means adding an entry here.
+    /// Wired routine name -> (protocol it requires the owner to obey, canonical wired-routine name
+    /// to look up on the owner). Derived from the single source of truth
+    /// <see cref="WiredRoutineCatalog"/> (entries flagged <see cref="WiredView.Capability"/>); used
+    /// by both the constraint walker (which receives a `T obeys P` constraint and must check T) and
+    /// the routine-applicability gate (which receives a routine and must check its owner). To add a
+    /// wired routine, edit <see cref="WiredRoutineCatalog"/>, not this projection.
     /// </summary>
     private static readonly Dictionary<string, (string Protocol, string WiredName)>
-        _wiredRoutineMap = new(comparer: StringComparer.Ordinal)
-        {
-            ["$eq"] = ("Equatable", "$eq"),
-            ["$ne"] = ("Equatable", "$eq"),
-            ["$hash"] = ("Hashable", "$hash"),
-            ["$fast_hash"] = ("FastHashable", "$fast_hash"),
-            ["$cmp"] = (ComparableProtocolName, "$cmp"),
-            ["$lt"] = (ComparableProtocolName, "$cmp"),
-            ["$le"] = (ComparableProtocolName, "$cmp"),
-            ["$gt"] = (ComparableProtocolName, "$cmp"),
-            ["$ge"] = (ComparableProtocolName, "$cmp"),
-            ["$contains"] = ("Container", ContainsMethodName),
-            ["$notcontains"] = ("Container", ContainsMethodName),
-            ["$getitem!"] = ("Indexable", "$getitem!"),
-            ["$setitem!"] = ("Indexable", "$setitem!"),
-            ["$iter"] = ("Iterable", "$iter"),
-            ["$next!"] = ("Iterator", "$next!"),
-            ["$represent"] = ("Representable", "$represent"),
-            ["$diagnose"] = ("Diagnosable", "$diagnose"),
-            ["$add"] = ("Addable", "$add"),
-            ["$sub"] = ("Subtractable", "$sub"),
-            ["$mul"] = ("Multiplicable", "$mul"),
-            ["$truediv"] = ("Divisible", "$truediv"),
-            ["$floordiv"] = ("FloorDivisible", "$floordiv"),
-            ["$mod"] = ("FloorDivisible", "$floordiv"),
-            ["$pow"] = ("Exponentiable", "$pow"),
-            ["$neg"] = ("Negatable", "$neg"),
-            ["$bitand"] = ("Bitwiseable", BitAndMethodName),
-            ["$bitor"] = ("Bitwiseable", BitAndMethodName),
-            ["$bitxor"] = ("Bitwiseable", BitAndMethodName),
-            ["$bitnot"] = ("Invertible", "$bitnot"),
-            ["$ashl"] = (ShiftableProtocolName, ArithmeticShiftLeftMethodName),
-            ["$ashr"] = (ShiftableProtocolName, ArithmeticShiftLeftMethodName),
-            ["$lshl"] = (ShiftableProtocolName, ArithmeticShiftLeftMethodName),
-            ["$lshr"] = (ShiftableProtocolName, ArithmeticShiftLeftMethodName),
-            ["$iadd"] = ("InPlaceAddable", "$iadd"),
-            ["$isub"] = ("InPlaceSubtractable", "$isub"),
-            ["$imul"] = ("InPlaceMultiplicable", "$imul"),
-            ["$itruediv"] = ("InPlaceDivisible", "$itruediv"),
-            ["$ifloordiv"] = ("InPlaceFloorDivisible", "$ifloordiv"),
-            ["$imod"] = ("InPlaceFloorDivisible", "$ifloordiv"),
-            ["$ipow"] = ("InPlaceExponentiable", "$ipow"),
-            ["$ibitand"] = ("InPlaceBitwiseable", InPlaceBitAndMethodName),
-            ["$ibitor"] = ("InPlaceBitwiseable", InPlaceBitAndMethodName),
-            ["$ibitxor"] = ("InPlaceBitwiseable", InPlaceBitAndMethodName),
-            ["$iashl"] = (InPlaceShiftableProtocolName, InPlaceArithmeticShiftLeftMethodName),
-            ["$iashr"] = (InPlaceShiftableProtocolName, InPlaceArithmeticShiftLeftMethodName),
-            ["$ilshl"] = (InPlaceShiftableProtocolName, InPlaceArithmeticShiftLeftMethodName),
-            ["$ilshr"] = (InPlaceShiftableProtocolName, InPlaceArithmeticShiftLeftMethodName),
-            ["$add_clamp"] = ("ClampingAddable", "$add_clamp"),
-            ["$sub_clamp"] = ("ClampingSubtractable", "$sub_clamp"),
-            ["$mul_clamp"] = ("ClampingMultiplicable", "$mul_clamp"),
-            ["$truediv_clamp"] = ("ClampingDivisible", "$truediv_clamp"),
-            ["$pow_clamp"] = ("ClampingExponentiable", "$pow_clamp"),
-            ["$add_wrap"] = ("WrappingAddable", "$add_wrap"),
-            ["$sub_wrap"] = ("WrappingSubtractable", "$sub_wrap"),
-            ["$mul_wrap"] = ("WrappingMultiplicable", "$mul_wrap"),
-            ["$pow_wrap"] = ("WrappingExponentiable", "$pow_wrap"),
-            ["$add_unchecked"] = ("UncheckedAddable", "$add_unchecked"),
-            ["$sub_unchecked"] = ("UncheckedSubtractable", "$sub_unchecked"),
-            ["$mul_unchecked"] = ("UncheckedMultiplicable", "$mul_unchecked"),
-            ["$truediv_unchecked"] = ("UncheckedTrueDivisible", "$truediv_unchecked"),
-            ["$floordiv_unchecked"] = ("UncheckedFloorDivisible", "$floordiv_unchecked"),
-            ["$mod_unchecked"] = ("UncheckedFloorDivisible", "$floordiv_unchecked"),
-            ["$pow_unchecked"] = ("UncheckedExponentiable", "$pow_unchecked"),
-            ["$copy"] = ("Assignable", "$copy"),
-        };
+        _wiredRoutineMap = WiredRoutineCatalog.BuildCapabilityMap();
 
     /// <summary>
     /// Reverse map: protocol -> canonical wired routine that materialises it. Built once

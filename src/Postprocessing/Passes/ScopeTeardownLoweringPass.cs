@@ -338,7 +338,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
 
     // -----------------------------------------------------------------------------
     // Move pre-scan: a binding whose ownership leaves the routine is never torn down here.
-    // A binding is "moved" when it is: stolen; consumed by `.retain()`/`.track()` (bare entity);
+    // A binding is "moved" when it is: stolen; consumed by `.retain()`/`.track()` (bare entity)
     // written into storage by a store primitive (`inject`/`set_element_at`/`store`); or assigned
     // into another binding/field. These are all unambiguous ownership transfers — unlike general
     // argument passing (which is usually a borrow), so we do NOT treat plain call args as moves.
