@@ -775,21 +775,33 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private TypeInfo? GetCallReturnType(CallExpression call) // NOSONAR S3776
     {
+        // The emitted `call` targets ResolvedRoutine, and its LLVM return type is
+        // GetLlvmType(ResolvedRoutine.ReturnType). So a FULLY CONCRETE resolved return type is
+        // authoritative and must win over ConstructedType. This matters for a failable creator call
+        // retargeted to its try_/check_/lookup_ variant (e.g. `S64(x)` → `S64.try_create`): the node
+        // still records the bare constructed payload in ConstructedType (S64) while the routine
+        // actually returns — and emits — the Maybe[S64] carrier. Sizing a spilled
+        // `var __td_ret = S64(x)` off ConstructedType there yields `store i64 %maybeVal`, which fails
+        // LLVM verification. When ReturnType is still generic (the universal `$create` returns `T`/
+        // `Me`), it is not concrete, so we fall through to ConstructedType — preserving prior
+        // behaviour for generic constructors.
+        if (call.ResolvedRoutine?.ReturnType is { } resolvedReturn and not ErrorTypeInfo)
+        {
+            TypeInfo concreteReturn = ApplyTypeSubstitutions(type: resolvedReturn);
+            if (concreteReturn is not GenericParameterTypeInfo and not ErrorTypeInfo
+                && !concreteReturn.IsGenericDefinition
+                && !ContainsGenericParameter(type: concreteReturn))
+            {
+                return concreteReturn;
+            }
+        }
+
         if (call.ConstructedType is not null and not ErrorTypeInfo)
         {
             TypeInfo constructed = ApplyTypeSubstitutions(type: call.ConstructedType);
             if (constructed is not GenericParameterTypeInfo and not ErrorTypeInfo)
             {
                 return constructed;
-            }
-        }
-
-        if (call.ResolvedRoutine?.ReturnType is { } resolvedReturn and not ErrorTypeInfo)
-        {
-            TypeInfo concreteReturn = ApplyTypeSubstitutions(type: resolvedReturn);
-            if (concreteReturn is not GenericParameterTypeInfo and not ErrorTypeInfo)
-            {
-                return concreteReturn;
             }
         }
 
