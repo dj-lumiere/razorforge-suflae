@@ -83,14 +83,9 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
                 RoutineInfo synthesized = SynthesizePerImplementer(protocolRoutine: pr, implementer: impl,
                     protoSubs: protoSubs);
 
-                if (pr.Name is "enumerate" or "zip")
-                    System.Console.Error.WriteLine(
-                        $"[PDISYN] pr={pr.RegistryKey} impl={impl.FullName} synthKey={synthesized.RegistryKey} " +
-                        $"protoSubs=[{string.Join(",", protoSubs.Select(k => k.Key + "->" + k.Value.FullName))}]");
-
                 Statement? clonedBody = CloneProtocolRoutineBody(protocolRoutine: pr, implementer: impl,
                     synthesized: synthesized, protoSubs: protoSubs);
-                if (clonedBody == null) { if (pr.Name is "enumerate" or "zip") System.Console.Error.WriteLine($"[PDISYN] {pr.Name} clonedBody=NULL"); return; }
+                if (clonedBody == null) return;
 
                 _synthesized[key: key] = synthesized;
                 ctx.Registry.RegisterRoutine(routine: synthesized);

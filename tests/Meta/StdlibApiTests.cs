@@ -37,14 +37,16 @@ public sealed class StdlibApiTests
         string expectedPath = Path.Combine(FixturesDir, $"{fixtureName}.expected.txt");
         Assert.True(File.Exists(rfPath), $"Fixture .rf not found: {rfPath}");
 
-        string actual = NormalizeNewlines(RunFixture(rfPath));
+        string actual = NormalizeForCompare(RunFixture(rfPath));
 
         // Bless mode: capture actual output as the new expected snapshot. Useful for
         // seeding new fixtures or refreshing after an intentional API/output change.
         // Set RF_TEST_BLESS=1 (or use the `bless-fixtures` helper) and re-run tests.
+        // Write the normalized form (per-line-trimmed, LF) so blessed snapshots are stable
+        // under editors that trim trailing whitespace on save.
         if (Environment.GetEnvironmentVariable("RF_TEST_BLESS") == "1")
         {
-            File.WriteAllText(expectedPath, actual);
+            File.WriteAllText(expectedPath, actual + "\n");
             return;
         }
 
@@ -52,8 +54,8 @@ public sealed class StdlibApiTests
             $"Expected snapshot not found: {expectedPath}. " +
             $"Run with RF_TEST_BLESS=1 to capture current output as the snapshot.");
 
-        string expected = NormalizeNewlines(File.ReadAllText(expectedPath));
-        Assert.Equal(expected.TrimEnd(), actual.TrimEnd());
+        string expected = NormalizeForCompare(File.ReadAllText(expectedPath));
+        Assert.Equal(expected, actual);
     }
 
     private static string RunFixture(string rfPath)
@@ -97,6 +99,18 @@ public sealed class StdlibApiTests
 
     private static string NormalizeNewlines(string s) =>
         s.Replace("\r\n", "\n").Replace("\r", "\n");
+
+    /// <summary>
+    /// Normalizes output for snapshot comparison: LF line endings (a snapshot checked out as CRLF on
+    /// Windows must still match LF program output), trailing blank lines removed, and PER-LINE trailing
+    /// whitespace stripped. The last is essential — editors trim trailing spaces on save, so a snapshot
+    /// can't reliably hold them, yet programs legitimately emit them (e.g. <c>out + f"{x} "</c>).
+    /// Trailing whitespace is never semantically meaningful for these stdlib fixtures, so trimming both
+    /// sides avoids false mismatches while still catching every real content difference.
+    /// </summary>
+    private static string NormalizeForCompare(string s) =>
+        string.Join("\n",
+            NormalizeNewlines(s).TrimEnd('\n').Split('\n').Select(line => line.TrimEnd()));
 
     private static string LocateRepoRoot()
     {
