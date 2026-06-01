@@ -152,6 +152,22 @@ public record RoutineDeclaration(
     bool IsDangerous = false) : Declaration(Location: Location)
 {
     /// <summary>
+    /// Generic parameter names. Settable so SignatureResolver can desugar a protocol-typed
+    /// parameter (<c>r: Iterable[S64]</c>) into an implicit generic (<c>__T0 obeys Iterable[S64]</c>)
+    /// on the AST decl itself — keeping the AST in lockstep with the desugared <see cref="RoutineInfo"/>
+    /// so the generic-monomorphization pipeline (FindInStdlib + GenericAstRewriter) treats implicit
+    /// and explicit generics identically. The body property shadows the positional parameter; the
+    /// primary constructor still initializes it.
+    /// </summary>
+    public List<string>? GenericParameters { get; set; } = GenericParameters;
+
+    /// <summary>
+    /// Generic constraints (incl. implicit <c>obeys</c> constraints synthesized for desugared
+    /// protocol parameters). Settable for the same reason as <see cref="GenericParameters"/>.
+    /// </summary>
+    public List<GenericConstraintDeclaration>? GenericConstraints { get; set; } = GenericConstraints;
+
+    /// <summary>
     /// Variables taken out of scope within this routine via <c>steal</c> / consumption (SA's
     /// per-routine deadref set, snapshotted after body analysis). The scope-exit teardown pass
     /// merges these into its move-set so a stolen binding is NOT destroyed at scope exit — the

@@ -1137,6 +1137,28 @@ public sealed partial class SemanticVerifier
             }
         }
 
+        // Generic-parameter receiver constrained to `Iterable[X]` — e.g. a desugared protocol
+        // parameter `r: Iterable[S64]` becomes `__T0 obeys Iterable[S64]`. The constraint pins the
+        // element type to X for EVERY instantiation, so take the element from the obeys-constraint's
+        // type argument. Without this the element falls through to Strategy 2 and resolves to the
+        // protocol's bare element param `T`, which then leaks unsubstituted into the monomorphized
+        // body and reaches codegen (`GenericParameterTypeInfo 'T' reached GetLlvmType`).
+        if (iterableType is GenericParameterTypeInfo gp)
+        {
+            foreach (GenericConstraintDeclaration c in ActiveConstraintsFor(paramName: gp.Name))
+            {
+                if (c is not { ConstraintType: ConstraintKind.Obeys, ConstraintTypes: not null })
+                    continue;
+                foreach (TypeExpression protocolExpr in c.ConstraintTypes)
+                {
+                    if (GetBaseTypeName(typeName: protocolExpr.Name) != "Iterable") continue;
+                    TypeSymbol resolved = _typeResolver.ResolveType(typeExpr: protocolExpr);
+                    if (resolved.TypeArguments is { Count: > 0 })
+                        return resolved.TypeArguments[index: 0];
+                }
+            }
+        }
+
         // Type must follow the Iterable protocol
         bool obeysIterable = ImplementsProtocol(type: iterableType, protocolName: "Iterable");
 

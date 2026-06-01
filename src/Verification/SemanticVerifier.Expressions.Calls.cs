@@ -1055,6 +1055,35 @@ public sealed partial class SemanticVerifier
                             }
                         }
 
+                        // Protocol method resolved through a generic param's `obeys` constraint
+                        // (e.g. `r.$iter()` where `r: __T0 obeys Iterable[S64]`). The resolved method
+                        // is homed on the bare generic param, and its signature carries the PROTOCOL's
+                        // own element param (`Iterator[T]`), which is distinct from `__T0` and so isn't
+                        // bound by the branches above. Bind each obeys-constraint protocol's params from
+                        // the constraint's type args (`Iterable[S64]` ⇒ T=S64) so a return type like
+                        // `Iterator[T]` resolves to `Iterator[S64]` instead of leaking the element param
+                        // into the monomorphized body (`GenericParameterTypeInfo 'T' reached GetLlvmType`).
+                        if (dispatchType is GenericParameterTypeInfo dispatchParam)
+                        {
+                            foreach (GenericConstraintDeclaration gc in
+                                     ActiveConstraintsFor(paramName: dispatchParam.Name))
+                            {
+                                if (gc is not { ConstraintType: ConstraintKind.Obeys, ConstraintTypes: not null })
+                                    continue;
+                                foreach (TypeExpression ce in gc.ConstraintTypes)
+                                {
+                                    TypeSymbol resolvedConstraint = _typeResolver.ResolveType(typeExpr: ce);
+                                    if (resolvedConstraint is not ProtocolTypeInfo rcProto ||
+                                        rcProto.TypeArguments is not { Count: > 0 } cArgs)
+                                        continue;
+                                    ProtocolTypeInfo rcDef = rcProto.GenericDefinition ?? rcProto;
+                                    if (rcDef.GenericParameters is not { Count: > 0 } cParams) continue;
+                                    for (int i = 0; i < cParams.Count && i < cArgs.Count; i++)
+                                        substitutions[key: cParams[index: i]] = cArgs[index: i];
+                                }
+                            }
+                        }
+
                         if (substitutions.Count > 0)
                         {
                             callReturnType = SubstituteWithMapping(type: callReturnType,

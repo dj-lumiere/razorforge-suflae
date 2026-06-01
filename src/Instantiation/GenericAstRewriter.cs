@@ -104,6 +104,18 @@ internal static class GenericAstRewriter
         public Dictionary<string, TypeInfo> ParamTypes { get; } = new();
 
         /// <summary>
+        /// Local variables whose type must be RE-INFERRED after monomorphization because their
+        /// initializer re-dispatched to a concrete owner. Specifically: a `var it = r.$iter()` where
+        /// `r` was a protocol-constrained generic param (`__T0 obeys Iterable[S64]`) is typed by SA
+        /// as the abstract protocol return (`Iterator[S64]`), but after `__T0 → Range[S64]` the call
+        /// re-dispatches to `Range[S64].$iter` returning the CONCRETE `RangeIterator[S64]`. Recording
+        /// that here lets later references (`it.try_next()`) re-dispatch against the concrete iterator
+        /// instead of the abstract protocol method (which has no body → linker error). Only used to
+        /// concretize references whose stale type is itself a protocol, so other locals are untouched.
+        /// </summary>
+        public Dictionary<string, TypeInfo> LocalReinferredTypes { get; } = new();
+
+        /// <summary>
         /// Resolves a <see cref="TypeInfo"/> through the substitution map. Returns null
         /// when the registry is not available or the type has no substitution.
         /// </summary>
@@ -906,6 +918,17 @@ internal static class GenericAstRewriter
                 resolvedType = cgSub;
             }
 
+            // Concretize a reference to a local whose type was re-inferred from a re-dispatched
+            // initializer (see RewriteContext.LocalReinferredTypes). Guarded to only replace a stale
+            // PROTOCOL type, so concrete-typed references are left untouched. This must run before the
+            // member-call re-dispatch below so the receiver type drives concrete method resolution.
+            if (result is IdentifierExpression localRef &&
+                resolvedType is ProtocolTypeInfo &&
+                ctx.LocalReinferredTypes.TryGetValue(key: localRef.Name, value: out TypeInfo? concreteLocal))
+            {
+                resolvedType = concreteLocal;
+            }
+
             result.ResolvedType = resolvedType;
 
             TypeInfo? routineResultType = resolvedType ?? result.ResolvedType ?? expr.ResolvedType;
@@ -1184,8 +1207,11 @@ internal static class GenericAstRewriter
     private static bool CallRoutineNeedsRebinding(RoutineInfo routine)
     {
         if (routine.IsGenericDefinition ||
-            routine.OwnerType is GenericParameterTypeInfo or { IsGenericDefinition: true })
+            routine.OwnerType is GenericParameterTypeInfo or ProtocolTypeInfo or { IsGenericDefinition: true })
         {
+            // A protocol-owned method is abstract (no body) — after monomorphization the call must
+            // re-dispatch to the concrete implementer (e.g. Iterator[S64].try_next, resolved via a
+            // constrained generic param's $iter, must rebind to RangeIterator[S64].try_next).
             return true;
         }
 
@@ -1470,20 +1496,38 @@ internal static class GenericAstRewriter
     private static SyntaxTree.Declaration RewriteDeclaration(SyntaxTree.Declaration decl,
         RewriteContext ctx)
     {
-        return decl switch
+        switch (decl)
         {
-            VariableDeclaration vd => vd with
+            case VariableDeclaration vd:
             {
-                Type = vd.Type != null
-                    ? RewriteType(type: vd.Type, ctx: ctx)
-                    : null,
-                Initializer = vd.Initializer != null
+                Expression? newInit = vd.Initializer != null
                     ? RewriteExpression(expr: vd.Initializer, ctx: ctx)
-                    : null
-            },
+                    : null;
 
-            _ => decl // Other declarations in statement context are rare
-        };
+                // Record a re-inferred local type when the initializer re-dispatched to a concrete
+                // owner (its return type is now non-protocol) but SA had typed the binding via an
+                // abstract protocol (e.g. `var it = r.$iter()` : Iterator[S64] → RangeIterator[S64]).
+                // This lets later references concretize so subsequent member calls re-dispatch to a
+                // real implementer rather than the bodyless protocol method. Only record when the
+                // SA-time type was a protocol and the new return type isn't, so we never demote a
+                // correctly-typed local.
+                if (vd.Type == null && newInit is CallExpression { ResolvedRoutine.ReturnType: { } reinferred }
+                    && vd.Initializer?.ResolvedType is ProtocolTypeInfo
+                    && reinferred is not ProtocolTypeInfo and not GenericParameterTypeInfo)
+                {
+                    ctx.LocalReinferredTypes[key: vd.Name] = reinferred;
+                }
+
+                return vd with
+                {
+                    Type = vd.Type != null ? RewriteType(type: vd.Type, ctx: ctx) : null,
+                    Initializer = newInit
+                };
+            }
+
+            default:
+                return decl; // Other declarations in statement context are rare
+        }
     }
 
     #endregion

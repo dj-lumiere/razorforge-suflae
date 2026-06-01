@@ -136,9 +136,14 @@ internal sealed class SignatureResolver
         var implicitGenerics = new List<string>();
         var implicitConstraints = new List<GenericConstraintDeclaration>();
         int implicitGenericCounter = 0;
+        // AST parameter rewrites for protocol-as-generic desugaring: (param index, implicit
+        // generic name). Applied to the AST decl after the loop so the decl mirrors the RoutineInfo.
+        var astParamGenericNames = new List<(int Index, string GenericName)>();
+        int paramIndex = -1;
 
         foreach (Parameter param in routine.Parameters)
         {
+            paramIndex++;
             if (param.Type == null)
             {
                 // Type inference required - handle later
@@ -186,6 +191,7 @@ internal sealed class SignatureResolver
                 // Generate implicit generic parameter name
                 string implicitGenericName = $"__T{implicitGenericCounter++}";
                 implicitGenerics.Add(item: implicitGenericName);
+                astParamGenericNames.Add(item: (paramIndex, implicitGenericName));
 
                 // Create "obeys" constraint for the implicit generic
                 var constraint = new GenericConstraintDeclaration(
@@ -263,6 +269,28 @@ internal sealed class SignatureResolver
         List<GenericConstraintDeclaration> allConstraints =
             routine.GenericConstraints?.ToList() ?? [];
         allConstraints.AddRange(collection: implicitConstraints);
+
+        // Desugar the protocol-as-generic rewrite onto the AST decl itself, so downstream passes
+        // that read the AST (GenericMonomorphizationPass.FindInStdlib + GenericAstRewriter) see the
+        // SAME implicit generics as the RoutineInfo. Without this the AST keeps `r: Iterable[S64]`
+        // with no `[T]`, FindInStdlib rejects it as non-generic, and no monomorphized body is emitted
+        // for `print_range[Range[S64]]` → declare-without-define → linker error. `routine` is the
+        // same node reference held in the program's declaration list, so mutating it in place
+        // propagates to the GMP routine index (built later from program.Declarations).
+        if (implicitGenerics.Count > 0)
+        {
+            foreach ((int idx, string genericName) in astParamGenericNames)
+            {
+                Parameter astParam = routine.Parameters[index: idx];
+                routine.Parameters[index: idx] = astParam with
+                {
+                    Type = new TypeExpression(Name: genericName, GenericArguments: null,
+                        Location: astParam.Type?.Location ?? astParam.Location)
+                };
+            }
+            routine.GenericParameters = allGenericParams;
+            routine.GenericConstraints = allConstraints;
+        }
 
         _sa._currentRoutine = prevRoutine;
 
