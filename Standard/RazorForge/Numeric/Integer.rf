@@ -12,7 +12,7 @@ module Numerics
 ### atomic-refcounted LibTomMath handle. Copying bumps the underlying refcount
 ### via SeqCst atomic; the last drop frees the handle + controller.
 ### :see: {Decimal}, {Complex}, {Numeric-Types}
-record Integer obeys Assignable, Integral, Divisible, Negatable, Ordered
+record Integer obeys Assignable, Integral, Divisible, Negatable, Ordered, Hashable, FastHashable
   ### Stores the native big-integer handle managed by the runtime.
   secret handle: CPtr
   ### Atomic strong-count controller (null for transient stack values is not
@@ -78,13 +78,12 @@ routine Integer.$copy() -> Integer
 ### Releases this value's reference. Frees the handle + controller when this
 ### was the last live ref. No-op when `ctrl` is null.
 dangerous routine Integer.$destroy()
-  danger!
-    if me.ctrl.is_none()
-      return
-    var prev = me.ctrl.as_entity().decrease_strong_count()
-    if prev <= 1_u64
-      rf_bigint_clear(me.handle)
-      me.ctrl.invalidate()
+  if me.ctrl.is_none()
+    return
+  var prev = me.ctrl.as_entity().decrease_strong_count()
+  if prev <= 1_u64
+    rf_bigint_clear(me.handle)
+    me.ctrl.invalidate()
   return
 
 # ============================================================================
@@ -337,6 +336,26 @@ routine Integer.represent_radix(radix: S32) -> Text
   var text = Text(from: CStr)
   rf_invalidate(pointer_to_int[Byte, Address](CStr.ptr))
   return text
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns an xxHash64-based hash of this value.
+### Hashes the canonical base-10 representation, so equal integers hash equally.
+### :returns: The 64-bit hash.
+@readonly
+routine Integer.$fast_hash() -> U64
+  return me.represent_radix(radix: 10_s32).$fast_hash()
+
+### Returns a SipHash-2-4 keyed hash of this value.
+### Hashes the canonical base-10 representation under the supplied key pair.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: The 64-bit keyed hash.
+@readonly
+routine Integer.$hash(k0: U64, k1: U64) -> U64
+  return me.represent_radix(radix: 10_s32).$hash(k0: k0, k1: k1)
 
 # ============================================================================
 # Factory Methods

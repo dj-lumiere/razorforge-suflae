@@ -13,7 +13,7 @@ preset DECIMAL_DEFAULT_PRECISION: S32 = 50
 ### atomic-refcounted decNumber handle. Copying bumps the underlying refcount
 ### via SeqCst atomic; the last drop frees the handle + controller.
 ### :see: {Integer}, {Complex}, {Numeric-Types}
-record Decimal obeys Assignable, Numeric, Ordered
+record Decimal obeys Assignable, Numeric, Ordered, Hashable, FastHashable
   ### Stores the native decimal handle managed by the runtime.
   secret handle: CPtr
   ### Atomic strong-count controller.
@@ -97,13 +97,12 @@ routine Decimal.$copy() -> Decimal
 ### Releases this value's reference. Frees the handle + controller when this
 ### was the last live ref. No-op when `ctrl` is null.
 dangerous routine Decimal.$destroy()
-  danger!
-    if me.ctrl.is_none()
-      return
-    var prev = me.ctrl.as_entity().decrease_strong_count()
-    if prev <= 1_u64
-      rf_bigdec_free(me.handle)
-      me.ctrl.invalidate()
+  if me.ctrl.is_none()
+    return
+  var prev = me.ctrl.as_entity().decrease_strong_count()
+  if prev <= 1_u64
+    rf_bigdec_free(me.handle)
+    me.ctrl.invalidate()
   return
 
 # ============================================================================
@@ -458,6 +457,27 @@ routine Decimal.represent_with_places(decimal_places: S32) -> ?Text
   var text = Text(from: CStr)
   rf_invalidate(pointer_to_int[Byte, Address](CStr.ptr))
   return text
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns an xxHash64-based hash of this value.
+### Hashes the canonical fixed-precision representation, so equal decimals hash
+### equally.
+### :returns: The 64-bit hash.
+@readonly
+routine Decimal.$fast_hash() -> U64
+  return me.represent_with_places(decimal_places: 10_s32).$fast_hash()
+
+### Returns a SipHash-2-4 keyed hash of this value.
+### Hashes the canonical fixed-precision representation under the supplied key pair.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: The 64-bit keyed hash.
+@readonly
+routine Decimal.$hash(k0: U64, k1: U64) -> U64
+  return me.represent_with_places(decimal_places: 10_s32).$hash(k0: k0, k1: k1)
 
 # ============================================================================
 # Constants (computed with high precision)

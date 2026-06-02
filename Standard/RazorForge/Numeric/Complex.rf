@@ -4,7 +4,7 @@ module Numerics
 ### `Complex` is built on top of {Decimal}, so both components retain decimal precision semantics.
 ### Use it for analysis routines that need complex arithmetic without collapsing to machine precision.
 ### :see: {Decimal}, {Numeric-Types}
-entity Complex obeys Numeric, Equatable
+record Complex obeys Numeric, Equatable, Hashable, FastHashable
   ### Stores the real component.
   secret real: Decimal
   ### Stores the imaginary component.
@@ -96,6 +96,27 @@ routine Complex.$neg() -> ?Complex
 @readonly
 routine Complex.$eq(you: Complex) -> Bool
   return me.real == you.real and me.imag == you.imag
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns an xxHash64-based hash of this value.
+### Hashes the canonical fixed-precision representation of both components, so
+### equal complex values hash equally.
+### :returns: The 64-bit hash.
+@readonly
+routine Complex.$fast_hash() -> U64
+  return me.represent_with_places(decimal_places: 10_s32).$fast_hash()
+
+### Returns a SipHash-2-4 keyed hash of this value.
+### Hashes the canonical fixed-precision representation under the supplied key pair.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: The 64-bit keyed hash.
+@readonly
+routine Complex.$hash(k0: U64, k1: U64) -> U64
+  return me.represent_with_places(decimal_places: 10_s32).$hash(k0: k0, k1: k1)
 
 # ============================================================================
 # Components and Properties
