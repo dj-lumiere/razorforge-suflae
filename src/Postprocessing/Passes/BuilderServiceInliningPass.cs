@@ -773,7 +773,7 @@ internal sealed class BuilderServiceInliningPass
             {
                 TypeInfo? tkType = _registry.LookupType(name: "TypeKind");
                 if (tkType is not ChoiceTypeInfo tkChoice) return null;
-                // Wrappers (Owned/Retained/Grasped/etc) report the inner type's kind.
+                // Wrappers (Retained/Modifying/etc) report the inner type's kind.
                 TypeInfo kindType = type is WrapperTypeInfo wt ? wt.InnerType : type;
                 string caseName = kindType.Category switch
                 {

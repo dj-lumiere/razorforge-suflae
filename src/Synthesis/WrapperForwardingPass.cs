@@ -11,7 +11,7 @@ namespace Compiler.Synthesis;
 
 /// <summary>
 /// Phase D synthesizer: lazily generates transparent-forwarding routines on wrapper
-/// types (T, Viewed[T], Grasped[T], etc.) when user code calls a method that
+/// types (T, Viewing[T], Modifying[T], etc.) when user code calls a method that
 /// exists on the inner type T but not directly on the wrapper.
 ///
 /// Synthesis anchors on the wrapper's generic definition (e.g. T) so that
@@ -26,7 +26,7 @@ namespace Compiler.Synthesis;
 /// transitively through raw.extract() to the concrete inner type.
 ///
 /// Policy:
-///   - Read-only wrappers (Viewed, Inspected) forward ONLY @readonly methods of T.
+///   - Read-only wrappers (Viewing, Inspecting) forward ONLY @readonly methods of T.
 ///   - All other wrappers forward any modification category.
 ///
 /// Signature synthesis: params/return are taken from the inner method's signature
@@ -52,16 +52,15 @@ internal sealed class WrapperForwardingPass
     /// </summary>
     private static readonly HashSet<string> WrapperTypes =
     [
-        "Viewed",    // Read-only single-threaded token
-        "Grasped",   // Exclusive write single-threaded token
-        "Inspected", // Read-only multi-threaded token
-        "Claimed",   // Exclusive write multi-threaded token
+        "Viewing",    // Read-only single-threaded token
+        "Modifying",  // Exclusive write single-threaded token
+        "Inspecting", // Read-only multi-threaded token
+        "Claiming",   // Exclusive write multi-threaded token
         "Shared",    // Reference-counted multi-threaded handle
-        "Marked",    // Weak reference multi-threaded handle
+        "Watched",   // Weak reference multi-threaded handle
         "Retained",  // Reference-counted handle
         "Tracked",   // Weak reference handle
         "Hijacked",  // Unmanaged raw pointer handle
-        "Owned"      // Exclusive ownership wrapper (unique_ptr equivalent)
     ];
 
     /// <summary>
@@ -71,15 +70,14 @@ internal sealed class WrapperForwardingPass
     /// </summary>
     private static readonly HashSet<string> ForwardingWrapperTypes =
     [
-        "Viewed",
-        "Grasped",
-        "Inspected",
-        "Claimed",
+        "Viewing",
+        "Modifying",
+        "Inspecting",
+        "Claiming",
         "Shared",
-        "Marked",
+        "Watched",
         "Retained",
         "Tracked",
-        "Owned"
     ];
 
     /// <summary>
@@ -119,8 +117,8 @@ internal sealed class WrapperForwardingPass
     /// </summary>
     private static readonly HashSet<string> ReadOnlyWrapperTypes =
     [
-        "Viewed",    // Read-only single-threaded token
-        "Inspected"  // Read-only multi-threaded token
+        "Viewing",    // Read-only single-threaded token
+        "Inspecting"  // Read-only multi-threaded token
     ];
 
     public WrapperForwardingPass(TypeRegistry registry,
@@ -337,8 +335,8 @@ internal sealed class WrapperForwardingPass
             Parameters = forwarderParameters,
             ReturnType = forwarderReturnType,
             IsFailable = innerMethod.IsFailable,
-            DeclaredModification = innerMethod.DeclaredModification,
-            ModificationCategory = innerMethod.ModificationCategory,
+            DeclaredMutation = innerMethod.DeclaredMutation,
+            MutationCategory = innerMethod.MutationCategory,
             Visibility = innerMethod.Visibility,
             Location = innerMethod.Location,
             Module = innerMethod.Module,
@@ -456,7 +454,7 @@ internal sealed class WrapperForwardingPass
                 // per wrapperDef and reused across all inner T. Baking innerMethod here would
                 // freeze the call to whichever inner type was resolved first (e.g. binding
                 // to BTreeListNode.keys_add_last forever, even when monomorphized for
-                // Grasped[BTreeSetNode[S64]]). Leaving it null lets RoutineReachabilityPass
+                // Modifying[BTreeSetNode[S64]]). Leaving it null lets RoutineReachabilityPass
                 // re-resolve the call from the substituted receiver type at monomorphization.
                 ResolvedType = innerMethod.ReturnType
             };
@@ -663,7 +661,7 @@ internal sealed class WrapperForwardingPass
     }
 
     /// <summary>
-    /// Checks if a type is a forwarding wrapper (Viewed, Grasped, Shared, etc.).
+    /// Checks if a type is a forwarding wrapper (Viewing, Modifying, Shared, etc.).
     /// Hijacked is intentionally excluded — its API is the explicit extract/as_entity/inject
     /// surface, not transparent forwarding of T's methods.
     /// </summary>
@@ -674,7 +672,7 @@ internal sealed class WrapperForwardingPass
     }
 
     /// <summary>
-    /// Checks if a wrapper type is read-only (Viewed, Inspected).
+    /// Checks if a wrapper type is read-only (Viewing, Inspecting).
     /// </summary>
     private static bool IsReadOnlyWrapper(TypeSymbol type)
     {
@@ -683,7 +681,7 @@ internal sealed class WrapperForwardingPass
     }
 
     /// <summary>
-    /// Gets the inner type from a wrapper type (e.g., T from Viewed&lt;T&gt;).
+    /// Gets the inner type from a wrapper type (e.g., T from Viewing&lt;T&gt;).
     /// </summary>
     private TypeSymbol? GetWrapperInnerType(TypeSymbol wrapperType)
     {

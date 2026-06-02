@@ -417,7 +417,7 @@ public partial class LlvmCodeGenerator
             // via `steal` at the call site (SA requires the verb — see the BareEntityAssignment
             // check in AnalyzeCallArguments), so this routine is the new sole owner and must tear
             // it down at scope exit, exactly like a local entity `var`. Borrows arrive as
-            // Referring/Controlling/Viewed/Grasped wrappers (RecordTypeInfo), never as bare
+            // Referring/Controlling/Viewing/Modifying wrappers (RecordTypeInfo), never as bare
             // EntityTypeInfo, so they are correctly excluded. If the body re-transfers ownership
             // (`steal r` into a call/field), ConsumeTransferredLocalOwnership removes it from this
             // set by name, preventing a double-free.
@@ -729,22 +729,20 @@ public partial class LlvmCodeGenerator
 
     private static string GetImplicitMeParameterAttributes(RoutineInfo routine)
     {
-        // Exclusive me-params get `noalias`. Three cases qualify:
-        //   - bare entity (post-Owned-retirement: bound T can't be duplicated, so
-        //     the me pointer is exclusive at the call boundary by the
-        //     entity-ownership rule),
-        //   - legacy `T` wrapper (transitional, while Owned still exists),
-        //   - `Grasped[T]` (scope-bound exclusive borrow — its definition).
+        // Exclusive me-params get `noalias`. Two cases qualify:
+        //   - bare entity (bound T can't be duplicated, so the me pointer is exclusive
+        //     at the call boundary by the entity-ownership rule),
+        //   - `Modifying[T]` (scope-bound exclusive borrow — its definition).
         bool isExclusive = routine.OwnerType is EntityTypeInfo
-                           || routine.OwnerType is WrapperTypeInfo { Name: "Owned" or "Grasped" };
+                           || routine.OwnerType is WrapperTypeInfo { Name: "Modifying" };
         if (isExclusive)
         {
-            return routine.ModificationCategory == ModificationCategory.Readonly
+            return routine.MutationCategory == MutationCategory.Readonly
                 ? "noalias readonly"
                 : "noalias";
         }
 
-        if (routine.ModificationCategory != ModificationCategory.Readonly)
+        if (routine.MutationCategory != MutationCategory.Readonly)
         {
             return string.Empty;
         }
@@ -758,7 +756,7 @@ public partial class LlvmCodeGenerator
 
     private static string GetExplicitParameterAttributes(TypeInfo? type) =>
         type is EntityTypeInfo
-        || type is WrapperTypeInfo { Name: "Owned" or "Grasped" }
+        || type is WrapperTypeInfo { Name: "Modifying" }
             ? "noalias"
             : string.Empty;
 

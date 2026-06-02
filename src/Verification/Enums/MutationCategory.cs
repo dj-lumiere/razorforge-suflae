@@ -1,11 +1,11 @@
 namespace Verification.Enums;
 
 /// <summary>
-/// Modification category for methods, inferred by the builder.
+/// Mutation category for methods, inferred by the builder.
 /// Determines what token types can call a method.
 /// </summary>
 /// <remarks>
-/// The builder automatically infers modification categories using three-phase analysis:
+/// The builder automatically infers mutation categories using three-phase analysis:
 ///
 /// Phase 1 (Direct Analysis):
 ///   - If method writes to any member variable of me -> Writable
@@ -17,22 +17,22 @@ namespace Verification.Enums;
 ///   - Repeat until fixpoint (no changes)
 ///
 /// Phase 3 (Token Checking):
-///   - Viewed/Inspected tokens can only call Readonly methods
-///   - Grasped/Claimed tokens can call Readonly or Writable methods
+///   - Viewing/Inspecting tokens can only call Readonly methods
+///   - Modifying/Claiming tokens can call Readonly or Writable methods
 ///   - Only owned/non-token access can call Migratable methods
 /// </remarks>
-public enum ModificationCategory
+public enum MutationCategory
 {
     /// <summary>
-    /// Read-only access, doesn't modify me.
-    /// Works with all token types: Viewed, Grasped, Inspected, Claimed.
+    /// Read-only access, doesn't mutate me.
+    /// Works with all token types: Viewing, Modifying, Inspecting, Claiming.
     /// </summary>
     Readonly,
 
     /// <summary>
-    /// Modifies in-place within existing memory allocation.
-    /// Needs modifiable token: Grasped or Claimed.
-    /// Cannot be called through Viewed or Inspected tokens.
+    /// Mutates in-place within existing memory allocation.
+    /// Needs modifiable token: Modifying or Claiming.
+    /// Cannot be called through Viewing or Inspecting tokens.
     /// </summary>
     Writable,
 

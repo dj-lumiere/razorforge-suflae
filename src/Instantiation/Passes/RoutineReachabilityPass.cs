@@ -610,8 +610,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             Parameters = substParams,
             ReturnType = substReturn,
             IsFailable = genericMethod.IsFailable,
-            DeclaredModification = genericMethod.DeclaredModification,
-            ModificationCategory = genericMethod.ModificationCategory,
+            DeclaredMutation = genericMethod.DeclaredMutation,
+            MutationCategory = genericMethod.MutationCategory,
             GenericParameters = genericMethod.GenericParameters?
                 .Where(predicate: gp => !subs.ContainsKey(key: gp))
                 .ToList() is { Count: > 0 } mp ? mp : null,
@@ -1677,8 +1677,8 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
             Parameters = resolved.Parameters,
             ReturnType = resolved.ReturnType,
             IsFailable = resolved.IsFailable,
-            DeclaredModification = resolved.DeclaredModification,
-            ModificationCategory = resolved.ModificationCategory,
+            DeclaredMutation = resolved.DeclaredMutation,
+            MutationCategory = resolved.MutationCategory,
             // Clear method-level generic parameters: `newArgs` carries the fully-substituted
             // method-level type arguments, so this routine is no longer a generic definition.
             // Leaving `GenericParameters` populated produces a routine with BOTH a non-empty

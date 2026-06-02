@@ -622,12 +622,12 @@ public sealed partial class SemanticVerifier
                 location: varDecl.Location);
         }
 
-        // #96: Claimed[T] cannot be copied or aliased — exclusive lock token
-        if (varDecl.Initializer is IdentifierExpression && IsClaimedType(type: varType))
+        // #96: Claiming[T] cannot be copied or aliased — exclusive lock token
+        if (varDecl.Initializer is IdentifierExpression && IsClaimingType(type: varType))
         {
-            ReportError(code: SemanticDiagnosticCode.ClaimedCopyNotAllowed,
-                message: $"Cannot copy or alias 'Claimed[T]' variable to '{varDecl.Name}'. " +
-                         "Claimed tokens are exclusive and cannot be duplicated — use the original variable directly.",
+            ReportError(code: SemanticDiagnosticCode.ClaimingCopyNotAllowed,
+                message: $"Cannot copy or alias 'Claiming[T]' variable to '{varDecl.Name}'. " +
+                         "Claiming tokens are exclusive and cannot be duplicated — use the original variable directly.",
                 location: varDecl.Location);
         }
 
@@ -643,7 +643,7 @@ public sealed partial class SemanticVerifier
                 location: varDecl.Location);
         }
 
-        // Scoped access tokens (Viewed / Grasped / Inspected / Claimed) cannot bind to a
+        // Scoped access tokens (Viewing / Modifying / Inspecting / Claiming) cannot bind to a
         // var at all — they only exist inline within their producing expression. Use the
         // value inline (`a.view().x`) or open a scope (`using a.view() as v`).
         if (_registry.Language == Language.RazorForge &&
@@ -820,13 +820,13 @@ public sealed partial class SemanticVerifier
         {
             TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
 
-            // Read-only wrapper types (Viewed, Inspected) cannot be written through
+            // Read-only wrapper types (Viewing, Inspecting) cannot be written through
             if (IsReadOnlyWrapper(type: objectType))
             {
                 ReportError(code: SemanticDiagnosticCode.WriteThroughReadOnlyWrapper,
                     message:
                     $"Cannot write to member '{member.PropertyName}' through read-only wrapper '{objectType.Name}'. " +
-                    "Use Grasped[T] for exclusive write access or Claimed[T] for locked write access.",
+                    "Use Modifying[T] for exclusive write access or Claiming[T] for locked write access.",
                     location: assign.Location);
             }
 
@@ -848,14 +848,14 @@ public sealed partial class SemanticVerifier
                 }
             }
 
-            // Check if we're in a @readonly method trying to modify 'me'
+            // Check if we're in a @readonly method trying to mutate 'me'
             if (_currentRoutine is { IsReadOnly: true } &&
                 member.Object is IdentifierExpression { Name: "me" })
             {
-                ReportError(code: SemanticDiagnosticCode.ModificationInReadonlyMethod,
+                ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMethod,
                     message:
-                    $"Cannot modify member variable '{member.PropertyName}' in a @readonly method. " +
-                    "Use @migratable to allow modifications.",
+                    $"Cannot mutate member variable '{member.PropertyName}' in a @readonly method. " +
+                    "Use @migratable to allow mutations.",
                     location: assign.Location);
             }
         }

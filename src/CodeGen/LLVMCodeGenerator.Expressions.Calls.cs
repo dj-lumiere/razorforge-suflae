@@ -513,7 +513,7 @@ public partial class LlvmCodeGenerator
         {
             TypeInfo? receiverTypeForIntercept = GetExpressionType(expr: member.Object);
             // Intercept only for struct-typed records — records that ARE pointer-shaped
-            // (@llvm("ptr") records like CPtr, Hijacked[T], Viewed[T], Grasped[T]) have
+            // (@llvm("ptr") records like CPtr, Hijacked[T], Viewing[T], Modifying[T]) have
             // their own working bodies that return the wrapped pointer value, not the
             // storage address of the wrapper itself.
             if (receiverTypeForIntercept is RecordTypeInfo { HasDirectBackendType: false })

@@ -13,26 +13,24 @@ public enum PointerFlavor
     Protocol,
     /// <summary>Function pointer.</summary>
     Routine,
-    /// <summary>Viewing borrow (Viewed[T]).</summary>
-    Viewed,
-    /// <summary>Grasped borrow (Grasped[T]).</summary>
-    Grasped,
-    /// <summary>Inspected borrow (read-only, internal use).</summary>
-    Inspected,
-    /// <summary>Claimed borrow (exclusive, internal use).</summary>
-    Claimed,
+    /// <summary>Viewing borrow (Viewing[T]).</summary>
+    Viewing,
+    /// <summary>Modifying borrow (Modifying[T]).</summary>
+    Modifying,
+    /// <summary>Inspecting borrow (read-only, internal use).</summary>
+    Inspecting,
+    /// <summary>Claiming borrow (exclusive, internal use).</summary>
+    Claiming,
     /// <summary>Reference-counted shared pointer (Retained[T]).</summary>
     Retained,
     /// <summary>Tracked ownership pointer (Tracked[T]).</summary>
     Tracked,
     /// <summary>Shared ownership pointer (deferred concurrency use).</summary>
     Shared,
-    /// <summary>Marked wrapper pointer (marker-protocol conformance).</summary>
-    Marked,
+    /// <summary>Watched wrapper pointer (marker-protocol conformance).</summary>
+    Watched,
     /// <summary>Unsafe hijack borrow (Hijacked[T]).</summary>
     Hijacked,
-    /// <summary>Unique ownership pointer (T).</summary>
-    Owned,
     /// <summary>Untyped raw pointer (CPtr / Address).</summary>
     Raw
 }

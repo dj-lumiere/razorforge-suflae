@@ -125,8 +125,8 @@ internal sealed class DerivedOperatorPass
             Parameters = eqMethod.Parameters,
             ReturnType = boolType,
             IsFailable = false,
-            DeclaredModification = ModificationCategory.Readonly,
-            ModificationCategory = ModificationCategory.Readonly,
+            DeclaredMutation = MutationCategory.Readonly,
+            MutationCategory = MutationCategory.Readonly,
             // Inherit `$eq`'s generic-parameter constraints so `$ne` is only available
             // for the same instantiations as `$eq`. Without this, Array[T,N].$ne is
             // unconditionally derivable even when $eq requires `T obeys Equatable`,
@@ -183,8 +183,8 @@ internal sealed class DerivedOperatorPass
             Parameters = containsMethod.Parameters,
             ReturnType = boolType,
             IsFailable = false,
-            DeclaredModification = ModificationCategory.Readonly,
-            ModificationCategory = ModificationCategory.Readonly,
+            DeclaredMutation = MutationCategory.Readonly,
+            MutationCategory = MutationCategory.Readonly,
             // Inherit `$contains`'s constraints so `$notcontains` is only available for
             // the same instantiations.
             GenericParameters = containsMethod.GenericParameters,
@@ -257,8 +257,8 @@ internal sealed class DerivedOperatorPass
                 Parameters = cmpMethod.Parameters,
                 ReturnType = boolType,
                 IsFailable = false,
-                DeclaredModification = ModificationCategory.Readonly,
-                ModificationCategory = ModificationCategory.Readonly,
+                DeclaredMutation = MutationCategory.Readonly,
+                MutationCategory = MutationCategory.Readonly,
                 // Inherit `$cmp`'s constraints so `$lt/$le/$gt/$ge` are only available for
                 // the same instantiations.
                 GenericParameters = cmpMethod.GenericParameters,

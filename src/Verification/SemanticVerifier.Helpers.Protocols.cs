@@ -344,7 +344,7 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// Returns true if all required methods in <paramref name="protocol"/> and its parent chain
-    /// have <see cref="ModificationCategory.Readonly"/> modification. Marker protocols with no
+    /// have <see cref="MutationCategory.Readonly"/> mutation. Marker protocols with no
     /// methods return false — they require explicit declaration, not relay.
     /// </summary>
     private bool IsAllReadOnlyProtocol(ProtocolTypeInfo protocol)
@@ -354,7 +354,7 @@ public sealed partial class SemanticVerifier
 
         foreach (ProtocolMethodInfo method in protocol.Methods)
         {
-            if (method.Modification != ModificationCategory.Readonly)
+            if (method.Mutation != MutationCategory.Readonly)
                 return false;
         }
 

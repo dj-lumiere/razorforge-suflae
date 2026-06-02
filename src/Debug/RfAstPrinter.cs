@@ -144,7 +144,7 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         string retStr = ri.ReturnType != null
             ? $" -> {ri.ReturnType.FullName}"
             : " -> Blank";
-        string annotations = ri.DeclaredModification == ModificationCategory.Readonly
+        string annotations = ri.DeclaredMutation == MutationCategory.Readonly
             ? "@readonly\n"
             : "";
         return $"{annotations}routine {ownerPrefix}{ri.Name}{failable}({paramStr}){retStr}";

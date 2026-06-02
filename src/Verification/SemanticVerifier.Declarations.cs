@@ -718,9 +718,9 @@ public sealed partial class SemanticVerifier
     /// </remarks>
     private static readonly HashSet<string> _markerProtocolBlessedWrappers = new(comparer: StringComparer.Ordinal)
     {
-        "Owned", "Retained", "Viewed", "Grasped", "Hijacked", "Tracked",
+        "Retained", "Viewing", "Modifying", "Hijacked", "Tracked",
         // Deferred concurrency wrappers (planned for v0.2+):
-        "Shared", "Marked", "Inspected", "Claimed",
+        "Shared", "Watched", "Inspecting", "Claiming",
     };
 
     private static readonly HashSet<string> _markerProtocolNames = new(comparer: StringComparer.Ordinal)
@@ -844,13 +844,13 @@ public sealed partial class SemanticVerifier
             {
                 // #61: Protocol mutation contract validation
                 // Protocol @readonly -> impl must be @readonly
-                if (requiredMethod.Modification == ModificationCategory.Readonly &&
-                    typeMethod.ModificationCategory != ModificationCategory.Readonly)
+                if (requiredMethod.Mutation == MutationCategory.Readonly &&
+                    typeMethod.MutationCategory != MutationCategory.Readonly)
                 {
                     ReportError(code: SemanticDiagnosticCode.ProtocolMutationContractViolation,
                         message:
                         $"Protocol '{protocol.Name}' requires '{requiredMethod.Name}' to be @readonly, " +
-                        $"but implementation on '{type.Name}' is @{typeMethod.ModificationCategory.ToString().ToLowerInvariant()}.",
+                        $"but implementation on '{type.Name}' is @{typeMethod.MutationCategory.ToString().ToLowerInvariant()}.",
                         location: typeMethod.Location ?? new SourceLocation("", 0, 0, 0));
                 }
             }

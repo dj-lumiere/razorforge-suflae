@@ -57,7 +57,7 @@ public class MarkerProtocolAllowlistTests
     [Fact]
     public void StdlibWrapper_ObeysControlling_NoS707()
     {
-        // Owned/Retained/Viewed/Grasped/Hijacked/Tracked are blessed — they declare obeys
+        // Retained/Viewing/Modifying/Hijacked/Tracked are blessed — they declare obeys
         // Referring/Controlling in stdlib without tripping the check. Importing IO/Console
         // forces stdlib to load (and re-validate) in the test harness.
         string source = """

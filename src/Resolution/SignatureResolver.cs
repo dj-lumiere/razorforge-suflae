@@ -90,10 +90,10 @@ internal sealed class SignatureResolver
     {
         RoutineDeclaration routine = pending.Declaration;
 
-        ModificationCategory declaredModification =
-            routine.Annotations.Contains(item: "readonly") ? ModificationCategory.Readonly :
-            routine.Annotations.Contains(item: "migratable") ? ModificationCategory.Migratable :
-            ModificationCategory.Writable;
+        MutationCategory declaredModification =
+            routine.Annotations.Contains(item: "readonly") ? MutationCategory.Readonly :
+            routine.Annotations.Contains(item: "migratable") ? MutationCategory.Migratable :
+            MutationCategory.Writable;
 
         // Phase 2 (ResolveTypeBodies) replaces user-defined entity/record types in the registry
         // with new objects that carry resolved member variables. pending.OwnerType was captured
@@ -315,8 +315,8 @@ internal sealed class SignatureResolver
             Module = pending.Module,
             ModulePath = pending.Module?.Split('/').ToList(),
             Annotations = routine.Annotations,
-            DeclaredModification = declaredModification,
-            ModificationCategory = declaredModification,
+            DeclaredMutation = declaredModification,
+            MutationCategory = declaredModification,
             IsDangerous = routine.IsDangerous,
             Storage = routine.Storage,
             AsyncStatus = routine.Async

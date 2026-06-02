@@ -149,7 +149,7 @@ public partial class LlvmCodeGenerator
             // Crashable types -> pointer to LLVM struct (always entity semantics)
             CrashableTypeInfo => "ptr",
 
-            // Wrappers (Viewed, Grasped, Hijacked, etc.) -> all pointers at LLVM level
+            // Wrappers (Viewing, Modifying, Hijacked, etc.) -> all pointers at LLVM level
             WrapperTypeInfo => "ptr",
 
             // Variants -> struct { tag, payload }
@@ -609,7 +609,7 @@ public partial class LlvmCodeGenerator
 
     /// <summary>
     /// Substitutes a generic parameter name with a concrete type in a type expression.
-    /// Handles both direct substitution (T -> Point) and nested resolution (Viewed[T] -> Viewed[Point]).
+    /// Handles both direct substitution (T -> Point) and nested resolution (Viewing[T] -> Viewing[Point]).
     /// </summary>
     private TypeInfo SubstituteGenericParamInType(TypeInfo type, string paramName,
         TypeInfo concreteType) // NOSONAR S3776

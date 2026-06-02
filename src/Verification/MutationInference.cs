@@ -10,12 +10,12 @@ using Verification.Enums;
 namespace Verification;
 
 /// <summary>
-/// Performs modification inference for routines.
+/// Performs mutation inference for routines.
 /// Implements the three-phase algorithm from the wiki:
 ///
 /// Phase 1 (Direct Analysis):
 ///   - If method writes to any member variable of me -> mark as Writable
-///   - If method calls .grasp() on me member variables -> mark as Writable
+///   - If method calls .modify() on me member variables -> mark as Writable
 ///
 /// Phase 2 (Call Graph Propagation):
 ///   - If method calls a Writable method on me -> mark as Writable
@@ -23,38 +23,38 @@ namespace Verification;
 ///   - Repeat until fixpoint (no changes)
 ///
 /// Phase 3 (Token Checking):
-///   - Viewed/Inspected tokens can only call Readonly methods
-///   - Grasped/Claimed tokens can call Readonly or Writable methods
+///   - Viewing/Inspecting tokens can only call Readonly methods
+///   - Modifying/Claiming tokens can call Readonly or Writable methods
 ///   - Only owned/non-token access can call Migratable methods
 /// </summary>
-public sealed class ModificationInference
+public sealed class MutationInference
 {
     private readonly CallGraph _callGraph;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ModificationInference"/> class.
+    /// Initializes a new instance of the <see cref="MutationInference"/> class.
     /// </summary>
     /// <param name="callGraph">The call graph to analyze.</param>
     /// <param name="registry">The type registry for lookups.</param>
-    public ModificationInference(CallGraph callGraph, TypeRegistry registry)
+    public MutationInference(CallGraph callGraph, TypeRegistry registry)
     {
         _callGraph = callGraph;
     }
 
     /// <summary>
-    /// Runs the complete modification inference algorithm.
+    /// Runs the complete mutation inference algorithm.
     /// </summary>
     public void InferAll()
     {
         // Phase 1: Direct analysis (already done during AST traversal)
-        // The DirectlyModifies flag should be set on CallGraphNodes
+        // The DirectlyMutates flag should be set on CallGraphNodes
 
         // Phase 2: Call graph propagation
         PropagateCategories();
     }
 
     /// <summary>
-    /// Phase 2: Propagates modification categories through the call graph.
+    /// Phase 2: Propagates mutation categories through the call graph.
     /// Uses fixpoint iteration until no changes occur.
     /// </summary>
     private void PropagateCategories()
@@ -67,40 +67,40 @@ public sealed class ModificationInference
 
             foreach (CallGraphNode node in _callGraph.AllNodes)
             {
-                ModificationCategory originalCategory = node.InferredModification;
-                ModificationCategory newCategory = ComputeCategory(node: node);
+                MutationCategory originalCategory = node.InferredMutation;
+                MutationCategory newCategory = ComputeCategory(node: node);
 
                 if (newCategory <= originalCategory)
                 {
                     continue;
                 }
 
-                node.InferredModification = newCategory;
+                node.InferredMutation = newCategory;
                 changed = true;
             }
         }
     }
 
     /// <summary>
-    /// Computes the modification category for a node based on its direct modifications
+    /// Computes the mutation category for a node based on its direct mutations
     /// and the categories of methods it calls on 'me'.
     /// </summary>
     /// <param name="node">The node to compute the category for.</param>
-    /// <returns>The computed modification category.</returns>
-    private static ModificationCategory ComputeCategory(CallGraphNode node)
+    /// <returns>The computed mutation category.</returns>
+    private static MutationCategory ComputeCategory(CallGraphNode node)
     {
         // Start from the declared floor — user annotations are never downgraded.
-        ModificationCategory category = node.Routine.DeclaredModification;
+        MutationCategory category = node.Routine.DeclaredMutation;
 
-        // Direct modifications
-        if (node.DirectlyModifies && category < ModificationCategory.Writable)
+        // Direct mutations
+        if (node.DirectlyMutates && category < MutationCategory.Writable)
         {
-            category = ModificationCategory.Writable;
+            category = MutationCategory.Writable;
         }
 
-        if (node.DirectlyMigrates && category < ModificationCategory.Migratable)
+        if (node.DirectlyMigrates && category < MutationCategory.Migratable)
         {
-            category = ModificationCategory.Migratable;
+            category = MutationCategory.Migratable;
         }
 
         // Propagate from callees (only for calls on 'me')
@@ -111,7 +111,7 @@ public sealed class ModificationInference
                 continue;
             }
 
-            ModificationCategory calleeCategory = edge.Target.InferredModification;
+            MutationCategory calleeCategory = edge.Target.InferredMutation;
             if (calleeCategory > category)
             {
                 category = calleeCategory;
@@ -122,58 +122,58 @@ public sealed class ModificationInference
     }
 
     /// <summary>
-    /// Analyzes a statement for direct modifications (member variable writes to 'me').
+    /// Analyzes a statement for direct mutations (member variable writes to 'me').
     /// Call this during Phase 1 AST traversal.
     /// </summary>
     /// <param name="node">The call graph node for the current routine.</param>
     /// <param name="statement">The statement to analyze.</param>
-    public void AnalyzeStatementForModification(CallGraphNode node, Statement statement)
+    public void AnalyzeStatementForMutation(CallGraphNode node, Statement statement)
     {
         switch (statement)
         {
             case AssignmentStatement assign:
-                AnalyzeAssignmentForModification(node: node, assignment: assign);
+                AnalyzeAssignmentForMutation(node: node, assignment: assign);
                 break;
 
             case BlockStatement block:
                 foreach (Statement stmt in block.Statements)
                 {
-                    AnalyzeStatementForModification(node: node, statement: stmt);
+                    AnalyzeStatementForMutation(node: node, statement: stmt);
                 }
 
                 break;
 
             case IfStatement ifStmt:
-                AnalyzeStatementForModification(node: node, statement: ifStmt.ThenStatement);
+                AnalyzeStatementForMutation(node: node, statement: ifStmt.ThenStatement);
                 if (ifStmt.ElseStatement != null)
                 {
-                    AnalyzeStatementForModification(node: node, statement: ifStmt.ElseStatement);
+                    AnalyzeStatementForMutation(node: node, statement: ifStmt.ElseStatement);
                 }
 
                 break;
 
             case WhileStatement whileStmt:
-                AnalyzeStatementForModification(node: node, statement: whileStmt.Body);
+                AnalyzeStatementForMutation(node: node, statement: whileStmt.Body);
                 break;
 
             case LoopStatement loopStmt:
-                AnalyzeStatementForModification(node: node, statement: loopStmt.Body);
+                AnalyzeStatementForMutation(node: node, statement: loopStmt.Body);
                 break;
 
             case ForStatement forStmt:
-                AnalyzeStatementForModification(node: node, statement: forStmt.Body);
+                AnalyzeStatementForMutation(node: node, statement: forStmt.Body);
                 break;
 
-            // Other statement types don't directly modify member variables
+            // Other statement types don't directly mutate member variables
         }
     }
 
     /// <summary>
-    /// Analyzes an assignment for direct modifications to 'me'.
+    /// Analyzes an assignment for direct mutations to 'me'.
     /// </summary>
     /// <param name="node">The call graph node.</param>
     /// <param name="assignment">The assignment statement.</param>
-    private static void AnalyzeAssignmentForModification(CallGraphNode node,
+    private static void AnalyzeAssignmentForMutation(CallGraphNode node,
         AssignmentStatement assignment)
     {
         if (!IsMemberVariableOfMe(expression: assignment.Target))
@@ -181,15 +181,15 @@ public sealed class ModificationInference
             return;
         }
 
-        node.DirectlyModifies = true;
-        node.InferredModification = ModificationCategory.Writable;
+        node.DirectlyMutates = true;
+        node.InferredMutation = MutationCategory.Writable;
 
         // A direct write to a Hijacked[T] field relocates the buffer pointer — migratable.
         if (assignment.Target is MemberExpression { Object: IdentifierExpression { Name: "me" } } direct
             && IsHijackedField(ownerType: node.Routine.OwnerType, fieldName: direct.PropertyName))
         {
             node.DirectlyMigrates = true;
-            node.InferredModification = ModificationCategory.Migratable;
+            node.InferredMutation = MutationCategory.Migratable;
         }
     }
 

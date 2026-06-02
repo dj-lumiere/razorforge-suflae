@@ -602,10 +602,10 @@ public sealed partial class StdlibLoader
         // Parameterized type like List[Character], Dict[Text, S32]
         if (typeExpr.GenericArguments is { Count: > 0 })
         {
-            // Wrapper types (Hijacked, Viewed, Grasped, etc.) are not in _types — create directly
+            // Wrapper types (Hijacked, Viewing, Modifying, etc.) are not in _types — create directly
             if (typeExpr.GenericArguments.Count == 1 &&
-                typeName is "Hijacked" or "Viewed" or "Grasped"
-                    or "Retained" or "Tracked" or "Owned")
+                typeName is "Hijacked" or "Viewing" or "Modifying"
+                    or "Retained" or "Tracked")
             {
                 TypeInfo? wrapperInner = ResolveSimpleType(registry: registry,
                     typeExpr: typeExpr.GenericArguments[index: 0],
@@ -613,7 +613,7 @@ public sealed partial class StdlibLoader
                     moduleName: moduleName);
                 if (wrapperInner != null)
                 {
-                    bool isReadOnly = typeName is "Viewed";
+                    bool isReadOnly = typeName is "Viewing";
                     return registry.GetOrCreateWrapperType(wrapperName: typeName,
                         innerType: wrapperInner,
                         isReadOnly: isReadOnly);

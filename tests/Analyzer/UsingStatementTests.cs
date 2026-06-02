@@ -18,7 +18,7 @@ public class UsingStatementTests
     [Fact]
     public void Analyze_TokenUsing_BindsTokenType()
     {
-        // Token path: using with .view() binds to the Viewed token type
+        // Token path: using with .view() binds to the Viewing token type
         string source = """
                         entity Point
                           x: S32
@@ -160,7 +160,7 @@ public class UsingStatementTests
     #region Generic Using
 
     /// <summary>
-    /// Verifies semantic analysis behavior for generic using and binds the viewed wrapper type.
+    /// Verifies semantic analysis behavior for generic using and binds the viewing wrapper type.
     /// </summary>
     [Fact]
     public void Analyze_GenericUsing_BindsViewedType()

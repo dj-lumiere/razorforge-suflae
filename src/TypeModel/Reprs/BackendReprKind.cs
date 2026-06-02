@@ -15,7 +15,7 @@ public enum BackendReprKind
     EntityRef,
     /// <summary>Protocol witness pointer (fat pointer or vtable ref).</summary>
     ProtocolRef,
-    /// <summary>RC wrapper pointer (Owned/Retained/Viewed/etc.).</summary>
+    /// <summary>RC wrapper pointer (Retained/Viewing/etc.).</summary>
     WrapperRef,
     /// <summary>Function pointer (routine reference).</summary>
     RoutineRef,

@@ -1005,7 +1005,7 @@ public record CarrierPayloadExpression(
 /// Steal expression rules:
 /// <list type="bullet">
 /// <item>Can steal: raw entities</item>
-/// <item>Cannot steal: Viewed&lt;T&gt;, Grasped&lt;T&gt;, Retained&lt;T&gt;, Tracked&lt;T&gt;, Shared&lt;T, P&gt;, Marked&lt;T, P&gt;, Inspected&lt;T&gt;, Claimed&lt;T&gt;, Hijacked&lt;T&gt;</item>
+/// <item>Cannot steal: Viewing&lt;T&gt;, Modifying&lt;T&gt;, Retained&lt;T&gt;, Tracked&lt;T&gt;, Shared&lt;T, P&gt;, Watched&lt;T, P&gt;, Inspecting&lt;T&gt;, Claiming&lt;T&gt;, Hijacked&lt;T&gt;</item>
 /// <item>After stealing, source becomes deadref (using it is a build error)</item>
 /// <item>Used for: ownership transfer (steal node), container push (list.push(steal node)),
 /// and consuming iteration (for item in steal list)</item>

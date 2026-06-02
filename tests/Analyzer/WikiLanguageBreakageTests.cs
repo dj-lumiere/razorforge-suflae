@@ -319,7 +319,7 @@ public class WikiLanguageBreakageTests
     {
         string source = """
                         record BadRecord
-                          view: Viewed[S32]
+                          view: Viewing[S32]
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -339,7 +339,7 @@ public class WikiLanguageBreakageTests
                         entity Node
                           value: S32
 
-                        routine get_view(node: Node) -> Viewed[Node]
+                        routine get_view(node: Node) -> Viewing[Node]
                           return node.view()
                         """;
 

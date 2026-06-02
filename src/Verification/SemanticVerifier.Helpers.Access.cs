@@ -28,10 +28,10 @@ public sealed partial class SemanticVerifier
         string baseName = GetBaseTypeName(typeName: type.Name);
         return baseName switch
         {
-            "Viewed" => "read-only token (Viewed)",
-            "Grasped" => "exclusive write token (Grasped)",
-            "Inspected" => "shared read token (Inspected)",
-            "Claimed" => "exclusive shared write token (Claimed)",
+            "Viewing" => "read-only token (Viewing)",
+            "Modifying" => "exclusive write token (Modifying)",
+            "Inspecting" => "shared read token (Inspecting)",
+            "Claiming" => "exclusive shared write token (Claiming)",
             _ => "token"
         };
     }
@@ -48,7 +48,7 @@ public sealed partial class SemanticVerifier
 
         // Exempt token-producing routines: when the routine's declared return type IS a
         // token type, the routine itself is the canonical constructor for that token
-        // (e.g. T.grasp() -> Grasped[T]). Block escapes from non-token routines only.
+        // (e.g. T.modify() -> Modifying[T]). Block escapes from non-token routines only.
         if (_currentRoutine?.ReturnType != null && IsInlineOnlyTokenType(type: _currentRoutine.ReturnType))
         {
             return;
@@ -84,7 +84,7 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Validates that exclusive tokens (Grasped, Claimed) are not passed multiple times in a single call.
+    /// Validates that exclusive tokens (Modifying, Claiming) are not passed multiple times in a single call.
     /// </summary>
     private void ValidateExclusiveTokenUniqueness(List<Expression> arguments,
         SourceLocation location)

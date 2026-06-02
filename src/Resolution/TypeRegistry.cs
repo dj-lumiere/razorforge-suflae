@@ -123,7 +123,7 @@ public sealed partial class TypeRegistry
 
     /// <summary>
     /// Wrapper type resolutions cache for synthesized scoped/RC wrappers
-    /// (Viewed, Grasped, Inspected, Claimed, Hijacked, Retained, Shared, Tracked, Marked, Owned).
+    /// (Viewing, Modifying, Inspecting, Claiming, Hijacked, Retained, Shared, Tracked, Watched).
     /// Kept separate from <see cref="_resolutions"/> to prevent key collisions when both
     /// <see cref="GetOrCreateWrapperType"/> and <see cref="GetOrCreateResolution"/> produce
     /// the same FullName-based key (e.g., "Hijacked[Core.Byte]").
@@ -1153,8 +1153,8 @@ public sealed partial class TypeRegistry
                 Parameters = [],
                 ReturnType = textType,
                 IsFailable = false,
-                DeclaredModification = ModificationCategory.Readonly,
-                ModificationCategory = ModificationCategory.Readonly,
+                DeclaredMutation = MutationCategory.Readonly,
+                MutationCategory = MutationCategory.Readonly,
                 Visibility = VisibilityModifier.Open,
                 IsSynthesized = true
             });
@@ -1166,8 +1166,8 @@ public sealed partial class TypeRegistry
                 Parameters = [],
                 ReturnType = textType,
                 IsFailable = false,
-                DeclaredModification = ModificationCategory.Readonly,
-                ModificationCategory = ModificationCategory.Readonly,
+                DeclaredMutation = MutationCategory.Readonly,
+                MutationCategory = MutationCategory.Readonly,
                 Visibility = VisibilityModifier.Open,
                 IsSynthesized = true
             });
@@ -1190,8 +1190,8 @@ public sealed partial class TypeRegistry
                 Parameters = [youParam],
                 ReturnType = boolType,
                 IsFailable = false,
-                DeclaredModification = ModificationCategory.Readonly,
-                ModificationCategory = ModificationCategory.Readonly,
+                DeclaredMutation = MutationCategory.Readonly,
+                MutationCategory = MutationCategory.Readonly,
                 Visibility = VisibilityModifier.Open,
                 IsSynthesized = true
             });
@@ -1203,8 +1203,8 @@ public sealed partial class TypeRegistry
                 Parameters = [youParam],
                 ReturnType = boolType,
                 IsFailable = false,
-                DeclaredModification = ModificationCategory.Readonly,
-                ModificationCategory = ModificationCategory.Readonly,
+                DeclaredMutation = MutationCategory.Readonly,
+                MutationCategory = MutationCategory.Readonly,
                 Visibility = VisibilityModifier.Open,
                 IsSynthesized = true
             });
@@ -1222,8 +1222,8 @@ public sealed partial class TypeRegistry
                 Parameters = [],
                 ReturnType = u64Type,
                 IsFailable = false,
-                DeclaredModification = ModificationCategory.Readonly,
-                ModificationCategory = ModificationCategory.Readonly,
+                DeclaredMutation = MutationCategory.Readonly,
+                MutationCategory = MutationCategory.Readonly,
                 Visibility = VisibilityModifier.Open,
                 IsSynthesized = true
             });
@@ -1243,8 +1243,8 @@ public sealed partial class TypeRegistry
                 Parameters = [youParam],
                 ReturnType = comparisonSignType,
                 IsFailable = false,
-                DeclaredModification = ModificationCategory.Readonly,
-                ModificationCategory = ModificationCategory.Readonly,
+                DeclaredMutation = MutationCategory.Readonly,
+                MutationCategory = MutationCategory.Readonly,
                 Visibility = VisibilityModifier.Open,
                 IsSynthesized = true
             });
@@ -1265,8 +1265,8 @@ public sealed partial class TypeRegistry
                     Parameters = [youParam],
                     ReturnType = boolType,
                     IsFailable = false,
-                    DeclaredModification = ModificationCategory.Readonly,
-                    ModificationCategory = ModificationCategory.Readonly,
+                    DeclaredMutation = MutationCategory.Readonly,
+                    MutationCategory = MutationCategory.Readonly,
                     Visibility = VisibilityModifier.Open,
                     IsSynthesized = true
                 });
@@ -1277,12 +1277,12 @@ public sealed partial class TypeRegistry
     }
 
     /// <summary>
-    /// Gets or creates a synthesized wrapper type (Grasped, Inspected, Claimed, Viewed).
+    /// Gets or creates a synthesized wrapper type (Modifying, Inspecting, Claiming, Viewing).
     /// These are builder-intrinsic types that don't need to be defined in the program.
     /// </summary>
-    /// <param name="wrapperName">The name of the wrapper type (e.g., "Grasped").</param>
+    /// <param name="wrapperName">The name of the wrapper type (e.g., "Modifying").</param>
     /// <param name="innerType">The type being wrapped.</param>
-    /// <param name="isReadOnly">Whether this is a read-only wrapper (Viewed, Inspected).</param>
+    /// <param name="isReadOnly">Whether this is a read-only wrapper (Viewing, Inspecting).</param>
     /// <returns>The cached or newly created wrapper type.</returns>
     public WrapperTypeInfo GetOrCreateWrapperType(string wrapperName, TypeInfo innerType,
         bool isReadOnly)

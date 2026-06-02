@@ -19,19 +19,19 @@ public sealed class CallGraphNode
     private readonly List<CallGraphNode> _callers = [];
 
     /// <summary>
-    /// The inferred modification category for this routine.
+    /// The inferred mutation category for this routine.
     /// Seeded from the routine's declared category so user annotations are never downgraded;
     /// propagation can only upgrade toward Migratable.
     /// </summary>
-    public ModificationCategory InferredModification { get; set; }
+    public MutationCategory InferredMutation { get; set; }
 
     /// <summary>
     /// Whether this routine directly writes to member variables of 'me'.
     /// </summary>
-    public bool DirectlyModifies { get; set; }
+    public bool DirectlyMutates { get; set; }
 
     /// <summary>
-    /// Whether this routine directly modifies the internal Hijacked buffer (migratable).
+    /// Whether this routine directly mutates the internal Hijacked buffer (migratable).
     /// </summary>
     public bool DirectlyMigrates { get; set; }
 
@@ -47,7 +47,7 @@ public sealed class CallGraphNode
     public CallGraphNode(RoutineInfo routine)
     {
         Routine = routine;
-        InferredModification = routine.DeclaredModification;
+        InferredMutation = routine.DeclaredMutation;
     }
 
     /// <summary>

@@ -615,13 +615,13 @@ public sealed partial class SemanticVerifier
             {
                 TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
 
-                // Read-only wrapper types (Viewed, Inspected) cannot be written through
+                // Read-only wrapper types (Viewing, Inspecting) cannot be written through
                 if (IsReadOnlyWrapper(type: objectType))
                 {
                     ReportError(code: SemanticDiagnosticCode.WriteThroughReadOnlyWrapper,
                         message:
                         $"Cannot write to member '{member.PropertyName}' through read-only wrapper '{objectType.Name}'. " +
-                        "Use Grasped[T] for exclusive write access or Claimed[T] for locked write access.",
+                        "Use Modifying[T] for exclusive write access or Claiming[T] for locked write access.",
                         location: location);
                 }
 
@@ -633,10 +633,10 @@ public sealed partial class SemanticVerifier
                 if (_currentRoutine is { IsReadOnly: true } &&
                     member.Object is IdentifierExpression { Name: "me" })
                 {
-                    ReportError(code: SemanticDiagnosticCode.ModificationInReadonlyMethod,
+                    ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMethod,
                         message:
-                        $"Cannot modify member variable '{member.PropertyName}' in a @readonly method. " +
-                        "Use @migratable to allow modifications.",
+                        $"Cannot mutate member variable '{member.PropertyName}' in a @readonly method. " +
+                        "Use @migratable to allow mutations.",
                         location: location);
                 }
 
@@ -792,10 +792,10 @@ public sealed partial class SemanticVerifier
                 if (_currentRoutine is { IsReadOnly: true } &&
                     member.Object is IdentifierExpression { Name: "me" })
                 {
-                    ReportError(code: SemanticDiagnosticCode.ModificationInReadonlyMethod,
+                    ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMethod,
                         message:
-                        $"Cannot modify member variable '{member.PropertyName}' in a @readonly method. " +
-                        "Use @migratable to allow modifications.",
+                        $"Cannot mutate member variable '{member.PropertyName}' in a @readonly method. " +
+                        "Use @migratable to allow mutations.",
                         location: compound.Location);
                 }
 
@@ -829,13 +829,13 @@ public sealed partial class SemanticVerifier
             }
         }
 
-        // #67: Cannot use compound assignment on read-only token (Viewed or Inspected)
+        // #67: Cannot use compound assignment on read-only token (Viewing or Inspecting)
         if (targetType is WrapperTypeInfo { IsReadOnly: true } readOnlyWrapper)
         {
             ReportError(code: SemanticDiagnosticCode.CompoundAssignmentOnReadOnlyToken,
                 message:
                 $"Cannot use compound assignment on read-only token '{readOnlyWrapper.Name}'. " +
-                "Read-only tokens (Viewed, Inspected) do not allow modifications.",
+                "Read-only tokens (Viewing, Inspecting) do not allow modifications.",
                 location: compound.Location);
             return ErrorTypeInfo.Instance;
         }
@@ -974,14 +974,14 @@ public sealed partial class SemanticVerifier
                     operandType.TypeArguments is { Count: > 0 })
                 {
                     TypeSymbol inner = operandType.TypeArguments[index: 0];
-                    // `Maybe[T]!!` yields `Grasped[T]` — Owned is unique, so the unwrap
+                    // `Maybe[T]!!` yields `Modifying[T]` — the unwrap
                     // is an exclusive scope-bound borrow, not a copy. Same LLVM repr (ptr), but
-                    // typed as Grasped so the destructor scheduler skips it.
+                    // typed as Modifying so the destructor scheduler skips it.
                     if (IsMaybeType(type: operandType) &&
                         IsOwnedOf(type: inner, out TypeSymbol ownedInner))
                     {
                         return _registry.GetOrCreateWrapperType(
-                            wrapperName: "Grasped",
+                            wrapperName: "Modifying",
                             innerType: ownedInner,
                             isReadOnly: false);
                     }

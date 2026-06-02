@@ -96,7 +96,7 @@ public class AccessBlockTests
         string source = """
                         routine test()
                           var data = SomeEntity()
-                          using data.grasp() as h
+                          using data.modify() as h
                             h.value = 42
                           return
                         """;
@@ -113,7 +113,7 @@ public class AccessBlockTests
         string source = """
                         routine test()
                           var node = Node(42)
-                          using node.grasp() as h
+                          using node.modify() as h
                             h.value = 42
                             h.name = "foo"
                             process(h)
@@ -132,7 +132,7 @@ public class AccessBlockTests
         string source = """
                         routine test()
                           var counter = Counter()
-                          using counter.grasp() as c
+                          using counter.modify() as c
                             if c.value < 100
                               c.value += 1
                             else
@@ -143,8 +143,8 @@ public class AccessBlockTests
         AssertParses(source: source);
     }
 
-    // Nested grasping test moved til Analyzer/MutabilityTests.cs
-    // It parses correctly but should be rejected by semantic analysis (partial grasping)
+    // Nested modifying test moved til Analyzer/MutabilityTests.cs
+    // It parses correctly but should be rejected by semantic analysis (partial modifying)
 
     #endregion
 
@@ -353,7 +353,7 @@ public class AccessBlockTests
                           using data.view() as v
                             if v.needs_update()
                               pass
-                          using data.grasp() as h
+                          using data.modify() as h
                             h.update()
                           return
                         """;
@@ -433,7 +433,7 @@ public class AccessBlockTests
         string source = """
                         routine test()
                           var node = Node(42)
-                          node.grasp().value += 1
+                          node.modify().value += 1
                           return
                         """;
 

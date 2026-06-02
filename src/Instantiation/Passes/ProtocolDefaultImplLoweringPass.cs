@@ -276,7 +276,7 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
 
     private static TypeInfo UnwrapWrappers(TypeInfo t)
     {
-        // Strip Owned/Retained/Tracked/Viewed/Grasped/Hijacked/Referring/Controlling layers
+        // Strip Retained/Tracked/Viewing/Modifying/Hijacked/Referring/Controlling layers
         // to get at the implementer record/entity.
         while (t is WrapperTypeInfo w)
         {

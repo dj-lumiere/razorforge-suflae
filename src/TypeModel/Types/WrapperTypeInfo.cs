@@ -5,7 +5,7 @@ using TypeModel.Enums;
 namespace TypeModel.Types;
 
 /// <summary>
-/// Builder-synthesized wrapper types (Viewed, Grasped, Retained, Tracked, Shared, Marked, Inspected, Claimed, Hijacked, Owned).
+/// Builder-synthesized wrapper types (Viewing, Modifying, Retained, Tracked, Shared, Watched, Inspecting, Claiming, Hijacked).
 /// These types transparently forward member access to their inner type while providing
 /// ownership and access control semantics.
 /// </summary>
@@ -17,13 +17,13 @@ public sealed class WrapperTypeInfo : TypeInfo
     /// <summary>The inner type being wrapped (T in Wrapper&lt;T&gt;).</summary>
     public TypeInfo InnerType { get; }
 
-    /// <summary>Whether this is a read-only wrapper (Viewed, Inspected).</summary>
+    /// <summary>Whether this is a read-only wrapper (Viewing, Inspecting).</summary>
     public bool IsReadOnly { get; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WrapperTypeInfo"/> class.
     /// </summary>
-    /// <param name="wrapperName">The name of the wrapper type (e.g., "Grasped", "Viewed").</param>
+    /// <param name="wrapperName">The name of the wrapper type (e.g., "Modifying", "Viewing").</param>
     /// <param name="innerType">The type being wrapped.</param>
     /// <param name="isReadOnly">Whether this is a read-only wrapper.</param>
     public WrapperTypeInfo(string wrapperName, TypeInfo innerType, bool isReadOnly = false) : base(
@@ -58,31 +58,31 @@ public sealed class WrapperTypeInfo : TypeInfo
         /// <summary>
         /// Read-only single-threaded wrapper. Provides unmodifiable view of the inner value.
         /// </summary>
-        public static readonly WrapperTypeInfo ViewedDefinition = new(wrapperName: "Viewed",
+        public static readonly WrapperTypeInfo ViewingDefinition = new(wrapperName: "Viewing",
             innerType: ErrorTypeInfo.Instance, // Placeholder, will be resolved with actual type
             isReadOnly: true) { GenericParameters = ["T"], Module = "Core" };
 
         /// <summary>
         /// Exclusive-write single-threaded wrapper. Provides modifiable access with exclusive ownership.
         /// </summary>
-        public static readonly WrapperTypeInfo GraspedDefinition = new(
-            wrapperName: "Grasped",
+        public static readonly WrapperTypeInfo ModifyingDefinition = new(
+            wrapperName: "Modifying",
             innerType: ErrorTypeInfo.Instance,
             isReadOnly: false) { GenericParameters = ["T"], Module = "Core" };
 
         /// <summary>
         /// Read-only multi-threaded wrapper. Thread-safe unmodifiable view.
         /// </summary>
-        public static readonly WrapperTypeInfo InspectedDefinition = new(
-            wrapperName: "Inspected",
+        public static readonly WrapperTypeInfo InspectingDefinition = new(
+            wrapperName: "Inspecting",
             innerType: ErrorTypeInfo.Instance,
             isReadOnly: true) { GenericParameters = ["T"], Module = "Core" };
 
         /// <summary>
         /// Exclusive-write multi-threaded wrapper. Thread-safe modifiable access with exclusive ownership.
         /// </summary>
-        public static readonly WrapperTypeInfo ClaimedDefinition = new(
-            wrapperName: "Claimed",
+        public static readonly WrapperTypeInfo ClaimingDefinition = new(
+            wrapperName: "Claiming",
             innerType: ErrorTypeInfo.Instance,
             isReadOnly: false) { GenericParameters = ["T"], Module = "Core" };
 
@@ -113,8 +113,8 @@ public sealed class WrapperTypeInfo : TypeInfo
         /// <summary>
         /// Weak-reference wrapper. Non-owning reference that can become invalid.
         /// </summary>
-        public static readonly WrapperTypeInfo TrackedDefinition = new(
-            wrapperName: "Marked",
+        public static readonly WrapperTypeInfo WatchedDefinition = new(
+            wrapperName: "Watched",
             innerType: ErrorTypeInfo.Instance,
             isReadOnly: false) { GenericParameters = ["T"], Module = "Core" };
 
@@ -126,28 +126,18 @@ public sealed class WrapperTypeInfo : TypeInfo
             innerType: ErrorTypeInfo.Instance,
             isReadOnly: false) { GenericParameters = ["T"], Module = "Core" };
 
-        /// <summary>
-        /// Exclusive-ownership wrapper. Equivalent to unique_ptr — single owner, freed at scope end.
-        /// Constraint: T must be EntityType. Transfer via steal.
-        /// </summary>
-        public static readonly WrapperTypeInfo OwnedDefinition = new(
-            wrapperName: "Owned",
-            innerType: ErrorTypeInfo.Instance,
-            isReadOnly: false) { GenericParameters = ["T"], Module = "Core" };
-
         /// <summary>All well-known wrapper type definitions.</summary>
         public static IEnumerable<WrapperTypeInfo> All =>
         [
-            ViewedDefinition,
-            GraspedDefinition,
+            ViewingDefinition,
+            ModifyingDefinition,
             RetainedDefinition,
             TrackedWeakDefinition,
-            InspectedDefinition,
-            ClaimedDefinition,
+            InspectingDefinition,
+            ClaimingDefinition,
             SharedDefinition,
-            TrackedDefinition,
+            WatchedDefinition,
             HijackedDefinition,
-            OwnedDefinition
         ];
     }
 }

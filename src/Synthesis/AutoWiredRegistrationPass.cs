@@ -121,7 +121,7 @@ internal sealed class AutoWiredRegistrationPass
                 case TypeCategory.Record:
                     // Blank maps to LLVM void — it cannot appear as a parameter type.
                     // Skip comparison/hash/copy stubs; two Blanks are trivially equal.
-                    // Wrapper types (Owned, Retained, Viewed, etc.) are transparent forwarders —
+                    // Wrapper types (Retained, Viewing, etc.) are transparent forwarders —
                     // WrapperForwardingPass lazily synthesizes their $hash/$eq/$cmp from the inner T.
                     // Don't register field-based stubs here: for zero-field wrappers (T)
                     // WiredRoutinePass would generate wrong bodies (returns 0 / returns true).
@@ -227,8 +227,8 @@ internal sealed class AutoWiredRegistrationPass
                                                         .ToList(),
                             ReturnType = type,
                             IsFailable = false,
-                            DeclaredModification = ModificationCategory.Readonly,
-                            ModificationCategory = ModificationCategory.Readonly,
+                            DeclaredMutation = MutationCategory.Readonly,
+                            MutationCategory = MutationCategory.Readonly,
                             Visibility = VisibilityModifier.Open,
                             IsSynthesized = true
                         });
@@ -283,8 +283,8 @@ internal sealed class AutoWiredRegistrationPass
                             Parameters = [new ParameterInfo(name: "from", type: type)],
                             ReturnType = s64Type,
                             IsFailable = false,
-                            DeclaredModification = ModificationCategory.Readonly,
-                            ModificationCategory = ModificationCategory.Readonly,
+                            DeclaredMutation = MutationCategory.Readonly,
+                            MutationCategory = MutationCategory.Readonly,
                             Visibility = VisibilityModifier.Open,
                             IsSynthesized = true
                         });
@@ -338,8 +338,8 @@ internal sealed class AutoWiredRegistrationPass
                                                            .ToList(),
                             ReturnType = type,
                             IsFailable = false,
-                            DeclaredModification = ModificationCategory.Readonly,
-                            ModificationCategory = ModificationCategory.Readonly,
+                            DeclaredMutation = MutationCategory.Readonly,
+                            MutationCategory = MutationCategory.Readonly,
                             Visibility = VisibilityModifier.Open,
                             IsSynthesized = true
                         });
@@ -403,8 +403,8 @@ internal sealed class AutoWiredRegistrationPass
                             Parameters = [new ParameterInfo(name: "from", type: type)],
                             ReturnType = u64Type,
                             IsFailable = false,
-                            DeclaredModification = ModificationCategory.Readonly,
-                            ModificationCategory = ModificationCategory.Readonly,
+                            DeclaredMutation = MutationCategory.Readonly,
+                            MutationCategory = MutationCategory.Readonly,
                             Visibility = VisibilityModifier.Open,
                             IsSynthesized = true
                         });
@@ -503,8 +503,8 @@ internal sealed class AutoWiredRegistrationPass
                     Parameters = [new ParameterInfo(name: "from", type: type)],
                     ReturnType = textType,
                     IsFailable = false,
-                    DeclaredModification = ModificationCategory.Readonly,
-                    ModificationCategory = ModificationCategory.Readonly,
+                    DeclaredMutation = MutationCategory.Readonly,
+                    MutationCategory = MutationCategory.Readonly,
                     Visibility = VisibilityModifier.Open,
                     IsSynthesized = true
                 });
@@ -567,8 +567,8 @@ internal sealed class AutoWiredRegistrationPass
             Parameters = [],
             ReturnType = returnType,
             IsFailable = false,
-            DeclaredModification = ModificationCategory.Readonly,
-            ModificationCategory = ModificationCategory.Readonly,
+            DeclaredMutation = MutationCategory.Readonly,
+            MutationCategory = MutationCategory.Readonly,
             Visibility = VisibilityModifier.Open,
             IsSynthesized = true
         });
@@ -595,15 +595,15 @@ internal sealed class AutoWiredRegistrationPass
             ReturnType = blankType,
             IsFailable = false,
             IsDangerous = true,
-            DeclaredModification = ModificationCategory.Readonly,
-            ModificationCategory = ModificationCategory.Readonly,
+            DeclaredMutation = MutationCategory.Readonly,
+            MutationCategory = MutationCategory.Readonly,
             Visibility = VisibilityModifier.Open,
             IsSynthesized = true
         });
     }
 
     /// <summary>
-    /// True for RC wrapper types (Owned/Retained/Tracked/Viewed/Grasped/Hijacked/...) — they
+    /// True for RC wrapper types (Retained/Tracked/Viewing/Modifying/Hijacked/...) — they
     /// supply their own custom destructor / forwarders and are excluded from generated `$destroy`.
     /// </summary>
     private static bool IsWrapperType(TypeSymbol type)
@@ -640,8 +640,8 @@ internal sealed class AutoWiredRegistrationPass
             ],
             ReturnType = u64Type,
             IsFailable = false,
-            DeclaredModification = ModificationCategory.Readonly,
-            ModificationCategory = ModificationCategory.Readonly,
+            DeclaredMutation = MutationCategory.Readonly,
+            MutationCategory = MutationCategory.Readonly,
             Visibility = VisibilityModifier.Open,
             IsSynthesized = true
         });
@@ -665,8 +665,8 @@ internal sealed class AutoWiredRegistrationPass
             Parameters = [new ParameterInfo(name: paramName, type: paramType)],
             ReturnType = returnType,
             IsFailable = false,
-            DeclaredModification = ModificationCategory.Readonly,
-            ModificationCategory = ModificationCategory.Readonly,
+            DeclaredMutation = MutationCategory.Readonly,
+            MutationCategory = MutationCategory.Readonly,
             Visibility = VisibilityModifier.Open,
             IsSynthesized = true
         });
@@ -693,8 +693,8 @@ internal sealed class AutoWiredRegistrationPass
                 : [],
             ReturnType = returnType,
             IsFailable = true,
-            DeclaredModification = ModificationCategory.Readonly,
-            ModificationCategory = ModificationCategory.Readonly,
+            DeclaredMutation = MutationCategory.Readonly,
+            MutationCategory = MutationCategory.Readonly,
             Visibility = VisibilityModifier.Open,
             IsSynthesized = true
         });

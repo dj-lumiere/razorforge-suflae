@@ -102,7 +102,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
             _movedNames.UnionWith(other: stolen);
 
         // Consuming entity parameters are owned by the routine and torn down at every exit, exactly
-        // like a top-level local. (Borrows arrive as Referring/Controlling/Viewed/Grasped wrappers,
+        // like a top-level local. (Borrows arrive as Referring/Controlling/Viewing/Modifying wrappers,
         // never as bare EntityTypeInfo, so they are correctly excluded.)
         var paramLive = new List<Owned>();
         foreach (Parameter p in r.Parameters)
@@ -306,7 +306,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
     /// <summary>
     /// Every type has a `$destroy`, so by default it's called at scope exit (the per-type
     /// `$destroy` is a cheap no-op when there's nothing to free). The ONLY exclusions are the
-    /// access/borrow tier — `Viewed`/`Grasped`/`Inspected`/`Claimed` views, the `Referring`/
+    /// access/borrow tier — `Viewing`/`Modifying`/`Inspecting`/`Claiming` views, the `Referring`/
     /// `Controlling` access protocols, and the unmanaged `Hijacked` pointer — whose referent is
     /// owned elsewhere, so destroying them here would free a caller's value. Abstract types
     /// (generic params, protocols) likewise have no concrete destructor to call.

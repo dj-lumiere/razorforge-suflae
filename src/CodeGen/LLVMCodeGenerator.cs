@@ -59,8 +59,8 @@ public partial class LlvmCodeGenerator
     // TODO: It shouldn't know about all these types because they are going to be llvm ptr anyway.
     private static readonly HashSet<string> WrapperTypeNames =
     [
-        "Viewed", "Grasped", "Retained", "Tracked", "Inspected", "Claimed", "Shared",
-        "Marked", "Hijacked", "Owned"
+        "Viewing", "Modifying", "Retained", "Tracked", "Inspecting", "Claiming", "Shared",
+        "Watched", "Hijacked"
     ];
 
     /// <summary>The user program ASTs to generate code for (single-file or multi-file).</summary>

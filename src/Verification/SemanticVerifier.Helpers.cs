@@ -569,8 +569,8 @@ public sealed partial class SemanticVerifier
         if (target.Category == TypeCategory.Protocol)
         {
             // Borrow protocols (Referring[T] / Controlling[T]) accept an ownership-carrying or
-            // bare source whose inner type matches T. Owned/Retained/Grasped are accepted by
-            // both; Viewed is readonly so accepted only by Referring; Hijacked needs explicit
+            // bare source whose inner type matches T. Retained/Modifying are accepted by
+            // both; Viewing is readonly so accepted only by Referring; Hijacked needs explicit
             // .as_entity() — never accepted by implicit borrow coercion.
             string targetBase = GetBaseTypeName(typeName: target.Name);
             if ((targetBase == "Referring" || targetBase == "Controlling") &&
@@ -581,9 +581,9 @@ public sealed partial class SemanticVerifier
                         inner: out TypeSymbol? srcInner))
                 {
                     bool wrapperAllowed = targetBase == "Referring"
-                        ? srcWrapper is "Owned" or "Retained" or "Grasped" or "Viewed"
+                        ? srcWrapper is "Retained" or "Modifying" or "Viewing"
                             or "Controlling" or "Referring"
-                        : srcWrapper is "Owned" or "Retained" or "Grasped" or "Controlling";
+                        : srcWrapper is "Retained" or "Modifying" or "Controlling";
                     if (wrapperAllowed && srcInner != null &&
                         (srcInner.FullName == borrowInner.FullName ||
                          srcInner.Name == borrowInner.Name))
@@ -658,14 +658,14 @@ public sealed partial class SemanticVerifier
     /// </summary>
     /// <summary>
     /// If <paramref name="type"/> is an ownership-carrying or borrow wrapper
-    /// (Owned/Retained/Tracked/Grasped/Viewed/Controlling/Referring/Hijacked) over some inner T,
+    /// (Retained/Tracked/Modifying/Viewing/Controlling/Referring/Hijacked) over some inner T,
     /// returns the base wrapper name and inner T. Returns false for anything else.
     /// </summary>
     private static bool TryGetOwnershipWrapperInner(TypeSymbol type, out string? wrapperBase,
         out TypeSymbol? inner)
     {
         string baseName = GetBaseTypeName(typeName: type.Name);
-        if (baseName is "Owned" or "Retained" or "Tracked" or "Grasped" or "Viewed"
+        if (baseName is "Retained" or "Tracked" or "Modifying" or "Viewing"
             or "Controlling" or "Referring" or "Hijacked")
         {
             if (type is WrapperTypeInfo { InnerType: not null } w)

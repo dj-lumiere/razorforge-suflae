@@ -12,13 +12,13 @@ using TypeSymbol = TypeInfo;
 
 public sealed partial class SemanticVerifier
 {
-    private const string GraspedWrapperName = "Grasped";
-    private const string ClaimedWrapperName = "Claimed";
-    private const string ViewedWrapperName = "Viewed";
-    private const string InspectedWrapperName = "Inspected";
+    private const string ModifyingWrapperName = "Modifying";
+    private const string ClaimingWrapperName = "Claiming";
+    private const string ViewingWrapperName = "Viewing";
+    private const string InspectingWrapperName = "Inspecting";
     private const string ScopedNoEscapeHint = "(none — scoped, can't escape)";
 
-    private bool IsNestedGrasping(Expression source)
+    private bool IsNestedModifying(Expression source)
     {
         while (true)
         {
@@ -36,28 +36,28 @@ public sealed partial class SemanticVerifier
                 continue;
             }
 
-            // Look up the variable and check if its type is Grasped<T>
+            // Look up the variable and check if its type is Modifying<T>
             VariableInfo? varInfo = _registry.LookupVariable(name: id.Name);
             return varInfo != null &&
-                   // Check if the variable's type is Grasped<T>
-                   IsGraspedType(type: varInfo.Type);
+                   // Check if the variable's type is Modifying<T>
+                   IsModifyingType(type: varInfo.Type);
         }
     }
 
     /// <summary>
-    /// Checks if a type is a Grasped&lt;T&gt; token type.
+    /// Checks if a type is a Modifying&lt;T&gt; token type.
     /// </summary>
-    private static bool IsGraspedType(TypeSymbol type)
+    private static bool IsModifyingType(TypeSymbol type)
     {
-        return type.Name == GraspedWrapperName || type.Name.StartsWith(value: GraspedWrapperName + "[");
+        return type.Name == ModifyingWrapperName || type.Name.StartsWith(value: ModifyingWrapperName + "[");
     }
 
     /// <summary>
-    /// Checks if a type is a Claimed&lt;T&gt; token type.
+    /// Checks if a type is a Claiming&lt;T&gt; token type.
     /// </summary>
-    private static bool IsClaimedType(TypeSymbol type)
+    private static bool IsClaimingType(TypeSymbol type)
     {
-        return type.Name == ClaimedWrapperName || type.Name.StartsWith(value: ClaimedWrapperName + "[");
+        return type.Name == ClaimingWrapperName || type.Name.StartsWith(value: ClaimingWrapperName + "[");
     }
 
     /// <summary>
@@ -69,11 +69,11 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Checks if a type is a Marked&lt;T&gt; handle type.
+    /// Checks if a type is a Watched&lt;T&gt; handle type.
     /// </summary>
-    private static bool IsMarkedType(TypeSymbol type)
+    private static bool IsWatchedType(TypeSymbol type)
     {
-        return type.Name == "Marked";
+        return type.Name == "Watched";
     }
 
     /// <summary>
@@ -81,16 +81,15 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static readonly HashSet<string> WrapperTypes =
     [
-        ViewedWrapperName,    // Read-only single-threaded token
-        GraspedWrapperName,  // Exclusive write single-threaded token
-        InspectedWrapperName, // Read-only multi-threaded token
-        ClaimedWrapperName,    // Exclusive write multi-threaded token
+        ViewingWrapperName,    // Read-only single-threaded token
+        ModifyingWrapperName,  // Exclusive write single-threaded token
+        InspectingWrapperName, // Read-only multi-threaded token
+        ClaimingWrapperName,   // Exclusive write multi-threaded token
         "Shared",    // Reference-counted multi-threaded handle
-        "Marked",    // Weak reference multi-threaded handle
+        "Watched",   // Weak reference multi-threaded handle
         "Retained",  // Reference-counted handle
         "Tracked",   // Weak reference handle
         "Hijacked",  // Unmanaged raw pointer handle
-        "Owned"      // Exclusive ownership wrapper (unique_ptr equivalent)
     ];
 
     /// <summary>
@@ -98,12 +97,12 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static readonly HashSet<string> ReadOnlyWrapperTypes =
     [
-        ViewedWrapperName, // Read-only single-threaded token
-        InspectedWrapperName // Read-only multi-threaded token
+        ViewingWrapperName, // Read-only single-threaded token
+        InspectingWrapperName // Read-only multi-threaded token
     ];
 
     /// <summary>
-    /// Checks if a type is a wrapper type (Viewed, Grasped, Shared, etc.).
+    /// Checks if a type is a wrapper type (Viewing, Modifying, Shared, etc.).
     /// </summary>
     /// <param name="type">The type to check.</param>
     /// <returns>True if the type is a wrapper type.</returns>
@@ -114,7 +113,7 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Checks if a wrapper type is read-only (Viewed, Inspected).
+    /// Checks if a wrapper type is read-only (Viewing, Inspecting).
     /// </summary>
     /// <param name="type">The wrapper type to check.</param>
     /// <returns>True if the wrapper is read-only.</returns>
@@ -125,7 +124,7 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Gets the inner type from a wrapper type (e.g., T from Viewed&lt;T&gt;).
+    /// Gets the inner type from a wrapper type (e.g., T from Viewing&lt;T&gt;).
     /// </summary>
     /// <param name="wrapperType">The wrapper type.</param>
     /// <returns>The inner type, or null if not a wrapper or no type arguments.</returns>
@@ -172,7 +171,7 @@ public sealed partial class SemanticVerifier
 
     /// <summary>
     /// Validates that a method can be called through a read-only wrapper.
-    /// Read-only wrappers (Viewed, Inspected) can only call @readonly methods.
+    /// Read-only wrappers (Viewing, Inspecting) can only call @readonly methods.
     /// </summary>
     /// <param name="wrapperType">The wrapper type being used.</param>
     /// <param name="method">The method being called.</param>
@@ -203,10 +202,10 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static readonly HashSet<string> InlineOnlyTokenTypes =
     [
-        ViewedWrapperName, // Read-only single-threaded token
-        GraspedWrapperName, // Exclusive write single-threaded token
-        InspectedWrapperName, // Read-only multi-threaded token
-        ClaimedWrapperName // Exclusive write multi-threaded token
+        ViewingWrapperName, // Read-only single-threaded token
+        ModifyingWrapperName, // Exclusive write single-threaded token
+        InspectingWrapperName, // Read-only multi-threaded token
+        ClaimingWrapperName // Exclusive write multi-threaded token
     ];
 
     /// <summary>
@@ -214,8 +213,8 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static readonly HashSet<string> ExclusiveTokenTypes =
     [
-        GraspedWrapperName, // Cannot pass same Grasped token twice
-        ClaimedWrapperName // Cannot pass same Claimed token twice
+        ModifyingWrapperName, // Cannot pass same Modifying token twice
+        ClaimingWrapperName // Cannot pass same Claiming token twice
     ];
 
     /// <summary>
@@ -227,15 +226,14 @@ public sealed partial class SemanticVerifier
     private static readonly Dictionary<string, string> NonTriviallyCopyableWrappers =
         new(StringComparer.Ordinal)
         {
-            ["Owned"] = "steal a",
             ["Retained"] = "a.retain()",
             ["Tracked"] = "a.track()",
             ["Shared"] = "a.share()",
-            ["Marked"] = "a.mark()",
-            [ViewedWrapperName] = ScopedNoEscapeHint,
-            [GraspedWrapperName] = ScopedNoEscapeHint,
-            [InspectedWrapperName] = ScopedNoEscapeHint,
-            [ClaimedWrapperName] = ScopedNoEscapeHint,
+            ["Watched"] = "a.watch()",
+            [ViewingWrapperName] = ScopedNoEscapeHint,
+            [ModifyingWrapperName] = ScopedNoEscapeHint,
+            [InspectingWrapperName] = ScopedNoEscapeHint,
+            [ClaimingWrapperName] = ScopedNoEscapeHint,
         };
 
     /// <summary>
@@ -243,7 +241,7 @@ public sealed partial class SemanticVerifier
     /// non-<c>steal</c> argument pass, non-<c>?T</c> return, <c>with</c> base). The check
     /// is "obeys <c>Assignable</c>" — auto-derived for records whose @llvm layout has no
     /// <c>ptr</c>, explicitly opt-in for raw-pointer wrappers (<c>Hijacked</c>, <c>CPtr</c>),
-    /// never auto-derived for ownership-bearing wrappers (<c>Owned</c>, <c>Retained</c>,
+    /// never auto-derived for ownership-bearing wrappers (<c>Retained</c>,
     /// <c>Tracked</c>, scoped tokens). The recursive structural walk that this used to do
     /// is now subsumed by the protocol's auto-derivation rule.
     /// </summary>

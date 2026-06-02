@@ -254,8 +254,8 @@ public class MutabilityTests
     [Fact]
     public void Analyze_NestedHijacking_ReportsError()
     {
-        // Nested grasping (partial grasping) should not be allowed
-        // You cannot grasp a child of an already-grasped object
+        // Nested modifying (partial modifying) should not be allowed
+        // You cannot modify a child of an already-modifying object
         string source = """
                         entity Child
                           value: S64
@@ -265,8 +265,8 @@ public class MutabilityTests
 
                         routine test()
                           var parent = Parent(child: Child(value: 0))
-                          using parent.grasp() as p
-                            using p.child.grasp() as c
+                          using parent.modify() as p
+                            using p.child.modify() as c
                               c.value = 10
                           return
                         """;
@@ -275,7 +275,7 @@ public class MutabilityTests
         Assert.True(condition: result.Errors.Count > 0);
         Assert.Contains(collection: result.Errors,
             filter: e =>
-                e.Message.Contains(value: "grasp",
+                e.Message.Contains(value: "modify",
                     comparisonType: StringComparison.OrdinalIgnoreCase) ||
                 e.Message.Contains(value: "nested",
                     comparisonType: StringComparison.OrdinalIgnoreCase));
@@ -371,7 +371,7 @@ public class MutabilityTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ModificationInReadonlyMethod);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.MutationInReadonlyMethod);
     }
     /// <summary>
     /// Verifies semantic analysis behavior for readonly method calls readonly without unexpected diagnostics.
@@ -394,7 +394,7 @@ public class MutabilityTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.ModificationInReadonlyMethod);
+        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.MutationInReadonlyMethod);
     }
     /// <summary>
     /// Verifies semantic analysis behavior for readonly method calls on other without unexpected diagnostics.
@@ -420,7 +420,7 @@ public class MutabilityTests
         AnalysisResult result = AnalyzeSa(source: source);
         // Calling a mutating method on 'other' (not 'me') is allowed in @readonly
         Assert.DoesNotContain(result.Errors,
-            e => e.Code == SemanticDiagnosticCode.ModificationInReadonlyMethod
+            e => e.Code == SemanticDiagnosticCode.MutationInReadonlyMethod
                  && e.Message.Contains("increment"));
     }
 

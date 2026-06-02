@@ -6,7 +6,7 @@ import BuilderService
 ### `Hijacked[T]` is the low-level pointer wrapper for memory that is outside RazorForge's ownership and borrow rules.
 ### Use it for FFI, allocators, explicit memory layout work, and runtime plumbing where safety is intentionally bypassed.
 ### :typeparam T: The pointee type.
-### :see: {Address}, {Grasped[T]}, {Viewed[T]}, {Memory-Types}
+### :see: {Address}, {Modifying[T]}, {Viewing[T]}, {Memory-Types}
 @llvm("ptr")
 record Hijacked[T] obeys Assignable
   pass

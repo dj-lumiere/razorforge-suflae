@@ -183,16 +183,16 @@ public sealed class RoutineInfo
     /// </summary>
     public List<TypeSymbol> ThrowableTypes { get; set; } = [];
 
-    /// <summary>The declared modification category for this routine (from source annotation).</summary>
-    public ModificationCategory DeclaredModification { get; init; } =
-        ModificationCategory.Migratable;
+    /// <summary>The declared mutation category for this routine (from source annotation).</summary>
+    public MutationCategory DeclaredMutation { get; init; } =
+        MutationCategory.Migratable;
 
     /// <summary>
-    /// The inferred/final modification category for this routine.
-    /// Initially set to declared value, then updated by modification inference.
+    /// The inferred/final mutation category for this routine.
+    /// Initially set to declared value, then updated by mutation inference.
     /// </summary>
-    public ModificationCategory ModificationCategory { get; set; } =
-        ModificationCategory.Migratable;
+    public MutationCategory MutationCategory { get; set; } =
+        MutationCategory.Migratable;
 
     /// <summary>Generic type parameters, if any.</summary>
     public List<string>? GenericParameters { get; init; }
@@ -255,9 +255,9 @@ public sealed class RoutineInfo
     /// <summary>Annotations on this routine (e.g., @readonly, @inline).</summary>
     public List<string> Annotations { get; init; } = [];
 
-    /// <summary>Whether this routine is marked @readonly (can be called through Viewed/Inspected).</summary>
+    /// <summary>Whether this routine is marked @readonly (can be called through Viewing/Inspecting).</summary>
     public bool IsReadOnly =>
-        Annotations.Contains(value: "readonly") || ModificationCategory == ModificationCategory.Readonly;
+        Annotations.Contains(value: "readonly") || MutationCategory == MutationCategory.Readonly;
 
     /// <summary>
     /// For external("llvm") routines, the LLVM IR template from @llvm_ir annotation.
@@ -410,8 +410,8 @@ public sealed class RoutineInfo
             Parameters = substitutedParams,
             ReturnType = substitutedReturnType,
             IsFailable = IsFailable,
-            DeclaredModification = DeclaredModification,
-            ModificationCategory = ModificationCategory,
+            DeclaredMutation = DeclaredMutation,
+            MutationCategory = MutationCategory,
             TypeArguments = typeArguments,
             GenericDefinition = this,
             Visibility = Visibility,

@@ -78,7 +78,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
 
             // Skip if an explicit (non-synthesized) implementation already exists in the registry.
             // This prevents synthesized bodies from overriding custom stdlib implementations
-            // such as Marked[T,P].$represent / $diagnose defined in Marked.rf.
+            // such as Watched[T,P].$represent / $diagnose defined in Watched.rf.
             if (routine.OwnerType != null &&
                 ctx.Registry.GetMethodsForType(type: routine.OwnerType)
                     .Any(r => r.Name == routine.Name && !r.IsSynthesized))
@@ -103,7 +103,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             // record/entity/crashable types recurse into their owned fields; scalar kinds
             // (choices, flags, `@llvm`-backed primitives, tuples, variants) are no-ops. The
             // leaf RC/ptr behaviour (Hijacked → invalidate, Retained/Tracked → controller,
-            // Viewed/Grasped → no-op) lives in hand-written wrapper `$destroy`s, so those are
+            // Viewing/Modifying → no-op) lives in hand-written wrapper `$destroy`s, so those are
             // never auto-derived (they already exist).
             if (routine is { Name: "$destroy", Parameters.Count: 0 })
             {
@@ -2058,7 +2058,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
     /// Builds the auto-derived <c>$destroy()</c> body. Composite record/entity/crashable types
     /// recurse into their owned fields (<c>me.field.$destroy()</c> for each); scalar kinds
     /// (choices, flags, <c>@llvm</c>-backed primitives, tuples, variants) get a no-op return.
-    /// Leaf RC/ptr teardown (Hijacked, Retained/Tracked, Viewed/Grasped) lives in hand-written
+    /// Leaf RC/ptr teardown (Hijacked, Retained/Tracked, Viewing/Modifying) lives in hand-written
     /// wrapper destructors and is never reached here (those types keep their own <c>$destroy</c>).
     /// </summary>
     private Statement BuildDestroyBody(TypeInfo? owner)

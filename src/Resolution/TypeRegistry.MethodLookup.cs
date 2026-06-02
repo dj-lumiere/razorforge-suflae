@@ -373,8 +373,8 @@ public sealed partial class TypeRegistry
             Parameters = parameters,
             ReturnType = returnType,
             IsFailable = routine.IsFailable,
-            DeclaredModification = routine.DeclaredModification,
-            ModificationCategory = routine.ModificationCategory,
+            DeclaredMutation = routine.DeclaredMutation,
+            MutationCategory = routine.MutationCategory,
             GenericParameters = genericParameters,
             GenericConstraints = genericConstraints,
             Visibility = routine.Visibility,
@@ -609,7 +609,7 @@ public sealed partial class TypeRegistry
             return null;
         }
 
-        // WrapperTypeInfo (Owned/Viewed/Grasped/Inspected/Claimed/Shared/Marked)
+        // WrapperTypeInfo (Viewing/Modifying/Inspecting/Claiming/Shared/Watched)
         // is the parallel representation to the substituted RecordTypeInfo of the same wrapper.
         // The RecordTypeInfo path finds methods via its substituted `Controlling[InnerT]` /
         // `Referring[InnerT]` protocol entry. WrapperTypeInfo carries no ImplementedProtocols,
@@ -623,8 +623,8 @@ public sealed partial class TypeRegistry
         // controller pointer, reading controller's strong+weak counts as if they were T's first
         // fields. The forwarder-synthesis path emits the correct double-indirection body
         // (Hijacked[RetainController[T]](me).as_entity().borrow_data().as_entity().method(...)).
-        if (type is WrapperTypeInfo { Name: "Owned" or "Viewed"
-                or "Grasped" or "Inspected" or "Claimed" or "Shared" or "Marked"
+        if (type is WrapperTypeInfo { Name: "Viewing"
+                or "Modifying" or "Inspecting" or "Claiming" or "Shared" or "Watched"
             } forwardingWrapper)
         {
             return LookupMethod(type: forwardingWrapper.InnerType,
@@ -848,7 +848,7 @@ public sealed partial class TypeRegistry
             Parameters = parameters,
             ReturnType = resolvedReturn,
             IsFailable = protoMethod.IsFailable,
-            ModificationCategory = protoMethod.Modification,
+            MutationCategory = protoMethod.Mutation,
             Storage = protoMethod.IsInstanceMethod
                 ? StorageClass.None
                 : StorageClass.Common,
@@ -898,8 +898,8 @@ public sealed partial class TypeRegistry
                 Parameters = substitutedParams,
                 ReturnType = substitutedReturn,
                 IsFailable = method.IsFailable,
-                DeclaredModification = method.DeclaredModification,
-                ModificationCategory = method.ModificationCategory,
+                DeclaredMutation = method.DeclaredMutation,
+                MutationCategory = method.MutationCategory,
                 GenericParameters = methodOnlyGenericParams,
                 GenericConstraints = methodOnlyConstraints,
                 Visibility = method.Visibility,
@@ -980,8 +980,8 @@ public sealed partial class TypeRegistry
                     Parameters = fwdParams,
                     ReturnType = concreteInnerMethod.ReturnType,
                     IsFailable = method.IsFailable,
-                    DeclaredModification = method.DeclaredModification,
-                    ModificationCategory = method.ModificationCategory,
+                    DeclaredMutation = method.DeclaredMutation,
+                    MutationCategory = method.MutationCategory,
                     Visibility = method.Visibility,
                     Location = method.Location,
                     Module = method.Module,
@@ -1067,8 +1067,8 @@ public sealed partial class TypeRegistry
             Parameters = substitutedParams2,
             ReturnType = substitutedReturn2,
             IsFailable = method.IsFailable,
-            DeclaredModification = method.DeclaredModification,
-            ModificationCategory = method.ModificationCategory,
+            DeclaredMutation = method.DeclaredMutation,
+            MutationCategory = method.MutationCategory,
             GenericParameters = methodOnlyGenericParams2,
             GenericConstraints = methodOnlyConstraints2,
             Visibility = method.Visibility,
@@ -1398,7 +1398,7 @@ public sealed partial class TypeRegistry
     /// <summary>
     /// Lifecycle and reference are governed by the four wired routines
     /// <c>$create</c>/<c>$refer</c>/<c>$control</c>/<c>$destroy</c> — the system is AGNOSTIC to
-    /// specific wrapper-type names (no hardcoded Viewed/Grasped/Hijacked list). Teardown simply calls
+    /// specific wrapper-type names (no hardcoded Viewing/Modifying/Hijacked list). Teardown simply calls
     /// <c>$destroy</c> uniformly: it is a real destructor on owning types and a no-op on the
     /// access/borrow wrappers, so firing it is always safe by construction. The only thing this gate
     /// excludes is the ABSTRACT tier — generic parameters and protocols (the latter also covering the

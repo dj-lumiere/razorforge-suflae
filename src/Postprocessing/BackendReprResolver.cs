@@ -152,16 +152,15 @@ public static class BackendReprResolver
         string baseName = typeName.Split(separator: '[', count: 2)[0];
         return baseName switch
         {
-            "Viewed" => PointerFlavor.Viewed,
-            "Grasped" => PointerFlavor.Grasped,
-            "Inspected" => PointerFlavor.Inspected,
-            "Claimed" => PointerFlavor.Claimed,
+            "Viewing" => PointerFlavor.Viewing,
+            "Modifying" => PointerFlavor.Modifying,
+            "Inspecting" => PointerFlavor.Inspecting,
+            "Claiming" => PointerFlavor.Claiming,
             "Retained" => PointerFlavor.Retained,
             "Tracked" => PointerFlavor.Tracked,
             "Shared" => PointerFlavor.Shared,
-            "Marked" => PointerFlavor.Marked,
+            "Watched" => PointerFlavor.Watched,
             "Hijacked" => PointerFlavor.Hijacked,
-            "Owned" => PointerFlavor.Owned,
             _ => PointerFlavor.Raw
         };
     }

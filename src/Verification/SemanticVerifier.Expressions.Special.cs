@@ -218,14 +218,14 @@ public sealed partial class SemanticVerifier
     /// - Raw entities (direct entity references)
     ///
     /// Non-stealable types (build error):
-    /// - Viewed[T]    (read-only wrapper, scope-bound)
-    /// - Grasped[T]  (exclusive wrapper, scope-bound)
-    /// - Inspected[T] (thread-safe read wrapper, scope-bound)
-    /// - Claimed[T]    (thread-safe exclusive wrapper, scope-bound)
+    /// - Viewing[T]    (read-only wrapper, scope-bound)
+    /// - Modifying[T]  (exclusive wrapper, scope-bound)
+    /// - Inspecting[T] (thread-safe read wrapper, scope-bound)
+    /// - Claiming[T]   (thread-safe exclusive wrapper, scope-bound)
     /// - Retained[T]  (shared-ownership wrapper)
     /// - Tracked[T]   (reference-counted wrapper)
     /// - Shared[T, P] (shared-ownership wrapper)
-    /// - Marked[T, P] (reference-counted wrapper)
+    /// - Watched[T, P] (reference-counted wrapper)
     /// - Hijacked[T]  (internal ownership wrapper)
     /// </remarks>
     private TypeSymbol AnalyzeStealExpression(StealExpression steal)
@@ -305,12 +305,12 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Checks if a type is a scope-bound wrapper (Viewed, Grasped).
+    /// Checks if a type is a scope-bound wrapper (Viewing, Modifying).
     /// Scope-bound wrappers cannot be stolen.
     /// </summary>
     private static bool IsMemoryToken(TypeSymbol type)
     {
-        return type.Name is "Viewed" or "Grasped";
+        return type.Name is "Viewing" or "Modifying";
     }
 
     /// <summary>
@@ -318,14 +318,14 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static string GetMemoryTokenKind(TypeSymbol type)
     {
-        if (type.Name.StartsWith(value: "Viewed"))
+        if (type.Name.StartsWith(value: "Viewing"))
         {
-            return "Viewed[T]";
+            return "Viewing[T]";
         }
 
-        if (type.Name.StartsWith(value: "Grasped"))
+        if (type.Name.StartsWith(value: "Modifying"))
         {
-            return "Grasped[T]";
+            return "Modifying[T]";
         }
 
         return type.Name;

@@ -68,7 +68,7 @@ public sealed partial class SemanticVerifier
                 return memberVariable.Type;
             }
 
-            // Wrapper type forwarding for record-based wrappers (Viewed[T], Grasped[T], etc.)
+            // Wrapper type forwarding for record-based wrappers (Viewing[T], Modifying[T], etc.)
             if (IsWrapperType(type: lookupType))
             {
                 MemberVariableInfo? innerMemberVariable =
@@ -132,7 +132,7 @@ public sealed partial class SemanticVerifier
                 return memberVariable.Type;
             }
         }
-        // Wrapper type forwarding: Viewed<T>, Grasped<T>, Shared<T>, etc.
+        // Wrapper type forwarding: Viewing<T>, Modifying<T>, Shared<T>, etc.
         else if (IsWrapperType(type: lookupType))
         {
             // Try to forward member variable access to the inner type
@@ -619,7 +619,7 @@ public sealed partial class SemanticVerifier
             ReportError(code: SemanticDiagnosticCode.LambdaCaptureToken,
                 message: $"Cannot capture '{varName}' of type '{tokenKind}' in lambda - " +
                          $"scope-bound tokens cannot escape their scope. " +
-                         $"Use a handle type (Shared[T] or Marked[T]) instead.",
+                         $"Use a handle type (Shared[T] or Watched[T]) instead.",
                 location: location);
             return;
         }
@@ -631,7 +631,7 @@ public sealed partial class SemanticVerifier
                 message:
                 $"Cannot capture raw entity '{varName}' of type '{varType.Name}' in lambda - " +
                 $"raw entities cannot be captured. " +
-                $"Wrap in a handle type (Shared[T] or Marked[T]) before capturing.",
+                $"Wrap in a handle type (Shared[T] or Watched[T]) before capturing.",
                 location: location);
         }
     }

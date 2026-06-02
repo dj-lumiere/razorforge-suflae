@@ -18,8 +18,8 @@ public sealed class ProtocolMethodInfo
     /// </summary>
     public bool IsInstanceMethod { get; init; } = true;
 
-    /// <summary>The modification category for this method.</summary>
-    public ModificationCategory Modification { get; init; } = ModificationCategory.Migratable;
+    /// <summary>The mutation category for this method.</summary>
+    public MutationCategory Mutation { get; init; } = MutationCategory.Migratable;
 
     /// <summary>Parameter types (excluding me for instance methods).</summary>
     public List<TypeInfo> ParameterTypes { get; init; } = [];

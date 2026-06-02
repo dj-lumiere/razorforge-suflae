@@ -545,7 +545,7 @@ public partial class LlvmCodeGenerator
                 value: value,
                 valueType: valueType);
         }
-        // Wrapper-of-record field write: Grasped[Record] etc. The wrapper is `@llvm("ptr")`
+        // Wrapper-of-record field write: Modifying[Record] etc. The wrapper is `@llvm("ptr")`
         // and the pointer addresses a record value in memory. GEP into the record at the
         // field index and store. (Record-inner branch must come before the entity-inner one
         // since RecordTypeInfo and EntityTypeInfo are distinct AST nodes.)
@@ -582,7 +582,7 @@ public partial class LlvmCodeGenerator
             EmitLine(sb: sb,
                 line: $"  store {GetLlvmType(type: fieldInfo.Type)} {value}, ptr {fieldPtr}");
         }
-        // Wrapper type forwarding: Grasped[T], Claimed[T], etc. -> write through to inner entity
+        // Wrapper type forwarding: Modifying[T], Claiming[T], etc. -> write through to inner entity
         else if (targetType is RecordTypeInfo wrapperRecord &&
                  GetGenericBaseName(type: wrapperRecord) is { } wrapBaseName &&
                  WrapperTypeNames.Contains(item: wrapBaseName) &&

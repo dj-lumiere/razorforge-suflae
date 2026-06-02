@@ -66,7 +66,7 @@ public sealed class ProtocolTypeInfo : TypeInfo
             .Select(selector: m => new ProtocolMethodInfo(name: m.Name)
             {
                 IsInstanceMethod = m.IsInstanceMethod,
-                Modification = m.Modification,
+                Mutation = m.Mutation,
                 ParameterTypes = m.ParameterTypes
                     .Select(selector: t => RecordTypeInfo.SubstituteType(type: t, substitution: substitution))
                     .ToList(),

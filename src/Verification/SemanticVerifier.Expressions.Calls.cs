@@ -16,7 +16,7 @@ public sealed partial class SemanticVerifier
     private const string StartRoutineName = "start";
     private const string UseWhenHint = "Use 'when' to match the result, '??' to provide a default, or make the enclosing routine failable (!).";
     private const string BlankMemberName = "Blank";
-    private const string GraspMethodName = "grasp";
+    private const string ModifyMethodName = "modify";
     private const string InspectMethodName = "inspect";
 
     private TypeSymbol AnalyzeCallExpression(CallExpression call)
@@ -342,7 +342,7 @@ public sealed partial class SemanticVerifier
                         arguments: call.Arguments,
                         location: call.Location);
 
-                    // Validate exclusive token uniqueness (cannot pass same Grasped/Claimed twice)
+                    // Validate exclusive token uniqueness (cannot pass same Modifying/Claiming twice)
                     ValidateExclusiveTokenUniqueness(arguments: call.Arguments,
                         location: call.Location);
 
@@ -624,13 +624,13 @@ public sealed partial class SemanticVerifier
                     return ErrorTypeInfo.Instance;
                 }
 
-// #137: Nested grasping detection — checked before method resolution
-                // since grasp() is generic extension T.grasp() that may not resolve by concrete type name
-                if (member.PropertyName == GraspMethodName && IsNestedGrasping(source: member.Object))
+                // #137: Nested grasping detection — checked before method resolution
+                // since modify() is generic extension T.modify() that may not resolve by concrete type name
+                if (member.PropertyName == ModifyMethodName && IsNestedModifying(source: member.Object))
                 {
                     ReportError(code: SemanticDiagnosticCode.NestedHijackingNotAllowed,
-                        message: "Cannot grasp a member of an already-grasped object. " +
-                                 "Hijack the parent entity directly instead.",
+                        message: "Cannot modify a member of an already-modified object. " +
+                                 "Modify the parent entity directly instead.",
                         location: call.Location);
                 }
 
@@ -787,20 +787,20 @@ public sealed partial class SemanticVerifier
                             location: call.Location);
                     }
 
-                    // @readonly enforcement: cannot call modifying methods on 'me'
+                    // @readonly enforcement: cannot call mutating methods on 'me'
                     if (_currentRoutine is { IsReadOnly: true } &&
                         member.Object is IdentifierExpression { Name: "me" } && !method.IsReadOnly)
                     {
-                        ReportError(code: SemanticDiagnosticCode.ModificationInReadonlyMethod,
+                        ReportError(code: SemanticDiagnosticCode.MutationInReadonlyMethod,
                             message:
                             $"Cannot call non-readonly method '{method.Name}' on 'me' in a @readonly method. " +
                             "Mark the called method @readonly or use @migratable.",
                             location: call.Location);
                     }
 
-                    // Preset enforcement: cannot call modifying methods on preset variables
+                    // Preset enforcement: cannot call mutating methods on preset variables
                     if (member.Object is IdentifierExpression letTarget &&
-                        method.ModificationCategory != ModificationCategory.Readonly)
+                        method.MutationCategory != MutationCategory.Readonly)
                     {
                         VariableInfo? targetVar = _registry.LookupVariable(name: letTarget.Name);
                         if (targetVar is { IsModifiable: false })
@@ -873,7 +873,7 @@ public sealed partial class SemanticVerifier
                     }
 
                     // #12: Partial access rule — entity.field.view() is not allowed
-                    if (member.PropertyName is "view" or GraspMethodName &&
+                    if (member.PropertyName is "view" or ModifyMethodName &&
                         member.Object is MemberExpression innerMember)
                     {
                         TypeSymbol innerObjectType =
@@ -889,7 +889,8 @@ public sealed partial class SemanticVerifier
                     }
 
                     // #137: Nested grasping detection
-                    if (member.PropertyName == GraspMethodName && IsNestedGrasping(source: member.Object))
+                    if (member.PropertyName == ModifyMethodName && IsNestedModifying(source: member
+                        .Object))
                     {
                         ReportError(code: SemanticDiagnosticCode.NestedHijackingNotAllowed,
                             message: "Cannot grasp a member of an already-grasped object. " +
@@ -898,22 +899,22 @@ public sealed partial class SemanticVerifier
                     }
 
                     // #92: Re-grasping prohibition — cannot grasp an already-grasped token
-                    if (member.PropertyName == GraspMethodName && IsGraspedType(type: objectType))
+                    if (member.PropertyName == ModifyMethodName && IsModifyingType(type: objectType))
                     {
                         ReportError(code: SemanticDiagnosticCode.ReHijackingProhibited,
                             message:
-                            $"Cannot re-grasp an already-grasped token '{objectType.Name}'. " +
+                            $"Cannot re-modify an already-modified token '{objectType.Name}'. " +
                             "The entity is already exclusively accessed.",
                             location: call.Location);
                     }
 
-                    // #170: Downgrade prohibition — cannot call .view() on Grasped/Claimed
-                    if (member.PropertyName == "view" && (IsGraspedType(type: objectType) ||
-                                                          IsClaimedType(type: objectType)))
+                    // #170: Downgrade prohibition — cannot call .view() on Modifying/Claiming
+                    if (member.PropertyName == "view" && (IsModifyingType(type: objectType) ||
+                                                          IsClaimingType(type: objectType)))
                     {
                         ReportError(code: SemanticDiagnosticCode.TokenDowngradeProhibited,
                             message: $"Cannot downgrade '{objectType.Name}' with '.view()'. " +
-                                     "Grasped/Claimed tokens already have write access — use them directly.",
+                                     "Modifying/Claiming tokens already have write access — use them directly.",
                             location: call.Location);
                     }
 
@@ -927,14 +928,14 @@ public sealed partial class SemanticVerifier
                             location: call.Location);
                     }
 
-                    // #98: .hijack() on Shared/Marked requires danger! block
+                    // #98: .hijack() on Shared/Watched requires danger! block
                     if (member.PropertyName == "hijack" && !InDangerBlock &&
-                        (IsSharedType(type: objectType) || IsMarkedType(type: objectType)))
+                        (IsSharedType(type: objectType) || IsWatchedType(type: objectType)))
                     {
                         ReportError(code: SemanticDiagnosticCode.SnatchRequiresDanger,
                             message:
                             $"Calling '.hijack()' on '{objectType.Name}' requires a 'danger!' block. " +
-                            "Snatching bypasses reference counting safety.",
+                            "Hijacked values bypasses reference counting safety.",
                             location: call.Location);
                     }
 
@@ -987,7 +988,7 @@ public sealed partial class SemanticVerifier
                     // #22: Reject migratable operations on collection being iterated
                     if (member.Object is IdentifierExpression iterTarget &&
                         _activeIterationSources.Contains(item: iterTarget.Name) &&
-                        method.ModificationCategory == ModificationCategory.Migratable)
+                        method.MutationCategory == MutationCategory.Migratable)
                     {
                         ReportError(code: SemanticDiagnosticCode.MigratableDuringIteration,
                             message:
@@ -998,7 +999,7 @@ public sealed partial class SemanticVerifier
 
                     // #47: .grasp() on @initonly record warns — record is frozen after construction
                     // Check if the variable holding the record is @initonly bound
-                    if (member.PropertyName == GraspMethodName && objectType is RecordTypeInfo &&
+                    if (member.PropertyName == ModifyMethodName && objectType is RecordTypeInfo &&
                         member.Object is IdentifierExpression graspTarget)
                     {
                         VariableInfo? targetVar =
@@ -1023,7 +1024,7 @@ public sealed partial class SemanticVerifier
                         }
                     }
 
-                    // Validate exclusive token uniqueness (cannot pass same Grasped/Claimed twice)
+                    // Validate exclusive token uniqueness (cannot pass same Modifying/Claiming twice)
                     ValidateExclusiveTokenUniqueness(arguments: call.Arguments,
                         location: call.Location);
 

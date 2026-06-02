@@ -32,8 +32,8 @@ public sealed partial class TypeRegistry
     /// <returns>True if the type is a memory wrapper, false otherwise.</returns>
     private static bool IsMemoryWrapperType(string typeName)
     {
-        return typeName is "Viewed" or "Grasped" or "Inspected" or "Claimed" or "Hijacked"
-            or "Shared" or "Marked" or "Retained" or "Tracked";
+        return typeName is "Viewing" or "Modifying" or "Inspecting" or "Claiming" or "Hijacked"
+            or "Shared" or "Watched" or "Retained" or "Tracked";
     }
 
     #endregion

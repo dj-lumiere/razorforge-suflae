@@ -466,7 +466,7 @@ public partial class LlvmCodeGenerator
         TryGetTransparentProtocolTarget(type: targetType, targetType: out TypeInfo? lookupType);
         targetType = lookupType ?? targetType;
 
-        // Wrapper-of-record field read: Grasped[Record], Viewed[Record], etc. The wrapper is
+        // Wrapper-of-record field read: Modifying[Record], Viewing[Record], etc. The wrapper is
         // `@llvm("ptr")` and the pointer addresses a record value. GEP at the field index and
         // load. Mirrors the symmetric write handler in EmitMemberVariableAssignment.
         if (targetType is RecordTypeInfo wrapperRecOfRec &&
@@ -502,7 +502,7 @@ public partial class LlvmCodeGenerator
             // wrapper has a method forwarder for this name.
         }
 
-        // Wrapper type forwarding: Viewed[T], Grasped[T], etc.
+        // Wrapper type forwarding: Viewing[T], Modifying[T], etc.
         // These are records wrapping a Hijacked[T] (ptr) — forward member access to the inner entity type
         if (targetType is RecordTypeInfo wrapperRecord &&
             GetGenericBaseName(type: wrapperRecord) is { } wrapBaseName &&
@@ -548,7 +548,7 @@ public partial class LlvmCodeGenerator
                 string recordTypeName = GetRecordTypeName(record: wrapperRecord);
                 innerPtr = NextTemp();
                 // Find the index of the Hijacked[T] field that holds the inner entity pointer.
-                // (e.g. Retained[T] has controller=0, data=1; Inspected[T] has ptr=0)
+                // (e.g. Retained[T] has controller=0, data=1; Inspecting[T] has ptr=0)
                 int dataFieldIndex = 0;
                 for (int fi = 0; fi < wrapperRecord.MemberVariables.Count; fi++)
                 {
@@ -1017,8 +1017,8 @@ public partial class LlvmCodeGenerator
         if (typeExpr.GenericArguments is { Count: > 0 } genericArgs)
         {
             if (genericArgs.Count == 1 &&
-                typeExpr.Name is "Hijacked" or "Viewed" or "Grasped" or "Inspected" or
-                    "Claimed" or "Retained" or "Shared" or "Tracked" or "Marked" or "Owned")
+                typeExpr.Name is "Hijacked" or "Viewing" or "Modifying" or "Inspecting" or
+                    "Claiming" or "Retained" or "Shared" or "Tracked" or "Watched")
             {
                 TypeInfo? innerType = ResolveEntityMemberTypeFromAst(typeExpr: genericArgs[index: 0],
                     moduleName: moduleName,
@@ -1028,7 +1028,7 @@ public partial class LlvmCodeGenerator
                     return null;
                 }
 
-                bool isReadOnly = typeExpr.Name is "Viewed" or "Inspected";
+                bool isReadOnly = typeExpr.Name is "Viewing" or "Inspecting";
                 return _registry.GetOrCreateWrapperType(wrapperName: typeExpr.Name,
                     innerType: innerType,
                     isReadOnly: isReadOnly);

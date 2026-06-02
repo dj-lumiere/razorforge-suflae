@@ -337,8 +337,8 @@ public static class BuilderInfoProvider
             Parameters = [],
             ReturnType = returnType,
             IsFailable = false,
-            DeclaredModification = ModificationCategory.Readonly,
-            ModificationCategory = ModificationCategory.Readonly,
+            DeclaredMutation = MutationCategory.Readonly,
+            MutationCategory = MutationCategory.Readonly,
             Visibility = VisibilityModifier.Open,
             IsSynthesized = true
         });
@@ -363,8 +363,8 @@ public static class BuilderInfoProvider
             Parameters = [new ParameterInfo(name: paramName, type: paramType)],
             ReturnType = returnType,
             IsFailable = false,
-            DeclaredModification = ModificationCategory.Readonly,
-            ModificationCategory = ModificationCategory.Readonly,
+            DeclaredMutation = MutationCategory.Readonly,
+            MutationCategory = MutationCategory.Readonly,
             Visibility = VisibilityModifier.Open,
             IsSynthesized = true
         });
@@ -388,8 +388,8 @@ public static class BuilderInfoProvider
             Parameters = [],
             ReturnType = returnType,
             IsFailable = false,
-            DeclaredModification = ModificationCategory.Readonly,
-            ModificationCategory = ModificationCategory.Readonly,
+            DeclaredMutation = MutationCategory.Readonly,
+            MutationCategory = MutationCategory.Readonly,
             Visibility = VisibilityModifier.Open,
             IsSynthesized = true
         });

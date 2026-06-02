@@ -9,7 +9,7 @@ namespace Compiler.Diagnostics;
 /// - RF-W050-RF-W099: Unreachable Code Warnings
 /// - RF-W100-RF-W149: Deprecated Feature Warnings
 /// - RF-W150-RF-W199: Redundant Code Warnings
-/// - RF-W200-RF-W249: Modification Warnings
+/// - RF-W200-RF-W249: Mutation Warnings
 /// - RF-W250-RF-W299: Pattern Matching Warnings
 /// - RF-W300-RF-W349: Style Warnings
 /// - RF-W350-RF-W399: Performance Warnings
@@ -115,7 +115,7 @@ public enum SemanticWarningCode
     /// <summary>Method could be marked @readonly but is not.</summary>
     MethodCouldBeReadonly = 201,
 
-    /// <summary>Calling .grasp() on @initonly record — the record is frozen after construction.</summary>
+    /// <summary>Calling .modify() on @initonly record — the record is frozen after construction.</summary>
     HijackOnInitOnly = 210,
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -221,7 +221,7 @@ public static class SemanticWarningCodeExtensions
                 < 100 => "Unreachable Code",
                 < 150 => "Deprecated Feature",
                 < 200 => "Redundant Code",
-                < 250 => "Modification",
+                < 250 => "Mutation",
                 < 300 => "Pattern Matching",
                 < 350 => "Style",
                 < 400 => "Performance",

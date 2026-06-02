@@ -221,7 +221,7 @@ public class RecordContainmentTests
     }
 
     /// <summary>
-    /// Verifies semantic analysis behavior for record with viewed field and reports the expected error.
+    /// Verifies semantic analysis behavior for record with viewing field and reports the expected error.
     /// </summary>
     [Fact]
     public void Analyze_RecordWithViewedField_ReportsError()
@@ -231,7 +231,7 @@ public class RecordContainmentTests
                         entity Node
                           value: S32
                         record BadRecord
-                          view: Viewed[Node]
+                          view: Viewing[Node]
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -241,23 +241,23 @@ public class RecordContainmentTests
     }
 
     /// <summary>
-    /// Verifies semantic analysis behavior for record with grasped field and reports the expected error.
+    /// Verifies semantic analysis behavior for record with modifying field and reports the expected error.
     /// </summary>
     [Fact]
-    public void Analyze_RecordWithGraspedField_ReportsError()
+    public void Analyze_RecordWithModifyingField_ReportsError()
     {
         // Scoped tokens are caught by S601 (TokenMemberVariableNotAllowed) before S412
         string source = """
                         entity Node
                           value: S32
                         record BadRecord
-                          grasped: Grasped[Node]
+                          modifying: Modifying[Node]
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.TokenMemberVariableNotAllowed
-                         && e.Message.Contains("grasped"));
+                         && e.Message.Contains("modifying"));
     }
 
     #endregion

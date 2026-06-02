@@ -280,8 +280,8 @@ public enum SemanticDiagnosticCode
     /// <summary>Compound assignment operator not supported on type.</summary>
     CompoundAssignmentNotSupported = 254,
 
-    /// <summary>Attempting to modify 'me' member variable in a @readonly method.</summary>
-    ModificationInReadonlyMethod = 255,
+    /// <summary>Attempting to mutate 'me' member variable in a @readonly method.</summary>
+    MutationInReadonlyMethod = 255,
 
     /// <summary>Cannot call modifying method on preset variable.</summary>
     ModifyingCallOnImmutable = 256,
@@ -623,28 +623,28 @@ public enum SemanticDiagnosticCode
     /// <summary>Partial access on entity (e.g., entity.field.view()) is not allowed.</summary>
     PartialAccessOnEntity = 616,
 
-    /// <summary>Cannot downgrade token permission (e.g., .view() on Grasped/Claimed).</summary>
+    /// <summary>Cannot downgrade token permission (e.g., .view() on Modifying/Claiming).</summary>
     TokenDowngradeProhibited = 618,
 
-    /// <summary>Same entity cannot be grasped multiple times in one call.</summary>
+    /// <summary>Same entity cannot be modified multiple times in one call.</summary>
     HijackDuplicateInCall = 620,
 
-    /// <summary>Cannot grasp an already-grasped token.</summary>
+    /// <summary>Cannot re-modify an already-modifying token.</summary>
     ReHijackingProhibited = 621,
 
     /// <summary>Migratable operation on collection during iteration is not allowed.</summary>
     MigratableDuringIteration = 625,
 
-    /// <summary>Claimed[T] cannot be copied or aliased.</summary>
-    ClaimedCopyNotAllowed = 626,
+    /// <summary>Claiming[T] cannot be copied or aliased.</summary>
+    ClaimingCopyNotAllowed = 626,
 
-    /// <summary>Cannot write to member variable through read-only wrapper (Viewed, Inspected).</summary>
+    /// <summary>Cannot write to member variable through read-only wrapper (Viewing, Inspecting).</summary>
     WriteThroughReadOnlyWrapper = 631,
 
     /// <summary>Hijacked[T] method calls require danger! block.</summary>
     HijackedRequiresDanger = 627,
 
-    /// <summary>.hijack() on Shared/Marked requires danger! block.</summary>
+    /// <summary>.hijack() on Shared/Watched requires danger! block.</summary>
     SnatchRequiresDanger = 628,
 
     /// <summary>inspect!() only valid with MultiRead lock policy.</summary>
@@ -654,11 +654,11 @@ public enum SemanticDiagnosticCode
     ReadOnlyRejectsLocking = 630,
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // MODIFICATION INFERENCE ERRORS (RF-S650 - RF-S699)
+    // MUTATION INFERENCE ERRORS (RF-S650 - RF-S699)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// <summary>Modification category conflict detected.</summary>
-    ModificationCategoryConflict = 653,
+    /// <summary>Mutation category conflict detected.</summary>
+    MutationCategoryConflict = 653,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PROTOCOL CONFORMANCE ERRORS (RF-S700 - RF-S749)
@@ -689,7 +689,7 @@ public enum SemanticDiagnosticCode
     InvalidAnnotation = 706,
 
     /// <summary>Type declares 'obeys Referring[T]' or 'obeys Controlling[T]' but is not in the
-    /// stdlib closed allowlist (Owned/Retained/Viewed/Grasped/Hijacked/Tracked + deferred concurrency
+    /// stdlib closed allowlist (Retained/Viewing/Modifying/Hijacked/Tracked + deferred concurrency
     /// wrappers + entity-T auto-conformance). Marker-protocol obeyers type-erase to ptr layout, so
     /// the allowlist is the soundness fence preventing user types with incompatible layouts from
     /// being passed where the routine body assumes T's ptr representation.</summary>
@@ -734,7 +734,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Index operators ($getitem/$setitem) are only valid on entities.</summary>
     IndexOperatorTypeKindRestriction = 765,
 
-    /// <summary>Cannot use compound assignment on a read-only token (Viewed or Inspected).</summary>
+    /// <summary>Cannot use compound assignment on a read-only token (Viewing or Inspecting).</summary>
     CompoundAssignmentOnReadOnlyToken = 766,
 
     /// <summary>Fixed-width numeric types must match exactly; explicit conversion required.</summary>
@@ -765,7 +765,7 @@ public enum SemanticDiagnosticCode
     InvalidVisibilityCombination = 775,
 
     /// <summary>Conflicting mutation category annotations (e.g., both @readonly and @writable).</summary>
-    MutationCategoryConflict = 776,
+    MutationCategoryContradiction = 776,
 
     /// <summary>Annotation arguments must be build-time constants.</summary>
     AnnotationArgNotConstant = 777,

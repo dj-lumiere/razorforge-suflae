@@ -155,8 +155,8 @@ internal sealed class TypeBodyResolver
                     : ErrorTypeInfo.Instance;
 
                 // Records can contain: value types, bound entities/crashables (pointer-shaped when bound),
-                // generic parameters, and storable wrappers (Hijacked, Retained, Shared, Tracked, Marked, Owned).
-                // Scoped tokens (Viewed, Grasped, Inspected, Claimed) are wrappers NOT in the storable set.
+                // generic parameters, and storable wrappers (Hijacked, Retained, Shared, Tracked, Watched).
+                // Scoped tokens (Viewing, Modifying, Inspecting, Claiming) are wrappers NOT in the storable set.
                 bool isBoundReference =
                     memberVariableType?.Category == TypeCategory.Entity ||
                     memberVariableType?.Category == TypeCategory.Crashable;
@@ -171,7 +171,7 @@ internal sealed class TypeBodyResolver
                     _sa.ReportError(code: SemanticDiagnosticCode.RecordContainsNonValueType,
                         message:
                         $"Record member variable '{memberVariable.Name}' has type '{memberVariableType.Name}' which is not a value type. " +
-                        "Records can only contain value types, Hijacked[T], and RC wrappers (Retained, Shared, Tracked, Marked).",
+                        "Records can only contain value types, Hijacked[T], and RC wrappers (Retained, Shared, Tracked, Watched).",
                         location: memberVariable.Location);
                 }
 
@@ -398,18 +398,18 @@ internal sealed class TypeBodyResolver
                 ? _typeResolver.ResolveProtocolType(typeExpr: sig.ReturnType)
                 : null;
 
-            // Extract modification category from attributes
+            // Extract mutation category from attributes
             // @readonly -> Readonly, @migratable -> Migratable, default/no annotation -> Writable
-            ModificationCategory modification = ModificationCategory.Writable; // Default
+            MutationCategory modification = MutationCategory.Writable; // Default
             if (sig.Annotations != null)
             {
                 if (sig.Annotations.Contains(item: "readonly"))
                 {
-                    modification = ModificationCategory.Readonly;
+                    modification = MutationCategory.Readonly;
                 }
                 else if (sig.Annotations.Contains(item: "migratable"))
                 {
-                    modification = ModificationCategory.Migratable;
+                    modification = MutationCategory.Migratable;
                 }
             }
 
@@ -427,7 +427,7 @@ internal sealed class TypeBodyResolver
             var methodInfo = new ProtocolMethodInfo(name: methodName)
             {
                 IsInstanceMethod = isInstanceMethod,
-                Modification = modification,
+                Mutation = modification,
                 GenerationKind = generationKind,
                 ParameterTypes = paramTypes,
                 ParameterNames = paramNames,
@@ -853,7 +853,6 @@ internal sealed class TypeBodyResolver
         "Retained", // Reference-counted handle
         "Shared",   // Reference-counted multi-threaded handle
         "Tracked",  // Weak reference handle
-        "Marked",   // Weak reference multi-threaded handle
-        "Owned"     // Exclusive ownership wrapper (unique_ptr equivalent)
+        "Watched",  // Weak reference multi-threaded handle
     ];
 }

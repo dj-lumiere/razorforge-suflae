@@ -121,7 +121,7 @@ public class ImplicitWrapperCopyVarDeclTests
             filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
     }
 
-    /// <summary>`var v = a.view()` is rejected: Viewed[T] is a scoped token that can't escape.</summary>
+    /// <summary>`var v = a.view()` is rejected: Viewing[T] is a scoped token that can't escape.</summary>
     [Fact]
     public void Analyze_VarDecl_ViewedFromCall_IsError()
     {
@@ -138,11 +138,11 @@ public class ImplicitWrapperCopyVarDeclTests
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy &&
-                e.Message.Contains(value: "Viewed",
+                e.Message.Contains(value: "Viewing",
                     comparisonType: StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>`var g = a.grasp()` is rejected: Grasped[T] is a scoped token that can't escape.</summary>
+    /// <summary>`var g = a.modify()` is rejected: Modifying[T] is a scoped token that can't escape.</summary>
     [Fact]
     public void Analyze_VarDecl_GraspedFromCall_IsError()
     {
@@ -152,20 +152,20 @@ public class ImplicitWrapperCopyVarDeclTests
 
                         routine start()
                           var a = Node(value: 1)
-                          var g = a.grasp()
+                          var g = a.modify()
                           return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy &&
-                e.Message.Contains(value: "Grasped",
+                e.Message.Contains(value: "Modifying",
                     comparisonType: StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>Inline chained access `a.view().value` is accepted — desugars as a scoped `using`.</summary>
     [Fact]
-    public void Analyze_InlineMemberAccess_OnViewedCall_IsAccepted()
+    public void Analyze_InlineMemberAccess_OnViewingCall_IsAccepted()
     {
         string source = """
                         import IO/Console
@@ -186,7 +186,7 @@ public class ImplicitWrapperCopyVarDeclTests
 
     /// <summary>`using a.view() as v` is the supported form — accepted.</summary>
     [Fact]
-    public void Analyze_UsingBlock_ViewedFromCall_IsAccepted()
+    public void Analyze_UsingBlock_ViewingFromCall_IsAccepted()
     {
         string source = """
                         import IO/Console
