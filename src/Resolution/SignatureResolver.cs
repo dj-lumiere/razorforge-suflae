@@ -29,14 +29,16 @@ internal sealed class SignatureResolver
 
     /// <summary>
     /// Reports S802 for any `?T` rvalue mark in a slot-position type expression.
-    /// Slots (params, vars, fields, type-args) hold lvalue; only routine return type may carry `?T`.
-    /// Recurses into generic arguments — `List[?T]` is rejected because the slot inside the
-    /// collection is itself an lvalue slot.
+    /// Vars, fields, and type-args hold lvalue, so `?T` is rejected there. A routine return type
+    /// and a parameter type may carry `?T`: the return is an rvalue producer and a `?T` parameter
+    /// is an ownership-transfer (steal) slot. The top-level allowance does not recurse — a nested
+    /// type argument is always an lvalue slot, so `List[?T]` stays rejected even on a parameter.
     /// </summary>
-    private void RejectRvalueMarkInSlot(TypeExpression? typeExpr, string positionDescription)
+    private void RejectRvalueMarkInSlot(TypeExpression? typeExpr, string positionDescription,
+        bool allowTopLevelRvalue = false)
     {
         if (typeExpr is null) return;
-        if (typeExpr.IsRvalue)
+        if (typeExpr.IsRvalue && !allowTopLevelRvalue)
         {
             _sa.ReportError(code: SemanticDiagnosticCode.RvalueMarkInSlotPosition,
                 message:
@@ -153,7 +155,7 @@ internal sealed class SignatureResolver
             }
 
             RejectRvalueMarkInSlot(typeExpr: param.Type,
-                positionDescription: $"parameter '{param.Name}'");
+                positionDescription: $"parameter '{param.Name}'", allowTopLevelRvalue: true);
             TypeSymbol paramType = _typeResolver.ResolveType(typeExpr: param.Type);
 
             // #74: Varargs parameter gets wrapped as List[T]
