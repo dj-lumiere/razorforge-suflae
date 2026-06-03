@@ -413,7 +413,7 @@ routine Set[T].$diagnose() -> ?Text
 # ============================================================================
 
 @readonly
-routine Set[T].$eq(other: Set[T]) -> Bool
+routine Set[T].$eq(other: Referring[Set[T]]) -> Bool
   if me.count != other.count
     return false
   for val in me

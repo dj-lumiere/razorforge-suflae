@@ -382,7 +382,7 @@ routine ListEmitter[T].$next!() -> ?T
 ### :param other: The other list to compare against.
 ### :returns: `true` if both have equal count and all corresponding elements are equal.
 @readonly
-routine List[T].$eq(other: List[T]) -> Bool
+routine List[T].$eq(other: Referring[List[T]]) -> Bool
   if me.count() != other.count()
     return false
   var i = 0u64

@@ -889,7 +889,7 @@ routine SortedList[T].$diagnose() -> ?Text
 ### :param other: The list to compare against.
 ### :returns: `true` if element-wise equal.
 @readonly
-routine SortedList[T].$eq(other: SortedList[T]) -> Bool
+routine SortedList[T].$eq(other: Referring[SortedList[T]]) -> Bool
   if me.count != other.count
     return false
   var i = 0u64

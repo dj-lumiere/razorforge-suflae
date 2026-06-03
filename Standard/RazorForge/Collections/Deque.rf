@@ -452,7 +452,7 @@ routine Deque[T].$diagnose() -> ?Text
 ### :param other: The other deque to compare against.
 ### :returns: `true` if both have equal count and all corresponding elements are equal.
 @readonly
-routine Deque[T].$eq(other: Deque[T]) -> Bool
+routine Deque[T].$eq(other: Referring[Deque[T]]) -> Bool
   if me.count != other.count
     return false
   var i = 0u64

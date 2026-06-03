@@ -464,7 +464,7 @@ routine Dict[K, V].$diagnose() -> ?Text
 # ============================================================================
 
 @readonly
-routine Dict[K, V].$eq(other: Dict[K, V]) -> Bool
+routine Dict[K, V].$eq(other: Referring[Dict[K, V]]) -> Bool
   if me.count != other.count
     return false
   var i = 0u64

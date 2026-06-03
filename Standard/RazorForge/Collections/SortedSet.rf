@@ -1022,7 +1022,7 @@ routine SortedSet[T].$diagnose() -> ?Text
 ### :param other: The other set to compare against.
 ### :returns: `true` if both sets have equal count and all corresponding elements are equal.
 @readonly
-routine SortedSet[T].$eq(other: SortedSet[T]) -> Bool
+routine SortedSet[T].$eq(other: Referring[SortedSet[T]]) -> Bool
   if me.count != other.count
     return false
   var i = 0u64

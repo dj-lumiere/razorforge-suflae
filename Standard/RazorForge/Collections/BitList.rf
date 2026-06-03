@@ -511,7 +511,7 @@ routine BitList.reverse() -> ?BitList
 ### :param other: The other bit list to compare against.
 ### :returns: `true` if both have the same count and all corresponding bits match.
 @readonly
-routine BitList.$eq(other: BitList) -> Bool
+routine BitList.$eq(other: Referring[BitList]) -> Bool
   if me.count != other.count
     return false
   var i = 0u64
@@ -626,7 +626,7 @@ common routine BitList.from_u32(value: U32) -> ?BitList
 ### Returns a compact display form of the logical bit sequence.
 ### :returns: The resulting `Text` value.
 @readonly
-routine BitList.$represent() -> ?Text
+routine BitList.$represent() -> Text
   var result = me.type_name() + "(["
   var i = 0u64
   for v in me
@@ -635,12 +635,12 @@ routine BitList.$represent() -> ?Text
     result = result + v.$represent()
     i = i +% 1u64
   result = result + "])"
-  return steal result
+  return result
 
 ### Returns a diagnostic form that includes the bit count, one-bit count, and contents.
 ### :returns: The resulting `Text` value.
 @readonly
-routine BitList.$diagnose() -> ?Text
+routine BitList.$diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().$represent() + ", ["
   var i = 0u64
   for v in me
@@ -649,7 +649,7 @@ routine BitList.$diagnose() -> ?Text
     result = result + v.$represent()
     i = i +% 1u64
   result = result + "])"
-  return steal result
+  return result
 
 ### Expands a `U64` into a sixty-four-bit list.
 ### The least-significant bit of `value` becomes the first element in the list.
