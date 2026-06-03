@@ -398,8 +398,10 @@ internal sealed class LiteralLoweringPass
             }
             case BackIndexExpression back:
             {
+                // Lower `^n` to `BackIndex(offset: n)` so codegen never sees the back-index
+                // operator — it only sees the creator, the same as ByteSize/Character literals.
                 Expression o = LowerExpression(back.Operand);
-                return ReferenceEquals(o, back.Operand) ? expr : back with { Operand = o };
+                return MakeBackIndexCreator(o, back.Location);
             }
             case BlockExpression block:
             {
@@ -499,6 +501,24 @@ internal sealed class LiteralLoweringPass
     {
         var byteLit = new LiteralExpression(Value: byteValue.ToString(), LiteralType: TokenType.U8Literal, Location: loc);
         return new CreatorExpression("Byte", null, [("from", byteLit)], loc);
+    }
+
+    /// <summary>
+    /// Builds the `BackIndex(offset: n)` creator that replaces a `^n` expression.
+    /// The <c>BackIndex.$create</c> routine takes a <c>U64</c> offset, so an untyped or
+    /// signed integer-literal operand is retagged <c>U64</c>; any other operand passes through
+    /// unchanged (semantic analysis has already verified it is an integer).
+    /// </summary>
+    private static CreatorExpression MakeBackIndexCreator(Expression operand, SourceLocation loc)
+    {
+        Expression offset =
+            operand is LiteralExpression
+            {
+                LiteralType: TokenType.IntegerLiteral or TokenType.S64Literal
+            } lit
+                ? lit with { LiteralType = TokenType.U64Literal }
+                : operand;
+        return new CreatorExpression("BackIndex", null, [("offset", offset)], loc);
     }
 
     // -----------------------------------------------------------------------------
