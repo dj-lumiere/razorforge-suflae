@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Compiler.Tokenizer;
 using SyntaxTree;
+using TypeModel.Types;
 
 namespace Compiler.Postprocessing.Passes;
 
@@ -24,6 +25,7 @@ namespace Compiler.Postprocessing.Passes;
 internal sealed class LiteralLoweringPass
 {
     private readonly Dictionary<string, Statement>? _variantBodies;
+    private readonly TypeInfo? _backIndexType;
 
     /// <summary>
     /// Initializes a new instance with the dependencies required for its compiler phase.
@@ -31,6 +33,9 @@ internal sealed class LiteralLoweringPass
     internal LiteralLoweringPass(PostprocessingContext ctx)
     {
         _variantBodies = ctx.VariantBodies;
+        // Cached so the synthesized `BackIndex(...)` creator can carry a resolved type — a later
+        // pass (OperatorLoweringPass) needs it to pick the BackIndex `$getitem!` overload.
+        _backIndexType = ctx.Registry.LookupType(name: "BackIndex");
     }
 
     // -----------------------------------------------------------------------------
@@ -509,7 +514,7 @@ internal sealed class LiteralLoweringPass
     /// signed integer-literal operand is retagged <c>U64</c>; any other operand passes through
     /// unchanged (semantic analysis has already verified it is an integer).
     /// </summary>
-    private static CreatorExpression MakeBackIndexCreator(Expression operand, SourceLocation loc)
+    private CreatorExpression MakeBackIndexCreator(Expression operand, SourceLocation loc)
     {
         Expression offset =
             operand is LiteralExpression
@@ -518,7 +523,11 @@ internal sealed class LiteralLoweringPass
             } lit
                 ? lit with { LiteralType = TokenType.U64Literal }
                 : operand;
-        return new CreatorExpression("BackIndex", null, [("offset", offset)], loc);
+        var creator = new CreatorExpression("BackIndex", null, [("offset", offset)], loc);
+        // Carry the resolved type so OperatorLoweringPass can disambiguate `$getitem!`/`$setitem!`
+        // by the index argument type (the BackIndex overload, not the forward U64 one).
+        creator.ResolvedType = _backIndexType;
+        return creator;
     }
 
     // -----------------------------------------------------------------------------

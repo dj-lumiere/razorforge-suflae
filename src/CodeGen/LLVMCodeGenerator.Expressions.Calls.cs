@@ -16,6 +16,7 @@ public partial class LlvmCodeGenerator
     private const string CreateMethodName = "$create";
 
     /// <summary>
+    /// <summary>
     /// Emit routine call as part of this compiler phase.
     /// </summary>
     private string EmitRoutineCall(StringBuilder sb, RoutineCallRequest req)

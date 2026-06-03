@@ -384,7 +384,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 EnqueueMethodIfPresent(owner: collectionType, methodName: "add");
                 EnqueueZeroArgCreateIfPresent(owner: collectionType);
                 break;
-            case IndexExpression:
+            case IndexExpression ixNode:
                 // Both read ($getitem) and write ($setitem) — IndexExpression's role is determined
                 // by parent context (assignment target or not). Enqueue both; if either is absent
                 // on this type, LookupMethod returns null and EnqueueMethodIfPresent is a no-op.
@@ -392,6 +392,18 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 // tracks failability on RoutineInfo separately. See TypeRegistry.MethodLookup.cs:236.
                 EnqueueMethodIfPresent(owner: collectionType, methodName: "$getitem");
                 EnqueueMethodIfPresent(owner: collectionType, methodName: "$setitem");
+                // The first-overload lookup above only reaches the forward (integer) index form.
+                // List/Text/Bytes/Array also expose `$getitem!(BackIndex)`; without seeding the
+                // overload matching the actual index type, `coll[^n]` links against an unemitted
+                // symbol. Seed by the index argument type so the BackIndex body gets monomorphized.
+                if (ixNode.Index.ResolvedType is { } idxRaw)
+                {
+                    TypeInfo idxType = RoutineInfo.SubstituteType(type: idxRaw, substitution: typeSubs);
+                    EnqueueMethodOverloadIfPresent(owner: collectionType, methodName: "$getitem",
+                        argType: idxType);
+                    EnqueueMethodOverloadIfPresent(owner: collectionType, methodName: "$setitem",
+                        argType: idxType);
+                }
                 break;
             case UnaryExpression { Operator: UnaryOperator.ForceUnwrap }:
                 // `expr!!` is lowered by OperatorLoweringPass (Phase 7) to `expr.$unwrap()`.
@@ -415,6 +427,19 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     private void EnqueueMethodIfPresent(TypeInfo owner, string methodName)
     {
         RoutineInfo? routine = ctx.Registry.LookupMethod(type: owner, methodName: methodName);
+        if (routine != null) EnqueueCallee(callee: routine);
+    }
+
+    /// <summary>
+    /// Enqueues the <paramref name="methodName"/> overload whose parameter list matches a single
+    /// argument of <paramref name="argType"/>. Used to reach a type-specific index overload (e.g.
+    /// <c>$getitem!(BackIndex)</c>) that the first-match <see cref="EnqueueMethodIfPresent"/> skips.
+    /// No-op when no such overload exists (e.g. two-parameter <c>$setitem!</c> against one argType).
+    /// </summary>
+    private void EnqueueMethodOverloadIfPresent(TypeInfo owner, string methodName, TypeInfo argType)
+    {
+        RoutineInfo? routine = ctx.Registry.LookupMethodOverload(type: owner,
+            methodName: methodName, argTypes: [argType]);
         if (routine != null) EnqueueCallee(callee: routine);
     }
 

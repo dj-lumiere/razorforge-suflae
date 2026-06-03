@@ -223,6 +223,34 @@ internal sealed class SignatureResolver
             }
         }
 
+        // S511: a user `$create` may not occupy the all-fields memberwise signature — i.e. take
+        // exactly the type's field-name set. That shape is the built-in memberwise constructor and
+        // cannot be overridden. A parsing/validating constructor must use a distinct parameter shape
+        // (different names) or `secret` fields plus a named constructor. The synthesized memberwise
+        // creator is registered elsewhere (AutoWiredRegistrationPass), so it never reaches here.
+        if (pending.RoutineName is "$create" or "$create!")
+        {
+            List<string>? fieldNames = refreshedOwnerType switch
+            {
+                EntityTypeInfo e => e.MemberVariables.Select(selector: mv => mv.Name).ToList(),
+                RecordTypeInfo r => r.MemberVariables.Select(selector: mv => mv.Name).ToList(),
+                _ => null
+            };
+            if (fieldNames is { Count: > 0 }
+                && parameters.Count == fieldNames.Count
+                && new HashSet<string>(collection: parameters.Select(selector: p => p.Name))
+                    .SetEquals(other: fieldNames))
+            {
+                _sa.ReportError(code: SemanticDiagnosticCode.AllFieldsCreatorReserved,
+                    message:
+                    $"'$create' cannot take exactly the field set ({string.Join(separator: ", ", values: fieldNames)}) " +
+                    $"of '{refreshedOwnerType!.Name}' — that signature is the built-in memberwise constructor and " +
+                    "cannot be overridden. Use a distinct parameter shape (e.g. different parameter names) or " +
+                    "`secret` fields with a named constructor.",
+                    location: routine.Location);
+            }
+        }
+
         // Resolve return type. Top-level `?T` is legal (entity rvalue, return-position only);
         // nested `?T` inside generic args is a slot position and rejected.
         if (routine.ReturnType?.GenericArguments is { } retArgs)

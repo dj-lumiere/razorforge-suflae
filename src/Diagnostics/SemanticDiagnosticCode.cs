@@ -543,6 +543,10 @@ public enum SemanticDiagnosticCode
     /// <summary>Routine with 2+ parameters requires named arguments at call site.</summary>
     NamedArgumentRequired = 510,
 
+    /// <summary>A user `$create` may not take exactly the type's field-name set — that signature
+    /// is the built-in memberwise constructor and cannot be overridden.</summary>
+    AllFieldsCreatorReserved = 511,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // COLLECTION LITERAL ERRORS (RF-S550 - RF-S599)
     // ═══════════════════════════════════════════════════════════════════════════

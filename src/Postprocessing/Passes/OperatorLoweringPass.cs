@@ -357,16 +357,20 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 TypeInfo? targetType = idx.Object.ResolvedType;
                 if (targetType != null)
                 {
-                    resolvedGetItem =
-                        ctx.Registry.LookupMethod(type: targetType, methodName: "$getitem");
-                    if (resolvedGetItem != null)
+                    TypeInfo? indexType = loweredIdx.ResolvedType ?? idx.Index.ResolvedType;
+                    // Overload-aware: List/Text/Bytes/Array expose both `$getitem!(U64)` and
+                    // `$getitem!(BackIndex)`. Pick by the index argument type so `coll[^n]` binds the
+                    // BackIndex overload instead of the first-declared forward (U64) one. Falls back
+                    // to the plain first-match lookup when the index type is unknown.
+                    resolvedGetItem = indexType != null
+                        ? ctx.Registry.LookupMethodOverload(type: targetType,
+                              methodName: "$getitem", argTypes: [indexType])
+                          ?? ctx.Registry.LookupMethod(type: targetType, methodName: "$getitem")
+                        : ctx.Registry.LookupMethod(type: targetType, methodName: "$getitem");
+                    if (resolvedGetItem != null && indexType != null)
                     {
-                        TypeInfo? indexType = loweredIdx.ResolvedType ?? idx.Index.ResolvedType;
-                        if (indexType != null)
-                        {
-                            resolvedGetItem = ResolveMethodGenericRoutine(routine: resolvedGetItem,
-                                argTypes: [indexType]);
-                        }
+                        resolvedGetItem = ResolveMethodGenericRoutine(routine: resolvedGetItem,
+                            argTypes: [indexType]);
                     }
                 }
 
