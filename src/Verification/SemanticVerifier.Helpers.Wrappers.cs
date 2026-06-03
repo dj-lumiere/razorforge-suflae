@@ -203,17 +203,18 @@ public sealed partial class SemanticVerifier
     private static readonly HashSet<string> InlineOnlyTokenTypes =
     [
         ViewingWrapperName, // Read-only single-threaded token
-        ModifyingWrapperName, // Exclusive write single-threaded token
+        ModifyingWrapperName, // Mutable (non-exclusive) single-threaded token
         InspectingWrapperName, // Read-only multi-threaded token
         ClaimingWrapperName // Exclusive write multi-threaded token
     ];
 
     /// <summary>
     /// Token types that require uniqueness validation (cannot be passed twice in same call).
+    /// Only the multi-threaded exclusive write token qualifies: single-threaded Modifying is
+    /// non-exclusive (shared-mutable aliasing is harmless without a second thread).
     /// </summary>
     private static readonly HashSet<string> ExclusiveTokenTypes =
     [
-        ModifyingWrapperName, // Cannot pass same Modifying token twice
         ClaimingWrapperName // Cannot pass same Claiming token twice
     ];
 

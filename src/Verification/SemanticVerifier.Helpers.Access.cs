@@ -84,7 +84,7 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
-    /// Validates that exclusive tokens (Modifying, Claiming) are not passed multiple times in a single call.
+    /// Validates that exclusive tokens (Claiming) are not passed multiple times in a single call.
     /// </summary>
     private void ValidateExclusiveTokenUniqueness(List<Expression> arguments,
         SourceLocation location)
