@@ -218,6 +218,9 @@ public partial class Tokenizer
 
             // Generic constraints
             [key: "needs"] = TokenType.Needs,
+
+            // Associated types
+            [key: "relates"] = TokenType.Relates,
         };
 
         // RF-only keywords

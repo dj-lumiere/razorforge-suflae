@@ -117,6 +117,19 @@ internal sealed class TypeResolver
         if (typeExpr is { Name: "Me", GenericArguments: not { Count: > 0 } } &&
             _sa._currentRoutine?.OwnerType is { } meOwner and not GenericParameterTypeInfo)
         {
+            // When the owner is a generic definition (e.g. `Box[T]`), `Me` must resolve to the
+            // owner applied to its OWN generic parameters (`Box[T]`), not the bare definition.
+            // Otherwise `Me` used as a type argument (`Wrapper[T, Me]`) drops the params, and
+            // monomorphization can't substitute them — yielding a malformed `Wrapper[S64, Box]`
+            // whose methods never get instantiated. For a non-generic owner this is a no-op.
+            if (meOwner is { IsGenericDefinition: true, GenericParameters: { } ownerParams })
+            {
+                var selfArgs = ownerParams
+                    .Select(selector: p => (TypeInfo)new GenericParameterTypeInfo(name: p))
+                    .ToList();
+                return _sa._registry.GetOrCreateResolution(genericDef: meOwner,
+                    typeArguments: selfArgs);
+            }
             return meOwner;
         }
 

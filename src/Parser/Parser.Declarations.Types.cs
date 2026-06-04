@@ -63,6 +63,9 @@ public partial class Parser
         constraints = ParseGenericConstraints(genericParams: genericParams,
             existingConstraints: constraints);
 
+        // Associated-type bindings: `relates ConcreteType as Iter` (needs-sibling clause).
+        List<AssociatedTypeDeclaration>? associatedTypes = ParseRelatesClauses();
+
         var members = new List<SyntaxTree.Declaration>();
         bool hasPass = false;
 
@@ -137,7 +140,10 @@ public partial class Parser
             Members: members,
             Visibility: visibility,
             Location: location,
-            HasPassBody: hasPass);
+            HasPassBody: hasPass)
+        {
+            AssociatedTypes = associatedTypes
+        };
     }
 
     /// <summary>
@@ -197,6 +203,9 @@ public partial class Parser
         // Try constraints again after obeys (supports needs on next line)
         constraints = ParseGenericConstraints(genericParams: genericParams,
             existingConstraints: constraints);
+
+        // Associated-type bindings: `relates ConcreteType as Iter` (needs-sibling clause).
+        List<AssociatedTypeDeclaration>? associatedTypes = ParseRelatesClauses();
 
         var members = new List<SyntaxTree.Declaration>();
         bool hasPass = false;
@@ -272,7 +281,10 @@ public partial class Parser
             Visibility: visibility,
             Location: location,
             HasPassBody: hasPass,
-            Annotations: annotations);
+            Annotations: annotations)
+        {
+            AssociatedTypes = associatedTypes
+        };
     }
 
     /// <summary>
@@ -620,6 +632,9 @@ public partial class Parser
         constraints = ParseGenericConstraints(genericParams: genericParams,
             existingConstraints: constraints);
 
+        // Associated-type slot declarations: `relates Iter obeys Iterator[T]` (needs-sibling clause).
+        List<AssociatedTypeDeclaration>? associatedTypes = ParseRelatesClauses();
+
         var methods = new List<RoutineSignature>();
 
         // Parse protocol body as indented block
@@ -633,7 +648,10 @@ public partial class Parser
                 Methods: methods,
                 Visibility: visibility,
                 Location: location,
-                GenericConstraints: constraints);
+                GenericConstraints: constraints)
+            {
+                AssociatedTypes = associatedTypes
+            };
         }
 
         ProcessIndentToken();
@@ -798,7 +816,10 @@ public partial class Parser
             Methods: methods,
             Visibility: visibility,
             Location: location,
-            GenericConstraints: constraints);
+            GenericConstraints: constraints)
+        {
+            AssociatedTypes = associatedTypes
+        };
     }
 
     /// <summary>

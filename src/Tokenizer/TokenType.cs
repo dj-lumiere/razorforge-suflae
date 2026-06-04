@@ -842,6 +842,14 @@ public enum TokenType
     /// </summary>
     Needs,
 
+    /// <summary>
+    /// The 'relates' keyword for associated types on type declarations.
+    /// Declares an associated-type slot on a protocol, or binds one on an implementer.
+    /// Example: protocol Iterable[T] \n relates Iter obeys Iterator[T]
+    /// Example: entity List[T] obeys Iterable[T] \n relates ListEmitter[T] as Iter
+    /// </summary>
+    Relates,
+
     #endregion
 
     #region Terminal Tokens

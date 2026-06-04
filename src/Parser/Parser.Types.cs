@@ -62,6 +62,21 @@ public partial class Parser
         // ═══════════════════════════════════════════════════════════════════════════
         if (Match(type: TokenType.MyType))
         {
+            // `Me` may be followed by an associated-type projection: `Me/Iter`, `Me/Iter/Inner`.
+            // Carry it in the flattened name; the resolver walks `/` segments (Me → owner type,
+            // then each following segment is an associated-type projection).
+            if (Check(type: TokenType.Slash))
+            {
+                var meSb = new System.Text.StringBuilder("Me");
+                while (Match(type: TokenType.Slash))
+                {
+                    meSb.Append('/');
+                    meSb.Append(ConsumeIdentifier(
+                        errorMessage: "Expected associated-type name after '/' in projection"));
+                }
+                return new TypeExpression(Name: meSb.ToString(), GenericArguments: null,
+                    Location: location);
+            }
             return new TypeExpression(Name: "Me", GenericArguments: null, Location: location);
         }
 
@@ -589,6 +604,61 @@ public partial class Parser
         return constraints.Count > 0
             ? constraints
             : null;
+    }
+
+    /// <summary>
+    /// Parses <c>relates</c> clauses on a type declaration — a <c>needs</c>-sibling clause placed
+    /// after the header (and any <c>needs</c>), before the indented body. Two forms:
+    /// <list type="bullet">
+    ///   <item>Protocol slot declaration: <c>relates Iter obeys Iterator[T]</c></item>
+    ///   <item>Implementer binding: <c>relates ListEmitter[T] as Iter</c></item>
+    /// </list>
+    /// Returns the accumulated list (merged with <paramref name="existing"/>), or null if none.
+    /// </summary>
+    private List<AssociatedTypeDeclaration>? ParseRelatesClauses(
+        List<AssociatedTypeDeclaration>? existing = null)
+    {
+        List<AssociatedTypeDeclaration> related = existing != null ? [..existing] : [];
+
+        while (SkipNewlinesIfFollowedBy(type: TokenType.Relates) &&
+               Match(type: TokenType.Relates))
+        {
+            SourceLocation location = GetLocation();
+
+            // Parse the first token group as a type. For a slot declaration it is a bare
+            // identifier (the slot name); for a binding it is the concrete type.
+            TypeExpression first = ParseType();
+
+            if (Match(type: TokenType.Obeys))
+            {
+                // Slot declaration: `relates Iter obeys Iterator[T]`.
+                TypeExpression constraint = ParseType();
+                related.Add(item: new AssociatedTypeDeclaration(
+                    Name: first.Name,
+                    Constraint: constraint,
+                    Binding: null,
+                    Location: location));
+            }
+            else if (Match(type: TokenType.As))
+            {
+                // Implementer binding: `relates ListEmitter[T] as Iter`.
+                string slotName = ConsumeIdentifier(
+                    errorMessage: "Expected associated-type name after 'as' in 'relates' clause");
+                related.Add(item: new AssociatedTypeDeclaration(
+                    Name: slotName,
+                    Constraint: null,
+                    Binding: first,
+                    Location: location));
+            }
+            else
+            {
+                throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedConstraintType,
+                    message:
+                    "Expected 'obeys' (slot declaration) or 'as' (binding) in 'relates' clause");
+            }
+        }
+
+        return related.Count > 0 ? related : null;
     }
 
     /// <summary>

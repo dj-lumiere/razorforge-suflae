@@ -58,6 +58,26 @@ public record GenericConstraintDeclaration(
     List<TypeExpression>? ConstraintTypes = null,
     SourceLocation? Location = null);
 
+/// <summary>
+/// Associated-type clause introduced by <c>relates</c> on a type declaration.
+/// Two forms:
+/// <list type="bullet">
+///   <item>Protocol slot declaration: <c>relates Iter obeys Iterator[T]</c> — <see cref="Name"/>
+///   is the slot, <see cref="Constraint"/> is the bound, <see cref="Binding"/> is null.</item>
+///   <item>Implementer binding: <c>relates ListEmitter[T] as Iter</c> — <see cref="Name"/> is the
+///   slot, <see cref="Binding"/> is the concrete type, <see cref="Constraint"/> is null.</item>
+/// </list>
+/// </summary>
+/// <param name="Name">The associated-type slot name (e.g. <c>Iter</c>).</param>
+/// <param name="Constraint">Protocol bound for a slot declaration; null for a binding.</param>
+/// <param name="Binding">Concrete type bound to the slot by an implementer; null for a declaration.</param>
+/// <param name="Location">Source location.</param>
+public record AssociatedTypeDeclaration(
+    string Name,
+    TypeExpression? Constraint = null,
+    TypeExpression? Binding = null,
+    SourceLocation? Location = null);
+
 #endregion
 
 #region Variable and Function Declarations
@@ -219,6 +239,9 @@ public record EntityDeclaration(
     List<GenericConstraintDeclaration>? GenericConstraints = null,
     bool HasPassBody = false) : Declaration(Location: Location)
 {
+    /// <summary>Associated-type clauses (<c>relates …</c>) on this entity. Set by the parser.</summary>
+    public List<AssociatedTypeDeclaration>? AssociatedTypes { get; set; }
+
     /// <inheritdoc/>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {
@@ -260,6 +283,9 @@ public record RecordDeclaration(
     bool HasPassBody = false,
     List<string>? Annotations = null) : Declaration(Location: Location)
 {
+    /// <summary>Associated-type clauses (<c>relates …</c>) on this record. Set by the parser.</summary>
+    public List<AssociatedTypeDeclaration>? AssociatedTypes { get; set; }
+
     /// <inheritdoc/>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {
@@ -292,6 +318,9 @@ public record ChoiceDeclaration(
     VisibilityModifier Visibility,
     SourceLocation Location) : Declaration(Location: Location)
 {
+    /// <summary>Associated-type clauses (<c>relates …</c>) on this choice. Set by the parser.</summary>
+    public List<AssociatedTypeDeclaration>? AssociatedTypes { get; set; }
+
     /// <inheritdoc/>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {
@@ -418,6 +447,9 @@ public record ProtocolDeclaration(
     List<GenericConstraintDeclaration>? GenericConstraints = null)
     : Declaration(Location: Location)
 {
+    /// <summary>Associated-type slot declarations (<c>relates …</c>) on this protocol. Set by the parser.</summary>
+    public List<AssociatedTypeDeclaration>? AssociatedTypes { get; set; }
+
     /// <inheritdoc/>
     public override T Accept<T>(ISyntaxTreeVisitor<T> visitor)
     {
