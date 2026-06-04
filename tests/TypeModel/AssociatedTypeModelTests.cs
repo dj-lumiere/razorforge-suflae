@@ -70,4 +70,41 @@ public class AssociatedTypeModelTests
         Assert.Equal(expected: "Iter", actual: projection.SlotName);
         Assert.Equal(expected: "S/Iter", actual: projection.Name);
     }
+
+    /// <summary>
+    /// Bucket 3 core: substituting <c>S/Iter</c> where <c>S</c> maps to a concrete type that binds
+    /// <c>Iter</c> resolves the projection to the bound type.
+    /// </summary>
+    [Fact]
+    public void SubstituteType_ResolvesProjection_WhenBaseBecomesConcreteWithBinding()
+    {
+        var emitter = new RecordTypeInfo(name: "ListEmitter");
+        var concreteList = new EntityTypeInfo(name: "List")
+        {
+            AssociatedTypeBindings = new() { ["Iter"] = emitter }
+        };
+        var projection = new AssociatedProjectionTypeInfo(
+            baseType: new GenericParameterTypeInfo(name: "S"), slotName: "Iter");
+
+        var subs = new Dictionary<string, TypeInfo> { ["S"] = concreteList };
+        TypeInfo result = RecordTypeInfo.SubstituteType(type: projection, substitution: subs);
+
+        Assert.Same(expected: emitter, actual: result);
+    }
+
+    /// <summary>
+    /// When the base of a projection is still generic after substitution, the projection is kept
+    /// (deferred) rather than wrongly resolved.
+    /// </summary>
+    [Fact]
+    public void SubstituteType_KeepsProjection_WhenBaseStillGeneric()
+    {
+        var projection = new AssociatedProjectionTypeInfo(
+            baseType: new GenericParameterTypeInfo(name: "S"), slotName: "Iter");
+
+        var subs = new Dictionary<string, TypeInfo>(); // no binding for S
+        TypeInfo result = RecordTypeInfo.SubstituteType(type: projection, substitution: subs);
+
+        Assert.IsType<AssociatedProjectionTypeInfo>(@object: result);
+    }
 }
