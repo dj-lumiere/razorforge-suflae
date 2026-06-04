@@ -962,6 +962,35 @@ public sealed partial class StdlibLoader
     }
 
     /// <summary>
+    /// Post-registration pass: (re)resolves associated-type bindings (<c>relates Concrete as Name</c>)
+    /// for all entity/record types now that every type — including iterator/emitter types defined
+    /// later in their file — is registered. The inline resolution during initial registration can
+    /// miss forward references (e.g. <c>List</c> binds <c>ListEmitter[T]</c> but <c>ListEmitter</c>
+    /// is declared further down the file), leaving the binding empty; this fills them in.
+    /// </summary>
+    private static void ResolveAssociatedTypeBindings(TypeRegistry registry, Program program)
+    {
+        foreach (ISyntaxTreeNode node in program.Declarations)
+        {
+            switch (node)
+            {
+                case EntityDeclaration { AssociatedTypes: { Count: > 0 } at } ed
+                    when registry.LookupType(name: ed.Name) is EntityTypeInfo ent:
+                    RegisterAssociatedTypeBindings(registry: registry, declared: at,
+                        genericParams: ed.GenericParameters, moduleName: ent.Module ?? "",
+                        bindings: ent.AssociatedTypeBindings);
+                    break;
+                case RecordDeclaration { AssociatedTypes: { Count: > 0 } at } rd
+                    when registry.LookupType(name: rd.Name) is RecordTypeInfo rec:
+                    RegisterAssociatedTypeBindings(registry: registry, declared: at,
+                        genericParams: rd.GenericParameters, moduleName: rec.Module ?? "",
+                        bindings: rec.AssociatedTypeBindings);
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
     /// Resolves <c>relates Concrete as Name</c> bindings from a declaration's AST and populates the
     /// target type's binding map (slot name → concrete <see cref="TypeInfo"/>). Shared by entity
     /// and record registration.

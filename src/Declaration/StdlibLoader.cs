@@ -187,6 +187,7 @@ public sealed partial class StdlibLoader
         foreach ((Program program, string _, string _) in _corePrograms)
         {
             ResolveProtocolMethodReturnTypes(registry: registry, program: program);
+            ResolveAssociatedTypeBindings(registry: registry, program: program);
         }
 
         // Pass 2: Register all routines (now all types are available for return type resolution)
@@ -431,6 +432,7 @@ public sealed partial class StdlibLoader
         foreach ((Program program, string _, string _) in programs)
         {
             ResolveProtocolMethodReturnTypes(registry: registry, program: program);
+            ResolveAssociatedTypeBindings(registry: registry, program: program);
         }
 
         foreach ((Program program, string _, string ns) in programs)
@@ -523,6 +525,38 @@ public sealed partial class StdlibLoader
         }
 
         string typeName = typeExpr.Name;
+
+        // `Me` (protocol-self / owner placeholder) used as a type or type argument — e.g. in
+        // `Iterable[T].enumerate() -> ?EnumerateIterator[T, Me]`. Resolved to ProtocolSelf here;
+        // re-homing / call-site substitution binds it to the concrete implementer. Without this,
+        // `Me` falls through to the type lookup, returns null, and nulls the whole signature type.
+        if (typeName == "Me")
+        {
+            return ProtocolSelfTypeInfo.Instance;
+        }
+
+        // Associated-type projection `Base/Slot` (e.g. `S/Iter`): the base is an in-scope generic
+        // parameter or `Me`. Produce a deferred AssociatedProjectionTypeInfo that monomorphization
+        // resolves through the base's binding once the base is concrete.
+        if (typeName.Contains(value: '/'))
+        {
+            string[] segments = typeName.Split(separator: '/');
+            TypeInfo? projBase = segments[0] == "Me"
+                ? ProtocolSelfTypeInfo.Instance
+                : genericParams != null && genericParams.Contains(value: segments[0])
+                    ? new GenericParameterTypeInfo(name: segments[0])
+                    : null;
+            if (projBase != null)
+            {
+                TypeInfo current = projBase;
+                for (int i = 1; i < segments.Length; i++)
+                {
+                    current = new AssociatedProjectionTypeInfo(baseType: current,
+                        slotName: segments[i]);
+                }
+                return current;
+            }
+        }
 
         // Generic parameter name (T, K, V) -> placeholder for substitution
         if (genericParams != null && genericParams.Contains(value: typeName))

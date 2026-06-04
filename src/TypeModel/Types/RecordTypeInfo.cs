@@ -434,6 +434,54 @@ public class RecordTypeInfo : TypeInfo
     /// <param name="type">The type to substitute.</param>
     /// <param name="substitution">The type parameter substitution map.</param>
     /// <returns>The substituted type, or the original if no substitution applies.</returns>
+    /// <summary>
+    /// Resolves an associated-type binding (slot) on a base type. Prefers the base's own binding;
+    /// falls back to the generic definition's binding substituted with the base's type arguments —
+    /// needed because cached generic instances created before the binding post-pass have empty
+    /// binding maps while the definition holds the source-of-truth binding. Returns null if neither
+    /// the instance nor the definition binds the slot.
+    /// </summary>
+    internal static TypeInfo? ProjectAssociatedBinding(TypeInfo baseType, string slot)
+    {
+        (Dictionary<string, TypeInfo>? own, TypeInfo? def, List<TypeInfo>? args) = baseType switch
+        {
+            EntityTypeInfo e => (e.AssociatedTypeBindings, (TypeInfo?)e.GenericDefinition,
+                e.TypeArguments),
+            RecordTypeInfo r => (r.AssociatedTypeBindings, (TypeInfo?)r.GenericDefinition,
+                r.TypeArguments),
+            _ => (null, null, null)
+        };
+
+        if (own != null && own.TryGetValue(key: slot, value: out TypeInfo? direct))
+        {
+            return direct;
+        }
+
+        Dictionary<string, TypeInfo>? defBindings = def switch
+        {
+            EntityTypeInfo e => e.AssociatedTypeBindings,
+            RecordTypeInfo r => r.AssociatedTypeBindings,
+            _ => null
+        };
+        if (defBindings is null ||
+            !defBindings.TryGetValue(key: slot, value: out TypeInfo? defBound))
+        {
+            return null;
+        }
+
+        if (def!.GenericParameters is { } defParams && args is { } typeArgs &&
+            defParams.Count == typeArgs.Count)
+        {
+            var subs = new Dictionary<string, TypeInfo>();
+            for (int i = 0; i < defParams.Count; i++)
+            {
+                subs[key: defParams[index: i]] = typeArgs[index: i];
+            }
+            return SubstituteType(type: defBound, substitution: subs);
+        }
+        return defBound;
+    }
+
     internal static TypeInfo SubstituteType(TypeInfo type,
         Dictionary<string, TypeInfo> substitution)
     {
@@ -443,14 +491,9 @@ public class RecordTypeInfo : TypeInfo
         if (type is AssociatedProjectionTypeInfo projection)
         {
             TypeInfo newBase = SubstituteType(type: projection.Base, substitution: substitution);
-            Dictionary<string, TypeInfo>? bindings = newBase switch
-            {
-                EntityTypeInfo e => e.AssociatedTypeBindings,
-                RecordTypeInfo r => r.AssociatedTypeBindings,
-                _ => null
-            };
-            if (bindings != null &&
-                bindings.TryGetValue(key: projection.SlotName, value: out TypeInfo? bound))
+            TypeInfo? bound = ProjectAssociatedBinding(baseType: newBase,
+                slot: projection.SlotName);
+            if (bound != null)
             {
                 // The binding may still carry params/projections of its own — substitute again.
                 return SubstituteType(type: bound, substitution: substitution);

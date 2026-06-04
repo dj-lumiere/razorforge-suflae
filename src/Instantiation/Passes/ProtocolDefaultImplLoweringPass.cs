@@ -98,7 +98,14 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
                 // (ControlFlow, FString, Pattern, Expression, Operator, ...). Several
                 // RunOnInstantiatedGenericBodies methods skip IsSynthesized=true entries
                 // assuming there is no AST to walk, which is not the case here.
-                var bodySubs = new Dictionary<string, TypeInfo>(protoSubs) { ["me"] = impl };
+                // "me" is the receiver value binding; "Me" maps ProtocolSelf (Name "Me") to the
+                // implementer so codegen's type substitution resolves `Me`-typed constructions
+                // (e.g. `EnumerateIterator[T, Me]`) instead of leaking ProtocolSelf.
+                var bodySubs = new Dictionary<string, TypeInfo>(protoSubs)
+                {
+                    ["me"] = impl,
+                    ["Me"] = impl
+                };
                 ctx.InstantiatedGenericBodies[key: synthesized.RegistryKey] = new MonomorphizedBody(
                     Ast: WrapInShellDecl(name: synthesized.Name, body: clonedBody, info: synthesized),
                     Info: synthesized,
@@ -364,6 +371,12 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
     {
         if (t is GenericParameterTypeInfo gp && subs.TryGetValue(key: gp.Name, value: out TypeInfo? sub))
             return sub;
+
+        // `Me` in a protocol-default-impl signature/body resolves to ProtocolSelf; bind it to the
+        // implementer (subs["Me"]). Without this, a return type like `?EnumerateIterator[T, Me]`
+        // keeps ProtocolSelf, which ContainsGenericParameter flags, making codegen skip the body.
+        if (t is ProtocolSelfTypeInfo && subs.TryGetValue(key: "Me", value: out TypeInfo? meSub))
+            return meSub;
 
         // Recurse into composite types (e.g. EnumerateIterator[T] → EnumerateIterator[Text],
         // List[Me] → List[List[Text]]) so the substituted param doesn't survive in a type argument.

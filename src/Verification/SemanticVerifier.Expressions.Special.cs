@@ -118,7 +118,25 @@ public sealed partial class SemanticVerifier
     private TypeSymbol SubstituteWithMapping(TypeSymbol type,
         Dictionary<string, TypeSymbol> substitutions)
     {
-        // Direct type parameter replacement
+        // Associated-type projection (`S/Iter`): substitute the base, then resolve via its binding.
+        // Done at the call site so a method return like `?EnumerateEmitter[T, S/Iter]` resolves to
+        // the CONCRETE emitter (EnumerateEmitter[Text, ListEmitter[Text]]) — otherwise reachability
+        // marks the unresolved-projection emitter's methods and the concrete ones never generate.
+        if (type is AssociatedProjectionTypeInfo proj)
+        {
+            TypeSymbol newBase = SubstituteWithMapping(type: proj.Base, substitutions: substitutions);
+            TypeInfo? bound = RecordTypeInfo.ProjectAssociatedBinding(baseType: newBase,
+                slot: proj.SlotName);
+            if (bound != null)
+            {
+                return SubstituteWithMapping(type: bound, substitutions: substitutions);
+            }
+            return ReferenceEquals(objA: newBase, objB: proj.Base)
+                ? proj
+                : new AssociatedProjectionTypeInfo(baseType: newBase, slotName: proj.SlotName);
+        }
+
+        // Direct type parameter replacement (covers ProtocolSelf via its Name "Me").
         if (substitutions.TryGetValue(key: type.Name, value: out TypeSymbol? replacement))
         {
             return replacement;

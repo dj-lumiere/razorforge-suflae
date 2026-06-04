@@ -1076,6 +1076,15 @@ public sealed partial class SemanticVerifier
                             }
                         }
 
+                        // `Me` (ProtocolSelf, Name "Me") in a return type always denotes the
+                        // receiver — e.g. `Iterable[T].enumerate() -> ?EnumerateIterator[T, Me]`.
+                        // Bind it to the concrete receiver so the call's return type is the concrete
+                        // adapter (`EnumerateIterator[Text, List[Text]]`). Unconditional: the
+                        // protocol-extension method is re-homed onto the implementer (owner =
+                        // List[Text], not the protocol), so an owner-is-protocol gate would miss it;
+                        // for non-protocol methods no return type contains `Me`, so this is a no-op.
+                        substitutions[key: "Me"] = dispatchType;
+
                         // Protocol method resolved through a generic param's `obeys` constraint
                         // (e.g. `r.$iter()` where `r: __T0 obeys Iterable[S64]`). The resolved method
                         // is homed on the bare generic param, and its signature carries the PROTOCOL's

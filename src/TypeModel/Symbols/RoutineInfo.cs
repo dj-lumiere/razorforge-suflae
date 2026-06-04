@@ -452,6 +452,23 @@ public sealed class RoutineInfo
     internal static TypeSymbol SubstituteType(TypeSymbol type,
         Dictionary<string, TypeSymbol> substitution)
     {
+        // Associated-type projection (`S/Iter`): substitute the base, then resolve via the base's
+        // binding (instance, or generic-definition fallback). Mirrors RecordTypeInfo.SubstituteType
+        // so reachability/instantiation paths that route through here also resolve projections.
+        if (type is AssociatedProjectionTypeInfo projection)
+        {
+            TypeSymbol newBase = SubstituteType(type: projection.Base, substitution: substitution);
+            TypeInfo? bound = RecordTypeInfo.ProjectAssociatedBinding(baseType: newBase,
+                slot: projection.SlotName);
+            if (bound != null)
+            {
+                return SubstituteType(type: bound, substitution: substitution);
+            }
+            return ReferenceEquals(objA: newBase, objB: projection.Base)
+                ? projection
+                : new AssociatedProjectionTypeInfo(baseType: newBase, slotName: projection.SlotName);
+        }
+
         if (substitution.TryGetValue(key: type.Name, value: out TypeSymbol? substituted))
         {
             return substituted;

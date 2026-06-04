@@ -1373,7 +1373,12 @@ public sealed partial class TypeRegistry
     /// </summary>
     private static bool IsFullyConcrete(TypeInfo t)
     {
-        if (t is GenericParameterTypeInfo or ErrorTypeInfo) return false;
+        // An unresolved associated-type projection (`S/Iter`) or protocol self (`Me`/ProtocolSelf)
+        // is NOT concrete — both must be resolved to a concrete type during monomorphization before
+        // they can be instantiated/codegen'd.
+        if (t is GenericParameterTypeInfo or ErrorTypeInfo or AssociatedProjectionTypeInfo
+            or ProtocolSelfTypeInfo)
+            return false;
         if (t.IsBlank) return false;
         // A generic definition has free type parameters (no TypeArguments, only GenericParameters).
         // Wrapper instances like Hijacked[BTreeDictNode[K,V]] must not be treated as fully concrete

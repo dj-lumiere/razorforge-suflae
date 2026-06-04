@@ -814,6 +814,19 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             }
         }
 
+        // Tuples carry their elements in ElementTypes (not TypeArguments), so the generic-resolution
+        // recursion below misses them — substitute element-wise (e.g. Tuple[U64, T] -> Tuple[U64, Text]).
+        if (type is TupleTypeInfo tuple)
+        {
+            var subbedElems = tuple.ElementTypes
+                .Select(selector: e => ResolveSubstitutedType(e, subs))
+                .ToList();
+            bool tupleChanged = subbedElems
+                .Where(predicate: (e, i) => !ReferenceEquals(objA: e, objB: tuple.ElementTypes[index: i]))
+                .Any();
+            return tupleChanged ? new TupleTypeInfo(elementTypes: subbedElems) : type;
+        }
+
         if (type is { IsGenericResolution: true, TypeArguments: not null })
         {
             bool anySubstituted = false;

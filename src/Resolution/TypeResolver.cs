@@ -134,6 +134,15 @@ internal sealed class TypeResolver
         if (typeExpr is { Name: "Me", GenericArguments: not { Count: > 0 } } &&
             _sa._currentRoutine?.OwnerType is { } meOwner and not GenericParameterTypeInfo)
         {
+            // Protocol owner (protocol-extension routine like `Iterable[T].enumerate`): `Me` is the
+            // abstract self, resolved per-implementer later. Use ProtocolSelf so a body construction
+            // `EnumerateIterator[T, Me]` matches the signature's `Me` (both ProtocolSelf) — otherwise
+            // self-applying to `Iterable[T]` mismatches the return type (S301).
+            if (meOwner is ProtocolTypeInfo)
+            {
+                return ProtocolSelfTypeInfo.Instance;
+            }
+
             // When the owner is a generic definition (e.g. `Box[T]`), `Me` must resolve to the
             // owner applied to its OWN generic parameters (`Box[T]`), not the bare definition.
             // Otherwise `Me` used as a type argument (`Wrapper[T, Me]`) drops the params, and
@@ -619,6 +628,11 @@ internal sealed class TypeResolver
     /// </summary>
     private TypeSymbol SelfApplyOwner(TypeSymbol owner)
     {
+        // Protocol owner: `Me` is the abstract self (deferred), not the protocol applied to itself.
+        if (owner is ProtocolTypeInfo)
+        {
+            return ProtocolSelfTypeInfo.Instance;
+        }
         if (owner is { IsGenericDefinition: true, GenericParameters: { } ownerParams })
         {
             var selfArgs = ownerParams

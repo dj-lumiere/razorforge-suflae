@@ -124,6 +124,21 @@ internal static class GenericAstRewriter
             if (original == null || TypeSubs == null || Registry == null)
                 return null;
 
+            // Protocol self (`Me`/ProtocolSelf) -> the bound implementer (TypeSubs["Me"]).
+            if (original is ProtocolSelfTypeInfo &&
+                TypeSubs.TryGetValue(key: "Me", value: out TypeInfo? meBound))
+                return meBound;
+
+            // Associated-type projection (`S/Iter`) -> resolve base then its binding.
+            if (original is AssociatedProjectionTypeInfo proj)
+            {
+                TypeInfo newBase = ResolveType(original: proj.Base) ?? proj.Base;
+                TypeInfo? bound = RecordTypeInfo.ProjectAssociatedBinding(baseType: newBase,
+                    slot: proj.SlotName);
+                if (bound != null)
+                    return ResolveType(original: bound) ?? bound;
+            }
+
             // Direct generic parameter substitution: T -> S64
             if (original is GenericParameterTypeInfo gp)
             {
@@ -610,6 +625,18 @@ internal static class GenericAstRewriter
     private static TypeExpression RewriteType(TypeExpression type,
         RewriteContext ctx)
     {
+        // Associated-type projection `Base/Slot` (e.g. `S/Iter`): resolve the base through the
+        // monomorphization type-subs, walk its associated-type binding(s), and emit the concrete
+        // bound type. Without this the raw `S/Iter` name survives into codegen (TypeParameter).
+        if (type.Name.Contains(value: '/') && ctx.TypeSubs != null)
+        {
+            TypeExpression? projected = RewriteProjection(type: type, ctx: ctx);
+            if (projected != null)
+            {
+                return projected;
+            }
+        }
+
         string name = ctx.StringSubs.TryGetValue(key: type.Name, value: out string? sub)
             ? sub
             : type.Name;
@@ -622,6 +649,59 @@ internal static class GenericAstRewriter
         }
 
         return type with { Name = name, GenericArguments = args };
+    }
+
+    /// <summary>
+    /// Resolves an associated-type projection type expression (<c>Base/Slot</c>) during
+    /// monomorphization: looks up the base in the type substitution map, then walks each slot's
+    /// binding on the (now concrete) base. Returns the bound type as an expression (with
+    /// <c>ResolvedType</c> set), or null when the base/binding can't be resolved.
+    /// </summary>
+    private static TypeExpression? RewriteProjection(TypeExpression type, RewriteContext ctx)
+    {
+        string[] segments = type.Name.Split(separator: '/');
+        if (segments.Length < 2 ||
+            ctx.TypeSubs is null ||
+            !ctx.TypeSubs.TryGetValue(key: segments[0], value: out TypeInfo? current))
+        {
+            return null;
+        }
+
+        for (int i = 1; i < segments.Length; i++)
+        {
+            TypeInfo? bound = RecordTypeInfo.ProjectAssociatedBinding(baseType: current,
+                slot: segments[i]);
+            if (bound is null)
+            {
+                return null;
+            }
+            current = bound;
+        }
+
+        return TypeInfoToTypeExpr(type: current, location: type.Location) with
+        {
+            ResolvedType = current
+        };
+    }
+
+    /// <summary>Builds a <see cref="TypeExpression"/> for a (resolved) <see cref="TypeInfo"/>.</summary>
+    private static TypeExpression TypeInfoToTypeExpr(TypeInfo type, SourceLocation location)
+    {
+        string baseName = type switch
+        {
+            RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition.Name,
+            EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition.Name,
+            ProtocolTypeInfo { GenericDefinition: not null } p => p.GenericDefinition.Name,
+            _ => type.IsGenericResolution && type.Name.Contains(value: '[')
+                ? type.Name[..type.Name.IndexOf(value: '[')]
+                : type.Name
+        };
+        List<TypeExpression>? args = type.TypeArguments is { Count: > 0 }
+            ? type.TypeArguments
+                .Select(selector: a => TypeInfoToTypeExpr(type: a, location: location))
+                .ToList()
+            : null;
+        return new TypeExpression(Name: baseName, GenericArguments: args, Location: location);
     }
 
     #endregion
@@ -658,7 +738,14 @@ internal static class GenericAstRewriter
                                          .Select(selector: mv => (mv.Name,
                                               Value: RewriteExpression(expr: mv.Value,
                                                   ctx: ctx)))
-                                         .ToList()
+                                         .ToList(),
+                // The cloned stdlib body is SA-annotated: the resolved ConstructedType carries
+                // `Me`/projection types that codegen uses directly. Substitute them too, else a
+                // construction like `EnumerateIterator[T, Me]` leaks `ProtocolSelf` into codegen.
+                ConstructedType = ctx.ResolveType(original: creator.ConstructedType)
+                                  ?? creator.ConstructedType,
+                ResolvedType = ctx.ResolveType(original: creator.ResolvedType)
+                               ?? creator.ResolvedType
             },
 
             TypeConversionExpression tce => tce with
@@ -916,6 +1003,16 @@ internal static class GenericAstRewriter
                 cgSub is ConstGenericValueTypeInfo)
             {
                 resolvedType = cgSub;
+            }
+
+            // `me` (the receiver) in a re-homed protocol-default-impl body must be the concrete
+            // implementer (ParamTypes["me"]), not the protocol's substituted element type. Without
+            // this, `me.hijack()` etc. dispatch on the abstract `Iterable[Text]` (undefined symbol)
+            // instead of `List[Text]`. Must run before the member-call re-dispatch below.
+            if (result is IdentifierExpression { Name: "me" } &&
+                ctx.ParamTypes.TryGetValue(key: "me", value: out TypeInfo? meReceiverType))
+            {
+                resolvedType = meReceiverType;
             }
 
             // Concretize a reference to a local whose type was re-inferred from a re-dispatched
