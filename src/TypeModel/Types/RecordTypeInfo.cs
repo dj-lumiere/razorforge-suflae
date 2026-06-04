@@ -27,6 +27,13 @@ public class RecordTypeInfo : TypeInfo
     public List<TypeInfo> ImplementedProtocols { get; set; } = [];
 
     /// <summary>
+    /// Associated-type bindings declared via <c>relates Concrete as Name</c> — maps a protocol
+    /// slot name to the concrete type that fills it. Mirrors
+    /// <see cref="EntityTypeInfo.AssociatedTypeBindings"/>.
+    /// </summary>
+    public Dictionary<string, TypeInfo> AssociatedTypeBindings { get; set; } = new();
+
+    /// <summary>
     /// Backend type from @llvm("type") annotation. Null if not a backend-annotated type.
     /// </summary>
     public string? BackendType { get; set; }
@@ -168,10 +175,15 @@ public class RecordTypeInfo : TypeInfo
             .Select(selector: p => (TypeInfo)(ProtocolTypeInfo)SubstituteType(type: p, substitution: substitution))
             .ToList();
 
+        var substitutedBindings = AssociatedTypeBindings.ToDictionary(
+            keySelector: kv => kv.Key,
+            elementSelector: kv => SubstituteType(type: kv.Value, substitution: substitution));
+
         return new RecordTypeInfo(name: resolvedName)
         {
             MemberVariables = substitutedMemberVariables,
             ImplementedProtocols = substitutedProtocols,
+            AssociatedTypeBindings = substitutedBindings,
             TypeArguments = typeArguments,
             GenericDefinition = this,
             CarrierKind = CarrierKind,

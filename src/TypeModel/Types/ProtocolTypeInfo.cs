@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using TypeModel.Enums;
+using TypeModel.Symbols;
 
 namespace TypeModel.Types;
 
@@ -19,6 +20,12 @@ public sealed class ProtocolTypeInfo : TypeInfo
 
     /// <summary>Parent protocols that this protocol extends.</summary>
     public List<ProtocolTypeInfo> ParentProtocols { get; init; } = [];
+
+    /// <summary>
+    /// Associated-type slots declared by this protocol via <c>relates Name obeys Constraint</c>.
+    /// Implementers bind these (see <see cref="EntityTypeInfo.AssociatedTypeBindings"/>).
+    /// </summary>
+    public List<AssociatedTypeSlot> AssociatedTypes { get; set; } = [];
 
     /// <summary>
     /// For generic definitions, the original generic type this was resolved from.
@@ -86,10 +93,22 @@ public sealed class ProtocolTypeInfo : TypeInfo
                 (ProtocolTypeInfo)RecordTypeInfo.SubstituteType(type: p, substitution: substitution))
             .ToList();
 
+        // Substitute the protocol's own generic params into each slot's constraint
+        // (e.g. Iterable[T]'s `Iter obeys Iterator[T]` becomes `Iter obeys Iterator[Text]`).
+        var substitutedAssociated = AssociatedTypes
+            .Select(selector: s => new AssociatedTypeSlot(name: s.Name)
+            {
+                Constraint = s.Constraint != null
+                    ? RecordTypeInfo.SubstituteType(type: s.Constraint, substitution: substitution)
+                    : null
+            })
+            .ToList();
+
         return new ProtocolTypeInfo(name: resolvedName)
         {
             Methods = substitutedMethods,
             ParentProtocols = substitutedParentProtocols,
+            AssociatedTypes = substitutedAssociated,
             TypeArguments = typeArguments,
             GenericDefinition = this,
             Visibility = Visibility,

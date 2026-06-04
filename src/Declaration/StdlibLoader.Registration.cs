@@ -788,6 +788,12 @@ public sealed partial class StdlibLoader
                                         })
                                    .ToList();
 
+        RegisterAssociatedTypeBindings(registry: registry,
+            declared: record.AssociatedTypes,
+            genericParams: record.GenericParameters,
+            moduleName: moduleName,
+            bindings: typeInfo.AssociatedTypeBindings);
+
         if (isEntitySpecialization)
         {
             // This is the entity-type specialization of a constrained generic
@@ -946,7 +952,45 @@ public sealed partial class StdlibLoader
                                         })
                                    .ToList();
 
+        RegisterAssociatedTypeBindings(registry: registry,
+            declared: entity.AssociatedTypes,
+            genericParams: entity.GenericParameters,
+            moduleName: moduleName,
+            bindings: typeInfo.AssociatedTypeBindings);
+
         registry.RegisterType(type: typeInfo);
+    }
+
+    /// <summary>
+    /// Resolves <c>relates Concrete as Name</c> bindings from a declaration's AST and populates the
+    /// target type's binding map (slot name → concrete <see cref="TypeInfo"/>). Shared by entity
+    /// and record registration.
+    /// </summary>
+    private static void RegisterAssociatedTypeBindings(TypeRegistry registry,
+        List<AssociatedTypeDeclaration>? declared, List<string>? genericParams, string moduleName,
+        Dictionary<string, TypeInfo> bindings)
+    {
+        if (declared is not { Count: > 0 })
+        {
+            return;
+        }
+
+        foreach (AssociatedTypeDeclaration binding in declared)
+        {
+            if (binding.Binding == null)
+            {
+                continue;
+            }
+
+            TypeInfo? concrete = ResolveSimpleType(registry: registry,
+                typeExpr: binding.Binding,
+                genericParams: genericParams,
+                moduleName: moduleName);
+            if (concrete != null)
+            {
+                bindings[key: binding.Name] = concrete;
+            }
+        }
     }
 
     /// <summary>
@@ -1122,6 +1166,24 @@ public sealed partial class StdlibLoader
             GenericParameters = protocol.GenericParameters,
             GenericConstraints = protocol.GenericConstraints
         };
+
+        // Associated-type slots declared via `relates Iter obeys Iterator[T]`.
+        if (protocol.AssociatedTypes is { Count: > 0 } slots)
+        {
+            foreach (AssociatedTypeDeclaration slot in slots)
+            {
+                TypeInfo? constraint = slot.Constraint != null
+                    ? ResolveSimpleType(registry: registry,
+                        typeExpr: slot.Constraint,
+                        genericParams: protocol.GenericParameters,
+                        moduleName: moduleName)
+                    : null;
+                typeInfo.AssociatedTypes.Add(item: new AssociatedTypeSlot(name: slot.Name)
+                {
+                    Constraint = constraint
+                });
+            }
+        }
 
         registry.RegisterType(type: typeInfo);
     }

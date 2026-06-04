@@ -26,6 +26,13 @@ public sealed class EntityTypeInfo : TypeInfo
     public List<TypeInfo> ImplementedProtocols { get; set; } = [];
 
     /// <summary>
+    /// Associated-type bindings declared via <c>relates Concrete as Name</c> — maps a protocol
+    /// slot name (e.g. <c>Iter</c>) to the concrete type that fills it (e.g. <c>ListEmitter[T]</c>).
+    /// Resolved during monomorphization when projecting <c>S/Iter</c>.
+    /// </summary>
+    public Dictionary<string, TypeInfo> AssociatedTypeBindings { get; set; } = new();
+
+    /// <summary>
     /// Size of the underlying heap-allocated struct (sum of member sizes with alignment).
     /// Distinct from <see cref="SizeBytes"/>, which returns the pointer-sized value used
     /// to pass entities around at the SSA level.
@@ -119,6 +126,13 @@ public sealed class EntityTypeInfo : TypeInfo
             .Select(selector: p => (TypeInfo)(ProtocolTypeInfo)RecordTypeInfo.SubstituteType(type: p, substitution: substitution))
             .ToList();
 
+        // Substitute the entity's generic params into each associated-type binding
+        // (e.g. `relates ListEmitter[T] as Iter` becomes `Iter -> ListEmitter[S64]`).
+        var substitutedBindings = AssociatedTypeBindings.ToDictionary(
+            keySelector: kv => kv.Key,
+            elementSelector: kv =>
+                RecordTypeInfo.SubstituteType(type: kv.Value, substitution: substitution));
+
         // Detect cycles from self-referential member types (e.g., BTreeListNode[T].children:
         // List[BTreeListNode[T]]). Return the in-progress entity so the recursive reference
         // points to the same object that will have its members filled in below.
@@ -134,6 +148,7 @@ public sealed class EntityTypeInfo : TypeInfo
                 {
                     MemberVariables = [],
                     ImplementedProtocols = substitutedProtocols,
+                    AssociatedTypeBindings = substitutedBindings,
                     TypeArguments = typeArguments,
                     GenericDefinition = this,
                     Visibility = Visibility,
@@ -149,6 +164,7 @@ public sealed class EntityTypeInfo : TypeInfo
         {
             MemberVariables = [],
             ImplementedProtocols = substitutedProtocols,
+            AssociatedTypeBindings = substitutedBindings,
             TypeArguments = typeArguments,
             GenericDefinition = this,
             Visibility = Visibility,
