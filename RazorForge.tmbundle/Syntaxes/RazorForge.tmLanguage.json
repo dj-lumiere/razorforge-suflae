@@ -40,12 +40,12 @@
         {
           "comment": "Access and routine modifiers",
           "name": "keyword.modifier.razorforge",
-          "match": "\\b(secret|posted|global|external|dangerous|suspended|threaded|emitting)\\b"
+          "match": "\\b(secret|posted|external|dangerous|suspended|threaded)\\b"
         },
         {
           "comment": "Control flow",
           "name": "keyword.control.razorforge",
-          "match": "\\b(if|elseif|else|then|unless|for|loop|while|when|break|continue|return|throw|absent|becomes|discard|emit)\\b"
+          "match": "\\b(if|elseif|else|then|unless|for|loop|while|when|break|continue|return|throw|absent|becomes|discard)\\b"
         },
         {
           "comment": "Type and pattern operations",
@@ -68,9 +68,9 @@
           "match": "\\b(waitfor|within|after)\\b"
         },
         {
-          "comment": "Generic constraints",
+          "comment": "Generic constraints and associated types",
           "name": "keyword.other.razorforge",
-          "match": "\\b(needs)\\b"
+          "match": "\\b(needs|relates)\\b"
         },
         {
           "comment": "Logical operators",
@@ -108,7 +108,7 @@
           "match": "\\b(None)\\b"
         },
         {
-          "comment": "none value literal (absent value for Maybe/Lookup/Result[Blank]/variant-with-None)",
+          "comment": "none value literal (absent value for Maybe/Lookup/variant-with-None)",
           "name": "constant.language.null.razorforge",
           "match": "\\b(none)\\b"
         }
