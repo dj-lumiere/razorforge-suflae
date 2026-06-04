@@ -33,6 +33,7 @@ import BuilderService
 ### :see: {Deque[T]} for efficient double-ended insertion and removal.
 ### :see: {SortedList[T]} for a list that maintains ascending order automatically.
 entity List[T] obeys Iterable[T]
+relates ListEmitter[T] as Iter
   ### Stores the backing buffer.
   secret data: Hijacked[T]
   ### Stores the number of initialized elements.

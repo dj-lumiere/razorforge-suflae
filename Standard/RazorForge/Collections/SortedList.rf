@@ -47,6 +47,7 @@ needs T obeys Comparable
 ### :see: {SortedDict[K, V]} for sorted key-value storage.
 entity SortedList[T] obeys Iterable[T]
 needs T obeys Comparable
+relates SortedListIterator[T] as Iter
   secret root: Hijacked[BTreeListNode[T]]?
   secret count: U64
 

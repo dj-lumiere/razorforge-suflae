@@ -259,6 +259,7 @@ routine BTreeSetNode[T].children_add_range_from(other: Referring[BTreeSetNode[T]
 ### :see: {SortedDict[K, V]} for a sorted mapping from keys to values.
 entity SortedSet[T] obeys Iterable[T]
 needs T obeys Comparable
+relates SortedSetIterator[T] as Iter
   secret root: Hijacked[BTreeSetNode[T]]?
   secret count: U64
 

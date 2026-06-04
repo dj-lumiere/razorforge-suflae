@@ -5,6 +5,7 @@ module Core
 ### other traversal utilities.
 ### :typeparam T: The element type yielded during iteration.
 protocol Iterable[T]
+relates Iter obeys Iterator[T]
   ### Creates an iterator over this value.
   ### Each call should return an iterator positioned at the start of the sequence.
   ### :returns: The resulting `Iterator[T]` value.

@@ -49,6 +49,7 @@ needs K obeys Comparable
 ### :see: {SortedList[T]} for a sorted sequence that allows duplicates.
 entity SortedDict[K, V] obeys Iterable[DictEntry[K, V]]
 needs K obeys Comparable
+relates SortedDictIterator[K, V] as Iter
   secret root: Hijacked[BTreeDictNode[K, V]]?
   secret count: U64
 

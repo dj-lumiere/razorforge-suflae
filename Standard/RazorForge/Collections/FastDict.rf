@@ -48,6 +48,7 @@ preset ENTRY_LIVE: U8 = 1_u8
 ### :see: {Dict[K, V]} for the safe-by-default counterpart used with untrusted input.
 entity FastDict[K, V] obeys Iterable[DictEntry[K, V]]
 needs K obeys FastHashable, Equatable
+relates FastDictIterator[K, V] as Iter
   secret ctrl: Hijacked[U8]         # 1 byte/probe slot: 128=empty, 254=deleted, 0-127=H2
   secret indices: Hijacked[U64]     # probe slot -> entry index
   secret keys: Hijacked[K]          # dense entries array, insertion-ordered

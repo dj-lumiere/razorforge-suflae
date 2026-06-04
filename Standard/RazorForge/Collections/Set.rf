@@ -36,6 +36,7 @@ preset ENTRY_LIVE: U8 = 1_u8
 ### :see: {Dict[K, V]} for the dictionary counterpart.
 entity Set[T] obeys Iterable[T]
 needs T obeys Hashable, Equatable
+relates SetIterator[T] as Iter
   secret ctrl: Hijacked[U8]
   secret indices: Hijacked[U64]
   secret slots: Hijacked[T]

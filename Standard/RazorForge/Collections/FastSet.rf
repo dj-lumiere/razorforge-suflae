@@ -46,6 +46,7 @@ preset ENTRY_LIVE: U8 = 1_u8
 ### :see: {Set[T]} for the safe-by-default counterpart used with untrusted input.
 entity FastSet[T] obeys Iterable[T]
 needs T obeys FastHashable, Equatable
+relates FastSetIterator[T] as Iter
   secret ctrl: Hijacked[U8]
   secret indices: Hijacked[U64]
   secret slots: Hijacked[T]

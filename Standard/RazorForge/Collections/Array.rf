@@ -33,8 +33,9 @@ import BuilderService
 ### :see: {List[T]} for a heap-backed growable sequence.
 ### :see: {BitArray[N]} for a compact fixed-size bit sequence.
 @llvm("[{N} x {T}]")
-record Array[T, N] obeys Comparable
+record Array[T, N] obeys Comparable, Iterable[T]
 needs N is U64
+relates ArrayIterator[T, N] as Iter
   # N elements of T stored inline by compiler - no explicit member variables needed
   pass
 
