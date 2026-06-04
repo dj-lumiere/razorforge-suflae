@@ -5,6 +5,7 @@ using Compiler.Diagnostics;
 using Compiler.Tokenizer;
 using Verification;
 using SyntaxTree;
+using TypeModel;
 using TypeModel.Enums;
 using TypeModel.Symbols;
 using TypeModel.Types;
@@ -21,6 +22,12 @@ internal sealed class TypeResolver
     private const string MaybeTypeName = "Maybe";
 
     private readonly SemanticVerifier _sa;
+
+    /// <summary>
+    /// Tunable limits for associated-type projection (depth / stdlib-only). Read from a config
+    /// record rather than hardcoded so the restrictions can be relaxed without touching call sites.
+    /// </summary>
+    private readonly AssociatedTypeOptions _assocOptions = AssociatedTypeOptions.Default;
 
     internal TypeResolver(SemanticVerifier sa)
     {
@@ -110,6 +117,16 @@ internal sealed class TypeResolver
 
     private TypeSymbol ResolveTypeCore(TypeExpression typeExpr) // NOSONAR S3776
     {
+        // Associated-type projection: `Me/Iter`, `S/Iter` (the parser flattens these into the
+        // type name). Handled before the normal Me/lookup paths so the `/` segment-walk wins
+        // over module-path resolution when the root is `Me` or an in-scope generic parameter.
+        if (typeExpr.Name.Contains(value: '/') &&
+            TryResolveAssociatedProjection(typeExpr: typeExpr,
+                result: out TypeSymbol projected))
+        {
+            return projected;
+        }
+
         // `Me` in a member-routine signature refers to the owner type
         // (e.g. `routine SumS64.combine(you: Me) -> Me` — Me is SumS64).
         // Protocol contexts use ProtocolSelfTypeInfo via ResolveProtocolType; concrete owners
@@ -232,6 +249,29 @@ internal sealed class TypeResolver
         if (typeExpr is { Name: "Me", GenericArguments: not { Count: > 0 } })
         {
             return ProtocolSelfTypeInfo.Instance;
+        }
+
+        // Associated-type projection in a protocol signature (e.g. `Me/Iter` in
+        // `routine Me.$iter() -> Me/Iter`). `Me` here is the abstract protocol self, so the
+        // projection is deferred and resolved per-implementer during monomorphization.
+        if (typeExpr.Name.Contains(value: '/'))
+        {
+            string[] segments = typeExpr.Name.Split(separator: '/');
+            TypeSymbol? projBase = segments[0] == "Me"
+                ? ProtocolSelfTypeInfo.Instance
+                : IsGenericParameter(name: segments[0])
+                    ? new GenericParameterTypeInfo(name: segments[0])
+                    : null;
+            if (projBase != null && segments.Length - 1 <= _assocOptions.MaxProjectionDepth)
+            {
+                TypeSymbol current = projBase;
+                for (int i = 1; i < segments.Length; i++)
+                {
+                    current = ProjectAssociatedType(baseType: current, slotName: segments[i]);
+                }
+                typeExpr.ResolvedType = current;
+                return current;
+            }
         }
 
         // Fall back to normal type resolution
@@ -492,6 +532,104 @@ internal sealed class TypeResolver
     /// Returns true if <paramref name="name"/> is a generic type parameter declared on the
     /// currently-analyzed routine or type, allowing it to be used as a valid type reference.
     /// </summary>
+    /// <summary>
+    /// Resolves an associated-type projection name (<c>Me/Iter</c>, <c>S/Iter</c>) by walking its
+    /// <c>/</c> segments. Returns false when the root is not a projection root (e.g. a module
+    /// path), leaving the name to the normal lookup path.
+    /// </summary>
+    private bool TryResolveAssociatedProjection(TypeExpression typeExpr, out TypeSymbol result)
+    {
+        result = ErrorTypeInfo.Instance;
+        string[] segments = typeExpr.Name.Split(separator: '/');
+        if (segments.Length < 2)
+        {
+            return false;
+        }
+
+        string root = segments[0];
+
+        // The root must be `Me` or an in-scope generic parameter. Anything else (a module path
+        // such as `razorforge/Collections.Dict`) is not a projection — defer to normal lookup.
+        TypeSymbol baseType;
+        if (root == "Me")
+        {
+            if (_sa._currentRoutine?.OwnerType is not { } owner ||
+                owner is GenericParameterTypeInfo)
+            {
+                return false;
+            }
+            baseType = SelfApplyOwner(owner: owner);
+        }
+        else if (IsGenericParameter(name: root))
+        {
+            baseType = new GenericParameterTypeInfo(name: root);
+        }
+        else
+        {
+            return false;
+        }
+
+        // Depth limit (configurable via AssociatedTypeOptions — not hardcoded).
+        int depth = segments.Length - 1;
+        if (depth > _assocOptions.MaxProjectionDepth)
+        {
+            _sa.ReportError(code: SemanticDiagnosticCode.UnknownType,
+                message:
+                $"Associated-type projection '{typeExpr.Name}' exceeds the maximum projection " +
+                $"depth of {_assocOptions.MaxProjectionDepth}.",
+                location: typeExpr.Location);
+            return true; // handled (with error) — don't fall through to module-path lookup
+        }
+
+        TypeSymbol current = baseType;
+        for (int i = 1; i < segments.Length; i++)
+        {
+            current = ProjectAssociatedType(baseType: current, slotName: segments[i]);
+        }
+        result = current;
+        return true;
+    }
+
+    /// <summary>
+    /// Projects one associated-type slot from a base type. When the base is concrete and has a
+    /// binding for the slot, returns the bound concrete type; otherwise (generic param, protocol
+    /// self, or not-yet-bound) returns a deferred <see cref="AssociatedProjectionTypeInfo"/> that
+    /// monomorphization resolves once the base becomes concrete.
+    /// </summary>
+    private static TypeSymbol ProjectAssociatedType(TypeSymbol baseType, string slotName)
+    {
+        Dictionary<string, TypeInfo>? bindings = baseType switch
+        {
+            EntityTypeInfo e => e.AssociatedTypeBindings,
+            RecordTypeInfo r => r.AssociatedTypeBindings,
+            _ => null
+        };
+        if (bindings != null &&
+            bindings.TryGetValue(key: slotName, value: out TypeInfo? bound))
+        {
+            return bound;
+        }
+        return new AssociatedProjectionTypeInfo(baseType: baseType, slotName: slotName);
+    }
+
+    /// <summary>
+    /// Resolves a generic-definition owner to itself applied over its own generic parameters
+    /// (<c>Box</c> → <c>Box[T]</c>) so projections off <c>Me</c> monomorphize correctly. No-op for
+    /// non-generic owners.
+    /// </summary>
+    private TypeSymbol SelfApplyOwner(TypeSymbol owner)
+    {
+        if (owner is { IsGenericDefinition: true, GenericParameters: { } ownerParams })
+        {
+            var selfArgs = ownerParams
+                .Select(selector: p => (TypeInfo)new GenericParameterTypeInfo(name: p))
+                .ToList();
+            return _sa._registry.GetOrCreateResolution(genericDef: owner,
+                typeArguments: selfArgs);
+        }
+        return owner;
+    }
+
     internal bool IsGenericParameter(string name)
     {
         if (_sa._currentRoutine?.GenericParameters?.Contains(value: name) == true)

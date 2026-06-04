@@ -437,6 +437,29 @@ public class RecordTypeInfo : TypeInfo
     internal static TypeInfo SubstituteType(TypeInfo type,
         Dictionary<string, TypeInfo> substitution)
     {
+        // Associated-type projection (e.g. `S/Iter`): substitute the base type first; once the
+        // base resolves to a concrete type that binds the slot, resolve to the bound type.
+        // Otherwise keep a (re-based) deferred projection.
+        if (type is AssociatedProjectionTypeInfo projection)
+        {
+            TypeInfo newBase = SubstituteType(type: projection.Base, substitution: substitution);
+            Dictionary<string, TypeInfo>? bindings = newBase switch
+            {
+                EntityTypeInfo e => e.AssociatedTypeBindings,
+                RecordTypeInfo r => r.AssociatedTypeBindings,
+                _ => null
+            };
+            if (bindings != null &&
+                bindings.TryGetValue(key: projection.SlotName, value: out TypeInfo? bound))
+            {
+                // The binding may still carry params/projections of its own — substitute again.
+                return SubstituteType(type: bound, substitution: substitution);
+            }
+            return ReferenceEquals(objA: newBase, objB: projection.Base)
+                ? projection
+                : new AssociatedProjectionTypeInfo(baseType: newBase, slotName: projection.SlotName);
+        }
+
         // If it's a type parameter, substitute it
         if (substitution.TryGetValue(key: type.Name, value: out TypeInfo? substituted))
         {
