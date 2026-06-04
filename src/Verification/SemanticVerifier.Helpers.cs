@@ -160,6 +160,28 @@ public sealed partial class SemanticVerifier
         bool requiresNamedArgs = nonMeParamCount >= 3 && !routine.IsVariadic;
         bool recommendsNamedArgs = nonMeParamCount == 2 && !routine.IsVariadic;
 
+        // @positional: the routine opts into positional calls. Named arguments always remain
+        // legal, so this only RELAXES the S510/W258 rules — it never forbids names. A single
+        // call must still be all-or-nothing: all positional, or all named, never mixed (S512).
+        bool isPositional = routine.Annotations.Contains(value: "positional");
+        if (isPositional)
+        {
+            requiresNamedArgs = false;
+            recommendsNamedArgs = false;
+
+            bool hasNamedArg = arguments.Any(predicate: a => a is NamedArgumentExpression);
+            bool hasPositionalArg =
+                arguments.Any(predicate: a => a is not NamedArgumentExpression);
+            if (hasNamedArg && hasPositionalArg)
+            {
+                ReportError(code: SemanticDiagnosticCode.MixedPositionalAndNamedArguments,
+                    message:
+                    $"Call to '@positional' routine '{routine.Name}' mixes positional and named " +
+                    "arguments — a call must be either all positional or all named.",
+                    location: location);
+            }
+        }
+
         foreach (Expression arg in arguments)
         {
             if (arg is NamedArgumentExpression named)
@@ -216,9 +238,10 @@ public sealed partial class SemanticVerifier
                         $"Routine '{routine.Name}' has 2 parameters - naming arguments is recommended for clarity.",
                         location: arg.Location);
                 }
-                else if (seenNamed)
+                else if (seenNamed && !isPositional)
                 {
-                    // S507: Positional argument after named argument
+                    // S507: Positional argument after named argument. For @positional routines
+                    // this mixing is already reported once as S512, so suppress S507 here.
                     ReportError(code: SemanticDiagnosticCode.PositionalAfterNamed,
                         message:
                         $"Positional argument cannot appear after named arguments in call to '{routine.Name}'.",

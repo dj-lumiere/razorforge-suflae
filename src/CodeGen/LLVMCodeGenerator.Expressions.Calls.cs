@@ -83,6 +83,15 @@ public partial class LlvmCodeGenerator
             return result;
         }
 
+        // When SA resolved this entity construction to a user-declared `$create` (non-synthesized),
+        // the inline memberwise cases below must NOT intercept it — fall through to the routine-call
+        // path so the user `$create` body actually runs. The synthesized memberwise creator and the
+        // base-case construction inside `$create` carry a null/synth resolvedRoutine and still inline.
+        bool routesToUserCreate = resolvedRoutine is
+        {
+            IsSynthesized: false, Name: "$create" or "$create!"
+        } && constructedType is EntityTypeInfo;
+
         switch (loweringKind)
         {
             case CallLoweringKind.ValueConversion when arguments.Count == 1 &&
@@ -116,7 +125,7 @@ public partial class LlvmCodeGenerator
                         ctorRecord.MemberVariables.Any(
                             predicate: mv => mv.Name == namedArg.Name)):
                 return EmitRecordConstruction(sb: sb, record: ctorRecord, arguments: arguments);
-            case CallLoweringKind.TypeConstructor or CallLoweringKind.WrapperConstruction when constructedType is EntityTypeInfo
+            case CallLoweringKind.TypeConstructor or CallLoweringKind.WrapperConstruction when !routesToUserCreate && constructedType is EntityTypeInfo
                 {
                     MemberVariables.Count: > 0
                 } ctorEntity &&
@@ -167,7 +176,8 @@ public partial class LlvmCodeGenerator
                     return EmitRecordConstruction(sb: sb, record: record, arguments: arguments);
                 }
 
-                if (calledType is EntityTypeInfo { MemberVariables.Count: > 0 } entity &&
+                if (!routesToUserCreate &&
+                    calledType is EntityTypeInfo { MemberVariables.Count: > 0 } entity &&
                     arguments.Count == entity.MemberVariables.Count && arguments.All(
                         predicate: a =>
                             a is NamedArgumentExpression named2 &&

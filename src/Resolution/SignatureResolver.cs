@@ -224,28 +224,31 @@ internal sealed class SignatureResolver
         }
 
         // S511: a user `$create` may not occupy the all-fields memberwise signature — i.e. take
-        // exactly the type's field-name set. That shape is the built-in memberwise constructor and
-        // cannot be overridden. A parsing/validating constructor must use a distinct parameter shape
-        // (different names) or `secret` fields plus a named constructor. The synthesized memberwise
-        // creator is registered elsewhere (AutoWiredRegistrationPass), so it never reaches here.
+        // exactly the type's fields by BOTH name AND type. That shape is the built-in memberwise
+        // constructor and cannot be overridden. The match is by TYPE, not just name: a
+        // parsing/validating constructor that reuses a field name with a DIFFERENT type
+        // (e.g. `$create(tag: S32)` for field `tag: S64`) is allowed and routes normally.
+        // The synthesized memberwise creator is registered elsewhere (AutoWiredRegistrationPass),
+        // so it never reaches here.
         if (pending.RoutineName is "$create" or "$create!")
         {
-            List<string>? fieldNames = refreshedOwnerType switch
+            List<MemberVariableInfo>? fields = refreshedOwnerType switch
             {
-                EntityTypeInfo e => e.MemberVariables.Select(selector: mv => mv.Name).ToList(),
-                RecordTypeInfo r => r.MemberVariables.Select(selector: mv => mv.Name).ToList(),
+                EntityTypeInfo e => e.MemberVariables.ToList(),
+                RecordTypeInfo r => r.MemberVariables.ToList(),
                 _ => null
             };
-            if (fieldNames is { Count: > 0 }
-                && parameters.Count == fieldNames.Count
-                && new HashSet<string>(collection: parameters.Select(selector: p => p.Name))
-                    .SetEquals(other: fieldNames))
+            if (fields is { Count: > 0 }
+                && parameters.Count == fields.Count
+                && new HashSet<(string Name, string Type)>(
+                        collection: parameters.Select(selector: p => (p.Name, p.Type.FullName)))
+                    .SetEquals(other: fields.Select(selector: f => (f.Name, f.Type.FullName))))
             {
                 _sa.ReportError(code: SemanticDiagnosticCode.AllFieldsCreatorReserved,
                     message:
-                    $"'$create' cannot take exactly the field set ({string.Join(separator: ", ", values: fieldNames)}) " +
+                    $"'$create' cannot take exactly the fields ({string.Join(separator: ", ", values: fields.Select(selector: f => $"{f.Name}: {f.Type.Name}"))}) " +
                     $"of '{refreshedOwnerType!.Name}' — that signature is the built-in memberwise constructor and " +
-                    "cannot be overridden. Use a distinct parameter shape (e.g. different parameter names) or " +
+                    "cannot be overridden. Use a distinct parameter shape (different names or types) or " +
                     "`secret` fields with a named constructor.",
                     location: routine.Location);
             }

@@ -547,6 +547,10 @@ public enum SemanticDiagnosticCode
     /// is the built-in memberwise constructor and cannot be overridden.</summary>
     AllFieldsCreatorReserved = 511,
 
+    /// <summary>A call to a `@positional` routine mixes positional and named arguments — a call
+    /// must be either all positional or all named.</summary>
+    MixedPositionalAndNamedArguments = 512,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // COLLECTION LITERAL ERRORS (RF-S550 - RF-S599)
     // ═══════════════════════════════════════════════════════════════════════════

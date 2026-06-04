@@ -276,23 +276,42 @@ public sealed partial class SemanticVerifier
                         call.ConstructedType = callableType;
                         call.LoweringKind = ClassifyConstruction(type: callableType,
                             isCollectionLiteral: call.IsCollectionLiteral);
-                        call.ResolvedRoutine = creator;
 
-                        // Failability propagation for failable constructors (e.g. `U32!(x)`
-                        // routing to `U32.$create!(from: U64)`).
-                        if (creator.IsFailable && _currentRoutine != null)
+                        // `Type(fields)` written *inside* Type's own `$create` is the memberwise
+                        // primitive base case — it must inline, never route back to `$create`
+                        // (infinite recursion). Mirrors the CreatorExpression path's guard.
+                        bool insideOwnCreate =
+                            _currentRoutine is { Name: "$create" or "$create!" } currentCreate
+                            && currentCreate.OwnerType != null
+                            && (currentCreate.OwnerType.FullName == callableType.FullName
+                                || currentCreate.OwnerType.Name == callableType.Name);
+
+                        // Route through a *user-declared* `$create` so its body/side-effects run.
+                        // The synthesized memberwise creator (IsSynthesized) is pure field-init and
+                        // is left to inline construction in codegen. A user `$create` whose params
+                        // match the fields only by name but differ by type (e.g.
+                        // `Resource.$create(tag: S32)` over field `tag: S64`) is the real
+                        // constructor and is selected by arg type via LookupMethodOverload above.
+                        if (!insideOwnCreate && !creator.IsSynthesized)
                         {
-                            _currentRoutine.HasFailableCalls = true;
-                            _currentRoutine.FailableCallees.Add(creator);
-                            if (!_currentRoutine.IsFailable &&
-                                _currentRoutine.Name != StartRoutineName &&
-                                !_currentRoutine.IsSynthesized)
+                            call.ResolvedRoutine = creator;
+
+                            // Failability propagation for failable constructors (e.g. `U32!(x)`
+                            // routing to `U32.$create!(from: U64)`).
+                            if (creator.IsFailable && _currentRoutine != null)
                             {
-                                ReportWarning(code: SemanticWarningCode.UnhandledCrashableCall,
-                                    message:
-                                    $"Failable constructor '{callableType.Name}!' called without error handling. " +
-                                    UseWhenHint,
-                                    location: call.Location);
+                                _currentRoutine.HasFailableCalls = true;
+                                _currentRoutine.FailableCallees.Add(creator);
+                                if (!_currentRoutine.IsFailable &&
+                                    _currentRoutine.Name != StartRoutineName &&
+                                    !_currentRoutine.IsSynthesized)
+                                {
+                                    ReportWarning(code: SemanticWarningCode.UnhandledCrashableCall,
+                                        message:
+                                        $"Failable constructor '{callableType.Name}!' called without error handling. " +
+                                        UseWhenHint,
+                                        location: call.Location);
+                                }
                             }
                         }
 
@@ -380,6 +399,7 @@ public sealed partial class SemanticVerifier
                         creator ??= _registry.LookupRoutineOverload(
                             baseName: $"{type.FullName}.$create",
                             argTypes: argTypes);
+
 
                         if (creator != null && creator.Parameters.Count == argTypes.Count &&
                             !creator.Parameters.Any(predicate: p => p.IsVariadicParam))

@@ -370,4 +370,90 @@ public class NamedArgumentTests
     }
 
     #endregion
+
+    #region @positional Opt-Out (S512)
+    /// <summary>
+    /// A `@positional` routine accepts all-positional calls even with 3+ params (S510 relaxed).
+    /// </summary>
+    [Fact]
+    public void Analyze_Positional_AllPositional_NoS510()
+    {
+        string source = """
+                        @positional
+                        routine make(a: S32, b: S32, c: S32) -> S32
+                          return a
+                        routine main()
+                          make(1, 2, 3)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MixedPositionalAndNamedArguments);
+    }
+    /// <summary>
+    /// Named arguments still work on a `@positional` routine (the annotation only relaxes).
+    /// </summary>
+    [Fact]
+    public void Analyze_Positional_AllNamed_NoError()
+    {
+        string source = """
+                        @positional
+                        routine make(a: S32, b: S32, c: S32) -> S32
+                          return a
+                        routine main()
+                          make(a: 1, b: 2, c: 3)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MixedPositionalAndNamedArguments);
+    }
+    /// <summary>
+    /// Mixing positional and named in a single `@positional` call is rejected (S512).
+    /// </summary>
+    [Fact]
+    public void Analyze_Positional_Mixed_ReportsS512()
+    {
+        string source = """
+                        @positional
+                        routine make(a: S32, b: S32, c: S32) -> S32
+                          return a
+                        routine main()
+                          make(1, b: 2, c: 3)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MixedPositionalAndNamedArguments);
+        // S507 is suppressed for @positional — S512 covers the mixing.
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.PositionalAfterNamed);
+    }
+    /// <summary>
+    /// Without `@positional`, a 3-param all-positional call still reports S510 (regression guard).
+    /// </summary>
+    [Fact]
+    public void Analyze_NoPositional_ThreeParams_AllPositional_ReportsS510()
+    {
+        string source = """
+                        routine make(a: S32, b: S32, c: S32) -> S32
+                          return a
+                        routine main()
+                          make(1, 2, 3)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
+    }
+
+    #endregion
 }
