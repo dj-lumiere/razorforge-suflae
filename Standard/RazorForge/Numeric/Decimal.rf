@@ -50,7 +50,7 @@ common routine Decimal.get_precision() -> S32
 ### :returns: The resulting `Decimal` value.
 routine Decimal.$create() -> Decimal
   var dec = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
-  rf_bigdec_set_s64(dec.handle, 0)
+  rf_bigdec_set_s64(handle: dec.handle, value: 0)
   return dec
 
 ### Creates a decimal from a signed 64-bit integer.
@@ -60,7 +60,7 @@ routine Decimal.$create() -> Decimal
 ### :returns: The resulting `Decimal` value.
 routine Decimal.$create(value: S64) -> Decimal
   var dec = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
-  rf_bigdec_set_s64(dec.handle, value)
+  rf_bigdec_set_s64(handle: dec.handle, value: value)
   return dec
 
 ### Creates a decimal from a 64-bit floating-point value.
@@ -71,7 +71,7 @@ routine Decimal.$create(value: S64) -> Decimal
 ### :returns: The resulting `Decimal` value.
 routine Decimal.$create(value: F64) -> Decimal
   var dec = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
-  rf_bigdec_set_f64(dec.handle, value)
+  rf_bigdec_set_f64(handle: dec.handle, value: value)
   return dec
 
 ### Parses a decimal value from text.
@@ -81,7 +81,7 @@ routine Decimal.$create(value: F64) -> Decimal
 ### :returns: The resulting `Decimal` value.
 routine Decimal.$create!(text: Text) -> Decimal
   var dec = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
-  rf_bigdec_set_str(dec.handle, text.to_cstr())
+  rf_bigdec_set_str(handle: dec.handle, str: text.to_cstr())
   return dec
 
 ### Materializes a `Decimal` from a tokenizer-validated decimal literal string.
@@ -91,7 +91,7 @@ routine Decimal.$create!(text: Text) -> Decimal
 ### :returns: The resulting `Decimal` value.
 common routine Decimal.$from_literal(text: Text) -> Decimal
   var dec = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
-  rf_bigdec_set_str(dec.handle, text.to_cstr())
+  rf_bigdec_set_str(handle: dec.handle, str: text.to_cstr())
   return dec
 
 ### Returns a copy of this value with the underlying refcount bumped.
@@ -173,7 +173,7 @@ routine Decimal.divide(other: Decimal, precision: S32) -> Decimal
 @readonly
 routine Decimal.$neg() -> Decimal
   var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
-  rf_bigdec_neg(result.handle, me.handle)
+  rf_bigdec_neg(result: result.handle, a: me.handle)
   return result
 
 # ============================================================================
@@ -185,14 +185,14 @@ routine Decimal.$neg() -> Decimal
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Decimal.$eq(other: Decimal) -> Bool
-  return rf_bigdec_cmp(me.handle, other.handle) == 0
+  return rf_bigdec_cmp(a: me.handle, b: other.handle) == 0
 
 ### Compares this value with `you` using numeric ordering.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
 routine Decimal.$cmp(you: Decimal) -> ComparisonSign
-  var value = rf_bigdec_cmp(me.handle, you.handle)
+  var value = rf_bigdec_cmp(a: me.handle, b: you.handle)
   if value < 0
     return ME_SMALL
   elseif value > 0
@@ -208,7 +208,7 @@ routine Decimal.$cmp(you: Decimal) -> ComparisonSign
 @readonly
 routine Decimal.abs() -> Decimal
   var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
-  rf_bigdec_abs(result.handle, me.handle)
+  rf_bigdec_abs(result: result.handle, a: me.handle)
   return result
 
 ### Computes the principal square root of this value.
@@ -324,11 +324,11 @@ routine Decimal.atan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
 routine Decimal.atan2(x: Decimal, precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
   if x.is_zero()
     return when
-      me.is_positive() => Decimal.pi(precision).divide(Decimal(2_s64), precision)
-      me.is_negative() => -Decimal.pi(precision).divide(Decimal(2_s64), precision)
+      me.is_positive() => Decimal.pi(precision).divide(other: Decimal(2_s64), precision: precision)
+      me.is_negative() => -Decimal.pi(precision).divide(other: Decimal(2_s64), precision: precision)
       else => Decimal.zero()
 
-  var theta = me.divide(x, precision + 4).atan(precision)
+  var theta = me.divide(other: x, precision: precision + 4).atan(precision)
   if x.is_positive()
     return theta
 
@@ -373,7 +373,7 @@ routine Decimal.tanh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
 @readonly
 routine Decimal.ceil() -> Decimal
   var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
-  rf_bigdec_ceil(result.handle, me.handle)
+  rf_bigdec_ceil(result: result.handle, a: me.handle)
   return result
 
 ### Rounds this value downward to the previous integral decimal value.
@@ -381,7 +381,7 @@ routine Decimal.ceil() -> Decimal
 @readonly
 routine Decimal.floor() -> Decimal
   var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
-  rf_bigdec_floor(result.handle, me.handle)
+  rf_bigdec_floor(result: result.handle, a: me.handle)
   return result
 
 ### Rounds this value to the requested number of decimal places.
@@ -463,7 +463,7 @@ routine Decimal.$represent() -> ?Text
 ### :returns: The resulting `Text` value.
 @readonly
 routine Decimal.represent_with_places(decimal_places: S32) -> ?Text
-  var CStr = rf_bigdec_get_str(me.handle, decimal_places)
+  var CStr = rf_bigdec_get_str(handle: me.handle, decimal_places: decimal_places)
   var text = Text(from: CStr)
   rf_invalidate(pointer_to_int[Byte, Address](CStr.ptr))
   return text
@@ -499,7 +499,7 @@ routine Decimal.$hash(k0: U64, k1: U64) -> U64
 @readonly
 common routine Decimal.pi(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
   var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
-  rf_bigdec_pi(result.handle, precision)
+  rf_bigdec_pi(result: result.handle, precision: precision)
   return result
 
 ### Returns Euler's number computed to the requested precision.
@@ -508,7 +508,7 @@ common routine Decimal.pi(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
 @readonly
 common routine Decimal.e(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
   var result = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
-  rf_bigdec_e(result.handle, precision)
+  rf_bigdec_e(result: result.handle, precision: precision)
   return result
 
 # ============================================================================
@@ -522,7 +522,7 @@ common routine Decimal.e(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> Decimal
 ### :returns: The resulting `Maybe[Decimal]` value.
 routine Decimal.$create!(text: Text) -> Decimal
   var dec = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
-  rf_bigdec_set_str(dec.handle, text.to_cstr())
+  rf_bigdec_set_str(handle: dec.handle, str: text.to_cstr())
   if dec.handle == cptr_none()
     throw DecimalValueError()
   return dec
@@ -557,7 +557,7 @@ routine exp_taylor(x: Decimal, terms: S32 = 20, precision: S32 = 50) -> Decimal
   var i: S32 = 1
   while i <= terms
     term = term * x
-    term = term.divide(Decimal(S64!(i)), precision)
+    term = term.divide(other: Decimal(S64!(i)), precision: precision)
     result = result + term
     i = i + 1
 
@@ -574,15 +574,15 @@ routine sqrt_newton(x: Decimal, iterations: S32 = 20, precision: S32 = 50) -> De
   if x.is_zero() or x.is_negative()
     return Decimal.zero()
 
-  var guess = x.divide(Decimal(2_s64), precision)
+  var guess = x.divide(other: Decimal(2_s64), precision: precision)
   var two = Decimal(2_s64)
 
   var i: S32 = 0
   while i < iterations
     # Newton-Raphson: guess = (guess + x/guess) / 2
-    var quotient = x.divide(guess, precision)
+    var quotient = x.divide(other: guess, precision: precision)
     var sum = guess + quotient
-    guess = sum.divide(two, precision)
+    guess = sum.divide(other: two, precision: precision)
     i = i + 1
 
   return guess
@@ -596,8 +596,8 @@ routine compute_pi(precision: S32 = 50) -> Decimal
   var five = Decimal(5_s64)
   var two_thirty_nine = Decimal(239_s64)
 
-  var atan_1_5 = one.divide(five, precision + 10).atan(precision + 10)
-  var atan_1_239 = one.divide(two_thirty_nine, precision + 10).atan(precision + 10)
+  var atan_1_5 = one.divide(other: five, precision: precision + 10).atan(precision + 10)
+  var atan_1_239 = one.divide(other: two_thirty_nine, precision: precision + 10).atan(precision + 10)
 
   var pi_over_4 = four * atan_1_5 - atan_1_239
   return four * pi_over_4

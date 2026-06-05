@@ -38,7 +38,7 @@ routine Integer.$create() -> ?Integer
 ### :returns: The resulting `Integer` value.
 routine Integer.$create(value: S64) -> ?Integer
   var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
-  rf_bigint_set_i64(int.handle, value)
+  rf_bigint_set_i64(handle: int.handle, value: value)
   return int
 
 ### Creates an `Integer` from an unsigned 64-bit source value.
@@ -48,7 +48,7 @@ routine Integer.$create(value: S64) -> ?Integer
 ### :returns: The resulting `Integer` value.
 routine Integer.$create(value: U64) -> ?Integer
   var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
-  rf_bigint_set_u64(int.handle, value)
+  rf_bigint_set_u64(handle: int.handle, value: value)
   return int
 
 ### Parses an integer from text using the requested radix.
@@ -153,7 +153,7 @@ routine Integer.$mod(other: Integer) -> Integer
 @readonly
 routine Integer.$neg() -> Integer
   var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
-  rf_bigint_neg(result.handle, me.handle)
+  rf_bigint_neg(result: result.handle, a: me.handle)
   return result
 
 # ============================================================================
@@ -165,14 +165,14 @@ routine Integer.$neg() -> Integer
 ### :returns: The resulting `Bool` value.
 @readonly
 routine Integer.$eq(you: Integer) -> Bool
-  return rf_bigint_cmp(me.handle, you.handle) == 0
+  return rf_bigint_cmp(a: me.handle, b: you.handle) == 0
 
 ### Compares this value with `you` using numeric ordering.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 @readonly
 routine Integer.$cmp(you: Integer) -> ComparisonSign
-  var comparison_value = rf_bigint_cmp(me.handle, you.handle)
+  var comparison_value = rf_bigint_cmp(a: me.handle, b: you.handle)
   if comparison_value < 0
     return ME_SMALL
   elseif comparison_value > 0
@@ -239,7 +239,7 @@ routine Integer.$shr(bits: S32) -> Integer
 @readonly
 routine Integer.abs() -> Integer
   var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
-  rf_bigint_abs(result.handle, me.handle)
+  rf_bigint_abs(result: result.handle, a: me.handle)
   return result
 
 ### Raises this value to a non-negative integer exponent.
@@ -257,7 +257,7 @@ routine Integer.$pow(exp: U32) -> Integer
 @readonly
 routine Integer.sqrt() -> Integer
   var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
-  rf_bigint_sqrt(result.handle, me.handle)
+  rf_bigint_sqrt(result: result.handle, a: me.handle)
   return result
 
 ### Computes the greatest common divisor of this value and `other`.
@@ -342,7 +342,7 @@ routine Integer.$represent() -> ?Text
 ### :returns: The resulting `Text` value.
 @readonly
 routine Integer.represent_radix(radix: S32) -> Text
-  var CStr = rf_bigint_get_str(me.handle, radix)
+  var CStr = rf_bigint_get_str(handle: me.handle, radix: radix)
   var text = Text(from: CStr)
   rf_invalidate(pointer_to_int[Byte, Address](CStr.ptr))
   return text

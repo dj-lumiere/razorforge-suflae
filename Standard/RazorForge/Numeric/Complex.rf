@@ -173,8 +173,8 @@ routine Complex.sqrt(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
     return COMPLEX_ZERO
 
   var two = Decimal(2_s64)
-  var rp = (r + me.real).divide(two, precision).sqrt(precision)
-  var ip = (r - me.real).divide(two, precision).sqrt(precision)
+  var rp = (r + me.real).divide(other: two, precision: precision).sqrt(precision)
+  var ip = (r - me.real).divide(other: two, precision: precision).sqrt(precision)
   if me.imag.is_negative()
     ip = -ip
   return Complex(real: rp, imag: ip)
@@ -230,7 +230,7 @@ routine Complex.tan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
   var a2 = me.real + me.real
   var b2 = me.imag + me.imag
   var d = a2.cos(precision) + b2.cosh(precision)
-  return Complex(real: a2.sin(precision).divide(d, precision), imag: b2.sinh(precision).divide(d, precision))
+  return Complex(real: a2.sin(precision).divide(other: d, precision: precision), imag: b2.sinh(precision).divide(other: d, precision: precision))
 
 ### Computes the principal inverse sine of this value.
 ### :param precision: The decimal precision to use.
@@ -262,7 +262,7 @@ routine Complex.atan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
   var num = Complex(real: me.real, imag: me.imag + one)
   var den = Complex(real: -me.real, imag: one - me.imag)
   var v = (num / den).log(precision)
-  return Complex(real: -v.imag_part().divide(two, precision), imag: v.real_part().divide(two, precision))
+  return Complex(real: -v.imag_part().divide(other: two, precision: precision), imag: v.real_part().divide(other: two, precision: precision))
 
 ### Computes the complex hyperbolic sine of this value.
 ### :param precision: The decimal precision to use.
@@ -292,7 +292,7 @@ routine Complex.tanh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
   var a2 = me.real + me.real
   var b2 = me.imag + me.imag
   var d = a2.cosh(precision) + b2.cos(precision)
-  return Complex(real: a2.sinh(precision).divide(d, precision), imag: b2.sin(precision).divide(d, precision))
+  return Complex(real: a2.sinh(precision).divide(other: d, precision: precision), imag: b2.sin(precision).divide(other: d, precision: precision))
 
 ### Computes the principal inverse hyperbolic sine of this value.
 ### :param precision: The decimal precision to use.
@@ -315,7 +315,7 @@ routine Complex.acosh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
 routine Complex.atanh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
   var two = Decimal(2_s64)
   var v = ((COMPLEX_ONE + me) / (COMPLEX_ONE - me)).log(precision)
-  return Complex(real: v.real_part().divide(two, precision), imag: v.imag_part().divide(two, precision))
+  return Complex(real: v.real_part().divide(other: two, precision: precision), imag: v.imag_part().divide(other: two, precision: precision))
 
 ### Computes the principal base-10 logarithm of this value.
 ### :param precision: The decimal precision to use.
@@ -324,7 +324,7 @@ routine Complex.atanh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
 routine Complex.log10(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
   var v = me.log(precision)
   var ln10 = Decimal(10_s64).log(precision)
-  return Complex(real: v.real_part().divide(ln10, precision), imag: v.imag_part().divide(ln10, precision))
+  return Complex(real: v.real_part().divide(other: ln10, precision: precision), imag: v.imag_part().divide(other: ln10, precision: precision))
 
 # ============================================================================
 # Query Routines
