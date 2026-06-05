@@ -337,6 +337,23 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
                 return result; // remainder consumed into the if's then-branch
             }
 
+            // Check/Lookup variants: Result/Lookup carriers are tag-based (not the flat {present,value}
+            // of Maybe), so propagate a non-tail failable call through a `when` over the inner's
+            // same-kind variant. Only in the global path-1 (`!nextOnly`): the synthesized `when`
+            // (incl. `is Crashable`) is lowered by CrashableExpansionPass + PatternLoweringPass which
+            // run on path-1 variant bodies but NOT on path-2 monomorphized bodies.
+            if (kind is ErrorHandlingVariantKind.Check or ErrorHandlingVariantKind.Lookup
+                && registry != null && !nextOnly
+                && TryBuildCarrierSafeCall(stmt: s, registry: registry, kind: kind,
+                    safeCall: out Expression? carrierCall, bindName: out string? carrierBind))
+            {
+                List<Statement> remainder = TransformBlockStatements(stmts: stmts, start: i + 1,
+                    kind: kind, rewriter: rewriter, registry: registry, nextOnly: nextOnly);
+                result.Add(item: BuildCarrierPropagationWhen(subject: carrierCall!, bindName: carrierBind,
+                    kind: kind, remainder: remainder, loc: s.Location));
+                return result; // remainder consumed into the when's success arm
+            }
+
             result.Add(item: TransformBodyCore(body: s, kind: kind, rewriter: rewriter, registry: registry, nextOnly: nextOnly));
         }
 
@@ -435,6 +452,94 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Like <see cref="TryBuildTryPropagation"/> but for Check/Lookup variants: retargets a non-tail
+    /// failable call to the inner routine's same-kind (<c>check_</c>/<c>lookup_</c>) variant, returning
+    /// the retargeted call (typed as the Result/Lookup carrier) and the success-binding name. The
+    /// caller wraps it in a <c>when</c> (see <see cref="BuildCarrierPropagationWhen"/>) — Result/Lookup
+    /// are tag-based so they cannot use the flat <c>{present,value}</c> field unwrap.
+    /// </summary>
+    private static bool TryBuildCarrierSafeCall(Statement stmt, TypeRegistry registry,
+        ErrorHandlingVariantKind kind, out Expression? safeCall, out string? bindName)
+    {
+        safeCall = null;
+        bindName = null;
+
+        CallExpression failCall;
+        switch (stmt)
+        {
+            case DeclarationStatement { Declaration: VariableDeclaration { Initializer: CallExpression ce } vd }
+                when ce.ResolvedRoutine is { IsFailable: true }:
+                failCall = ce;
+                bindName = vd.Name;
+                break;
+            case ExpressionStatement { Expression: CallExpression ce2 } when ce2.ResolvedRoutine is { IsFailable: true }:
+                failCall = ce2;
+                bindName = null;
+                break;
+            default:
+                return false;
+        }
+
+        RoutineInfo failRoutine = failCall.ResolvedRoutine!;
+        if (failRoutine.OwnerType is not { } owner) return false;
+
+        string prefix = kind == ErrorHandlingVariantKind.Check ? "check" : "lookup";
+        string baseName = (failRoutine.OriginalName ?? failRoutine.Name).TrimStart(trimChar: '$');
+        RoutineInfo? variant = registry.LookupMethod(type: owner, methodName: $"{prefix}_{baseName}",
+            isFailable: false);
+        if (variant?.ReturnType is not { } carrier) return false;
+
+        CallExpression retargeted = failCall with { ResolvedRoutine = variant, ResolvedType = carrier };
+        retargeted = retargeted.Callee switch
+        {
+            MemberExpression m => retargeted with { Callee = m with { PropertyName = variant.Name } },
+            IdentifierExpression idc => retargeted with { Callee = idc with { Name = variant.Name } },
+            _ => retargeted
+        };
+        safeCall = retargeted;
+        return true;
+    }
+
+    /// <summary>
+    /// Builds the <c>when</c> that short-circuits a Check/Lookup variant on the inner carrier's
+    /// failure and otherwise binds the unwrapped success value before running the remainder:
+    /// <code>
+    /// when inner.check_x()
+    ///   is None -&gt; &lt;return None&gt;          # Lookup only
+    ///   is Crashable e -&gt; &lt;return error e&gt; # Check + Lookup
+    ///   else var x -&gt; &lt;remainder&gt;
+    /// </code>
+    /// Lowered by CrashableExpansionPass + PatternLoweringPass on path-1 variant bodies.
+    /// </summary>
+    private static WhenStatement BuildCarrierPropagationWhen(Expression subject, string? bindName,
+        ErrorHandlingVariantKind kind, List<Statement> remainder, SourceLocation loc)
+    {
+        var clauses = new List<WhenClause>();
+
+        if (kind == ErrorHandlingVariantKind.Lookup)
+        {
+            clauses.Add(item: new WhenClause(
+                Pattern: new NonePattern(Location: loc),
+                Body: new VariantReturnStatement(kind, VariantSiteKind.FromAbsent, null, loc),
+                Location: loc));
+        }
+
+        const string errName = "__rf_prop_err";
+        clauses.Add(item: new WhenClause(
+            Pattern: new CrashablePattern(ErrorType: null, VariableName: errName, Location: loc),
+            Body: new VariantReturnStatement(kind, VariantSiteKind.FromThrow,
+                new IdentifierExpression(Name: errName, Location: loc), loc),
+            Location: loc));
+
+        clauses.Add(item: new WhenClause(
+            Pattern: new ElsePattern(VariableName: bindName, Location: loc),
+            Body: new BlockStatement(Statements: remainder, Location: loc),
+            Location: loc));
+
+        return new WhenStatement(Expression: subject, Clauses: clauses, Location: loc);
     }
 
     /// <summary>

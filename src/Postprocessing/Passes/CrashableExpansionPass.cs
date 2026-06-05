@@ -78,6 +78,31 @@ internal sealed class CrashableExpansionPass(PostprocessingContext ctx)
         }
     }
 
+    /// <summary>
+    /// Expands <see cref="CrashablePattern"/> clauses in error-handling variant bodies
+    /// (<see cref="PostprocessingContext.VariantBodies"/>). Needed because non-tail failable-call
+    /// propagation in <c>check_</c>/<c>lookup_</c> variants synthesizes
+    /// <c>when inner.check_x() { is Crashable e =&gt; ...; else v =&gt; ... }</c>, whose
+    /// <c>is Crashable</c> arm must be expanded to per-type <see cref="TypePattern"/>s before
+    /// <see cref="PatternLoweringPass.RunOnVariantBodies"/> can lower it.
+    /// </summary>
+    public void RunOnVariantBodies()
+    {
+        List<CrashableTypeInfo> crashableTypes = ctx.Registry
+                                                             .GetAllTypes()
+                                                             .OfType<CrashableTypeInfo>()
+                                                             .ToList();
+        if (crashableTypes.Count == 0) return;
+
+        foreach (string key in ctx.VariantBodies.Keys.ToList())
+        {
+            Statement body = ctx.VariantBodies[key];
+            Statement expanded = ExpandStatement(stmt: body, crashableTypes: crashableTypes);
+            if (!ReferenceEquals(expanded, body))
+                ctx.VariantBodies[key] = expanded;
+        }
+    }
+
     private void ExpandMemberList(List<SyntaxTree.Declaration> members,
         List<CrashableTypeInfo> crashableTypes)
     {

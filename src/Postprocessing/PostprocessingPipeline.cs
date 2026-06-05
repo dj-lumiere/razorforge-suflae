@@ -55,6 +55,10 @@ public sealed class PostprocessingPipeline(PostprocessingContext ctx)
         new LiteralLoweringPass(ctx).RunOnVariantBodies();
         new BuilderServiceInliningPass(ctx.Registry, ctx.VariantBodies).RunOnVariantBodies();
         new GenericCallLoweringPass(ctx.Registry, ctx.VariantBodies).RunOnVariantBodies();
+        // Expand `is Crashable` clauses (synthesized by non-tail propagation in check_/lookup_
+        // variants) into per-type TypePatterns before PatternLowering can lower them. No-op for
+        // variant bodies that contain no CrashablePattern.
+        new CrashableExpansionPass(ctx).RunOnVariantBodies();
         // PatternLowering runs before ExpressionLowering so that when-clauses with
         // ChainedComparison patterns are converted to IfStatement chains first, allowing
         // ExpressionLowering to correctly lower And/Or in the resulting if-conditions.
