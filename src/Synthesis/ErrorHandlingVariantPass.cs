@@ -1,7 +1,9 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Compiler.Desugaring;
 using Compiler.Instantiation;
+using Compiler.Resolution;
 using SyntaxTree;
 using TypeModel.Symbols;
 using TypeModel.Types;
@@ -148,7 +150,8 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
                 Statement variantSourceBody = GenericAstRewriter.RewriteStatement(
                     stmt: body,
                     subs: new Dictionary<string, string>());
-                Statement variantBody = TransformBody(body: variantSourceBody, kind: kind, rewriter: TryRewriteToVariantCall);
+                Statement variantBody = TransformBody(body: variantSourceBody, kind: kind,
+                    rewriter: TryRewriteToVariantCall, registry: ctx.Registry);
                 ctx.VariantBodies[key: variant.Routine.RegistryKey] = variantBody;
             }
         }
@@ -183,7 +186,34 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     /// already-carrier-shaped expression directly.
     /// </summary>
     internal static Statement TransformBody(Statement body, ErrorHandlingVariantKind kind,
-        VariantCallRewriter? rewriter = null)
+        VariantCallRewriter? rewriter = null, TypeRegistry? registry = null)
+    {
+        // Non-tail inner-failable-call propagation (TransformBlockStatements) only applies when this
+        // variant's failability is PURELY propagated — i.e. the source has NO direct absent/throw of
+        // its own. A routine that guards its own failure (e.g. SortedSetIterator bounds-checks with
+        // `absent` before a then-safe `me.set[i]` $getitem!) must NOT have that inner call retargeted
+        // to a try_ variant: the call can no longer actually fail, and the inner safe variant may not
+        // be monomorphized for the instance (→ LINKERR). Disable propagation by clearing the registry
+        // that TransformBlockStatements gates on. EnumerateEmitter.$next! has no direct absent (its
+        // only failure is the inner source.$next!), so propagation stays on for it.
+        TypeRegistry? propRegistry =
+            registry != null && kind == ErrorHandlingVariantKind.Try && !BodyHasDirectAbsentOrThrow(body: body)
+                ? registry
+                : null;
+        return TransformBodyCore(body: body, kind: kind, rewriter: rewriter, registry: propRegistry);
+    }
+
+    /// <summary>True if <paramref name="body"/> directly contains an <c>absent</c> or <c>throw</c>
+    /// (anywhere in its statement tree) — i.e. the routine signals failure itself rather than purely
+    /// propagating it from a callee.</summary>
+    private static bool BodyHasDirectAbsentOrThrow(Statement body)
+    {
+        ErrorHandlingAnalysis a = ErrorHandlingGenerator.AnalyzeBody(body: body);
+        return a.HasAbsent || a.HasThrow;
+    }
+
+    private static Statement TransformBodyCore(Statement body, ErrorHandlingVariantKind kind,
+        VariantCallRewriter? rewriter, TypeRegistry? registry)
     {
         return body switch
         {
@@ -201,32 +231,31 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
 
             BlockStatement block => block with
             {
-                Statements = block.Statements
-                                  .Select(selector: s => TransformBody(body: s, kind: kind, rewriter: rewriter))
-                                  .ToList()
+                Statements = TransformBlockStatements(stmts: block.Statements, start: 0, kind: kind,
+                    rewriter: rewriter, registry: registry)
             },
 
             IfStatement ifs => ifs with
             {
-                ThenStatement = TransformBody(body: ifs.ThenStatement, kind: kind, rewriter: rewriter),
+                ThenStatement = TransformBodyCore(body: ifs.ThenStatement, kind: kind, rewriter: rewriter, registry: registry),
                 ElseStatement = ifs.ElseStatement != null
-                    ? TransformBody(body: ifs.ElseStatement, kind: kind, rewriter: rewriter)
+                    ? TransformBodyCore(body: ifs.ElseStatement, kind: kind, rewriter: rewriter, registry: registry)
                     : null
             },
 
             WhileStatement ws => ws with
             {
-                Body = TransformBody(body: ws.Body, kind: kind, rewriter: rewriter),
+                Body = TransformBodyCore(body: ws.Body, kind: kind, rewriter: rewriter, registry: registry),
                 ElseBranch = ws.ElseBranch != null
-                    ? TransformBody(body: ws.ElseBranch, kind: kind, rewriter: rewriter)
+                    ? TransformBodyCore(body: ws.ElseBranch, kind: kind, rewriter: rewriter, registry: registry)
                     : null
             },
 
             ForStatement fs => fs with
             {
-                Body = TransformBody(body: fs.Body, kind: kind, rewriter: rewriter),
+                Body = TransformBodyCore(body: fs.Body, kind: kind, rewriter: rewriter, registry: registry),
                 ElseBranch = fs.ElseBranch != null
-                    ? TransformBody(body: fs.ElseBranch, kind: kind, rewriter: rewriter)
+                    ? TransformBodyCore(body: fs.ElseBranch, kind: kind, rewriter: rewriter, registry: registry)
                     : null
             },
 
@@ -235,23 +264,169 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
                 Clauses = ws.Clauses
                             .Select(selector: c => c with
                              {
-                                 Body = TransformBody(body: c.Body, kind: kind, rewriter: rewriter)
+                                 Body = TransformBodyCore(body: c.Body, kind: kind, rewriter: rewriter, registry: registry)
                              })
                             .ToList()
             },
 
             UsingStatement us => us with
             {
-                Body = TransformBody(body: us.Body, kind: kind, rewriter: rewriter)
+                Body = TransformBodyCore(body: us.Body, kind: kind, rewriter: rewriter, registry: registry)
             },
 
             DangerStatement danger => danger with
             {
-                Body = (BlockStatement)TransformBody(body: danger.Body, kind: kind, rewriter: rewriter)
+                Body = (BlockStatement)TransformBodyCore(body: danger.Body, kind: kind, rewriter: rewriter, registry: registry)
             },
 
             _ => body // All other statements pass through unchanged
         };
+    }
+
+    private static int _propTemp;
+
+    /// <summary>
+    /// Transforms a block's statements, propagating NON-tail failable calls through their safe
+    /// variant. The tail-position <paramref name="rewriter"/> only handles <c>return F!(x)</c>; a
+    /// failable call used in statement position — e.g. <c>var item = src.$next!()</c> — would
+    /// otherwise be left calling the raw <c>!</c> routine, which HARD-CRASHES on absence (the raw
+    /// form lowers <c>absent</c> to <c>rf_crash</c>). Inside a <c>try_</c> variant that inner
+    /// absence must instead become this variant's own <c>None</c> return.
+    ///
+    /// For each such statement the remainder of the block is folded into the success branch of a
+    /// plain <c>if</c> over the inner safe variant's Maybe carrier:
+    /// <code>
+    /// var __rf_prop_N = src.try_next()      # Maybe[T]
+    /// if __rf_prop_N.present
+    ///   var item = __rf_prop_N.value
+    ///   &lt;rest of block&gt;
+    /// else
+    ///   &lt;return None&gt;                       # VariantReturnStatement(Try, FromAbsent)
+    /// </code>
+    /// Only the <c>if</c>, Bool field-read and field access are used — all codegen-ready without
+    /// pattern/operator lowering, so this works in BOTH the global variant path (which has
+    /// downstream lowering) and the monomorphized fallback path (which does not). Scoped to the
+    /// <c>Try</c> kind: only the <c>Maybe</c> carrier has the flat <c>{present,value}</c> layout this
+    /// unwrap relies on; Check/Lookup carriers keep the existing tail-position behavior.
+    /// </summary>
+    private static List<Statement> TransformBlockStatements(List<Statement> stmts, int start,
+        ErrorHandlingVariantKind kind, VariantCallRewriter? rewriter, TypeRegistry? registry)
+    {
+        var result = new List<Statement>();
+        for (int i = start; i < stmts.Count; i++)
+        {
+            Statement s = stmts[i];
+
+            if (kind == ErrorHandlingVariantKind.Try && registry != null
+                && TryBuildTryPropagation(stmt: s, registry: registry,
+                    tempDecl: out Statement? tempDecl, presentCondition: out Expression? presentCondition,
+                    bindStmt: out Statement? bindStmt))
+            {
+                List<Statement> remainder = TransformBlockStatements(stmts: stmts, start: i + 1,
+                    kind: kind, rewriter: rewriter, registry: registry);
+
+                var thenStmts = new List<Statement>();
+                if (bindStmt != null) thenStmts.Add(item: bindStmt);
+                thenStmts.AddRange(collection: remainder);
+
+                result.Add(item: tempDecl!);
+                result.Add(item: new IfStatement(
+                    Condition: presentCondition!,
+                    ThenStatement: new BlockStatement(Statements: thenStmts, Location: s.Location),
+                    ElseStatement: new VariantReturnStatement(kind, VariantSiteKind.FromAbsent, null, s.Location),
+                    Location: s.Location));
+                return result; // remainder consumed into the if's then-branch
+            }
+
+            result.Add(item: TransformBodyCore(body: s, kind: kind, rewriter: rewriter, registry: registry));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// If <paramref name="stmt"/> uses a failable call in non-tail position (a <c>var x = F!(...)</c>
+    /// declaration or a bare <c>F!(...)</c> expression statement) and the callee has a <c>try_</c>
+    /// variant returning a <c>Maybe</c>, produces the spliced pieces:
+    /// <list type="bullet">
+    /// <item><paramref name="tempDecl"/>: <c>var __rf_prop_N = recv.try_X(...)</c></item>
+    /// <item><paramref name="presentCondition"/>: <c>__rf_prop_N.present</c> (the <c>if</c> condition)</item>
+    /// <item><paramref name="bindStmt"/>: <c>var x = __rf_prop_N.value</c> (null when the result was discarded)</item>
+    /// </list>
+    /// Returns false — leaving the original crash-on-absence statement untouched — when no matching
+    /// Maybe-returning <c>try_</c> variant resolves.
+    /// </summary>
+    private static bool TryBuildTryPropagation(Statement stmt, TypeRegistry registry,
+        out Statement? tempDecl, out Expression? presentCondition, out Statement? bindStmt)
+    {
+        tempDecl = null;
+        presentCondition = null;
+        bindStmt = null;
+
+        CallExpression failCall;
+        string? bindName;
+        switch (stmt)
+        {
+            case DeclarationStatement { Declaration: VariableDeclaration { Initializer: CallExpression ce } vd }
+                when ce.ResolvedRoutine is { IsFailable: true }:
+                failCall = ce;
+                bindName = vd.Name;
+                break;
+            case ExpressionStatement { Expression: CallExpression ce2 } when ce2.ResolvedRoutine is { IsFailable: true }:
+                failCall = ce2;
+                bindName = null;
+                break;
+            default:
+                return false;
+        }
+
+        RoutineInfo failRoutine = failCall.ResolvedRoutine!;
+        if (failRoutine.OwnerType is not { } owner) return false;
+
+        string baseName = (failRoutine.OriginalName ?? failRoutine.Name).TrimStart(trimChar: '$');
+        RoutineInfo? variant = registry.LookupMethod(type: owner, methodName: $"try_{baseName}",
+            isFailable: false);
+
+        // Need a Maybe carrier (flat {present,value}) to unwrap with field access. The TryBool
+        // variant returns Bool (no type args) and is rejected here.
+        if (variant?.ReturnType is not { TypeArguments.Count: > 0 } carrier) return false;
+
+        SourceLocation loc = stmt.Location;
+        string tempName = $"__rf_prop_{Interlocked.Increment(location: ref _propTemp)}";
+
+        // Retarget the failable call to its try_ variant and re-type it as the carrier.
+        CallExpression safeCall = failCall with { ResolvedRoutine = variant, ResolvedType = carrier };
+        safeCall = safeCall.Callee switch
+        {
+            MemberExpression m => safeCall with { Callee = m with { PropertyName = variant.Name } },
+            IdentifierExpression idc => safeCall with { Callee = idc with { Name = variant.Name } },
+            _ => safeCall
+        };
+
+        tempDecl = new DeclarationStatement(
+            Declaration: new VariableDeclaration(Name: tempName, Type: null, Initializer: safeCall,
+                Visibility: VisibilityModifier.Secret, Location: loc),
+            Location: loc);
+
+        presentCondition = new MemberExpression(
+            Object: new IdentifierExpression(Name: tempName, Location: loc) { ResolvedType = carrier },
+            PropertyName: "present", Location: loc);
+
+        if (bindName != null)
+        {
+            TypeInfo? valueType = carrier.TypeArguments[index: 0];
+            Expression valueAccess = new MemberExpression(
+                Object: new IdentifierExpression(Name: tempName, Location: loc) { ResolvedType = carrier },
+                PropertyName: "value", Location: loc)
+            { ResolvedType = valueType };
+
+            bindStmt = new DeclarationStatement(
+                Declaration: new VariableDeclaration(Name: bindName, Type: null, Initializer: valueAccess,
+                    Visibility: VisibilityModifier.Secret, Location: loc),
+                Location: loc);
+        }
+
+        return true;
     }
 
     /// <summary>

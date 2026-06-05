@@ -659,18 +659,27 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
 
         // The fallback body is the original failable AST (ReturnStatement nodes, not
         // VariantReturnStatement). Transform it so codegen emits carrier construction.
-        if (variantStatus != null)
+        //
+        // Check/Lookup/TryBool are driven by variantStatus. The try_ (Maybe) variant leaves
+        // variantStatus null — codegen natively wraps top-level `return`->Some and `absent`->None
+        // — but a Maybe variant whose source uses a failable call in NON-tail position (e.g.
+        // `var item = src.$next!()` in EnumerateEmitter) needs that inner call routed through its
+        // own try_ variant; otherwise the raw `!` call hard-crashes at exhaustion. Run the
+        // Try-kind transform for Maybe returns so TransformBlockStatements can splice in that
+        // propagation. (ListEmitter etc. have no such inner call, so the transform is a no-op for
+        // them beyond the equivalent VariantReturn rewrite codegen already understands.)
+        ErrorHandlingVariantKind? fallbackKind = variantStatus switch
         {
-            ErrorHandlingVariantKind kind = variantStatus switch
-            {
-                AsyncStatus.CheckVariant => ErrorHandlingVariantKind.Check,
-                AsyncStatus.LookupVariant => ErrorHandlingVariantKind.Lookup,
-                AsyncStatus.TryVariant => ErrorHandlingVariantKind.Try,
-                AsyncStatus.TryBoolVariant => ErrorHandlingVariantKind.TryBool,
-                _ => ErrorHandlingVariantKind.Try
-            };
+            AsyncStatus.CheckVariant => ErrorHandlingVariantKind.Check,
+            AsyncStatus.LookupVariant => ErrorHandlingVariantKind.Lookup,
+            AsyncStatus.TryBoolVariant => ErrorHandlingVariantKind.TryBool,
+            _ when GetGenericBaseName(emitInfo.ReturnType) == "Maybe" => ErrorHandlingVariantKind.Try,
+            _ => null
+        };
+        if (fallbackKind != null)
+        {
             Statement transformed = ErrorHandlingVariantPass.TransformBody(
-                body: rewrittenDecl.Body, kind: kind);
+                body: rewrittenDecl.Body, kind: fallbackKind.Value, rewriter: null, registry: ctx.Registry);
             rewrittenDecl = rewrittenDecl with { Body = transformed };
         }
 
