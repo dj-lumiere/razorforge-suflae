@@ -3,24 +3,30 @@ module IterTools
 ### Represents a lazy adapter that discards leading values while a predicate stays true.
 ### Once the predicate fails, all remaining source values are yielded unchanged.
 ### :typeparam T: The element type produced by the source sequence.
-entity SkipWhileIterator[T] obeys Iterable[T]
-  ### Stores the source iterable.
-  secret source: Iterable[T]
+### :typeparam S: The concrete source iterable type (borrowed; enables build-time dispatch).
+entity SkipWhileIterator[T, S] obeys Iterable[T]
+needs S obeys Iterable[T]
+relates SkipWhileEmitter[T, S/Iter] as Iter
+  ### Stores the source iterable (borrowed, not owned).
+  secret source: Hijacked[S]
   ### Stores the predicate used to decide whether a value should be skipped.
   secret predicate: Routine[(T,), Bool]
 
 ### Returns the stateful iterator that skips leading values while the predicate succeeds.
 ### The returned emitter tracks whether it is still in the skipping phase.
-### :returns: The resulting `SkipWhileEmitter[T]` value.
+### :returns: The resulting `SkipWhileEmitter[T, S/Iter]` value.
 @readonly
-routine SkipWhileIterator[T].$iter() -> ?SkipWhileEmitter[T]
-  return SkipWhileEmitter[T](source: me.source.$iter(), predicate: me.predicate, skipping: true)
+routine SkipWhileIterator[T, S].$iter() -> ?SkipWhileEmitter[T, S/Iter]
+  danger!
+    return SkipWhileEmitter[T, S/Iter](source: me.source.as_entity().$iter(), predicate: me.predicate, skipping: true)
 
 ### Iterates over a source sequence after dropping its leading predicate-matching prefix.
 ### :typeparam T: The element type produced by the source sequence.
-entity SkipWhileEmitter[T] obeys Iterator[T]
-  ### Stores the underlying source iterator.
-  secret source: Iterator[T]
+### :typeparam SE: The concrete source iterator type (borrowed).
+entity SkipWhileEmitter[T, SE] obeys Iterator[T]
+needs SE obeys Iterator[T]
+  ### Stores the underlying source iterator (borrowed).
+  secret source: Hijacked[SE]
   ### Stores the predicate used while skipping.
   secret predicate: Routine[(T,), Bool]
   ### Stores whether the emitter is still discarding leading values.
@@ -29,18 +35,20 @@ entity SkipWhileEmitter[T] obeys Iterator[T]
 ### Returns the next value after any remaining skippable prefix has been consumed.
 ### After the first predicate failure, later values are yielded without rechecking earlier skip state.
 ### :returns: The resulting `T` value.
-routine SkipWhileEmitter[T].$next!() -> ?T
-  if me.skipping
-    loop
-      var item = me.source.$next!()
-      if not me.predicate(item)
-        me.skipping = false
-        return item
-  return me.source.$next!()
+routine SkipWhileEmitter[T, SE].$next!() -> ?T
+  danger!
+    if me.skipping
+      loop
+        var item = me.source.as_entity().$next!()
+        if not me.predicate(item)
+          me.skipping = false
+          return item
+    return me.source.as_entity().$next!()
 
 ### Returns a lazy adapter that skips values while `predicate` returns `true`.
 ### :param predicate: The predicate that controls the initial skipping phase.
-### :returns: The resulting `SkipWhileIterator[T]` value.
+### :returns: The resulting `SkipWhileIterator[T, Me]` value.
 @readonly
-routine Iterable[T].skip_while(predicate: Routine[(T,), Bool]) -> ?SkipWhileIterator[T]
-  return SkipWhileIterator[T](source: me, predicate: predicate)
+routine Iterable[T].skip_while(predicate: Routine[(T,), Bool]) -> ?SkipWhileIterator[T, Me]
+  danger!
+    return SkipWhileIterator[T, Me](source: me.hijack(), predicate: predicate)

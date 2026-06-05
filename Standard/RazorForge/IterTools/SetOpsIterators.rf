@@ -3,94 +3,117 @@ module IterTools
 ### Represents a lazy adapter that yields elements present in both this iterable and another.
 ### The second iterable is fully materialized into a set when iteration begins.
 ### :typeparam T: The element type of both source sequences.
-entity IntersectIterator[T] obeys Iterable[T]
-  ### Stores the primary source iterable.
-  secret source: Iterable[T]
-  ### Stores the membership-test iterable to materialize at iteration start.
-  secret other: Iterable[T]
+### :typeparam S: The concrete primary source iterable type (borrowed).
+### :typeparam SO: The concrete membership-test iterable type (borrowed).
+entity IntersectIterator[T, S, SO] obeys Iterable[T]
+needs S obeys Iterable[T]
+needs SO obeys Iterable[T]
+relates IntersectEmitter[T, S/Iter] as Iter
+  ### Stores the primary source iterable (borrowed, not owned).
+  secret source: Hijacked[S]
+  ### Stores the membership-test iterable to materialize at iteration start (borrowed).
+  secret other: Hijacked[SO]
 
 ### Materializes `other` into a set and returns an iterator that filters `source` against it.
-### :returns: The resulting `IntersectEmitter[T]` value.
+### :returns: The resulting `IntersectEmitter[T, S/Iter]` value.
 @readonly
-routine IntersectIterator[T].$iter() -> ?IntersectEmitter[T]
+routine IntersectIterator[T, S, SO].$iter() -> ?IntersectEmitter[T, S/Iter]
 needs T obeys Hashable, Comparable
-  var other_set = me.other.Set()
-  return IntersectEmitter[T](source: me.source.$iter(), other: steal other_set)
+  danger!
+    var other_set = me.other.as_entity().Set()
+    return IntersectEmitter[T, S/Iter](source: me.source.as_entity().$iter(), other: steal other_set)
 
 ### Iterates over a source sequence and keeps only elements that appear in the membership set.
 ### :typeparam T: The element type of the filtered sequence.
-entity IntersectEmitter[T] obeys Iterator[T]
-  ### Stores the underlying source iterator.
-  secret source: Iterator[T]
+### :typeparam SE: The concrete source iterator type (borrowed).
+entity IntersectEmitter[T, SE] obeys Iterator[T]
+needs SE obeys Iterator[T]
+  ### Stores the underlying source iterator (borrowed).
+  secret source: Hijacked[SE]
   ### Stores the pre-materialized membership set.
   secret other: Set[T]
 
 ### Returns the next source element that is also present in the membership set.
 ### Source elements not found in the set are consumed and discarded.
 ### :returns: The resulting `T` value.
-routine IntersectEmitter[T].$next!() -> ?T
+routine IntersectEmitter[T, SE].$next!() -> ?T
 needs T obeys Hashable, Comparable
-  loop
-    var item = me.source.$next!()
-    if me.other.contains(item)
-      return item
+  danger!
+    loop
+      var item = me.source.as_entity().$next!()
+      if me.other.contains(item)
+        return item
 
 ### Returns a lazy adapter that keeps only elements also present in `other`.
 ### :param other: The iterable that defines the membership set.
-### :returns: The resulting `IntersectIterator[T]` value.
+### :returns: The resulting `IntersectIterator[T, Me, SO]` value.
 @readonly
-routine Iterable[T].intersect(other: Iterable[T]) -> ?IntersectIterator[T]
+routine Iterable[T].intersect[SO](other: Referring[SO]) -> ?IntersectIterator[T, Me, SO]
+needs SO obeys Iterable[T]
 needs T obeys Hashable, Comparable
-  return IntersectIterator[T](source: me, other: other)
+  danger!
+    return IntersectIterator[T, Me, SO](source: me.hijack(), other: other.hijack())
 
 ### Represents a lazy adapter that suppresses elements present in another iterable.
 ### The exclusion iterable is fully materialized into a set when iteration begins.
 ### :typeparam T: The element type of both source sequences.
-entity ExcludeIterator[T] obeys Iterable[T]
-  ### Stores the primary source iterable.
-  secret source: Iterable[T]
-  ### Stores the exclusion iterable to materialize at iteration start.
-  secret other: Iterable[T]
+### :typeparam S: The concrete primary source iterable type (borrowed).
+### :typeparam SO: The concrete exclusion iterable type (borrowed).
+entity ExcludeIterator[T, S, SO] obeys Iterable[T]
+needs S obeys Iterable[T]
+needs SO obeys Iterable[T]
+relates ExcludeEmitter[T, S/Iter] as Iter
+  ### Stores the primary source iterable (borrowed, not owned).
+  secret source: Hijacked[S]
+  ### Stores the exclusion iterable to materialize at iteration start (borrowed).
+  secret other: Hijacked[SO]
 
 ### Materializes `other` into a set and returns an iterator that removes matching elements.
-### :returns: The resulting `ExcludeEmitter[T]` value.
+### :returns: The resulting `ExcludeEmitter[T, S/Iter]` value.
 @readonly
-routine ExcludeIterator[T].$iter() -> ?ExcludeEmitter[T]
+routine ExcludeIterator[T, S, SO].$iter() -> ?ExcludeEmitter[T, S/Iter]
 needs T obeys Hashable, Comparable
-  var other_set = me.other.Set()
-  return ExcludeEmitter[T](source: me.source.$iter(), other: steal other_set)
+  danger!
+    var other_set = me.other.as_entity().Set()
+    return ExcludeEmitter[T, S/Iter](source: me.source.as_entity().$iter(), other: steal other_set)
 
 ### Iterates over a source sequence and suppresses elements found in the exclusion set.
 ### :typeparam T: The element type of the filtered sequence.
-entity ExcludeEmitter[T] obeys Iterator[T]
-  ### Stores the underlying source iterator.
-  secret source: Iterator[T]
+### :typeparam SE: The concrete source iterator type (borrowed).
+entity ExcludeEmitter[T, SE] obeys Iterator[T]
+needs SE obeys Iterator[T]
+  ### Stores the underlying source iterator (borrowed).
+  secret source: Hijacked[SE]
   ### Stores the pre-materialized exclusion set.
   secret other: Set[T]
 
 ### Returns the next source element that is not present in the exclusion set.
 ### Source elements found in the set are consumed and discarded.
 ### :returns: The resulting `T` value.
-routine ExcludeEmitter[T].$next!() -> ?T
+routine ExcludeEmitter[T, SE].$next!() -> ?T
 needs T obeys Hashable, Comparable
-  loop
-    var item = me.source.$next!()
-    if not me.other.contains(item)
-      return item
+  danger!
+    loop
+      var item = me.source.as_entity().$next!()
+      if not me.other.contains(item)
+        return item
 
 ### Returns a lazy adapter that suppresses all elements also found in `other`.
 ### :param other: The iterable that defines the exclusion set.
-### :returns: The resulting `ExcludeIterator[T]` value.
+### :returns: The resulting `ExcludeIterator[T, Me, SO]` value.
 @readonly
-routine Iterable[T].exclude(other: Iterable[T]) -> ?ExcludeIterator[T]
+routine Iterable[T].exclude[SO](other: Referring[SO]) -> ?ExcludeIterator[T, Me, SO]
+needs SO obeys Iterable[T]
 needs T obeys Hashable, Comparable
-  return ExcludeIterator[T](source: me, other: other)
+  danger!
+    return ExcludeIterator[T, Me, SO](source: me.hijack(), other: other.hijack())
 
 ### Returns a lazy adapter that yields all distinct elements from this iterable followed by `other`.
 ### Duplicate values across both sources are suppressed.
 ### :param other: The iterable to concatenate before deduplication.
-### :returns: The resulting `DistinctIterator[T]` value.
+### :returns: The resulting `DistinctIterator[T, ExtendIterator[T, Me, SO]]` value.
 @readonly
-routine Iterable[T].union(other: Iterable[T]) -> ?DistinctIterator[T]
+routine Iterable[T].union[SO](other: Referring[SO]) -> ?DistinctIterator[T, ExtendIterator[T, Me, SO]]
+needs SO obeys Iterable[T]
 needs T obeys Hashable, Comparable
   return me.extend(other).distinct()

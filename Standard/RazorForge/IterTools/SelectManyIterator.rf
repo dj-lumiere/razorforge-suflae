@@ -4,26 +4,32 @@ module IterTools
 ### yields all values produced by each resulting inner iterable in sequence.
 ### :typeparam T: The source element type.
 ### :typeparam U: The output element type produced by each inner iterable.
-entity SelectManyIterator[T, U] obeys Iterable[U]
-  ### Stores the source iterable.
-  secret source: Iterable[T]
+### :typeparam S: The concrete source iterable type (borrowed; enables build-time dispatch).
+entity SelectManyIterator[T, U, S] obeys Iterable[U]
+needs S obeys Iterable[T]
+relates SelectManyEmitter[T, U, S/Iter] as Iter
+  ### Stores the source iterable (borrowed, not owned).
+  secret source: Hijacked[S]
   ### Stores the transform routine applied to each source element.
   secret transform: Routine[(T,), Iterable[U]]
 
 ### Returns the stateful iterator that drives the flat-map expansion.
-### :returns: The resulting `SelectManyEmitter[T, U]` value.
+### :returns: The resulting `SelectManyEmitter[T, U, S/Iter]` value.
 @readonly
-routine SelectManyIterator[T, U].$iter() -> ?SelectManyEmitter[T, U]
+routine SelectManyIterator[T, U, S].$iter() -> ?SelectManyEmitter[T, U, S/Iter]
   var buffer = List[U]()
-  return SelectManyEmitter[T, U](source: me.source.$iter(), transform: me.transform, buffer: steal buffer, buffer_index: 0u64)
+  danger!
+    return SelectManyEmitter[T, U, S/Iter](source: me.source.as_entity().$iter(), transform: me.transform, buffer: steal buffer, buffer_index: 0u64)
 
 ### Iterates over source elements, expanding each through a transform to yield a flat sequence.
 ### An internal buffer holds the current inner sequence; once drained the next outer element is fetched.
 ### :typeparam T: The source element type.
 ### :typeparam U: The element type yielded by each inner iterable.
-entity SelectManyEmitter[T, U] obeys Iterator[U]
-  ### Stores the outer source iterator.
-  secret source: Iterator[T]
+### :typeparam SE: The concrete source iterator type (borrowed).
+entity SelectManyEmitter[T, U, SE] obeys Iterator[U]
+needs SE obeys Iterator[T]
+  ### Stores the outer source iterator (borrowed).
+  secret source: Hijacked[SE]
   ### Stores the transform routine used to expand each source element.
   secret transform: Routine[(T,), Iterable[U]]
   ### Stores the current inner buffer of materialized inner-sequence values.
@@ -35,21 +41,23 @@ entity SelectManyEmitter[T, U] obeys Iterator[U]
 ### The emitter calls `$next!` on the outer source whenever the buffer is exhausted.
 ### :returns: The resulting `U` value.
 @migratable
-routine SelectManyEmitter[T, U].$next!() -> ?U
-  loop
-    if me.buffer_index < me.buffer.count()
-      var item = me.buffer[me.buffer_index]
-      me.buffer_index = me.buffer_index + 1u64
-      return item
-    var outer = me.source.$next!()
-    var new_buffer = me.transform(outer).List()
-    me.buffer = steal new_buffer
-    me.buffer_index = 0u64
+routine SelectManyEmitter[T, U, SE].$next!() -> ?U
+  danger!
+    loop
+      if me.buffer_index < me.buffer.count()
+        var item = me.buffer[me.buffer_index]
+        me.buffer_index = me.buffer_index + 1u64
+        return item
+      var outer = me.source.as_entity().$next!()
+      var new_buffer = me.transform(outer).List()
+      me.buffer = steal new_buffer
+      me.buffer_index = 0u64
 
 ### Returns a lazy adapter that applies `transform` to each element and yields values from all
 ### resulting inner iterables in sequence.
 ### :param transform: The routine that maps each source element to an inner iterable.
-### :returns: The resulting `SelectManyIterator[T, U]` value.
+### :returns: The resulting `SelectManyIterator[T, U, Me]` value.
 @readonly
-routine Iterable[T].select_many[U](transform: Routine[(T,), Iterable[U]]) -> ?SelectManyIterator[T, U]
-  return SelectManyIterator[T, U](source: me, transform: transform)
+routine Iterable[T].select_many[U](transform: Routine[(T,), Iterable[U]]) -> ?SelectManyIterator[T, U, Me]
+  danger!
+    return SelectManyIterator[T, U, Me](source: me.hijack(), transform: transform)

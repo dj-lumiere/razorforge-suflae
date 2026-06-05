@@ -3,17 +3,21 @@ module IterTools
 ### Represents a lazy adapter that yields source elements in reverse order.
 ### The source is fully materialized when iteration begins.
 ### :typeparam T: The element type of the source sequence.
-entity ReverseIterator[T] obeys Iterable[T]
-  ### Stores the source iterable to materialize and reverse.
-  secret source: Iterable[T]
+### :typeparam S: The concrete source iterable type (borrowed; enables build-time dispatch).
+entity ReverseIterator[T, S] obeys Iterable[T]
+needs S obeys Iterable[T]
+relates ReverseEmitter[T] as Iter
+  ### Stores the source iterable to materialize and reverse (borrowed, not owned).
+  secret source: Hijacked[S]
 
 ### Materializes the source into a buffer and returns an iterator that walks it backwards.
 ### :returns: The resulting `ReverseEmitter[T]` value.
 @readonly
-routine ReverseIterator[T].$iter() -> ?ReverseEmitter[T]
-  var buffer = me.source.List()
-  var n = buffer.count()
-  return ReverseEmitter[T](buffer: steal buffer, index: n)
+routine ReverseIterator[T, S].$iter() -> ?ReverseEmitter[T]
+  danger!
+    var buffer = me.source.as_entity().List()
+    var n = buffer.count()
+    return ReverseEmitter[T](buffer: steal buffer, index: n)
 
 ### Iterates over a pre-materialized buffer from back to front.
 ### :typeparam T: The element type of the reversed sequence.
@@ -34,7 +38,8 @@ routine ReverseEmitter[T].$next!() -> ?T
 
 ### Returns a lazy adapter that yields this iterable's elements in reverse order.
 ### The source is fully consumed when the returned adapter is first iterated.
-### :returns: The resulting `ReverseIterator[T]` value.
+### :returns: The resulting `ReverseIterator[T, Me]` value.
 @readonly
-routine Iterable[T].reverse() -> ?ReverseIterator[T]
-  return ReverseIterator[T](source: me)
+routine Iterable[T].reverse() -> ?ReverseIterator[T, Me]
+  danger!
+    return ReverseIterator[T, Me](source: me.hijack())
