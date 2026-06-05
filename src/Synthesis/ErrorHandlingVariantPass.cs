@@ -345,12 +345,14 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
             if (kind is ErrorHandlingVariantKind.Check or ErrorHandlingVariantKind.Lookup
                 && registry != null && !nextOnly
                 && TryBuildCarrierSafeCall(stmt: s, registry: registry, kind: kind,
-                    safeCall: out Expression? carrierCall, bindName: out string? carrierBind))
+                    safeCall: out Expression? carrierCall, bindName: out string? carrierBind,
+                    innerCanNone: out bool innerCanNone, innerCanError: out bool innerCanError))
             {
                 List<Statement> remainder = TransformBlockStatements(stmts: stmts, start: i + 1,
                     kind: kind, rewriter: rewriter, registry: registry, nextOnly: nextOnly);
                 result.Add(item: BuildCarrierPropagationWhen(subject: carrierCall!, bindName: carrierBind,
-                    kind: kind, remainder: remainder, loc: s.Location));
+                    kind: kind, innerCanNone: innerCanNone, innerCanError: innerCanError,
+                    remainder: remainder, loc: s.Location));
                 return result; // remainder consumed into the when's success arm
             }
 
@@ -456,16 +458,23 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
 
     /// <summary>
     /// Like <see cref="TryBuildTryPropagation"/> but for Check/Lookup variants: retargets a non-tail
-    /// failable call to the inner routine's same-kind (<c>check_</c>/<c>lookup_</c>) variant, returning
-    /// the retargeted call (typed as the Result/Lookup carrier) and the success-binding name. The
-    /// caller wraps it in a <c>when</c> (see <see cref="BuildCarrierPropagationWhen"/>) — Result/Lookup
-    /// are tag-based so they cannot use the flat <c>{present,value}</c> field unwrap.
+    /// failable call to the BEST available inner safe variant and reports what that carrier can fail
+    /// with. The inner routine may not have the outer's exact kind — variant generation produces
+    /// try_ only (absent-only), try_+check_ (throw-only), or try_+lookup_ (both). So fall back:
+    /// prefer the outer's kind, then lookup_ &gt; check_ &gt; try_ (try_ always exists). The chosen
+    /// carrier's capabilities (<paramref name="innerCanNone"/>/<paramref name="innerCanError"/>)
+    /// drive which arms <see cref="BuildCarrierPropagationWhen"/> emits. Returns false when no failure
+    /// arm would apply (e.g. a Check outer over an absent-only inner — an inconsistent combination),
+    /// leaving the original statement untouched.
     /// </summary>
     private static bool TryBuildCarrierSafeCall(Statement stmt, TypeRegistry registry,
-        ErrorHandlingVariantKind kind, out Expression? safeCall, out string? bindName)
+        ErrorHandlingVariantKind kind, out Expression? safeCall, out string? bindName,
+        out bool innerCanNone, out bool innerCanError)
     {
         safeCall = null;
         bindName = null;
+        innerCanNone = false;
+        innerCanError = false;
 
         CallExpression failCall;
         switch (stmt)
@@ -486,11 +495,35 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
         RoutineInfo failRoutine = failCall.ResolvedRoutine!;
         if (failRoutine.OwnerType is not { } owner) return false;
 
-        string prefix = kind == ErrorHandlingVariantKind.Check ? "check" : "lookup";
         string baseName = (failRoutine.OriginalName ?? failRoutine.Name).TrimStart(trimChar: '$');
-        RoutineInfo? variant = registry.LookupMethod(type: owner, methodName: $"{prefix}_{baseName}",
-            isFailable: false);
+
+        // Prefer the outer kind's variant, then fall back to the most-informative available.
+        string[] order = kind == ErrorHandlingVariantKind.Check
+            ? ["check", "lookup", "try"]
+            : ["lookup", "check", "try"];
+        RoutineInfo? variant = null;
+        string chosen = "";
+        foreach (string p in order)
+        {
+            RoutineInfo? v = registry.LookupMethod(type: owner, methodName: $"{p}_{baseName}",
+                isFailable: false);
+            if (v?.ReturnType is { TypeArguments.Count: > 0 })
+            {
+                variant = v;
+                chosen = p;
+                break;
+            }
+        }
         if (variant?.ReturnType is not { } carrier) return false;
+
+        innerCanNone = chosen is "try" or "lookup";
+        innerCanError = chosen is "check" or "lookup";
+
+        // The outer carrier represents None only for Lookup (Try uses the flat-field path), and an
+        // error for both Check and Lookup. If neither failure the inner can produce maps onto the
+        // outer, propagation is meaningless — leave the call raw.
+        bool outerCanNone = kind == ErrorHandlingVariantKind.Lookup;
+        if (!((innerCanNone && outerCanNone) || innerCanError)) return false;
 
         CallExpression retargeted = failCall with { ResolvedRoutine = variant, ResolvedType = carrier };
         retargeted = retargeted.Callee switch
@@ -507,19 +540,21 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     /// Builds the <c>when</c> that short-circuits a Check/Lookup variant on the inner carrier's
     /// failure and otherwise binds the unwrapped success value before running the remainder:
     /// <code>
-    /// when inner.check_x()
-    ///   is None -&gt; &lt;return None&gt;          # Lookup only
-    ///   is Crashable e -&gt; &lt;return error e&gt; # Check + Lookup
+    /// when inner.&lt;safe&gt;_x()
+    ///   is None -&gt; &lt;return None&gt;          # inner can None AND outer is Lookup
+    ///   is Crashable e -&gt; &lt;return error e&gt; # inner can error (Check/Lookup outer)
     ///   else var x -&gt; &lt;remainder&gt;
     /// </code>
-    /// Lowered by CrashableExpansionPass + PatternLoweringPass on path-1 variant bodies.
+    /// Arms are emitted only for failures the chosen inner carrier can produce AND the outer can
+    /// represent. Lowered by CrashableExpansionPass + PatternLoweringPass on path-1 variant bodies.
     /// </summary>
     private static WhenStatement BuildCarrierPropagationWhen(Expression subject, string? bindName,
-        ErrorHandlingVariantKind kind, List<Statement> remainder, SourceLocation loc)
+        ErrorHandlingVariantKind kind, bool innerCanNone, bool innerCanError,
+        List<Statement> remainder, SourceLocation loc)
     {
         var clauses = new List<WhenClause>();
 
-        if (kind == ErrorHandlingVariantKind.Lookup)
+        if (innerCanNone && kind == ErrorHandlingVariantKind.Lookup)
         {
             clauses.Add(item: new WhenClause(
                 Pattern: new NonePattern(Location: loc),
@@ -527,12 +562,15 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
                 Location: loc));
         }
 
-        const string errName = "__rf_prop_err";
-        clauses.Add(item: new WhenClause(
-            Pattern: new CrashablePattern(ErrorType: null, VariableName: errName, Location: loc),
-            Body: new VariantReturnStatement(kind, VariantSiteKind.FromThrow,
-                new IdentifierExpression(Name: errName, Location: loc), loc),
-            Location: loc));
+        if (innerCanError)
+        {
+            const string errName = "__rf_prop_err";
+            clauses.Add(item: new WhenClause(
+                Pattern: new CrashablePattern(ErrorType: null, VariableName: errName, Location: loc),
+                Body: new VariantReturnStatement(kind, VariantSiteKind.FromThrow,
+                    new IdentifierExpression(Name: errName, Location: loc), loc),
+                Location: loc));
+        }
 
         clauses.Add(item: new WhenClause(
             Pattern: new ElsePattern(VariableName: bindName, Location: loc),
