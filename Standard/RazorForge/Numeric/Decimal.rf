@@ -84,6 +84,16 @@ routine Decimal.$create!(text: Text) -> Decimal
   rf_bigdec_set_str(dec.handle, text.to_cstr())
   return dec
 
+### Materializes a `Decimal` from a tokenizer-validated decimal literal string.
+### Used by literal lowering for `dn` literals (e.g. `3.14dn`); the input is guaranteed
+### valid by the tokenizer, so this is infallible (unlike the public `$create!(text:)`).
+### :param text: The decimal literal string (no suffix, no separators).
+### :returns: The resulting `Decimal` value.
+common routine Decimal.$from_literal(text: Text) -> Decimal
+  var dec = Decimal(handle: rf_bigdec_new(), ctrl: ImmutableSharedController().hijack())
+  rf_bigdec_set_str(dec.handle, text.to_cstr())
+  return dec
+
 ### Returns a copy of this value with the underlying refcount bumped.
 ### The handle is shared; no decimal data is copied.
 ### :returns: The resulting `Decimal` value.

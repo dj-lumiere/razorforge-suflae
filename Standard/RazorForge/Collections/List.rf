@@ -199,9 +199,11 @@ routine List[T].add_at!(index: U64, value: T)
 
 ### Removes and returns the first element, shifting the remaining elements left by one position.
 ### :returns: The element that was at the front.
-### :throws: {IndexOutOfBoundsError} if the list is empty.
+### :absent: The list is empty.
 @migratable
 routine List[T].remove_first!() -> ?T
+  if me.is_empty()
+    absent
   return me.remove_at!(0u64)
 
 ### Removes and returns the element at `index`, shifting later elements left by one position.

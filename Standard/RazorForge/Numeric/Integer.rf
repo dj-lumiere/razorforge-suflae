@@ -64,6 +64,16 @@ routine Integer.$create!(text: Text, radix: S32 = 10) -> Integer
     throw ValueError(f"Invalid integer string: {text}")
   return int
 
+### Materializes an `Integer` from a tokenizer-validated decimal digit string.
+### Used by literal lowering for `n` literals (e.g. `123n`); the input is guaranteed
+### valid by the tokenizer, so this is infallible (unlike the public `$create!(text:)`).
+### :param text: The decimal digit string (no suffix, no separators).
+### :returns: The resulting `Integer` value.
+common routine Integer.$from_literal(text: Text) -> Integer
+  var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  discard rf_bigint_set_str(int.handle, text.to_cstr(), 10)
+  return int
+
 ### Returns a copy of this value with the underlying refcount bumped.
 ### The handle is shared; no big-integer data is copied. For values with a null
 ### controller (transient zero) the copy is a bitwise duplicate with no atomic op.
