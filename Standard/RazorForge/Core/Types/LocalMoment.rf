@@ -257,13 +257,17 @@ routine LocalMoment.$represent() -> ?Text
 
   var off = me.utc_offset()
   var off_hours = off.total_hours()
-  var off_minutes = (off.total_minutes() % 60_s64).abs()
+  # Magnitude via wrapping negate (non-failable) — `abs!` is failable and its `try_abs` variant is
+  # not available to stdlib bodies; these offset components are small and never S64_MIN.
+  var off_minutes_raw = off.total_minutes() % 60_s64
+  var off_minutes = if off_minutes_raw < 0_s64 then 0_s64 -% off_minutes_raw else off_minutes_raw
 
   if off.is_zero()
     return f"{y}-{mo}-{d} {h}:{mi}:{s}Z"
 
   var sign = if off.is_negative() then "-" else "+"
-  return f"{y}-{mo}-{d} {h}:{mi}:{s}{sign}{off_hours.abs()}:{off_minutes}"
+  var off_hours_abs = if off_hours < 0_s64 then 0_s64 -% off_hours else off_hours
+  return f"{y}-{mo}-{d} {h}:{mi}:{s}{sign}{off_hours_abs}:{off_minutes}"
 
 ### Returns the diagnostic form of this local moment.
 ### :returns: The resulting `Text` value.

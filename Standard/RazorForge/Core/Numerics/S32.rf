@@ -508,8 +508,11 @@ routine S32.$cmp(you: S32) -> ComparisonSign
 # ============================================================================
 
 ### Returns the absolute value of this integer.
-### :returns: `-me` if `me < 0`; `me` if `me >= 0`. Behavior is undefined for `S32_MIN`.
-routine S32.abs() -> S32
+### :returns: `-me` if `me < 0`; `me` if `me >= 0`.
+### :throws: {IntegerOverflowError} when `me` is `S32_MIN` (its magnitude is not representable in S32).
+routine S32.abs!() -> S32
+  if me == -2147483648_s32
+    throw IntegerOverflowError()
   return int_abs[S32](me)
 
 ### Returns the smaller of this value and `you`.

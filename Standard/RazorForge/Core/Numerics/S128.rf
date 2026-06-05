@@ -491,8 +491,11 @@ routine S128.$cmp(you: S128) -> ComparisonSign
 # ============================================================================
 
 ### Returns the absolute value of this integer.
-### :returns: `-me` if `me < 0`; `me` if `me >= 0`. Behavior is undefined for `S128_MIN`.
-routine S128.abs() -> S128
+### :returns: `-me` if `me < 0`; `me` if `me >= 0`.
+### :throws: {IntegerOverflowError} when `me` is `S128_MIN` (its magnitude is not representable in S128).
+routine S128.abs!() -> S128
+  if me == S128_MIN
+    throw IntegerOverflowError()
   return int_abs[S128](me)
 
 ### Returns the smaller of this value and `you`.

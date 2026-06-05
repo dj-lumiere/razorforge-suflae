@@ -492,7 +492,10 @@ routine S64.$cmp(you: S64) -> ComparisonSign
 
 ### Returns the absolute value of this value.
 ### :returns: `me` if non-negative; `-me` otherwise.
-routine S64.abs() -> S64
+### :throws: {IntegerOverflowError} when `me` is `S64_MIN` (its magnitude is not representable in S64).
+routine S64.abs!() -> S64
+  if me == -9223372036854775808_s64
+    throw IntegerOverflowError()
   return int_abs[S64](me)
 
 ### Returns the smaller of this value and `you`.
