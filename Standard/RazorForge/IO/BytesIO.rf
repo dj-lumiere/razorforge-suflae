@@ -101,14 +101,18 @@ routine S64.to_digit_bytes!() -> ?Bytes
     return Bytes(from_list: buf)
 
   var negative = me.is_negative()
-  var abs_val = me.abs()
+  # Compute the magnitude in U64 space. `me.abs()` overflows for S64_MIN (|S64_MIN| = 2^63 is not
+  # representable in S64), so reinterpret the bits and take the two's-complement magnitude in U64,
+  # where 2^63 fits. For non-negative values the bit pattern already equals the value.
+  var bits: U64 = reinterpret_bits[S64, U64](me)
+  var mag: U64 = if negative then 0_u64 -% bits else bits
   var digits: List[Byte] = []
 
-  while abs_val > 0_s64
-    var d: S64 = abs_val % 10_s64                  # 0..9
-    var b: U8 = 0x30_u8 + U8(from: d)             # '0' + d
+  while mag > 0_u64
+    var d: U64 = mag % 10_u64                       # 0..9
+    var b: U8 = 0x30_u8 + U8(from: d)              # '0' + d
     digits.add_last(value: Byte(from: b))
-    abs_val = abs_val // 10_s64
+    mag = mag // 10_u64
 
   if negative
     digits.add_last(value: Byte(from: 0x2D_u8))    # '-'
@@ -287,13 +291,17 @@ routine S128.to_digit_bytes!() -> ?Bytes
     return Bytes(from_list: buf)
 
   var negative = me.is_negative()
-  var abs_val = me.abs()
+  # Compute the magnitude in U128 space. `me.abs()` overflows for S128_MIN (|S128_MIN| = 2^127 is
+  # not representable in S128), so reinterpret the bits and take the two's-complement magnitude in
+  # U128, where 2^127 fits. For non-negative values the bit pattern already equals the value.
+  var bits: U128 = reinterpret_bits[S128, U128](me)
+  var mag: U128 = if negative then 0_u128 -% bits else bits
   var digits: List[Byte] = []
-  while abs_val > 0_s128
-    var d: S128 = abs_val % 10_s128
+  while mag > 0_u128
+    var d: U128 = mag % 10_u128
     var b: U8 = 0x30_u8 + U8(from: d)
     digits.add_last(value: Byte(from: b))
-    abs_val = abs_val // 10_s128
+    mag = mag // 10_u128
   if negative
     digits.add_last(value: Byte(from: 0x2D_u8))
   digits.reverse_in_place()
