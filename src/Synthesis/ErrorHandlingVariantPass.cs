@@ -285,6 +285,28 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     private static int _propTemp;
 
     /// <summary>
+    /// Resolves a <c>prefix_base</c> variant on <paramref name="owner"/> that matches
+    /// <paramref name="original"/>'s OVERLOAD. A name-only lookup is wrong for heavily-overloaded
+    /// routines (e.g. <c>U8.$create!</c> from S8/S16/S32/S64/…): it returns an arbitrary
+    /// <c>try_create</c> whose parameter type mismatches the original call's argument, producing
+    /// invalid IR. Match by the original's explicit parameter types via <c>LookupMethodOverload</c>;
+    /// fall back to name-only lookup when a parameter type isn't a concrete <see cref="TypeInfo"/>.
+    /// </summary>
+    private static RoutineInfo? LookupVariantForOverload(TypeRegistry registry, TypeInfo owner,
+        string variantName, RoutineInfo original)
+    {
+        var argTypes = new List<TypeInfo>();
+        foreach (ParameterInfo p in original.Parameters)
+        {
+            if (p.Type is TypeInfo ti) argTypes.Add(item: ti);
+            else return registry.LookupMethod(type: owner, methodName: variantName, isFailable: false);
+        }
+
+        return registry.LookupMethodOverload(type: owner, methodName: variantName, argTypes: argTypes)
+            ?? registry.LookupMethod(type: owner, methodName: variantName, isFailable: false);
+    }
+
+    /// <summary>
     /// Transforms a block's statements, propagating NON-tail failable calls through their safe
     /// variant. The tail-position <paramref name="rewriter"/> only handles <c>return F!(x)</c>; a
     /// failable call used in statement position — e.g. <c>var item = src.$next!()</c> — would
@@ -411,8 +433,8 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
         // propagates ALL non-tail failable calls and reachability then emits the introduced variants.
         if (nextOnly && baseName != "next") return false;
 
-        RoutineInfo? variant = registry.LookupMethod(type: owner, methodName: $"try_{baseName}",
-            isFailable: false);
+        RoutineInfo? variant = LookupVariantForOverload(registry: registry, owner: owner,
+            variantName: $"try_{baseName}", original: failRoutine);
 
         // Need a Maybe carrier (flat {present,value}) to unwrap with field access. The TryBool
         // variant returns Bool (no type args) and is rejected here.
@@ -505,8 +527,8 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
         string chosen = "";
         foreach (string p in order)
         {
-            RoutineInfo? v = registry.LookupMethod(type: owner, methodName: $"{p}_{baseName}",
-                isFailable: false);
+            RoutineInfo? v = LookupVariantForOverload(registry: registry, owner: owner,
+                variantName: $"{p}_{baseName}", original: failRoutine);
             if (v?.ReturnType is { TypeArguments.Count: > 0 })
             {
                 variant = v;

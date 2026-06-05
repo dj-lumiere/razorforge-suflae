@@ -417,6 +417,39 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                     }
                 }
 
+                // Variant construction via the call form: `Inner(7_s32)` / `Inner(none)`. SA leaves
+                // these as CallExpressions with ConstructedType=<variant> but no $create routine, so
+                // codegen would emit a bogus `call @Inner`. Rewrite to the variant CreatorExpression
+                // that EmitVariantConstruction handles (the same shape the assignment auto-wrap uses).
+                if (call is { ConstructedType: VariantTypeInfo callVariant, ResolvedRoutine: null }
+                    && args.Count == 1)
+                {
+                    Expression vArg = args[index: 0] is NamedArgumentExpression vna ? vna.Value : args[index: 0];
+                    string? armName = null;
+                    if (vArg is LiteralExpression { LiteralType: TokenType.NoneValue })
+                    {
+                        if (callVariant.Members.Any(predicate: m => m.IsNone)) armName = "None";
+                    }
+                    else if (vArg.ResolvedType is { } vArgType)
+                    {
+                        VariantMemberInfo? m = FindVariantMember(callVariant, vArgType);
+                        if (m != null) armName = m.IsNone ? "None" : m.Type!.Name;
+                    }
+                    if (armName != null)
+                    {
+                        var variantCreator = new CreatorExpression(
+                            TypeName: callVariant.Name,
+                            TypeArguments: null,
+                            MemberVariables: [(armName, vArg)],
+                            Location: call.Location)
+                        {
+                            ResolvedType = callVariant,
+                            ConstructedType = callVariant,
+                        };
+                        return (hoisted, variantCreator);
+                    }
+                }
+
                 if (hoisted.Count == 0 && !argsChanged
                     && ReferenceEquals(loweredCallee, call.Callee))
                     return ([], expr);
@@ -1132,7 +1165,10 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
         // Skip when init's type IS the variant (passthrough) or is a generic def for it.
         if (targetType is VariantTypeInfo variant)
         {
-            if (initType is VariantTypeInfo) return null;
+            // Passthrough only when init IS the same variant. A DIFFERENT variant that is an arm of
+            // the target (e.g. `var o: Outer = Inner(...)` where Outer has an Inner arm) must still be
+            // wrapped — otherwise an inner-variant value is stored straight into the outer slot.
+            if (initType.FullName == variant.FullName) return null;
 
             // `var x: Variant = none` → wrap as the variant's None arm if it has one.
             if (init is LiteralExpression { LiteralType: TokenType.NoneValue })

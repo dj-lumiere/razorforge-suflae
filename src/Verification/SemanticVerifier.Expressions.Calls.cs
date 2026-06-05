@@ -138,7 +138,8 @@ public sealed partial class SemanticVerifier
                         if (t != ErrorTypeInfo.Instance) arityArgTypes.Add(item: t);
                     }
                     RoutineInfo? arityMatch =
-                        _registry.LookupRoutineOverload(baseName: callName, argTypes: arityArgTypes);
+                        _registry.LookupRoutineOverload(baseName: callName, argTypes: arityArgTypes)
+                        ?? _registry.LookupRoutineOverload(baseName: routine.BaseName, argTypes: arityArgTypes);
                     if (arityMatch != null && arityMatch != routine)
                     {
                         routine = arityMatch;
@@ -202,8 +203,13 @@ public sealed partial class SemanticVerifier
                             }
                         }
 
+                        // Bare callName misses module-qualified overloads (the routines register
+                        // under `Module.name#params`). Fall back to the resolved routine's qualified
+                        // BaseName so overload resolution finds sibling overloads in the same module.
                         RoutineInfo? better =
                             _registry.LookupRoutineOverload(baseName: callName,
+                                argTypes: resolvedArgTypes)
+                            ?? _registry.LookupRoutineOverload(baseName: routine.BaseName,
                                 argTypes: resolvedArgTypes);
                         if (better != null && better != routine)
                         {
@@ -257,10 +263,15 @@ public sealed partial class SemanticVerifier
 
                 if (callableType != null && call.Arguments.Count > 0)
                 {
+                    // Variant construction auto-wraps the argument into the variant (e.g.
+                    // `Inner(7_s32)` -> Inner's S32 arm, `Inner(none)` -> Inner's None arm), so the
+                    // argument's contextual type is the variant itself. Without this, a bare `none`
+                    // argument has no expected type and errors S016.
+                    TypeSymbol? variantArgContext = callableType is VariantTypeInfo ? callableType : null;
                     var creatorArgTypes = new List<TypeSymbol>(capacity: call.Arguments.Count);
                     foreach (Expression arg in call.Arguments)
                     {
-                        creatorArgTypes.Add(item: AnalyzeExpression(expression: arg));
+                        creatorArgTypes.Add(item: AnalyzeExpression(expression: arg, expectedType: variantArgContext));
                     }
 
                     RoutineInfo? creator = _registry.LookupMethodOverload(type: callableType,
@@ -381,11 +392,14 @@ public sealed partial class SemanticVerifier
                     call.LoweringKind = ClassifyConstruction(type: type,
                         isCollectionLiteral: call.IsCollectionLiteral);
 
-                    // Analyze all arguments once before branching
+                    // Analyze all arguments once before branching. Variant construction auto-wraps
+                    // the argument into the variant, so its contextual type is the variant itself
+                    // (lets a bare `none` argument resolve to the variant's None arm).
+                    TypeSymbol? variantArgContext = type is VariantTypeInfo ? type : null;
                     var argTypes = new List<TypeSymbol>();
                     foreach (Expression arg in call.Arguments)
                     {
-                        argTypes.Add(item: AnalyzeExpression(expression: arg));
+                        argTypes.Add(item: AnalyzeExpression(expression: arg, expectedType: variantArgContext));
                     }
 
                     // C95: Try $create overload match first
