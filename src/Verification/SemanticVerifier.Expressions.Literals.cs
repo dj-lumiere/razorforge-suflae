@@ -478,7 +478,10 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private ParsedInteger ParseIntegerLiteral(LiteralExpression literal, string rawValue)
     {
-        (byte[] bytes, int sign) = NumericLiteralParser.ParseIntegerToBytes(str: rawValue);
+        // Strip the `n` suffix and digit-group underscores (e.g. "1_000_000n" -> "1000000")
+        // before handing the bare digits to the native parser.
+        string digits = CleanNumericLiteral(value: ExtractNumericPart(rawValue: rawValue, suffix: "n"));
+        (byte[] bytes, int sign) = NumericLiteralParser.ParseIntegerToBytes(str: digits);
         if (bytes.Length == 0)
         {
             ReportError(code: SemanticDiagnosticCode.InvalidIntegerLiteral,
@@ -501,8 +504,11 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private ParsedDecimal ParseDecimalLiteral(LiteralExpression literal, string rawValue)
     {
+        // Strip the `dn` suffix and digit-group underscores (e.g. "3.14_159dn" -> "3.14159")
+        // before parsing. decNumber (unlike libbf's bf_atof) rejects trailing non-numeric chars.
+        string digits = CleanNumericLiteral(value: ExtractNumericPart(rawValue: rawValue, suffix: "dn"));
         (string value, int sign, int exponent, int significantDigits, bool isInteger) =
-            NumericLiteralParser.ParseDecimalInfo(str: rawValue);
+            NumericLiteralParser.ParseDecimalInfo(str: digits);
 
         if (string.IsNullOrEmpty(value: value))
         {

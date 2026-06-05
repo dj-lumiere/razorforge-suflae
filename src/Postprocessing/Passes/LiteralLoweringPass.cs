@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Compiler.Tokenizer;
 using SyntaxTree;
+using TypeModel.Symbols;
 using TypeModel.Types;
 
 namespace Compiler.Postprocessing.Passes;
@@ -26,6 +27,12 @@ internal sealed class LiteralLoweringPass
 {
     private readonly Dictionary<string, Statement>? _variantBodies;
     private readonly TypeInfo? _backIndexType;
+    // Arbitrary-precision literal lowering: `123n`/`3.14dn` -> Integer/Decimal.$from_literal(text:"...").
+    private readonly TypeInfo? _integerType;
+    private readonly TypeInfo? _decimalType;
+    private readonly TypeInfo? _textType;
+    private readonly RoutineInfo? _integerFromLiteral;
+    private readonly RoutineInfo? _decimalFromLiteral;
 
     /// <summary>
     /// Initializes a new instance with the dependencies required for its compiler phase.
@@ -36,6 +43,18 @@ internal sealed class LiteralLoweringPass
         // Cached so the synthesized `BackIndex(...)` creator can carry a resolved type — a later
         // pass (OperatorLoweringPass) needs it to pick the BackIndex `$getitem!` overload.
         _backIndexType = ctx.Registry.LookupType(name: "BackIndex");
+
+        // `n`/`dn` arbitrary-precision literals are emitted as malformed scalar IR by codegen
+        // (e.g. `store %Record.Integer 42n`); lower them to an infallible constructor call instead.
+        _integerType = ctx.Registry.LookupType(name: "Integer");
+        _decimalType = ctx.Registry.LookupType(name: "Decimal");
+        _textType = ctx.Registry.LookupType(name: "Text");
+        _integerFromLiteral = _integerType != null
+            ? ctx.Registry.LookupMethod(type: _integerType, methodName: "$from_literal")
+            : null;
+        _decimalFromLiteral = _decimalType != null
+            ? ctx.Registry.LookupMethod(type: _decimalType, methodName: "$from_literal")
+            : null;
     }
 
     // -----------------------------------------------------------------------------
@@ -225,6 +244,11 @@ internal sealed class LiteralLoweringPass
     {
         if (expr is LiteralExpression literal)
         {
+            // Arbitrary-precision `n`/`dn` literals -> infallible $from_literal constructor call
+            // (instance lowering: needs the cached Integer/Decimal types + routines).
+            Expression? fromLit = TryLowerArbitraryPrecisionLiteral(literal);
+            if (fromLit != null) return fromLit;
+
             Expression? lowered = TryLowerLiteral(literal);
             if (lowered != null) return lowered;
             return expr;
@@ -467,6 +491,53 @@ internal sealed class LiteralLoweringPass
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Lowers an arbitrary-precision <c>n</c>/<c>dn</c> literal to a <c>$from_literal</c> constructor
+    /// call, or returns null if <paramref name="literal"/> is not such a literal (or the
+    /// Integer/Decimal type/routine is unavailable). Codegen has no scalar form for these record
+    /// types, so they must become a call before codegen.
+    /// </summary>
+    private CallExpression? TryLowerArbitraryPrecisionLiteral(LiteralExpression literal)
+    {
+        if (literal.Value is not string s) return null;
+        SourceLocation loc = literal.Location;
+        return literal.LiteralType switch
+        {
+            TokenType.IntegerLiteral when _integerType != null && _integerFromLiteral != null =>
+                MakeFromLiteralCall(s, "n", _integerType, _integerFromLiteral, loc),
+            TokenType.DecimalLiteral when _decimalType != null && _decimalFromLiteral != null =>
+                MakeFromLiteralCall(s, "dn", _decimalType, _decimalFromLiteral, loc),
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Builds <c>&lt;Type&gt;.$from_literal(text: "&lt;digits&gt;")</c> for an arbitrary-precision
+    /// (<c>n</c>/<c>dn</c>) literal. The suffix and digit-group underscores are stripped; the bare
+    /// digit string is materialized at runtime by the infallible <c>$from_literal</c> constructor.
+    /// </summary>
+    private CallExpression MakeFromLiteralCall(string raw, string suffix, TypeInfo type,
+        RoutineInfo fromLiteral, SourceLocation loc)
+    {
+        string digits = (raw.EndsWith(value: suffix, comparisonType: System.StringComparison.OrdinalIgnoreCase)
+            ? raw[..^suffix.Length]
+            : raw).Replace(oldValue: "_", newValue: "");
+
+        var textLit = new LiteralExpression(Value: digits, LiteralType: TokenType.TextLiteral, Location: loc)
+        {
+            ResolvedType = _textType
+        };
+        var arg = new NamedArgumentExpression(Name: "text", Value: textLit, Location: loc);
+        var callee = new MemberExpression(
+            Object: new IdentifierExpression(Name: type.Name, Location: loc) { ResolvedType = type },
+            PropertyName: "$from_literal", Location: loc);
+        return new CallExpression(Callee: callee, Arguments: [arg], Location: loc)
+        {
+            ResolvedRoutine = fromLiteral,
+            ResolvedType = fromLiteral.ReturnType
+        };
     }
 
     /// <summary>

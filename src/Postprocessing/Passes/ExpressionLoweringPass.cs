@@ -970,8 +970,23 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                 return ([], undecDec with { LiteralType = resolved });
             }
 
+            // Lambda bodies are lifted to top-level routines by LambdaLiftingPass, which runs
+            // AFTER this pass — so the lifted body is never lowered again. Descend into the body
+            // here so its UndecidedInteger/UndecidedDecimal literals get a concrete LiteralType;
+            // otherwise codegen receives UndecidedInteger and (per IsIntegerLiteralType) emits it
+            // as a Text string constant (e.g. `x % 2` → `$mod(i64, %Record.Text)` type mismatch).
+            // Lambda bodies are expression-position and cannot carry hoisted statements, so only
+            // rewrite when lowering produced none; complex bodies (`??`/`?.`) fall through unchanged.
+            case LambdaExpression lambda:
+            {
+                var (bodyH, loweredBody) = LowerExpr(expr: lambda.Body);
+                if (bodyH.Count == 0 && !ReferenceEquals(objA: loweredBody, objB: lambda.Body))
+                    return ([], lambda with { Body = loweredBody });
+                return ([], expr);
+            }
+
             default:
-                // LiteralExpression, TypeExpression, LambdaExpression,
+                // LiteralExpression, TypeExpression,
                 // BlockExpression, TypeConversionExpression, GenericMemberExpression:
                 // no sub-expressions that need lowering.
                 return ([], expr);

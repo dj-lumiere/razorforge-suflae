@@ -88,6 +88,10 @@ public static class WiredRoutineCatalog
     [
         // ---- Creator / context / lifecycle (declarable, not protocol-bound) ----
         new() { Name = "$create",  Kind = WiredKind.Creator, Views = Known },
+        // Infallible literal constructor synthesized by LiteralLoweringPass for `n`/`dn`
+        // arbitrary-precision literals (Integer/Decimal.$from_literal(text:)). Declarable in
+        // stdlib (Known) and seeded live so the synthesized calls keep their link symbols (Seed).
+        new() { Name = "$from_literal", Kind = WiredKind.Creator, Views = Known | Seed },
         new() { Name = "$enter",   Kind = WiredKind.Context, Views = Known },
         new() { Name = "$exit",    Kind = WiredKind.Context, Views = Known },
         new() { Name = "$destroy", Kind = WiredKind.Lifecycle, Views = Known, AlwaysLive = true },
@@ -330,7 +334,7 @@ public static class WiredRoutineCatalog
 
     private static readonly string[] _legacyKnownWired =
     [
-        "$create", "$add", "$sub", "$mul", "$truediv", "$floordiv", "$mod", "$pow",
+        "$create", "$from_literal", "$add", "$sub", "$mul", "$truediv", "$floordiv", "$mod", "$pow",
         "$add_wrap", "$sub_wrap", "$mul_wrap", "$pow_wrap",
         "$add_clamp", "$sub_clamp", "$mul_clamp", "$truediv_clamp", "$pow_clamp",
         "$eq", "$ne", "$lt", "$le", "$gt", "$ge", "$cmp",
@@ -367,6 +371,7 @@ public static class WiredRoutineCatalog
 
     private static readonly string[] _legacyReachabilitySeed =
     [
+        "$from_literal",
         "$represent", "$diagnose", "$hash", "$copy", "$eq", "$ne", "$cmp", "$lt", "$le", "$gt", "$ge",
         "$contains", "$notcontains", "$iter", "$next", "try_next",
         "$add", "$sub", "$mul", "$truediv", "$floordiv", "$mod", "$pow", "$neg",
