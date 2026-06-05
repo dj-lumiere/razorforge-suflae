@@ -33,6 +33,14 @@ internal sealed class LiteralLoweringPass
     private readonly TypeInfo? _textType;
     private readonly RoutineInfo? _integerFromLiteral;
     private readonly RoutineInfo? _decimalFromLiteral;
+    // Imaginary literal lowering: `4.0j64` -> C64(real: 0.0_f64, imag: 4.0_f64), etc.
+    private readonly TypeInfo? _c32Type;
+    private readonly TypeInfo? _c64Type;
+    private readonly TypeInfo? _c128Type;
+    private readonly TypeInfo? _complexType;
+    private readonly TypeInfo? _f32Type;
+    private readonly TypeInfo? _f64Type;
+    private readonly TypeInfo? _f128Type;
 
     /// <summary>
     /// Initializes a new instance with the dependencies required for its compiler phase.
@@ -55,6 +63,16 @@ internal sealed class LiteralLoweringPass
         _decimalFromLiteral = _decimalType != null
             ? ctx.Registry.LookupMethod(type: _decimalType, methodName: "$from_literal")
             : null;
+
+        // Imaginary `j*` literals (J32/J64/J128/Jn) are emitted as Text by codegen (no scalar form
+        // for the complex record types); lower them to pure-imaginary complex constructors.
+        _c32Type = ctx.Registry.LookupType(name: "C32");
+        _c64Type = ctx.Registry.LookupType(name: "C64");
+        _c128Type = ctx.Registry.LookupType(name: "C128");
+        _complexType = ctx.Registry.LookupType(name: "Complex");
+        _f32Type = ctx.Registry.LookupType(name: "F32");
+        _f64Type = ctx.Registry.LookupType(name: "F64");
+        _f128Type = ctx.Registry.LookupType(name: "F128");
     }
 
     // -----------------------------------------------------------------------------
@@ -248,6 +266,10 @@ internal sealed class LiteralLoweringPass
             // (instance lowering: needs the cached Integer/Decimal types + routines).
             Expression? fromLit = TryLowerArbitraryPrecisionLiteral(literal);
             if (fromLit != null) return fromLit;
+
+            // Imaginary `j*` literals -> pure-imaginary complex constructor.
+            Expression? imag = TryLowerImaginaryLiteral(literal);
+            if (imag != null) return imag;
 
             Expression? lowered = TryLowerLiteral(literal);
             if (lowered != null) return lowered;
@@ -511,6 +533,52 @@ internal sealed class LiteralLoweringPass
                 MakeFromLiteralCall(s, "dn", _decimalType, _decimalFromLiteral, loc),
             _ => null
         };
+    }
+
+    /// <summary>
+    /// Lowers an imaginary <c>j*</c> literal (<c>4.0j32</c>/<c>4.0j64</c>/<c>4.0j</c>/<c>4.0j128</c>/
+    /// <c>4.0jn</c>) to a pure-imaginary complex constructor <c>&lt;CType&gt;(real: 0, imag: value)</c>
+    /// (C32/C64/C128 memberwise, or Complex for <c>jn</c>). Returns null if not such a literal or the
+    /// types are unavailable. Codegen has no scalar form for the complex record types.
+    /// </summary>
+    private Expression? TryLowerImaginaryLiteral(LiteralExpression literal)
+    {
+        if (literal.Value is not string raw) return null;
+        int j = raw.IndexOfAny(['j', 'J']);
+        if (j < 0) return null;
+        SourceLocation loc = literal.Location;
+        // Magnitude = everything before the `j` suffix, underscores stripped.
+        string mag = raw[..j].Replace(oldValue: "_", newValue: "");
+
+        switch (literal.LiteralType)
+        {
+            case TokenType.J32Literal when _c32Type != null:
+                return MakeComplexCreator("C32", _c32Type, mag, TokenType.F32Literal, _f32Type, loc);
+            case TokenType.J64Literal when _c64Type != null:
+                return MakeComplexCreator("C64", _c64Type, mag, TokenType.F64Literal, _f64Type, loc);
+            case TokenType.J128Literal when _c128Type != null:
+                return MakeComplexCreator("C128", _c128Type, mag, TokenType.F128Literal, _f128Type, loc);
+            case TokenType.JnLiteral when _complexType != null && _decimalType != null
+                                          && _decimalFromLiteral != null:
+                // Complex components are arbitrary-precision Decimal -> $from_literal calls
+                // (the creator's args are not re-lowered, so build them already-lowered here).
+                return new CreatorExpression("Complex", null,
+                    [("real", MakeFromLiteralCall("0", "", _decimalType, _decimalFromLiteral, loc)),
+                     ("imag", MakeFromLiteralCall(mag, "", _decimalType, _decimalFromLiteral, loc))],
+                    loc) { ResolvedType = _complexType };
+            default:
+                return null;
+        }
+    }
+
+    /// <summary>Builds <c>&lt;CType&gt;(real: 0&lt;suffix&gt;, imag: &lt;mag&gt;&lt;suffix&gt;)</c> for a
+    /// fixed-width imaginary literal, where the components are float literals of <paramref name="compLit"/>.</summary>
+    private static CreatorExpression MakeComplexCreator(string typeName, TypeInfo type, string mag,
+        TokenType compLit, TypeInfo? compType, SourceLocation loc)
+    {
+        var real = new LiteralExpression(Value: "0.0", LiteralType: compLit, Location: loc) { ResolvedType = compType };
+        var imag = new LiteralExpression(Value: mag, LiteralType: compLit, Location: loc) { ResolvedType = compType };
+        return new CreatorExpression(typeName, null, [("real", real), ("imag", imag)], loc) { ResolvedType = type };
     }
 
     /// <summary>
