@@ -188,28 +188,16 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     internal static Statement TransformBody(Statement body, ErrorHandlingVariantKind kind,
         VariantCallRewriter? rewriter = null, TypeRegistry? registry = null)
     {
-        // Non-tail inner-failable-call propagation (TransformBlockStatements) only applies when this
-        // variant's failability is PURELY propagated — i.e. the source has NO direct absent/throw of
-        // its own. A routine that guards its own failure (e.g. SortedSetIterator bounds-checks with
-        // `absent` before a then-safe `me.set[i]` $getitem!) must NOT have that inner call retargeted
-        // to a try_ variant: the call can no longer actually fail, and the inner safe variant may not
-        // be monomorphized for the instance (→ LINKERR). Disable propagation by clearing the registry
-        // that TransformBlockStatements gates on. EnumerateEmitter.$next! has no direct absent (its
-        // only failure is the inner source.$next!), so propagation stays on for it.
+        // Non-tail inner-failable-call propagation (TransformBlockStatements / TryBuildTryPropagation)
+        // is enabled for try_ variants when a registry is available. The actual retarget is restricted
+        // to inner `$next` calls (iterator chaining) — see TryBuildTryPropagation — so a guarded
+        // `$getitem!` (e.g. SortedSetIterator bounds-checks then indexes) is NOT touched: its try_
+        // variant may not be emitted for the instance (→ LINKERR) and the call can't actually fail.
+        // Restricting to `$next` is safe because `try_next` is systematically emitted for live iterator
+        // instances (for-loops drive it), so the propagated chain always links.
         TypeRegistry? propRegistry =
-            registry != null && kind == ErrorHandlingVariantKind.Try && !BodyHasDirectAbsentOrThrow(body: body)
-                ? registry
-                : null;
+            registry != null && kind == ErrorHandlingVariantKind.Try ? registry : null;
         return TransformBodyCore(body: body, kind: kind, rewriter: rewriter, registry: propRegistry);
-    }
-
-    /// <summary>True if <paramref name="body"/> directly contains an <c>absent</c> or <c>throw</c>
-    /// (anywhere in its statement tree) — i.e. the routine signals failure itself rather than purely
-    /// propagating it from a callee.</summary>
-    private static bool BodyHasDirectAbsentOrThrow(Statement body)
-    {
-        ErrorHandlingAnalysis a = ErrorHandlingGenerator.AnalyzeBody(body: body);
-        return a.HasAbsent || a.HasThrow;
     }
 
     private static Statement TransformBodyCore(Statement body, ErrorHandlingVariantKind kind,
@@ -277,6 +265,11 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
             DangerStatement danger => danger with
             {
                 Body = (BlockStatement)TransformBodyCore(body: danger.Body, kind: kind, rewriter: rewriter, registry: registry)
+            },
+
+            LoopStatement loop => loop with
+            {
+                Body = TransformBodyCore(body: loop.Body, kind: kind, rewriter: rewriter, registry: registry)
             },
 
             _ => body // All other statements pass through unchanged
@@ -384,6 +377,14 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
         if (failRoutine.OwnerType is not { } owner) return false;
 
         string baseName = (failRoutine.OriginalName ?? failRoutine.Name).TrimStart(trimChar: '$');
+
+        // Restrict propagation to iterator chaining: an inner `$next!` whose `try_next` variant is
+        // systematically emitted for live iterator instances (for-loops drive it), so the propagated
+        // chain always links. Other failable calls (e.g. a bounds-guarded `$getitem!` in
+        // SortedSetIterator) are NOT retargeted — their try_ variant may be unemitted (→ LINKERR) and
+        // such calls are typically already guarded so they cannot actually fail here.
+        if (baseName != "next") return false;
+
         RoutineInfo? variant = registry.LookupMethod(type: owner, methodName: $"try_{baseName}",
             isFailable: false);
 
@@ -427,6 +428,50 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Builds a registry-based <see cref="VariantCallRewriter"/> for the monomorphized fallback path
+    /// (<see cref="Compiler.Instantiation.Passes.GenericMonomorphizationPass"/>), which has no
+    /// per-pass rewriter instance. It rewrites a TAIL-position <c>return src.$next!()</c> into a
+    /// passthrough call to the matching <c>try_/check_/lookup_next</c> variant (resolved via
+    /// <see cref="TypeRegistry.LookupMethod"/> on the concrete callee owner). Restricted to
+    /// <c>$next</c> for the same reason as <see cref="TryBuildTryPropagation"/>: <c>try_next</c> is
+    /// systematically emitted for live iterator instances, so the rewritten chain always links.
+    /// </summary>
+    public static VariantCallRewriter MakeNextVariantRewriter(TypeRegistry registry)
+    {
+        return (Expression? value, ErrorHandlingVariantKind kind, out Expression? rewritten) =>
+        {
+            rewritten = null;
+            string? prefix = kind switch
+            {
+                ErrorHandlingVariantKind.Try => "try",
+                ErrorHandlingVariantKind.Check => "check",
+                ErrorHandlingVariantKind.Lookup => "lookup",
+                _ => null
+            };
+            if (prefix == null) return false;
+            if (value is not CallExpression { ResolvedRoutine: { IsFailable: true } callee } call) return false;
+
+            string baseName = (callee.OriginalName ?? callee.Name).TrimStart(trimChar: '$');
+            if (baseName != "next") return false;
+            if (callee.OwnerType is not { } owner) return false;
+
+            RoutineInfo? variant = registry.LookupMethod(type: owner, methodName: $"{prefix}_{baseName}",
+                isFailable: false);
+            if (variant == null) return false;
+
+            CallExpression newCall = call with { ResolvedRoutine = variant, ResolvedType = variant.ReturnType };
+            newCall = newCall.Callee switch
+            {
+                MemberExpression m => newCall with { Callee = m with { PropertyName = variant.Name } },
+                IdentifierExpression idc => newCall with { Callee = idc with { Name = variant.Name } },
+                _ => newCall
+            };
+            rewritten = newCall;
+            return true;
+        };
     }
 
     /// <summary>

@@ -679,7 +679,9 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         if (fallbackKind != null)
         {
             Statement transformed = ErrorHandlingVariantPass.TransformBody(
-                body: rewrittenDecl.Body, kind: fallbackKind.Value, rewriter: null, registry: ctx.Registry);
+                body: rewrittenDecl.Body, kind: fallbackKind.Value,
+                rewriter: ErrorHandlingVariantPass.MakeNextVariantRewriter(registry: ctx.Registry),
+                registry: ctx.Registry);
             rewrittenDecl = rewrittenDecl with { Body = transformed };
         }
 

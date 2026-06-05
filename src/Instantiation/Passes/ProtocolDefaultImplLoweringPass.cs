@@ -71,6 +71,59 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
                     return;
                 TypeInfo impl = implOrNull;
 
+                // Method-generic resolution (e.g. `List[Text].zip[S64, List[S64]]`): the call already
+                // resolved to a fully-concrete resolution `rr` whose method type-arguments bind the
+                // protocol body's method generics. SynthesizePerImplementer drops method generics, so
+                // instead generate the body FOR `rr` directly — substituting the protocol's own params
+                // (T→Text) AND the method generics (U→S64, S2→List[S64]) — keyed by rr's own
+                // RegistryKey (which is exactly the symbol the call site emits).
+                RoutineInfo rr = ce.ResolvedRoutine!;
+                // pr.GenericParameters lists the protocol owner's params first (e.g. T) then the
+                // method-level params (U, S2); rr.TypeArguments holds only the method args. Align them
+                // from the END so the trailing method generics bind, while the owner param (T) is
+                // supplied separately by BuildProtocolGenericSubs (T→Text from the conformance).
+                if (rr.TypeArguments is { Count: > 0 } methodArgs &&
+                    pr.GenericParameters is { Count: > 0 } allParams &&
+                    methodArgs.Count <= allParams.Count)
+                {
+                    Dictionary<string, TypeInfo> fullSubs = BuildProtocolGenericSubs(
+                        protocolRoutine: pr, implementer: impl);
+                    int offset = allParams.Count - methodArgs.Count;
+                    for (int i = 0; i < methodArgs.Count; i++)
+                        fullSubs[key: allParams[index: offset + i]] = methodArgs[index: i];
+
+                    // Build the per-implementer routine with Me + the method generics substituted in
+                    // its signature (rr's own ReturnType still carries ProtocolSelf `Me`, which would
+                    // trip codegen's ContainsGenericParameter guard and silently skip emission). Carry
+                    // rr.TypeArguments so it mangles to the same symbol the call site emits.
+                    RoutineInfo mgInfo = SynthesizePerImplementer(protocolRoutine: pr, implementer: impl,
+                        protoSubs: fullSubs, typeArguments: methodArgs);
+
+                    // Guard on the key we actually store under (mgInfo's), or the fixed-point loop
+                    // never converges (re-adding every iteration).
+                    if (ctx.InstantiatedGenericBodies.ContainsKey(key: mgInfo.RegistryKey)) return;
+
+                    Statement? mgBody = CloneProtocolRoutineBody(protocolRoutine: pr, implementer: impl,
+                        synthesized: mgInfo, protoSubs: fullSubs);
+                    if (mgBody == null) return;
+
+                    ctx.LiveRoutineKeys.Add(item: mgInfo.RegistryKey);
+                    var mgSubs = new Dictionary<string, TypeInfo>(fullSubs)
+                    {
+                        ["me"] = impl,
+                        ["Me"] = impl
+                    };
+                    ctx.InstantiatedGenericBodies[key: mgInfo.RegistryKey] = new MonomorphizedBody(
+                        Ast: WrapInShellDecl(name: mgInfo.Name, body: mgBody, info: mgInfo),
+                        Info: mgInfo,
+                        TypeSubs: mgSubs,
+                        VariantStatus: null,
+                        VariantInnerType: null,
+                        IsSynthesized: false);
+                    added = true;
+                    return;
+                }
+
                 var key = (pr.RegistryKey, impl.FullName);
                 if (_synthesized.ContainsKey(key: key)) return;
 
@@ -168,12 +221,19 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
         TypeInfo impl = UnwrapWrappers(t: recvType);
         if (impl is ProtocolTypeInfo) return false; // implementer still unresolved
 
+        // Walk the GenericDefinition chain to find a protocol-owned default-impl body. One level
+        // covers the re-homed owner-resolved form (List[Text].enumerate -> Iterable[T].enumerate);
+        // a method-generic RESOLUTION needs two (List[Text].zip[S64,List[S64]] ->
+        // List[Text].zip[U,S2] -> Iterable[T].zip[U,S2]).
         RoutineInfo? proto = null;
-        if (rr.OwnerType is ProtocolTypeInfo && RoutineHasDefaultImplBody(routine: rr))
-            proto = rr;
-        else if (rr.GenericDefinition is { OwnerType: ProtocolTypeInfo } gd &&
-                 RoutineHasDefaultImplBody(routine: rr))
-            proto = gd;
+        for (RoutineInfo? cur = rr; cur != null; cur = cur.GenericDefinition)
+        {
+            if (cur.OwnerType is ProtocolTypeInfo && RoutineHasDefaultImplBody(routine: cur))
+            {
+                proto = cur;
+                break;
+            }
+        }
 
         if (proto == null) return false;
         protoRoutine = proto;
@@ -293,12 +353,15 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
     }
 
     private RoutineInfo SynthesizePerImplementer(RoutineInfo protocolRoutine, TypeInfo implementer,
-        Dictionary<string, TypeInfo> protoSubs)
+        Dictionary<string, TypeInfo> protoSubs, List<TypeInfo>? typeArguments = null)
     {
         // Clone parameters/return with `Me` substituted to the implementer AND the protocol's own
         // generic params bound from the implementer's conformance (e.g. T→Text). The latter matters
         // for signatures like Iterable[T].enumerate() -> ?EnumerateIterator[T], whose return would
-        // otherwise leak the protocol element param.
+        // otherwise leak the protocol element param. For a method-generic instantiation (zip[U,S2]),
+        // protoSubs also carries the bound method generics and <paramref name="typeArguments"/> the
+        // concrete method args, so the synthesized routine mangles identically to the call site's
+        // resolution symbol (e.g. `List[Text].zip[S64,List[S64]](List[S64])`).
         var subs = new Dictionary<string, TypeInfo>(protoSubs) { ["Me"] = implementer };
         var newParams = protocolRoutine.Parameters
             .Select(selector: p => p.WithSubstitutedType(newType: SubstituteMe(t: p.Type, subs: subs)))
@@ -316,6 +379,7 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
             ReturnType = newRet,
             IsFailable = protocolRoutine.IsFailable,
             IsSynthesized = true,
+            TypeArguments = typeArguments,
             Location = protocolRoutine.Location
             // GenericDefinition is left null intentionally — this is not a generic instantiation
             // in the usual sense; the body is keyed in InstantiatedGenericBodies by RegistryKey.

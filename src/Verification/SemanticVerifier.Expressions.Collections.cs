@@ -738,6 +738,11 @@ public sealed partial class SemanticVerifier
                 inferred: typeArgs);
         }
 
+        // Second pass: infer any still-unbound generics from `needs` constraints whose constraining
+        // param is now known (e.g. `zip[U, S2](other: Referring[S2]) needs S2 obeys Iterable[U]` —
+        // S2 binds from the argument, then U binds from S2's Iterable conformance).
+        InferGenericsFromConstraints(routine: genericRoutine, inferred: typeArgs);
+
         // All type args must be inferred
         for (int i = 0; i < typeArgs.Length; i++)
         {
@@ -748,6 +753,70 @@ public sealed partial class SemanticVerifier
         }
 
         return typeArgs.ToList()!;
+    }
+
+    /// <summary>
+    /// Infers still-unbound method generics from the routine's <c>needs</c> constraints. For a
+    /// constraint <c>S obeys Proto[..., U, ...]</c> where <c>S</c> is already inferred to a concrete
+    /// type, the bound type's actual conformance to <c>Proto</c> supplies the concrete arguments,
+    /// which are unified positionally against the constraint's type arguments to fill in <c>U</c>.
+    /// Enables element-type inference for source-parameterized adapters (zip/extend/set-ops) whose
+    /// element generic no longer appears directly in a parameter type.
+    /// </summary>
+    private static void InferGenericsFromConstraints(RoutineInfo routine, TypeSymbol?[] inferred)
+    {
+        if (routine.GenericConstraints is not { Count: > 0 } constraints ||
+            routine.GenericParameters is not { Count: > 0 } gp)
+        {
+            return;
+        }
+
+        foreach (GenericConstraintDeclaration constraint in constraints)
+        {
+            if (constraint.ConstraintTypes is not { Count: > 0 } constraintTypes) continue;
+
+            int boundIdx = gp.IndexOf(item: constraint.ParameterName);
+            if (boundIdx < 0 || inferred[boundIdx] is not { } boundType) continue;
+
+            List<TypeSymbol> conformances = ImplementedProtocolsOf(type: boundType);
+
+            foreach (TypeExpression ct in constraintTypes)
+            {
+                if (ct.GenericArguments is not { Count: > 0 } ctArgs) continue;
+
+                TypeSymbol? conformance = conformances
+                    .FirstOrDefault(predicate: p => ProtocolBaseName(type: p) == ct.Name);
+                if (conformance?.TypeArguments is not { Count: > 0 } confArgs) continue;
+
+                int n = Math.Min(val1: ctArgs.Count, val2: confArgs.Count);
+                for (int k = 0; k < n; k++)
+                {
+                    int uIdx = gp.IndexOf(item: ctArgs[index: k].Name);
+                    if (uIdx >= 0 && inferred[uIdx] == null)
+                    {
+                        inferred[uIdx] = confArgs[index: k];
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>Reads a type's implemented-protocol list across the type kinds that carry one.</summary>
+    private static List<TypeSymbol> ImplementedProtocolsOf(TypeSymbol type) =>
+        type switch
+        {
+            RecordTypeInfo r => r.ImplementedProtocols.Cast<TypeSymbol>().ToList(),
+            EntityTypeInfo e => e.ImplementedProtocols.Cast<TypeSymbol>().ToList(),
+            CrashableTypeInfo cr => cr.ImplementedProtocols.Cast<TypeSymbol>().ToList(),
+            _ => []
+        };
+
+    /// <summary>Base (un-parameterized) name of a possibly-parameterized protocol type.</summary>
+    private static string ProtocolBaseName(TypeSymbol type)
+    {
+        string name = type.Name;
+        int bracket = name.IndexOf(value: '[');
+        return bracket >= 0 ? name[..bracket] : name;
     }
 
     /// <summary>
@@ -781,6 +850,9 @@ public sealed partial class SemanticVerifier
                 inferred: inferred);
         }
 
+        // Infer still-unbound generics from `needs` constraints (e.g. U from `S obeys Iterable[U]`).
+        InferGenericsFromConstraints(routine: genericMethod, inferred: inferred);
+
         for (int i = 0; i < inferred.Length; i++)
         {
             if (inferred[i] == null)
@@ -801,6 +873,25 @@ public sealed partial class SemanticVerifier
             if (idx >= 0 && inferred[idx] == null)
             {
                 inferred[idx] = argType;
+            }
+
+            return;
+        }
+
+        // Marker borrow wrappers around a BARE generic param (Referring[S2]/Controlling[S2]) are
+        // transparent at call sites: a bare argument `a` passed where `Referring[S2]` is expected
+        // binds S2 to the WHOLE argument type. Without this, `other: Referring[S2]` against arg
+        // `List[S64]` would wrongly element-wise-bind S2 to S64 (the inner element). Restricted to a
+        // bare-generic inner so wrappers around constructed types (e.g. `Referring[List[T]]`) keep
+        // the normal element-wise unification that binds their inner params (T) correctly.
+        if (paramType is { TypeArguments: [GenericParameterTypeInfo markerParam] } &&
+            ProtocolBaseName(type: paramType) is "Referring" or "Controlling" &&
+            ProtocolBaseName(type: argType) is not ("Referring" or "Controlling"))
+        {
+            int markerIdx = genericParameters.ToList().IndexOf(item: markerParam.Name);
+            if (markerIdx >= 0 && inferred[markerIdx] == null)
+            {
+                inferred[markerIdx] = argType;
             }
 
             return;
