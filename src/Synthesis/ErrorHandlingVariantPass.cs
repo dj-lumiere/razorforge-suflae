@@ -185,23 +185,29 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     /// emitted as <see cref="VariantSiteKind.FromVariantPassthrough"/> so codegen returns the
     /// already-carrier-shaped expression directly.
     /// </summary>
+    /// <param name="nextOnlyPropagation">
+    /// When true, non-tail failable-call propagation is restricted to inner <c>$next</c> calls
+    /// (iterator chaining). Used by the MONOMORPHIZED (path-2) caller, which runs AFTER reachability:
+    /// any other <c>try_X</c> it introduces wouldn't be marked live and would LINKERR (e.g. a guarded
+    /// <c>$getitem!</c>), whereas <c>try_next</c> is always emitted for live iterators. When false
+    /// (the global path-1 caller, which runs BEFORE reachability), ALL non-tail failable calls are
+    /// propagated — reachability then sees the introduced <c>try_X</c> calls and emits them. Path-1
+    /// MUST propagate broadly so a try_ variant whose failability is purely propagated through a
+    /// non-tail call (e.g. <c>try_from_digit_bytes</c> → <c>from_digit_bytes_at!</c>) actually catches
+    /// the inner throw/absent instead of letting it escape uncaught.
+    /// </param>
     internal static Statement TransformBody(Statement body, ErrorHandlingVariantKind kind,
-        VariantCallRewriter? rewriter = null, TypeRegistry? registry = null)
+        VariantCallRewriter? rewriter = null, TypeRegistry? registry = null,
+        bool nextOnlyPropagation = false)
     {
-        // Non-tail inner-failable-call propagation (TransformBlockStatements / TryBuildTryPropagation)
-        // is enabled for try_ variants when a registry is available. The actual retarget is restricted
-        // to inner `$next` calls (iterator chaining) — see TryBuildTryPropagation — so a guarded
-        // `$getitem!` (e.g. SortedSetIterator bounds-checks then indexes) is NOT touched: its try_
-        // variant may not be emitted for the instance (→ LINKERR) and the call can't actually fail.
-        // Restricting to `$next` is safe because `try_next` is systematically emitted for live iterator
-        // instances (for-loops drive it), so the propagated chain always links.
         TypeRegistry? propRegistry =
             registry != null && kind == ErrorHandlingVariantKind.Try ? registry : null;
-        return TransformBodyCore(body: body, kind: kind, rewriter: rewriter, registry: propRegistry);
+        return TransformBodyCore(body: body, kind: kind, rewriter: rewriter, registry: propRegistry,
+            nextOnly: nextOnlyPropagation);
     }
 
     private static Statement TransformBodyCore(Statement body, ErrorHandlingVariantKind kind,
-        VariantCallRewriter? rewriter, TypeRegistry? registry)
+        VariantCallRewriter? rewriter, TypeRegistry? registry, bool nextOnly)
     {
         return body switch
         {
@@ -220,30 +226,30 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
             BlockStatement block => block with
             {
                 Statements = TransformBlockStatements(stmts: block.Statements, start: 0, kind: kind,
-                    rewriter: rewriter, registry: registry)
+                    rewriter: rewriter, registry: registry, nextOnly: nextOnly)
             },
 
             IfStatement ifs => ifs with
             {
-                ThenStatement = TransformBodyCore(body: ifs.ThenStatement, kind: kind, rewriter: rewriter, registry: registry),
+                ThenStatement = TransformBodyCore(body: ifs.ThenStatement, kind: kind, rewriter: rewriter, registry: registry, nextOnly: nextOnly),
                 ElseStatement = ifs.ElseStatement != null
-                    ? TransformBodyCore(body: ifs.ElseStatement, kind: kind, rewriter: rewriter, registry: registry)
+                    ? TransformBodyCore(body: ifs.ElseStatement, kind: kind, rewriter: rewriter, registry: registry, nextOnly: nextOnly)
                     : null
             },
 
             WhileStatement ws => ws with
             {
-                Body = TransformBodyCore(body: ws.Body, kind: kind, rewriter: rewriter, registry: registry),
+                Body = TransformBodyCore(body: ws.Body, kind: kind, rewriter: rewriter, registry: registry, nextOnly: nextOnly),
                 ElseBranch = ws.ElseBranch != null
-                    ? TransformBodyCore(body: ws.ElseBranch, kind: kind, rewriter: rewriter, registry: registry)
+                    ? TransformBodyCore(body: ws.ElseBranch, kind: kind, rewriter: rewriter, registry: registry, nextOnly: nextOnly)
                     : null
             },
 
             ForStatement fs => fs with
             {
-                Body = TransformBodyCore(body: fs.Body, kind: kind, rewriter: rewriter, registry: registry),
+                Body = TransformBodyCore(body: fs.Body, kind: kind, rewriter: rewriter, registry: registry, nextOnly: nextOnly),
                 ElseBranch = fs.ElseBranch != null
-                    ? TransformBodyCore(body: fs.ElseBranch, kind: kind, rewriter: rewriter, registry: registry)
+                    ? TransformBodyCore(body: fs.ElseBranch, kind: kind, rewriter: rewriter, registry: registry, nextOnly: nextOnly)
                     : null
             },
 
@@ -252,24 +258,24 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
                 Clauses = ws.Clauses
                             .Select(selector: c => c with
                              {
-                                 Body = TransformBodyCore(body: c.Body, kind: kind, rewriter: rewriter, registry: registry)
+                                 Body = TransformBodyCore(body: c.Body, kind: kind, rewriter: rewriter, registry: registry, nextOnly: nextOnly)
                              })
                             .ToList()
             },
 
             UsingStatement us => us with
             {
-                Body = TransformBodyCore(body: us.Body, kind: kind, rewriter: rewriter, registry: registry)
+                Body = TransformBodyCore(body: us.Body, kind: kind, rewriter: rewriter, registry: registry, nextOnly: nextOnly)
             },
 
             DangerStatement danger => danger with
             {
-                Body = (BlockStatement)TransformBodyCore(body: danger.Body, kind: kind, rewriter: rewriter, registry: registry)
+                Body = (BlockStatement)TransformBodyCore(body: danger.Body, kind: kind, rewriter: rewriter, registry: registry, nextOnly: nextOnly)
             },
 
             LoopStatement loop => loop with
             {
-                Body = TransformBodyCore(body: loop.Body, kind: kind, rewriter: rewriter, registry: registry)
+                Body = TransformBodyCore(body: loop.Body, kind: kind, rewriter: rewriter, registry: registry, nextOnly: nextOnly)
             },
 
             _ => body // All other statements pass through unchanged
@@ -303,7 +309,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     /// unwrap relies on; Check/Lookup carriers keep the existing tail-position behavior.
     /// </summary>
     private static List<Statement> TransformBlockStatements(List<Statement> stmts, int start,
-        ErrorHandlingVariantKind kind, VariantCallRewriter? rewriter, TypeRegistry? registry)
+        ErrorHandlingVariantKind kind, VariantCallRewriter? rewriter, TypeRegistry? registry, bool nextOnly)
     {
         var result = new List<Statement>();
         for (int i = start; i < stmts.Count; i++)
@@ -311,12 +317,12 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
             Statement s = stmts[i];
 
             if (kind == ErrorHandlingVariantKind.Try && registry != null
-                && TryBuildTryPropagation(stmt: s, registry: registry,
+                && TryBuildTryPropagation(stmt: s, registry: registry, nextOnly: nextOnly,
                     tempDecl: out Statement? tempDecl, presentCondition: out Expression? presentCondition,
                     bindStmt: out Statement? bindStmt))
             {
                 List<Statement> remainder = TransformBlockStatements(stmts: stmts, start: i + 1,
-                    kind: kind, rewriter: rewriter, registry: registry);
+                    kind: kind, rewriter: rewriter, registry: registry, nextOnly: nextOnly);
 
                 var thenStmts = new List<Statement>();
                 if (bindStmt != null) thenStmts.Add(item: bindStmt);
@@ -331,7 +337,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
                 return result; // remainder consumed into the if's then-branch
             }
 
-            result.Add(item: TransformBodyCore(body: s, kind: kind, rewriter: rewriter, registry: registry));
+            result.Add(item: TransformBodyCore(body: s, kind: kind, rewriter: rewriter, registry: registry, nextOnly: nextOnly));
         }
 
         return result;
@@ -349,7 +355,7 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     /// Returns false — leaving the original crash-on-absence statement untouched — when no matching
     /// Maybe-returning <c>try_</c> variant resolves.
     /// </summary>
-    private static bool TryBuildTryPropagation(Statement stmt, TypeRegistry registry,
+    private static bool TryBuildTryPropagation(Statement stmt, TypeRegistry registry, bool nextOnly,
         out Statement? tempDecl, out Expression? presentCondition, out Statement? bindStmt)
     {
         tempDecl = null;
@@ -378,12 +384,13 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
 
         string baseName = (failRoutine.OriginalName ?? failRoutine.Name).TrimStart(trimChar: '$');
 
-        // Restrict propagation to iterator chaining: an inner `$next!` whose `try_next` variant is
-        // systematically emitted for live iterator instances (for-loops drive it), so the propagated
-        // chain always links. Other failable calls (e.g. a bounds-guarded `$getitem!` in
-        // SortedSetIterator) are NOT retargeted — their try_ variant may be unemitted (→ LINKERR) and
-        // such calls are typically already guarded so they cannot actually fail here.
-        if (baseName != "next") return false;
+        // In the monomorphized (path-2) caller — which runs AFTER reachability — restrict propagation
+        // to inner `$next!` calls: `try_next` is systematically emitted for live iterator instances, so
+        // the propagated chain always links, whereas an arbitrary `try_X` introduced here wouldn't be
+        // marked live and would LINKERR (e.g. a bounds-guarded `$getitem!` in SortedSetIterator, which
+        // also can't actually fail). The global (path-1) caller runs BEFORE reachability, so it
+        // propagates ALL non-tail failable calls and reachability then emits the introduced variants.
+        if (nextOnly && baseName != "next") return false;
 
         RoutineInfo? variant = registry.LookupMethod(type: owner, methodName: $"try_{baseName}",
             isFailable: false);

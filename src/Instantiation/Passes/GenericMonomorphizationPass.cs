@@ -681,7 +681,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             Statement transformed = ErrorHandlingVariantPass.TransformBody(
                 body: rewrittenDecl.Body, kind: fallbackKind.Value,
                 rewriter: ErrorHandlingVariantPass.MakeNextVariantRewriter(registry: ctx.Registry),
-                registry: ctx.Registry);
+                registry: ctx.Registry, nextOnlyPropagation: true);
             rewrittenDecl = rewrittenDecl with { Body = transformed };
         }
 
