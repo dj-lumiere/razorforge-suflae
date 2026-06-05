@@ -129,13 +129,117 @@ int64_t rf_cs_integer_exponent(rf_cs_integer_t h)
 #endif // HAVE_LIBBF
 
 // ============================================================================
-// Arbitrary precision decimal parsing — PLACEHOLDER (no backend wired).
-// The previous MAPM backend (#ifdef HAVE_MAPM) was deleted because HAVE_MAPM
-// was never defined in CMake and no `mapm.cmake` ever existed. The C#
-// P/Invokes in src/Verification/NumericLiteralParser.cs (ParseDecimal etc.)
-// will fail to resolve `rf_cs_decimal_*` symbols at first use until a
-// decNumber-backed implementation lands. Tracking: future v0.1.x patch.
+// Arbitrary precision decimal parsing (via decNumber) — C# Compiler Interop
+// Implements the rf_cs_decimal_* symbols the C# NumericLiteralParser P/Invokes
+// (src/Verification/NumericLiteralParser.cs) to parse `dn` Decimal literals at
+// compile time. Backed by decNumber (HAVE_DECNUMBER); a high DECNUMDIGITS lets
+// arbitrary-precision literals parse without rounding. The handle is an opaque
+// heap decNumber, freed via rf_cs_decimal_free.
 // ============================================================================
+
+#ifdef HAVE_DECNUMBER
+#ifndef DECNUMDIGITS
+#define DECNUMDIGITS 1000
+#endif
+#include <decContext.h>
+#include <decNumber.h>
+
+typedef decNumber* rf_cs_decimal_t;
+
+// Per-thread parsing context: arbitrary precision, no traps (errors via status).
+static decContext* rf_cs_dec_ctx(void)
+{
+    static _Thread_local decContext ctx;
+    static _Thread_local int inited = 0;
+    if (!inited) {
+        decContextDefault(&ctx, DEC_INIT_BASE);
+        ctx.digits = DECNUMDIGITS;
+        ctx.emax = 999999999;
+        ctx.emin = -999999999;
+        ctx.round = DEC_ROUND_HALF_EVEN;
+        ctx.traps = 0;
+        inited = 1;
+    }
+    return &ctx;
+}
+
+rf_cs_decimal_t rf_cs_decimal_from_string(const char* str)
+{
+    decNumber* num = (decNumber*)malloc(sizeof(decNumber));
+    if (!num) return NULL;
+    decContext* ctx = rf_cs_dec_ctx();
+    ctx->status = 0;
+    decNumberFromString(num, str, ctx);
+    if (ctx->status & DEC_Errors) {
+        free(num);
+        return NULL;
+    }
+    return num;
+}
+
+void rf_cs_decimal_free(rf_cs_decimal_t h)
+{
+    if (h) free(h);
+}
+
+// Sign: -1 negative, 0 zero, +1 positive.
+int rf_cs_decimal_sign(rf_cs_decimal_t h)
+{
+    if (!h) return 0;
+    if (decNumberIsZero(h)) return 0;
+    return decNumberIsNegative(h) ? -1 : 1;
+}
+
+// Power-of-ten exponent of the coefficient.
+int rf_cs_decimal_exponent(rf_cs_decimal_t h)
+{
+    return h ? h->exponent : 0;
+}
+
+// Count of significant digits in the coefficient.
+int rf_cs_decimal_significant_digits(rf_cs_decimal_t h)
+{
+    return h ? h->digits : 0;
+}
+
+// Integer iff there is no fractional part (exponent >= 0).
+int rf_cs_decimal_is_integer(rf_cs_decimal_t h)
+{
+    return (h && h->exponent >= 0) ? 1 : 0;
+}
+
+// Negate in place by toggling the sign bit (no-op for zero; no context needed).
+void rf_cs_decimal_negate(rf_cs_decimal_t h)
+{
+    if (h && !decNumberIsZero(h)) h->bits ^= DECNEG;
+}
+
+// Canonical decimal string. Caller (C#) reads then leaks it (matches the
+// DecimalToString contract in NumericLiteralParser.cs). decimal_places is
+// ignored; decNumberToString emits full precision.
+char* rf_cs_decimal_to_string(rf_cs_decimal_t h, int decimal_places)
+{
+    (void)decimal_places;
+    if (!h) return NULL;
+    char* buf = (char*)malloc((size_t)h->digits + 14); // decNumber spec: digits+14
+    if (!buf) return NULL;
+    decNumberToString(h, buf);
+    return buf;
+}
+
+// Integer-valued string (fractional part truncated toward zero).
+char* rf_cs_decimal_to_integer_string(rf_cs_decimal_t h)
+{
+    if (!h) return NULL;
+    decContext* ctx = rf_cs_dec_ctx();
+    decNumber tmp;
+    decNumberToIntegralValue(&tmp, h, ctx);
+    char* buf = (char*)malloc((size_t)tmp.digits + 14);
+    if (!buf) return NULL;
+    decNumberToString(&tmp, buf);
+    return buf;
+}
+#endif // HAVE_DECNUMBER
 
 // ============================================================================
 // Decimal floating point string parsing (decNumber)

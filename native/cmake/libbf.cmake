@@ -26,6 +26,19 @@ elseif(EXISTS "${LIBBF_DIR}/libbf.c")
 
     target_include_directories(libbf PUBLIC ${LIBBF_DIR})
 
+    # libbf exports global mp_add / mp_sub / mp_mul (limb-array multi-precision helpers) whose names
+    # COLLIDE with LibTomMath's public mp_add / mp_sub / mp_mul (mp_int* API). In the shared runtime DLL
+    # the linker can bind bignum_functions.c's LibTomMath calls to libbf's versions, which reinterpret the
+    # mp_int as a limb array with a garbage length -> out-of-bounds read -> heap corruption (numeric_arbitrary
+    # AccessViolation). Namespace libbf's internal copies to remove the clash. The rename is applied to every
+    # libbf translation unit (and the libbf.h declarations it pulls in), and no non-libbf runtime code calls
+    # libbf's mp_*; the only runtime caller (bignum_functions.c) wants LibTomMath's mp_*, which is unaffected.
+    target_compile_definitions(libbf PRIVATE
+        mp_add=libbf_mp_add
+        mp_sub=libbf_mp_sub
+        mp_mul=libbf_mp_mul
+    )
+
     # Compiler-specific settings (Clang/GCC only)
     target_compile_options(libbf PRIVATE
         -O2
