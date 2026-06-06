@@ -792,6 +792,10 @@ public enum SemanticDiagnosticCode
     /// <summary>'with' expression base must obey the Assignable protocol.</summary>
     WithBaseNotAssignable = 785,
 
+    /// <summary>A statement is unreachable: a preceding statement in the same block always diverges
+    /// (return / throw / absent / break / continue), so control can never reach this one.</summary>
+    UnreachableStatement = 786,
+
     /// <summary>Deprecated — ValueTuple distinction removed, all tuples are inline structs.</summary>
     ValueTupleContainmentViolation = 779,
 
