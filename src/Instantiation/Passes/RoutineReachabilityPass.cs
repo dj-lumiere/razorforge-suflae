@@ -253,6 +253,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 CallExpression ce => RetargetProtocolDispatch(ce: ce) ?? ce.ResolvedRoutine ?? ResolveNoArgConstructor(ce: ce) ?? ResolveCallStyleConstructor(ce: ce) ?? ResolveMemberCall(ce: ce),
                 GenericMethodCallExpression gce => gce.ResolvedRoutine,
                 CreatorExpression cre => ResolveCreatorRoutine(cre: cre),
+                IdentifierExpression id => ResolveRoutineValueRef(id: id, frame: frame),
                 _ => null
             };
             if (resolved == null) continue;
@@ -288,6 +289,7 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                     CallExpression ce => RetargetProtocolDispatch(ce: ce) ?? ce.ResolvedRoutine ?? ResolveNoArgConstructor(ce: ce) ?? ResolveCallStyleConstructor(ce: ce) ?? ResolveMemberCall(ce: ce),
                     GenericMethodCallExpression gce => gce.ResolvedRoutine,
                     CreatorExpression cre => ResolveCreatorRoutine(cre: cre),
+                    IdentifierExpression id => ResolveRoutineValueRef(id: id, frame: frame),
                     _ => null
                 };
                 if (resolved == null) continue;
@@ -1775,6 +1777,41 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
     /// operator BinaryExpressions whose operator maps to a method. ProcessFrame then
     /// synthesizes the corresponding call edges.
     /// </summary>
+    /// <summary>
+    /// Resolves a bare routine name used as a first-class value (a function-pointer argument such
+    /// as <c>select(transform: double)</c>) to its <see cref="RoutineInfo"/>, mirroring codegen's
+    /// <c>TryResolveRoutineReference</c>. Returns null for identifiers that are NOT top-level
+    /// routines (e.g. a local variable holding a <c>Routine</c> value) — those need no extra
+    /// reachability marking. Lambdas are excluded: lifted-lambda liveness is handled separately.
+    /// </summary>
+    private RoutineInfo? ResolveRoutineValueRef(IdentifierExpression id, Frame frame)
+    {
+        if (id.ResolvedType is not RoutineTypeInfo routineType)
+            return null;
+        // A local variable shadowing the name is not a routine reference.
+        if (_localTypes.ContainsKey(key: id.Name))
+            return null;
+
+        string bareName = id.Name.EndsWith(value: '!') ? id.Name[..^1] : id.Name;
+        List<TypeInfo> paramTypes = routineType.ParameterTypes.ToList();
+        string? moduleName = frame.Routine.OwnerType?.Module ?? frame.Routine.Module;
+
+        RoutineInfo? routine = null;
+        if (moduleName != null && !bareName.Contains(value: '.'))
+        {
+            routine = ctx.Registry.LookupRoutineOverload(
+                baseName: $"{moduleName}.{bareName}", argTypes: paramTypes);
+            routine ??= ctx.Registry.LookupRoutine(fullName: $"{moduleName}.{bareName}",
+                isFailable: routineType.IsFailable);
+        }
+        routine ??= ctx.Registry.LookupRoutineOverload(baseName: bareName, argTypes: paramTypes);
+        routine ??= ctx.Registry.LookupRoutine(fullName: bareName,
+            isFailable: routineType.IsFailable);
+
+        // Lambdas are lifted/closure-converted elsewhere; only mark plain routines here.
+        return routine is { IsLambda: false } ? routine : null;
+    }
+
     private static void CollectCalls(object? node, List<object> sink)
     {
         AstWalker.Walk(root: node, visit: n =>
@@ -1785,6 +1822,10 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 || n is DictLiteralExpression || n is IndexExpression
                 || n is InsertedTextExpression
                 || n is UsingStatement
+                // A bare routine name used as a first-class VALUE (e.g. `select(transform: double)`)
+                // resolves to RoutineTypeInfo. It is not a CallExpression callee, so reachability
+                // must mark the referenced routine live or codegen emits an undefined symbol.
+                || n is IdentifierExpression { ResolvedType: RoutineTypeInfo }
                 || n is UnaryExpression { Operator: UnaryOperator.ForceUnwrap }
                 || (n is BinaryExpression bin && bin.Operator.GetMethodName() != null))
             {

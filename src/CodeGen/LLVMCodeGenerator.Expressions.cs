@@ -116,6 +116,88 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
+    /// Materializes a plain (non-lambda) routine reference as a captureless heap closure
+    /// <c>{ fn_ptr }</c> whose function slot holds a closure-ABI adapter thunk (see
+    /// <see cref="EnsureRoutineValueThunk"/>). This lets a bare routine name flow through the
+    /// same indirect-call path as a lambda value.
+    /// </summary>
+    private string EmitRoutineValueClosure(StringBuilder sb, RoutineInfo routine)
+    {
+        string thunkSym = EnsureRoutineValueThunk(routine: routine);
+
+        // Closure is just { ptr } — no captures. Allocate 8 bytes and store the thunk pointer.
+        string sizeTemp = NextTemp();
+        EmitLine(sb: sb, line: $"  {sizeTemp} = getelementptr ptr, ptr null, i32 1");
+        string size = NextTemp();
+        EmitLine(sb: sb, line: $"  {size} = ptrtoint ptr {sizeTemp} to i64");
+        string clPtr = NextTemp();
+        EmitLine(sb: sb, line: $"  {clPtr} = call ptr @rf_allocate_dynamic(i64 {size})");
+        EmitLine(sb: sb, line: $"  store ptr {thunkSym}, ptr {clPtr}");
+        return clPtr;
+    }
+
+    /// <summary>
+    /// Ensures a closure-ABI adapter thunk exists for a plain free routine used as a value, and
+    /// returns its symbol. The thunk has the routine's signature with a hidden leading
+    /// <c>ptr %__cl</c> (ignored); it forwards the remaining arguments to the real routine. One
+    /// thunk per routine (deduped). Restricted to free routines — a bare method name carries no
+    /// receiver, so method-as-value is not supported here.
+    /// </summary>
+    private string EnsureRoutineValueThunk(RoutineInfo routine)
+    {
+        // MangleRoutineName already quotes the symbol when it contains special chars (parens), so
+        // strip any surrounding quotes to recover the raw name, append the thunk suffix, re-quote.
+        string mangled = MangleRoutineName(routine: routine);
+        string realRef = $"@{mangled}";
+        string rawName = mangled.StartsWith(value: '"') ? mangled[1..^1] : mangled;
+        string thunkRaw = $"{rawName}$rfvthunk";
+        string thunkSym = $"@{Q(name: thunkRaw)}";
+        if (!_emittedRoutineValueThunks.Add(item: thunkRaw))
+            return thunkSym;
+
+        string returnType = routine.ReturnType != null
+            ? GetLlvmType(type: routine.ReturnType)
+            : "void";
+        returnType = routine.AsyncStatus switch
+        {
+            AsyncStatus.LookupVariant => GetLookupCarrierLlvmType(valueType: routine.ReturnType!),
+            AsyncStatus.CheckVariant => GetResultCarrierLlvmType(valueType: routine.ReturnType!),
+            AsyncStatus.TryBoolVariant => "i1",
+            _ => returnType
+        };
+
+        var paramDecls = new List<string> { "ptr %__cl" };
+        var fwdTypes = new List<string>();
+        var fwdValues = new List<string>();
+        for (int i = 0; i < routine.Parameters.Count; i++)
+        {
+            string pType = GetParameterLlvmType(type: routine.Parameters[index: i].Type);
+            string pName = $"%a{i}";
+            paramDecls.Add(item: $"{pType} {pName}");
+            fwdTypes.Add(item: pType);
+            fwdValues.Add(item: pName);
+        }
+
+        var b = _auxRoutineDefinitions;
+        b.Append(value:
+            $"define {returnType} {thunkSym}({string.Join(separator: ", ", values: paramDecls)}) {{\n");
+        b.Append(value: "entry:\n");
+        string fwdArgs = string.Join(separator: ", ",
+            values: fwdTypes.Select(selector: (t, i) => $"{t} {fwdValues[index: i]}"));
+        if (returnType == "void")
+        {
+            b.Append(value: $"  call void {realRef}({fwdArgs})\n");
+            b.Append(value: "  ret void\n}\n");
+        }
+        else
+        {
+            b.Append(value: $"  %r = call {returnType} {realRef}({fwdArgs})\n");
+            b.Append(value: $"  ret {returnType} %r\n}}\n");
+        }
+        return thunkSym;
+    }
+
+    /// <summary>
     /// Generates code for an identifier expression (variable reference).
     /// </summary>
     private string EmitIdentifier(StringBuilder sb, IdentifierExpression identifier)
@@ -151,7 +233,11 @@ public partial class LlvmCodeGenerator
             {
                 return EmitClosureValue(sb: sb, lambda: routine);
             }
-            return $"@{MangleRoutineName(routine!)}";
+            // A plain (non-lambda) routine used as a Routine VALUE must also present the uniform
+            // closure ABI so the indirect call site (which loads fn from closure[0] and passes the
+            // closure as the hidden leading arg) works. Wrap it in a captureless closure whose fn
+            // slot is an adapter thunk that drops the closure arg and forwards to the real routine.
+            return EmitRoutineValueClosure(sb: sb, routine: routine);
         }
 
         // Look up the variable in local variables first

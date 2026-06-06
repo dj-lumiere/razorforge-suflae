@@ -108,6 +108,10 @@ public partial class LlvmCodeGenerator
     /// <summary>Output buffer for auxiliary top-level helper function definitions.</summary>
     private readonly StringBuilder _auxRoutineDefinitions = new();
 
+    /// <summary>Thunk symbols already emitted for plain routines used as first-class values
+    /// (see <c>EnsureRoutineValueThunk</c>) — dedups the closure-ABI adapter per routine.</summary>
+    private readonly HashSet<string> _emittedRoutineValueThunks = [];
+
     /// <summary>Counter for generating unique temporary variable names.</summary>
     private int _tempCounter;
 
