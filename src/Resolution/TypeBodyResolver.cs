@@ -154,17 +154,18 @@ internal sealed class TypeBodyResolver
                     ? _typeResolver.ResolveType(typeExpr: memberVariable.Type)
                     : ErrorTypeInfo.Instance;
 
-                // Records can contain: value types, bound entities/crashables (pointer-shaped when bound),
-                // generic parameters, and storable wrappers (Hijacked, Retained, Shared, Tracked, Watched).
-                // Scoped tokens (Viewing, Modifying, Inspecting, Claiming) are wrappers NOT in the storable set.
-                bool isBoundReference =
+                // Records can contain: value types, entity/crashable REFERENCE fields (entities are
+                // pointer-shaped reference types, so the field stores a reference), generic parameters,
+                // and storable wrappers (Hijacked, Retained, Shared, Tracked, Watched). Scoped access
+                // tokens (Viewing, Modifying, Inspecting, Claiming) are wrappers NOT in the storable set.
+                bool isReferenceTyped =
                     memberVariableType?.Category == TypeCategory.Entity ||
                     memberVariableType?.Category == TypeCategory.Crashable;
                 if (memberVariableType != null &&
                     memberVariableType is not ErrorTypeInfo &&
                     memberVariableType is not GenericParameterTypeInfo &&
                     !TypeRegistry.IsValueType(type: memberVariableType) &&
-                    !isBoundReference &&
+                    !isReferenceTyped &&
                     !(memberVariableType is WrapperTypeInfo wrapper &&
                       StorableWrapperTypes.Contains(item: GetBaseTypeName(typeName: wrapper.Name))))
                 {

@@ -255,7 +255,7 @@ public class OperatorProtocolTests
                         entity Resource
                           handle: S32
 
-                        routine Resource.$destroy()
+                        dangerous routine Resource.$destroy()
                           pass
                           return
                         """;

@@ -1,3 +1,4 @@
+#pragma warning disable CS1591
 using Compiler.Diagnostics;
 using Verification.Results;
 

@@ -693,8 +693,27 @@ public sealed partial class SemanticVerifier
         // Check each protocol — skip protocols added by implicit marker conformance
         foreach (TypeSymbol protocol in implementedProtocols)
         {
-            if (protocol is ProtocolTypeInfo protoInfo &&
-                !_implicitProtocolConformances.Contains(item: (type.FullName, protoInfo.Name)))
+            if (protocol is not ProtocolTypeInfo protoInfo)
+            {
+                continue;
+            }
+
+            // Crashable (being a throwable error) is conferred ONLY by the `crashable` type kind —
+            // the keyword implicitly satisfies the protocol, so it is never written explicitly. Any
+            // OTHER type declaring `obeys Crashable` on ITSELF is illegal. (A generic CONSTRAINT
+            // `needs T obeys Crashable` is a bound on the type parameter, not a conformance on this
+            // type, so it lives on T's constraints — not in ImplementedProtocols — and is unaffected.)
+            if (protoInfo.Name == "Crashable" && type.Category != TypeCategory.Crashable)
+            {
+                ReportError(code: SemanticDiagnosticCode.CrashableObeyedByNonCrashableKind,
+                    message:
+                    $"Type '{type.Name}' cannot declare 'obeys Crashable' — only `crashable`-kind " +
+                    $"types are throwable errors. Declare it as `crashable {type.Name}` instead.",
+                    location: type.Location);
+                continue;
+            }
+
+            if (!_implicitProtocolConformances.Contains(item: (type.FullName, protoInfo.Name)))
             {
                 ValidateProtocolMethods(type: type, protocol: protoInfo);
             }
@@ -842,14 +861,18 @@ public sealed partial class SemanticVerifier
             }
             else if (typeMethod != null)
             {
-                // #61: Protocol mutation contract validation
-                // Protocol @readonly -> impl must be @readonly
-                if (requiredMethod.Mutation == MutationCategory.Readonly &&
-                    typeMethod.MutationCategory != MutationCategory.Readonly)
+                // #61: Protocol mutation contract validation. The implementation must not be MORE
+                // mutating than the protocol declares (Readonly < Writable < Migratable): callers
+                // hold tokens sized to the protocol's category — e.g. a Viewing token for @readonly,
+                // a Modifying token for the writable default — so an impl that mutates or relocates
+                // beyond that contract would be unsound (a Migratable impl behind a Writable protocol
+                // could relocate mid-iteration through a Modifying token, invalidating iterators).
+                if (typeMethod.MutationCategory > requiredMethod.Mutation)
                 {
                     ReportError(code: SemanticDiagnosticCode.ProtocolMutationContractViolation,
                         message:
-                        $"Protocol '{protocol.Name}' requires '{requiredMethod.Name}' to be @readonly, " +
+                        $"Protocol '{protocol.Name}' requires '{requiredMethod.Name}' to be " +
+                        $"@{requiredMethod.Mutation.ToString().ToLowerInvariant()} (or less mutating), " +
                         $"but implementation on '{type.Name}' is @{typeMethod.MutationCategory.ToString().ToLowerInvariant()}.",
                         location: typeMethod.Location ?? new SourceLocation("", 0, 0, 0));
                 }

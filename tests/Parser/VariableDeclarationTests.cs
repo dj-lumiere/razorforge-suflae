@@ -79,7 +79,7 @@ public class VariableDeclarationTests
     {
         string source = """
                         routine test()
-                          var value: S32? = None
+                          var value: S32? = none
                           return
                         """;
 

@@ -242,7 +242,7 @@ public class WikiLanguageBreakageTests
     {
         string source = """
                         routine test() -> Maybe[S32]
-                          return None
+                          return none
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -292,10 +292,11 @@ public class WikiLanguageBreakageTests
     }
 
     /// <summary>
-    /// Verifies that records cannot store raw entity types.
+    /// Verifies a record MAY store an entity field — entities are reference (pointer-shaped) types,
+    /// so the field holds a reference; only scoped access tokens are rejected as record members.
     /// </summary>
     [Fact]
-    public void Analyze_RecordContainingRawEntity_ReportsError()
+    public void Analyze_RecordContainingEntityReference_NoError()
     {
         string source = """
                         entity Node
@@ -307,7 +308,7 @@ public class WikiLanguageBreakageTests
 
         AnalysisResult result = AnalyzeSa(source: source);
 
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
 

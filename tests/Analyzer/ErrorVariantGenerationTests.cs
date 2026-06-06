@@ -60,7 +60,7 @@ public class ErrorVariantGenerationTests
         // - check_validate() -> Result[T]
         // - try_validate() -> T?
         string source = """
-                        entity ValidationError obeys Crashable
+                        crashable ValidationError
                           message: Text
 
                         @readonly
@@ -102,7 +102,7 @@ public class ErrorVariantGenerationTests
         // - lookup_get_user() -> Lookup[T]
         // - try_get_user() -> T?
         string source = """
-                        entity DatabaseError obeys Crashable
+                        crashable DatabaseError
                           code: S32
 
                         @readonly
@@ -220,7 +220,7 @@ public class ErrorVariantGenerationTests
     public void Analyze_ThrowInNonFailableRoutine_ReportsWarning()
     {
         string source = """
-                        entity SomeError obeys Crashable
+                        crashable SomeError
                           msg: Text
 
                         @readonly
@@ -294,7 +294,7 @@ public class ErrorVariantGenerationTests
     public void Analyze_VariantNames_FollowConvention()
     {
         string source = """
-                        entity SomeError obeys Crashable
+                        crashable SomeError
                           msg: Text
 
                         @readonly

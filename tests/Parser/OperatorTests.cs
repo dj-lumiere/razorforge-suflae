@@ -603,7 +603,7 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> S32
-                          var value: S32? = None
+                          var value: S32? = none
                           return value ?? 42
                         """;
 
@@ -618,8 +618,8 @@ public class OperatorTests
     {
         string source = """
                         routine test() -> S32
-                          var a: S32? = None
-                          var b: S32? = None
+                          var a: S32? = none
+                          var b: S32? = none
                           var c: S32 = 100
                           return a ?? b ?? c
                         """;

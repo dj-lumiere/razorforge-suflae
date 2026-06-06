@@ -175,7 +175,7 @@ public class UsingStatementTests
                         entity Container[T]
                           item: T
 
-                        routine Container[T].$enter() -> T
+                        routine Container[T].$enter() -> ?T
                           return me.item
 
                         routine Container[T].$exit()

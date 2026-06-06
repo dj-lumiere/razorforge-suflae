@@ -138,9 +138,10 @@ public class NamedArgumentTests
     /// </summary>
 
     [Fact]
-    public void Analyze_PositionalAfterNamed_S510SubsumesS507()
+    public void Analyze_PositionalAfterNamed_ReportsMixed()
     {
-        // With 2+ params, S510 fires instead of S507 (S510 subsumes S507)
+        // A positional arg after named args is a mix → the all-or-nothing rule reports S512
+        // (MixedPositionalAndNamedArguments), which subsumes the old S507 PositionalAfterNamed.
         string source = """
                         routine add(a: S32, b: S32) -> S32
                           return a
@@ -151,7 +152,7 @@ public class NamedArgumentTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
+            filter: e => e.Code == SemanticDiagnosticCode.MixedPositionalAndNamedArguments);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.PositionalAfterNamed);
     }
@@ -206,8 +207,10 @@ public class NamedArgumentTests
     /// </summary>
 
     [Fact]
-    public void Analyze_TwoParams_AllPositional_ReportsS510()
+    public void Analyze_TwoParams_AllPositional_WarnsRecommended()
     {
+        // 2-param positional calls are allowed but emit the advisory W258 warning;
+        // only 3+ non-defaulted params is a hard S510 error.
         string source = """
                         routine add(a: S32, b: S32) -> S32
                           return a
@@ -217,8 +220,10 @@ public class NamedArgumentTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
+        Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
+        Assert.Contains(collection: result.Warnings,
+            filter: w => w.Code == SemanticWarningCode.NamedArgumentRecommended);
     }
     /// <summary>
     /// Verifies semantic analysis behavior for two params all named no s510.
@@ -244,8 +249,10 @@ public class NamedArgumentTests
     /// </summary>
 
     [Fact]
-    public void Analyze_TwoParams_MixedPositionalNamed_ReportsS510()
+    public void Analyze_TwoParams_MixedPositionalNamed_ReportsMixed()
     {
+        // Any mix of positional and named args is a compile error (all-or-nothing), even at
+        // 2 params where all-positional would only warn.
         string source = """
                         routine add(a: S32, b: S32) -> S32
                           return a
@@ -256,7 +263,7 @@ public class NamedArgumentTests
 
         AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.NamedArgumentRequired);
+            filter: e => e.Code == SemanticDiagnosticCode.MixedPositionalAndNamedArguments);
     }
     /// <summary>
     /// Verifies semantic analysis behavior for one param positional no s510.
@@ -329,19 +336,20 @@ public class NamedArgumentTests
     /// </summary>
 
     [Fact]
-    public void Analyze_MemberRoutine_TwoNonMeParams_Positional_ReportsS510()
+    public void Analyze_MemberRoutine_ThreeNonMeParams_Positional_ReportsS510()
     {
+        // `me` is excluded from the param count; 3 explicit positional args trip S510.
         string source = """
                         record Point
                           x: S32
                           y: S32
 
-                        routine Point.offset(dx: S32, dy: S32) -> S32
+                        routine Point.offset(dx: S32, dy: S32, dz: S32) -> S32
                           return me.x
 
                         routine main()
                           var p = Point(x: 1, y: 2)
-                          p.offset(3, 4)
+                          p.offset(3, 4, 5)
                           return
                         """;
 

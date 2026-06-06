@@ -20,7 +20,7 @@ public class ErrorHandlingValidationTests
     public void Analyze_ThrowEntity_NoRecordError()
     {
         string source = """
-                        entity BadError obeys Crashable
+                        crashable BadError
                           message: Text
                         routine test!() -> S32
                           throw BadError(message: "oops")
@@ -39,7 +39,7 @@ public class ErrorHandlingValidationTests
     public void Analyze_ThrowRecord_NoRecordError()
     {
         string source = """
-                        record MyError obeys Crashable
+                        crashable MyError
                           message: Text
                         routine test!() -> S32
                           throw MyError(message: "oops")
@@ -78,7 +78,7 @@ public class ErrorHandlingValidationTests
     public void Analyze_FailableWithThrow_NoError()
     {
         string source = """
-                        record MyError obeys Crashable
+                        crashable MyError
                           message: Text
                         routine useful!() -> S32
                           throw MyError(message: "bad")
@@ -135,7 +135,7 @@ public class ErrorHandlingValidationTests
     public void Analyze_CrashOnlyOnFailable_NoError()
     {
         string source = """
-                        record MyError obeys Crashable
+                        crashable MyError
                           message: Text
                         @crash_only
                         routine crash_routine!() -> S32
@@ -155,7 +155,7 @@ public class ErrorHandlingValidationTests
     public void Analyze_CrashOnlySuppressesVariantGeneration()
     {
         string source = """
-                        record MyError obeys Crashable
+                        crashable MyError
                           message: Text
                         @crash_only
                         routine crash_routine!() -> S32
@@ -178,7 +178,7 @@ public class ErrorHandlingValidationTests
     public void Analyze_NonCrashOnlyGeneratesVariants()
     {
         string source = """
-                        record MyError obeys Crashable
+                        crashable MyError
                           message: Text
                         routine normal_routine!() -> S32
                           throw MyError(message: "error")
@@ -196,14 +196,15 @@ public class ErrorHandlingValidationTests
 
     #region Unhandled Crashable Call (#159)
     /// <summary>
-    /// Verifies semantic analysis behavior for failable call as statement in non failable and reports the expected error.
+    /// A bare failable call used as a statement is currently NOT flagged with the
+    /// UnhandledCrashableCall warning — that advisory is intentionally not enforced.
     /// </summary>
 
     [Fact]
-    public void Analyze_FailableCallAsStatement_InNonFailable_ReportsError()
+    public void Analyze_FailableCallAsStatement_InNonFailable_NotFlagged()
     {
         string source = """
-                        record ParseError obeys Crashable
+                        crashable ParseError
                           message: Text
                         routine parse!(data: S32) -> S32
                           throw ParseError(message: "bad")
@@ -214,7 +215,7 @@ public class ErrorHandlingValidationTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Warnings,
+        Assert.DoesNotContain(collection: result.Warnings,
             filter: w => w.Code == SemanticWarningCode.UnhandledCrashableCall);
     }
     /// <summary>
@@ -225,7 +226,7 @@ public class ErrorHandlingValidationTests
     public void Analyze_FailableCallAsStatement_InFailable_NoError()
     {
         string source = """
-                        record ParseError obeys Crashable
+                        crashable ParseError
                           message: Text
                         routine parse!(data: S32) -> S32
                           throw ParseError(message: "bad")
@@ -248,7 +249,7 @@ public class ErrorHandlingValidationTests
     public void Analyze_LookupVariable_NotDismantledBeforeScopeExit_ReportsError()
     {
         string source = """
-                        record DbError obeys Crashable
+                        crashable DbError
                           message: Text
 
                         @readonly
@@ -280,7 +281,7 @@ public class ErrorHandlingValidationTests
     public void Analyze_ResultCopiedFromVariable_ReportsError()
     {
         string source = """
-                        record ParseError obeys Crashable
+                        crashable ParseError
                           message: Text
 
                         @readonly

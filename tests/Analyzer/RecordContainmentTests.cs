@@ -182,11 +182,13 @@ public class RecordContainmentTests
 
     #region Invalid Record MemberVariables (errors expected)
     /// <summary>
-    /// Verifies semantic analysis behavior for record with entity member variable and reports the expected error.
+    /// Verifies a record MAY contain an entity-typed field. Entities are reference (pointer-shaped)
+    /// types, so the field stores a reference — only the scoped access tokens (Viewing/Modifying/
+    /// Inspecting/Claiming) are rejected as record members (see the token tests below).
     /// </summary>
 
     [Fact]
-    public void Analyze_RecordWithEntityMemberVariable_ReportsError()
+    public void Analyze_RecordWithEntityReferenceField_NoError()
     {
         string source = """
                         entity User
@@ -196,28 +198,8 @@ public class RecordContainmentTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType
-                         && e.Message.Contains("user"));
-    }
-    /// <summary>
-    /// Verifies semantic analysis behavior for record with entity member variable message mentions value types.
-    /// </summary>
-
-    [Fact]
-    public void Analyze_RecordWithEntityMemberVariable_MessageMentionsValueTypes()
-    {
-        string source = """
-                        entity Connection
-                          id: S32
-                        record BadConfig
-                          conn: Connection
-                        """;
-
-        AnalysisResult result = AnalyzeSa(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType
-                         && e.Message.Contains("value type"));
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
 
     /// <summary>

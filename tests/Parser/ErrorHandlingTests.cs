@@ -260,7 +260,7 @@ public class ErrorHandlingTests
         string source = """
                         routine try_get(id: U64) -> User?
                           if id == 0
-                            return None
+                            return none
                           return get_user(id)
                         """;
 
@@ -297,7 +297,7 @@ public class ErrorHandlingTests
     {
         string source = """
                         routine foo()
-                          var x: S32? = None
+                          var x: S32? = none
                           return
                         """;
 
@@ -316,7 +316,7 @@ public class ErrorHandlingTests
     {
         string source = """
                         routine get_or_default() -> S32
-                          var value: S32? = None
+                          var value: S32? = none
                           return value ?? 42
                         """;
 
@@ -331,8 +331,8 @@ public class ErrorHandlingTests
     {
         string source = """
                         routine get_first_available() -> S32
-                          var a: S32? = None
-                          var b: S32? = None
+                          var a: S32? = none
+                          var b: S32? = none
                           var c: S32 = 100
                           return a ?? b ?? c
                         """;

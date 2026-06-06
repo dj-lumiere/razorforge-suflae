@@ -708,6 +708,11 @@ public enum SemanticDiagnosticCode
     /// producing unsound representations. Body must be `pass` (or empty).</summary>
     LlvmAnnotatedRecordMustHavePassBody = 708,
 
+    /// <summary>A non-crashable type (record, entity, …) declares <c>obeys Crashable</c>. The
+    /// Crashable contract — being a throwable error — is conferred ONLY by the <c>crashable</c>
+    /// type kind. Declare the type with the <c>crashable</c> keyword instead.</summary>
+    CrashableObeyedByNonCrashableKind = 709,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ERROR HANDLING ERRORS (RF-S750 - RF-S799)
     // ═══════════════════════════════════════════════════════════════════════════

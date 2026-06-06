@@ -46,10 +46,13 @@ public sealed partial class SemanticVerifier
             return; // Token validation only applies to RazorForge
         }
 
-        // Exempt token-producing routines: when the routine's declared return type IS a
-        // token type, the routine itself is the canonical constructor for that token
-        // (e.g. T.modify() -> Modifying[T]). Block escapes from non-token routines only.
-        if (_currentRoutine?.ReturnType != null && IsInlineOnlyTokenType(type: _currentRoutine.ReturnType))
+        // Exempt the canonical token constructors, which legitimately return a token (e.g.
+        // `T.view() -> Viewing[T]`, `T.modify() -> Modifying[T]`). These live in the stdlib
+        // wrapper modules, so scope the exemption to stdlib files — a USER routine declaring a
+        // token return type is escaping a scope-bound token and must be rejected.
+        if (IsStdlibFile(filePath: _currentFilePath) &&
+            _currentRoutine?.ReturnType != null &&
+            IsInlineOnlyTokenType(type: _currentRoutine.ReturnType))
         {
             return;
         }

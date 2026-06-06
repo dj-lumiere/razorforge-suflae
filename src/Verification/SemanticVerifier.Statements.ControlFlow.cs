@@ -394,29 +394,20 @@ public sealed partial class SemanticVerifier
 
         TypeSymbol errorType = AnalyzeExpression(expression: throwStmt.Error);
 
-        // Crashable type category automatically satisfies the Crashable protocol.
-        // For other types, require explicit 'obeys Crashable' — it's a safety contract.
+        // Only `crashable`-kind types are throwable errors. The `crashable` keyword implicitly
+        // confers the Crashable contract; no other type kind may obey it (enforced at the
+        // declaration site — see ValidateTypeProtocolImplementation), so there is no longer an
+        // explicit-`obeys Crashable` path for records/entities. `Error`/ErrorTypeInfo are the
+        // catch-all error references used by generic error handling.
         bool isCrashable = errorType.Category == TypeCategory.Crashable ||
-                           ExplicitlyImplementsProtocol(type: errorType,
-                               protocolName: "Crashable");
+                           errorType is ErrorTypeInfo ||
+                           errorType.Name == "Error";
         if (!isCrashable)
         {
             ReportError(code: SemanticDiagnosticCode.ThrowNotCrashable,
                 message:
-                $"Thrown value must implement Crashable protocol, got '{errorType.Name}'.",
-                location: throwStmt.Error.Location);
-        }
-
-        // Thrown types must be named record, entity, or crashable types.
-        if (errorType.Category != TypeCategory.Record &&
-            errorType.Category != TypeCategory.Entity &&
-            errorType.Category != TypeCategory.Crashable && errorType is not ErrorTypeInfo &&
-            errorType.Name != "Error")
-        {
-            ReportError(code: SemanticDiagnosticCode.ThrowRequiresRecordType,
-                message:
-                $"Only record, entity, or crashable types can be thrown, got '{errorType.Name}' ({errorType.Category}). " +
-                "Thrown errors must be named Crashable types.",
+                $"Only `crashable`-kind types can be thrown, got '{errorType.Name}' ({errorType.Category}). " +
+                "Declare the error type with the `crashable` keyword.",
                 location: throwStmt.Error.Location);
         }
 

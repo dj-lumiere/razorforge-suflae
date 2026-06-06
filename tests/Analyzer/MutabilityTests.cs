@@ -207,11 +207,12 @@ public class MutabilityTests
 
     #region Parameter Mutability
     /// <summary>
-    /// Verifies semantic analysis behavior for parameter reassignment and reports the expected error.
+    /// Parameters are mutable locals — reassigning a value-typed parameter is permitted (the
+    /// caller's argument is unaffected since value types are passed by value).
     /// </summary>
 
     [Fact]
-    public void Analyze_ParameterReassignment_ReportsError()
+    public void Analyze_ParameterReassignment_Allowed()
     {
         string source = """
                         routine test(x: S32)
@@ -220,7 +221,7 @@ public class MutabilityTests
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
-        Assert.True(condition: result.Errors.Count > 0);
+        Assert.Empty(collection: result.Errors);
     }
 
     #endregion

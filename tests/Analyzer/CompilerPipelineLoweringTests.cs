@@ -178,7 +178,7 @@ public class CompilerPipelineLoweringTests
                         record Box[T]
                           value: T
 
-                        routine Box[T].peek() -> T
+                        routine Box[T].peek() -> ?T
                           return me.value
 
                         routine test() -> S32
@@ -247,10 +247,10 @@ public class CompilerPipelineLoweringTests
                         record Box[T]
                           value: T
 
-                        routine Box[T].peek() -> T
+                        routine Box[T].peek() -> ?T
                           return me.value
 
-                        routine Box[T].copy_value() -> T
+                        routine Box[T].copy_value() -> ?T
                           return me.peek()
 
                         routine test() -> S32
@@ -735,7 +735,7 @@ public class CompilerPipelineLoweringTests
                         record Box[T]
                           value: T
 
-                        routine Box[T].peek() -> T
+                        routine Box[T].peek() -> ?T
                           return me.value
 
                         routine make_box() -> Box[S32]
@@ -1141,7 +1141,7 @@ public class CompilerPipelineLoweringTests
                         needs N is Address
                           data: T
 
-                        routine Buffer[T, N].first() -> T
+                        routine Buffer[T, N].first() -> ?T
                           return me.data
 
                         routine test(buf: Buffer[U8, WIDTH]) -> U8

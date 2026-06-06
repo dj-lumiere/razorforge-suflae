@@ -82,11 +82,14 @@ public class ProtocolValidationTests
     [Fact]
     public void Analyze_ProtocolWritableImplMigratable_ReportsError()
     {
+        // Protocol method is writable by default; the impl is @migratable — MORE mutating than
+        // the contract allows, so it is rejected (a Modifying-token caller could trigger relocation).
         string source = """
                         protocol Mutator
                           routine Me.mutate()
                         entity Thing obeys Mutator
                           value: S32
+                        @migratable
                         routine Thing.mutate()
                           return
                         """;
