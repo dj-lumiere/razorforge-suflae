@@ -1429,11 +1429,52 @@ public sealed partial class TypeRegistry
             .Where(predicate: m => m.Name == "$destroy" && m.Parameters.Count == 0)
             .OrderBy(keySelector: m => m.IsSynthesized ? 1 : 0)
             .FirstOrDefault();
-        RoutineInfo? copy = type is RecordTypeInfo
-            ? own.FirstOrDefault(predicate: m =>
-                m.Name == "$copy" && m.Parameters.Count == 0 && !m.IsSynthesized)
-            : null;
+        RoutineInfo? copy = null;
+        if (type is RecordTypeInfo rec)
+        {
+            // A hand-written $copy is always a retaining copy (the managed-leaf retain hook,
+            // e.g. Text/Decimal bumping a shared controller).
+            copy = own.FirstOrDefault(predicate: m =>
+                m.Name == "$copy" && m.Parameters.Count == 0 && !m.IsSynthesized);
+
+            // The synthesized record $copy is field-delegating (WiredRoutinePass.
+            // BuildRecordCopyBody) — symmetric with the field-delegating synthesized $destroy.
+            // Treat it as a retaining copy iff some field itself needs one, so it gets injected
+            // at copy sites and balances the per-field $destroy at teardown (else: double-free).
+            if (copy is null && RecordHasRetainingField(record: rec))
+                copy = own.FirstOrDefault(predicate: m =>
+                    m.Name == "$copy" && m.Parameters.Count == 0);
+        }
         return new Lifecycle(Copy: copy, Destroy: destroy, IsBorrow: false);
+    }
+
+    /// <summary>
+    /// Whether a record transitively contains a field that needs a retaining copy — i.e. a
+    /// field whose type has a hand-written <c>$copy</c> (a managed leaf such as <c>Text</c> or
+    /// <c>Decimal</c>), or a composite record that itself contains one. Drives whether the
+    /// synthesized field-delegating <c>$copy</c> counts as retaining in <see cref="GetLifecycle"/>.
+    /// </summary>
+    private bool RecordHasRetainingField(RecordTypeInfo record,
+        HashSet<string>? visited = null)
+    {
+        if (record.HasDirectBackendType || record.MemberVariables is null)
+            return false;
+        visited ??= new HashSet<string>();
+        if (!visited.Add(item: record.FullName ?? record.Name))
+            return false; // recursive-record cycle guard
+
+        foreach (MemberVariableInfo field in record.MemberVariables)
+        {
+            if (field.Type is not RecordTypeInfo fieldRec)
+                continue;
+            List<RoutineInfo> fieldOwn = GetOwnMethodsResolved(type: fieldRec).ToList();
+            if (fieldOwn.Any(predicate: m =>
+                    m.Name == "$copy" && m.Parameters.Count == 0 && !m.IsSynthesized))
+                return true;
+            if (RecordHasRetainingField(record: fieldRec, visited: visited))
+                return true;
+        }
+        return false;
     }
 
     /// <summary>

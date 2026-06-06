@@ -356,7 +356,7 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
         switch (routine.Name)
         {
             case "$copy":
-                ctx.VariantBodies[key: routine.RegistryKey] = BuildReturnMeBody(ownerType: record);
+                ctx.VariantBodies[key: routine.RegistryKey] = BuildRecordCopyBody(record: record);
                 return;
             case "clone":
                 ctx.VariantBodies[key: routine.RegistryKey] = BuildCloneViaCopyBody(ownerType: record);
@@ -677,6 +677,63 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             ResolvedType = ownerType
         };
         return new ReturnStatement(Value: meRef, Location: _synthLoc);
+    }
+
+    /// <summary>
+    /// Builds the synthesized record <c>$copy</c> body. Symmetric with
+    /// <see cref="BuildDestroyBody"/>: if any field needs a retaining copy (e.g. a
+    /// refcounted <c>Decimal</c>/<c>Text</c> field whose own <c>$copy</c> bumps a shared
+    /// controller), reconstruct the record memberwise — <c>return Owner(f: me.f.$copy(),
+    /// g: me.g, …)</c> — so those field refcounts are bumped to balance the per-field
+    /// <c>$destroy</c> at teardown. Without this, the value-copy shares field handles at
+    /// refcount 1 and both copies free them → double-free.
+    ///
+    /// Pure value records (all fields trivially copyable) and @llvm-backed primitives keep
+    /// the cheap shallow <c>return me</c>.
+    /// </summary>
+    private ReturnStatement BuildRecordCopyBody(RecordTypeInfo record)
+    {
+        // @llvm-backed primitives (S64, Bool, …) have no composite fields to recurse into.
+        if (record.HasDirectBackendType || record.MemberVariables is null or { Count: 0 })
+            return BuildReturnMeBody(ownerType: record);
+
+        // Only reconstruct when at least one field genuinely needs a retaining copy.
+        // Otherwise the shallow byte-copy is both correct and cheaper.
+        var anyRetaining = record.MemberVariables.Any(
+            predicate: f => ctx.Registry.GetLifecycle(type: f.Type).Copy is not null);
+        if (!anyRetaining)
+            return BuildReturnMeBody(ownerType: record);
+
+        var memberArgs = new List<(string Name, Expression Value)>(
+            capacity: record.MemberVariables.Count);
+        foreach (MemberVariableInfo field in record.MemberVariables)
+        {
+            var meRef = new IdentifierExpression(Name: "me", Location: _synthLoc)
+                { ResolvedType = record };
+            var fieldRef = new MemberExpression(Object: meRef, PropertyName: field.Name,
+                Location: _synthLoc) { ResolvedType = field.Type };
+
+            // Retaining field → me.f.$copy() (bumps its refcount); value field → me.f (shallow).
+            Expression argExpr = ctx.Registry.GetLifecycle(type: field.Type).Copy is not null
+                ? new CallExpression(
+                    Callee: new MemberExpression(Object: fieldRef, PropertyName: "$copy",
+                        Location: _synthLoc) { ResolvedType = field.Type },
+                    Arguments: [],
+                    Location: _synthLoc) { ResolvedType = field.Type }
+                : fieldRef;
+            memberArgs.Add(item: (field.Name, argExpr));
+        }
+
+        var creator = new CreatorExpression(
+            TypeName: record.Name,
+            TypeArguments: null,
+            MemberVariables: memberArgs,
+            Location: _synthLoc)
+        {
+            ResolvedType = record,
+            LoweringKind = CallLoweringKind.TypeConstructor
+        };
+        return new ReturnStatement(Value: creator, Location: _synthLoc);
     }
 
     /// <summary>
