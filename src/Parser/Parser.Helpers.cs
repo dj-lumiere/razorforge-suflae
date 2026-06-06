@@ -71,12 +71,8 @@ public partial class Parser
             message: $"{errorMessage}. Expected Identifier, got {current.Type}.");
     }
 
-    /// <summary>
-    /// Consumes an identifier that can be used as a method/routine name.
-    /// Supports '!' suffix for failable methods.
-    /// </summary>
-    /// <param name="errorMessage">Error message to show if token is not a valid method name.</param>
-    /// <returns>The method name, possibly with '!' suffix for failable methods.</returns>
+    /// <summary>Returns true when <paramref name="type"/> is a keyword token also valid as a method name (e.g. <c>none</c>).</summary>
+    /// <param name="type">The token type to test.</param>
     private static bool IsKeywordValidAsMethodName(TokenType type) =>
         type == TokenType.NoneValue;
 

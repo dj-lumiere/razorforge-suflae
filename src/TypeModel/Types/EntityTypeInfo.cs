@@ -34,7 +34,7 @@ public sealed class EntityTypeInfo : TypeInfo
 
     /// <summary>
     /// Size of the underlying heap-allocated struct (sum of member sizes with alignment).
-    /// Distinct from <see cref="SizeBytes"/>, which returns the pointer-sized value used
+    /// Distinct from <c>SizeBytes</c>, which returns the pointer-sized value used
     /// to pass entities around at the SSA level.
     /// </summary>
     public int HeapBlockSize(int pointerSize)

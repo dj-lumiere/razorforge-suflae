@@ -185,6 +185,10 @@ internal sealed class ErrorHandlingVariantPass(DesugaringContext ctx)
     /// emitted as <see cref="VariantSiteKind.FromVariantPassthrough"/> so codegen returns the
     /// already-carrier-shaped expression directly.
     /// </summary>
+    /// <param name="body">The routine body statement to transform.</param>
+    /// <param name="kind">Which error-handling variant shape to produce (try/check/lookup/try-bool).</param>
+    /// <param name="rewriter">Optional tail-return rewriter; when it succeeds the return is emitted as a passthrough.</param>
+    /// <param name="registry">Optional type registry used for try_-variant synthesis when <paramref name="kind"/> is <c>Try</c>.</param>
     /// <param name="nextOnlyPropagation">
     /// When true, non-tail failable-call propagation is restricted to inner <c>$next</c> calls
     /// (iterator chaining). Used by the MONOMORPHIZED (path-2) caller, which runs AFTER reachability:

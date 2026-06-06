@@ -289,6 +289,7 @@ internal sealed class RecordCopyLoweringPass(PostprocessingContext ctx)
     /// copied — that would leak the local. A returned field (<see cref="MemberExpression"/>) is
     /// still copied, since the aggregate keeps its own reference.
     /// </param>
+    /// <param name="expr">The expression to inspect and potentially wrap in a copy call.</param>
     private Expression LowerOwnership(Expression expr, bool isReturn)
     {
         // Preserve explicit steal so later stages can observe the ownership transfer site.

@@ -429,18 +429,14 @@ public class RecordTypeInfo : TypeInfo
     }
 
     /// <summary>
-    /// Recursively substitutes type parameters in a type.
-    /// </summary>
-    /// <param name="type">The type to substitute.</param>
-    /// <param name="substitution">The type parameter substitution map.</param>
-    /// <returns>The substituted type, or the original if no substitution applies.</returns>
-    /// <summary>
     /// Resolves an associated-type binding (slot) on a base type. Prefers the base's own binding;
     /// falls back to the generic definition's binding substituted with the base's type arguments —
     /// needed because cached generic instances created before the binding post-pass have empty
     /// binding maps while the definition holds the source-of-truth binding. Returns null if neither
     /// the instance nor the definition binds the slot.
     /// </summary>
+    /// <param name="baseType">The concrete type whose associated-type binding is resolved.</param>
+    /// <param name="slot">The associated-type slot name to look up (e.g. <c>Iter</c>).</param>
     internal static TypeInfo? ProjectAssociatedBinding(TypeInfo baseType, string slot)
     {
         (Dictionary<string, TypeInfo>? own, TypeInfo? def, List<TypeInfo>? args) = baseType switch

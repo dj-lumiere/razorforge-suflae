@@ -77,6 +77,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     private readonly HashSet<string> _walkedBodyKeys = new(comparer: StringComparer.Ordinal);
     private bool _routineIndexBuilt;
 
+    /// <summary>Runs global monomorphization of all generic types and routines in the registry.</summary>
     public void RunGlobal() // NOSONAR S3776
     {
         // Pre-build the routine-declaration index so FindInStdlib is O(1) per lookup.
@@ -816,7 +817,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             AsyncStatus.CheckVariant => ErrorHandlingVariantKind.Check,
             AsyncStatus.LookupVariant => ErrorHandlingVariantKind.Lookup,
             AsyncStatus.TryBoolVariant => ErrorHandlingVariantKind.TryBool,
-            _ when GetGenericBaseName(emitInfo.ReturnType) == "Maybe" => ErrorHandlingVariantKind.Try,
+            _ when emitInfo.ReturnType != null && GetGenericBaseName(emitInfo.ReturnType) == "Maybe" => ErrorHandlingVariantKind.Try,
             _ => null
         };
         if (fallbackKind != null)

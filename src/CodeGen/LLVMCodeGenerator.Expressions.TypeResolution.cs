@@ -277,7 +277,7 @@ public partial class LlvmCodeGenerator
                 TypeArguments: not null
             } staleEntity:
             {
-                var refreshed = genDef.CreateInstance(typeArguments: staleEntity.TypeArguments) as EntityTypeInfo;
+                var refreshed = genDef.CreateInstance(typeArguments: staleEntity.TypeArguments!) as EntityTypeInfo;
                 if (refreshed is { MemberVariables.Count: > 0 })
                 {
                     objType = refreshed;

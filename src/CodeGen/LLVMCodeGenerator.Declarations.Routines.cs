@@ -129,17 +129,12 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Generates the LLVM function definition (with body).
-    /// </summary>
-    /// <param name="routine">The routine declaration from AST.</param>
-    /// <param name="preResolvedInfo">Optional pre-resolved routine metadata.</param>
-    /// <param name="nameOverride">Optional mangled name override.</param>
-    /// <summary>
     /// Returns the LLVM named-struct type for a lifted lambda's closure environment —
     /// <c>%"Closure.&lt;liftedName&gt;" = type { ptr, &lt;capture types&gt; }</c> — declaring it on
     /// first use. Field 0 is the function pointer; the captured values follow in
     /// <see cref="RoutineInfo.ClosureCaptures"/> order.
     /// </summary>
+    /// <param name="lambda">The lifted lambda's RoutineInfo; its Name and ClosureCaptures determine the struct name and fields.</param>
     private string ClosureStructName(RoutineInfo lambda)
     {
         string name = $"%\"Closure.{lambda.Name}\"";

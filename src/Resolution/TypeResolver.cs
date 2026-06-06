@@ -538,14 +538,12 @@ internal sealed class TypeResolver
     }
 
     /// <summary>
-    /// Returns true if <paramref name="name"/> is a generic type parameter declared on the
-    /// currently-analyzed routine or type, allowing it to be used as a valid type reference.
-    /// </summary>
-    /// <summary>
     /// Resolves an associated-type projection name (<c>Me/Iter</c>, <c>S/Iter</c>) by walking its
     /// <c>/</c> segments. Returns false when the root is not a projection root (e.g. a module
     /// path), leaving the name to the normal lookup path.
     /// </summary>
+    /// <param name="typeExpr">The type expression whose <c>Name</c> contains the <c>/</c>-delimited projection path.</param>
+    /// <param name="result">On success, the resolved concrete type for the projection.</param>
     private bool TryResolveAssociatedProjection(TypeExpression typeExpr, out TypeSymbol result)
     {
         result = ErrorTypeInfo.Instance;

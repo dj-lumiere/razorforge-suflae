@@ -10,6 +10,7 @@ namespace Compiler.Resolution;
 [System.Flags]
 public enum WiredView
 {
+    /// <summary>The zero value; no views selected.</summary>
     None = 0,
 
     /// <summary>In <c>TypeRegistry.Capabilities._wiredRoutineMap</c>: capability gating
@@ -32,16 +33,58 @@ public enum WiredView
 /// <summary>Coarse classification of a wired routine, used by generation/lifecycle policy.</summary>
 public enum WiredKind
 {
-    Creator, Comparison, Arithmetic, ArithmeticWrap, ArithmeticClamp, ArithmeticUnchecked,
-    Bitwise, Shift, Unary, Unwrap, Container, Iteration, Indexing, Context, Lifecycle,
-    Display, Hash, Copy, InPlaceArithmetic, InPlaceBitwise, InPlaceShift
+    /// <summary>Object creation ($create, $from_literal).</summary>
+    Creator,
+    /// <summary>Equality and ordering ($eq, $cmp, etc.).</summary>
+    Comparison,
+    /// <summary>Checked arithmetic ($add, $sub, $mul, $div, $mod, $floordiv, $pow).</summary>
+    Arithmetic,
+    /// <summary>Wrapping arithmetic variants ($add%, $sub%, $mul%).</summary>
+    ArithmeticWrap,
+    /// <summary>Clamping arithmetic variants ($add|, $sub|, $mul|).</summary>
+    ArithmeticClamp,
+    /// <summary>Unchecked arithmetic variants ($add!, $sub!, $mul!).</summary>
+    ArithmeticUnchecked,
+    /// <summary>Bitwise operations ($and, $or, $xor, $not).</summary>
+    Bitwise,
+    /// <summary>Bit-shift operations ($shl, $shr).</summary>
+    Shift,
+    /// <summary>Unary prefix operations ($neg).</summary>
+    Unary,
+    /// <summary>Carrier unwrap ($unwrap_or, $unwrap).</summary>
+    Unwrap,
+    /// <summary>Container membership ($contains, $notcontains).</summary>
+    Container,
+    /// <summary>Iteration protocol ($iter, $next).</summary>
+    Iteration,
+    /// <summary>Indexing protocol ($getitem, $setitem).</summary>
+    Indexing,
+    /// <summary>Context/scope protocol ($enter, $exit).</summary>
+    Context,
+    /// <summary>Object lifecycle ($destroy).</summary>
+    Lifecycle,
+    /// <summary>Display and diagnostic formatting ($represent, $diagnose).</summary>
+    Display,
+    /// <summary>Hash computation ($hash, $fast_hash).</summary>
+    Hash,
+    /// <summary>Value copy ($copy).</summary>
+    Copy,
+    /// <summary>In-place arithmetic assignment ($iadd, $isub, etc.).</summary>
+    InPlaceArithmetic,
+    /// <summary>In-place bitwise assignment ($iand, $ior, $ixor).</summary>
+    InPlaceBitwise,
+    /// <summary>In-place shift assignment ($ishl, $ishr).</summary>
+    InPlaceShift
 }
 
 /// <summary>One wired-routine concept (keyed by its bare canonical name, e.g. <c>$getitem</c>).</summary>
 public sealed class WiredEntry
 {
+    /// <summary>The bare canonical wired name (e.g. <c>$getitem</c>). Never includes a <c>!</c> suffix; failability is tracked by <see cref="Failable"/>.</summary>
     public required string Name { get; init; }
+    /// <summary>Coarse classification used by generation and lifecycle policy.</summary>
     public required WiredKind Kind { get; init; }
+    /// <summary>Bitmask of consumer lists this entry participates in.</summary>
     public required WiredView Views { get; init; }
 
     /// <summary>The protocols that materialise this routine. <c>[0]</c> is the primary/canonical
@@ -64,6 +107,7 @@ public sealed class WiredEntry
     /// Lookups resolve by the bare name and compare this property; they never key on a banged string.</summary>
     public bool Failable { get; init; }
 
+    /// <summary>The canonical wired name used by the capability gate: <see cref="CapabilityWiredOverride"/> if set, otherwise <see cref="Name"/>.</summary>
     public string CapabilityWired => CapabilityWiredOverride ?? Name;
 }
 
@@ -82,6 +126,7 @@ public static class WiredRoutineCatalog
     private const WiredView Proto = WiredView.ProtocolDecl;
     private const WiredView Seed = WiredView.ReachabilitySeed;
 
+    /// <summary>All wired-routine entries in canonical order. Every consumer projection is a filtered view of this list.</summary>
     public static readonly IReadOnlyList<WiredEntry> All = BuildAll();
 
     private static WiredEntry[] BuildAll() =>
@@ -235,8 +280,10 @@ public static class WiredRoutineCatalog
         All.Where(predicate: e => e.AlwaysLive).Select(selector: e => e.Name)
            .ToHashSet(comparer: System.StringComparer.Ordinal);
 
+    /// <summary>Looks up a wired entry by its bare canonical name. Returns false when the name is not wired.</summary>
     public static bool TryGet(string name, out WiredEntry entry) => _byName.TryGetValue(key: name, value: out entry!);
 
+    /// <summary>Returns true when <paramref name="name"/> is a lifecycle-category wired routine (<c>$destroy</c> or <c>$copy</c>).</summary>
     public static bool IsLifecycle(string name) =>
         _byName.TryGetValue(key: name, value: out WiredEntry? e) &&
         e.Kind is WiredKind.Lifecycle or WiredKind.Copy;

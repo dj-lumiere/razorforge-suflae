@@ -108,7 +108,9 @@ public sealed partial class SemanticVerifier
     private int _conditionalNestingDepth;
 
     /// <summary>Tracks the last variant variable declared, for immediate dismantling check (#58).</summary>
+#pragma warning disable CS0414
     private (string Name, SourceLocation Location)? _lastDeclaredVariantVar;
+#pragma warning restore CS0414
 
     /// <summary>
     /// When statements determined to be exhaustive (either via catch-all or full type coverage).

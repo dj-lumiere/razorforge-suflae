@@ -633,7 +633,7 @@ public partial class LlvmCodeGenerator
                         {
                             Name: "Hijacked", TypeArguments.Count: > 0
                         } hijacked &&
-                        hijacked.TypeArguments[index: 0] is EntityTypeInfo fieldInner &&
+                        hijacked.TypeArguments![index: 0] is EntityTypeInfo fieldInner &&
                         fieldInner.FullName == innerEntity.FullName)
                     {
                         dataFieldIndex = fi;

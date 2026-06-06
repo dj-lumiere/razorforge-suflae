@@ -242,24 +242,15 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
     // -------- Helpers --------
 
     /// <summary>
-    /// Identifies a call to a protocol default-impl (extension) routine and the concrete implementer
-    /// it's invoked on. Handles two shapes:
-    /// <list type="bullet">
-    ///   <item>Direct: <c>ResolvedRoutine.OwnerType</c> is the protocol (not yet re-homed).</item>
-    ///   <item>Re-homed: SA already rewrote the owner to the concrete implementer (e.g.
-    ///   <c>List[Text].enumerate</c>), but the routine's <c>GenericDefinition</c> is still the
-    ///   protocol-owned body source (<c>Iterable[T].enumerate</c>). The earlier owner-only check
-    ///   missed this, leaving the call referencing an undefined implementer-owned symbol.</item>
-    /// </list>
-    /// Returns the protocol body source as <paramref name="protoRoutine"/> so synthesis keys both
-    /// shapes to the same per-implementer routine.
-    /// </summary>
-    /// <summary>
     /// Extracts the resolved routine, receiver type, and a rebind callback from a call-shaped
     /// expression — either a lowered <see cref="CallExpression"/> (callee is a MemberExpression) or a
     /// still-generic <see cref="GenericMethodCallExpression"/> (explicit method type args, not yet
     /// lowered by GenericCallLoweringPass, which runs after this pass). Returns false for anything else.
     /// </summary>
+    /// <param name="expr">The expression to inspect.</param>
+    /// <param name="resolvedRoutine">On success, the resolved routine from the call site.</param>
+    /// <param name="receiverType">On success, the concrete receiver type the call dispatches on.</param>
+    /// <param name="rebind">On success, a callback to replace the call's resolved routine with the synthesized one.</param>
     private static bool TryGetProtocolDefaultCallParts(Expression expr,
         out RoutineInfo? resolvedRoutine, out TypeInfo? receiverType, out Action<RoutineInfo> rebind)
     {

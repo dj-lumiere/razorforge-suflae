@@ -783,7 +783,7 @@ public sealed partial class SemanticVerifier
 
                     if (arityMismatch || firstArgMismatch)
                     {
-                        RoutineInfo? betterMethod = _registry.LookupMethodOverload(type: dispatchType,
+                        RoutineInfo? betterMethod = _registry.LookupMethodOverload(type: dispatchType!,
                             methodName: callLookupName,
                             argTypes: resolvedArgTypes);
                         if (betterMethod != null)
@@ -1111,7 +1111,7 @@ public sealed partial class SemanticVerifier
                         // GenericParameterTypeInfo owner -> map param name to receiver type
                         if (method.OwnerType is GenericParameterTypeInfo genParamOwner)
                         {
-                            substitutions[key: genParamOwner.Name] = dispatchType;
+                            substitutions[key: genParamOwner.Name] = dispatchType!;
                         }
 
                         // Protocol owner -> map protocol generic params to receiver's type args
@@ -1137,7 +1137,7 @@ public sealed partial class SemanticVerifier
                         // protocol-extension method is re-homed onto the implementer (owner =
                         // List[Text], not the protocol), so an owner-is-protocol gate would miss it;
                         // for non-protocol methods no return type contains `Me`, so this is a no-op.
-                        substitutions[key: "Me"] = dispatchType;
+                        substitutions[key: "Me"] = dispatchType!;
 
                         // Protocol method resolved through a generic param's `obeys` constraint
                         // (e.g. `r.$iter()` where `r: __T0 obeys Iterable[S64]`). The resolved method

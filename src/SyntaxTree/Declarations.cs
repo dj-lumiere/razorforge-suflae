@@ -174,7 +174,7 @@ public record RoutineDeclaration(
     /// <summary>
     /// Generic parameter names. Settable so SignatureResolver can desugar a protocol-typed
     /// parameter (<c>r: Iterable[S64]</c>) into an implicit generic (<c>__T0 obeys Iterable[S64]</c>)
-    /// on the AST decl itself — keeping the AST in lockstep with the desugared <see cref="RoutineInfo"/>
+    /// on the AST decl itself — keeping the AST in lockstep with the desugared <c>RoutineInfo</c>
     /// so the generic-monomorphization pipeline (FindInStdlib + GenericAstRewriter) treats implicit
     /// and explicit generics identically. The body property shadows the positional parameter; the
     /// primary constructor still initializes it.

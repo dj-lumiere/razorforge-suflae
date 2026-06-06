@@ -221,7 +221,7 @@ internal sealed class CrashableExpansionPass(PostprocessingContext ctx)
             // (it's a protocol-style match, not a special pattern node). Older AST paths still
             // produce CrashablePattern — handle both shapes uniformly here.
             string? bangBindName = null;
-            SourceLocation bangLoc = default;
+            SourceLocation? bangLoc = null;
             bool isCrashableShape = false;
             switch (clause.Pattern)
             {
@@ -251,7 +251,7 @@ internal sealed class CrashableExpansionPass(PostprocessingContext ctx)
                     var typeExpr = new TypeExpression(
                         Name: crashable.Name,
                         GenericArguments: null,
-                        Location: bangLoc)
+                        Location: bangLoc!)
                     {
                         ResolvedType = crashable
                     };
@@ -259,7 +259,7 @@ internal sealed class CrashableExpansionPass(PostprocessingContext ctx)
                         Type: typeExpr,
                         VariableName: bangBindName,
                         Bindings: null,
-                        Location: bangLoc);
+                        Location: bangLoc!);
 
                     Statement clonedBody = GenericAstRewriter.RewriteStatement(
                         stmt: clause.Body, subs: emptySubs);

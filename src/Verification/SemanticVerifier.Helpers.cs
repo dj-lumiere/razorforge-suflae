@@ -161,25 +161,31 @@ public sealed partial class SemanticVerifier
         bool recommendsNamedArgs = nonMeParamCount == 2 && !routine.IsVariadic;
 
         // @positional: the routine opts into positional calls. Named arguments always remain
-        // legal, so this only RELAXES the S510/W258 rules — it never forbids names. A single
-        // call must still be all-or-nothing: all positional, or all named, never mixed (S512).
+        // legal, so this only RELAXES the S510/W258 rules — it never forbids names.
         bool isPositional = routine.Annotations.Contains(value: "positional");
         if (isPositional)
         {
             requiresNamedArgs = false;
             recommendsNamedArgs = false;
+        }
 
-            bool hasNamedArg = arguments.Any(predicate: a => a is NamedArgumentExpression);
-            bool hasPositionalArg =
-                arguments.Any(predicate: a => a is not NamedArgumentExpression);
-            if (hasNamedArg && hasPositionalArg)
-            {
-                ReportError(code: SemanticDiagnosticCode.MixedPositionalAndNamedArguments,
-                    message:
-                    $"Call to '@positional' routine '{routine.Name}' mixes positional and named " +
-                    "arguments — a call must be either all positional or all named.",
-                    location: location);
-            }
+        // All-or-nothing (S512): a single call must be EITHER all named OR all positional —
+        // mixing the two is always a compile error, for @positional and plain routines alike,
+        // because partially-named calls are the most argument-swap-prone shape. The all-positional
+        // case is then governed by the count rules above (0/1 ok, 2 warns W258, 3+ requires names
+        // S510); the all-named case is always fine. When mixed, S512 subsumes the per-argument
+        // W258/S510/S507 diagnostics below (gated on !isMixed) so the call reports once, cleanly.
+        bool hasNamedArg = arguments.Any(predicate: a => a is NamedArgumentExpression);
+        bool hasPositionalArg =
+            arguments.Any(predicate: a => a is not NamedArgumentExpression);
+        bool isMixed = hasNamedArg && hasPositionalArg;
+        if (isMixed)
+        {
+            ReportError(code: SemanticDiagnosticCode.MixedPositionalAndNamedArguments,
+                message:
+                $"Call to '{routine.Name}' mixes positional and named arguments — a call must be " +
+                "either all positional or all named.",
+                location: location);
         }
 
         foreach (Expression arg in arguments)
@@ -222,7 +228,7 @@ public sealed partial class SemanticVerifier
             }
             else
             {
-                if (requiresNamedArgs)
+                if (requiresNamedArgs && !isMixed)
                 {
                     // S510: Named argument enforcement — subsumes S507
                     ReportError(code: SemanticDiagnosticCode.NamedArgumentRequired,
@@ -230,7 +236,7 @@ public sealed partial class SemanticVerifier
                         $"Routine '{routine.Name}' has {nonMeParamCount} parameters - all arguments must be named.",
                         location: arg.Location);
                 }
-                else if (recommendsNamedArgs)
+                else if (recommendsNamedArgs && !isMixed)
                 {
                     // W258: Named arguments recommended for 2-parameter calls.
                     ReportWarning(code: SemanticWarningCode.NamedArgumentRecommended,
@@ -238,10 +244,10 @@ public sealed partial class SemanticVerifier
                         $"Routine '{routine.Name}' has 2 parameters - naming arguments is recommended for clarity.",
                         location: arg.Location);
                 }
-                else if (seenNamed && !isPositional)
+                else if (seenNamed && !isPositional && !isMixed)
                 {
-                    // S507: Positional argument after named argument. For @positional routines
-                    // this mixing is already reported once as S512, so suppress S507 here.
+                    // S507: Positional argument after named argument. Mixed calls are already
+                    // reported once as S512 above, so this is suppressed for them.
                     ReportError(code: SemanticDiagnosticCode.PositionalAfterNamed,
                         message:
                         $"Positional argument cannot appear after named arguments in call to '{routine.Name}'.",
