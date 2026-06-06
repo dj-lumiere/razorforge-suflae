@@ -451,12 +451,13 @@ routine S64.$create(from: Decimal) -> S64
 routine F64.$create(from: Decimal) -> F64
   return rf_bigdec_get_f64(from.handle)
 
-### Formats this decimal as text with the default fractional precision (10 places).
-### Standard `$represent` shape (no args) for f-string dispatch.
+### Formats this decimal in its canonical form — full stored precision, with trailing zeros and
+### a redundant decimal point stripped (e.g. `1`, not `1.0000000000`). Standard `$represent` shape
+### (no args) for f-string dispatch. (`decimal_places: -1` selects decNumber's free-form output.)
 ### :returns: The resulting `Text` value.
 @readonly
 routine Decimal.$represent() -> ?Text
-  return me.represent_with_places(decimal_places: 10_s32)
+  return me.represent_with_places(decimal_places: -1_s32)
 
 ### Formats this decimal as text with the requested fractional precision.
 ### :param decimal_places: The number of decimal places to emit.

@@ -352,12 +352,17 @@ routine Complex.is_imaginary() -> Bool
 # Text Representation
 # ============================================================================
 
-### Formats this value as `a +/- bi` with the default fractional precision.
+### Formats this value compactly as `a+bi` / `a-bi`, with each component in its canonical decimal
+### form (full precision, no trailing zeros — e.g. `1+1i`, not `1.0000000000 + 1.0000000000i`).
 ### Standard `$represent` shape (no args) for f-string dispatch.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Complex.$represent() -> ?Text
-  return me.represent_with_places(decimal_places: 10_s32)
+  var real_text = me.real.$represent()
+  var imag_abs = me.imag.abs().$represent()
+  if me.imag.is_negative()
+    return real_text + "-" + imag_abs + "i"
+  return real_text + "+" + imag_abs + "i"
 
 ### Formats this value as `a +/- bi` with the requested precision.
 ### :param decimal_places: The number of decimal places to render.
