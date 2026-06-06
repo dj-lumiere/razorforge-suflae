@@ -70,34 +70,58 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
     /// <summary>
     /// Public entry point
     /// </summary>
+    // Persisted across RunGlobal + RunIncremental so a post-PDIL incremental re-run only does work
+    // for genuinely-new types/bodies instead of re-seeding and re-walking everything (which made the
+    // PDIL→GMP fixed point in GenericClosurePass quadratic).
+    private readonly HashSet<string> _processedTypes = new(comparer: StringComparer.Ordinal);
+    private readonly HashSet<string> _walkedBodyKeys = new(comparer: StringComparer.Ordinal);
+    private bool _routineIndexBuilt;
+
     public void RunGlobal() // NOSONAR S3776
     {
         // Pre-build the routine-declaration index so FindInStdlib is O(1) per lookup.
-        BuildRoutineIndex();
-
-        // Process concrete generic instances. Start with the liveness-filtered set, then use
-        // a push-based queue to pick up types discovered during body rewriting
-        // (e.g. ListEmitter[Byte] registered by GenericAstRewriter when rewriting List[Byte].$iter).
-        // Only types newly created by GetOrCreateResolution after tracking starts are enqueued —
-        // pre-existing phantom types (BTreeDictNode stubs etc.) never enter the queue.
-        bool timing = ctx.SaTiming;
-        var sw = timing ? Stopwatch.StartNew() : null;
-
-        var processedTypes = new HashSet<string>(StringComparer.Ordinal);
+        if (!_routineIndexBuilt)
+        {
+            BuildRoutineIndex();
+            _routineIndexBuilt = true;
+        }
 
         // Enable push-based discovery before the first ProcessConcreteType call so any types
         // created during rewriting are captured immediately.
         ctx.Registry.StartGmpDiscoveryTracking();
 
-        // Seed with liveness-filtered instances + wrapper instances.
-        TypeInfo[] initialInstances = ctx.Registry.AllConcreteGenericInstances
-            .Concat(second: ctx.Registry.AllConcreteWrapperInstances)
-            .DistinctBy(type => type.FullName)
-            .ToArray();
-        foreach (TypeInfo concreteType in initialInstances)
+        SeedAndProcess(timing: ctx.SaTiming);
+    }
+
+    /// <summary>
+    /// Cheap re-run after <see cref="ProtocolDefaultImplLoweringPass"/> synthesizes new bodies post-GMP
+    /// (e.g. <c>List[S64].List</c>/<c>.Set</c> collectors whose call sites appear only inside
+    /// GMP-monomorphized adapter <c>$iter</c> bodies). The persisted <see cref="_processedTypes"/> /
+    /// <see cref="_walkedBodyKeys"/> sets mean the seed scans short-circuit and the liveness expansion
+    /// walks only the freshly-synthesized bodies, so this is bounded by NEW work — unlike re-running
+    /// the full <see cref="RunGlobal"/> per round.
+    /// </summary>
+    public void RunIncremental() => SeedAndProcess(timing: false);
+
+    private void SeedAndProcess(bool timing)
+    {
+        // Process concrete generic instances. Start with the liveness-filtered set, then use
+        // a push-based queue to pick up types discovered during body rewriting
+        // (e.g. ListEmitter[Byte] registered by GenericAstRewriter when rewriting List[Byte].$iter).
+        // Only types newly created by GetOrCreateResolution after tracking starts are enqueued —
+        // pre-existing phantom types (BTreeDictNode stubs etc.) never enter the queue.
+        var sw = timing ? Stopwatch.StartNew() : null;
+        int startCount = _processedTypes.Count;
+
+        // Seed with liveness-filtered instances + wrapper instances. On an incremental re-run the
+        // Add returns false for everything already processed, so these scans become cheap lookups.
+        foreach (TypeInfo concreteType in ctx.Registry.AllConcreteGenericInstances
+                     .Concat(second: ctx.Registry.AllConcreteWrapperInstances)
+                     .DistinctBy(type => type.FullName)
+                     .ToArray())
         {
-            processedTypes.Add(concreteType.FullName);
-            ProcessConcreteType(concreteType);
+            if (_processedTypes.Add(concreteType.FullName))
+                ProcessConcreteType(concreteType);
         }
 
         // One-time pass over ALL concrete types in _resolutions that weren't in the liveness set.
@@ -107,7 +131,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         // Materialize to a list first — ProcessConcreteType modifies _resolutions during iteration.
         foreach (TypeInfo preExisting in ctx.Registry.AllConcreteGenericInstancesUnfiltered.ToList())
         {
-            if (!processedTypes.Add(preExisting.FullName)) continue;
+            if (!_processedTypes.Add(preExisting.FullName)) continue;
             ProcessConcreteType(preExisting);
         }
 
@@ -116,7 +140,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         // but live in _wrapperResolutions and aren't enqueued by NotifyConcreteRegistration.
         foreach (TypeInfo preExisting in ctx.Registry.AllConcreteWrapperInstancesUnfiltered.ToList())
         {
-            if (!processedTypes.Add(preExisting.FullName)) continue;
+            if (!_processedTypes.Add(preExisting.FullName)) continue;
             ProcessConcreteType(preExisting);
         }
 
@@ -132,7 +156,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             {
                 foreach (TypeInfo newType in discovered)
                 {
-                    if (!processedTypes.Add(newType.FullName)) continue;
+                    if (!_processedTypes.Add(newType.FullName)) continue;
                     ProcessConcreteType(newType);
                     madeProgress = true;
                 }
@@ -144,7 +168,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             // rewriting List[Text] forwarder bodies.
             foreach (TypeInfo wrapper in ctx.Registry.AllConcreteWrapperInstancesUnfiltered.ToList())
             {
-                if (!processedTypes.Add(wrapper.FullName)) continue;
+                if (!_processedTypes.Add(wrapper.FullName)) continue;
                 ProcessConcreteType(wrapper);
                 madeProgress = true;
             }
@@ -154,7 +178,7 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         {
             sw!.Stop();
             Console.Error.WriteLine(value:
-                $"[SA]     GMP initial reachable types: {initialInstances.Length} + {processedTypes.Count - initialInstances.Length} discovered ({sw.ElapsedMilliseconds} ms)");
+                $"[SA]     GMP reachable types: {_processedTypes.Count} ({_processedTypes.Count - startCount} new) ({sw.ElapsedMilliseconds} ms)");
         }
 
         // Scan built bodies for method-generic call sites (e.g. $getitem[U64]! called from
@@ -164,7 +188,116 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
         ScanAndRegisterMethodGenericCallResolutions();
 
         ProcessResolvedMethodGenericRoutines();
+
+        // Liveness expansion across the bodies emitted above. RoutineReachabilityPass ran BEFORE
+        // ProtocolDefaultImplLoweringPass synthesized the iterator-adapter bodies, so the nested
+        // adapter/emitter types those bodies construct and iterate (e.g. SelectIterator and its
+        // SelectEmitter, reached only through a chained `list.where(..).select(..)`) were never
+        // seeded as live owners, and the universal `hijack` instances they call were never seeded
+        // as live routines. Both were then silently gated out, leaving undefined symbols at link.
+        // Walk the emitted (=live) bodies, enliven every concrete type they reference and every
+        // routine they call, and re-process — iterating to a fixed point as newly-emitted bodies
+        // surface deeper layers of the adapter chain.
+        ExpandLivenessThroughEmittedBodies();
+
         EmitGenericDefBuilderServiceBodies();
+    }
+
+    /// <summary>
+    /// Propagates liveness through the bodies GMP already emitted, then emits the routines/types
+    /// that become reachable as a result. Needed because <see cref="RoutineReachabilityPass"/> runs
+    /// before <see cref="ProtocolDefaultImplLoweringPass"/>, so types/routines reachable only through
+    /// the synthesized iterator-adapter chain were never marked live and got gated out. A fixed-point
+    /// loop is required: enlivening one layer (e.g. <c>SelectIterator</c>) emits its <c>$iter</c>,
+    /// whose body references the next layer (<c>SelectEmitter</c>), and so on.
+    /// </summary>
+    private void ExpandLivenessThroughEmittedBodies()
+    {
+        // Both gates empty means fan-out mode (no liveness filtering) — everything is already emitted.
+        if (ctx.LiveOwnerTypeNames.Count == 0 && ctx.LiveRoutineKeys.Count == 0)
+            return;
+
+        // Walk each emitted body at most once across the whole fixed point (not once per round) —
+        // re-walking every body every round, plus re-running ProcessResolvedMethodGenericRoutines,
+        // is quadratic and stalls compilation on a large stdlib. New bodies emitted by a round are
+        // picked up in the next round's delta. _walkedBodyKeys is instance state so a later
+        // RunIncremental pass only walks bodies synthesized since the last pass.
+        int guard = 0;
+        bool changed = true;
+        while (changed && guard++ < 100)
+        {
+            changed = false;
+            var newOwners = new Dictionary<string, TypeInfo>(StringComparer.Ordinal);
+            bool registeredRoutine = false;
+
+            foreach ((string bodyKey, MonomorphizedBody mb) in ctx.InstantiatedGenericBodies.ToList())
+            {
+                if (!_walkedBodyKeys.Add(item: bodyKey) || mb.Ast?.Body == null) continue;
+                AstWalker.WalkExpressions(root: mb.Ast.Body, visit: expr =>
+                {
+                    CollectConcreteOwnerTypes(t: expr.ResolvedType, sink: newOwners);
+                    if (expr is CreatorExpression creator)
+                        CollectConcreteOwnerTypes(t: creator.ConstructedType, sink: newOwners);
+                    // A routine CALLED from an emitted body is reachable. This covers universal
+                    // methods (e.g. WhereIterator[..].hijack, whose generic-def owner is `T`) that
+                    // ProcessConcreteType never emits because they aren't owned by the receiver's
+                    // generic definition.
+                    if (expr is CallExpression { ResolvedRoutine: { } rr }
+                        && ctx.LiveRoutineKeys.Count > 0
+                        && ctx.LiveRoutineKeys.Add(item: rr.RegistryKey))
+                    {
+                        if (rr.GenericDefinition != null
+                            && !ctx.InstantiatedGenericBodies.ContainsKey(rr.RegistryKey)
+                            && !ctx.VariantBodies.ContainsKey(rr.RegistryKey))
+                        {
+                            ctx.Registry.RegisterRoutineResolution(resolvedMethod: rr);
+                            registeredRoutine = true;
+                        }
+                        changed = true;
+                    }
+                });
+            }
+
+            foreach ((string fullName, TypeInfo type) in newOwners)
+            {
+                if (ctx.LiveOwnerTypeNames.Add(item: fullName))
+                {
+                    _processedTypes.Add(item: fullName);
+                    ProcessConcreteType(type);
+                    changed = true;
+                }
+            }
+
+            // Drain types created while rewriting the bodies just emitted.
+            List<TypeInfo> discovered;
+            while ((discovered = ctx.Registry.DrainGmpDiscoveryQueue()).Count > 0)
+                foreach (TypeInfo newType in discovered)
+                {
+                    if (!_processedTypes.Add(item: newType.FullName)) continue;
+                    ProcessConcreteType(newType);
+                    changed = true;
+                }
+
+            // Only re-run the (expensive) resolved-routine builder when this round actually
+            // registered a new resolution to build — e.g. a universal-method instance.
+            if (registeredRoutine)
+                ProcessResolvedMethodGenericRoutines();
+        }
+    }
+
+    /// <summary>
+    /// Adds every concrete (fully-resolved) generic owner type reachable from <paramref name="t"/>
+    /// — including those nested in its type arguments — to <paramref name="sink"/>. Generic
+    /// definitions and types with unresolved parameters are ignored.
+    /// </summary>
+    private static void CollectConcreteOwnerTypes(TypeInfo? t, Dictionary<string, TypeInfo> sink)
+    {
+        if (t == null || HasUnresolvedTypeArgs(t)) return;
+        if (GetGenericBase(t) != null || t is WrapperTypeInfo)
+            sink.TryAdd(key: t.FullName, value: t);
+        if (t.TypeArguments is { Count: > 0 } args)
+            foreach (TypeInfo arg in args)
+                CollectConcreteOwnerTypes(t: arg, sink: sink);
     }
     // Per-type processing
 
@@ -249,7 +382,17 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
                 stringSubs: stringSubs);
 
             if (body != null)
+            {
                 ctx.InstantiatedGenericBodies[key] = body;
+                // Keep codegen's Phase-B live gate in sync with GMP's wired-routine bypass.
+                // LLVMCodeGenerator emits an instantiated body only when its key is in the live set,
+                // with NO wired bypass — so a wired routine emitted here for a live owner that
+                // post-dates RoutineReachabilityPass (e.g. try_next on a chained iterator emitter
+                // like SelectEmitter[S64, S64, ListEmitter[S64]]) was never seeded and would be
+                // silently dropped at codegen. Marking the key live closes that gap; non-wired
+                // emissions already have a live key, so this is a no-op for them.
+                ctx.LiveRoutineKeys.Add(item: key);
+            }
         }
     }
 

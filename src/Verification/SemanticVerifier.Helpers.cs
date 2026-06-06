@@ -449,6 +449,43 @@ public sealed partial class SemanticVerifier
     }
 
     /// <summary>
+    /// Re-types lambda arguments after a method-generic routine has been resolved. The initial
+    /// <see cref="AnalyzeCallArguments"/> pass runs before method-level generics are inferred, so a
+    /// lambda parameter bound to a method generic keeps it unresolved — e.g. `acc` in
+    /// <c>accumulate[U](combiner: Routine[(U,T),U])</c> stays <c>U</c> rather than the inferred
+    /// <c>S64</c>. Re-analyzing the lambda against the resolved parameter type rewrites
+    /// <c>lambda.ResolvedType</c> with concrete parameter types so the post-processing lambda-lift
+    /// mangles a defined symbol instead of one carrying an unbound generic.
+    /// </summary>
+    private void ReanalyzeLambdaArguments(RoutineInfo resolvedMethod, List<Expression> arguments,
+        TypeSymbol? callObjectType)
+    {
+        IReadOnlyList<ParameterInfo> parameters = resolvedMethod.Parameters;
+        foreach (Expression argExpr in arguments)
+        {
+            Expression inner = argExpr is NamedArgumentExpression nae ? nae.Value : argExpr;
+            if (inner is not LambdaExpression) continue;
+
+            // Named arguments match by parameter name; a bare positional lambda matches the (single)
+            // Routine-typed parameter — robust against the implicit `me` receiver offset.
+            ParameterInfo? param = argExpr is NamedArgumentExpression named
+                ? parameters.FirstOrDefault(predicate: p => p.Name == named.Name)
+                : parameters.FirstOrDefault(predicate: p => p.Type is RoutineTypeInfo);
+            if (param?.Type is not RoutineTypeInfo) continue;
+
+            TypeSymbol paramType = param.Type;
+            // Owner-level generics (T) are substituted the same way AnalyzeCallArguments does, so a
+            // `Routine[(U,T),U]` parameter is fully concrete once both U (method) and T (owner) bind.
+            if (callObjectType != null && resolvedMethod.OwnerType is { IsGenericDefinition: true })
+                paramType = SubstituteOwnerGenerics(paramType: paramType,
+                    lookupType: callObjectType,
+                    ownerType: resolvedMethod.OwnerType) ?? paramType;
+
+            AnalyzeExpression(expression: inner, expectedType: paramType);
+        }
+    }
+
+    /// <summary>
     /// Rewrites `show(x)` / `alert(x)` arguments in-place when `x` is a copy-restricted
     /// wrapper (Owned, Retained, Tracked, ...). Each such argument becomes `x.$represent()`
     /// (for show) or `x.$diagnose()` (for alert). The display protocols guarantee `@readonly`,
@@ -547,6 +584,29 @@ public sealed partial class SemanticVerifier
         if (source.Category == TypeCategory.Error || target.Category == TypeCategory.Error)
         {
             return true;
+        }
+
+        // Function-type (lambda) compatibility with return-type COVARIANCE: a lambda returning a
+        // concrete type is assignable to a parameter expecting a supertype of that return — e.g.
+        // `select_many[S64](transform: x => (1 to x).List())` produces `Routine[(S64,), List[S64]]`
+        // for a `Routine[(S64,), Iterable[S64]]` parameter, and `List[S64]` obeys `Iterable[S64]`.
+        // Parameter types must line up (the lambda was analyzed against the expected param types, so
+        // they already match — accept either assignment direction for robustness).
+        if (source is RoutineTypeInfo srcRoutine && target is RoutineTypeInfo tgtRoutine)
+        {
+            if (srcRoutine.ParameterTypes.Count != tgtRoutine.ParameterTypes.Count)
+                return false;
+            for (int i = 0; i < srcRoutine.ParameterTypes.Count; i++)
+            {
+                if (!IsAssignableTo(source: srcRoutine.ParameterTypes[index: i],
+                        target: tgtRoutine.ParameterTypes[index: i])
+                    && !IsAssignableTo(source: tgtRoutine.ParameterTypes[index: i],
+                        target: srcRoutine.ParameterTypes[index: i]))
+                    return false;
+            }
+            if (srcRoutine.ReturnType == null || tgtRoutine.ReturnType == null)
+                return srcRoutine.ReturnType == null && tgtRoutine.ReturnType == null;
+            return IsAssignableTo(source: srcRoutine.ReturnType, target: tgtRoutine.ReturnType);
         }
 
         // Variant auto-wrap: any value whose type matches a variant member type is

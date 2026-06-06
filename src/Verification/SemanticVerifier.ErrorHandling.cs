@@ -283,6 +283,36 @@ public sealed partial class SemanticVerifier
                 return typeExpr.Name;
             }
 
+            // `Routine[(params), ret]`: RoutineTypeInfo.Name renders the parameter-list tuple
+            // PARENTHESIZED — `(T,)` for one element, `(A, B)` for several — and the return type
+            // directly, NOT as `Tuple[...]` (see RoutineTypeInfo.BuildName). The AST instead parses
+            // the param-list as a generic `Tuple[...]`. Render the Routine form to match exactly, so
+            // lambda-taking protocol-extension methods (Iterable[T].where/select/accumulate/...) match
+            // their registered RoutineInfo signature; otherwise their bodies aren't collected and
+            // ProtocolDefaultImplLoweringPass can't synthesize per-implementer instances → "undefined
+            // symbol" at codegen. Scoped to the Routine param-list ONLY — a standalone `Tuple[...]`
+            // parameter keeps its `Tuple[...]` rendering (which matches TupleTypeInfo.Name).
+            if (typeExpr.Name == "Routine" && typeExpr.GenericArguments.Count == 2)
+            {
+                TypeExpression paramTupleExpr = typeExpr.GenericArguments[index: 0];
+                string paramList;
+                if (paramTupleExpr.Name == "Tuple"
+                    && paramTupleExpr.GenericArguments is { Count: > 0 } tupleArgs)
+                {
+                    paramList = tupleArgs.Count == 1
+                        ? "(" + GetAstTypeName(typeExpr: tupleArgs[index: 0]) + ",)"
+                        : "(" + string.Join(separator: ", ",
+                            values: tupleArgs.Select(GetAstTypeName)) + ")";
+                }
+                else
+                {
+                    // 0-parameter routine type: RoutineTypeInfo.BuildName renders "Blank".
+                    paramList = GetAstTypeName(typeExpr: paramTupleExpr);
+                }
+
+                return $"Routine[{paramList}, {GetAstTypeName(typeExpr: typeExpr.GenericArguments[index: 1])}]";
+            }
+
             return $"{typeExpr.Name}[{string.Join(separator: ",",
                 values: typeExpr.GenericArguments.Select(GetAstTypeName))}]";
         }

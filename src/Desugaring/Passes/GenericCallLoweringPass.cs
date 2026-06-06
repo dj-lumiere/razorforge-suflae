@@ -360,6 +360,31 @@ internal sealed class GenericCallLoweringPass
                 return ReferenceEquals(val, named.Value) ? expr : named with { Value = val };
             }
 
+            case InsertedTextExpression inserted:
+            {
+                // f-string interpolations: a `{ expr }` part can hold a GenericMethodCallExpression
+                // (e.g. `f"…{words.min_by[U64](selector: …)}…"`). Without recursing into the parts
+                // that GMCE survives to codegen and trips the "GenericMethodCallExpression survived
+                // postprocessing" guard.
+                bool partChanged = false;
+                var newParts = new List<InsertedTextPart>(capacity: inserted.Parts.Count);
+                foreach (InsertedTextPart part in inserted.Parts)
+                {
+                    if (part is ExpressionPart ep)
+                    {
+                        Expression loweredPart = LowerExpression(ep.Expression);
+                        if (!ReferenceEquals(loweredPart, ep.Expression))
+                        {
+                            partChanged = true;
+                            newParts.Add(item: ep with { Expression = loweredPart });
+                            continue;
+                        }
+                    }
+                    newParts.Add(item: part);
+                }
+                return partChanged ? inserted with { Parts = newParts } : expr;
+            }
+
             default:
                 return expr;
         }

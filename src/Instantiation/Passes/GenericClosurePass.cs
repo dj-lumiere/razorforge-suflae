@@ -41,18 +41,35 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
         // Lower protocol-default-impl routines (e.g. Iterable[Text].join) to per-implementer
         // routines BEFORE GMP, so the synthesized implementer-owned bodies flow through the
         // normal monomorphization machinery.
-        new ProtocolDefaultImplLoweringPass(ctx: ctx).Run();
-        // Re-sync adapter with newly-synthesized entries.
-        foreach ((string key, MonomorphizedBody body) in ctx.InstantiatedGenericBodies)
-        {
-            adapter.InstantiatedGenericBodies[key] = body;
-        }
-        foreach (string key in ctx.LiveRoutineKeys)
-        {
-            adapter.LiveRoutineKeys.Add(item: key);
-        }
+        var pdil = new ProtocolDefaultImplLoweringPass(ctx: ctx);
+        pdil.Run();
+        SyncCtxToAdapter(ctx: ctx, adapter: adapter);
 
-        new GenericMonomorphizationPass(ctx: adapter).RunGlobal();
+        // One GMP instance reused across the fixed point so its processed-type / walked-body sets
+        // persist — a re-run only does work for newly-synthesized bodies.
+        var gmp = new GenericMonomorphizationPass(ctx: adapter);
+        gmp.RunGlobal();
+
+        // PDIL → GMP fixed point. PDIL runs before GMP, so a protocol-default-impl call that appears
+        // ONLY inside a GMP-monomorphized body — e.g. `me.source.as_entity().List()` inside
+        // `ReverseIterator[T,S].$iter`, or `.Set()` inside `IntersectIterator.$iter` — was never seen
+        // by PDIL and its per-implementer body (`List[S64].List`/`.Set`) was never synthesized,
+        // leaving an undefined symbol at link. Re-run PDIL over the now-larger body set; if it
+        // synthesizes anything new, fold it in with a cheap incremental GMP pass and repeat. Most
+        // (non-iterator) programs converge immediately — the second PDIL pass finds nothing.
+        int guard = 0;
+        while (guard++ < 16)
+        {
+            SyncAdapterToCtx(adapter: adapter, ctx: ctx);
+            if (!pdil.Run())
+                break;
+            SyncCtxToAdapter(ctx: ctx, adapter: adapter);
+            // The collector bodies PDIL just synthesized (List[S64].List/.Set) are usually
+            // self-contained, but a freshly-synthesized body may reference an as-yet-unmonomorphized
+            // type — fold those in with a cheap incremental GMP pass (its persisted processed-type /
+            // walked-body sets keep the re-run bounded to NEW work).
+            gmp.RunIncremental();
+        }
         // ControlFlowLowering for instantiated bodies: protocol-default-impl clones (from
         // ProtocolDefaultImplLoweringPass above) carry raw `for` loops from the stdlib AST
         // that never went through Phase 4 desugaring. Lower them before subsequent passes.
@@ -113,5 +130,42 @@ internal sealed class GenericClosurePass(InstantiationContext ctx)
         {
             ctx.InstantiatedGenericBodies[key] = body;
         }
+
+        // Propagate liveness discovered DURING monomorphization back to the shared context.
+        // GMP expands LiveRoutineKeys/LiveOwnerTypeNames while emitting bodies for types that
+        // only became reachable through the synthesized iterator-adapter chain (which post-dates
+        // RoutineReachabilityPass). Codegen reads these sets from the outer InstantiationContext
+        // (result.LiveRoutineKeys) to gate Phase-B emission, so without copying the adapter's
+        // additions back, the freshly-emitted bodies (e.g. chained-emitter try_next) would be
+        // silently dropped at codegen, leaving undefined symbols at link.
+        foreach (string key in adapter.LiveRoutineKeys)
+            ctx.LiveRoutineKeys.Add(item: key);
+        foreach (string ownerName in adapter.LiveOwnerTypeNames)
+            ctx.LiveOwnerTypeNames.Add(item: ownerName);
+    }
+
+    /// <summary>Copies the monomorphization-relevant state from the shared context into the GMP adapter.</summary>
+    private static void SyncCtxToAdapter(InstantiationContext ctx, DesugaringContext adapter)
+    {
+        foreach ((string key, MonomorphizedBody body) in ctx.InstantiatedGenericBodies)
+            adapter.InstantiatedGenericBodies[key] = body;
+        foreach (string key in ctx.LiveRoutineKeys)
+            adapter.LiveRoutineKeys.Add(item: key);
+        foreach (string ownerName in ctx.LiveOwnerTypeNames)
+            adapter.LiveOwnerTypeNames.Add(item: ownerName);
+    }
+
+    /// <summary>
+    /// Copies GMP output (and the liveness it expanded) from the adapter back into the shared context,
+    /// so the next ProtocolDefaultImplLoweringPass pass walks the freshly-monomorphized bodies.
+    /// </summary>
+    private static void SyncAdapterToCtx(DesugaringContext adapter, InstantiationContext ctx)
+    {
+        foreach ((string key, MonomorphizedBody body) in adapter.InstantiatedGenericBodies)
+            ctx.InstantiatedGenericBodies[key] = body;
+        foreach (string key in adapter.LiveRoutineKeys)
+            ctx.LiveRoutineKeys.Add(item: key);
+        foreach (string ownerName in adapter.LiveOwnerTypeNames)
+            ctx.LiveOwnerTypeNames.Add(item: ownerName);
     }
 }

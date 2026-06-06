@@ -40,33 +40,71 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
     private readonly Dictionary<(string ProtoKey, string ImplKey), RoutineInfo> _synthesized =
         new();
 
-    public void Run()
+    /// <summary>
+    /// Synthesizes per-implementer protocol-default-impl bodies for every call site reachable from
+    /// the current body set, iterating to a local fixed point. Returns <c>true</c> if any new body
+    /// was synthesized — the caller re-runs GMP + this pass so that protocol-default calls appearing
+    /// only inside GMP-monomorphized bodies (e.g. <c>source.List()</c> inside <c>ReverseIterator.$iter</c>)
+    /// are also lowered.
+    /// </summary>
+    /// <summary>
+    /// Bodies already scanned (by reference). Persists across Run() calls AND across this Run's
+    /// fixed-point rounds so a post-GMP re-run only walks bodies synthesized/monomorphized since the
+    /// last pass — re-walking the entire (post-GMP) body set every round is the dominant cost and made
+    /// the PDIL→GMP fixed point unusably slow. A body's protocol-default call sites are resolvable on
+    /// first scan (monomorphized receivers are concrete), so re-scanning never surfaces new work.
+    /// </summary>
+    private readonly HashSet<Statement> _walkedBodies =
+        new(comparer: ReferenceEqualityComparer.Instance);
+
+    public bool Run()
     {
         // Iterate until fixed point: synthesizing per-implementer bodies may surface new
-        // call sites (the cloned body has its own protocol-default-impl calls).
+        // call sites (the cloned body has its own protocol-default-impl calls). Each round processes
+        // only the bodies not yet scanned, so the work is bounded by the delta.
         bool changed;
+        bool synthesizedAny = false;
         do
         {
-            changed = DiscoverAndSynthesize();
-            if (changed) RewriteCallSites();
+            var freshBodies = EnumerateLiveRoutineBodies()
+                .Where(predicate: b => !_walkedBodies.Contains(item: b))
+                .ToList();
+            if (freshBodies.Count == 0) break;
+
+            changed = DiscoverAndSynthesize(bodies: freshBodies);
+            if (changed)
+            {
+                synthesizedAny = true;
+                RewriteCallSites(bodies: freshBodies);
+            }
+            foreach (Statement b in freshBodies) _walkedBodies.Add(item: b);
         } while (changed);
+        return synthesizedAny;
     }
 
     /// <summary>
-    /// Walks every reachable routine body looking for calls to protocol-default-impl routines.
+    /// Walks the supplied routine bodies looking for calls to protocol-default-impl routines.
     /// For each unique (protocolRoutine, implementer) pair not yet synthesized, creates the
     /// per-implementer RoutineInfo, clones the AST body, registers both with the registry
     /// and the instantiation context.
     /// </summary>
-    private bool DiscoverAndSynthesize()
+    private bool DiscoverAndSynthesize(IReadOnlyList<Statement> bodies)
     {
         bool added = false;
-        foreach (Statement body in EnumerateLiveRoutineBodies())
+        foreach (Statement body in bodies)
         {
             AstWalker.WalkExpressions(root: body, visit: expr =>
             {
-                if (expr is not CallExpression ce) return;
-                if (!TryResolveProtocolDefaultImpl(ce: ce, protoRoutine: out RoutineInfo? pr,
+                // Handle both the lowered call form and the still-generic method-call form: explicit
+                // method type args (e.g. `select_many[S64](…)`) reach PDIL as a
+                // GenericMethodCallExpression because GenericCallLoweringPass runs AFTER PDIL. Without
+                // this its per-implementer body (List[S64].select_many) is never synthesized.
+                if (!TryGetProtocolDefaultCallParts(expr: expr,
+                        resolvedRoutine: out RoutineInfo? rr0, receiverType: out TypeInfo? recvType0,
+                        rebind: out _))
+                    return;
+                if (!TryResolveProtocolDefaultImpl(resolvedRoutine: rr0, receiverResolvedType: recvType0,
+                        protoRoutine: out RoutineInfo? pr,
                         implementer: out TypeInfo? implOrNull) || pr == null || implOrNull == null)
                     return;
                 TypeInfo impl = implOrNull;
@@ -77,7 +115,7 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
                 // instead generate the body FOR `rr` directly — substituting the protocol's own params
                 // (T→Text) AND the method generics (U→S64, S2→List[S64]) — keyed by rr's own
                 // RegistryKey (which is exactly the symbol the call site emits).
-                RoutineInfo rr = ce.ResolvedRoutine!;
+                RoutineInfo rr = rr0!;
                 // pr.GenericParameters lists the protocol owner's params first (e.g. T) then the
                 // method-level params (U, S2); rr.TypeArguments holds only the method args. Align them
                 // from the END so the trailing method generics bind, while the owner param (T) is
@@ -173,23 +211,29 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
     }
 
     /// <summary>
-    /// Second-pass walk: rebinds every <c>ResolvedRoutine</c> that still points at a
-    /// protocol-default-impl routine over to the corresponding per-implementer synthesized routine.
+    /// Second-pass walk over the supplied bodies: rebinds every <c>ResolvedRoutine</c> that still
+    /// points at a protocol-default-impl routine over to the corresponding per-implementer routine.
+    /// Only the bodies scanned this round need rebinding — a call site to a routine synthesized this
+    /// round lives in one of those bodies (it is what triggered the synthesis).
     /// </summary>
-    private void RewriteCallSites()
+    private void RewriteCallSites(IReadOnlyList<Statement> bodies)
     {
-        foreach (Statement body in EnumerateLiveRoutineBodies())
+        foreach (Statement body in bodies)
         {
             AstWalker.WalkExpressions(root: body, visit: expr =>
             {
-                if (expr is not CallExpression ce) return;
-                if (!TryResolveProtocolDefaultImpl(ce: ce, protoRoutine: out RoutineInfo? pr,
+                if (!TryGetProtocolDefaultCallParts(expr: expr,
+                        resolvedRoutine: out RoutineInfo? rr, receiverType: out TypeInfo? recvType,
+                        rebind: out Action<RoutineInfo> rebind))
+                    return;
+                if (!TryResolveProtocolDefaultImpl(resolvedRoutine: rr, receiverResolvedType: recvType,
+                        protoRoutine: out RoutineInfo? pr,
                         implementer: out TypeInfo? impl) || pr == null || impl == null)
                     return;
                 if (_synthesized.TryGetValue(key: (pr.RegistryKey, impl.FullName),
                         value: out RoutineInfo? newRoutine))
                 {
-                    ce.ResolvedRoutine = newRoutine;
+                    rebind(newRoutine);
                 }
             });
         }
@@ -210,14 +254,42 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
     /// Returns the protocol body source as <paramref name="protoRoutine"/> so synthesis keys both
     /// shapes to the same per-implementer routine.
     /// </summary>
-    private bool TryResolveProtocolDefaultImpl(CallExpression ce, out RoutineInfo? protoRoutine,
-        out TypeInfo? implementer)
+    /// <summary>
+    /// Extracts the resolved routine, receiver type, and a rebind callback from a call-shaped
+    /// expression — either a lowered <see cref="CallExpression"/> (callee is a MemberExpression) or a
+    /// still-generic <see cref="GenericMethodCallExpression"/> (explicit method type args, not yet
+    /// lowered by GenericCallLoweringPass, which runs after this pass). Returns false for anything else.
+    /// </summary>
+    private static bool TryGetProtocolDefaultCallParts(Expression expr,
+        out RoutineInfo? resolvedRoutine, out TypeInfo? receiverType, out Action<RoutineInfo> rebind)
+    {
+        switch (expr)
+        {
+            case CallExpression { Callee: MemberExpression mem } ce:
+                resolvedRoutine = ce.ResolvedRoutine;
+                receiverType = mem.Object.ResolvedType;
+                rebind = r => ce.ResolvedRoutine = r;
+                return true;
+            case GenericMethodCallExpression gmc:
+                resolvedRoutine = gmc.ResolvedRoutine;
+                receiverType = gmc.Object.ResolvedType;
+                rebind = r => gmc.ResolvedRoutine = r;
+                return true;
+            default:
+                resolvedRoutine = null;
+                receiverType = null;
+                rebind = static _ => { };
+                return false;
+        }
+    }
+
+    private bool TryResolveProtocolDefaultImpl(RoutineInfo? resolvedRoutine,
+        TypeInfo? receiverResolvedType, out RoutineInfo? protoRoutine, out TypeInfo? implementer)
     {
         protoRoutine = null;
         implementer = null;
-        if (ce.ResolvedRoutine is not { } rr) return false;
-        if (ce.Callee is not MemberExpression mem) return false;
-        if (mem.Object.ResolvedType is not { } recvType) return false;
+        if (resolvedRoutine is not { } rr) return false;
+        if (receiverResolvedType is not { } recvType) return false;
         TypeInfo impl = UnwrapWrappers(t: recvType);
         if (impl is ProtocolTypeInfo) return false; // implementer still unresolved
 
@@ -295,7 +367,10 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
         {
             yield return s;
         }
-        foreach (MonomorphizedBody mb in ctx.InstantiatedGenericBodies.Values)
+        // Snapshot: DiscoverAndSynthesize adds to ctx.InstantiatedGenericBodies as it walks, which
+        // would invalidate a live enumerator (this matters on the post-GMP PDIL re-run, when the map
+        // is already populated). New bodies from this pass are picked up by the outer fixed-point loop.
+        foreach (MonomorphizedBody mb in ctx.InstantiatedGenericBodies.Values.ToList())
         {
             yield return mb.Ast.Body;
         }
@@ -441,6 +516,25 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
         // keeps ProtocolSelf, which ContainsGenericParameter flags, making codegen skip the body.
         if (t is ProtocolSelfTypeInfo && subs.TryGetValue(key: "Me", value: out TypeInfo? meSub))
             return meSub;
+
+        // RoutineTypeInfo keeps its parameter/return types in dedicated properties, NOT in
+        // TypeArguments, so the generic recursion below misses them. Substitute each explicitly so
+        // a lambda parameter like `transform: Routine[(T,), U]` becomes `Routine[(S64,), S64]`.
+        // Without this the synthesized routine mangles to `...select(Routine[(T,), U])` and never
+        // matches the call site's `...select(Routine[(S64,), S64])` → "undefined symbol" at codegen.
+        if (t is RoutineTypeInfo rt)
+        {
+            var newParamTypes = rt.ParameterTypes
+                .Select(selector: p => SubstituteMe(t: p, subs: subs))
+                .ToList();
+            TypeInfo? newReturn = rt.ReturnType != null
+                ? SubstituteMe(t: rt.ReturnType, subs: subs)
+                : null;
+            return new RoutineTypeInfo(parameterTypes: newParamTypes, returnType: newReturn)
+            {
+                IsFailable = rt.IsFailable
+            };
+        }
 
         // Recurse into composite types (e.g. EnumerateIterator[T] → EnumerateIterator[Text],
         // List[Me] → List[List[Text]]) so the substituted param doesn't survive in a type argument.

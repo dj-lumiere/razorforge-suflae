@@ -502,6 +502,21 @@ public partial class LlvmCodeGenerator
         if (loweringKind == CallLoweringKind.Unknown)
             loweringKind = CallLoweringKind.DirectMemberRoutine;
 
+        // Dynamic call through a callable FIELD on the receiver (e.g. `me.predicate(item)` in
+        // a stdlib iterator emitter, where `predicate` is a `secret predicate: Routine[(T,), Bool]`
+        // field). SA classifies these as DynamicCall. There is no method named `predicate`; load
+        // the stored function pointer from the field and call it indirectly — mirroring the
+        // free-call indirect path for Routine-typed locals/params (see EmitRoutineCall).
+        // SA also stamps DynamicCall on its generic fallback for calls it couldn't resolve to a
+        // concrete routine (e.g. `deque.first()` where `first` is an ordinary method returning S64);
+        // those are NOT field invocations, so only take this path when the member is genuinely a
+        // Routine-typed value — otherwise fall through to normal method resolution.
+        if (loweringKind == CallLoweringKind.DynamicCall
+            && (member.ResolvedType ?? GetMemberType(member: member)) is RoutineTypeInfo)
+        {
+            return EmitDynamicMemberFieldCall(sb: sb, member: member, arguments: arguments);
+        }
+
         // Intercept var_name() -> inline the variable name from the receiver expression
         if (member.PropertyName == "var_name" && arguments.Count == 0)
         {
@@ -937,6 +952,59 @@ public partial class LlvmCodeGenerator
             ConsumeTransferredCallOwnership(arguments: arguments);
             return result;
         }
+    }
+
+    /// <summary>
+    /// Emits an indirect call through a callable FIELD on a receiver — the member form of
+    /// EmitRoutineCall's local-variable indirect path. Used for stdlib iterator emitters that
+    /// store a lambda in a field (e.g. <c>secret predicate: Routine[(T,), Bool]</c>) and invoke
+    /// it as <c>me.predicate(item)</c>. Loads the function pointer from the field, then calls it
+    /// indirectly with the supplied arguments.
+    /// </summary>
+    private string EmitDynamicMemberFieldCall(StringBuilder sb, MemberExpression member,
+        List<Expression> arguments)
+    {
+        TypeInfo? calleeType = member.ResolvedType ?? GetMemberType(member: member);
+        if (calleeType is not RoutineTypeInfo routineType)
+        {
+            throw new InvalidOperationException(
+                $"DynamicCall on member '.{member.PropertyName}' but the field's type is " +
+                $"'{calleeType?.FullName ?? "<null>"}', not a Routine type. " +
+                $"Routine: {_currentEmittingRoutine?.Name ?? "<unknown>"} " +
+                $"(owner: {_currentEmittingRoutine?.OwnerType?.Name ?? "none"}).");
+        }
+
+        // Load the function pointer stored in the field (Routine values are `ptr` in LLVM).
+        string fpVal = EmitMemberVariableAccess(sb: sb, expr: member);
+
+        var fpArgValues = new List<string>();
+        var fpArgTypes = new List<string>();
+        foreach (Expression arg in arguments)
+        {
+            string v = EmitExpression(sb: sb, expr: arg);
+            fpArgValues.Add(item: v);
+            // Match the named-struct parameter form the callee was declared with (see the
+            // local-variable indirect path in EmitRoutineCall for the rationale).
+            TypeInfo? argType = GetExpressionType(expr: arg);
+            fpArgTypes.Add(item: argType != null
+                ? GetParameterLlvmType(type: argType)
+                : GetExpressionLlvmType(expr: arg));
+        }
+
+        string retLlvm = routineType.ReturnType != null
+            ? GetLlvmType(type: routineType.ReturnType)
+            : "void";
+
+        string callArgs = BuildCallArgs(types: fpArgTypes, values: fpArgValues);
+        if (retLlvm == "void")
+        {
+            EmitLine(sb: sb, line: $"  call void {fpVal}({callArgs})");
+            return "undef";
+        }
+
+        string result = NextTemp();
+        EmitLine(sb: sb, line: $"  {result} = call {retLlvm} {fpVal}({callArgs})");
+        return result;
     }
 
     /// <summary>

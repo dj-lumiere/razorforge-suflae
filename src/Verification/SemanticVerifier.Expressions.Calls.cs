@@ -709,6 +709,36 @@ public sealed partial class SemanticVerifier
                         constraints: constraints);
                 }
 
+                // Named-argument overload disambiguation. LookupMethod returns one overload by name;
+                // when the call supplies a named argument that overload lacks — e.g.
+                // `get_count(predicate: …)` resolving to the zero-arg `get_count()` — prefer the
+                // overload whose parameters cover every named argument. This MUST run before the
+                // arguments are analyzed below: otherwise a callback argument is analyzed against a
+                // missing/wrong parameter type, collapses to <error>, and the later type-based
+                // overload retry can no longer recover the right method.
+                if (method != null && dispatchType != null && call.Arguments.Count > 0
+                    && call.Arguments.Any(predicate: a => a is NamedArgumentExpression))
+                {
+                    var providedNames = call.Arguments
+                        .OfType<NamedArgumentExpression>()
+                        .Select(selector: n => n.Name)
+                        .ToList();
+                    bool methodCoversNames = providedNames.All(predicate: n =>
+                        method.Parameters.Any(predicate: p => p.Name == n));
+                    if (!methodCoversNames)
+                    {
+                        var candidates = new List<RoutineInfo>();
+                        _registry.CollectMemberRoutineCandidates(type: dispatchType,
+                            methodName: callLookupName, candidates: candidates);
+                        RoutineInfo? byName = candidates.FirstOrDefault(predicate: c =>
+                            c.Parameters.Count == call.Arguments.Count
+                            && providedNames.All(predicate: n =>
+                                c.Parameters.Any(predicate: p => p.Name == n)));
+                        if (byName != null)
+                            method = byName;
+                    }
+                }
+
                 if (method is { IsGenericDefinition: false } && call.Arguments.Count > 0)
                 {
                     var resolvedArgTypes = new List<TypeSymbol>(capacity: call.Arguments.Count);
@@ -860,6 +890,16 @@ public sealed partial class SemanticVerifier
                         {
                             method = _registry.GetOrCreateRoutineResolution(genericDef: method,
                                 typeArguments: inferredMethodTypeArgs);
+                            // AnalyzeCallArguments above ran against the still-generic signature, so a
+                            // lambda argument whose parameter binds a method-level generic kept it
+                            // unresolved (e.g. `acc` in `accumulate[U](combiner: Routine[(U,T),U])`
+                            // stayed `U`). Now that the method generics are bound, re-analyze the
+                            // lambda arguments against the resolved parameter types so their
+                            // parameters become concrete — otherwise the lifted lambda mangles with an
+                            // unbound generic (`[lambda]...(U,S64)`) and codegen cannot emit it.
+                            ReanalyzeLambdaArguments(resolvedMethod: method,
+                                arguments: call.Arguments,
+                                callObjectType: dispatchType);
                         }
                     }
 

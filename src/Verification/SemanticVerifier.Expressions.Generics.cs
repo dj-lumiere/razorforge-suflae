@@ -147,14 +147,10 @@ public sealed partial class SemanticVerifier
         {
             generic.LoweringKind = ClassifyMethodCall(method: method);
 
-            foreach (Expression arg in generic.Arguments)
-            {
-                AnalyzeExpression(expression: arg);
-            }
-
-            ValidateExclusiveTokenUniqueness(arguments: generic.Arguments,
-                location: generic.Location);
-
+            // Resolve the method's generics from the explicit type arguments BEFORE analyzing the
+            // arguments, so a lambda argument whose parameter binds a method-level generic receives a
+            // concrete expected type (e.g. `select_many[S64](transform: x => …)` types `x` as S64
+            // instead of the unbound generic, which would collapse to <error> and cascade S503/S450/S505).
             if (method.IsGenericDefinition)
             {
                 // Owner-level generic params (e.g. T from Hijacked[T]) are bound by the receiver.
@@ -206,6 +202,15 @@ public sealed partial class SemanticVerifier
                     typeArguments: fullTypeArgs);
             }
 
+            // Analyze arguments against the resolved method (param types now concrete), so lambda
+            // parameters bound to method generics are typed correctly. AnalyzeCallArguments also binds
+            // named/positional args and applies any remaining owner-generic substitution.
+            AnalyzeCallArguments(routine: method, arguments: generic.Arguments,
+                location: generic.Location, callObjectType: objectType);
+
+            ValidateExclusiveTokenUniqueness(arguments: generic.Arguments,
+                location: generic.Location);
+
             generic.ResolvedRoutine = method;
             generic.LoweringKind = ClassifyMethodCall(method: method);
             generic.IsInFlight = method.IsInFlightReturn;
@@ -216,6 +221,22 @@ public sealed partial class SemanticVerifier
             }
 
             TypeSymbol returnType = method.ReturnType;
+
+            // Bind ProtocolSelf (`Me`) in the return type to the receiver. A protocol-extension method
+            // like `select_many[U] -> ?SelectManyIterator[T, U, Me]` leaves `Me` in its return; left
+            // unbound it leaks into the per-implementer collector symbol (SelectManyIterator[.., Me].List)
+            // and never resolves. Rebuild the resolution explicitly — a ProtocolSelf argument suppresses
+            // the IsGenericResolution flag, so the generic substitution helpers below skip it.
+            if (returnType.TypeArguments is { Count: > 0 } retArgs
+                && retArgs.Any(predicate: a => a is ProtocolSelfTypeInfo || a.Name == "Me")
+                && GetGenericDefinition(resolution: returnType) is { } retDef)
+            {
+                var boundArgs = retArgs
+                    .Select(selector: a =>
+                        a is ProtocolSelfTypeInfo || a.Name == "Me" ? objectType : a)
+                    .ToList();
+                returnType = _registry.GetOrCreateResolution(genericDef: retDef, typeArguments: boundArgs);
+            }
 
             // Substitute method's own generic params (U from obtain_as[U])
             // GenericParameters now contains only method-level params (owner-level params

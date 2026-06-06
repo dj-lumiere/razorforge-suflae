@@ -1120,6 +1120,15 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 Text: secretPrefix + field.Name + ": ",
                 Location: _synthLoc));
 
+            // Routine-typed fields (stored lambdas/function pointers in iterator adapters such as
+            // WhereIterator's `predicate`) have no $represent — emitting one yields an undefined
+            // `Routine[...].$represent` symbol at link time. Render a stable placeholder instead.
+            if (field.Type is RoutineTypeInfo)
+            {
+                parts.Add(new TextPart(Text: "<routine>", Location: _synthLoc));
+                continue;
+            }
+
             var fieldExpr = new MemberExpression(
                 Object: new IdentifierExpression(Name: "me", Location: _synthLoc)
                     { ResolvedType = ownerType },
