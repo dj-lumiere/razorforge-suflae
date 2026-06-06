@@ -71,6 +71,51 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
+    /// Materializes a lifted lambda as a heap closure object <c>{ fn_ptr, capture0, ... }</c> and
+    /// returns the pointer to it. Captured values are loaded from the current scope's locals at this
+    /// (capture) site. The closure is the Routine value: indirect calls load the function pointer
+    /// from field 0 and pass the closure pointer as the hidden leading argument.
+    /// </summary>
+    private string EmitClosureValue(StringBuilder sb, RoutineInfo lambda)
+    {
+        string clStruct = ClosureStructName(lambda: lambda);
+        string fnSym = $"@{MangleRoutineName(routine: lambda)}";
+
+        string sizeTemp = NextTemp();
+        EmitLine(sb: sb, line: $"  {sizeTemp} = getelementptr {clStruct}, ptr null, i32 1");
+        string size = NextTemp();
+        EmitLine(sb: sb, line: $"  {size} = ptrtoint ptr {sizeTemp} to i64");
+        string clPtr = NextTemp();
+        EmitLine(sb: sb, line: $"  {clPtr} = call ptr @rf_allocate_dynamic(i64 {size})");
+
+        // Field 0: the function pointer.
+        string fnFieldPtr = NextTemp();
+        EmitLine(sb: sb,
+            line: $"  {fnFieldPtr} = getelementptr {clStruct}, ptr {clPtr}, i32 0, i32 0");
+        EmitLine(sb: sb, line: $"  store ptr {fnSym}, ptr {fnFieldPtr}");
+
+        // Fields 1..n: the captured values, loaded from the locals live at this capture site.
+        if (lambda.ClosureCaptures != null)
+        {
+            for (int i = 0; i < lambda.ClosureCaptures.Count; i++)
+            {
+                (string capName, TypeInfo capType) = lambda.ClosureCaptures[index: i];
+                string capLlvm = GetLlvmType(type: capType);
+                string llvmName =
+                    _localVarLlvmNames.GetValueOrDefault(key: capName, defaultValue: capName);
+                string capVal = NextTemp();
+                EmitLine(sb: sb, line: $"  {capVal} = load {capLlvm}, ptr %{llvmName}.addr");
+                string capFieldPtr = NextTemp();
+                EmitLine(sb: sb,
+                    line: $"  {capFieldPtr} = getelementptr {clStruct}, ptr {clPtr}, i32 0, i32 {i + 1}");
+                EmitLine(sb: sb, line: $"  store {capLlvm} {capVal}, ptr {capFieldPtr}");
+            }
+        }
+
+        return clPtr;
+    }
+
+    /// <summary>
     /// Generates code for an identifier expression (variable reference).
     /// </summary>
     private string EmitIdentifier(StringBuilder sb, IdentifierExpression identifier)
@@ -98,6 +143,14 @@ public partial class LlvmCodeGenerator
                 routineType: routineType,
                 routine: out RoutineInfo? routine))
         {
+            // A lifted lambda referenced as a VALUE (passed as an argument, returned, stored) is
+            // materialized as a heap closure object so it can carry its captures and be called
+            // through the uniform closure ABI. A plain (non-lambda) routine reference stays a bare
+            // function-pointer symbol.
+            if (routine!.IsLambda)
+            {
+                return EmitClosureValue(sb: sb, lambda: routine);
+            }
             return $"@{MangleRoutineName(routine!)}";
         }
 

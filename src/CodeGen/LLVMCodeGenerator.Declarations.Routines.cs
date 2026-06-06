@@ -134,6 +134,29 @@ public partial class LlvmCodeGenerator
     /// <param name="routine">The routine declaration from AST.</param>
     /// <param name="preResolvedInfo">Optional pre-resolved routine metadata.</param>
     /// <param name="nameOverride">Optional mangled name override.</param>
+    /// <summary>
+    /// Returns the LLVM named-struct type for a lifted lambda's closure environment —
+    /// <c>%"Closure.&lt;liftedName&gt;" = type { ptr, &lt;capture types&gt; }</c> — declaring it on
+    /// first use. Field 0 is the function pointer; the captured values follow in
+    /// <see cref="RoutineInfo.ClosureCaptures"/> order.
+    /// </summary>
+    private string ClosureStructName(RoutineInfo lambda)
+    {
+        string name = $"%\"Closure.{lambda.Name}\"";
+        if (!_typeDeclarationsClosure.ContainsKey(key: name))
+        {
+            var fields = new List<string> { "ptr" };
+            if (lambda.ClosureCaptures != null)
+            {
+                foreach ((string _, TypeInfo capType) in lambda.ClosureCaptures)
+                    fields.Add(item: GetLlvmType(type: capType));
+            }
+            _typeDeclarationsClosure[key: name] =
+                $"{name} = type {{ {string.Join(separator: ", ", values: fields)} }}\n";
+        }
+        return name;
+    }
+
     private void GenerateRoutineDefinition(RoutineDeclaration routine,
         RoutineInfo? preResolvedInfo = null, string? nameOverride = null)
     {
@@ -244,6 +267,14 @@ public partial class LlvmCodeGenerator
 
         // Build parameter list with names
         var paramList = new List<string>();
+
+        // Closure ABI: every lifted lambda receives its closure object as a hidden leading
+        // `ptr %__cl` parameter (uniform whether or not it captures), so indirect calls through a
+        // Routine value can always pass the closure. The body's prologue loads captures from it.
+        if (routineInfo.IsLambda)
+        {
+            paramList.Add(item: "ptr %__cl");
+        }
 
         // For methods, add implicit 'me' parameter first
         // Skip 'me' for $create routines (static factories), common (type-level) routines, and void/Blank owner types
@@ -424,6 +455,28 @@ public partial class LlvmCodeGenerator
             if (param.Type is EntityTypeInfo)
             {
                 _localEntityVars.Add(item: (param.Name, paramPtr));
+            }
+        }
+
+        // Closure prologue: load each captured value out of the closure object (the hidden `%__cl`
+        // parameter) into a local so the body references it as an ordinary variable. The closure
+        // layout is `{ ptr fn, capture0, capture1, ... }`; captures start at field index 1.
+        if (routine.IsLambda && routine.ClosureCaptures is { Count: > 0 } closureCaptures)
+        {
+            string clStruct = ClosureStructName(lambda: routine);
+            for (int i = 0; i < closureCaptures.Count; i++)
+            {
+                (string capName, TypeInfo capType) = closureCaptures[index: i];
+                string capLlvm = GetLlvmType(type: capType);
+                string capPtr = NextTemp();
+                EmitLine(sb: sb,
+                    line: $"  {capPtr} = getelementptr {clStruct}, ptr %__cl, i32 0, i32 {i + 1}");
+                string capVal = NextTemp();
+                EmitLine(sb: sb, line: $"  {capVal} = load {capLlvm}, ptr {capPtr}");
+                string capAddr = $"%{capName}.addr";
+                EmitEntryAlloca(llvmName: capAddr, llvmType: capLlvm);
+                EmitLine(sb: sb, line: $"  store {capLlvm} {capVal}, ptr {capAddr}");
+                _localVariables[key: capName] = capType;
             }
         }
 

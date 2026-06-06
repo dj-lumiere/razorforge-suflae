@@ -146,6 +146,16 @@ public sealed class RoutineInfo
     /// <summary>Parameters of this routine.</summary>
     public List<ParameterInfo> Parameters { get; init; } = [];
 
+    /// <summary>
+    /// For lifted lambdas (<see cref="RoutineKind.Lambda"/>): the variables the lambda body captures
+    /// from its enclosing scope (name + type), in closure-field order. Drives closure conversion —
+    /// the lambda compiles to a heap closure <c>{ fn_ptr, capture0, capture1, ... }</c>; the lifted
+    /// function takes the closure pointer as a hidden leading parameter and loads each capture from it
+    /// in its prologue. Empty/null for non-capturing lambdas (which still get the hidden parameter so
+    /// the indirect-call ABI is uniform).
+    /// </summary>
+    public List<(string Name, TypeSymbol Type)>? ClosureCaptures { get; set; }
+
     /// <summary>Return type. Null means "not yet inferred" (transient during analysis). After body analysis, always Blank or a concrete type.</summary>
     public TypeSymbol? ReturnType { get; set; }
 

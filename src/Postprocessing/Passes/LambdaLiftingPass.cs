@@ -862,19 +862,22 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
         bool includeMe)
     {
         HashSet<string> localCaptures = CollectLocalCaptures(lambda, scope);
-        // given-declared captures are handled by LiftCapturingLambdaIife (IIFE path).
-        // Exclude them here — LiftLambda is only reached for escaping (non-IIFE) lambdas.
-        if (lambda.Captures != null)
-            localCaptures.ExceptWith(lambda.Captures);
-        if (localCaptures.Count > 0)
-        {
-            // SA has already reported this capture error. Return an error expression
-            // so the pipeline doesn't crash — codegen is skipped when SA errors exist.
-            return new IdentifierExpression(Name: "__capture_error__", Location: lambda.Location)
-            {
-                ResolvedType = ErrorTypeInfo.Instance
-            };
-        }
+        // Closure conversion: every enclosing-scope variable the body references (the same set SA
+        // validated against the `given` clause) travels in a heap closure. Preserve the declared
+        // `given` order where present, then append any others. Their types come from the resolved
+        // identifier nodes in the body.
+        var captureNameList = lambda.Captures != null
+            ? lambda.Captures.Where(predicate: localCaptures.Contains).ToList()
+            : localCaptures.ToList();
+        foreach (string capName in localCaptures)
+            if (!captureNameList.Contains(item: capName)) captureNameList.Add(item: capName);
+
+        Dictionary<string, TypeInfo> captureTypes =
+            CollectCaptureTypesFromBody(lambda.Body, captureNameList);
+        var closureCaptures = captureNameList
+            .Where(predicate: captureTypes.ContainsKey)
+            .Select(selector: n => (Name: n, Type: captureTypes[key: n]))
+            .ToList();
 
         if (includeMe && ContainsIdentifier(lambda.Body, "me"))
         {
@@ -940,7 +943,8 @@ internal sealed class LambdaLiftingPass(PostprocessingContext ctx)
             ModulePath = _currentModuleName?.Split('/').ToList(),
             GenericParameters = genericParameters,
             GenericConstraints = genericConstraints,
-            IsSynthesized = true
+            IsSynthesized = true,
+            ClosureCaptures = closureCaptures
         });
 
         return new IdentifierExpression(Name: liftedName, Location: lambda.Location)

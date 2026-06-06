@@ -41,18 +41,22 @@ public partial class LlvmCodeGenerator
             return intrinsicCall;
         }
 
-        // Indirect call through a local function-pointer variable (e.g., compare(a: x, b: y)
-        // where 'compare' is a parameter of type Routine[(T, T), Bool]).
+        // Indirect call through a local Routine-typed variable (e.g., compare(a: x, b: y) where
+        // 'compare' is a parameter of type Routine[(T, T), Bool]). The variable holds a CLOSURE
+        // pointer `{ fn_ptr, captures... }`: load the function pointer from field 0 and pass the
+        // closure pointer as the hidden leading argument (the uniform lambda ABI).
         if (_localVariables.TryGetValue(key: functionName, value: out TypeInfo? localType) &&
             localType is RoutineTypeInfo routineTypeInfo)
         {
             string llvmName =
                 _localVarLlvmNames.GetValueOrDefault(functionName, functionName);
+            string clVal = NextTemp();
+            EmitLine(sb: sb, line: $"  {clVal} = load ptr, ptr %{llvmName}.addr");
             string fpVal = NextTemp();
-            EmitLine(sb: sb, line: $"  {fpVal} = load ptr, ptr %{llvmName}.addr");
+            EmitLine(sb: sb, line: $"  {fpVal} = load ptr, ptr {clVal}");
 
-            var fpArgValues = new List<string>();
-            var fpArgTypes = new List<string>();
+            var fpArgValues = new List<string> { clVal };
+            var fpArgTypes = new List<string> { "ptr" };
             foreach (Expression arg in arguments)
             {
                 string v = EmitExpression(sb: sb, expr: arg);
@@ -974,11 +978,14 @@ public partial class LlvmCodeGenerator
                 $"(owner: {_currentEmittingRoutine?.OwnerType?.Name ?? "none"}).");
         }
 
-        // Load the function pointer stored in the field (Routine values are `ptr` in LLVM).
-        string fpVal = EmitMemberVariableAccess(sb: sb, expr: member);
+        // The field holds a CLOSURE pointer `{ fn_ptr, captures... }`. Load the closure, then the
+        // function pointer from field 0, and pass the closure pointer as the hidden leading argument.
+        string clVal = EmitMemberVariableAccess(sb: sb, expr: member);
+        string fpVal = NextTemp();
+        EmitLine(sb: sb, line: $"  {fpVal} = load ptr, ptr {clVal}");
 
-        var fpArgValues = new List<string>();
-        var fpArgTypes = new List<string>();
+        var fpArgValues = new List<string> { clVal };
+        var fpArgTypes = new List<string> { "ptr" };
         foreach (Expression arg in arguments)
         {
             string v = EmitExpression(sb: sb, expr: arg);
