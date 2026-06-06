@@ -3,7 +3,7 @@ module Core
 ### Represents the `Range` record.
 ### `Range[T]` describes a lazily iterated arithmetic progression between two bounds.
 ### :typeparam T: The type argument bound to `T`.
-record Range[T] obeys Iterable needs T obeys Comparable, Numeric
+record Range[T] obeys Iterable[T] needs T obeys Comparable, Numeric
   ### Stores the first value in the progression.
   start: T
   ### Stores the terminating bound.

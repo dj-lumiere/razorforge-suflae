@@ -4,34 +4,40 @@ module IterTools
 ### yields all values produced by each resulting inner iterable in sequence.
 ### :typeparam T: The source element type.
 ### :typeparam U: The output element type produced by each inner iterable.
+### :typeparam Sub: The CONCRETE inner-iterable type the transform returns (captured so the
+###   emitter dispatches `.List()` against a real type — RazorForge has no runtime dispatch, so a
+###   bare `Iterable[U]` transform return would leave `Iterable[U].List` unresolvable).
 ### :typeparam S: The concrete source iterable type (borrowed; enables build-time dispatch).
-entity SelectManyIterator[T, U, S] obeys Iterable[U]
+entity SelectManyIterator[T, U, Sub, S] obeys Iterable[U]
 needs S obeys Iterable[T]
-relates SelectManyEmitter[T, U, S/Iter] as Iter
+needs Sub obeys Iterable[U]
+relates SelectManyEmitter[T, U, Sub, S/Iter] as Iter
   ### Stores the source iterable (borrowed, not owned).
   secret source: Hijacked[S]
   ### Stores the transform routine applied to each source element.
-  secret transform: Routine[(T,), Iterable[U]]
+  secret transform: Routine[(T,), Sub]
 
 ### Returns the stateful iterator that drives the flat-map expansion.
-### :returns: The resulting `SelectManyEmitter[T, U, S/Iter]` value.
+### :returns: The resulting `SelectManyEmitter[T, U, Sub, S/Iter]` value.
 @readonly
-routine SelectManyIterator[T, U, S].$iter() -> ?SelectManyEmitter[T, U, S/Iter]
+routine SelectManyIterator[T, U, Sub, S].$iter() -> ?SelectManyEmitter[T, U, Sub, S/Iter]
   var buffer = List[U]()
   danger!
-    return SelectManyEmitter[T, U, S/Iter](source: me.source.as_entity().$iter(), transform: me.transform, buffer: steal buffer, buffer_index: 0u64)
+    return SelectManyEmitter[T, U, Sub, S/Iter](source: me.source.as_entity().$iter(), transform: me.transform, buffer: steal buffer, buffer_index: 0u64)
 
 ### Iterates over source elements, expanding each through a transform to yield a flat sequence.
 ### An internal buffer holds the current inner sequence; once drained the next outer element is fetched.
 ### :typeparam T: The source element type.
 ### :typeparam U: The element type yielded by each inner iterable.
+### :typeparam Sub: The concrete inner-iterable type returned by the transform.
 ### :typeparam SE: The concrete source iterator type (borrowed).
-entity SelectManyEmitter[T, U, SE] obeys Iterator[U]
+entity SelectManyEmitter[T, U, Sub, SE] obeys Iterator[U]
 needs SE obeys Iterator[T]
+needs Sub obeys Iterable[U]
   ### Stores the outer source iterator (borrowed).
   secret source: Hijacked[SE]
   ### Stores the transform routine used to expand each source element.
-  secret transform: Routine[(T,), Iterable[U]]
+  secret transform: Routine[(T,), Sub]
   ### Stores the current inner buffer of materialized inner-sequence values.
   secret buffer: List[U]
   ### Stores the read position within the current inner buffer.
@@ -41,7 +47,7 @@ needs SE obeys Iterator[T]
 ### The emitter calls `$next!` on the outer source whenever the buffer is exhausted.
 ### :returns: The resulting `U` value.
 @migratable
-routine SelectManyEmitter[T, U, SE].$next!() -> ?U
+routine SelectManyEmitter[T, U, Sub, SE].$next!() -> ?U
   danger!
     loop
       if me.buffer_index < me.buffer.count()
@@ -54,10 +60,13 @@ routine SelectManyEmitter[T, U, SE].$next!() -> ?U
       me.buffer_index = 0u64
 
 ### Returns a lazy adapter that applies `transform` to each element and yields values from all
-### resulting inner iterables in sequence.
+### resulting inner iterables in sequence. The inner-iterable type `Sub` is an explicit type
+### argument (e.g. `select_many[S64, List[S64]]`) because RazorForge resolves the dispatch on it
+### at build time.
 ### :param transform: The routine that maps each source element to an inner iterable.
-### :returns: The resulting `SelectManyIterator[T, U, Me]` value.
+### :returns: The resulting `SelectManyIterator[T, U, Sub, Me]` value.
 @readonly
-routine Iterable[T].select_many[U](transform: Routine[(T,), Iterable[U]]) -> ?SelectManyIterator[T, U, Me]
+routine Iterable[T].select_many[U, Sub](transform: Routine[(T,), Sub]) -> ?SelectManyIterator[T, U, Sub, Me]
+needs Sub obeys Iterable[U]
   danger!
-    return SelectManyIterator[T, U, Me](source: me.hijack(), transform: transform)
+    return SelectManyIterator[T, U, Sub, Me](source: me.hijack(), transform: transform)

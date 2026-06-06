@@ -32,7 +32,7 @@ entity ReverseEmitter[T] obeys Iterator[T]
 ### :returns: The resulting `T` value.
 routine ReverseEmitter[T].$next!() -> ?T
   if me.index == 0u64
-    breach!()
+    absent
   me.index = me.index - 1u64
   return me.buffer[me.index]
 

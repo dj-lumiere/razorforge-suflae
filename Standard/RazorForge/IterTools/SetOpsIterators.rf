@@ -41,7 +41,7 @@ needs T obeys Hashable, Comparable
   danger!
     loop
       var item = me.source.as_entity().$next!()
-      if me.other.contains(item)
+      if me.other.$contains(item)
         return item
 
 ### Returns a lazy adapter that keeps only elements also present in `other`.
@@ -95,7 +95,7 @@ needs T obeys Hashable, Comparable
   danger!
     loop
       var item = me.source.as_entity().$next!()
-      if not me.other.contains(item)
+      if not me.other.$contains(item)
         return item
 
 ### Returns a lazy adapter that suppresses all elements also found in `other`.
