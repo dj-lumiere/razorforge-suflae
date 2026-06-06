@@ -1,0 +1,31 @@
+module Tests/Stdlib/FlagsApi
+import IO/Console
+
+flags Permission
+  READ
+  WRITE
+  EXECUTE
+
+routine start()
+  # Single flag
+  var single = Permission.EXECUTE
+  show(f"single: {single}")
+  show(f"single (diagnose): {single:?}")
+
+  # Combination
+  var rw = Permission.READ and Permission.WRITE
+  show(f"rw: {rw}")
+  show(f"rw (diagnose): {rw:?}")
+
+  var all = Permission.READ and Permission.WRITE and Permission.EXECUTE
+  show(f"all: {all}")
+  show(f"all (diagnose): {all:?}")
+
+  # Equality
+  show(f"rw == READ and WRITE: {rw isonly (Permission.READ and Permission.WRITE)}")
+  show(f"rw == READ: {rw isonly Permission.READ}")
+  show(f"all == rw: {all isonly rw}")
+  show(f"all is rw: {all is rw}")
+
+  show("DONE")
+  return

@@ -1,0 +1,37 @@
+module Tests/Stdlib/ByteSizeApi
+import IO/Console
+
+routine start()
+  var b = ByteSize(bytes: 1024_u64)
+  show(f"1024B: {b}")
+  show(f"byte_size: {b.byte_size()}")
+  show(f"bit_size: {b.bit_size()}")
+  show(f"kib_size: {b.kib_size()}")
+  show(f"mib_size: {b.mib_size()}")
+
+  # Constructors
+  var tb = ByteSize.terabytes(n: 1_u64)
+  var tib = ByteSize.tebibytes(n: 1_u64)
+  show(f"1 TB byte_size: {tb.byte_size()}")
+  show(f"1 TiB byte_size: {tib.byte_size()}")
+
+  # Arithmetic
+  var c = ByteSize(bytes: 2048_u64)
+  show(f"1024B + 2048B byte_size: {(b + c).byte_size()}")
+  show(f"2048B - 1024B byte_size: {(c - b).byte_size()}")
+
+  # Comparison
+  show(f"b < c: {b < c}")
+  show(f"b == b: {b == b}")
+  show(f"c == c: {c == c}")
+
+  # Component-breakdown formatting via $represent
+  show(f"0 bytes: {ByteSize(bytes: 0_u64)}")
+  show(f"1500 bytes: {ByteSize(bytes: 1500_u64)}")
+  show(f"1 GiB + 1 byte: {ByteSize(bytes: 1_073_741_825_u64)}")
+  show(f"1 TiB exactly: {ByteSize.tebibytes(n: 1_u64)}")
+  show(f"1 PiB exactly: {ByteSize.pebibytes(n: 1_u64)}")
+  show(f"1 trillion bytes: {ByteSize(bytes: 1_000_000_000_000_u64)}")
+
+  show("DONE")
+  return

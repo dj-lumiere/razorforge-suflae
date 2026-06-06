@@ -1,0 +1,8 @@
+size: 3
+sd['alpha']: 1
+sd['bravo']: 2
+sd['charlie']: 3
+  key: DictEntry[Text, S64](key: alpha, value: 1)
+  key: DictEntry[Text, S64](key: bravo, value: 2)
+  key: DictEntry[Text, S64](key: charlie, value: 3)
+DONE

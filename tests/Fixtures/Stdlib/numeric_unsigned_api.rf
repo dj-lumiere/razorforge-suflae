@@ -1,0 +1,41 @@
+module Tests/Stdlib/NumericUnsignedApi
+import IO/Console
+
+# Exercises U8, U16, U32, U64, U128 — arithmetic, conversion, comparison, bit ops.
+routine start()
+  var u8: U8 = 200_u8
+  var u16: U16 = 50000_u16
+  var u32: U32 = 4_000_000_000_u32
+  var u64: U64 = 18_000_000_000_000_000_000_u64
+  var u128: U128 = 340_282_366_920_938_463_463_u128
+
+  show(f"U8:   {u8}")
+  show(f"U16:  {u16}")
+  show(f"U32:  {u32}")
+  show(f"U64:  {u64}")
+  show(f"U128: {u128}")
+
+  # Arithmetic
+  show(f"U8 add: {u8 + 5_u8}")
+  show(f"U16 sub: {u16 - 1_u16}")
+  show(f"U32 mul: {2_u32 * 100_u32}")
+  show(f"U64 div: {u64 // 1000_u64}")
+  show(f"U64 mod: {u64 % 7_u64}")
+
+  # Bitwise
+  show(f"U32 and: {0b1100_u32 & 0b1010_u32}")
+  show(f"U32 or: {0b1100_u32 | 0b1010_u32}")
+  show(f"U32 xor: {0b1100_u32 ^ 0b1010_u32}")
+  show(f"U32 shl: {1_u32 << 4_u32}")
+  show(f"U32 shr: {16_u32 >> 2_u32}")
+
+  # Comparison
+  show(f"U64 100 < 200: {100_u64 < 200_u64}")
+  show(f"U64 0 == 0: {0_u64 == 0_u64}")
+
+  # Conversion
+  var n: U64 = U64(from: 42_u8)
+  show(f"U8->U64 42: {n}")
+
+  show("DONE")
+  return

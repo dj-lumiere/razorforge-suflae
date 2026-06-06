@@ -1,0 +1,44 @@
+module Tests/Stdlib/NumericConversionFailuresApi
+import IO/Console
+
+# Conversion paths between numeric types. Narrowing conversions that overflow
+# should be observable; text-to-number parses should fail cleanly via try_/check_
+# variants when input is malformed.
+
+routine start()
+  # In-range narrowing
+  show(f"S64->S8 of 100: {S8(from: 100_s64)}")
+  show(f"S64->S32 of 12345: {S32(from: 12345_s64)}")
+
+  # Float -> int truncation
+  show(f"F64->S64 of 3.7: {S64(from: 3.7_f64)}")
+  show(f"F64->S64 of -3.7: {S64(from: -3.7_f64)}")
+
+  # Int -> float
+  show(f"S64->F64 of 42: {F64(from: 42_s64)}")
+
+  # Unsigned <-> signed in valid range
+  show(f"U64->S64 of 42: {S64(from: 42_u64)}")
+  show(f"S64->U64 of 42: {U64(from: 42_s64)}")
+
+  # Parse text -> integer (failable)
+  var t_ok = try_S64_from_text(text: "42")
+  var t_bad = try_S64_from_text(text: "not a number")
+  show(f"parse '42': {t_ok}")
+  show(f"parse 'not a number': {t_bad}")
+
+  when t_ok
+    is None => show("  parse 42 -> None (unexpected)")
+    else v  => show(f"  parse 42 -> {v}")
+  when t_bad
+    is None => show("  parse junk -> None (expected)")
+    else v  => show(f"  parse junk -> {v} (unexpected)")
+
+  show("DONE")
+  return
+
+# Helper failable that wraps a parse — exact stdlib spelling may differ; this
+# fixture documents the EXPECTED shape and surfaces the gap if the API isn't
+# present yet.
+routine S64_from_text!(text: Text) -> S64
+  return S64!(from_text: text)

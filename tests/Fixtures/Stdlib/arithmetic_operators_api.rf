@@ -1,0 +1,72 @@
+module Tests/Stdlib/ArithmeticOperatorsApi
+import IO/Console
+
+# The four arithmetic-overflow modes, exercised on S64/U64:
+#   +   checked  — throws IntegerOverflowError on overflow
+#   +!  unchecked — UB on overflow (LLVM nsw/nuw); ONLY in-range case tested
+#   +%  wrapping — defined as mod 2^N
+#   +^  clamping — saturate at type bounds
+# Same family applies to -, *, **. Unary - is always checked-throw.
+# Stdlib provides `add!`/`sub!`/`mul!`/`pow!` whose `try_*`/`check_*` variants
+# expose the carrier without wrapping the operators manually.
+
+routine start()
+  # --- In-range: all four agree ---
+  show("--- in-range ---")
+  show(f"100 + 50 (checked): {100_s64 + 50_s64}")
+  danger!
+    show(f"100 +! 50 (unchecked): {100_s64 +! 50_s64}")
+  show(f"100 +% 50 (wrap): {100_s64 +% 50_s64}")
+  show(f"100 +^ 50 (clamp): {100_s64 +^ 50_s64}")
+
+  # --- Overflow: differs per mode ---
+  show("--- overflow ---")
+
+  # checked: catch via stdlib try_add
+  show(f"try_add S64_MAX + 1: {S64_MAX.try_add(1_s64)}")
+
+  # wrap: S64_MAX + 1 = S64_MIN
+  show(f"S64_MAX +% 1: {S64_MAX +% 1_s64}")
+
+  # clamp: S64_MAX + 1 = S64_MAX
+  show(f"S64_MAX +^ 1: {S64_MAX +^ 1_s64}")
+
+  # unchecked: NOT tested under overflow (UB)
+  show("S64_MAX +! 1 not exercised — undefined behavior")
+
+  # --- Underflow ---
+  show("--- underflow ---")
+  show(f"try_sub S64_MIN - 1: {S64_MIN.try_sub(1_s64)}")
+  show(f"S64_MIN -% 1: {S64_MIN -% 1_s64}")
+  show(f"S64_MIN -^ 1: {S64_MIN -^ 1_s64}")
+
+  # --- Multiplication overflow ---
+  show("--- mul overflow ---")
+  show(f"try_mul S64_MAX * 2: {S64_MAX.try_mul(2_s64)}")
+  show(f"S64_MAX *% 2: {S64_MAX *% 2_s64}")
+  show(f"S64_MAX *^ 2: {S64_MAX *^ 2_s64}")
+
+  # --- Exponent overflow ---
+  show("--- pow overflow ---")
+  show(f"try_pow 2 ** 62: {2_s64.try_pow(62_s64)}")
+  show(f"try_pow 2 ** 63 (overflow): {2_s64.try_pow(63_s64)}")
+
+  # --- Unary -: always checked-throw ---
+  show("--- unary - ---")
+  show(f"-(5): {-(5_s64)}")
+  show(f"-(-5): {-(-5_s64)}")
+
+  # --- U64 underflow (unsigned) ---
+  show("--- U64 underflow ---")
+  show(f"try_sub 0u64 - 1: {0_u64.try_sub(1_u64)}")
+  show(f"0u64 -% 1: {0_u64 -% 1_u64}")
+  show(f"0u64 -^ 1: {0_u64 -^ 1_u64}")
+
+  # --- All four agree on benign U64 cases ---
+  show("--- U64 in-range ---")
+  show(f"10u64 + 3: {10_u64 + 3_u64}")
+  show(f"10u64 +% 3: {10_u64 +% 3_u64}")
+  show(f"10u64 +^ 3: {10_u64 +^ 3_u64}")
+
+  show("DONE")
+  return

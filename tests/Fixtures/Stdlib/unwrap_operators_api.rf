@@ -1,0 +1,31 @@
+module Tests/Stdlib/UnwrapOperatorsApi
+import IO/Console
+
+# Exercises the unwrap-or operator `??` and force-unwrap `!!` on Maybe/Result.
+
+routine maybe_value!(n: S64) -> S64
+  if n == 0
+    absent
+  return n * 10
+
+routine start()
+  var m_some = try_maybe_value(n: 3)
+  var m_none = try_maybe_value(n: 0)
+
+  # ?? fallback
+  show(f"m_some ?? -1: {m_some ?? -1_s64}")
+  show(f"m_none ?? -1: {m_none ?? -1_s64}")
+
+  # !! force-unwrap (should succeed for some)
+  show(f"m_some !!: {m_some !!}")
+
+  # when on the carriers
+  when m_some
+    is None => show("  m_some => None")
+    else v  => show(f"  m_some => {v}")
+  when m_none
+    is None => show("  m_none => None")
+    else v  => show(f"  m_none => {v}")
+
+  show("DONE")
+  return

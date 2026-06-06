@@ -1,0 +1,9 @@
+AbsentValueError title: Absent value error
+AbsentValueError msg: Attempted to access a value that is absent.
+UserTerminationError title: User termination error
+VerificationFailedError title: Verification failed error
+LogicBreachedError title: Logic breached error
+  div ok: 5
+  caught: Division by zero error
+  caught: Verification failed error
+DONE

@@ -1,0 +1,33 @@
+﻿module Tests/Stdlib/ViewingModifyingApi
+import IO/Console
+import BuilderService
+
+entity Box
+  value: S64
+
+routine Box.set(value: S64)
+  me.value = value
+  return
+
+routine start()
+  var b = Box(value: 7)
+
+  # Viewing: read-only borrow — scoped token, must use inline or via using
+  using b.view() as v
+    show(f"v type: {v.type_name()}")
+    show(f"v.value via forward: {v.value}")
+
+  # Modifying: mutable borrow inside a using scope
+  using b.modify() as m
+    show(f"m type: {m.type_name()}")
+    m.set(value: 42)
+  show(f"after modify.set(42): {b.value}")
+
+  # T.view() peels — directly Viewing[Box] not Viewing[Box]
+  var another = Box(value: 100)
+  using another.view() as v2
+    show(f"v2 type: {v2.type_name()}")
+    show(f"v2.value: {v2.value}")
+
+  show("DONE")
+  return

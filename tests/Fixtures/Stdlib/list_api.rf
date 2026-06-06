@@ -1,0 +1,34 @@
+module Tests/Stdlib/ListApi
+import IO/Console
+
+routine start()
+  # Construction via literal
+  var a = [10, 20, 30]
+  show(f"a: {a}")
+  show(f"a size: {a.count()}")
+
+  # add_last / add_first
+  a.add_last(value: 40)
+  a.add_first(value: 0)
+  show(f"after add_last(40), add_first(0): {a}")
+  show(f"size: {a.count()}")
+
+  # Index access
+  show(f"a[0]: {a[0]}")
+  show(f"a[2]: {a[2]}")
+
+  # contains
+  show(f"contains 20: {20 in a}")
+  show(f"contains 99: {99 in a}")
+
+  # is_empty
+  show(f"is_empty: {a.is_empty()}")
+
+  # Iteration (deterministic — list preserves insertion order)
+  var sum = 0
+  for x in a
+    sum = sum + x
+  show(f"sum via for: {sum}")
+
+  show("DONE")
+  return

@@ -1,0 +1,33 @@
+module Tests/Stdlib/MaybeApi
+import IO/Console
+import BuilderService
+
+# Record return type — exercises Maybe[Record] (no Owned auto-wrap).
+record Point
+  x: S64
+  y: S64
+
+routine make_point!(use_zero: Bool) -> Point
+  if use_zero
+    absent
+  return Point(x: 3, y: 4)
+
+routine start()
+  var m_some = try_make_point(use_zero: false)
+  var m_none = try_make_point(use_zero: true)
+
+  show(f"some type: {m_some.type_name()}")
+  show(f"some present: {m_some}")
+  show(f"none present: {m_none}")
+  show(f"some diagnose: {m_some:?}")
+  show(f"none diagnose: {m_none:?}")
+
+  when m_some
+    is None => show("  m_some => absent")
+    else p => show(f"  m_some => present: x={p.x} y={p.y}")
+  when m_none
+    is None => show("  m_none => absent")
+    else p => show(f"  m_none => present: x={p.x} y={p.y}")
+
+  show("DONE")
+  return

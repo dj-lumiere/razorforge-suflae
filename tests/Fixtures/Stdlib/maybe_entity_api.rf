@@ -1,0 +1,32 @@
+module Tests/Stdlib/MaybeEntityApi
+import IO/Console
+import BuilderService
+
+# Bare-entity return — compiler auto-wraps to Maybe[Text] in the try_ variant.
+routine get_text!(n: S64) -> ?Text
+  when n
+    == 0 => throw DivisionByZeroError()
+    == 1 => return "hello"
+    else => return "world"
+
+routine start()
+  var m0 = try_get_text(n: 0)
+  var m1 = try_get_text(n: 1)
+  var m2 = try_get_text(n: 2)
+
+  show(f"m0 type: {m0.type_name()}")
+  show(f"m0: {m0}")
+  show(f"m1: {m1}")
+  show(f"m2: {m2}")
+  show(f"m0 (diagnose): {m0:?}")
+  show(f"m1 (diagnose): {m1:?}")
+
+  when m1
+    is None => show("  m1 => absent")
+    else v => show(f"  m1 => present: {v}")
+  when m0
+    is None => show("  m0 => absent")
+    else v => show(f"  m0 => present: {v}")
+
+  show("DONE")
+  return

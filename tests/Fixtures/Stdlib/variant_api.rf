@@ -1,0 +1,35 @@
+module Tests/Stdlib/VariantApi
+import IO/Console
+
+# User-defined tagged union. Members are types; `None` is the absent arm.
+variant Number
+  S64
+  F64
+  Text
+  None
+
+routine describe(n: Number) -> ?Text
+  when n
+    is S64 v  => return f"int:{v}"
+    is F64 v  => return f"float:{v}"
+    is Text v => return f"text:{v}"
+    is None   => return "none"
+
+routine start()
+  var a: Number = 42_s64
+  var b: Number = 3.14_f64
+  var c: Number = "hello"
+  var d: Number = none
+
+  show(f"a: {describe(n: a)}")
+  show(f"b: {describe(n: b)}")
+  show(f"c: {describe(n: c)}")
+  show(f"d: {describe(n: d)}")
+
+  # Represent / diagnose
+  show(f"a represent: {a}")
+  show(f"a diagnose: {a:?}")
+  show(f"d diagnose: {d:?}")
+
+  show("DONE")
+  return

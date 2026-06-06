@@ -1,0 +1,94 @@
+module Tests/Stdlib/LiteralsApi
+import IO/Console
+import Numerics.[Integer, Decimal, Complex]
+
+# Exercises every literal token form the tokenizer produces (see src/Tokenizer/TokenType.cs):
+# signed/unsigned fixed-width integers, Address, arbitrary-precision Integer (`n`),
+# number bases + digit separators, floats, fixed + arbitrary-precision Decimal (`dn`),
+# Bool, Text, Character, and ByteLetter literals.
+routine start()
+  # --- Signed integers (S8..S128) ---
+  show(f"s8: {42_s8}")
+  show(f"s16: {1000_s16}")
+  show(f"s32: {100000_s32}")
+  show(f"s64: {10000000000_s64}")
+  show(f"s128: {170141183460469231731687303715884105727_s128}")
+  show(f"s64 neg: {-42_s64}")
+
+  # --- Unsigned integers (U8..U128) ---
+  show(f"u8: {255_u8}")
+  show(f"u16: {65535_u16}")
+  show(f"u32: {4000000000_u32}")
+  show(f"u64: {18000000000000000000_u64}")
+  show(f"u128: {340282366920938463463374607431768211455_u128}")
+
+  # --- Address ---
+  show(f"addr: {4096_addr}")
+
+  # --- Arbitrary-precision Integer (n) ---
+  show(f"n: {42n}")
+  show(f"n big: {123456789012345678901234567890n}")
+  show(f"n grouped: {1_000_000n}")
+
+  # --- Number bases + separators ---
+  show(f"hex: {0xFF_u32}")
+  show(f"hex mixed: {0xDEAD_BEEF_u32}")
+  show(f"binary: {0b1010_u8}")
+  show(f"sep: {1_234_567_s64}")
+
+  # --- Floats (F16..F128) ---
+  show(f"f16: {1.5_f16}")
+  show(f"f32: {3.14_f32}")
+  show(f"f64: {2.5_f64}")
+  show(f"f128: {1.25_f128}")
+  show(f"sci: {1.5e3_f64}")
+
+  # --- Decimals (D32..D128) ---
+  show(f"d32: {3.5_d32}")
+  show(f"d64: {2.5_d64}")
+  show(f"d128: {1.25_d128}")
+
+  # --- Arbitrary-precision Decimal (dn) ---
+  show(f"dn: {3.14dn}")
+  show(f"dn exact: {0.1dn + 0.2dn}")
+
+  # --- Imaginary literals (j32/j64/j128/jn) -> pure-imaginary complex ---
+  show(f"j32: {2.0j32}")
+  show(f"j64: {3.0j64}")
+  show(f"j64 short: {4.0j}")
+  show(f"j128: {5.0j128}")
+  show(f"jn: {6.0jn}")
+
+  # --- Bool ---
+  show(f"true: {true}")
+  show(f"false: {false}")
+
+  # --- Text / Character / ByteLetter / Bytes ---
+  var t: Text = "hello"
+  show(f"text: {t}")
+  show(f"char: {'A'}")
+  show(f"byte: {b'x'}")
+  var bv: Bytes = b"hi"
+  show(f"bytes: {bv}")
+
+  # --- Duration literals (w/d/h/m/s/ms/us/ns) ---
+  show(f"dur_w: {2w}")
+  show(f"dur_d: {3d}")
+  show(f"dur_h: {4h}")
+  show(f"dur_m: {5m}")
+  show(f"dur_s: {6s}")
+  show(f"dur_ms: {7ms}")
+  show(f"dur_us: {8us}")
+  show(f"dur_ns: {9ns}")
+
+  # --- ByteSize literals (b/kb/kib/mb/mib/gb/gib) ---
+  show(f"bs_b: {100b}")
+  show(f"bs_kb: {8kb}")
+  show(f"bs_kib: {8kib}")
+  show(f"bs_mb: {2mb}")
+  show(f"bs_mib: {2mib}")
+  show(f"bs_gb: {1gb}")
+  show(f"bs_gib: {1gib}")
+
+  show("DONE")
+  return

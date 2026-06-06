@@ -1,0 +1,11 @@
+new size: 0
+is_empty: true
+after add_last 10/20 + add_first 0, size: 3
+first: 0
+last: 20
+  iter: 0
+  iter: 10
+  iter: 20
+first after remove_first: 10
+size: 2
+DONE

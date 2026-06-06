@@ -1,0 +1,14 @@
+a: Array([10, 20, 30, 40])
+a (diagnose): Collections.Array[Core.S64, 4]([10, 20, 30, 40])
+count: 4
+is_empty: false
+a[0]: 10
+a[3]: 40
+first: 10
+last: 40
+contains 20: true
+contains 99: false
+index_of 30: 2
+sum: 100
+a == b: true
+DONE

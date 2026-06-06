@@ -1,0 +1,46 @@
+module Tests/Stdlib/ArrayAPi
+import IO/Console
+import Collections
+
+# Fixed-size array Array[T, N] — N is a const-generic length.
+routine start()
+  var a = Array[S64, 4]()
+  a[0] = 10
+  a[1] = 20
+  a[2] = 30
+  a[3] = 40
+
+  show(f"a: {a}")
+  show(f"a (diagnose): {a:?}")
+  show(f"count: {a.count()}")
+  show(f"is_empty: {a.is_empty()}")
+
+  # Indexing
+  show(f"a[0]: {a[0]}")
+  show(f"a[3]: {a[3]}")
+
+  # first/last (failable)
+  show(f"first: {a.first!()}")
+  show(f"last: {a.last!()}")
+
+  # contains / index_of
+  show(f"contains 20: {20 in a}")
+  show(f"contains 99: {99 in a}")
+  show(f"index_of 30: {a.index_of!(value: 30)}")
+
+  # Iteration (deterministic — array order is fixed)
+  var sum = 0_s64
+  for x in a
+    sum = sum + x
+  show(f"sum: {sum}")
+
+  # Equality
+  var b = Array[S64, 4]()
+  b[0] = 10
+  b[1] = 20
+  b[2] = 30
+  b[3] = 40
+  show(f"a == b: {a == b}")
+
+  show("DONE")
+  return

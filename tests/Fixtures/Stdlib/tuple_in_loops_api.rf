@@ -1,0 +1,28 @@
+module Tests/Stdlib/TupleInLoopsApi
+import IO/Console
+import IterTools
+
+# Tuple destructuring inside for-in headers — common in zip/enumerate iteration.
+routine start()
+  # Iterate with index via enumerate (Tuple[U64, T])
+  var labels: List[Text] = ["a", "b", "c"]
+  for (i, label) in labels.enumerate()
+    show(f"  {i}: {label}")
+
+  # zip yields Tuple[T, U]
+  var nums: List[S64] = [10, 20, 30]
+  for (lbl, n) in labels.zip(other: nums)
+    show(f"  {lbl} -> {n}")
+
+  # Iterate pairs in a Dict (dict iter yields DictEntry[K, V])
+  var d: Dict[S64, S64] = {1: 100, 2: 200, 3: 300}
+  var keys_sum = 0_s64
+  var vals_sum = 0_s64
+  for entry in d
+    keys_sum = keys_sum + entry.key
+    vals_sum = vals_sum + entry.value
+  show(f"keys sum: {keys_sum}")
+  show(f"vals sum: {vals_sum}")
+
+  show("DONE")
+  return

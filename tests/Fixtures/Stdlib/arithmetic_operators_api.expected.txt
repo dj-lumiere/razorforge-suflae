@@ -1,0 +1,33 @@
+--- in-range ---
+100 + 50 (checked): 150
+100 +! 50 (unchecked): 150
+100 +% 50 (wrap): 150
+100 +^ 50 (clamp): 150
+--- overflow ---
+try_add S64_MAX + 1: None
+S64_MAX +% 1: -9223372036854775808
+S64_MAX +^ 1: 9223372036854775807
+S64_MAX +! 1 not exercised — undefined behavior
+--- underflow ---
+try_sub S64_MIN - 1: None
+S64_MIN -% 1: 9223372036854775807
+S64_MIN -^ 1: -9223372036854775808
+--- mul overflow ---
+try_mul S64_MAX * 2: None
+S64_MAX *% 2: -2
+S64_MAX *^ 2: 9223372036854775807
+--- pow overflow ---
+try_pow 2 ** 62: 4611686018427387904
+try_pow 2 ** 63 (overflow): None
+--- unary - ---
+-(5): -5
+-(-5): 5
+--- U64 underflow ---
+try_sub 0u64 - 1: None
+0u64 -% 1: 18446744073709551615
+0u64 -^ 1: 0
+--- U64 in-range ---
+10u64 + 3: 13
+10u64 +% 3: 13
+10u64 +^ 3: 13
+DONE

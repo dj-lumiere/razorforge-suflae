@@ -1,0 +1,11 @@
+single: EXECUTE
+single (diagnose): Tests/Stdlib/FlagsApi.Permission(value: %001, EXECUTE)
+rw: READ and WRITE
+rw (diagnose): Tests/Stdlib/FlagsApi.Permission(value: %110, READ and WRITE)
+all: READ and WRITE and EXECUTE
+all (diagnose): Tests/Stdlib/FlagsApi.Permission(value: %111, READ and WRITE and EXECUTE)
+rw == READ and WRITE: true
+rw == READ: false
+all == rw: false
+all is rw: true
+DONE

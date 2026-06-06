@@ -1,0 +1,43 @@
+module Tests/Stdlib/BoolShortCircuitApi
+import IO/Console
+
+# `and` / `or` short-circuit: the right operand is not evaluated when the left
+# already determines the result. Observable via a side-effecting probe.
+
+entity ProbeCounter
+  probe_count: S64
+
+routine probe(probe_counter: Controlling[ProbeCounter], label: Text, value: Bool) -> Bool
+  probe_counter.probe_count = probe_counter.probe_count + 1
+  show(f"  probe({label})={value}, count={probe_counter.probe_count}")
+  return value
+
+routine reset(probe_counter: Controlling[ProbeCounter])
+  probe_counter.probe_count = 0_s64
+  return
+
+routine start()
+  show("--- `and` short-circuit on false ---")
+  var probe_counter = ProbeCounter(probe_count: 0)
+  using probe_counter.modify() as g
+    reset(g)
+    var r1 = probe(probe_counter: g, label: "a", value: false) and probe(probe_counter: g, label: "b", value: true)
+    show(f"r1 = {r1}, probe_count={g.probe_count}")
+
+    show("--- `and` full evaluation when both true ---")
+    reset(g)
+    var r2 = probe(probe_counter: g, label: "a", value: true) and probe(probe_counter: g, label: "b", value: true)
+    show(f"r2 = {r2}, probe_count={g.probe_count}")
+
+    show("--- `or` short-circuit on true ---")
+    reset(g)
+    var r3 = probe(probe_counter: g, label: "a", value: true) or probe(probe_counter: g, label: "b", value: false)
+    show(f"r3 = {r3}, probe_count={g.probe_count}")
+
+    show("--- `or` full evaluation when first false ---")
+    reset(g)
+    var r4 = probe(probe_counter: g, label: "a", value: false) or probe(probe_counter: g, label: "b", value: true)
+    show(f"r4 = {r4}, probe_count={g.probe_count}")
+
+    show("DONE")
+  return

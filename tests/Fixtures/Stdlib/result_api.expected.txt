@@ -1,0 +1,8 @@
+ok type: Result[S64]
+ok present: 5
+err present: You tried to divide by zero, which is not allowed.
+ok diagnose: Core.Result[Core.S64](type_id: 11394925126407376075, S64(5))
+err diagnose: Core.Result[Core.S64](type_id: 17342471770159791602, Core.DivisionByZeroError(You tried to divide by zero, which is not allowed.))
+  r_ok => ok: 5
+  r_err => caught DivisionByZeroError
+DONE

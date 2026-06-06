@@ -1,0 +1,39 @@
+module Tests/Stdlib/ListSortApi
+import IO/Console
+
+# List sort surface: sort (in-place ascending), sort_by (custom comparator),
+# sorted (returns new), sorted_by (returns new with comparator).
+routine start()
+  # Default sort (ascending)
+  var a: List[S64] = [3, 1, 4, 1, 5, 9, 2, 6]
+  a.sort()
+  show(f"sort ascending: {a}")
+
+  # sort_by descending
+  var b: List[S64] = [3, 1, 4, 1, 5, 9, 2, 6]
+  b.sort_by(compare: (x, y) => x > y)
+  show(f"sort_by(>): {b}")
+
+  # sorted (non-mutating)
+  var c: List[S64] = [5, 2, 7, 3]
+  var sorted_c = c.sorted()
+  show(f"original c (unchanged): {c}")
+  show(f"sorted c: {sorted_c}")
+
+  # sorted_by (non-mutating, custom)
+  var d = c.sorted_by(compare: (x, y) => x > y)
+  show(f"sorted_by(>) of c: {d}")
+
+  # Sort by string length (entity element — Text)
+  var words: List[Text] = ["hello", "a", "world", "xy", "z"]
+  words.sort_by(compare: (x, y) => x.count() < y.count())
+  show(f"sorted by length: {words}")
+
+  # Stability check: sort_by on equal keys should preserve original order
+  # (this is a property the user expects from merge sort)
+  var pairs: List[Text] = ["a1", "b1", "a2", "b2"]
+  pairs.sort_by(compare: (x, y) => x[0_u64] < y[0_u64])
+  show(f"stable by first char: {pairs}")
+
+  show("DONE")
+  return

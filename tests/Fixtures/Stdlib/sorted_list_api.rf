@@ -1,0 +1,32 @@
+module Tests/Stdlib/SortedListApi
+import IO/Console
+import Collections
+
+# SortedList iterates in sorted order -> deterministic output.
+# Unlike SortedSet, duplicates are preserved.
+routine start()
+  var sl = SortedList[S64]()
+  show(f"new size: {sl.count()}")
+  show(f"is_empty: {sl.is_empty()}")
+
+  discard sl.add(value: 30)
+  discard sl.add(value: 10)
+  discard sl.add(value: 20)
+  discard sl.add(value: 10)  # duplicate -> preserved
+  show(f"after 30/10/20/10, size: {sl.count()}")
+
+  # iteration is sorted
+  for x in sl
+    show(f"  iter: {x}")
+
+  # Index access (positional, sorted)
+  show(f"sl[0]: {sl[0_u64]}")
+  show(f"sl[1]: {sl[1_u64]}")
+  show(f"sl[2]: {sl[2_u64]}")
+  show(f"sl[3]: {sl[3_u64]}")
+
+  show(f"contains 20: {20 in sl}")
+  show(f"contains 99: {99 in sl}")
+
+  show("DONE")
+  return

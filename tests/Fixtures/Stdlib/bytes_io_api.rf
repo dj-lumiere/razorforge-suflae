@@ -1,0 +1,84 @@
+module Tests/Stdlib/BytesIoApi
+import IO/Console
+import IO/BytesIO
+
+# Bytes-direct integer parsing + formatting (BytesIO). Bypasses Text and the
+# UTF-8↔UTF-32 roundtrip. Critical for CP-style stdin/stdout.
+# All BytesIO routines are `!` (in-range narrowing inside `to_digit_bytes!`);
+# happy-path calls use `!!` to force-unwrap, error paths go through `try_*`.
+
+routine start()
+  # --- S64 parse: happy paths ---
+  show(f"parse '42': {S64.try_from_digit_bytes(bytes: b"42")!!}")
+  show(f"parse '-42': {S64.try_from_digit_bytes(bytes: b"-42")!!}")
+  show(f"parse '+42': {S64.try_from_digit_bytes(bytes: b"+42")!!}")
+  show(f"parse '0': {S64.try_from_digit_bytes(bytes: b"0")!!}")
+  show(f"parse '1234567890': {S64.try_from_digit_bytes(bytes: b"1234567890")!!}")
+
+  # Leading whitespace
+  show(f"parse '   42': {S64.try_from_digit_bytes(bytes: b"   42")!!}")
+  show(f"parse '\\t-7': {S64.try_from_digit_bytes(bytes: b"\t-7")!!}")
+
+  # Lenient: stops at first non-digit, doesn't fail
+  show(f"parse '42abc' (stops at 'a'): {S64.try_from_digit_bytes(bytes: b"42abc")!!}")
+  show(f"parse '42 99' (stops at ' '): {S64.try_from_digit_bytes(bytes: b"42 99")!!}")
+
+  # --- S64 parse failures ---
+  show(f"try empty: {S64.try_from_digit_bytes(bytes: b"")}")
+  show(f"try 'abc': {S64.try_from_digit_bytes(bytes: b"abc")}")
+  show(f"try '+': {S64.try_from_digit_bytes(bytes: b"+")}")
+  show(f"try '   ': {S64.try_from_digit_bytes(bytes: b"   ")}")
+
+  # --- Streaming parse (from_digit_bytes_at) ---
+  var stream = b"10 20 -30 40"
+  var i: U64 = 0_u64
+  var sum: S64 = 0_s64
+  loop
+    var t = S64.try_from_digit_bytes_at(bytes: stream, start: i)
+    when t
+      is None => break
+      else pair =>
+        sum = sum + pair.item0
+        i = pair.item1
+  show(f"streaming sum: {sum}")
+
+  # --- to_digit_bytes (formatting) ---
+  show(f"format 0: {try_to_digit_bytes_s64(v: S64(0))!!}")
+  show(f"format 42: {try_to_digit_bytes_s64(v: S64(42))!!}")
+  show(f"format -42: {try_to_digit_bytes_s64(v: S64(-42))!!}")
+  show(f"format S64_MIN: {try_to_digit_bytes_s64(v: S64_MIN)!!}")
+  show(f"format S64_MAX: {try_to_digit_bytes_s64(v: S64_MAX)!!}")
+
+  # --- U64 ---
+  show(f"U64 parse '42': {U64.try_from_digit_bytes(bytes: b"42")!!}")
+  show(f"U64 parse '+42': {U64.try_from_digit_bytes(bytes: b"+42")!!}")
+  show(f"U64 try '-42' (must fail): {U64.try_from_digit_bytes(bytes: b"-42")}")
+
+  show(f"U64 format 0: {try_to_digit_bytes_u64(v: U64(0))!!}")
+  show(f"U64 format U64_MAX: {try_to_digit_bytes_u64(v: U64_MAX)!!}")
+
+  # --- Round-trip property: parse(format(x)) == x for many values ---
+  var ok = true
+  for x in -100 to 100
+    var bytes_opt = try_to_digit_bytes_s64(v: S64(from: x))
+    when bytes_opt
+      is None => ok = false
+      else b =>
+        var parsed_opt = S64.try_from_digit_bytes(bytes: b)
+        when parsed_opt
+          is None => ok = false
+          else parsed =>
+            if parsed != S64(from: x)
+              ok = false
+  show(f"S64 round-trip [-100..100]: {ok}")
+
+  show("DONE")
+  return
+
+# Helpers so we can call the failable `to_digit_bytes!` from a non-failable
+# routine via the auto-generated `try_*` variant.
+routine to_digit_bytes_s64!(v: S64) -> ?Bytes
+  return v.to_digit_bytes!()
+
+routine to_digit_bytes_u64!(v: U64) -> ?Bytes
+  return v.to_digit_bytes!()

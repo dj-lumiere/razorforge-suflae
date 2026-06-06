@@ -1,0 +1,4 @@
+inner-s32:7
+inner-none
+text:hi
+outer-none

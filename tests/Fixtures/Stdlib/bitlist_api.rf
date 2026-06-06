@@ -1,0 +1,19 @@
+module Tests/Stdlib/BitListApi
+import IO/Console
+import Collections
+
+routine start()
+  var bl = BitList()
+  show(f"new size: {bl.count()}")
+  show(f"is_empty: {bl.is_empty()}")
+
+  bl.add_last(value: true)
+  bl.add_last(value: false)
+  bl.add_last(value: true)
+  show(f"after add_last(t,f,t), size: {bl.count()}")
+  show(f"bl[0]: {bl[0_u64]}")
+  show(f"bl[1]: {bl[1_u64]}")
+  show(f"bl[2]: {bl[2_u64]}")
+
+  show("DONE")
+  return

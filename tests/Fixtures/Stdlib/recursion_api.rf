@@ -1,0 +1,48 @@
+module Tests/Stdlib/RecursionApi
+import IO/Console
+
+# Recursive routines — both direct and mutual.
+routine fact(n: S64) -> S64
+  if n <= 1
+    return 1
+  return n * fact(n: n - 1)
+
+routine fib(n: S64) -> S64
+  if n <= 1
+    return n
+  return fib(n: n - 1) + fib(n: n - 2)
+
+# Mutual recursion
+routine is_even_n(n: S64) -> Bool
+  if n == 0
+    return true
+  return is_odd_n(n: n - 1)
+
+routine is_odd_n(n: S64) -> Bool
+  if n == 0
+    return false
+  return is_even_n(n: n - 1)
+
+routine start()
+  # Factorial
+  show(f"fact(0): {fact(n: 0)}")
+  show(f"fact(1): {fact(n: 1)}")
+  show(f"fact(5): {fact(n: 5)}")
+  show(f"fact(10): {fact(n: 10)}")
+  show(f"fact(20): {fact(n: 20)}")
+
+  # Fibonacci
+  show(f"fib(0): {fib(n: 0)}")
+  show(f"fib(10): {fib(n: 10)}")
+  show(f"fib(15): {fib(n: 15)}")
+
+  # Mutual
+  show(f"is_even_n(10): {is_even_n(n: 10)}")
+  show(f"is_odd_n(10): {is_odd_n(n: 10)}")
+  show(f"is_even_n(7): {is_even_n(n: 7)}")
+
+  # Moderate depth (smoke test — exact recursion limit varies)
+  show(f"fact(15): {fact(n: 15)}")
+
+  show("DONE")
+  return
