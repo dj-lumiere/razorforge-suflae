@@ -233,7 +233,6 @@ public class ErrorVariantGenerationTests
 
                         routine will_fail() -> S32
                           throw SomeError(msg: "error")
-                          return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -307,7 +306,6 @@ public class ErrorVariantGenerationTests
 
                         routine parse_number!(text: Text) -> S32
                           throw SomeError(msg: "parse failed")
-                          return
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);

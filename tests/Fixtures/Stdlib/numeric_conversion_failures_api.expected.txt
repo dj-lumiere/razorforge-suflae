@@ -6,7 +6,7 @@ S64->F64 of 42: 42
 U64->S64 of 42: 42
 S64->U64 of 42: 42
 parse '42': 42
-parse 'not a number': None
+parse 'not a number': none
   parse 42 -> 42
   parse junk -> None (expected)
 DONE

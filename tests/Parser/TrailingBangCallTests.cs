@@ -72,7 +72,7 @@ public class TrailingBangCallTests
                           show(f"called: {f(value: 2)}")
                           return
                         """;
-        Parse(source: source);
+        AssertParses(source: source);
     }
 
     /// <summary>Verifies that the correct method!(args) form with bang in the name parses without error.</summary>

@@ -27,7 +27,7 @@ public sealed partial class SourceFolderFailurePointTests
             ["ModuleDependencyGraph", "CompileFile", "RegisterProgramTypes", "RegisterProgramRoutines"]
         },
         {
-            "Lexer",
+            "Tokenizer",
             "source validation rejects ambiguous bytes and whitespace before scanning",
             ["NormalizeAndValidateSource", "Source contains a null byte", "Tabs are not allowed", "Unsupported whitespace character"]
         },
@@ -139,7 +139,7 @@ public sealed partial class SourceFolderFailurePointTests
             "BuildSystem",
             "Declaration",
             "Desugaring",
-            "Lexer",
+            "Tokenizer",
             "Parser",
             "Resolution",
             "Synthesis",
@@ -230,7 +230,7 @@ public sealed partial class SourceFolderFailurePointTests
         {
             string candidate = Path.Combine(path1: current, path2: "src");
             if (Directory.Exists(path: candidate) &&
-                Directory.Exists(path: Path.Combine(path1: candidate, path2: "Lexer")))
+                Directory.Exists(path: Path.Combine(path1: candidate, path2: "Tokenizer")))
             {
                 return candidate;
             }

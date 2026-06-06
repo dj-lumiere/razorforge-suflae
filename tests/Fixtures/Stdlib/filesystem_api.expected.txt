@@ -4,5 +4,5 @@ file_name: z.txt
 file_stem: z
 extension: .txt
 file_stem no ext: plain
-extension no ext: 
+extension no ext:
 DONE

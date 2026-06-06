@@ -24,7 +24,6 @@ public class ErrorHandlingValidationTests
                           message: Text
                         routine test!() -> S32
                           throw BadError(message: "oops")
-                          return 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -43,7 +42,6 @@ public class ErrorHandlingValidationTests
                           message: Text
                         routine test!() -> S32
                           throw MyError(message: "oops")
-                          return 0
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -82,7 +80,6 @@ public class ErrorHandlingValidationTests
                           message: Text
                         routine useful!() -> S32
                           throw MyError(message: "bad")
-                          return 42
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -140,7 +137,6 @@ public class ErrorHandlingValidationTests
                         @crash_only
                         routine crash_routine!() -> S32
                           throw MyError(message: "fatal")
-                          return 42
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -160,7 +156,6 @@ public class ErrorHandlingValidationTests
                         @crash_only
                         routine crash_routine!() -> S32
                           throw MyError(message: "fatal")
-                          return 42
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -182,7 +177,6 @@ public class ErrorHandlingValidationTests
                           message: Text
                         routine normal_routine!() -> S32
                           throw MyError(message: "error")
-                          return 42
                         """;
 
         AnalysisResult result = AnalyzeSa(source: source);
@@ -208,7 +202,6 @@ public class ErrorHandlingValidationTests
                           message: Text
                         routine parse!(data: S32) -> S32
                           throw ParseError(message: "bad")
-                          return 42
                         routine caller() -> S32
                           parse!(data: 1)
                           return 0
@@ -230,7 +223,6 @@ public class ErrorHandlingValidationTests
                           message: Text
                         routine parse!(data: S32) -> S32
                           throw ParseError(message: "bad")
-                          return 42
                         routine caller!() -> S32
                           parse!(data: 1)
                           return 0

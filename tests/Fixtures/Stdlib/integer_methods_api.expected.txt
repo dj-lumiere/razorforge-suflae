@@ -14,5 +14,5 @@ leading_zeros(1): 63
 trailing_zeros(8): 3
 parse '12345': 12345
 parse '-42': -42
-parse 'abc': None
+parse 'abc': none
 DONE
