@@ -76,4 +76,42 @@ public class ImplicitWrapperCopyAssignmentTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
     }
+
+    /// <summary>Assigning a primitive value is a trivial copy — no error.</summary>
+    [Fact]
+    public void Analyze_Assignment_Primitive_IsAccepted()
+    {
+        string source = """
+                        routine start()
+                          var a = 1_s64
+                          var b = 2_s64
+                          b = a
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
+    }
+
+    /// <summary>`b = a.track()` at the assignment site produces a fresh handle — accepted.</summary>
+    [Fact]
+    public void Analyze_Assignment_ExplicitTrack_IsAccepted()
+    {
+        string source = """
+                        entity Node
+                          value: S64
+
+                        routine start()
+                          var a = Node(value: 1)
+                          var ra = a.retain()
+                          var rb = ra.retain()
+                          rb = ra.track()
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
+    }
 }

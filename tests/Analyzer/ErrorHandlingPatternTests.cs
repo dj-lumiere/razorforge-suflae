@@ -11,6 +11,56 @@ using static TestHelpers;
 public class ErrorHandlingPatternTests
 {
     /// <summary>
+    /// Verifies that Result[T] is rejected as a routine parameter type — carriers are internal
+    /// error-propagation types and may not be passed as arguments.
+    /// </summary>
+    [Fact]
+    public void Analyze_ResultAsParameter_ReportsError()
+    {
+        string source = """
+                        routine test(value: Result[S32])
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsParameter);
+    }
+
+    /// <summary>
+    /// Verifies that Lookup[T] is rejected as a routine parameter type.
+    /// </summary>
+    [Fact]
+    public void Analyze_LookupAsParameter_ReportsError()
+    {
+        string source = """
+                        routine test(value: Lookup[S32])
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsParameter);
+    }
+
+    /// <summary>
+    /// Verifies that Maybe[T] (T?) IS allowed as a routine parameter type — it is a storable
+    /// presence-carrying value, unlike Result/Lookup.
+    /// </summary>
+    [Fact]
+    public void Analyze_MaybeAsParameter_NoError()
+    {
+        string source = """
+                        routine test(value: S32?)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsParameter);
+    }
+
+    /// <summary>
     /// Verifies semantic analysis behavior for result is none reports pattern mismatch.
     /// </summary>
     [Fact]
@@ -71,4 +121,5 @@ public class ErrorHandlingPatternTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+
 }

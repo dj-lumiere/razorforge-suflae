@@ -78,4 +78,53 @@ public class ImplicitWrapperCopyCallArgTests
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
     }
+
+    /// <summary>Passing a trivially-copyable record by name is accepted.</summary>
+    [Fact]
+    public void Analyze_CallArg_TriviallyCopyableRecord_IsAccepted()
+    {
+        string source = """
+                        record Point
+                          x: S64
+                          y: S64
+
+                        routine consume(p: Point)
+                          return
+
+                        routine start()
+                          var pt = Point(x: 1, y: 2)
+                          consume(p: pt)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
+    }
+
+    /// <summary>
+    /// In a multi-argument call, a bare Retained argument is still flagged even when other
+    /// arguments are trivially copyable.
+    /// </summary>
+    [Fact]
+    public void Analyze_CallArg_MultiArg_BareRetained_IsError()
+    {
+        string source = """
+                        entity Node
+                          value: S64
+
+                        routine consume(tag: S64, handle: Retained[Node])
+                          return
+
+                        routine start()
+                          var a = Node(value: 1)
+                          var ra = a.retain()
+                          consume(tag: 7, handle: ra)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
+    }
 }

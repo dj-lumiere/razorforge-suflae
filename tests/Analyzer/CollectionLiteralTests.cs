@@ -114,6 +114,38 @@ public class CollectionLiteralTests
             filter: e => e.Code == SemanticDiagnosticCode.EmptyDictNoTypeAnnotation);
     }
     /// <summary>
+    /// Verifies that a non-empty list literal infers its element type from the elements.
+    /// </summary>
+    [Fact]
+    public void NonEmptyListLiteral_InfersFromElements()
+    {
+        string source = """
+                        routine test()
+                          var items = [1, 2, 3]
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    /// <summary>
+    /// Verifies that a non-empty list literal with an explicit annotation produces no error.
+    /// </summary>
+    [Fact]
+    public void NonEmptyListLiteral_WithTypeAnnotation_NoError()
+    {
+        string source = """
+                        routine test()
+                          var items: List[S64] = [10, 20, 30]
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    /// <summary>
     /// Verifies that the test validates empty set literal infers from elements.
     /// </summary>
 
