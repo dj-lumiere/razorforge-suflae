@@ -241,31 +241,6 @@ routine BitList.$setitem!(index: U64, value: ?Bool)
   return
 
 # ============================================================================
-# Indexing with BackIndex (backward index using ^)
-# ============================================================================
-
-### Returns the bit addressed by a back index.
-### Back indices count from the end of the sequence using the `^` syntax.
-### :param index: The backward position to resolve.
-### :returns: The resulting `Bool` value.
-@readonly
-routine BitList.$getitem!(index: BackIndex) -> Bool
-  var idx = index.resolve!(me.count)
-  if idx >= me.count
-    throw IndexOutOfBoundsError(index: idx, count: me.count)
-  return me.get_bit_internal(idx)
-
-### Replaces the bit addressed by a back index.
-### :param index: The backward position to resolve.
-### :param value: The replacement bit value.
-routine BitList.$setitem!(index: BackIndex, value: ?Bool)
-  var idx = index.resolve!(me.count)
-  if idx >= me.count
-    throw IndexOutOfBoundsError(index: idx, count: me.count)
-  me.set_bit_internal(index: idx, value: value)
-  return
-
-# ============================================================================
 # Bit Operations
 # ============================================================================
 

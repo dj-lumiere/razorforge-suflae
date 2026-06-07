@@ -88,17 +88,6 @@ routine BitArray[N].$getitem!(index: U64) -> Bool
   var byte_val = byte_at_bits[N](me,byte_idx)
   return (byte_val & (1u8 << bit_off)) != 0u8
 
-### Returns the bit addressed from the back of the array.
-### `^0` refers to the last bit, `^1` to the second-to-last, and so on.
-### :param index: The backward position to resolve.
-### :returns: `true` if the bit at the resolved position is set; `false` if it is clear.
-@readonly
-routine BitArray[N].$getitem!(index: BackIndex) -> Bool
-  var idx = index.resolve!(N)
-  if idx >= N
-    throw IndexOutOfBoundsError(index: idx, count: N)
-  return me[idx]
-
 ### Writes `value` into the bit at `index`, mutating this `BitArray` in place.
 ### :param index: The zero-based bit position to update.
 ### :param value: The new bit value.
@@ -113,18 +102,6 @@ routine BitArray[N].$setitem!(index: U64, value: ?Bool)
     me = set_byte_at_bits[N](me, byte_idx, byte_val | (1u8 << bit_off))
   else
     me = set_byte_at_bits[N](me, byte_idx, byte_val & ~(1u8 << bit_off))
-  return
-
-### Writes `value` into the bit addressed from the back of the array.
-### `^0` refers to the last bit, `^1` to the second-to-last, and so on.
-### :param index: The backward position to resolve.
-### :param value: The new bit value.
-### :throws: {IndexOutOfBoundsError} if the resolved index is out of range.
-routine BitArray[N].$setitem!(index: BackIndex, value: ?Bool)
-  var idx = index.resolve!(N)
-  if idx >= N
-    throw IndexOutOfBoundsError(index: idx, count: N)
-  me[idx] = value
   return
 
 # ============================================================================

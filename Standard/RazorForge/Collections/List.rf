@@ -279,34 +279,6 @@ routine List[T].$setitem!(index: U64, value: ?T)
   return
 
 # ============================================================================
-# Indexing with BackIndex (backward index using ^)
-# ============================================================================
-
-### Returns the element addressed by a back index, which counts from the end with the `^` syntax.
-### :param index: The backward position to resolve (`^0` is the last element).
-### :returns: The element at the resolved position.
-@readonly
-routine List[T].$getitem!(index: BackIndex) -> ?T
-  var idx = index.resolve!(me.count)
-  if idx >= me.count
-    throw IndexOutOfBoundsError(index: idx, count: me.count)
-  var byte_offset = T.data_size() * idx
-  danger!
-    return me.data.offset(byte_offset).extract()
-
-### Replaces the element addressed by a back index.
-### :param index: The backward position to resolve (`^0` is the last element).
-### :param value: The replacement value.
-routine List[T].$setitem!(index: BackIndex, value: ?T)
-  var idx = index.resolve!(me.count)
-  if idx >= me.count
-    throw IndexOutOfBoundsError(index: idx, count: me.count)
-  var byte_offset = T.data_size() * idx
-  danger!
-    me.data.offset(byte_offset).inject(value)
-  return
-
-# ============================================================================
 # Unchecked internal access — no bounds check, for stdlib use only
 # ============================================================================
 

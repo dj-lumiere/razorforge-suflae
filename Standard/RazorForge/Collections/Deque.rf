@@ -282,33 +282,6 @@ routine Deque[T].$setitem!(index: U64, value: ?T)
   return
 
 # ============================================================================
-# Indexing with BackIndex (backward index using ^)
-# ============================================================================
-
-### Returns the element addressed by a back index, counting from the logical back.
-### `^0` refers to the last element, `^1` to the second-to-last, and so on.
-### :param index: The backward position to resolve.
-### :returns: The element at the resolved position.
-@readonly
-routine Deque[T].$getitem!(index: BackIndex) -> ?T
-  var idx = index.resolve!(me.count)
-  if idx >= me.count
-    throw IndexOutOfBoundsError(index: idx, count: me.count)
-  var physical_idx = me.physical_index(idx)
-  return me.read_at(physical_idx)
-
-### Replaces the element addressed by a back index.
-### :param index: The backward position to resolve.
-### :param value: The replacement element.
-routine Deque[T].$setitem!(index: BackIndex, value: ?T)
-  var idx = index.resolve!(me.count)
-  if idx >= me.count
-    throw IndexOutOfBoundsError(index: idx, count: me.count)
-  var physical_idx = me.physical_index(idx)
-  me.write_at(physical_idx: physical_idx, value: value)
-  return
-
-# ============================================================================
 # Rotation
 # ============================================================================
 
