@@ -5,4 +5,7 @@ sd['charlie']: 3
   key: DictEntry[Text, S64](key: alpha, value: 1)
   key: DictEntry[Text, S64](key: bravo, value: 2)
   key: DictEntry[Text, S64](key: charlie, value: 3)
+sd.get_by_rank(0).key: alpha
+sd.get_by_rank(1).key: bravo
+sd.get_by_rank(2).key: charlie
 DONE

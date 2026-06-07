@@ -20,5 +20,10 @@ routine start()
   show(f"contains 20: {20 in ss}")
   show(f"contains 99: {99 in ss}")
 
+  # Rank access (O(log n) — named to signal cost)
+  show(f"ss.get_by_rank(0): {ss.try_get_by_rank(rank: 0_u64)!!}")
+  show(f"ss.get_by_rank(1): {ss.try_get_by_rank(rank: 1_u64)!!}")
+  show(f"ss.get_by_rank(2): {ss.try_get_by_rank(rank: 2_u64)!!}")
+
   show("DONE")
   return
