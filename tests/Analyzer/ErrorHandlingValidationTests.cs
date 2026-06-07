@@ -298,6 +298,72 @@ public class ErrorHandlingValidationTests
 
     #endregion
 
+    #region Throw target validation
+
+    /// <summary>
+    /// Verifies that throwing a primitive integer reports ThrowRequiresRecordType.
+    /// </summary>
+    [Fact]
+    public void Analyze_ThrowPrimitive_ReportsError()
+    {
+        string source = """
+                        routine test!() -> S32
+                          throw 42
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ThrowNotCrashable);
+    }
+
+    /// <summary>
+    /// Verifies that a failable routine can throw different crashable types on different paths.
+    /// </summary>
+    [Fact]
+    public void Analyze_MultipleCrashableTypes_AllThrow_NoError()
+    {
+        string source = """
+                        crashable ErrA
+                          message: Text
+                        crashable ErrB
+                          code: S32
+                        routine test!(flag: Bool) -> S32
+                          if flag
+                            throw ErrA(message: "a")
+                          throw ErrB(code: 1)
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ThrowRequiresRecordType);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrowOrAbsent);
+    }
+
+    /// <summary>
+    /// Verifies that a failable routine calling another failable propagates failability without error.
+    /// </summary>
+    [Fact]
+    public void Analyze_FailableCallingFailable_Propagates_NoError()
+    {
+        string source = """
+                        crashable MyErr
+                          message: Text
+                        routine inner!(value: S32) -> S32
+                          if value < 0
+                            throw MyErr(message: "bad")
+                          return value
+                        routine outer!(value: S32) -> S32
+                          return inner!(value: value)
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.FailableWithoutThrowOrAbsent);
+    }
+
+    #endregion
+
     // NOTE: #81 (Result/Lookup storage restriction) tests require multi-module test
     // infrastructure since check_/lookup_ variants are generated in Phase 5 but body
     // analysis happens in Phase 3. The implementation is in place and will be validated

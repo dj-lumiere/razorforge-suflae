@@ -184,6 +184,53 @@ public class ImplicitWrapperCopyVarDeclTests
             filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
     }
 
+    /// <summary>`var t = ra.track()` produces a fresh Tracked handle — accepted as a call result.</summary>
+    [Fact]
+    public void Analyze_VarDecl_TrackResultIsAccepted()
+    {
+        string source = """
+                        entity Node
+                          value: S64
+
+                        routine start()
+                          var a = Node(value: 1)
+                          var ra = a.retain()
+                          var t = ra.track()
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
+    }
+
+    /// <summary>Bare copy of a `Retained[T]` variable into a second var is rejected even inside a record field read.</summary>
+    [Fact]
+    public void Analyze_VarDecl_RetainedFromTwoLevels_IsError()
+    {
+        string source = """
+                        entity Node
+                          value: S64
+
+                        record Wrapper
+                          ref: Retained[Node]
+
+                        record Box
+                          inner: Wrapper
+
+                        routine start()
+                          var a = Node(value: 1)
+                          var w = Wrapper(ref: a.retain())
+                          var b = Box(inner: w)
+                          var taken = b.inner.ref
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
+    }
+
     /// <summary>`using a.view() as v` is the supported form — accepted.</summary>
     [Fact]
     public void Analyze_UsingBlock_ViewingFromCall_IsAccepted()

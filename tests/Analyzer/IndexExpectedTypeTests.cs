@@ -85,6 +85,27 @@ public class IndexExpectedTypeTests
             filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.IntegerLiteralOverflow);
     }
 
+    /// <summary>Verifies integer literal 0 on a U64 indexer retypes to U64 without overflow.</summary>
+    [Fact]
+    public void IndexLiteral_ZeroLiteral_OnU64Indexer_NoError()
+    {
+        string source = """
+                        protocol Indexable
+                          @readonly
+                          routine Me.$getitem(index: U64) -> S32
+                        entity Bin obeys Indexable
+                          size: S32
+                        @readonly
+                        routine Bin.$getitem(index: U64) -> S32
+                          return 0_s32
+                        routine probe(b: Bin) -> S32
+                          return b[0]
+                        """;
+
+        AnalysisResult result = AssertAnalyzesSa(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
     private static IndexExpression FindFirstIndexExpression(AnalysisResult result, string routineName)
     {
         RoutineDeclaration? decl = result.Registry.UserPrograms

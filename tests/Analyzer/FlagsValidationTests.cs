@@ -480,6 +480,74 @@ public class FlagsValidationTests
 
     #endregion
 
+    #region Additional valid flag patterns
+
+    /// <summary>
+    /// Verifies that a single-member flags type is valid.
+    /// </summary>
+    [Fact]
+    public void Flags_SingleMember_NoErrors()
+    {
+        string source = """
+                        flags Flag
+                          ONLY_ONE
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.FlagsTooManyMembers);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.FlagsDuplicateMember);
+    }
+
+    /// <summary>
+    /// Verifies that isonly with three members joined by and produces no error.
+    /// </summary>
+    [Fact]
+    public void Flags_IsOnlyWithThreeMembers_NoErrors()
+    {
+        string source = """
+                        flags Permissions
+                          READ
+                          WRITE
+                          EXECUTE
+
+                        routine test(perms: Permissions)
+                          var result = perms isonly READ and WRITE and EXECUTE
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.FlagsIsOnlyRejectsOrBut);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.FlagsMemberNotFound);
+    }
+
+    /// <summary>
+    /// Verifies that an is test combining two valid members with and produces no error.
+    /// </summary>
+    [Fact]
+    public void Flags_IsTest_CombinedAnd_NoErrors()
+    {
+        string source = """
+                        flags Permissions
+                          READ
+                          WRITE
+                          EXECUTE
+
+                        routine test(perms: Permissions)
+                          var result = perms is READ and WRITE
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.FlagsMemberNotFound);
+    }
+
+    #endregion
+
     #region Member Access (C98)
     /// <summary>
     /// Verifies flags validation behavior for member access as value.
