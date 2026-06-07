@@ -47,9 +47,11 @@ needs K obeys Comparable
 ### :typeparam V: The value type.
 ### :see: {Dict[K, V]} for an unordered dictionary with O(1) average lookup.
 ### :see: {SortedList[T]} for a sorted sequence that allows duplicates.
-entity SortedDict[K, V] obeys Iterable[DictEntry[K, V]]
+entity SortedDict[K, V] obeys Iterable[DictEntry[K, V]], KeyFindable
 needs K obeys Comparable
 relates SortedDictIterator[K, V] as Iter
+relates K as Key
+relates V as Value
   secret root: Hijacked[BTreeDictNode[K, V]]?
   secret count: U64
 

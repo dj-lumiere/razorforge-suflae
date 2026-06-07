@@ -33,7 +33,7 @@ import BuilderService
 ### :see: {BitList} for a heap-backed growable bit sequence.
 ### :see: {Array[T, N]} for a fixed-size inline array of typed elements.
 @llvm("[{(N+7)//8} x i8]")
-record BitArray[N] obeys Comparable, Iterable[Bool]
+record BitArray[N] obeys Comparable, Iterable[Bool], MutableIndexable[Bool]
 needs N is U64
 relates BitArrayIterator[N] as Iter
   pass

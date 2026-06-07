@@ -782,31 +782,19 @@ dangerous routine SortedSet[T].update_subtree_size(node: Controlling[BTreeSetNod
 # Indexing - O(log n) access by position
 # ============================================================================
 
-### Returns the element at the given zero-based sorted position.
+### Returns the element at the given zero-based sorted rank.
 ### Rank 0 is the smallest element; rank `count()-1` is the largest.
-### :param index: The zero-based sorted rank to read.
-### :returns: The element at that sorted position.
-### :throws: {IndexOutOfBoundsError} if `index >= count()`.
+### Unlike List's O(1) `[]`, this is O(log n) — use the name to signal the cost.
+### :param rank: The zero-based sorted rank to read.
+### :returns: The element at that sorted rank.
+### :throws: {IndexOutOfBoundsError} if `rank >= count()`.
 @readonly
-routine SortedSet[T].$getitem!(index: U64) -> ?T
-  if index >= me.count
-    throw IndexOutOfBoundsError(index: index, count: me.count)
+routine SortedSet[T].get_by_rank!(rank: U64) -> ?T
+  if rank >= me.count
+    throw IndexOutOfBoundsError(index: rank, count: me.count)
   danger!
     var root_ref = me.root!!.as_entity()
-    return me.get_by_rank(node: root_ref, rank: index)
-
-### Returns the element addressed by a back index in sorted order.
-### `^0` is the largest element, `^1` the second-largest, and so on.
-### :param index: The backward position to resolve.
-### :returns: The element at the resolved sorted position.
-@readonly
-routine SortedSet[T].$getitem!(index: BackIndex) -> ?T
-  var idx = index.resolve!(me.count)
-  if idx >= me.count
-    throw IndexOutOfBoundsError(index: idx, count: me.count)
-  danger!
-    var root_ref = me.root!!.as_entity()
-    return me.get_by_rank(node: root_ref, rank: idx)
+    return me.get_at_subtree_rank(node: root_ref, rank: rank)
 
 ### Returns the element at the given in-order rank within the subtree rooted at `node`.
 ### Cached subtree sizes allow whole branches to be skipped in O(log n).
@@ -814,7 +802,7 @@ routine SortedSet[T].$getitem!(index: BackIndex) -> ?T
 ### :param rank: The zero-based in-order rank to resolve.
 ### :returns: The element at that in-order rank within the subtree.
 @readonly
-dangerous routine SortedSet[T].get_by_rank(node: Referring[BTreeSetNode[T]], rank: U64) -> ?T
+dangerous routine SortedSet[T].get_at_subtree_rank(node: Referring[BTreeSetNode[T]], rank: U64) -> ?T
   if node.is_leaf
     return node.keys_get(rank)
 
@@ -825,7 +813,7 @@ dangerous routine SortedSet[T].get_by_rank(node: Referring[BTreeSetNode[T]], ran
     var child_size = node.children_get(i).as_entity().subtree_size
 
     if remaining < child_size
-      return me.get_by_rank(node: node.children_get(i).as_entity(), rank: remaining)
+      return me.get_at_subtree_rank(node: node.children_get(i).as_entity(), rank: remaining)
 
     remaining = remaining -% child_size
 

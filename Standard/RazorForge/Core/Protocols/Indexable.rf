@@ -1,19 +1,14 @@
 module Core
 
-### Represents the `Indexable` protocol.
-### Indexable values expose keyed read and write access through bracket syntax.
-### :typeparam K: The key type accepted by the indexer.
-### :typeparam V: The value type returned or assigned by the indexer.
-protocol Indexable[K, V]
-  ### Returns the value addressed by `key`.
-  ### Implementations define whether missing keys throw, return absent, or use another contract.
-  ### :param key: The key to resolve.
-  ### :returns: The element at the given index.
+### Integer-indexed read access for ordered sequences (List, Deque, Array, BitArray, BitList).
+### Provides the `[]` subscript operator with U64 integer keys.
+### Back-index (`^n`) is handled as a separate overload by each conforming type.
+### Bounds violations throw at runtime.
+### :typeparam V: The element type returned by the indexer.
+protocol Indexable[V]
+  ### Returns the element at zero-based position `index`.
+  ### :param index: The zero-based position to read.
+  ### :returns: The element at that position.
+  ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
   @readonly
-  routine Me.$getitem!(key: K) -> ?V
-
-  ### Stores `value` at `key`.
-  ### The write semantics are defined by the conforming type.
-  ### :param key: The key to resolve.
-  ### :param value: The value to use.
-  routine Me.$setitem!(key: K, value: V)
+  routine Me.$getitem!(index: U64) -> ?V

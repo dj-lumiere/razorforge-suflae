@@ -1,0 +1,21 @@
+module Core
+
+### Key-based read and write access for map types (Dict, FastDict, SortedDict).
+### Both `[]` read and `[]` write are failable: the key must already exist for either to succeed.
+### To insert a new key-value pair, use the `put(key:, value:)` method instead.
+protocol KeyFindable
+  ### The key type accepted by this map.
+  relates Key
+  ### The value type stored in this map.
+  relates Value
+  ### Returns the value associated with `key`.
+  ### :param key: The key to look up.
+  ### :returns: The associated value.
+  ### :throws: absent if `key` is not present in the map.
+  @readonly
+  routine Me.$getitem!(key: Me/Key) -> ?Me/Value
+  ### Replaces the value at an existing `key` with `value`.
+  ### :param key: The key to update (must already exist).
+  ### :param value: The replacement value.
+  ### :throws: absent if `key` is not present in the map.
+  routine Me.$setitem!(key: Me/Key, value: Me/Value)

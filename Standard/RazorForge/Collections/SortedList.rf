@@ -681,32 +681,28 @@ routine SortedList[T].remove_all(value: T) -> U64
   return removed
 
 # ============================================================================
-# Indexing
+# Rank-based access (replaces [] indexing — cost is O(log n))
 # ============================================================================
 
+### Returns the element at zero-based sorted rank `rank`.
+### Unlike List's O(1) `[]`, this is O(log n) because the tree must be descended.
+### :param rank: Zero-based position in sorted order.
+### :returns: The element at that rank.
+### :throws: {IndexOutOfBoundsError} if `rank >= count()`.
 @readonly
-routine SortedList[T].$getitem!(index: U64) -> ?T
-  if index >= me.count
-    throw IndexOutOfBoundsError(index: index, count: me.count)
+routine SortedList[T].get_by_rank!(rank: U64) -> ?T
+  if rank >= me.count
+    throw IndexOutOfBoundsError(index: rank, count: me.count)
   danger!
     var root_ref = me.root!!.as_entity()
-    return me.get_by_rank(node: root_ref, rank: index)
-
-@readonly
-routine SortedList[T].$getitem!(index: BackIndex) -> ?T
-  var idx = index.resolve!(me.count)
-  if idx >= me.count
-    throw IndexOutOfBoundsError(index: idx, count: me.count)
-  danger!
-    var root_ref = me.root!!.as_entity()
-    return me.get_by_rank(node: root_ref, rank: idx)
+    return me.get_at_subtree_rank(node: root_ref, rank: rank)
 
 ### Returns the element at zero-based sorted rank `rank` within `node`'s subtree.
 ### :param node: The subtree root to search.
 ### :param rank: Zero-based position in the in-order traversal of this subtree.
 ### :returns: The element at that rank.
 @readonly
-dangerous routine SortedList[T].get_by_rank(node: Referring[BTreeListNode[T]], rank: U64) -> ?T
+dangerous routine SortedList[T].get_at_subtree_rank(node: Referring[BTreeListNode[T]], rank: U64) -> ?T
   if node.is_leaf
     return node.keys_get(rank)
 
@@ -715,7 +711,7 @@ dangerous routine SortedList[T].get_by_rank(node: Referring[BTreeListNode[T]], r
   while i < node.children_count()
     var child_size = node.children_get(i).as_entity().subtree_size
     if remaining < child_size
-      return me.get_by_rank(node: node.children_get(i).as_entity(), rank: remaining)
+      return me.get_at_subtree_rank(node: node.children_get(i).as_entity(), rank: remaining)
     remaining = remaining -% child_size
     if i < node.keys_count()
       if remaining == 0u64

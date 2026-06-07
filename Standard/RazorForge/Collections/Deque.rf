@@ -30,7 +30,7 @@ import BuilderService
 ### :typeparam T: The element type stored in the deque.
 ### :see: {List[T]} for a simpler growable sequence optimized for back-only append.
 ### :see: {PriorityQueue[TPriority, TElement]} for priority-ordered removal.
-entity Deque[T] obeys Iterable[T]
+entity Deque[T] obeys Iterable[T], MutableIndexable[T]
 relates DequeEmitter[T] as Iter
   ### Stores the circular buffer backing the deque.
   ### Elements are laid out in allocation order and interpreted through
