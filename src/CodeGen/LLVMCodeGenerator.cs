@@ -440,7 +440,8 @@ public partial class LlvmCodeGenerator
             {
                 if (record.TypeArguments != null &&
                     record.TypeArguments.Any(predicate: t =>
-                        ContainsGenericParameter(t) || t is ErrorTypeInfo))
+                        ContainsGenericParameter(t) || t is ErrorTypeInfo ||
+                        ContainsAbstractProjection(t)))
                 {
                     continue;
                 }
@@ -462,6 +463,23 @@ public partial class LlvmCodeGenerator
     /// <summary>
     /// Checks if a type contains unresolved generic parameters at any nesting depth.
     /// </summary>
+    /// <summary>
+    /// True if <paramref name="type"/> is, or contains, an unresolved associated-type projection
+    /// ('Me/Value', 'S/Iter'). Such a type is abstract until monomorphization resolves the slot, so
+    /// a record instantiation built over it (e.g. Maybe[Me/Value] from an abstract protocol method
+    /// signature) is not emittable LLVM IR and must be skipped at the record-declaration sites.
+    /// Kept separate from <see cref="ContainsGenericParameter"/> so routine emission is unaffected.
+    /// </summary>
+    private static bool ContainsAbstractProjection(TypeInfo type)
+    {
+        if (type is AssociatedProjectionTypeInfo)
+        {
+            return true;
+        }
+
+        return type.TypeArguments?.Any(predicate: ContainsAbstractProjection) == true;
+    }
+
     private static bool ContainsGenericParameter(TypeInfo type)
     {
         if (type is GenericParameterTypeInfo or ErrorTypeInfo)

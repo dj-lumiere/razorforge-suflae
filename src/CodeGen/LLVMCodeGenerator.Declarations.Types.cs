@@ -145,7 +145,8 @@ public partial class LlvmCodeGenerator
         // emission, so it is defence-in-depth against partially-concrete types leaking through.
         if (record.IsGenericDefinition ||
             record.TypeArguments?.Any(predicate: t =>
-                ContainsGenericParameter(t) || t is ErrorTypeInfo) == true)
+                ContainsGenericParameter(t) || t is ErrorTypeInfo ||
+                ContainsAbstractProjection(t)) == true)
         {
             return;
         }

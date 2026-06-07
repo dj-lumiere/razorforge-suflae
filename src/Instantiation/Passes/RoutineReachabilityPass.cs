@@ -394,17 +394,26 @@ internal sealed class RoutineReachabilityPass(InstantiationContext ctx)
                 // tracks failability on RoutineInfo separately. See TypeRegistry.MethodLookup.cs:236.
                 EnqueueMethodIfPresent(owner: collectionType, methodName: "$getitem");
                 EnqueueMethodIfPresent(owner: collectionType, methodName: "$setitem");
-                // The first-overload lookup above only reaches the forward (integer) index form.
-                // List/Text/Bytes/Array also expose `$getitem!(BackIndex)`; without seeding the
-                // overload matching the actual index type, `coll[^n]` links against an unemitted
-                // symbol. Seed by the index argument type so the BackIndex body gets monomorphized.
                 if (ixNode.Index.ResolvedType is { } idxRaw)
                 {
                     TypeInfo idxType = RoutineInfo.SubstituteType(type: idxRaw, substitution: typeSubs);
-                    EnqueueMethodOverloadIfPresent(owner: collectionType, methodName: "$getitem",
-                        argType: idxType);
-                    EnqueueMethodOverloadIfPresent(owner: collectionType, methodName: "$setitem",
-                        argType: idxType);
+                    // `coll[^n]` (BackIndex index) is desugared by OperatorLoweringPass (Phase 7,
+                    // after this pass) to `coll.$getitem!(backIdx.resolve!(coll.count()))`. Seed the
+                    // two helper routines that desugar introduces so they aren't linked-but-unemitted:
+                    // the collection's `count()` and `BackIndex.resolve!`. The `$getitem` forward
+                    // (U64) form is already seeded above.
+                    if (idxType is { Name: "BackIndex" })
+                    {
+                        EnqueueMethodIfPresent(owner: collectionType, methodName: "count");
+                        EnqueueMethodIfPresent(owner: idxType, methodName: "resolve");
+                    }
+                    else
+                    {
+                        EnqueueMethodOverloadIfPresent(owner: collectionType, methodName: "$getitem",
+                            argType: idxType);
+                        EnqueueMethodOverloadIfPresent(owner: collectionType, methodName: "$setitem",
+                            argType: idxType);
+                    }
                 }
                 break;
             case UnaryExpression { Operator: UnaryOperator.ForceUnwrap }:

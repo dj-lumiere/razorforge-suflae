@@ -355,13 +355,23 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
                 const string propertyName = "$getitem";
                 RoutineInfo? resolvedGetItem = null;
                 TypeInfo? targetType = idx.Object.ResolvedType;
+
+                // Back-index desugaring: `coll[^n]` has a BackIndex-typed index. Collections only
+                // expose `$getitem!(index: U64)`, so rewrite the index to a forward U64 position
+                // via `backIdx.resolve!(coll.count())` (which throws on out-of-range, matching the
+                // old per-type BackIndex overload). The object is referenced twice — acceptable for
+                // the common `var[^n]` case; a side-effecting receiver would evaluate twice.
+                TypeInfo? rawIndexType = loweredIdx.ResolvedType ?? idx.Index.ResolvedType;
+                if (targetType != null && rawIndexType is { Name: "BackIndex" })
+                {
+                    loweredIdx = BuildBackIndexResolve(loweredObj: loweredObj,
+                        backIndex: loweredIdx, targetType: targetType, location: idx.Location);
+                }
+
                 if (targetType != null)
                 {
                     TypeInfo? indexType = loweredIdx.ResolvedType ?? idx.Index.ResolvedType;
-                    // Overload-aware: List/Text/Bytes/Array expose both `$getitem!(U64)` and
-                    // `$getitem!(BackIndex)`. Pick by the index argument type so `coll[^n]` binds the
-                    // BackIndex overload instead of the first-declared forward (U64) one. Falls back
-                    // to the plain first-match lookup when the index type is unknown.
+                    // Pick the `$getitem` overload by the (now forward U64) index argument type.
                     resolvedGetItem = indexType != null
                         ? ctx.Registry.LookupMethodOverload(type: targetType,
                               methodName: "$getitem", argTypes: [indexType])
@@ -1054,6 +1064,51 @@ internal sealed class OperatorLoweringPass(PostprocessingContext ctx)
     {
         if (method.LlvmIrTemplate != null) return CallLoweringKind.LlvmIntrinsic;
         return CallLoweringKind.DirectMemberRoutine;
+    }
+
+    /// <summary>
+    /// Builds the forward-index expression for a back-index subscript: given a receiver and a
+    /// <c>BackIndex</c> value, produces <c>backIndex.resolve!(receiver.count())</c> — a resolved
+    /// <c>U64</c> position. This is the call-site desugaring that replaces the per-collection
+    /// <c>$getitem!(index: BackIndex)</c> overloads; collections need only declare the
+    /// <c>$getitem!(index: U64)</c> form. <c>BackIndex.resolve!</c> throws on out-of-range, so the
+    /// bounds semantics match the old overload.
+    /// </summary>
+    private Expression BuildBackIndexResolve(Expression loweredObj, Expression backIndex,
+        TypeInfo targetType, SourceLocation location)
+    {
+        // receiver.count() -> U64
+        RoutineInfo? countRoutine = ctx.Registry.LookupMethod(type: targetType, methodName: "count");
+        var countCall = new CallExpression(
+            Callee: new MemberExpression(Object: loweredObj, PropertyName: "count",
+                Location: location),
+            Arguments: [],
+            Location: location)
+        {
+            ResolvedRoutine = countRoutine,
+            ResolvedType = countRoutine?.ReturnType,
+            LoweringKind = countRoutine != null
+                ? ClassifyMethod(countRoutine)
+                : CallLoweringKind.DirectMemberRoutine
+        };
+
+        // backIndex.resolve!(count) -> U64 (failable: throws IndexOutOfBoundsError on overshoot)
+        TypeInfo? backIndexType = backIndex.ResolvedType;
+        RoutineInfo? resolveRoutine = backIndexType != null
+            ? ctx.Registry.LookupMethod(type: backIndexType, methodName: "resolve", isFailable: true)
+            : null;
+        return new CallExpression(
+            Callee: new MemberExpression(Object: backIndex, PropertyName: "resolve",
+                Location: location),
+            Arguments: [countCall],
+            Location: location)
+        {
+            ResolvedRoutine = resolveRoutine,
+            ResolvedType = resolveRoutine?.ReturnType,
+            LoweringKind = resolveRoutine != null
+                ? ClassifyMethod(resolveRoutine)
+                : CallLoweringKind.DirectMemberRoutine
+        };
     }
 
     private bool TryResolveCommonIntegerComparisonType(TypeInfo left, TypeInfo right,

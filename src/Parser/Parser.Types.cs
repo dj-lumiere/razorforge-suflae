@@ -620,9 +620,26 @@ public partial class Parser
     {
         List<AssociatedTypeDeclaration> related = existing != null ? [..existing] : [];
 
-        while (SkipNewlinesIfFollowedBy(type: TokenType.Relates) &&
-               Match(type: TokenType.Relates))
+        // Each clause may be preceded by doc comments and blank lines (a slot is often
+        // documented just like a member). Only commit to consuming that trivia once a
+        // `relates` keyword is confirmed to follow, so trivia before the indented body
+        // (which has no `relates`) is left intact for the body parser.
+        while (true)
         {
+            int offset = 0;
+            while (PeekToken(offset: offset).Type is TokenType.Newline or TokenType.DocComment)
+            {
+                offset++;
+            }
+
+            if (PeekToken(offset: offset).Type != TokenType.Relates)
+            {
+                break;
+            }
+
+            while (Match(TokenType.Newline, TokenType.DocComment)) { } // NOSONAR S108
+            Match(type: TokenType.Relates);
+
             SourceLocation location = GetLocation();
 
             // Parse the first token group as a type. For a slot declaration it is a bare
@@ -631,7 +648,7 @@ public partial class Parser
 
             if (Match(type: TokenType.Obeys))
             {
-                // Slot declaration: `relates Iter obeys Iterator[T]`.
+                // Constrained slot declaration: `relates Iter obeys Iterator[T]`.
                 TypeExpression constraint = ParseType();
                 related.Add(item: new AssociatedTypeDeclaration(
                     Name: first.Name,
@@ -652,9 +669,13 @@ public partial class Parser
             }
             else
             {
-                throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedConstraintType,
-                    message:
-                    "Expected 'obeys' (slot declaration) or 'as' (binding) in 'relates' clause");
+                // Bare slot declaration: `relates Key` — an associated type with no
+                // constraint and no binding (the implementer supplies it via `relates ... as`).
+                related.Add(item: new AssociatedTypeDeclaration(
+                    Name: first.Name,
+                    Constraint: null,
+                    Binding: null,
+                    Location: location));
             }
         }
 
