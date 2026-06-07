@@ -422,7 +422,7 @@ dangerous routine SortedDict[K, V].search_node(node: Referring[BTreeDictNode[K, 
 ### :returns: The value mapped to `key`.
 ### :throws: `KeyNotFoundError` if `key` is not present.
 @readonly
-routine SortedDict[K, V].$getitem!(key: K) -> ?V
+routine SortedDict[K, V].$getitem!(key: Referring[K]) -> ?V
   if me.root is None
     throw KeyNotFoundError(key: key.$represent())
   danger!
@@ -447,7 +447,7 @@ dangerous routine SortedDict[K, V].get_from_node!(node: Referring[BTreeDictNode[
 ### :param key: The key to update.
 ### :param value: The replacement value.
 ### :absent: The key is not present in the dictionary.
-routine SortedDict[K, V].$setitem!(key: K, value: V)
+routine SortedDict[K, V].$setitem!(key: Referring[K], value: ?V)
   if key notin me
     absent
   discard me.add(key: key, value: value)

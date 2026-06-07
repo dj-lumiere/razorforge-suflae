@@ -270,7 +270,7 @@ routine List[T].$getitem!(index: U64) -> ?T
 ### :param index: The zero-based position to update.
 ### :param value: The replacement value.
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
-routine List[T].$setitem!(index: U64, value: T)
+routine List[T].$setitem!(index: U64, value: ?T)
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   var byte_offset = T.data_size() * index
@@ -297,7 +297,7 @@ routine List[T].$getitem!(index: BackIndex) -> ?T
 ### Replaces the element addressed by a back index.
 ### :param index: The backward position to resolve (`^0` is the last element).
 ### :param value: The replacement value.
-routine List[T].$setitem!(index: BackIndex, value: T)
+routine List[T].$setitem!(index: BackIndex, value: ?T)
   var idx = index.resolve!(me.count)
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)

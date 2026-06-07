@@ -103,7 +103,7 @@ routine BitArray[N].$getitem!(index: BackIndex) -> Bool
 ### :param index: The zero-based bit position to update.
 ### :param value: The new bit value.
 ### :throws: {IndexOutOfBoundsError} if `index >= N`.
-routine BitArray[N].$setitem!(index: U64, value: Bool)
+routine BitArray[N].$setitem!(index: U64, value: ?Bool)
   if index >= N
     throw IndexOutOfBoundsError(index: index, count: N)
   var byte_idx = unsigned_div[U64](index, 8u64)
@@ -120,7 +120,7 @@ routine BitArray[N].$setitem!(index: U64, value: Bool)
 ### :param index: The backward position to resolve.
 ### :param value: The new bit value.
 ### :throws: {IndexOutOfBoundsError} if the resolved index is out of range.
-routine BitArray[N].$setitem!(index: BackIndex, value: Bool)
+routine BitArray[N].$setitem!(index: BackIndex, value: ?Bool)
   var idx = index.resolve!(N)
   if idx >= N
     throw IndexOutOfBoundsError(index: idx, count: N)

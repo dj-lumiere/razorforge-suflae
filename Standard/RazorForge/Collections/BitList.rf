@@ -234,7 +234,7 @@ routine BitList.$getitem!(index: U64) -> Bool
 ### :param index: The zero-based logical position to update.
 ### :param value: The replacement bit value.
 ### :throws: May throw {IndexOutOfBoundsError}.
-routine BitList.$setitem!(index: U64, value: Bool)
+routine BitList.$setitem!(index: U64, value: ?Bool)
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   me.set_bit_internal(index: index, value: value)
@@ -258,7 +258,7 @@ routine BitList.$getitem!(index: BackIndex) -> Bool
 ### Replaces the bit addressed by a back index.
 ### :param index: The backward position to resolve.
 ### :param value: The replacement bit value.
-routine BitList.$setitem!(index: BackIndex, value: Bool)
+routine BitList.$setitem!(index: BackIndex, value: ?Bool)
   var idx = index.resolve!(me.count)
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)

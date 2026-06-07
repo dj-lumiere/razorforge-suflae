@@ -57,7 +57,7 @@ routine Array[T, N].$getitem!(index: U64) -> ?T
 ### :param index: The zero-based position to update.
 ### :param value: The replacement value.
 ### :throws: {IndexOutOfBoundsError} if `index >= N`.
-routine Array[T, N].$setitem!(index: U64, value: T)
+routine Array[T, N].$setitem!(index: U64, value: ?T)
   if index >= N
     throw IndexOutOfBoundsError(index: index, count: me.count())
   me = set_element_at[Array[T, N], T](me, index, value)

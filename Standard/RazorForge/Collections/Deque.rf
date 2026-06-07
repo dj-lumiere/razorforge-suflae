@@ -274,7 +274,7 @@ routine Deque[T].$getitem!(index: U64) -> ?T
 ### :param index: The zero-based logical position to update.
 ### :param value: The replacement element.
 ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
-routine Deque[T].$setitem!(index: U64, value: T)
+routine Deque[T].$setitem!(index: U64, value: ?T)
   if index >= me.count
     throw IndexOutOfBoundsError(index: index, count: me.count)
   var physical_idx = me.physical_index(index)
@@ -300,7 +300,7 @@ routine Deque[T].$getitem!(index: BackIndex) -> ?T
 ### Replaces the element addressed by a back index.
 ### :param index: The backward position to resolve.
 ### :param value: The replacement element.
-routine Deque[T].$setitem!(index: BackIndex, value: T)
+routine Deque[T].$setitem!(index: BackIndex, value: ?T)
   var idx = index.resolve!(me.count)
   if idx >= me.count
     throw IndexOutOfBoundsError(index: idx, count: me.count)

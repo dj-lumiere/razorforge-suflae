@@ -391,7 +391,7 @@ routine FastDict[K, V].get_or_default(key: K, default_value: V) -> ?V
 ### :returns: The value mapped to `key`.
 ### :absent: The key is not present in the dictionary.
 @readonly
-routine FastDict[K, V].$getitem!(key: K) -> ?V
+routine FastDict[K, V].$getitem!(key: Referring[K]) -> ?V
   var slot = me.find_slot(key)
   if slot >= me.capacity
     absent
@@ -402,7 +402,7 @@ routine FastDict[K, V].$getitem!(key: K) -> ?V
 ### :param key: The key to update.
 ### :param value: The replacement value.
 ### :absent: The key is not present in the dictionary.
-routine FastDict[K, V].$setitem!(key: K, value: V)
+routine FastDict[K, V].$setitem!(key: Referring[K], value: ?V)
   if key notin me
     absent
   var slot = me.find_slot(key)
