@@ -249,7 +249,7 @@ routine BTreeSetNode[T].children_add_range_from(other: Referring[BTreeSetNode[T]
 ### | `remove` | O(log n) |
 ### | `$contains` | O(log n) |
 ### | `min!` / `max!` | O(log n) |
-### | `$getitem!` | O(log n) |
+### | `get_by_rank!` | O(log n) |
 ### | `range` | O(log n + k) |
 ### | Iteration | O(n) |
 ###
@@ -970,7 +970,7 @@ routine SortedSetIterator[T].$next!() -> ?T
   danger!
     if me.index >= me.set.as_entity().count()
       absent
-    var _result = me.set.as_entity()[me.index]
+    var _result = me.set.as_entity().get_by_rank!(rank: me.index)
     me.index = me.index + 1u64
     return _result
 
@@ -1016,7 +1016,7 @@ routine SortedSet[T].$eq(other: Referring[SortedSet[T]]) -> Bool
     return false
   var i = 0u64
   while i < me.count
-    if me[i] != other[i]
+    if me.try_get_by_rank(rank: i)!! != other.try_get_by_rank(rank: i)!!
       return false
     i = i +% 1u64
   return true

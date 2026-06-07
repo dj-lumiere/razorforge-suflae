@@ -850,7 +850,7 @@ routine SortedListIterator[T].$next!() -> ?T
   danger!
     if me.index >= me.list.as_entity().count()
       absent
-    var _result = me.list.as_entity()[me.index]
+    var _result = me.list.as_entity().get_by_rank!(rank: me.index)
     me.index = me.index + 1u64
     return _result
 
@@ -891,7 +891,7 @@ routine SortedList[T].$eq(other: Referring[SortedList[T]]) -> Bool
     return false
   var i = 0u64
   while i < me.count
-    if me[i] != other[i]
+    if me.try_get_by_rank(rank: i)!! != other.try_get_by_rank(rank: i)!!
       return false
     i = i +% 1u64
   return true
