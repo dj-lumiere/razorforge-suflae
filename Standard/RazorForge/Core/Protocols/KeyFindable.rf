@@ -4,10 +4,10 @@ module Core
 ### Both `[]` read and `[]` write are failable: the key must already exist for either to succeed.
 ### To insert a new key-value pair, use the `put(key:, value:)` method instead.
 protocol KeyFindable
-  ### The key type accepted by this map.
-  relates Key
-  ### The value type stored in this map.
-  relates Value
+### The key type accepted by this map.
+relates Key
+### The value type stored in this map.
+relates Value
   ### Returns the value associated with `key`.
   ### :param key: The key to look up.
   ### :returns: The associated value.
