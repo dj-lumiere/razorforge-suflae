@@ -18,4 +18,4 @@ relates Value
   ### :param key: The key to update (must already exist).
   ### :param value: The replacement value.
   ### :throws: absent if `key` is not present in the map.
-  routine Me.$setitem!(key: Referring[Me/Key], value: Referring[Me/Value])
+  routine Me.$setitem!(key: Referring[Me/Key], value: ?Me/Value)
