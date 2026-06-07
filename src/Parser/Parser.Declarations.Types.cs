@@ -701,6 +701,26 @@ public partial class Parser
                 methodIsCommon = true;
             }
 
+            // Associated-type slot declaration inside protocol body: `relates Key` or `relates Key obeys Hashable`
+            if (Match(type: TokenType.Relates))
+            {
+                SourceLocation relatesLocation = GetLocation();
+                TypeExpression slotNameType = ParseType();
+                TypeExpression? constraint = null;
+                if (Match(type: TokenType.Obeys))
+                {
+                    constraint = ParseType();
+                }
+                associatedTypes ??= [];
+                associatedTypes.Add(item: new AssociatedTypeDeclaration(
+                    Name: slotNameType.Name,
+                    Constraint: constraint,
+                    Binding: null,
+                    Location: relatesLocation));
+                Match(type: TokenType.Newline);
+                continue;
+            }
+
             // Parse routine signature
             if (Match(type: TokenType.Routine))
             {

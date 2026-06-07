@@ -753,6 +753,11 @@ public sealed partial class SemanticVerifier
         GenerateDerivedOperators();
         AnalyzeSynthesizedBodies();
 
+        // Pre-register try_/check_/lookup_ stubs for all failable stdlib routines so that
+        // stdlib bodies that call try_X (e.g. try_get_by_rank) resolve during body analysis.
+        // Uses AST-level detection — no full body analysis or expression lowering required.
+        PreRegisterStdlibVariants();
+
         AnalyzeStdlibBodies();
 
         // Collect stdlib-specific errors
