@@ -164,16 +164,182 @@ public class DiscardTests
                         record Wrapper
                           value: S32
 
-                        routine Wrapper.try_get!(self: Wrapper) -> S32
+                        routine Wrapper.get_value!(self: Wrapper) -> S32
                           return self.value
 
                         routine test()
                           var w = Wrapper(value: 42)
-                          discard w.try_get!()
+                          discard w.get_value!()
                           return
                         """;
 
         AssertParses(source: source);
+    }
+
+    #endregion
+
+    #region RazorForge - Discard In Failable Context
+
+    /// <summary>
+    /// Verifies that discard on a failable call inside a failable routine produces no error.
+    /// </summary>
+    [Fact]
+    public void Analyze_DiscardFailableCallInFailableContext_NoError()
+    {
+        string source = """
+                        routine get!(flag: Bool) -> S32
+                          if flag
+                            absent
+                          return 42
+
+                        routine test!()
+                          discard get!(flag: true)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    /// <summary>
+    /// Verifies that calling a failable routine without handling inside a non-failable routine
+    /// is currently suppressed (UnhandledCrashableCall is in SuppressedWarnings alongside SW007).
+    /// When enforcement is wanted, remove UnhandledCrashableCall from SuppressedWarnings.
+    /// </summary>
+    [Fact]
+    public void Analyze_DiscardFailableCallInNonFailableContext_CurrentlySuppressed()
+    {
+        string source = """
+                        routine get!(flag: Bool) -> S32
+                          if flag
+                            absent
+                          return 42
+
+                        routine test()
+                          discard get!(flag: true)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Warnings,
+            filter: w => w.Code == SemanticWarningCode.UnhandledCrashableCall);
+    }
+
+    /// <summary>
+    /// Verifies that discard on the non-failable try_ variant in a non-failable context produces no error.
+    /// </summary>
+    [Fact]
+    public void Analyze_DiscardTryVariantInNonFailableContext_NoError()
+    {
+        string source = """
+                        routine get!(flag: Bool) -> S32
+                          if flag
+                            absent
+                          return 42
+
+                        routine test()
+                          discard try_get(flag: true)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    #endregion
+
+    #region RazorForge - Discard Chained And Constructed Calls
+
+    /// <summary>
+    /// Verifies that the parser accepts discard on a chained method call.
+    /// </summary>
+    [Fact]
+    public void Parse_DiscardChainedCall_Succeeds()
+    {
+        string source = """
+                        record Counter
+                          value: S32
+
+                        routine Counter.incremented(n: S32) -> Counter
+                          return Counter(value: me.value)
+
+                        routine Counter.get_value() -> S32
+                          return me.value
+
+                        routine test()
+                          var c = Counter(value: 0)
+                          discard c.incremented(n: 1).get_value()
+                          return
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    /// <summary>
+    /// Verifies that the parser accepts discard on a constructor-style call expression.
+    /// </summary>
+    [Fact]
+    public void Parse_DiscardConstructorCall_Succeeds()
+    {
+        string source = """
+                        record Point
+                          x: S32
+                          y: S32
+
+                        routine test()
+                          discard Point(x: 1, y: 2)
+                          return
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    /// <summary>
+    /// Verifies semantic analysis of sequential discard calls produces no unexpected errors.
+    /// </summary>
+    [Fact]
+    public void Analyze_MultipleDiscardCallsSequentially_NoError()
+    {
+        string source = """
+                        routine get_a() -> S32
+                          return 1
+
+                        routine get_b() -> S32
+                          return 2
+
+                        routine test()
+                          discard get_a()
+                          discard get_b()
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+        Assert.Empty(collection: result.Warnings);
+    }
+
+    /// <summary>
+    /// Verifies that discard on a void member call produces no warnings.
+    /// </summary>
+    [Fact]
+    public void Analyze_DiscardVoidMemberCall_NoWarning()
+    {
+        string source = """
+                        record Logger
+                          count: S32
+
+                        routine Logger.log(message: Text)
+                          pass
+                          return
+
+                        routine test()
+                          var lg = Logger(count: 0)
+                          discard lg.log(message: "hello")
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
     }
 
     #endregion
@@ -226,6 +392,25 @@ public class DiscardTests
                         """;
 
         // discard must be followed by a call expression
+        AssertParseError(source: source);
+    }
+
+    /// <summary>
+    /// Verifies that the parser rejects discard on a member field access (not a call).
+    /// </summary>
+    [Fact]
+    public void Parse_DiscardMemberAccess_ReportsError()
+    {
+        string source = """
+                        record Wrapper
+                          value: S32
+
+                        routine test()
+                          var w = Wrapper(value: 42)
+                          discard w.value
+                          return
+                        """;
+
         AssertParseError(source: source);
     }
 

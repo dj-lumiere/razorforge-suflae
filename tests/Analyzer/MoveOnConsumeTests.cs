@@ -75,6 +75,26 @@ public class MoveOnConsumeTests
             filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.ImplicitWrapperCopy);
     }
 
+    /// <summary>`.retain()` twice on the same variable; the second use is a double-consume error.</summary>
+    [Fact]
+    public void Analyze_RetainTwiceOnEntity_SecondUseIsError()
+    {
+        string source = """
+                        entity Node
+                          value: S64
+
+                        routine start()
+                          var a = Node(value: 1)
+                          var r1 = a.retain()
+                          var r2 = a.retain()
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == Compiler.Diagnostics.SemanticDiagnosticCode.UseAfterSteal);
+    }
+
     /// <summary>`ra.retain()` on a `Retained[T]` source does NOT kill `ra`.</summary>
     [Fact]
     public void Analyze_RetainOnRetained_KeepsSourceAlive()

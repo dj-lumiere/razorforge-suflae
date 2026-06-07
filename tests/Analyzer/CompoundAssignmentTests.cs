@@ -277,6 +277,122 @@ public class CompoundAssignmentTests
 
     #endregion
 
+    #region Additional Operator Coverage
+
+    /// <summary>
+    /// Verifies semantic analysis behavior for multiply compound assignment without unexpected diagnostics.
+    /// </summary>
+    [Fact]
+    public void Analyze_MultiplyCompoundAssignment_NoError()
+    {
+        string source = """
+                        protocol InPlaceMultiplicable
+                          routine Me.$imul(from: Me) -> Blank
+
+                        record Scale obeys InPlaceMultiplicable
+                          factor: S32
+
+                        routine Scale.$imul(from: Scale) -> Blank
+
+                        routine test()
+                          var s = Scale(factor: 2)
+                          s *= Scale(factor: 3)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
+    }
+
+    /// <summary>
+    /// Verifies semantic analysis behavior for bitwise-or compound assignment without unexpected diagnostics.
+    /// </summary>
+    [Fact]
+    public void Analyze_BitwiseOrCompoundAssignment_NoError()
+    {
+        string source = """
+                        protocol InPlaceBitwiseable
+                          routine Me.$ibitand(from: Me) -> Blank
+
+                        record Mask obeys InPlaceBitwiseable
+                          bits: S32
+
+                        routine Mask.$ibitand(from: Mask) -> Blank
+                          pass
+                        routine Mask.$ibitor(from: Mask) -> Blank
+                          pass
+
+                        routine test()
+                          var m = Mask(bits: 0)
+                          m |= Mask(bits: 8)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
+    }
+
+    /// <summary>
+    /// Verifies semantic analysis behavior for modulo compound assignment without unexpected diagnostics.
+    /// </summary>
+    [Fact]
+    public void Analyze_ModuloCompoundAssignment_NoError()
+    {
+        string source = """
+                        protocol InPlaceFloorDivisible
+                          routine Me.$ifloordiv(from: Me) -> Blank
+
+                        record Bucket obeys InPlaceFloorDivisible
+                          size: S32
+
+                        routine Bucket.$ifloordiv(from: Bucket) -> Blank
+                          pass
+                        routine Bucket.$imod(from: Bucket) -> Blank
+                          pass
+
+                        routine test()
+                          var b = Bucket(size: 10)
+                          b %= Bucket(size: 3)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
+    }
+
+    /// <summary>
+    /// Verifies that a record with both $iadd and $add defined uses $iadd (no fallback needed).
+    /// </summary>
+    [Fact]
+    public void Analyze_RecordWithBothIaddAndAdd_PrefersInPlace_NoError()
+    {
+        string source = """
+                        record Vector
+                          x: S32
+
+                        routine Vector.$iadd(from: Vector) -> Blank
+                          pass
+
+                        @readonly
+                        routine Vector.$add(you: Vector) -> Vector
+                          return Vector(x: me.x)
+
+                        routine test()
+                          var v = Vector(x: 1)
+                          v += Vector(x: 2)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
+    }
+
+    #endregion
+
     #region Primitive Types (existing behavior preserved)
     /// <summary>
     /// Verifies semantic analysis behavior for primitive var compound assignment without unexpected diagnostics.

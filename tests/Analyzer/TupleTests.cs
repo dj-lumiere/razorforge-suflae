@@ -170,6 +170,49 @@ public class TupleTests
 
     #endregion
 
+    #region Tuple destructuring arity
+
+    /// <summary>
+    /// Verifies that assigning a 3-element tuple to a 2-element destructure target reports an arity error.
+    /// </summary>
+    [Fact]
+    public void Analyze_TupleAssignmentArityMismatch_TooManySource_ReportsError()
+    {
+        string source = """
+                        routine test()
+                          var a = 1
+                          var b = 2
+                          (a, b) = (1, 2, 3)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.DestructuringArityMismatch);
+    }
+
+    /// <summary>
+    /// Verifies that assigning a 2-element tuple to a 3-element destructure target reports an arity error.
+    /// </summary>
+    [Fact]
+    public void Analyze_TupleAssignmentArityMismatch_TooFewSource_ReportsError()
+    {
+        string source = """
+                        routine test()
+                          var a = 1
+                          var b = 2
+                          var c = 3
+                          (a, b, c) = (1, 2)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.DestructuringArityMismatch);
+    }
+
+    #endregion
+
     #region #173: Tuple assignment destructuring
     /// <summary>
     /// Verifies semantic analysis behavior for tuple assignment destructuring without unexpected diagnostics.

@@ -439,6 +439,91 @@ public class ExhaustivenessTests
 
     #endregion
 
+    #region Single-Case Choice Exhaustiveness
+
+    /// <summary>
+    /// Verifies that a when expression covering the only case of a single-case choice is exhaustive.
+    /// </summary>
+    [Fact]
+    public void WhenExpression_Choice_SingleCase_AllCovered_NoError()
+    {
+        string source = """
+                        choice Only
+                          ONE
+
+                        routine test(o: Only) -> S32
+                          return when o
+                            is ONE => 1
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
+    }
+
+    #endregion
+
+    #region Bool - When Statement
+
+    /// <summary>
+    /// Verifies that a when statement on Bool covering both branches produces no warning.
+    /// </summary>
+    [Fact]
+    public void WhenStatement_Bool_BothCases_NoWarning()
+    {
+        string source = """
+                        routine test(b: Bool)
+                          when b
+                            true => show("yes")
+                            false => show("no")
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Warnings,
+            filter: w => w.Code == SemanticWarningCode.NonExhaustiveWhen);
+    }
+
+    /// <summary>
+    /// Verifies that a when statement on Bool missing the false branch reports a warning.
+    /// </summary>
+    [Fact]
+    public void WhenStatement_Bool_MissingFalse_ReportsWarning()
+    {
+        string source = """
+                        routine test(b: Bool)
+                          when b
+                            true => show("yes")
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Warnings,
+            filter: w => w.Code == SemanticWarningCode.NonExhaustiveWhen);
+    }
+
+    /// <summary>
+    /// Verifies that a when statement on Bool with else produces no warning.
+    /// </summary>
+    [Fact]
+    public void WhenStatement_Bool_WithElse_NoWarning()
+    {
+        string source = """
+                        routine test(b: Bool)
+                          when b
+                            true => show("yes")
+                            else => show("no")
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Warnings,
+            filter: w => w.Code == SemanticWarningCode.NonExhaustiveWhen);
+    }
+
+    #endregion
+
     #region Choice - Unified 'is' Pattern (Phase 12)
     /// <summary>
     /// Verifies that validates when expression choice is a pattern all cases no error.

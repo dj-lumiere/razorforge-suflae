@@ -136,6 +136,63 @@ public class OperatorValidationTests
 
     #endregion
 
+    #region Additional fixed-width mismatch cases
+
+    /// <summary>
+    /// Verifies semantic analysis behavior for S8 plus S64 arithmetic and reports a fixed-width mismatch.
+    /// </summary>
+    [Fact]
+    public void Analyze_S8PlusS64_ReportsFixedWidthError()
+    {
+        string source = """
+                        routine test(a: S8, b: S64) -> S64
+                          return a + b
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.FixedWidthTypeMismatch);
+    }
+
+    /// <summary>
+    /// Verifies semantic analysis behavior for S64 arithmetic with itself produces no fixed-width error.
+    /// </summary>
+    [Fact]
+    public void Analyze_S64PlusS64_NoFixedWidthError()
+    {
+        string source = """
+                        routine test(a: S64, b: S64) -> S64
+                          return a + b
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.FixedWidthTypeMismatch);
+    }
+
+    #endregion
+
+    #region BackIndex in range — both ends
+
+    /// <summary>
+    /// Verifies that a back index on both ends of a range reports an error on the first back index.
+    /// </summary>
+    [Fact]
+    public void Analyze_BackIndexBothEndsOfRange_ReportsError()
+    {
+        string source = """
+                        routine test()
+                          var r = (^5 to ^1)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.BackIndexOutsideSubscript);
+    }
+
+    #endregion
+
     #region S201: Binary operator type mismatch
     /// <summary>
     /// Verifies semantic analysis behavior for text plus list reports argument type mismatch.
