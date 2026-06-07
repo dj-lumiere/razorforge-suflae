@@ -165,7 +165,7 @@ public static class WiredRoutineCatalog
         new() { Name = "$next",        Kind = WiredKind.Iteration, Views = Cap | Known | Proto | Seed, Protocols = ["Iterator"], Failable = true },
         new() { Name = "try_next",     Kind = WiredKind.Iteration, Views = Seed },
         new() { Name = "$getitem",     Kind = WiredKind.Indexing, Views = Cap | Known | Proto | Seed, Protocols = ["Indexable"], Failable = true },
-        new() { Name = "$setitem",     Kind = WiredKind.Indexing, Views = Cap | Known | Proto | Seed, Protocols = ["Indexable"], Failable = true },
+        new() { Name = "$setitem",     Kind = WiredKind.Indexing, Views = Cap | Known | Proto | Seed, Protocols = ["MutableIndexable"], Failable = true },
 
         // ---- Unwrap (Maybe / Result / Lookup) ----
         new() { Name = "$unwrap",    Kind = WiredKind.Unwrap, Views = Known | Seed, Failable = true },
@@ -351,7 +351,7 @@ public static class WiredRoutineCatalog
             ["$lt"] = ("Comparable", "$cmp"), ["$le"] = ("Comparable", "$cmp"), ["$gt"] = ("Comparable", "$cmp"),
             ["$ge"] = ("Comparable", "$cmp"), ["$contains"] = ("Container", "$contains"),
             ["$notcontains"] = ("Container", "$contains"), ["$getitem"] = ("Indexable", "$getitem"),
-            ["$setitem"] = ("Indexable", "$setitem"), ["$iter"] = ("Iterable", "$iter"),
+            ["$setitem"] = ("MutableIndexable", "$setitem"), ["$iter"] = ("Iterable", "$iter"),
             ["$next"] = ("Iterator", "$next"), ["$represent"] = ("Representable", "$represent"),
             ["$diagnose"] = ("Diagnosable", "$diagnose"), ["$add"] = ("Addable", "$add"),
             ["$sub"] = ("Subtractable", "$sub"), ["$mul"] = ("Multiplicable", "$mul"),
@@ -408,7 +408,7 @@ public static class WiredRoutineCatalog
         ["$bitxor"] = ["Bitwiseable"], ["$ashl"] = ["Shiftable"], ["$ashr"] = ["Shiftable"],
         ["$lshl"] = ["Shiftable"], ["$lshr"] = ["Shiftable"], ["$neg"] = ["Negatable"], ["$bitnot"] = ["Invertible"],
         ["$contains"] = ["Container"], ["$notcontains"] = ["Container"], ["$getitem"] = ["Indexable"],
-        ["$setitem"] = ["Indexable"], ["$iter"] = ["Iterable"], ["$next"] = ["Iterator"],
+        ["$setitem"] = ["MutableIndexable"], ["$iter"] = ["Iterable"], ["$next"] = ["Iterator"],
         ["$iadd"] = ["InPlaceAddable"], ["$isub"] = ["InPlaceSubtractable"], ["$imul"] = ["InPlaceMultiplicable"],
         ["$itruediv"] = ["InPlaceDivisible"], ["$ifloordiv"] = ["InPlaceFloorDivisible"], ["$imod"] = ["InPlaceFloorDivisible"],
         ["$ipow"] = ["InPlaceExponentiable"], ["$ibitand"] = ["InPlaceBitwiseable"], ["$ibitor"] = ["InPlaceBitwiseable"],

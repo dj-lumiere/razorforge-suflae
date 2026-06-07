@@ -1242,11 +1242,6 @@ public sealed partial class StdlibLoader
             bool needsRefresh = false;
             foreach (RoutineSignature method in protocolDecl.Methods)
             {
-                if (method.ReturnType == null)
-                {
-                    continue; // Intentionally void
-                }
-
                 string rawName = method.Name;
                 bool isFailable = rawName.EndsWith(value: '!');
                 string fullName = isFailable ? rawName[..^1] : rawName;
@@ -1255,6 +1250,24 @@ public sealed partial class StdlibLoader
 
                 ProtocolMethodInfo? protoMethod = existing.Methods.FirstOrDefault(predicate: m =>
                     m.Name == methodName && m.IsFailable == isFailable);
+
+                // A param whose type was a forward reference (e.g. a concrete `index: U64` before
+                // U64 was registered) is silently dropped by FillProtocolMethods, leaving the proto
+                // method with fewer params than declared. Detect the count mismatch and re-fill now
+                // that all type shells exist, so conformance (S703) sees the real arity. This must
+                // run for void methods too (e.g. `$setitem!`), so it precedes the return-type check.
+                int declParamCount = method.Parameters.Count(predicate: p => p.Name != "me");
+                if (protoMethod != null && protoMethod.ParameterTypes.Count != declParamCount)
+                {
+                    needsRefresh = true;
+                    break;
+                }
+
+                if (method.ReturnType == null)
+                {
+                    continue; // Intentionally void — nothing more to check for return type
+                }
+
                 if (protoMethod?.ReturnType == null)
                 {
                     needsRefresh = true;

@@ -84,6 +84,7 @@ public sealed class ProtocolTypeInfo : TypeInfo
                 IsFailable = m.IsFailable,
                 GenerationKind = m.GenerationKind,
                 HasDefaultImplementation = m.HasDefaultImplementation,
+                IsAutoDerivedVariant = m.IsAutoDerivedVariant,
                 Location = m.Location
             })
             .ToList();

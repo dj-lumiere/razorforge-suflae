@@ -569,12 +569,22 @@ public partial class LlvmCodeGenerator
                 continue;
             }
 
+            // A C-extern routine (e.g. `external("C") rf_allocate_dynamic`) emits under its raw C
+            // symbol and always needs a `declare` — it never has an RF body. Its bare name can
+            // collide with a same-named RF wrapper overload (e.g. `rf_allocate_dynamic(ByteSize)`,
+            // which mangles to a distinct `Core.rf_allocate_dynamic(Core.ByteSize)` symbol). The
+            // body-name skip below would then wrongly drop the C-extern's declaration, producing
+            // `use of undefined value @rf_allocate_dynamic` at opt time when only the raw form is
+            // called. Declare C-externs unconditionally (declarations dedupe by symbol name).
+            bool isCExtern = routine.CallingConvention == "C";
+
             // Skip routines that have bodies (they will be emitted as 'define' in GenerateFunctionDefinitions)
             string fullName = routine.OwnerType != null
                 ? $"{routine.OwnerType.Name}.{routine.Name}"
                 : routine.Name;
-            if (routinesWithBodies.Contains(item: routine.Name) ||
-                routinesWithBodies.Contains(item: fullName))
+            if (!isCExtern &&
+                (routinesWithBodies.Contains(item: routine.Name) ||
+                 routinesWithBodies.Contains(item: fullName)))
             {
                 continue;
             }
