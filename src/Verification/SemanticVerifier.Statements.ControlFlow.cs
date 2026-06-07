@@ -273,8 +273,9 @@ public sealed partial class SemanticVerifier
             _registry.ExitScope();
         }
 
-        // Check exhaustiveness for enumerable types (choice, variant, error-handling)
-        if (matchedType is ChoiceTypeInfo or VariantTypeInfo || IsCarrierType(type: matchedType))
+        // Check exhaustiveness for enumerable types (choice, variant, error-handling, Bool)
+        if (matchedType is ChoiceTypeInfo or VariantTypeInfo || IsCarrierType(type: matchedType) ||
+            IsBoolType(type: matchedType))
         {
             bool hasCatchAll = whenStmt.Clauses.Any(predicate: c =>
                 c.Pattern is WildcardPattern or ElsePattern or IdentifierPattern);
