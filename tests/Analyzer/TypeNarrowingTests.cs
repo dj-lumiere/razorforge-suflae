@@ -136,6 +136,72 @@ public class TypeNarrowingTests
 
     #endregion
 
+    #region Multi-Parameter Guard Narrowing
+
+    /// <summary>
+    /// Verifies that two independent guard clauses narrow two separate Maybe parameters.
+    /// </summary>
+    [Fact]
+    public void Analyze_TwoGuardClauses_BothNarrowed_NoError()
+    {
+        string source = """
+                        routine process(a: S32?, b: S32?) -> S32
+                          if a is None
+                            return 0
+                          if b is None
+                            return 0
+                          return a + b
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    #endregion
+
+    #region Narrowing Does Not Escape Conditional Scope
+
+    /// <summary>
+    /// Verifies that narrowing inside an if-isnot-None branch does not persist after the branch.
+    /// </summary>
+    [Fact]
+    public void Analyze_NarrowingInsideBranch_DoesNotEscapeScope_ReportsError()
+    {
+        string source = """
+                        routine process(value: S32?) -> S32
+                          if value isnot None
+                            pass
+                          return value
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ReturnTypeMismatch);
+    }
+
+    /// <summary>
+    /// Verifies that narrowing inside an unless block narrows the unless body but not after.
+    /// </summary>
+    [Fact]
+    public void Analyze_UnlessIsNone_NarrowedInsideOnly_AfterStillMaybe_ReportsError()
+    {
+        // The unless body executes when value is NOT None, so value is S32 inside.
+        // After the unless block (if execution reaches there), value is still S32?.
+        string source = """
+                        routine process(value: S32?) -> S32
+                          unless value is None
+                            return value
+                          return value
+                        """;
+
+        // The second return sees value as S32? — return type mismatch expected.
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ReturnTypeMismatch);
+    }
+
+    #endregion
+
     #region No Narrowing for Non-Error Types
     /// <summary>
     /// Verifies semantic analysis behavior for non error handling type no narrowing crash.

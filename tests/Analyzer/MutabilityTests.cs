@@ -427,6 +427,122 @@ public class MutabilityTests
 
     #endregion
 
+    #region Multiple Var Reassignments
+
+    /// <summary>
+    /// Verifies that a var can be reassigned multiple times in sequence without error.
+    /// </summary>
+    [Fact]
+    public void Analyze_VarMultipleReassignments_NoError()
+    {
+        string source = """
+                        routine test()
+                          var x = 1
+                          x = 2
+                          x = 3
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    #endregion
+
+    #region Entity Parameter Ownership
+
+    /// <summary>
+    /// Verifies that copying an entity parameter into a new var reports BareEntityAssignment.
+    /// Entity ownership is non-copyable: use steal to explicitly transfer.
+    /// </summary>
+    [Fact]
+    public void Analyze_EntityParameterBareAssignment_ReportsError()
+    {
+        string source = """
+                        entity Doc
+                          title: Text
+
+                        routine test(d: Doc)
+                          var d2 = d
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.BareEntityAssignment);
+    }
+
+    /// <summary>
+    /// Verifies that stealing an entity local variable into a new var is permitted.
+    /// </summary>
+    [Fact]
+    public void Analyze_EntityStealReassignment_NoError()
+    {
+        string source = """
+                        entity Doc
+                          title: Text
+
+                        routine test()
+                          var d1 = Doc(title: "one")
+                          var d2 = steal d1
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.BareEntityAssignment);
+    }
+
+    #endregion
+
+    #region Readonly / Writable Cross-Calls
+
+    /// <summary>
+    /// Verifies that a @readonly method can still read a var field without error.
+    /// </summary>
+    [Fact]
+    public void Analyze_ReadonlyMethod_CanReadVarField_NoError()
+    {
+        string source = """
+                        entity Counter
+                          count: S32
+
+                        @readonly
+                        routine Counter.get_count() -> S32
+                          return me.count
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MutationInReadonlyMethod);
+    }
+
+    /// <summary>
+    /// Verifies that a writable method calling a @readonly method produces no error.
+    /// </summary>
+    [Fact]
+    public void Analyze_WritableMethodCallsReadonly_NoError()
+    {
+        string source = """
+                        entity Counter
+                          count: S32
+
+                        @readonly
+                        routine Counter.get_count() -> S32
+                          return me.count
+
+                        routine Counter.increment_and_read() -> S32
+                          me.count += 1
+                          return me.get_count()
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MutationInReadonlyMethod);
+    }
+
+    #endregion
+
     #region Posted Member Variable Access
     /// <summary>
     /// Verifies semantic analysis behavior for posted member variable write same module without unexpected diagnostics.

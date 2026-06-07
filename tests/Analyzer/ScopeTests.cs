@@ -367,6 +367,87 @@ public class ScopeTests
 
     #endregion
 
+    #region Additional Loop Scoping
+
+    /// <summary>
+    /// Verifies that a for-loop variable shadows an outer variable of the same name without error.
+    /// </summary>
+    [Fact]
+    public void Analyze_ForLoopVariableShadowsOuter_NoError()
+    {
+        string source = """
+                        routine test()
+                          var i = 0
+                          for i in 0 til 5
+                            show(i)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.NotNull(@object: result);
+    }
+
+    /// <summary>
+    /// Verifies that nested for-loops with distinct loop variables both resolve correctly.
+    /// </summary>
+    [Fact]
+    public void Analyze_NestedForLoops_IndependentVariables_NoError()
+    {
+        string source = """
+                        routine test()
+                          for i in 0 til 3
+                            for j in 0 til 3
+                              show(i + j)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.NotNull(@object: result);
+    }
+
+    #endregion
+
+    #region Independent Lambda Captures
+
+    /// <summary>
+    /// Verifies that two lambdas in the same scope with different given clauses each compile without error.
+    /// </summary>
+    [Fact]
+    public void Analyze_TwoLambdas_IndependentGivenCaptures_NoError()
+    {
+        string source = """
+                        routine test()
+                          var a = 1
+                          var b = 2
+                          var f = (x) given a => x + a
+                          var g = (x) given b => x + b
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.NotNull(@object: result);
+    }
+
+    /// <summary>
+    /// Verifies that a lambda with multiple captured variables listed in given compiles without error.
+    /// </summary>
+    [Fact]
+    public void Analyze_LambdaWithMultipleGivenCaptures_NoError()
+    {
+        string source = """
+                        routine test()
+                          var a = 10
+                          var b = 20
+                          var f = (x) given a, b => x + a + b
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.NotNull(@object: result);
+    }
+
+    #endregion
+
     #region Closure Scoping
     /// <summary>
     /// Verifies semantic analysis behavior for lambda implicit capture and reports the expected error.

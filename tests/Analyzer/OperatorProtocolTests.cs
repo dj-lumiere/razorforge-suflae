@@ -224,6 +224,90 @@ public class OperatorProtocolTests
 
     #endregion
 
+    #region Wrong Method Signature
+
+    /// <summary>
+    /// Verifies that implementing $eq with the wrong return type produces an error.
+    /// </summary>
+    [Fact]
+    public void Analyze_EqWithWrongReturnType_ReportsError()
+    {
+        string source = """
+                        protocol Equatable
+                          @readonly
+                          routine Me.$eq(you: Me) -> Bool
+
+                        record Point obeys Equatable
+                          x: S32
+                          y: S32
+
+                        @readonly
+                        routine Point.$eq(you: Point) -> S32
+                          return 0_s32
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.True(condition: result.Errors.Count > 0);
+    }
+
+    /// <summary>
+    /// Verifies that implementing $add with wrong parameter type produces an error.
+    /// </summary>
+    [Fact]
+    public void Analyze_AddWithWrongParamType_ReportsError()
+    {
+        string source = """
+                        protocol Addable
+                          @readonly
+                          routine Me.$add(you: Me) -> Me
+
+                        record Vector obeys Addable
+                          x: S32
+                          y: S32
+
+                        @readonly
+                        routine Vector.$add(you: S32) -> Vector
+                          return Vector(x: me.x, y: me.y)
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.True(condition: result.Errors.Count > 0);
+    }
+
+    #endregion
+
+    #region Mixed Operator and Normal Methods
+
+    /// <summary>
+    /// Verifies that a type can define both operator wired methods and regular business methods.
+    /// </summary>
+    [Fact]
+    public void Analyze_MixedOperatorAndNormalMethods_NoError()
+    {
+        string source = """
+                        protocol Addable
+                          @readonly
+                          routine Me.$add(you: Me) -> Me
+
+                        record Vector obeys Addable
+                          x: S32
+                          y: S32
+
+                        @readonly
+                        routine Vector.$add(you: Vector) -> Vector
+                          return Vector(x: me.x +% you.x, y: me.y +% you.y)
+
+                        @readonly
+                        routine Vector.magnitude_squared() -> S32
+                          return me.x * me.x +% me.y * me.y
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    #endregion
+
     #region Non-Operator Methods (No Protocol Required)
     /// <summary>
     /// Verifies semantic analysis behavior for create without protocol without unexpected diagnostics.

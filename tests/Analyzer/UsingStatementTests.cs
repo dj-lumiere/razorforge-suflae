@@ -157,6 +157,92 @@ public class UsingStatementTests
 
     #endregion
 
+    #region Resource With Only $exit
+
+    /// <summary>
+    /// Verifies that a resource with only $exit and no $enter reports the missing-enter/exit error.
+    /// </summary>
+    [Fact]
+    public void Analyze_ResourceWithOnlyExit_ReportsError()
+    {
+        string source = """
+                        record HalfResource
+                          value: S32
+
+                        routine HalfResource.$exit()
+                          return
+
+                        routine test()
+                          var r = HalfResource(value: 42)
+                          using r as res
+                            var a: S32 = res.value
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.UsingTargetMissingEnterExit);
+    }
+
+    #endregion
+
+    #region Nested Using Blocks
+
+    /// <summary>
+    /// Verifies that nested using blocks make both bound variables available in the inner scope.
+    /// </summary>
+    [Fact]
+    public void Analyze_NestedUsing_BothBindingsInScope_NoError()
+    {
+        string source = """
+                        record Token
+                          id: S32
+
+                        routine Token.$enter()
+                          return
+                        routine Token.$exit()
+                          return
+
+                        routine test()
+                          var t1 = Token(id: 1)
+                          var t2 = Token(id: 2)
+                          using t1 as a
+                            using t2 as b
+                              var sum: S32 = a.id + b.id
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    #endregion
+
+    #region Using Bound Variable Out of Scope
+
+    /// <summary>
+    /// Verifies that the variable bound by a using block is not accessible after the block closes.
+    /// </summary>
+    [Fact]
+    public void Analyze_UsingBoundVariableOutOfScope_ReportsError()
+    {
+        string source = """
+                        entity Data
+                          value: S32
+
+                        routine test(d: Data)
+                          using d.view() as v
+                            show(v.value)
+                          show(v.value)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.True(condition: result.Errors.Count > 0);
+    }
+
+    #endregion
+
     #region Generic Using
 
     /// <summary>

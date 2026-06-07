@@ -33,6 +33,26 @@ public class EmptyBodyValidationTests
 
     #endregion
 
+    #region Protocol Body
+
+    /// <summary>
+    /// Verifies that a protocol body with only pass (marker protocol) produces no error.
+    /// </summary>
+    [Fact]
+    public void Analyze_ProtocolWithPass_NoError()
+    {
+        string source = """
+                        protocol Marker
+                          pass
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
+    }
+
+    #endregion
+
     #region Type Bodies
     /// <summary>
     /// Verifies semantic analysis behavior for empty record body and reports the expected error.

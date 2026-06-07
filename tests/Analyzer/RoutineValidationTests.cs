@@ -56,6 +56,79 @@ public class RoutineValidationTests
 
     #endregion
 
+    #region Migratable annotation
+
+    /// <summary>
+    /// Verifies that a single @migratable annotation on a method produces no conflict error.
+    /// </summary>
+    [Fact]
+    public void Analyze_MigratableAnnotationAlone_NoError()
+    {
+        string source = """
+                        entity Counter
+                          count: S32
+
+                        @migratable
+                        routine Counter.reset(value: S32)
+                          me.count = value
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MutationCategoryConflict);
+    }
+
+    /// <summary>
+    /// Verifies that @migratable combined with @readonly reports a mutation category conflict.
+    /// </summary>
+    [Fact]
+    public void Analyze_MigratableAndReadonly_ReportsConflict()
+    {
+        string source = """
+                        entity Counter
+                          count: S32
+
+                        @migratable
+                        @readonly
+                        routine Counter.peek() -> S32
+                          return me.count
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MutationCategoryConflict);
+    }
+
+    #endregion
+
+    #region Common routine on entity
+
+    /// <summary>
+    /// Verifies that a common routine on an entity type works the same as on a record.
+    /// </summary>
+    [Fact]
+    public void Analyze_CommonRoutineOnEntity_NoError()
+    {
+        string source = """
+                        entity Node
+                          value: S32
+
+                        common routine Node.empty() -> Node
+                          return Node(value: 0)
+
+                        routine test()
+                          var n = Node.empty()
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.CommonRoutineMismatch);
+    }
+
+    #endregion
+
     #region #151: Static/instance mismatch
     /// <summary>
     /// Verifies semantic analysis behavior for common routine called on instance and reports the expected error.

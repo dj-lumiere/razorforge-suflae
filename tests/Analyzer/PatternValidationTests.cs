@@ -119,6 +119,51 @@ public class PatternValidationTests
 
     #endregion
 
+    #region Pattern Variable Scope Leakage
+
+    /// <summary>
+    /// Verifies that a pattern binding variable is not accessible outside its when clause.
+    /// </summary>
+    [Fact]
+    public void Analyze_PatternBinding_DoesNotLeakOutsideWhen_ReportsError()
+    {
+        string source = """
+                        routine test() -> S32
+                          var x: S32 = 5
+                          when x
+                            is S32 n => pass
+                            else => pass
+                          return n
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.True(condition: result.Errors.Count > 0);
+    }
+
+    /// <summary>
+    /// Verifies that the same binding name used in separate when clauses does not shadow outer scope.
+    /// </summary>
+    [Fact]
+    public void Analyze_SameBindingNameInSeparateClauses_NoShadowingError()
+    {
+        string source = """
+                        variant Value
+                          S32
+                          F64
+
+                        routine test(v: Value) -> S32
+                          return when v
+                            is S32 n => n
+                            else n => 0
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.IdentifierShadowing);
+    }
+
+    #endregion
+
     #region Type Compatibility
     /// <summary>
     /// Verifies semantic analysis behavior for type pattern compatible type without unexpected diagnostics.

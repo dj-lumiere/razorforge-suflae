@@ -256,6 +256,87 @@ public class ChoiceValidationTests
 
     #endregion
 
+    #region Single-Member and Zero-Value Choices
+
+    /// <summary>
+    /// Verifies that a choice with a single member produces no errors.
+    /// </summary>
+    [Fact]
+    public void Analyze_ChoiceWithSingleMember_NoError()
+    {
+        string source = """
+                        choice Singleton
+                          ONLY
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ChoiceMixedValues);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ChoiceDuplicateValue);
+    }
+
+    /// <summary>
+    /// Verifies that zero is a valid explicit choice value.
+    /// </summary>
+    [Fact]
+    public void Analyze_ChoiceWithZeroValue_NoError()
+    {
+        string source = """
+                        choice Ternary
+                          NEG: -1
+                          ZERO: 0
+                          POS: 1
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ChoiceCaseValueOverflow);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ChoiceDuplicateValue);
+    }
+
+    /// <summary>
+    /// Verifies that two members with the same explicit value report a duplicate-value error.
+    /// </summary>
+    [Fact]
+    public void Analyze_ChoiceTwoMembersSameValue_ReportsError()
+    {
+        string source = """
+                        choice Alias
+                          FIRST: 5
+                          SECOND: 5
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ChoiceDuplicateValue);
+    }
+
+    /// <summary>
+    /// Verifies that a choice used unqualified inside a routine resolves without error.
+    /// </summary>
+    [Fact]
+    public void Analyze_ChoiceUnqualifiedInRoutine_NoError()
+    {
+        string source = """
+                        choice Direction
+                          NORTH
+                          SOUTH
+
+                        routine test(d: Direction) -> Bool
+                          return d == NORTH
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.MemberNotFound);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.UnknownIdentifier);
+    }
+
+    #endregion
+
     #region Member Access (C98)
     /// <summary>
     /// Verifies that the test validates member access as value.
