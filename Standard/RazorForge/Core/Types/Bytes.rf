@@ -170,18 +170,6 @@ routine Bytes.$getitem!(index: U64) -> Byte
   danger!
     return me.data.stride(count: S64(index)).extract()
 
-### Returns the byte addressed by a back index.
-### Back indices count from the end of the sequence using the `^` syntax.
-### :param index: The backward position to resolve.
-### :returns: The resulting `Byte` value.
-@readonly
-routine Bytes.$getitem!(index: BackIndex) -> Byte
-  var i = index.resolve(length: me.count)
-  if i >= me.count
-    throw IndexOutOfBoundsError(index: i, count: me.count)
-  danger!
-    return me.data.stride(count: S64(i)).extract()
-
 # String operations
 
 ### Returns a new value with `other` appended.
