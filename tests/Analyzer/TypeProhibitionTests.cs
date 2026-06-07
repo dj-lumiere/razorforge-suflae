@@ -162,6 +162,45 @@ public class TypeProhibitionTests
 
     #endregion
 
+    #region Additional nullable and collection prohibitions
+
+    /// <summary>
+    /// Verifies that Text? (nullable Text) is allowed and produces no error.
+    /// </summary>
+    [Fact]
+    public void Analyze_TextNullable_NoError()
+    {
+        string source = """
+                        routine find!(text: Text?) -> Text
+                          if text is None
+                            absent
+                          return text
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
+    }
+
+    /// <summary>
+    /// Verifies that Maybe[S32?] (explicit nested Maybe) is rejected.
+    /// </summary>
+    [Fact]
+    public void Analyze_ExplicitNestedMaybe_ReportsError()
+    {
+        string source = """
+                        routine test(x: Maybe[S32?])
+                          pass
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.NestedMaybeProhibited);
+    }
+
+    #endregion
+
     #region Byte Literal ASCII Validation
     /// <summary>
     /// Verifies semantic analysis behavior for byte literal non ascii and reports the expected error.

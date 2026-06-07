@@ -244,6 +244,98 @@ public class RecordContainmentTests
 
     #endregion
 
+    #region Multiple token fields both rejected
+
+    /// <summary>
+    /// Verifies that two scoped-token fields on the same record both report TokenMemberVariableNotAllowed.
+    /// </summary>
+    [Fact]
+    public void Analyze_RecordWithTwoTokenFields_BothReportErrors()
+    {
+        string source = """
+                        entity Node
+                          value: S32
+                        record BadRecord
+                          reader: Viewing[Node]
+                          writer: Modifying[Node]
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.True(condition: result.Errors.Count(predicate: e =>
+            e.Code == SemanticDiagnosticCode.TokenMemberVariableNotAllowed) >= 2);
+    }
+
+    #endregion
+
+    #region Variant field in record
+
+    /// <summary>
+    /// Verifies that a record can contain a variant-typed field.
+    /// </summary>
+    [Fact]
+    public void Analyze_RecordWithVariantField_NoError()
+    {
+        string source = """
+                        variant Status
+                          S32
+                          Text
+
+                        record Result
+                          status: Status
+                          code: S32
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
+    }
+
+    #endregion
+
+    #region With expression field validation
+
+    /// <summary>
+    /// Verifies that a with expression referencing a non-existent field reports an error.
+    /// </summary>
+    [Fact]
+    public void Analyze_WithExpressionUnknownField_ReportsError()
+    {
+        string source = """
+                        record Point
+                          x: S32
+                          y: S32
+                        routine test(p: Point)
+                          var q = p with .z = 5
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.True(condition: result.Errors.Count > 0);
+    }
+
+    /// <summary>
+    /// Verifies that a with expression updating multiple fields with correct types produces no error.
+    /// </summary>
+    [Fact]
+    public void Analyze_WithExpressionMultipleValidFields_NoError()
+    {
+        string source = """
+                        record Point
+                          x: S32
+                          y: S32
+                          z: S32
+                        routine test(p: Point)
+                          var q = p with .x = 1, .z = 3
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.WithExpressionNotRecord);
+    }
+
+    #endregion
+
     #region With Expression on Non-Records
     /// <summary>
     /// Verifies semantic analysis behavior for with on entity and reports the expected error.

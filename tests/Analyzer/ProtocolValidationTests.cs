@@ -100,4 +100,74 @@ public class ProtocolValidationTests
     }
 
     #endregion
+
+    #region Migratable protocol contract
+
+    /// <summary>
+    /// Verifies that a @migratable protocol method implemented as @migratable produces no error.
+    /// </summary>
+    [Fact]
+    public void Analyze_ProtocolMigratableImplMigratable_NoError()
+    {
+        string source = """
+                        protocol Relocatable
+                          @migratable
+                          routine Me.relocate()
+                        entity Widget obeys Relocatable
+                          value: S32
+                        @migratable
+                        routine Widget.relocate()
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ProtocolMutationContractViolation);
+    }
+
+    /// <summary>
+    /// Verifies that a @migratable protocol method implemented as plain writable produces no error
+    /// (writable is more restrictive than migratable, so the contract is satisfied).
+    /// </summary>
+    [Fact]
+    public void Analyze_ProtocolMigratableImplWritable_NoError()
+    {
+        string source = """
+                        protocol Relocatable
+                          @migratable
+                          routine Me.relocate()
+                        entity Widget obeys Relocatable
+                          value: S32
+                        routine Widget.relocate()
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ProtocolMutationContractViolation);
+    }
+
+    /// <summary>
+    /// Verifies that a @readonly protocol method implemented as @migratable reports a contract violation.
+    /// </summary>
+    [Fact]
+    public void Analyze_ProtocolReadonlyImplMigratable_ReportsError()
+    {
+        string source = """
+                        protocol Reader
+                          @readonly
+                          routine Me.read() -> S32
+                        entity Sensor obeys Reader
+                          value: S32
+                        @migratable
+                        routine Sensor.read() -> S32
+                          return me.value
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ProtocolMutationContractViolation);
+    }
+
+    #endregion
 }
