@@ -304,11 +304,20 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
 
     private void ProcessConcreteType(TypeInfo concreteType) // NOSONAR S3776
     {
-        // Strategy-B reachability gate at the type level: when LiveOwnerTypeNames is populated,
-        // skip concrete instances that no reachable routine ever owned. This prevents
-        // unreachable types like Array[BuildMode, 63] or BTreeListNode[Text] from emitting
-        // try_next/$getitem!/etc. via the wired-routine bypass on the per-routine gate.
-        if (ctx.LiveOwnerTypeNames.Count > 0
+        // Strategy-B reachability gate at the type level: skip concrete instances that no
+        // reachable routine ever owned. This prevents unreachable types like Array[BuildMode, 63]
+        // or BTreeListNode[Text] from emitting try_next/$getitem!/etc. via the wired-routine bypass
+        // on the per-routine gate.
+        //
+        // The "reachability ran" signal is LiveRoutineKeys (NOT LiveOwnerTypeNames): reachability
+        // always seeds at least the entry point, so a non-empty LiveRoutineKeys means the pass ran.
+        // A program that uses no generic types at all produces a genuinely EMPTY LiveOwnerTypeNames
+        // — gating on `LiveOwnerTypeNames.Count > 0` would misread that as "filter off" and fan out
+        // over every concrete instance in the registry (BuilderService/BTree/numeric machinery),
+        // force-emitting wired operators whose plain-helper callees (add_with_overflow, recast_as,
+        // $cmp) are never emitted → LINKERR. Mirror the per-routine gate at the BuildBody site below,
+        // which already keys off LiveRoutineKeys. Both empty = legacy fan-out (reachability skipped).
+        if (ctx.LiveRoutineKeys.Count > 0
             && !ctx.LiveOwnerTypeNames.Contains(item: concreteType.FullName))
         {
             return;
