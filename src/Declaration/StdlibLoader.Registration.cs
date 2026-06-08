@@ -1283,6 +1283,11 @@ public sealed partial class StdlibLoader
             // Reset and re-fill with all type shells now registered
             existing.Methods = [];
             FillProtocolMethods(registry: registry, protocol: protocolDecl);
+
+            // Cached protocol instances (e.g. MutableIndexable[T] created during List's earlier
+            // stdlib registration) copied the pre-refill stale methods. Refresh them in place so
+            // user types obeying the protocol see the corrected arity instead of failing S703.
+            registry.RefreshProtocolResolutions(genericDef: existing);
         }
     }
 

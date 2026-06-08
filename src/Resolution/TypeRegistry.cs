@@ -1072,6 +1072,61 @@ public sealed partial class TypeRegistry
         }
     }
 
+    /// <summary>
+    /// Refreshes stale cached protocol resolutions whose method signatures are out of date.
+    /// Called after <c>ResolveProtocolMethodReturnTypes</c> (Pass 1e) re-fills a generic protocol
+    /// definition (e.g. MutableIndexable[V]) whose methods were initially registered with dropped
+    /// forward-reference params — a concrete <c>index: U64</c> param silently dropped because U64
+    /// wasn't registered yet. Instances created before that re-fill (during earlier stdlib
+    /// registration, e.g. List's <c>obeys MutableIndexable[T]</c>) hold stale method signatures and
+    /// are cached, so user types obeying the protocol pick up the stale 1-param <c>$setitem</c> and
+    /// wrongly fail conformance (S703). Mirrors <see cref="RefreshEntityResolutions"/> /
+    /// <see cref="RefreshRecordResolutions"/> by rebuilding Methods in place so existing references
+    /// (e.g. a collection's ImplementedProtocols) also see the fix.
+    /// </summary>
+    public void RefreshProtocolResolutions(ProtocolTypeInfo genericDef)
+    {
+        if (!genericDef.IsGenericDefinition)
+        {
+            return;
+        }
+
+        foreach (TypeInfo resolution in _resolutions.Values)
+        {
+            if (resolution is ProtocolTypeInfo protoRes &&
+                protoRes.GenericDefinition == genericDef &&
+                protoRes.TypeArguments != null &&
+                IsProtocolResolutionStale(instance: protoRes, genericDef: genericDef))
+            {
+                var fresh =
+                    (ProtocolTypeInfo)genericDef.CreateInstance(
+                        typeArguments: protoRes.TypeArguments);
+                protoRes.Methods = fresh.Methods;
+            }
+        }
+    }
+
+    /// <summary>
+    /// A cached protocol instance is stale if any of its methods is missing or has a different
+    /// parameter arity than the (just re-filled) generic definition's matching method.
+    /// </summary>
+    private static bool IsProtocolResolutionStale(ProtocolTypeInfo instance,
+        ProtocolTypeInfo genericDef)
+    {
+        foreach (ProtocolMethodInfo defMethod in genericDef.Methods)
+        {
+            ProtocolMethodInfo? instMethod = instance.Methods.FirstOrDefault(predicate: m =>
+                m.Name == defMethod.Name && m.IsFailable == defMethod.IsFailable);
+            if (instMethod == null ||
+                instMethod.ParameterTypes.Count != defMethod.ParameterTypes.Count)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// Short name for a type argument used in the shortKey of GetOrCreateResolution / TryGetResolution.
     /// WrapperTypeInfo.Name is bare ("Owned") without inner args, so we expand it recursively to
     /// "InnerName" to prevent shortKey collisions across different inner types.
