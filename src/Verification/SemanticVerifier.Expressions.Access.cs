@@ -424,13 +424,44 @@ public sealed partial class SemanticVerifier
             return returnType;
         }
 
-        // For generic types like List<T>, return the element type
+        // No `$getitem` resolved. If the lookup type is fully concrete (no unresolved generic
+        // parameters), it genuinely does not support indexing — report it cleanly here rather
+        // than letting `arr[i]` slip through to codegen, which would crash with
+        // "reached codegen ... but no resolved method". Types that removed their `$getitem`
+        // (e.g. SortedList, replaced by the named `get_by_rank!`) land here.
+        if (getItem == null && !ContainsUnresolvedTypeParameter(type: lookupType))
+        {
+            ReportError(code: SemanticDiagnosticCode.TypeNotIndexable,
+                message:
+                $"Type '{lookupType.Name}' does not support indexing with '[]' (no '$getitem' routine).",
+                location: index.Location);
+            return ErrorTypeInfo.Instance;
+        }
+
+        // For generic types like List<T> whose `$getitem` resolves only after monomorphization,
+        // return the element type.
         if (lookupType.TypeArguments is { Count: > 0 })
         {
             return lookupType.TypeArguments[index: 0];
         }
 
         return ErrorTypeInfo.Instance;
+    }
+
+    /// <summary>
+    /// True when <paramref name="type"/> is or contains an unresolved generic parameter,
+    /// protocol self-type, or error type — cases where method resolution may legitimately
+    /// complete only after monomorphization, so a missing routine is not yet a hard error.
+    /// </summary>
+    private static bool ContainsUnresolvedTypeParameter(TypeSymbol type)
+    {
+        if (type is GenericParameterTypeInfo or ProtocolSelfTypeInfo or ErrorTypeInfo)
+        {
+            return true;
+        }
+
+        return type.TypeArguments is { Count: > 0 } args &&
+               args.Any(predicate: ContainsUnresolvedTypeParameter);
     }
 
     private TypeSymbol AnalyzeConditionalExpression(ConditionalExpression cond)
