@@ -284,6 +284,130 @@ public sealed class GenericMonomorphizationPass(DesugaringContext ctx)
             if (registeredRoutine)
                 ProcessResolvedMethodGenericRoutines();
         }
+
+        EnliveWiredLeafCallees();
+    }
+
+    /// <summary>
+    /// Closes the live-routine set under the implicit callees of compiler-synthesized routines.
+    /// <para>
+    /// Routines enlivened AFTER <see cref="RoutineReachabilityPass"/> (by this pass, e.g. a wired
+    /// <c>$destroy</c> on <c>Tuple[S64, Bool]</c> pulled in by overflow-arithmetic machinery, or a
+    /// derived <c>U64.$lt</c> referenced from an emitted generic body) never had their own bodies
+    /// walked: those bodies live in <c>SynthesizedBodies</c> (not <c>VariantBodies</c>, the only
+    /// source the reachability BFS walks), and their leaf callees sit on NON-generic primitive
+    /// owners that <see cref="ProcessConcreteType"/> never visits. The result is a live aggregate
+    /// whose leaf callee is declared-but-undefined at link time:
+    /// <list type="bullet">
+    ///   <item>derived <c>$lt/$le/$gt/$ge</c> → owner <c>$cmp</c> + <c>ComparisonSign.$eq/$ne</c></item>
+    ///   <item><c>$ne</c> → owner <c>$eq</c>; <c>$notcontains</c> → owner <c>$contains</c></item>
+    ///   <item>composite <c>$destroy/$copy/$hash/$fast_hash/$eq/$cmp</c> → the same wired verb on
+    ///         each field/element type (recursing to a fixed point)</item>
+    /// </list>
+    /// This mirrors <c>RoutineReachabilityPass.ExpandSyntheticSiblings</c> + its synthesized-body
+    /// walk, applied to the post-GMP live set. Bounded by design: the verbs covered never cascade
+    /// into formatting/IO (deliberately excludes <c>$represent</c>/<c>$diagnose</c>).
+    /// </para>
+    /// </summary>
+    private void EnliveWiredLeafCallees()
+    {
+        if (ctx.LiveRoutineKeys.Count == 0) return;
+
+        var queue = new Queue<RoutineInfo>();
+        var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        // Seed from every currently-live routine that resolves to a RoutineInfo.
+        foreach (string key in ctx.LiveRoutineKeys.ToArray())
+        {
+            RoutineInfo? r = ctx.Registry.LookupRoutine(fullName: key);
+            if (r != null && seen.Add(item: key)) queue.Enqueue(item: r);
+        }
+
+        while (queue.Count > 0)
+        {
+            RoutineInfo r = queue.Dequeue();
+            foreach (RoutineInfo callee in WiredLeafCalleesOf(routine: r))
+            {
+                // Skip generic-def callees — those are emitted (with their callees) via
+                // ProcessConcreteType for each concrete instantiation, not by this leaf closure.
+                if (callee.OwnerType?.IsGenericDefinition == true) continue;
+                ctx.LiveRoutineKeys.Add(item: callee.RegistryKey);
+                if (seen.Add(item: callee.RegistryKey)) queue.Enqueue(item: callee);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Yields the wired routines a synthesized body for <paramref name="routine"/> implicitly calls.
+    /// See <see cref="EnliveWiredLeafCallees"/> for the rationale and the verb→callee mapping.
+    /// </summary>
+    private IEnumerable<RoutineInfo> WiredLeafCalleesOf(RoutineInfo routine)
+    {
+        TypeInfo? owner = routine.OwnerType;
+        if (owner == null) yield break;
+
+        switch (routine.Name)
+        {
+            case "$lt" or "$le" or "$gt" or "$ge" or "$cmp":
+                // Derived comparisons (and composite $cmp) reduce to a $cmp whose ComparisonSign
+                // result is tested with ComparisonSign.$eq/$ne.
+                if (routine.Name != "$cmp"
+                    && ctx.Registry.LookupMethod(type: owner, methodName: "$cmp") is { } cmp)
+                    yield return cmp;
+                if (ctx.Registry.LookupType(name: "ComparisonSign") is { } cs)
+                {
+                    if (ctx.Registry.LookupMethod(type: cs, methodName: "$eq") is { } cseq)
+                        yield return cseq;
+                    if (ctx.Registry.LookupMethod(type: cs, methodName: "$ne") is { } csne)
+                        yield return csne;
+                }
+                if (routine.Name == "$cmp")
+                    foreach (RoutineInfo fc in FieldWiredCallees(owner: owner, verb: "$cmp"))
+                        yield return fc;
+                break;
+            case "$ne":
+                if (ctx.Registry.LookupMethod(type: owner, methodName: "$eq") is { } eq)
+                    yield return eq;
+                break;
+            case "$notcontains":
+                if (ctx.Registry.LookupMethod(type: owner, methodName: "$contains") is { } contains)
+                    yield return contains;
+                break;
+            case "$destroy" or "$copy" or "$hash" or "$fast_hash" or "$eq":
+                foreach (RoutineInfo fc in FieldWiredCallees(owner: owner, verb: routine.Name))
+                    yield return fc;
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Yields the <paramref name="verb"/> wired routine on each owned field/element/payload type of
+    /// a composite <paramref name="owner"/> (record, entity, crashable, tuple, variant). Scalar
+    /// kinds (choices, flags, <c>@llvm</c>-backed primitives) have no fields and yield nothing.
+    /// Mirrors <c>WiredRoutinePass.BuildDestroyBody</c>'s field selection.
+    /// </summary>
+    private IEnumerable<RoutineInfo> FieldWiredCallees(TypeInfo owner, string verb)
+    {
+        IEnumerable<TypeInfo> fieldTypes = owner switch
+        {
+            VariantTypeInfo v => v.Members
+                .Where(predicate: m => m is { IsNone: false, Type: not null })
+                .Select(selector: m => m.Type!),
+            EntityTypeInfo e => e.MemberVariables.Select(selector: f => f.Type),
+            CrashableTypeInfo c => c.MemberVariables.Select(selector: f => f.Type),
+            TupleTypeInfo t => t.MemberVariables.Select(selector: f => f.Type),
+            ChoiceTypeInfo or FlagsTypeInfo => [],
+            RecordTypeInfo { HasDirectBackendType: false } r =>
+                r.MemberVariables.Select(selector: f => f.Type),
+            _ => []
+        };
+
+        foreach (TypeInfo ft in fieldTypes)
+        {
+            if (ft == null) continue;
+            if (ctx.Registry.LookupMethod(type: ft, methodName: verb) is { } callee)
+                yield return callee;
+        }
     }
 
     /// <summary>
