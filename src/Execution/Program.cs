@@ -1455,6 +1455,14 @@ internal partial class Program
         string windowsThreadingLibs = OperatingSystem.IsWindows()
             ? " -lucrt -lmsvcrt -lkernel32"
             : "";
+        // On Linux/macOS the LLVM IR emits direct calls into libm (floor, exp, pow, …) and the
+        // pthread/dl runtime. Modern ld defaults to --as-needed, so libm must be named explicitly
+        // on the command line or linking fails with "DSO missing from command line". We also embed
+        // an rpath pointing at the runtime library directory so the produced executable can locate
+        // librazorforge_runtime.so at load time without requiring LD_LIBRARY_PATH.
+        string unixRuntimeLibs = OperatingSystem.IsWindows()
+            ? ""
+            : $" -lm -lpthread -ldl -Wl,-rpath,\"{runtimeLibDir}\"";
         // Compiler-RT builtins resolve softfloat/softint symbols that LLVM emits for types
         // without direct hardware support:
         //   fp128 arithmetic: __addtf3, __subtf3, __multf3, __divtf3, __negtf2, __eqtf2, etc.
@@ -1496,7 +1504,7 @@ internal partial class Program
             ? " -Wl,\"/MANIFESTUAC:level='asInvoker' uiAccess='false'\" -Wl,/MANIFEST:EMBED"
             : "";
         string clangArgs =
-            $"{clangOptLevel}{framePointerFlag}{lldFlag} -o \"{exeFile}\" \"{optFile}\" -L\"{runtimeLibDir}\" -lrazorforge_runtime{compilerRtArg}{windowsThreadingLibs}{linkerErrorLimitFlag}{manifestUacFlag}";
+            $"{clangOptLevel}{framePointerFlag}{lldFlag} -o \"{exeFile}\" \"{optFile}\" -L\"{runtimeLibDir}\" -lrazorforge_runtime{compilerRtArg}{windowsThreadingLibs}{unixRuntimeLibs}{linkerErrorLimitFlag}{manifestUacFlag}";
 
         var clangPsi = new ProcessStartInfo
         {
