@@ -816,6 +816,9 @@ public partial class LlvmCodeGenerator
         }
 
         // SA must set ResolvedRoutine or ConstructedType on every call before backend entry.
+        // Report the ACTUAL annotation values: a call can carry a non-null ResolvedRoutine and
+        // still land here when its return type never became concrete (e.g. a generic-def
+        // resolution whose ReturnType still contains a type parameter).
         string calleeDesc = call.Callee switch
         {
             MemberExpression m => $"{m.Object.GetType().Name}.{m.PropertyName}",
@@ -825,8 +828,15 @@ public partial class LlvmCodeGenerator
         string memberObjResolvedDesc = call.Callee is MemberExpression me
             ? me.Object.ResolvedType?.FullName ?? "<null>"
             : "<not member>";
+        string resolvedRoutineDesc = call.ResolvedRoutine is { } rr
+            ? $"{rr.FullName} -> {rr.ReturnType?.FullName ?? "<null>"}"
+            : "<null>";
         throw new InvalidOperationException(
-            $"CallExpression '{calleeDesc}' has no SA-resolved return type (ResolvedRoutine=null, ConstructedType=null, ObjectResolvedType={memberObjResolvedDesc}). " +
+            $"CallExpression '{calleeDesc}' has no concrete SA-resolved return type " +
+            $"(ResolvedRoutine={resolvedRoutineDesc}, " +
+            $"ConstructedType={call.ConstructedType?.FullName ?? "<null>"}, " +
+            $"ResolvedType={call.ResolvedType?.FullName ?? "<null>"}, " +
+            $"ObjectResolvedType={memberObjResolvedDesc}). " +
             $"Semantic analysis must annotate all calls. Routine: {_currentEmittingRoutine?.Name ?? "<unknown>"}.");
     }
 
