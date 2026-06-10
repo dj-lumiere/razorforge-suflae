@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.IO;
+using Compiler.Parser;
 using SyntaxTree;
 using Verification.Results;
 
@@ -14,8 +15,10 @@ namespace Compiler.Diagnostics;
 ///     42 |   adj[i] = neighbors
 ///        |            ^
 /// </code>
+/// Every diagnostic family routes through here — semantic errors/warnings, grammar (parse)
+/// errors, and parser build warnings — so the caret presentation is uniform.
 /// Color uses <see cref="Console.ForegroundColor"/> (portable — no VT escape handling needed)
-/// and is suppressed when output is redirected or the NO_COLOR convention is set.
+/// and is suppressed when the target stream is redirected or the NO_COLOR convention is set.
 /// Source files are read lazily and cached per render batch; unreadable files degrade
 /// gracefully to the header line only.
 /// </summary>
@@ -24,9 +27,8 @@ public static class DiagnosticRenderer
     private static readonly ConcurrentDictionary<string, string[]?> _sourceCache =
         new(comparer: StringComparer.OrdinalIgnoreCase);
 
-    private static readonly bool _useColor =
-        !Console.IsOutputRedirected
-        && Environment.GetEnvironmentVariable(variable: "NO_COLOR") == null
+    private static readonly bool _colorEnvironment =
+        Environment.GetEnvironmentVariable(variable: "NO_COLOR") == null
         && Environment.GetEnvironmentVariable(variable: "TERM") != "dumb";
 
     /// <summary>
@@ -38,8 +40,44 @@ public static class DiagnosticRenderer
 
     /// <summary>Renders a semantic error (header + excerpt) to standard output.</summary>
     public static void Print(SemanticError error, string indent = "  ") =>
-        PrintDiagnostic(severity: "error", severityColor: ConsoleColor.Red,
+        PrintDiagnostic(writer: Console.Out, severity: "error", severityColor: ConsoleColor.Red,
             header: error.FormattedMessage, location: error.Location, indent: indent);
+
+    /// <summary>Renders a semantic warning (header + excerpt) to standard output.</summary>
+    public static void Print(SemanticWarning warning, string indent = "  ") =>
+        PrintDiagnostic(writer: Console.Out, severity: "warning",
+            severityColor: ConsoleColor.Yellow,
+            header: warning.FormattedMessage, location: warning.Location, indent: indent);
+
+    /// <summary>
+    /// Renders a grammar (lexer/parser) error with excerpt + caret. The exception's message
+    /// is already in standard <c>error[RF-G###]: file:line:col: …</c> form.
+    /// Pass <paramref name="writer"/> = <see cref="Console.Error"/> for the parser's
+    /// mid-parse recovery reports; defaults to standard output.
+    /// </summary>
+    public static void Print(GrammarException ex, TextWriter? writer = null, string indent = "")
+    {
+        PrintDiagnostic(writer: writer ?? Console.Out, severity: "error",
+            severityColor: ConsoleColor.Red,
+            header: ex.Message,
+            location: new SourceLocation(FileName: ex.FileName, Line: ex.Line, Column: ex.Column,
+                Position: 0),
+            indent: indent);
+    }
+
+    /// <summary>Renders a parser build warning (style/deprecation) with excerpt + caret.</summary>
+    public static void Print(BuildWarning warning, string indent = "  ")
+    {
+        string location = string.IsNullOrEmpty(value: warning.FileName)
+            ? $"{warning.Line}:{warning.Column}"
+            : $"{warning.FileName}:{warning.Line}:{warning.Column}";
+        PrintDiagnostic(writer: Console.Out, severity: "warning",
+            severityColor: ConsoleColor.Yellow,
+            header: $"warning[{warning.WarningCode}]: {location}: {warning.Message}",
+            location: new SourceLocation(FileName: warning.FileName, Line: warning.Line,
+                Column: warning.Column, Position: 0),
+            indent: indent);
+    }
 
     /// <summary>Renders up to <see cref="MaxRenderedPerBatch"/> errors, then a suppression note.</summary>
     public static void PrintAll(System.Collections.Generic.IReadOnlyList<SemanticError> errors,
@@ -76,31 +114,41 @@ public static class DiagnosticRenderer
         }
     }
 
-    /// <summary>Renders a semantic warning (header + excerpt) to standard output.</summary>
-    public static void Print(SemanticWarning warning, string indent = "  ") =>
-        PrintDiagnostic(severity: "warning", severityColor: ConsoleColor.Yellow,
-            header: warning.FormattedMessage, location: warning.Location, indent: indent);
-
-    private static void PrintDiagnostic(string severity, ConsoleColor severityColor,
-        string header, SourceLocation location, string indent)
+    private static bool UseColorFor(TextWriter writer)
     {
+        if (!_colorEnvironment)
+        {
+            return false;
+        }
+
+        return ReferenceEquals(objA: writer, objB: Console.Error)
+            ? !Console.IsErrorRedirected
+            : !Console.IsOutputRedirected;
+    }
+
+    private static void PrintDiagnostic(TextWriter writer, string severity,
+        ConsoleColor severityColor, string header, SourceLocation location, string indent)
+    {
+        bool useColor = UseColorFor(writer: writer);
+
         // Header line: the severity word is colored; the rest stays default so the
         // file:line:col fragment remains terminal-clickable and copy-paste friendly.
-        if (_useColor && header.StartsWith(value: severity, comparisonType: StringComparison.Ordinal))
+        if (useColor && header.StartsWith(value: severity, comparisonType: StringComparison.Ordinal))
         {
-            Console.Write(value: indent);
+            writer.Write(value: indent);
             ConsoleColor saved = Console.ForegroundColor;
             Console.ForegroundColor = severityColor;
-            Console.Write(value: severity);
+            writer.Write(value: severity);
             Console.ForegroundColor = saved;
-            Console.WriteLine(value: header[severity.Length..]);
+            writer.WriteLine(value: header[severity.Length..]);
         }
         else
         {
-            Console.WriteLine(value: $"{indent}{header}");
+            writer.WriteLine(value: $"{indent}{header}");
         }
 
-        PrintExcerpt(location: location, severityColor: severityColor, indent: indent);
+        PrintExcerpt(writer: writer, location: location, severityColor: severityColor,
+            indent: indent, useColor: useColor);
     }
 
     /// <summary>
@@ -108,8 +156,8 @@ public static class DiagnosticRenderer
     /// Silently prints nothing when the file is missing/unreadable or the location
     /// is out of range (e.g. synthesized nodes carry line 0).
     /// </summary>
-    private static void PrintExcerpt(SourceLocation location, ConsoleColor severityColor,
-        string indent)
+    private static void PrintExcerpt(TextWriter writer, SourceLocation location,
+        ConsoleColor severityColor, string indent, bool useColor)
     {
         if (string.IsNullOrEmpty(value: location.FileName) || location.Line <= 0)
         {
@@ -142,34 +190,34 @@ public static class DiagnosticRenderer
         string gutterPad = new(c: ' ', count: lineNumber.Length);
         int caretOffset = Math.Clamp(value: location.Column - 1, min: 0, max: sourceLine.Length);
 
-        WriteGutter(text: $"{indent}{lineNumber} | ");
-        Console.WriteLine(value: sourceLine);
-        WriteGutter(text: $"{indent}{gutterPad} | ");
-        if (_useColor)
+        WriteGutter(writer: writer, text: $"{indent}{lineNumber} | ", useColor: useColor);
+        writer.WriteLine(value: sourceLine);
+        WriteGutter(writer: writer, text: $"{indent}{gutterPad} | ", useColor: useColor);
+        if (useColor)
         {
             ConsoleColor saved = Console.ForegroundColor;
             Console.ForegroundColor = severityColor;
-            Console.WriteLine(value: $"{new string(c: ' ', count: caretOffset)}^");
+            writer.WriteLine(value: $"{new string(c: ' ', count: caretOffset)}^");
             Console.ForegroundColor = saved;
         }
         else
         {
-            Console.WriteLine(value: $"{new string(c: ' ', count: caretOffset)}^");
+            writer.WriteLine(value: $"{new string(c: ' ', count: caretOffset)}^");
         }
     }
 
-    private static void WriteGutter(string text)
+    private static void WriteGutter(TextWriter writer, string text, bool useColor)
     {
-        if (_useColor)
+        if (useColor)
         {
             ConsoleColor saved = Console.ForegroundColor;
             Console.ForegroundColor = ConsoleColor.DarkGray;
-            Console.Write(value: text);
+            writer.Write(value: text);
             Console.ForegroundColor = saved;
         }
         else
         {
-            Console.Write(value: text);
+            writer.Write(value: text);
         }
     }
 }

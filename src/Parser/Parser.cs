@@ -168,7 +168,7 @@ public partial class Parser
                 // error[RF-G150]: filename.rf:9:14: message
                 // error[SF-G150]: filename.sf:9:14: message
                 _errors.Add(item: ex.Message);
-                Console.Error.WriteLine(value: ex.Message);
+                DiagnosticRenderer.Print(ex: ex, writer: Console.Error);
                 Synchronize();
             }
         }

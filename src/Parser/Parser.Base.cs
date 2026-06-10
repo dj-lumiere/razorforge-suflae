@@ -804,7 +804,8 @@ _ => GrammarDiagnosticCode.UnexpectedToken
             line: token.Line,
             column: token.Column,
             severity: severity,
-            warningCode: warningCode));
+            warningCode: warningCode,
+            fileName: FileName));
     }
 
     /// <summary>

@@ -518,8 +518,7 @@ internal partial class Program
                 Console.WriteLine(value: $"=== WARNINGS ({warnings.Count}) ===");
                 foreach (BuildWarning warning in warnings)
                 {
-                    Console.WriteLine(
-                        value: $"  [{warning.Line}:{warning.Column}] {warning.Message}");
+                    DiagnosticRenderer.Print(warning: warning);
                 }
             }
 
@@ -537,7 +536,7 @@ internal partial class Program
         }
         catch (GrammarException ex)
         {
-            Console.WriteLine(value: ex.Message);
+            DiagnosticRenderer.Print(ex: ex);
             return 1;
         }
         catch (Exception ex)
@@ -723,7 +722,7 @@ internal partial class Program
         }
         catch (GrammarException ex)
         {
-            Console.WriteLine(value: $"{ex.Message}");
+            DiagnosticRenderer.Print(ex: ex);
             return 1;
         }
         catch (Exception ex)
@@ -1028,8 +1027,7 @@ internal partial class Program
                 Console.WriteLine(value: $"Warnings: {buildResult.Warnings.Count}");
                 foreach (BuildWarning warning in buildResult.Warnings)
                 {
-                    Console.WriteLine(
-                        value: $"  [{warning.Line}:{warning.Column}] {warning.Message}");
+                    DiagnosticRenderer.Print(warning: warning);
                 }
             }
 
@@ -1205,7 +1203,7 @@ internal partial class Program
         }
         catch (GrammarException ex)
         {
-            Console.WriteLine(value: $"{ex.Message}");
+            DiagnosticRenderer.Print(ex: ex);
             return 1;
         }
         catch (Exception ex)
@@ -1269,8 +1267,7 @@ internal partial class Program
                 Console.WriteLine(value: $"Warnings: {buildResult.Warnings.Count}");
                 foreach (BuildWarning warning in buildResult.Warnings)
                 {
-                    Console.WriteLine(
-                        value: $"  [{warning.Line}:{warning.Column}] {warning.Message}");
+                    DiagnosticRenderer.Print(warning: warning);
                 }
             }
 
@@ -1345,7 +1342,7 @@ internal partial class Program
         }
         catch (GrammarException ex)
         {
-            Console.WriteLine(value: $"{ex.Message}");
+            DiagnosticRenderer.Print(ex: ex);
             return 1;
         }
         catch (Exception ex)

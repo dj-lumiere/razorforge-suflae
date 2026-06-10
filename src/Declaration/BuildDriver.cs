@@ -313,11 +313,14 @@ public sealed class BuildDriver
         }
         catch (GrammarException ex)
         {
+            // Preserve the REAL error position (not 1:1) so the caret renderer points at the
+            // offending token, and embed only the grammar code + raw text — the SemanticError
+            // envelope supplies its own `error[…]: file:line:col:` prefix.
             _errors.Add(item: new SemanticError(Code: SemanticDiagnosticCode.ParseError,
-                Message: $"{ex.Message}",
-                Location: new SourceLocation(FileName: filePath,
-                    Line: 1,
-                    Column: 1,
+                Message: $"[{ex.Code.ToCodeString(language: ex.Language)}] {ex.RawMessage}",
+                Location: new SourceLocation(FileName: ex.FileName,
+                    Line: ex.Line > 0 ? ex.Line : 1,
+                    Column: ex.Column > 0 ? ex.Column : 1,
                     Position: 0)));
             return null;
         }

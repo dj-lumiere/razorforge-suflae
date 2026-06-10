@@ -1100,7 +1100,7 @@ public partial class Parser
                 // statement in THIS block, and keep parsing — one bad statement must not
                 // discard the rest of the routine (or cascade through the rest of the file).
                 _errors.Add(item: ex.Message);
-                Console.Error.WriteLine(value: ex.Message);
+                DiagnosticRenderer.Print(ex: ex, writer: Console.Error);
                 SynchronizeWithinBlock();
             }
         }

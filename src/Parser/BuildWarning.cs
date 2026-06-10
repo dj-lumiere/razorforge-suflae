@@ -8,13 +8,18 @@ namespace Compiler.Parser;
 /// <param name="column">The column.</param>
 /// <param name="severity">The severity.</param>
 /// <param name="warningCode">The warning code.</param>
+/// <param name="fileName">The source file the warning was raised in (empty when unknown).</param>
 public class BuildWarning(
     string message,
     int line,
     int column,
     WarningSeverity severity,
-    string warningCode)
+    string warningCode,
+    string fileName = "")
 {
+    /// <summary>Source file the warning was raised in (empty when unknown).</summary>
+    public string FileName { get; } = fileName;
+
     /// <summary>Human-readable description of the warning condition.</summary>
     public string Message { get; } = message;
 

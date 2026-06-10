@@ -32,6 +32,12 @@ public class GrammarException(
     public GrammarDiagnosticCode Code { get; } = code;
 
     /// <summary>
+    /// The unformatted message text (without the <c>error[…]: file:line:col:</c> prefix),
+    /// for callers that re-wrap this error in another diagnostic envelope.
+    /// </summary>
+    public string RawMessage { get; } = message;
+
+    /// <summary>
     /// The source file where the error occurred.
     /// </summary>
     public string FileName { get; } = fileName;
