@@ -205,12 +205,16 @@ public sealed partial class SemanticVerifier
     /// </summary>
     private static bool LiteralFitsInType(LiteralExpression literal, TypeSymbol targetType)
     {
-        long value;
+        bool negative;
+        ulong magnitude;
 
         switch (literal.Value)
         {
             case long longValue:
-                value = longValue;
+                negative = longValue < 0;
+                magnitude = negative
+                    ? (ulong)(-(longValue + 1)) + 1 // two's-complement-safe |long.MinValue|
+                    : (ulong)longValue;
                 break;
             case string strValue:
             {
@@ -224,9 +228,11 @@ public sealed partial class SemanticVerifier
                     ? strValue[..lastUnderscore]
                     : strValue;
                 string cleaned = withoutSuffix.Replace(oldValue: "_", newValue: "");
-                if (!long.TryParse(s: cleaned, result: out value))
+                negative = cleaned.StartsWith(value: '-');
+                string digits = negative ? cleaned[1..] : cleaned;
+                if (!TryParseLiteralMagnitude(digits: digits, magnitude: out magnitude))
                 {
-                    // Value doesn't fit in long -> only S128/U128 could hold it
+                    // Magnitude doesn't fit in 64 bits -> only S128/U128 could hold it
                     return targetType.Name is "S128" or "U128";
                 }
 
@@ -238,19 +244,55 @@ public sealed partial class SemanticVerifier
 
         return targetType.Name switch
         {
-            "S8" => value is >= sbyte.MinValue and <= sbyte.MaxValue,
-            "S16" => value is >= short.MinValue and <= short.MaxValue,
-            "S32" => value is >= int.MinValue and <= int.MaxValue,
-            "S64" => true, // Any long fits in S64
-            "S128" => true, // Any long fits in S128
-            "U8" => value is >= 0 and <= byte.MaxValue,
-            "U16" => value is >= 0 and <= ushort.MaxValue,
-            "U32" => value is >= 0 and <= uint.MaxValue,
-            "U64" => value >= 0, // Any non-negative long fits in U64
-            "U128" => value >= 0,
+            "S8" => negative ? magnitude <= 128UL : magnitude <= 127UL,
+            "S16" => negative ? magnitude <= 32768UL : magnitude <= 32767UL,
+            "S32" => negative ? magnitude <= 2147483648UL : magnitude <= 2147483647UL,
+            "S64" => negative
+                ? magnitude <= 9223372036854775808UL
+                : magnitude <= 9223372036854775807UL,
+            "S128" => true, // Any 64-bit magnitude fits in S128
+            "U8" => !negative && magnitude <= byte.MaxValue,
+            "U16" => !negative && magnitude <= ushort.MaxValue,
+            "U32" => !negative && magnitude <= uint.MaxValue,
+            "U64" => !negative, // Any non-negative 64-bit magnitude fits in U64
+            "U128" => !negative,
             AddressTypeName => true, // System-dependent, allow for now
             _ => false
         };
+    }
+
+    /// <summary>
+    /// Parses the magnitude digits of an integer literal, honoring base prefixes
+    /// (<c>0x</c> hex, <c>0b</c> binary, <c>0o</c> octal). Plain <c>long.TryParse</c>
+    /// rejects "0xFF", which used to make the contextual range check report a bogus
+    /// "overflows type" error for every base-prefixed literal.
+    /// Returns false when the magnitude does not fit in 64 bits (or is malformed).
+    /// </summary>
+    private static bool TryParseLiteralMagnitude(string digits, out ulong magnitude)
+    {
+        if (digits.StartsWith(value: "0x", comparisonType: StringComparison.OrdinalIgnoreCase))
+        {
+            return ulong.TryParse(s: digits[2..], style: NumberStyles.HexNumber,
+                provider: CultureInfo.InvariantCulture, result: out magnitude);
+        }
+
+        if (digits.StartsWith(value: "0b", comparisonType: StringComparison.OrdinalIgnoreCase) ||
+            digits.StartsWith(value: "0o", comparisonType: StringComparison.OrdinalIgnoreCase))
+        {
+            int numericBase = char.ToLowerInvariant(c: digits[1]) == 'b' ? 2 : 8;
+            try
+            {
+                magnitude = Convert.ToUInt64(value: digits[2..], fromBase: numericBase);
+                return true;
+            }
+            catch (Exception ex) when (ex is FormatException or OverflowException or ArgumentOutOfRangeException)
+            {
+                magnitude = 0;
+                return false;
+            }
+        }
+
+        return ulong.TryParse(s: digits, result: out magnitude);
     }
 
     /// <summary>
