@@ -1,0 +1,112 @@
+name: Release
+
+# Tag-triggered release: builds the linux-x64 package on CI and attaches it (plus
+# checksums) to a Gitea release for the tag.
+#
+# The win-x64 package cannot be built here (no Windows runner; the native runtime
+# needs the host toolchain) — build it on the dev machine with scripts/package.ps1
+# and attach the zip to the release manually.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install system build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            autoconf \
+            automake \
+            libtool \
+            python3 \
+            curl \
+            wget \
+            ca-certificates \
+            lsb-release \
+            software-properties-common \
+            gnupg \
+            zip
+
+      - name: Install LLVM 20 toolchain
+        run: |
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 20
+          sudo ln -sf /usr/bin/clang-20 /usr/local/bin/clang
+          sudo ln -sf /usr/bin/clang++-20 /usr/local/bin/clang++
+          sudo ln -sf /usr/bin/opt-20 /usr/local/bin/opt
+          sudo ln -sf /usr/bin/llc-20 /usr/local/bin/llc
+          sudo ln -sf /usr/bin/llvm-ar-20 /usr/local/bin/llvm-ar
+          sudo ln -sf /usr/bin/lld-20 /usr/local/bin/lld
+          clang --version
+          opt --version
+
+      - name: Fetch native library sources
+        run: |
+          cd native
+
+          git clone --depth 1 https://github.com/SDL-Hercules-390/decNumber.git decNumber
+          curl -L -o libbf.tar.gz "https://bellard.org/libbf/libbf-2025-06-03.tar.gz"
+          mkdir -p libbf
+          tar -xzf libbf.tar.gz -C libbf --strip-components=1
+          rm libbf.tar.gz
+          git clone --depth 1 https://github.com/libtom/libtommath.git libtommath
+          git clone --depth 1 https://github.com/madler/zlib.git zlib
+          git clone --depth 1 https://github.com/facebook/zstd.git zstd
+          mkdir -p sqlite3
+          curl -L -o sqlite3.zip "https://www.sqlite.org/2025/sqlite-amalgamation-3500000.zip"
+          unzip -q -j sqlite3.zip -d sqlite3
+          rm sqlite3.zip
+          git clone --depth 1 -b stable https://github.com/jedisct1/libsodium.git libsodium
+          git clone --depth 1 -b v2.28.10 https://github.com/Mbed-TLS/mbedtls.git mbedtls2
+          git clone --depth 1 https://github.com/PCRE2Project/pcre2.git pcre2
+          git clone --depth 1 https://github.com/JuliaStrings/utf8proc.git utf8proc
+          git clone --depth 1 https://github.com/ibireme/yyjson.git yyjson
+          git clone --depth 1 https://github.com/cktan/tomlc99.git tomlc99
+          git clone --depth 1 https://github.com/ivmai/bdwgc.git bdwgc
+          git clone --depth 1 https://github.com/libuv/libuv.git libuv
+          git clone --depth 1 https://github.com/higan-emu/libco.git libco
+          git clone --depth 1 https://github.com/jedisct1/minicsv.git minicsv || true
+
+      - name: Build native libraries
+        run: |
+          cd native
+          chmod +x build.sh
+          export CC=clang
+          export CXX=clang++
+          export CFLAGS="-D_GNU_SOURCE -Wno-implicit-function-declaration"
+          export CXXFLAGS="-D_GNU_SOURCE -Wno-implicit-function-declaration"
+          ./build.sh
+
+      - name: Package linux-x64
+        run: |
+          chmod +x scripts/package.sh
+          # Derive the version from the tag (strip leading 'v') so the artifact
+          # name always matches the release even if the csproj lags behind.
+          VERSION="${GITHUB_REF_NAME#v}" scripts/package.sh
+
+      - name: Create Gitea release with artifacts
+        uses: https://gitea.com/actions/release-action@main
+        with:
+          files: |-
+            dist/*.tar.gz
+            dist/checksums.txt
+          api_key: '${{ secrets.RELEASE_TOKEN }}'
