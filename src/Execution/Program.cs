@@ -105,7 +105,8 @@ internal partial class Program
             case BuildCommand:
             {
                 (string? entryFile, string? projectRoot, string? outputFile2,
-                    RfBuildMode buildMode2, bool dumpAst2, bool saTiming2, bool requireStart2, bool showStages2) = ResolveEntryFile(args: args, needsOutputArg: true);
+                    RfBuildMode buildMode2, bool dumpAst2, bool saTiming2, bool requireStart2,
+                    bool showStages2, IReadOnlyList<string> libraryRoots2) = ResolveEntryFile(args: args, needsOutputArg: true);
                 if (entryFile == null)
                 {
                     return 1;
@@ -118,13 +119,15 @@ internal partial class Program
                     dumpAst: dumpAst2,
                     saTiming: saTiming2,
                     requireStartRoutine: requireStart2,
-                    showBuildStages: showStages2);
+                    showBuildStages: showStages2,
+                    libraryRoots: libraryRoots2);
             }
 
             case "buildandrun":
             {
                 (string? entryFile, string? projectRoot, _,
-                    RfBuildMode buildMode3, bool dumpAst3, bool saTiming3, bool requireStart3, bool showStages3) = ResolveEntryFile(args: args, needsOutputArg: false);
+                    RfBuildMode buildMode3, bool dumpAst3, bool saTiming3, bool requireStart3,
+                    bool showStages3, IReadOnlyList<string> libraryRoots3) = ResolveEntryFile(args: args, needsOutputArg: false);
                 if (entryFile == null)
                 {
                     return 1;
@@ -136,19 +139,22 @@ internal partial class Program
                     dumpAst: dumpAst3,
                     saTiming: saTiming3,
                     requireStartRoutine: requireStart3,
-                    showBuildStages: showStages3);
+                    showBuildStages: showStages3,
+                    libraryRoots: libraryRoots3);
             }
 
             case "check":
             {
-                (string? entryFile, string? projectRoot, _, _, _, _, _, _) =
+                (string? entryFile, string? projectRoot, _, _, _, _, _, _,
+                    IReadOnlyList<string> libraryRoots4) =
                     ResolveEntryFile(args: args, needsOutputArg: false);
                 if (entryFile == null)
                 {
                     return 1;
                 }
 
-                return CheckMultiFile(entryFile: entryFile, projectRoot: projectRoot);
+                return CheckMultiFile(entryFile: entryFile, projectRoot: projectRoot,
+                    libraryRoots: libraryRoots4);
             }
 
             case "validate-stdlib":
@@ -177,34 +183,24 @@ internal partial class Program
     /// Resolves the entry file, project root, optional output file, build mode, dump-ast, and sa-timing flags
     /// for build/buildandrun/check commands.
     /// When no explicit entry file is given, searches for a razorforge.toml manifest.
-    /// Supports --target to select a specific target from the manifest.
+    /// ALL build configuration lives in the manifest's [target] section (executable, library,
+    /// mode, dump-ast, sa-timing, show-build-stages) — the CLI deliberately takes no flags.
     /// Returns (entryFile, projectRoot, outputFile, buildMode, dumpAst, saTiming, requireStartRoutine, showBuildStages); entryFile is null on error.
     /// </summary>
     private static (string? EntryFile, string? ProjectRoot, string? OutputFile,
-        RfBuildMode BuildMode, bool DumpAst, bool SaTiming, bool RequireStartRoutine, bool ShowBuildStages) ResolveEntryFile(string[] args, bool needsOutputArg) // NOSONAR S3776
+        RfBuildMode BuildMode, bool DumpAst, bool SaTiming, bool RequireStartRoutine, bool ShowBuildStages,
+        IReadOnlyList<string> LibraryRoots) ResolveEntryFile(string[] args, bool needsOutputArg) // NOSONAR S3776
     {
         // args[0] is the command name (build/buildandrun/check)
-        string? targetName = null;
         string? explicitEntry = null;
         string? outputFile = null;
-        bool cliShowBuildStages = false;
 
-        // Parse remaining args
+        // Parse remaining args (positional only: [entry-file] [out.ll])
         int i = 1;
         while (i < args.Length)
         {
-            if (args[i] == "--target" && i + 1 < args.Length)
-            {
-                targetName = args[i + 1];
-                i += 2;
-            }
-            else if (args[i] == "--show-build-stages")
-            {
-                cliShowBuildStages = true;
-                i++;
-            }
-            else if (!args[i]
-                        .StartsWith('-'))
+            if (!args[i]
+                   .StartsWith('-'))
             {
                 if (explicitEntry == null)
                 {
@@ -219,7 +215,10 @@ internal partial class Program
             }
             else
             {
-                i++;
+                Console.WriteLine(
+                    value:
+                    $"Error: unknown option '{args[i]}'. RazorForge takes no build flags — configure builds in razorforge.toml ([target] executable, library, mode, ...).");
+                return (null, null, null, RfBuildMode.Debug, false, false, false, false, []);
             }
         }
 
@@ -231,14 +230,14 @@ internal partial class Program
             if (!File.Exists(path: explicitEntry))
             {
                 Console.WriteLine(value: $"Error: File '{explicitEntry}' not found.");
-                return (null, null, null, RfBuildMode.Debug, false, false, false, false);
+                return (null, null, null, RfBuildMode.Debug, false, false, false, false, []);
             }
 
             string projectRoot =
                 Path.GetDirectoryName(path: Path.GetFullPath(path: explicitEntry)) ?? ".";
             // Bare .rf source given without manifest — assume an executable build so codegen
             // knows to synthesize @main and SA can require a 'start' routine.
-            return (explicitEntry, projectRoot, outputFile, RfBuildMode.Debug, false, false, true, cliShowBuildStages);
+            return (explicitEntry, projectRoot, outputFile, RfBuildMode.Debug, false, false, true, false, []);
         }
 
         // No explicit entry (or .toml manifest given) — load manifest
@@ -261,13 +260,13 @@ internal partial class Program
                     value: "Either provide an entry file or create a razorforge.toml manifest.");
             }
 
-            return (null, null, null, RfBuildMode.Debug, false, false, false, false);
+            return (null, null, null, RfBuildMode.Debug, false, false, false, false, []);
         }
 
         try
         {
             ProjectManifest manifest = ManifestLoader.Load(tomlPath: manifestPath);
-            TargetInfo target = ResolveManifestTarget(manifest: manifest, targetName: targetName);
+            BuildTarget target = manifest.Target;
 
             RfBuildMode buildMode = target.Mode.ToLowerInvariant() switch
             {
@@ -276,65 +275,32 @@ internal partial class Program
                 "release-time" => RfBuildMode.ReleaseTime,
                 "release-space" => RfBuildMode.ReleaseSpace,
                 _ => throw new InvalidOperationException(
-                    $"Unknown build mode '{target.Mode}' in manifest target '{target.Name}'. " +
+                    $"Unknown build mode '{target.Mode}' in [target]. " +
                     "Valid modes are: debug, release, release-time, release-space.")
             };
 
-            bool showBuildStages = cliShowBuildStages || target.ShowBuildStages;
+            bool showBuildStages = target.ShowBuildStages;
             if (showBuildStages)
             {
                 Console.WriteLine(value: $"Using manifest: {manifestPath}");
-                Console.WriteLine(value: $"Target: {target.Name} ({target.Type}, {target.Mode})");
+                Console.WriteLine(value: $"Executable: {target.Executable} ({target.Mode})");
+                if (target.Libraries.Count > 0)
+                {
+                    Console.WriteLine(
+                        value:
+                        $"Libraries: {string.Join(separator: ", ", values: target.Libraries)}");
+                }
             }
 
-            bool requireStartRoutine = string.Equals(a: target.Type,
-                b: "executable",
-                comparisonType: StringComparison.OrdinalIgnoreCase);
-            return (target.Entry, manifest.ManifestDirectory, outputFile, buildMode, target.DumpAst, target.SaTiming, requireStartRoutine, showBuildStages);
+            return (target.Executable, manifest.ManifestDirectory, outputFile, buildMode,
+                target.DumpAst, target.SaTiming, true, showBuildStages, target.Libraries);
         }
         catch (Exception ex)
         {
             Console.WriteLine(
                 value: $"Error loading {ManifestLoader.ManifestFileName}: {ex.Message}");
-            return (null, null, null, RfBuildMode.Debug, false, false, false, false);
+            return (null, null, null, RfBuildMode.Debug, false, false, false, false, []);
         }
-    }
-
-    private static TargetInfo ResolveManifestTarget(ProjectManifest manifest, string? targetName)
-    {
-        if (targetName != null)
-        {
-            TargetInfo? explicitTarget = manifest.Targets.Find(match: t => string.Equals(a: t.Name,
-                b: targetName,
-                comparisonType: StringComparison.OrdinalIgnoreCase));
-            if (explicitTarget == null)
-            {
-                throw new InvalidOperationException(
-                    $"Target '{targetName}' not found in {ManifestLoader.ManifestFileName}. " +
-                    $"Available targets: {string.Join(separator: ", ", values: manifest.Targets.Select(selector: t => t.Name))}");
-            }
-
-            return explicitTarget;
-        }
-
-        if (manifest.Targets.Count == 1)
-        {
-            return manifest.Targets[index: 0];
-        }
-
-        var executableTargets = manifest.Targets
-                                        .Where(predicate: t => string.Equals(a: t.Type,
-                                             b: "executable",
-                                             comparisonType: StringComparison.OrdinalIgnoreCase))
-                                        .ToList();
-        if (executableTargets.Count == 1)
-        {
-            return executableTargets[index: 0];
-        }
-
-        throw new InvalidOperationException(
-            "Manifest contains multiple candidate targets. " +
-            $"Pass --target <name>. Available targets: {string.Join(separator: ", ", values: manifest.Targets.Select(selector: t => t.Name))}");
     }
 
     /// <summary>
@@ -360,19 +326,10 @@ internal partial class Program
         Console.WriteLine(
             value: "  RazorForge build [entry-file] [out.ll]          - Build multi-file project");
         Console.WriteLine(
-            value:
-            "  RazorForge build --target <name> [out.ll]       - Build a specific manifest target");
-        Console.WriteLine(
             value: "  RazorForge buildandrun [entry-file]             - Build and execute");
         Console.WriteLine(
             value:
-            "  RazorForge buildandrun --target <name>          - Build and execute manifest target");
-        Console.WriteLine(
-            value:
             "  RazorForge check [entry-file]                   - Type-check only (no codegen)");
-        Console.WriteLine(
-            value:
-            "  RazorForge check --target <name>                - Type-check manifest target");
         Console.WriteLine(
             value:
             "  RazorForge validate-stdlib [rf|sf]              - Validate stdlib routine bodies");
@@ -386,6 +343,11 @@ internal partial class Program
         Console.WriteLine(
             value: "  If no entry file is given, searches for razorforge.toml in the current");
         Console.WriteLine(value: "  directory and parent directories.");
+        Console.WriteLine();
+        Console.WriteLine(
+            value: "  There are no build flags: all build configuration lives in razorforge.toml's");
+        Console.WriteLine(
+            value: "  [target] section (executable, library, mode, show-build-stages, ...).");
     }
 
     /// <summary>Prints the compiler version (from assembly metadata) to standard output.</summary>
@@ -743,7 +705,12 @@ internal partial class Program
             "Unable to resolve the RazorForge executable directory.");
     }
 
-    private static string FindNativeBuildDirectory(string exeDir)
+    /// <summary>
+    /// Locates the native runtime's CMake build tree (development checkouts only).
+    /// Installed/published layouts ship prebuilt artifacts flat next to the executable
+    /// and have no source tree — callers must treat a miss as "use the installed layout".
+    /// </summary>
+    private static bool TryFindNativeBuildDirectory(string exeDir, out string nativeBuildDir)
     {
         string? current = exeDir;
         for (int i = 0; i < 6 && current != null; i++)
@@ -752,15 +719,20 @@ internal partial class Program
             if (File.Exists(path: Path.Combine(path1: candidate, path2: "build.ninja")) ||
                 File.Exists(path: Path.Combine(path1: candidate, path2: "Makefile")))
             {
-                return candidate;
+                nativeBuildDir = candidate;
+                return true;
             }
 
             current = Path.GetDirectoryName(path: current);
         }
 
-        throw new InvalidOperationException(
-            "Unable to locate 'native/build' relative to the RazorForge executable.");
+        nativeBuildDir = "";
+        return false;
     }
+
+    /// <summary>The platform-specific link-time artifact of the bundled native runtime.</summary>
+    private static string RuntimeLinkLibraryFileName =>
+        OperatingSystem.IsWindows() ? "razorforge_runtime.lib" : "librazorforge_runtime.so";
 
     private static int BuildNativeRuntime(string exeDir, string nativeBuildDir)
     {
@@ -972,7 +944,7 @@ internal partial class Program
     private static int BuildMultiFile(string entryFile, string? outputFile,
         string? projectRoot = null, RfBuildMode buildMode = RfBuildMode.Debug,
         bool dumpAst = false, bool saTiming = false, bool requireStartRoutine = true,
-        bool showBuildStages = false)
+        bool showBuildStages = false, IReadOnlyList<string>? libraryRoots = null)
     {
         if (!File.Exists(path: entryFile))
         {
@@ -1004,7 +976,8 @@ internal partial class Program
                 Console.WriteLine(value: "=== BUILD DRIVER ===");
             var driver = new BuildDriver(projectRoot: projectRoot,
                 stdlibRoot: stdlibRoot,
-                language: language);
+                language: language,
+                libraryRoots: libraryRoots);
             BuildResult buildResult =
                 driver.CompileFile(entryFile: Path.GetFullPath(path: entryFile));
 
@@ -1094,6 +1067,9 @@ internal partial class Program
             var target = TargetConfig.ForCurrentHost();
             var analyzer = new SemanticVerifier(language: language,
                 target: target, buildMode: buildMode) { SaTiming = saTiming };
+            // Share the driver's fully-indexed resolver so SA-phase imports see the same
+            // module set the build graph resolved (incl. [target] library directories).
+            analyzer.Registry.UseModuleResolver(resolver: driver.Resolver);
             AnalysisResult result = analyzer.AnalyzeMultiple(files: orderedFiles);
 
             if (showBuildStages)
@@ -1218,7 +1194,8 @@ internal partial class Program
     /// Runs the multi-file build pipeline through semantic analysis only (no codegen).
     /// Reports errors and warnings. Returns 0 if type-checking succeeds, 1 otherwise.
     /// </summary>
-    private static int CheckMultiFile(string entryFile, string? projectRoot = null) // NOSONAR S3776
+    private static int CheckMultiFile(string entryFile, string? projectRoot = null,
+        IReadOnlyList<string>? libraryRoots = null) // NOSONAR S3776
     {
         if (!File.Exists(path: entryFile))
         {
@@ -1245,7 +1222,8 @@ internal partial class Program
             Console.WriteLine(value: "=== BUILD DRIVER ===");
             var driver = new BuildDriver(projectRoot: projectRoot,
                 stdlibRoot: stdlibRoot,
-                language: language);
+                language: language,
+                libraryRoots: libraryRoots);
             BuildResult buildResult =
                 driver.CompileFile(entryFile: Path.GetFullPath(path: entryFile));
 
@@ -1313,6 +1291,9 @@ internal partial class Program
             Console.WriteLine(value: "=== SEMANTIC ANALYSIS ===");
 
             var analyzer = new SemanticVerifier(language: language);
+            // Share the driver's fully-indexed resolver so SA-phase imports see the same
+            // module set the build graph resolved (incl. [target] library directories).
+            analyzer.Registry.UseModuleResolver(resolver: driver.Resolver);
             AnalysisResult result = analyzer.AnalyzeMultiple(files: orderedFiles);
 
             Console.WriteLine(
@@ -1360,7 +1341,7 @@ internal partial class Program
     private static int BuildAndRun(string entryFile, string? projectRoot = null,
         RfBuildMode buildMode = RfBuildMode.Debug, bool dumpAst = false, bool saTiming = false,
         bool requireStartRoutine = true,
-        bool showBuildStages = false)
+        bool showBuildStages = false, IReadOnlyList<string>? libraryRoots = null)
     {
         // Remove stale per-target outputs before rebuilding.
         string llFile = Path.ChangeExtension(path: entryFile, extension: ".ll");
@@ -1376,18 +1357,18 @@ internal partial class Program
             dumpAst: dumpAst,
             saTiming: saTiming,
             requireStartRoutine: requireStartRoutine,
-            showBuildStages: showBuildStages);
+            showBuildStages: showBuildStages,
+            libraryRoots: libraryRoots);
         if (buildResult != 0)
         {
             return buildResult;
         }
 
         string exeDir;
-        string nativeBuildDir;
+        string runtimeLibDir;
         try
         {
             exeDir = ResolveExecutableDirectory();
-            nativeBuildDir = FindNativeBuildDirectory(exeDir: exeDir);
         }
         catch (Exception ex)
         {
@@ -1395,14 +1376,31 @@ internal partial class Program
             return 1;
         }
 
-        int nativeResult = BuildNativeRuntime(exeDir: exeDir,
-            nativeBuildDir: nativeBuildDir);
-        if (nativeResult != 0)
+        if (TryFindNativeBuildDirectory(exeDir: exeDir, nativeBuildDir: out string nativeBuildDir))
         {
-            return nativeResult;
-        }
+            // Development checkout: rebuild the native runtime incrementally before linking.
+            int nativeResult = BuildNativeRuntime(exeDir: exeDir,
+                nativeBuildDir: nativeBuildDir);
+            if (nativeResult != 0)
+            {
+                return nativeResult;
+            }
 
-        string runtimeLibDir = Path.Combine(path1: nativeBuildDir, path2: "lib");
+            runtimeLibDir = Path.Combine(path1: nativeBuildDir, path2: "lib");
+        }
+        else if (File.Exists(path: Path.Combine(path1: exeDir, path2: RuntimeLinkLibraryFileName)))
+        {
+            // Installed/published layout: prebuilt runtime artifacts ship flat next to the
+            // executable (csproj LinkBase="." / the packaging scripts) — nothing to rebuild.
+            runtimeLibDir = exeDir;
+        }
+        else
+        {
+            Console.WriteLine(
+                value:
+                $"Failed to resolve the RazorForge native runtime: expected either a development 'native/build' tree near the executable, or '{RuntimeLinkLibraryFileName}' next to it (installed layout).");
+            return 1;
+        }
 
         string optPipelineLevel = buildMode switch
         {

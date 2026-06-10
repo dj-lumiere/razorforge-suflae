@@ -882,6 +882,22 @@ public sealed partial class SemanticVerifier
         var moduleNameSnapshots =
             new Dictionary<string, string?>(comparer: StringComparer.OrdinalIgnoreCase);
 
+        // Every file in the build graph contributes its declarations via Phase 1 below.
+        // Pre-mark their declared modules as provided so `import` statements between them
+        // record the module name instead of re-loading the file through StdlibLoader
+        // (which would register every routine a second time -> duplicate-definition errors).
+        foreach ((Program program, string _) in files)
+        {
+            foreach (ISyntaxTreeNode node in program.Declarations)
+            {
+                if (node is ModuleDeclaration moduleDecl)
+                {
+                    _registry.MarkModuleProvided(modulePath: moduleDecl.Path);
+                    break;
+                }
+            }
+        }
+
         // Phase 1: Collect declarations from ALL files (populates registry with all types/routines)
         foreach ((Program program, string filePath) in files)
         {

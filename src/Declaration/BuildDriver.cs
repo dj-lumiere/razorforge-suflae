@@ -61,12 +61,29 @@ public sealed class BuildDriver
     /// <param name="projectRoot">The root directory of the project.</param>
     /// <param name="stdlibRoot">The root directory of the standard library.</param>
     /// <param name="language">The language being built.</param>
-    public BuildDriver(string projectRoot, string stdlibRoot, Language language)
+    /// <param name="libraryRoots">
+    /// External library dependency directories from the manifest's <c>[target] library</c>
+    /// list; their modules join the import search space between the project and the stdlib.
+    /// </param>
+    public BuildDriver(string projectRoot, string stdlibRoot, Language language,
+        IReadOnlyList<string>? libraryRoots = null)
     {
-        _resolver = new ModuleResolver(projectRoot: projectRoot, stdlibRoot: stdlibRoot);
+        _libraryRoots = libraryRoots ?? [];
+        _resolver = new ModuleResolver(projectRoot: projectRoot, stdlibRoot: stdlibRoot,
+            libraryRoots: _libraryRoots);
         _stdlibRoot = stdlibRoot;
         _language = language;
     }
+
+    private readonly IReadOnlyList<string> _libraryRoots;
+
+    /// <summary>
+    /// The driver's module resolver, fully indexed after <see cref="CompileFiles"/>
+    /// (stdlib pre-scan + library roots + every project file processed). Share this with
+    /// <c>TypeRegistry.UseModuleResolver</c> so SA-phase import loading resolves the same
+    /// module set the build graph did.
+    /// </summary>
+    public ModuleResolver Resolver => _resolver;
 
     /// <summary>
     /// Builds a single source file and all its dependencies.
@@ -87,6 +104,9 @@ public sealed class BuildDriver
     {
         // Pre-register all stdlib files so imports resolve without filesystem probing.
         PreRegisterStdlib();
+        // Pre-register external library dependencies ([target] library) the same way —
+        // their modules declare names in `module` headers, not file-path conventions.
+        PreRegisterLibraryRoots();
 
         // Process each entry file
         foreach (string sourceFile in sourceFiles)
@@ -423,6 +443,47 @@ public sealed class BuildDriver
 
             moduleName ??= DeriveModuleNameFromPath(filePath: filePath, languageSubdir: subdirectory);
             _resolver.RegisterFile(filePath: filePath, moduleName: moduleName, ast: ast);
+        }
+    }
+
+    /// <summary>
+    /// Parses all sources in external library dependency directories and registers their
+    /// declared module names in the resolver index — mirroring the stdlib pre-scan.
+    /// Library files without a <c>module</c> declaration are skipped (a dependency's
+    /// public surface is its declared modules).
+    /// </summary>
+    private void PreRegisterLibraryRoots()
+    {
+        foreach (string libraryRoot in _libraryRoots)
+        {
+            if (!Directory.Exists(path: libraryRoot))
+            {
+                continue;
+            }
+
+            foreach (string pattern in (string[])["*.rf", "*.sf"])
+            {
+                foreach (string filePath in Directory.GetFiles(path: libraryRoot,
+                             searchPattern: pattern,
+                             searchOption: SearchOption.AllDirectories))
+                {
+                    Program? ast = ParseAstOnly(filePath: filePath);
+                    if (ast is null)
+                    {
+                        continue;
+                    }
+
+                    foreach (ISyntaxTreeNode node in ast.Declarations)
+                    {
+                        if (node is ModuleDeclaration md)
+                        {
+                            _resolver.RegisterFile(filePath: filePath, moduleName: md.Path,
+                                ast: ast);
+                            break;
+                        }
+                    }
+                }
+            }
         }
     }
 

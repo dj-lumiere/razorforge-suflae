@@ -163,6 +163,33 @@ public sealed partial class TypeRegistry
     /// <summary>The module resolver for finding module files.</summary>
     private ModuleResolver? _moduleResolver;
 
+    /// <summary>
+    /// Injects a pre-built module resolver so SA-phase import loading shares the
+    /// <see cref="Compiler.Declaration.BuildDriver"/> index (stdlib pre-scan, project files,
+    /// and manifest <c>[target] library</c> roots). Without this, <see cref="LoadModule"/>
+    /// lazily builds a blind resolver that can only probe the filesystem by path-name
+    /// convention — which misses modules whose file name differs from their declared name
+    /// and knows nothing about external library directories.
+    /// </summary>
+    public void UseModuleResolver(ModuleResolver resolver) => _moduleResolver = resolver;
+
+    /// <summary>
+    /// Marks a module as already provided by the current compilation, so an
+    /// <c>import</c> of it resolves without re-loading its file through
+    /// <see cref="StdlibLoader"/>. Multi-file analysis calls this for every file in the
+    /// build graph before Phase 1: those files' declarations are registered directly by
+    /// the per-file declaration pass, and loading them again would produce
+    /// duplicate-definition errors.
+    /// </summary>
+    /// <param name="modulePath">The declared module path, verbatim (e.g. "MathUtils", "Geo/Shapes").</param>
+    public void MarkModuleProvided(string modulePath)
+    {
+        string moduleId = modulePath.Replace(oldChar: '/', newChar: '.')
+                                    .Replace(oldChar: '\\', newChar: '.');
+        _loadedModules.Add(item: moduleId);
+        _moduleNames.TryAdd(key: moduleId, value: modulePath);
+    }
+
     #endregion
 
     #region Routine Storage

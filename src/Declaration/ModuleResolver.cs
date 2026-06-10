@@ -14,6 +14,7 @@ public sealed class ModuleResolver
 {
     private readonly string _projectRoot;
     private readonly string _stdlibRoot;
+    private readonly IReadOnlyList<string> _libraryRoots;
 
     private readonly List<SemanticError> _errors = [];
 
@@ -30,10 +31,13 @@ public sealed class ModuleResolver
 
     /// <param name="projectRoot">Project root directory, used as a filesystem fallback for project files.</param>
     /// <param name="stdlibRoot">Standard library root, used as a filesystem fallback when AST pre-registration fails.</param>
-    public ModuleResolver(string projectRoot, string stdlibRoot)
+    /// <param name="libraryRoots">External library dependency directories (manifest <c>[target] library</c>), searched between project and stdlib.</param>
+    public ModuleResolver(string projectRoot, string stdlibRoot,
+        IReadOnlyList<string>? libraryRoots = null)
     {
         _projectRoot = projectRoot;
         _stdlibRoot = stdlibRoot;
+        _libraryRoots = libraryRoots ?? [];
     }
 
     /// <summary>
@@ -137,10 +141,12 @@ public sealed class ModuleResolver
         // Only '/' is a hierarchy separator; convert to OS path separator.
         string relPath = modulePart.Replace(oldChar: '/', newChar: Path.DirectorySeparatorChar);
 
-        // Search roots in priority order: project, then stdlib RazorForge, then stdlib Suflae.
+        // Search roots in priority order: project, then external library dependencies
+        // (manifest [target] library entries), then stdlib RazorForge, then stdlib Suflae.
         string[] roots =
         [
             _projectRoot,
+            .. _libraryRoots,
             Path.Combine(path1: _stdlibRoot, path2: "RazorForge"),
             Path.Combine(path1: _stdlibRoot, path2: "Suflae"),
         ];

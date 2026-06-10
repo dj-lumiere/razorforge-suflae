@@ -8,11 +8,14 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateProgramFile>false</GenerateProgramFile>
-    <Version>0.0.1</Version>
+    <Version>0.0.1-alpha</Version>
     <PackAsTool>true</PackAsTool>
-    <ToolCommandName>forge</ToolCommandName>
+    <!-- Canonical command name. `forge` is deliberately NOT used: it collides with
+         Foundry's forge (Ethereum toolchain) on developer machines. Users who want
+         `forge` can alias it locally; packages also ship an `rf` short alias. -->
+    <ToolCommandName>razorforge</ToolCommandName>
     <PackageId>RazorForge</PackageId>
-    <Description>The RazorForge compiler toolchain (forge CLI).</Description>
+    <Description>The RazorForge compiler toolchain.</Description>
   </PropertyGroup>
 
   <!-- Native library integration -->

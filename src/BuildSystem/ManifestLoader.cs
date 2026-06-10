@@ -73,26 +73,35 @@ public static class ManifestLoader
         // Build module index for resolving entry modules
         Dictionary<string, string> moduleIndex = BuildModuleIndex(projectDir: manifestDir);
 
-        // [targets.*]
-        if (root.TryGetValue(key: "targets", value: out object? targetsObj) &&
-            targetsObj is TomlTable targetsTable)
+        // [target] — the single build description: executable + external library deps.
+        if (root.TryGetValue(key: "target", value: out object? targetObj) &&
+            targetObj is TomlTable targetTable)
         {
-            foreach ((string name, object value) in targetsTable)
-            {
-                if (value is TomlTable targetTable)
-                {
-                    TargetInfo target = ParseTarget(name: name,
-                        table: targetTable,
-                        moduleIndex: moduleIndex);
-                    manifest.Targets.Add(item: target);
-                }
-            }
+            manifest.Target = ParseBuildTarget(table: targetTable, moduleIndex: moduleIndex);
         }
-
-        if (manifest.Targets.Count == 0)
+        else
         {
             throw new InvalidOperationException(
-                message: $"{ManifestFileName}: at least one target is required.");
+                message:
+                $"{ManifestFileName}: missing [target] section. Declare what the package builds, e.g.\n" +
+                "[target]\nexecutable = \"MainModule\"\nlibrary = [\"../shared-utils\"]\nmode = \"debug\"");
+        }
+
+        // Resolve external library dependency directories relative to the manifest.
+        for (int i = 0; i < manifest.Target.Libraries.Count; i++)
+        {
+            string rawEntry = manifest.Target.Libraries[index: i];
+            string resolved = Path.GetFullPath(path: Path.Combine(path1: manifestDir,
+                path2: rawEntry));
+            if (!Directory.Exists(path: resolved))
+            {
+                throw new InvalidOperationException(
+                    message:
+                    $"{ManifestFileName}: library dependency '{rawEntry}' not found (resolved to '{resolved}'). " +
+                    "Library entries are directories containing RazorForge modules.");
+            }
+
+            manifest.Target.Libraries[index: i] = resolved;
         }
 
         return manifest;
@@ -142,25 +151,41 @@ public static class ManifestLoader
         return pkg;
     }
 
-    private static TargetInfo ParseTarget(string name, TomlTable table,
+    private static BuildTarget ParseBuildTarget(TomlTable table,
         Dictionary<string, string> moduleIndex)
     {
-        var target = new TargetInfo { Name = name, Type = ReadRequiredString(table: table,
-            key: "type",
-            context: $"target '{name}'"),
-            Entry = ReadRequiredString(table: table,
-                key: "entry",
-                context: $"target '{name}'")
+        var target = new BuildTarget
+        {
+            Executable = ReadRequiredString(table: table,
+                key: "executable",
+                context: "[target]")
         };
 
-        if (table.TryGetValue(key: "lib_type", value: out object? libType))
+        // `library` = EXTERNAL dependency directories (requirements.txt-style), relative
+        // to the manifest. Accept a single string or an array of strings.
+        if (table.TryGetValue(key: "library", value: out object? libraryObj))
         {
-            target.LibType = libType?.ToString();
+            IEnumerable<string?> rawEntries = libraryObj switch
+            {
+                TomlArray array => array.Select(selector: item => item?.ToString()),
+                _ => [libraryObj?.ToString()]
+            };
+            foreach (string? rawEntry in rawEntries)
+            {
+                if (string.IsNullOrWhiteSpace(value: rawEntry))
+                {
+                    continue;
+                }
+
+                target.Libraries.Add(item: rawEntry);
+            }
         }
 
-        target.Mode = ReadRequiredString(table: table,
-            key: "mode",
-            context: $"target '{name}'");
+        if (table.TryGetValue(key: "mode", value: out object? mode) &&
+            !string.IsNullOrWhiteSpace(value: mode?.ToString()))
+        {
+            target.Mode = mode!.ToString()!;
+        }
 
         if (table.TryGetValue(key: "dump-ast", value: out object? dumpAst))
             target.DumpAst = dumpAst is bool and true;
@@ -171,8 +196,8 @@ public static class ManifestLoader
         if (table.TryGetValue(key: "show-build-stages", value: out object? showStages))
             target.ShowBuildStages = showStages is bool and true;
 
-        // Resolve module name to file path
-        if (!moduleIndex.TryGetValue(key: target.Entry, value: out string? resolvedFile))
+        // Resolve the executable's module name to a file path
+        if (!moduleIndex.TryGetValue(key: target.Executable, value: out string? resolvedFile))
         {
             string available = moduleIndex.Count > 0
                 ? string.Join(separator: ", ",
@@ -180,10 +205,10 @@ public static class ManifestLoader
                 : "(none found)";
             throw new InvalidOperationException(
                 message:
-                $"{ManifestFileName}: target '{name}' entry module '{target.Entry}' not found. Available modules: {available}");
+                $"{ManifestFileName}: executable module '{target.Executable}' not found. Available modules: {available}");
         }
 
-        target.Entry = resolvedFile;
+        target.Executable = resolvedFile;
         return target;
     }
 

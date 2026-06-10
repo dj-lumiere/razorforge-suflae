@@ -124,18 +124,32 @@ RazorForge parse <source-file>            Parse file and show AST summary
 RazorForge tokenize <source-file>         Tokenize file and show tokens
 RazorForge codegen <source-file> [out.ll] Generate LLVM IR (single file)
 RazorForge build [entry-file] [out.ll]    Build a multi-file project
-RazorForge build --target <name>          Build a razorforge.toml target
 RazorForge buildandrun [entry-file]       Build, link, and execute
-RazorForge buildandrun --target <name>    Build and execute a manifest target
 RazorForge check [entry-file]             Type-check only (no codegen)
 RazorForge validate-stdlib [rf]           Validate stdlib routine bodies
 RazorForge help                           Show usage
+RazorForge version                        Show compiler version
 ```
 
-Projects can declare targets in a `razorforge.toml` manifest with build modes
-`debug` (-O0), `release` (-O2), `release-time` (-O3), or `release-space` (-Os).
-With no entry file given, the CLI searches the current and parent directories
-for `razorforge.toml`.
+**There are no build flags.** All build configuration lives in the
+`razorforge.toml` manifest's single `[target]` section:
+
+```toml
+[package]
+name = "my-app"
+
+[target]
+executable = "MainModule"          # entry module (by `module` declaration, not file path)
+library = ["../shared-utils"]      # external dependency directories (optional)
+mode = "debug"                     # debug -O0 | release -O2 | release-time -O3 | release-space -Os
+```
+
+`library` entries are directories — relative to the manifest — whose modules join
+the import search space, requirements.txt-style. (When the package manager lands,
+entries will also accept versioned packages from the package site, e.g.
+`"json-utils@1.2.0"`, fetched into a cache that builds consume the same way.)
+With no entry file given, the CLI searches the current and parent directories for
+`razorforge.toml` — `cd` into a project and `razorforge buildandrun` just works.
 
 ---
 
@@ -164,11 +178,11 @@ for `razorforge.toml`.
 
 ### Platform support
 
-| Platform | Status |
-|----------|--------|
-| Windows x86-64 | Working (primary development platform) |
-| Linux x86-64 | Working (CI-verified on every commit) |
-| macOS / ARM64 | Target definitions exist, **not yet tested** |
+| Platform       | Status                                       |
+|----------------|----------------------------------------------|
+| Windows x86-64 | Working (primary development platform)       |
+| Linux x86-64   | Working (CI-verified on every commit)        |
+| macOS / ARM64  | Target definitions exist, **not yet tested** |
 
 ---
 
@@ -279,7 +293,8 @@ Dual-licensed under MIT and Apache-2.0 — choose either.
 - **Gitea**: [git.lumi-dev.xyz/Lumi/razorforge-suflae](https://git.lumi-dev.xyz/Lumi/razorforge-suflae)
 - **GitHub Mirror**: [github.com/dj-lumiere/razorforge-lang](https://github.com/dj-lumiere/razorforge-lang)
 - **Issues**: [Report bugs or request features](https://git.lumi-dev.xyz/Lumi/razorforge-suflae/issues)
-- **Docs**: [razorforge.lumi-dev.xyz](https://razorforge.lumi-dev.xyz/) · [suflae.lumi-dev.xyz](https://suflae.lumi-dev.xyz/)
+- **Docs
+  **: [razorforge.lumi-dev.xyz](https://razorforge.lumi-dev.xyz/) · [suflae.lumi-dev.xyz](https://suflae.lumi-dev.xyz/)
 
 ## Acknowledgments
 
