@@ -1030,8 +1030,25 @@ public partial class LlvmCodeGenerator
                             {
                                 _generatedRoutineDefs.Add(item: monoFuncName);
                                 _generatedRoutines.Add(item: monoFuncName);
+                                // Rewrite the shared generic-def body per concrete owner BEFORE
+                                // emission. The raw AST is shared across every instantiation, so
+                                // BuilderServiceInliningPass had to defer folding its BuilderService
+                                // constants (me.type_name() in synthesized $represent/$diagnose).
+                                // GenericAstRewriter deep-clones, substitutes the type params, folds
+                                // those constants against the concrete owner (same fold logic as the
+                                // inlining pass), and re-resolves routine bindings — emitting the
+                                // unrewritten body instead fails with unresolved-call errors.
+                                var monoStringSubs = newSubs.ToDictionary(
+                                    keySelector: kvp => kvp.Key,
+                                    elementSelector: kvp => kvp.Value.FullName);
+                                Statement rewrittenSynthBody = GenericAstRewriter.RewriteStatement(
+                                    stmt: synthBodyAst,
+                                    subs: monoStringSubs,
+                                    typeSubs: newSubs,
+                                    registry: _registry,
+                                    enclosingRoutine: concreteMethod);
                                 EmitSynthesizedBodyFromAst(routine: concreteMethod,
-                                    funcName: monoFuncName, body: synthBodyAst);
+                                    funcName: monoFuncName, body: rewrittenSynthBody);
                             }
                             catch (Exception ex)
                             {

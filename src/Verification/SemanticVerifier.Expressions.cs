@@ -78,6 +78,18 @@ public sealed partial class SemanticVerifier
             _ => HandleUnknownExpression(expression: expression)
         };
 
+        // Compiler-generated bodies are re-analyzed in a synthetic scope where some calls
+        // cannot be re-resolved (generic-def owners, method-generic locals, wired routines).
+        // Their synthesizer/cloner annotations are correct by construction — never replace
+        // a good annotation with <error> there. Downgrading cascades: an errored receiver
+        // kills resolution of every enclosing call, and codegen then rejects the whole body
+        // ("Synthesized body codegen failed" warnings).
+        if (_isInCompilerGeneratedBody && resultType is ErrorTypeInfo
+            && expression.ResolvedType is { } existingAnnotation and not ErrorTypeInfo)
+        {
+            return existingAnnotation;
+        }
+
         // Set the resolved type directly (no conversion needed)
         expression.ResolvedType = resultType;
         return resultType;
