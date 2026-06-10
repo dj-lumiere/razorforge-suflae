@@ -658,6 +658,32 @@ d128_t rf_f128_to_d128(f128_t x)
     return result;
 }
 
+// RazorForge-callable ABI bridges: returning the 16-byte f128_t by value does
+// not match the scalar fp128 return ABI RazorForge codegen emits, so these
+// variants write the result through an out pointer instead (see the bridge
+// section in f128_functions.c).
+
+void rf_d32_to_f128_parts(uint32_t bits, f128_t* out)
+{
+    char buf[64];
+    decSingle s = to_single(bits);
+    decSingleToString(&s, buf);
+    *out = rf_f128_from_string(buf);
+}
+
+void rf_d64_to_f128_parts(uint64_t bits, f128_t* out)
+{
+    char buf[64];
+    decDouble d = to_double(bits);
+    decDoubleToString(&d, buf);
+    *out = rf_f128_from_string(buf);
+}
+
+void rf_d128_to_f128_parts(uint64_t low, uint64_t high, f128_t* out)
+{
+    *out = rf_d128_to_f128(low, high);
+}
+
 // ============================================================================
 // d128 transcendental functions via f128 path
 //

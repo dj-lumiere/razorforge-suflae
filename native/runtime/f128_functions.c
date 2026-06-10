@@ -1458,6 +1458,76 @@ uint64_t rf_format_F128(f128_t x)
     return (uint64_t)buf;
 }
 
+// ============================================================================
+// RazorForge-callable ABI bridges
+//
+// RazorForge codegen represents F128 as the LLVM scalar `fp128`, whose call
+// ABI does not match the C ABI of the 16-byte `f128_t` struct on any x86-64
+// platform (SysV passes fp128 in SSE registers but f128_t in integer
+// registers; Win64 returns fp128 in xmm0 but f128_t via hidden sret).
+// These bridges only use ABI-stable parameter forms: f128 inputs arrive as
+// (low, high) u64 pairs and f128 results are written through an out pointer
+// (same approach as rf_parse_F128 above). The by-value rf_f128_* functions
+// remain for C-internal callers (decimal_functions.c, the Win64 builtins).
+// ============================================================================
+
+static f128_t f128_from_parts(uint64_t low, uint64_t high)
+{
+    f128_t v;
+    v.low = low;
+    v.high = high;
+    return v;
+}
+
+void rf_f128_sin_parts(uint64_t low, uint64_t high, f128_t* out)    { *out = rf_f128_sin(f128_from_parts(low, high)); }
+void rf_f128_cos_parts(uint64_t low, uint64_t high, f128_t* out)    { *out = rf_f128_cos(f128_from_parts(low, high)); }
+void rf_f128_tan_parts(uint64_t low, uint64_t high, f128_t* out)    { *out = rf_f128_tan(f128_from_parts(low, high)); }
+void rf_f128_asin_parts(uint64_t low, uint64_t high, f128_t* out)   { *out = rf_f128_asin(f128_from_parts(low, high)); }
+void rf_f128_acos_parts(uint64_t low, uint64_t high, f128_t* out)   { *out = rf_f128_acos(f128_from_parts(low, high)); }
+void rf_f128_atan_parts(uint64_t low, uint64_t high, f128_t* out)   { *out = rf_f128_atan(f128_from_parts(low, high)); }
+void rf_f128_sinh_parts(uint64_t low, uint64_t high, f128_t* out)   { *out = rf_f128_sinh(f128_from_parts(low, high)); }
+void rf_f128_cosh_parts(uint64_t low, uint64_t high, f128_t* out)   { *out = rf_f128_cosh(f128_from_parts(low, high)); }
+void rf_f128_tanh_parts(uint64_t low, uint64_t high, f128_t* out)   { *out = rf_f128_tanh(f128_from_parts(low, high)); }
+void rf_f128_asinh_parts(uint64_t low, uint64_t high, f128_t* out)  { *out = rf_f128_asinh(f128_from_parts(low, high)); }
+void rf_f128_acosh_parts(uint64_t low, uint64_t high, f128_t* out)  { *out = rf_f128_acosh(f128_from_parts(low, high)); }
+void rf_f128_atanh_parts(uint64_t low, uint64_t high, f128_t* out)  { *out = rf_f128_atanh(f128_from_parts(low, high)); }
+void rf_f128_exp_parts(uint64_t low, uint64_t high, f128_t* out)    { *out = rf_f128_exp(f128_from_parts(low, high)); }
+void rf_f128_exp2_parts(uint64_t low, uint64_t high, f128_t* out)   { *out = rf_f128_exp2(f128_from_parts(low, high)); }
+void rf_f128_expm1_parts(uint64_t low, uint64_t high, f128_t* out)  { *out = rf_f128_expm1(f128_from_parts(low, high)); }
+void rf_f128_log_parts(uint64_t low, uint64_t high, f128_t* out)    { *out = rf_f128_log(f128_from_parts(low, high)); }
+void rf_f128_log2_parts(uint64_t low, uint64_t high, f128_t* out)   { *out = rf_f128_log2(f128_from_parts(low, high)); }
+void rf_f128_log10_parts(uint64_t low, uint64_t high, f128_t* out)  { *out = rf_f128_log10(f128_from_parts(low, high)); }
+void rf_f128_log1p_parts(uint64_t low, uint64_t high, f128_t* out)  { *out = rf_f128_log1p(f128_from_parts(low, high)); }
+void rf_f128_cbrt_parts(uint64_t low, uint64_t high, f128_t* out)   { *out = rf_f128_cbrt(f128_from_parts(low, high)); }
+
+void rf_f128_atan2_parts(uint64_t y_low, uint64_t y_high, uint64_t x_low, uint64_t x_high, f128_t* out)
+{
+    *out = rf_f128_atan2(f128_from_parts(y_low, y_high), f128_from_parts(x_low, x_high));
+}
+
+void rf_f128_pow_parts(uint64_t base_low, uint64_t base_high, uint64_t exp_low, uint64_t exp_high, f128_t* out)
+{
+    *out = rf_f128_pow(f128_from_parts(base_low, base_high), f128_from_parts(exp_low, exp_high));
+}
+
+void rf_f128_hypot_parts(uint64_t x_low, uint64_t x_high, uint64_t y_low, uint64_t y_high, f128_t* out)
+{
+    *out = rf_f128_hypot(f128_from_parts(x_low, x_high), f128_from_parts(y_low, y_high));
+}
+
+void rf_f128_copysign_parts(uint64_t value_low, uint64_t value_high, uint64_t sign_low, uint64_t sign_high, f128_t* out)
+{
+    // IEEE binary128 sign bit lives in bit 63 of the high word.
+    (void)sign_low;
+    out->low = value_low;
+    out->high = (value_high & 0x7FFFFFFFFFFFFFFFULL) | (sign_high & 0x8000000000000000ULL);
+}
+
+uint64_t rf_format_F128_parts(uint64_t low, uint64_t high)
+{
+    return rf_format_F128(f128_from_parts(low, high));
+}
+
 #else
 #error "LibBF is required for f128 support. Define HAVE_LIBBF and link against LibBF."
 #endif // HAVE_LIBBF

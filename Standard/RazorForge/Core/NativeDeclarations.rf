@@ -157,9 +157,11 @@ external("C") routine rf_d32_to_f32(value: U32) -> F32
 ### :returns: The closest representable `F64` value.
 external("C") routine rf_d32_to_f64(value: U32) -> F64
 ### Converts a decimal32 value to binary quadruple precision.
-### :param value: The BID-form decimal32 bit pattern.
-### :returns: The closest representable `F128` value.
-external("C") routine rf_d32_to_f128(value: U32) -> F128
+### :param bits: The BID-form decimal32 bit pattern.
+### :param out: Storage receiving the converted `F128` value.
+### :note: Out-param ABI — returning the 16-byte `f128_t` by value does not
+###        match the scalar `fp128` ABI emitted for `F128` returns.
+external("C") routine rf_d32_to_f128_parts(bits: U32, out: Hijacked[F128])
 
 ### Converts a binary single-precision float to decimal32 encoding.
 ### :param value: The binary floating-point input.
@@ -273,9 +275,11 @@ external("C") routine rf_d64_to_f32(value: U64) -> F32
 ### :returns: The closest representable `F64` value.
 external("C") routine rf_d64_to_f64(value: U64) -> F64
 ### Converts a decimal64 value to binary quadruple precision.
-### :param value: The BID-form decimal64 bit pattern.
-### :returns: The closest representable `F128` value.
-external("C") routine rf_d64_to_f128(value: U64) -> F128
+### :param bits: The BID-form decimal64 bit pattern.
+### :param out: Storage receiving the converted `F128` value.
+### :note: Out-param ABI — returning the 16-byte `f128_t` by value does not
+###        match the scalar `fp128` ABI emitted for `F128` returns.
+external("C") routine rf_d64_to_f128_parts(bits: U64, out: Hijacked[F128])
 
 ### Converts a binary single-precision float to decimal64 encoding.
 ### :param value: The binary floating-point input.
@@ -511,8 +515,10 @@ external("C") routine rf_d128_to_f64(low: U64, high: U64) -> F64
 ### Converts a decimal128 value to binary quadruple precision.
 ### :param low: The low 64 bits of the operand.
 ### :param high: The high 64 bits of the operand.
-### :returns: The closest representable `F128` value.
-external("C") routine rf_d128_to_f128(low: U64, high: U64) -> F128
+### :param out: Storage receiving the converted `F128` value.
+### :note: Out-param ABI — returning the 16-byte `f128_t` by value does not
+###        match the scalar `fp128` ABI emitted for `F128` returns.
+external("C") routine rf_d128_to_f128_parts(low: U64, high: U64, out: Hijacked[F128])
 
 ### Converts a binary single-precision float to decimal128.
 ### :param value: The binary floating-point input.
@@ -569,112 +575,145 @@ external("C") routine d128_to_s64(low: U64, high: U64) -> S64
 
 # ============================================================================
 # F128 (Quadruple Precision) - LibBF Runtime
-# All functions operate on F128 values directly
+#
+# ABI note: the C runtime represents F128 as a 16-byte `f128_t` struct, whose
+# by-value call ABI does not match the scalar `fp128` ABI RazorForge emits
+# for `F128` parameters and returns. All bridges below therefore take F128
+# inputs as (low, high) `U64` pairs and write F128 results through an
+# `out: Hijacked[F128]` pointer — both forms are ABI-stable everywhere.
 # ============================================================================
 
 ### Returns the sine of an `F128` value interpreted as radians.
-### :param value: The input angle in radians.
-### :returns: The resulting `F128` value.
-external("C") routine rf_f128_sin(value: F128) -> F128
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_sin_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the cosine of an `F128` value interpreted as radians.
-### :param value: The input angle in radians.
-### :returns: The resulting `F128` value.
-external("C") routine rf_f128_cos(value: F128) -> F128
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_cos_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the tangent of an `F128` value interpreted as radians.
-### :param value: The input angle in radians.
-### :returns: The resulting `F128` value.
-external("C") routine rf_f128_tan(value: F128) -> F128
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_tan_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the inverse sine of an `F128` value.
-### :param value: The input value.
-### :returns: The resulting `F128` value.
-external("C") routine rf_f128_asin(value: F128) -> F128
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_asin_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the inverse cosine of an `F128` value.
-### :param value: The input value.
-### :returns: The resulting `F128` value.
-external("C") routine rf_f128_acos(value: F128) -> F128
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_acos_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the inverse tangent of an `F128` value.
-### :param value: The input value.
-### :returns: The resulting `F128` value.
-external("C") routine rf_f128_atan(value: F128) -> F128
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_atan_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the quadrant-aware angle of the point `(x, y)`.
-### :param y: The y-coordinate.
-### :param x: The x-coordinate.
-### :returns: The resulting `F128` value.
-external("C") routine rf_f128_atan2(y: F128, x: F128) -> F128
+### :param y_low: The low 64 bits of the y-coordinate.
+### :param y_high: The high 64 bits of the y-coordinate.
+### :param x_low: The low 64 bits of the x-coordinate.
+### :param x_high: The high 64 bits of the x-coordinate.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_atan2_parts(y_low: U64, y_high: U64, x_low: U64, x_high: U64, out: Hijacked[F128])
 
 ### Returns the hyperbolic sine of an `F128` value.
-### :param value: The input value.
-### :returns: The resulting `F128` value.
-external("C") routine rf_f128_sinh(value: F128) -> F128
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_sinh_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the hyperbolic cosine of an `F128` value.
-### :param value: The input value.
-### :returns: The resulting `F128` value.
-external("C") routine rf_f128_cosh(value: F128) -> F128
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_cosh_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the hyperbolic tangent of an `F128` value.
-### :param value: The input value.
-### :returns: The resulting `F128` value.
-external("C") routine rf_f128_tanh(value: F128) -> F128
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_tanh_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the inverse hyperbolic sine of an `F128` value.
-### :param value: The input value.
-### :returns: The resulting `F128` value.
-external("C") routine rf_f128_asinh(value: F128) -> F128
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_asinh_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the inverse hyperbolic cosine of an `F128` value.
-### :param value: The input value.
-### :returns: The resulting `F128` value.
-external("C") routine rf_f128_acosh(value: F128) -> F128
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_acosh_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the inverse hyperbolic tangent of an `F128` value.
-### :param value: The input value.
-### :returns: The resulting `F128` value.
-external("C") routine rf_f128_atanh(value: F128) -> F128
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_atanh_parts(low: U64, high: U64, out: Hijacked[F128])
 
 ### Returns `e` raised to an `F128` value.
-### :param value: The exponent.
-### :returns: The resulting `F128` value.
-external("C") routine rf_f128_exp(value: F128) -> F128
+### :param low: The low 64 bits of the exponent.
+### :param high: The high 64 bits of the exponent.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_exp_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns `2` raised to an `F128` value.
-### :param value: The exponent.
-### :returns: The resulting `F128` value.
-external("C") routine rf_f128_exp2(value: F128) -> F128
+### :param low: The low 64 bits of the exponent.
+### :param high: The high 64 bits of the exponent.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_exp2_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns `exp(value) - 1` with high precision for small inputs.
-### :param value: The exponent.
-### :returns: The resulting `F128` value.
-external("C") routine rf_f128_expm1(value: F128) -> F128
+### :param low: The low 64 bits of the exponent.
+### :param high: The high 64 bits of the exponent.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_expm1_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the natural logarithm of an `F128` value.
-### :param value: The input value.
-### :returns: The resulting `F128` value.
-external("C") routine rf_f128_log(value: F128) -> F128
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_log_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the base-2 logarithm of an `F128` value.
-### :param value: The input value.
-### :returns: The resulting `F128` value.
-external("C") routine rf_f128_log2(value: F128) -> F128
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_log2_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the base-10 logarithm of an `F128` value.
-### :param value: The input value.
-### :returns: The resulting `F128` value.
-external("C") routine rf_f128_log10(value: F128) -> F128
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_log10_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns `log(1 + value)` with high precision for small inputs.
-### :param value: The input value.
-### :returns: The resulting `F128` value.
-external("C") routine rf_f128_log1p(value: F128) -> F128
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_log1p_parts(low: U64, high: U64, out: Hijacked[F128])
 
 ### Raises an `F128` base to an `F128` exponent.
-### :param base: The base value.
-### :param exp: The exponent value.
-### :returns: The resulting `F128` value.
-external("C") routine rf_f128_pow(base: F128, exp: F128) -> F128
+### :param base_low: The low 64 bits of the base value.
+### :param base_high: The high 64 bits of the base value.
+### :param exp_low: The low 64 bits of the exponent value.
+### :param exp_high: The high 64 bits of the exponent value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_pow_parts(base_low: U64, base_high: U64, exp_low: U64, exp_high: U64, out: Hijacked[F128])
 ### Returns the real cube root of an `F128` value.
-### :param value: The input value.
-### :returns: The resulting `F128` value.
-external("C") routine rf_f128_cbrt(value: F128) -> F128
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_cbrt_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Returns the Euclidean length of the vector `(x, y)`.
-### :param x: The x-coordinate.
-### :param y: The y-coordinate.
-### :returns: The resulting `F128` value.
-external("C") routine rf_f128_hypot(x: F128, y: F128) -> F128
+### :param x_low: The low 64 bits of the x-coordinate.
+### :param x_high: The high 64 bits of the x-coordinate.
+### :param y_low: The low 64 bits of the y-coordinate.
+### :param y_high: The high 64 bits of the y-coordinate.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_hypot_parts(x_low: U64, x_high: U64, y_low: U64, y_high: U64, out: Hijacked[F128])
 ### Returns `value` with its sign copied from `sign`.
-### :param value: The magnitude source.
-### :param sign: The sign source.
-### :returns: The resulting `F128` value.
-external("C") routine rf_f128_copysign(value: F128, sign: F128) -> F128
+### :param value_low: The low 64 bits of the magnitude source.
+### :param value_high: The high 64 bits of the magnitude source.
+### :param sign_low: The low 64 bits of the sign source.
+### :param sign_high: The high 64 bits of the sign source.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_copysign_parts(value_low: U64, value_high: U64, sign_low: U64, sign_high: U64, out: Hijacked[F128])
 
 # ============================================================================
 # Moment - System Clock
@@ -1143,9 +1182,12 @@ external("C") routine rf_format_F32(value: F32) -> Address
 ### :returns: A pointer to the formatted string.
 external("C") routine rf_format_F64(value: F64) -> Address
 ### Formats an `F128` value as a heap-allocated null-terminated UTF-8 string.
-### :param value: The value to format.
+### :param low: The low 64 bits of the value to format.
+### :param high: The high 64 bits of the value to format.
 ### :returns: A pointer to the formatted string.
-external("C") routine rf_format_F128(value: F128) -> Address
+### :note: Parts ABI — passing the 16-byte `f128_t` by value does not match
+###        the scalar `fp128` ABI emitted for `F128` parameters.
+external("C") routine rf_format_F128_parts(low: U64, high: U64) -> Address
 
 # ============================================================================
 # File I/O

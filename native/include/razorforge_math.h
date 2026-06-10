@@ -717,6 +717,45 @@ f128_t rf_f128_trunc(f128_t x);
 f128_t rf_f128_round(f128_t x);
 f128_t rf_f128_fmod(f128_t x, f128_t y);
 
+// ============================================================================
+// RazorForge-callable ABI bridges
+//
+// Passing/returning f128_t by value does not match the scalar fp128 call ABI
+// emitted by RazorForge codegen (SysV: SSE vs integer-register classing;
+// Win64: xmm0 vs hidden sret return). These variants take f128 inputs as
+// (low, high) u64 pairs and write f128 results through an out pointer —
+// both forms have identical ABI on every supported platform.
+// ============================================================================
+
+void rf_f128_sin_parts(uint64_t low, uint64_t high, f128_t* out);
+void rf_f128_cos_parts(uint64_t low, uint64_t high, f128_t* out);
+void rf_f128_tan_parts(uint64_t low, uint64_t high, f128_t* out);
+void rf_f128_asin_parts(uint64_t low, uint64_t high, f128_t* out);
+void rf_f128_acos_parts(uint64_t low, uint64_t high, f128_t* out);
+void rf_f128_atan_parts(uint64_t low, uint64_t high, f128_t* out);
+void rf_f128_sinh_parts(uint64_t low, uint64_t high, f128_t* out);
+void rf_f128_cosh_parts(uint64_t low, uint64_t high, f128_t* out);
+void rf_f128_tanh_parts(uint64_t low, uint64_t high, f128_t* out);
+void rf_f128_asinh_parts(uint64_t low, uint64_t high, f128_t* out);
+void rf_f128_acosh_parts(uint64_t low, uint64_t high, f128_t* out);
+void rf_f128_atanh_parts(uint64_t low, uint64_t high, f128_t* out);
+void rf_f128_exp_parts(uint64_t low, uint64_t high, f128_t* out);
+void rf_f128_exp2_parts(uint64_t low, uint64_t high, f128_t* out);
+void rf_f128_expm1_parts(uint64_t low, uint64_t high, f128_t* out);
+void rf_f128_log_parts(uint64_t low, uint64_t high, f128_t* out);
+void rf_f128_log2_parts(uint64_t low, uint64_t high, f128_t* out);
+void rf_f128_log10_parts(uint64_t low, uint64_t high, f128_t* out);
+void rf_f128_log1p_parts(uint64_t low, uint64_t high, f128_t* out);
+void rf_f128_cbrt_parts(uint64_t low, uint64_t high, f128_t* out);
+void rf_f128_atan2_parts(uint64_t y_low, uint64_t y_high, uint64_t x_low, uint64_t x_high, f128_t* out);
+void rf_f128_pow_parts(uint64_t base_low, uint64_t base_high, uint64_t exp_low, uint64_t exp_high, f128_t* out);
+void rf_f128_hypot_parts(uint64_t x_low, uint64_t x_high, uint64_t y_low, uint64_t y_high, f128_t* out);
+void rf_f128_copysign_parts(uint64_t value_low, uint64_t value_high, uint64_t sign_low, uint64_t sign_high, f128_t* out);
+uint64_t rf_format_F128_parts(uint64_t low, uint64_t high);
+void rf_d32_to_f128_parts(uint32_t bits, f128_t* out);
+void rf_d64_to_f128_parts(uint64_t bits, f128_t* out);
+void rf_d128_to_f128_parts(uint64_t low, uint64_t high, f128_t* out);
+
 #ifdef __cplusplus
 }
 #endif
