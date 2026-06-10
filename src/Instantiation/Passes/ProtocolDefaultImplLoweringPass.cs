@@ -369,7 +369,9 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
 
     private static IEnumerable<Statement> WalkDeclarationsForBodies(Program prog)
     {
-        foreach (SyntaxTree.Declaration d in prog.Declarations)
+        // Program.Declarations is List<ISyntaxTreeNode>: top-level statements are legal
+        // alongside declarations, so pattern-match instead of casting each element.
+        foreach (ISyntaxTreeNode d in prog.Declarations)
         {
             switch (d)
             {
@@ -383,6 +385,9 @@ internal sealed class ProtocolDefaultImplLoweringPass(InstantiationContext ctx)
                 case RecordDeclaration rd:
                     foreach (SyntaxTree.Declaration m in rd.Members)
                         if (m is RoutineDeclaration mr) yield return mr.Body;
+                    break;
+                case Statement topLevel:
+                    yield return topLevel;
                     break;
             }
         }
