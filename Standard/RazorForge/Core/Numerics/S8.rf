@@ -246,7 +246,7 @@ routine S8.$mod!(you: S8) -> S8
 routine S8.$neg!() -> S8
   if me == -128_s8
     throw IntegerOverflowError()
-  return sub[S8](a: 0, b: me)
+  return sub[S8](a: 0_s8, b: me)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)

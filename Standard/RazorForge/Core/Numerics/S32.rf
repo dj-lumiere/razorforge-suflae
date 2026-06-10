@@ -248,7 +248,7 @@ routine S32.$mod!(you: S32) -> S32
 routine S32.$neg!() -> S32
   if me == -2147483648_s32
     throw IntegerOverflowError()
-  return sub[S32](a: 0, b: me)
+  return sub[S32](a: 0_s32, b: me)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)

@@ -224,7 +224,7 @@ routine S128.$mod!(you: S128) -> S128
 routine S128.$neg!() -> S128
   if me == S128_MIN
     throw IntegerOverflowError()
-  return sub[S128](a: 0, b: me)
+  return sub[S128](a: 0_s128, b: me)
 
 # ============================================================================
 # Wrapping Arithmetic (+%, -%, *%)
