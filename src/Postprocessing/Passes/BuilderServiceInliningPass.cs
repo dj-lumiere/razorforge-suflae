@@ -870,11 +870,10 @@ internal sealed class BuilderServiceInliningPass
         return $"{baseName}[{argList}]";
     }
 
-    //  Data size computation (mirrors WiredRoutinePass.CalculateDataSizeForType)
+    //  Data size computation (single source of truth — also used by GenericAstRewriter's fold)
 
     /// <summary>
     /// Returns the byte size of <paramref name="type"/> as seen by collection pointer arithmetic.
-    /// Mirrors <c>WiredRoutinePass.CalculateDataSizeForType</c> -> keep in sync.
     /// </summary>
     internal static ulong CalculateDataSizeForType(TypeInfo type) => type switch
     {
@@ -895,7 +894,6 @@ internal sealed class BuilderServiceInliningPass
 
     /// <summary>
     /// Returns the byte size of an LLVM scalar type string from an <c>@llvm("...")</c> annotation.
-    /// Mirrors <c>WiredRoutinePass.LlvmBackendTypeSize</c> -> keep in sync.
     /// </summary>
     private static ulong LlvmBackendTypeSize(string llvmType) => llvmType.Trim() switch
     {

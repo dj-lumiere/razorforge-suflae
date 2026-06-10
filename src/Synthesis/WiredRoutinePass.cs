@@ -1779,59 +1779,18 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
             or TypeCategory.ConstGenericValue)
             return false;
 
+        // Fold-only constants (type_name/data_size/type_id/...): BuilderServiceInliningPass
+        // and GenericAstRewriter fold EVERY call site to a literal computed from TypeInfo, so
+        // a synthesized body is pure dead weight in the emitted IR — and for generic-def
+        // owners it would bake the unparameterized name ("List" instead of "List[S64]").
+        // Register no body: nothing related to these may survive the inlining pass. An
+        // unfolded call site surfacing as a linker error indicates a folding bug to fix
+        // at the pass layer, not a missing definition.
+        if (BuilderServiceInliningPass.IsFoldable(routineName: routine.Name))
+            return true;
+
         switch (routine.Name)
         {
-            case "type_name":
-                ctx.VariantBodies[key: routine.RegistryKey] =
-                    MakeLiteralReturn(value: owner.ShortTypeName, returnType: textType);
-                return true;
-
-            case "module_name":
-                ctx.VariantBodies[key: routine.RegistryKey] =
-                    MakeLiteralReturn(value: owner.Module ?? "", returnType: textType);
-                return true;
-
-            case "full_type_name":
-                ctx.VariantBodies[key: routine.RegistryKey] =
-                    MakeLiteralReturn(value: owner.QualifiedTypeName, returnType: textType);
-                return true;
-
-            case "type_id" when u64Type != null:
-            {
-                ulong hash = TypeIdHelper.ComputeTypeId(fullName: owner.FullName);
-                ctx.VariantBodies[key: routine.RegistryKey] =
-                    MakeLiteralReturn(value: hash, returnType: u64Type);
-                return true;
-            }
-
-            case "data_size" when byteSizeType != null && u64Type != null:
-            {
-                ulong size = CalculateDataSizeForType(type: owner);
-                ctx.VariantBodies[key: routine.RegistryKey] = new ReturnStatement(
-                    Value: BuilderServiceInliningPass.MakeByteSizeCreatorPublic(
-                        value: size, u64Type: u64Type, byteSizeType: byteSizeType, loc: _synthLoc),
-                    Location: _synthLoc);
-                return true;
-            }
-
-            case "member_variable_count" when s64Type != null:
-            {
-                long count = owner switch
-                {
-                    TupleTypeInfo t => t.MemberVariables.Count,
-                    ChoiceTypeInfo ch => ch.Cases.Count,
-                    FlagsTypeInfo f => f.Members.Count,
-                    RecordTypeInfo r => r.MemberVariables.Count,
-                    EntityTypeInfo e => e.MemberVariables.Count,
-                    CrashableTypeInfo c => c.MemberVariables.Count,
-                    VariantTypeInfo v => v.Members.Count,
-                    _ => 0
-                };
-                ctx.VariantBodies[key: routine.RegistryKey] =
-                    MakeLiteralReturn(value: count, returnType: s64Type);
-                return true;
-            }
-
             case "member_type_id" when u64Type != null && boolType != null:
             {
                 List<MemberVariableInfo>? fields = owner switch
@@ -1883,44 +1842,6 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 }
 
                 ctx.VariantBodies[key: routine.RegistryKey] = body;
-                return true;
-            }
-
-            case "is_generic" when boolType != null:
-                ctx.VariantBodies[key: routine.RegistryKey] =
-                    MakeLiteralReturn(value: owner.IsGenericDefinition, returnType: boolType);
-                return true;
-
-            case "is_in_flight" when boolType != null:
-                // Synth body is only reached for bound `me` receivers (BSInliningPass folds
-                // literal/in-flight receivers at the call site). Bound values are never in-flight.
-                ctx.VariantBodies[key: routine.RegistryKey] =
-                    MakeLiteralReturn(value: false, returnType: boolType);
-                return true;
-
-            case "type_kind" when typeKindType is ChoiceTypeInfo typeKindChoice:
-            {
-                // Map the owner's category to the TypeKind case name, then look up its
-                // ComputedValue from the registry -> avoids hardcoding ordinals that could
-                // drift out of sync with the BuilderService.rf TypeKind declaration.
-                string caseName = owner.Category switch
-                {
-                    TypeCategory.Record => "RECORD",
-                    TypeCategory.Entity => "ENTITY",
-                    TypeCategory.Crashable => "CRASHABLE",
-                    TypeCategory.Choice => "CHOICE",
-                    TypeCategory.Variant => "VARIANT",
-                    TypeCategory.Flags => "FLAGS",
-                    TypeCategory.Routine => "ROUTINE",
-                    TypeCategory.Protocol => "PROTOCOL",
-                    _ => throw new InvalidOperationException(
-                        $"Unhandled TypeCategory '{owner.Category}' in type_kind BuilderService mapping.")
-                };
-                ChoiceCaseInfo? found =
-                    typeKindChoice.Cases.FirstOrDefault(c => c.Name == caseName);
-                if (found == null) return false;
-                ctx.VariantBodies[key: routine.RegistryKey] =
-                    MakeLiteralReturn(value: found.ComputedValue, returnType: typeKindChoice);
                 return true;
             }
 
@@ -2260,66 +2181,6 @@ public sealed class WiredRoutinePass(DesugaringContext ctx)
                 LiteralType: value ? TokenType.True : TokenType.False,
                 Location: _synthLoc) { ResolvedType = returnType },
             Location: _synthLoc);
-
-    /// <summary>
-    /// Approximates the in-memory byte size of a type for <c>data_size()</c>.
-    /// Primitive types use their natural width; structs sum field sizes (8-byte aligned).
-    /// Entity and crashable types return 8 (pointer size on 64-bit -> stored by reference).
-    /// Backend-annotated records use the LLVM type width parsed from the @llvm("...") string.
-    /// </summary>
-    private static ulong CalculateDataSizeForType(TypeInfo type) =>
-        type switch
-        {
-            // Tuple is a RecordTypeInfo (item0/item1/... members) — delegate to SizeBytes like
-            // records. `element_count * 8` was wrong for tuples holding a non-8-byte element (Text=24).
-            TupleTypeInfo t => (ulong)t.SizeBytes(pointerSize: 8),
-            RecordTypeInfo { HasDirectBackendType: true } r => LlvmBackendTypeSize(r.BackendType!),
-            // Delegate to the SAME size function codegen uses (RecordTypeInfo.SizeBytes) so the
-            // List element stride matches the actual struct layout. `member_count * 8` was wrong
-            // for any record with a non-8-byte member (nested value-record like Text=24, or i32).
-            RecordTypeInfo r => (ulong)r.SizeBytes(pointerSize: 8),
-            EntityTypeInfo => 8,   // heap-allocated; stored as pointer (8 bytes on 64-bit)
-            CrashableTypeInfo => 8, // same -> stored as pointer
-            // Variant is a tagged union: tag + MAX arm payload (not sum). Delegate to SizeBytes.
-            VariantTypeInfo v => (ulong)v.SizeBytes(pointerSize: 8),
-            _ => 0
-        };
-
-    /// <summary>
-    /// Returns the byte size of a scalar LLVM type name as used in @llvm("...") annotations.
-    /// Array types like "[4 x i32]" are parsed recursively.
-    /// Template strings containing '{' (unresolved generics) return 0.
-    /// </summary>
-    private static ulong LlvmBackendTypeSize(string llvmType) => llvmType.Trim() switch
-    {
-        "void" => 0,                // Blank -> zero-sized
-        "i1" or "i8" => 1,
-        "i16" or "half" => 2,
-        "i32" or "float" => 4,
-        "i64" or "double" or "ptr" => 8,
-        "i128" or "fp128" => 16,
-        var s when s.StartsWith('[') => ParseLlvmArraySize(s),
-        var s when s.Contains('{') => 0,  // unresolved generic template
-        _ => throw new InvalidOperationException(
-            $"Unknown LLVM type '{llvmType}' in LlvmBackendTypeSize — cannot determine byte size.")
-    };
-
-    /// <summary>
-    /// Parses an LLVM array type like "[4 x i32]" ??4 * 4 = 16.
-    /// Returns 0 if the format is unrecognised.
-    /// </summary>
-    private static ulong ParseLlvmArraySize(string arrayType)
-    {
-        // Expected format: "[ N x elemType ]"
-        int xIdx = arrayType.IndexOf(" x ", StringComparison.Ordinal);
-        if (xIdx < 0) return 0;
-
-        string countPart = arrayType[1..xIdx].Trim();
-        string elemPart = arrayType[(xIdx + 3)..].TrimEnd(']').Trim();
-
-        if (!ulong.TryParse(countPart, out ulong count)) return 0;
-        return count * LlvmBackendTypeSize(elemPart);
-    }
 
     //  $represent / $diagnose (tuple)
 
