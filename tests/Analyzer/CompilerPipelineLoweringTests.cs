@@ -606,7 +606,6 @@ public class CompilerPipelineLoweringTests
             instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         string llvmIr = generator.Generate();
-        System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "rf_bitlist_u8.ll"), llvmIr);
         string tryToU8Body = ExtractFunctionDefinition(llvmIr: llvmIr,
             functionMarker: "define %\"Record.Maybe[Core.U8]\" @Collections.BitList.try_to_u8");
         Assert.Contains(expectedSubstring: "call i64 @\"Core.Hijacked[Core.U64].extract\"",
