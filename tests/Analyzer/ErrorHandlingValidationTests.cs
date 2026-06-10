@@ -237,7 +237,7 @@ public class ErrorHandlingValidationTests
     /// Verifies semantic analysis behavior for lookup variable not dismantled before scope exit and reports the expected error.
     /// </summary>
 
-    [Fact(Skip = "check_/lookup_ variants are generated in Phase 5, not available during Phase 3 expression analysis")]
+    [Fact]
     public void Analyze_LookupVariable_NotDismantledBeforeScopeExit_ReportsError()
     {
         string source = """
@@ -269,7 +269,7 @@ public class ErrorHandlingValidationTests
     /// Verifies semantic analysis behavior for result copied from variable and reports the expected error.
     /// </summary>
 
-    [Fact(Skip = "check_/lookup_ variants are generated in Phase 5, not available during Phase 3 expression analysis")]
+    [Fact]
     public void Analyze_ResultCopiedFromVariable_ReportsError()
     {
         string source = """

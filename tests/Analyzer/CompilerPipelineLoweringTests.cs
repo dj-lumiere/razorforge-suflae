@@ -583,7 +583,7 @@ public class CompilerPipelineLoweringTests
     /// <summary>
     /// Verifies code generation behavior for bit list to U8 uses concrete hijacked U64 extract.
     /// </summary>
-    [Fact(Skip = "Calls generator.Generate() directly, skipping the Postprocessing/Instantiation pipeline, so the synthesized failable-variant body (try_to_u8) is un-lowered and codegen casts a ReturnStatement to Declaration. Not a compiler bug (buildandrun compiles this fine) — needs harness modernization to run the full pipeline.")]
+    [Fact]
     public void Codegen_BitListToU8_UsesConcreteHijackedU64Extract()
     {
         string source = """
@@ -606,6 +606,7 @@ public class CompilerPipelineLoweringTests
             instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         string llvmIr = generator.Generate();
+        System.IO.File.WriteAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "rf_bitlist_u8.ll"), llvmIr);
         string tryToU8Body = ExtractFunctionDefinition(llvmIr: llvmIr,
             functionMarker: "define %\"Record.Maybe[Core.U8]\" @Collections.BitList.try_to_u8");
         Assert.Contains(expectedSubstring: "call i64 @\"Core.Hijacked[Core.U64].extract\"",
@@ -830,7 +831,7 @@ public class CompilerPipelineLoweringTests
     /// <summary>
     /// Verifies semantic analysis behavior for stdlib variant bodies attach constructor metadata.
     /// </summary>
-    [Fact(Skip = "Asserts on SynthesizedBodies for BytesUtf8Iterator.try_next, which the SA-only path no longer populates (variant-body synthesis moved into the Postprocessing/Instantiation pipeline the test does not run). Needs harness modernization.")]
+    [Fact]
     public void Analyze_StdlibVariantBodies_AttachConstructorMetadata()
     {
         string source = """
@@ -855,21 +856,34 @@ public class CompilerPipelineLoweringTests
         Assert.NotEmpty(collection: matchingBodies);
         foreach ((string key, Statement body) in matchingBodies)
         {
-            var ctorCalls = FindCalls(statement: body)
-                           .Where(call => call.Callee is IdentifierExpression
-                            {
-                                Name: "Character"
-                            })
-                           .ToList();
+            // The lowering pipeline may leave Character(...) as a classified CallExpression
+            // or lower it to a CreatorExpression — both must carry constructor metadata.
+            var constructions = EnumerateExpressions(statement: body)
+                               .Where(predicate: e =>
+                                    e is CallExpression
+                                    {
+                                        Callee: IdentifierExpression { Name: "Character" }
+                                    }
+                                    or CreatorExpression { TypeName: "Character" })
+                               .ToList();
 
-            Assert.NotEmpty(collection: ctorCalls);
-            Assert.All(ctorCalls,
-                ctorCall =>
+            Assert.NotEmpty(collection: constructions);
+            Assert.All(constructions,
+                expr =>
                 {
-                    Assert.True(
-                        condition: ctorCall.LoweringKind == CallLoweringKind.TypeConstructor,
-                        userMessage: $"{key} contains unclassified Character(...)");
-                    Assert.NotNull(@object: ctorCall.ConstructedType);
+                    switch (expr)
+                    {
+                        case CallExpression ctorCall:
+                            Assert.True(
+                                condition: ctorCall.LoweringKind ==
+                                           CallLoweringKind.TypeConstructor,
+                                userMessage: $"{key} contains unclassified Character(...)");
+                            Assert.NotNull(@object: ctorCall.ConstructedType);
+                            break;
+                        case CreatorExpression creator:
+                            Assert.NotNull(@object: creator.ConstructedType);
+                            break;
+                    }
                 });
         }
     }
@@ -1144,7 +1158,7 @@ public class CompilerPipelineLoweringTests
     /// <summary>
     /// Verifies code generation behavior for typewise builder service method uses semantic receiver type.
     /// </summary>
-    [Fact(Skip = "Asserts the exact IR return-ABI symbol for a ByteSize-returning routine, which changed (sret/value-return repr). Needs the symbol re-derived against the current backend ABI.")]
+    [Fact]
     public void Codegen_TypewiseBuilderServiceMethod_UsesSemanticReceiverType()
     {
         string source = """
@@ -1167,7 +1181,14 @@ public class CompilerPipelineLoweringTests
             instantiatedGenericBodies: result.InstantiatedGenericBodies);
 
         string llvmIr = generator.Generate();
-        Assert.Contains(expectedSubstring: "define %Record.ByteSize @test(", actualString: llvmIr);
+        // ByteSize is a single-field record flattened to its i64 backing scalar, and
+        // S64.data_size() must fold against the SEMANTIC receiver (S64 -> 8 bytes) at
+        // the call site rather than emitting a data_size call.
+        string startBody = ExtractFunctionDefinition(llvmIr: llvmIr,
+            functionMarker: "define i64 @start()");
+        Assert.Contains(expectedSubstring: "ret i64 8", actualString: startBody);
+        Assert.DoesNotContain(expectedSubstring: "call i64 @Core.S64.data_size",
+            actualString: startBody);
     }
 
     /// <summary>
@@ -1614,6 +1635,140 @@ public class CompilerPipelineLoweringTests
                     yield return nested;
                 }
 
+                yield break;
+        }
+    }
+
+    /// <summary>
+    /// Yields every expression node reachable from <paramref name="statement"/>, including
+    /// nodes inside <c>danger!</c> blocks, loops, and variant-return wrappers that the
+    /// narrower <see cref="FindCalls(Statement)"/> walker does not traverse.
+    /// </summary>
+    private static IEnumerable<Expression> EnumerateExpressions(Statement statement)
+    {
+        switch (statement)
+        {
+            case BlockStatement block:
+                foreach (Statement inner in block.Statements)
+                foreach (Expression e in EnumerateExpressions(statement: inner))
+                    yield return e;
+                yield break;
+            case DangerStatement danger:
+                foreach (Expression e in EnumerateExpressions(statement: danger.Body))
+                    yield return e;
+                yield break;
+            case ReturnStatement { Value: { } returnValue }:
+                foreach (Expression e in EnumerateExpressions(expression: returnValue))
+                    yield return e;
+                yield break;
+            case VariantReturnStatement { Value: { } variantValue }:
+                foreach (Expression e in EnumerateExpressions(expression: variantValue))
+                    yield return e;
+                yield break;
+            case ThrowStatement throwStmt:
+                foreach (Expression e in EnumerateExpressions(expression: throwStmt.Error))
+                    yield return e;
+                yield break;
+            case ExpressionStatement exprStmt:
+                foreach (Expression e in EnumerateExpressions(expression: exprStmt.Expression))
+                    yield return e;
+                yield break;
+            case DeclarationStatement
+            {
+                Declaration: VariableDeclaration { Initializer: { } init }
+            }:
+                foreach (Expression e in EnumerateExpressions(expression: init))
+                    yield return e;
+                yield break;
+            case IfStatement ifStmt:
+                foreach (Expression e in EnumerateExpressions(expression: ifStmt.Condition))
+                    yield return e;
+                foreach (Expression e in EnumerateExpressions(statement: ifStmt.ThenStatement))
+                    yield return e;
+                if (ifStmt.ElseStatement != null)
+                    foreach (Expression e in EnumerateExpressions(statement: ifStmt.ElseStatement))
+                        yield return e;
+                yield break;
+            case WhileStatement whileStmt:
+                foreach (Expression e in EnumerateExpressions(expression: whileStmt.Condition))
+                    yield return e;
+                foreach (Expression e in EnumerateExpressions(statement: whileStmt.Body))
+                    yield return e;
+                if (whileStmt.ElseBranch != null)
+                    foreach (Expression e in EnumerateExpressions(statement: whileStmt.ElseBranch))
+                        yield return e;
+                yield break;
+            case ForStatement forStmt:
+                foreach (Expression e in EnumerateExpressions(statement: forStmt.Body))
+                    yield return e;
+                if (forStmt.ElseBranch != null)
+                    foreach (Expression e in EnumerateExpressions(statement: forStmt.ElseBranch))
+                        yield return e;
+                yield break;
+            case WhenStatement whenStmt:
+                if (whenStmt.Expression != null)
+                    foreach (Expression e in EnumerateExpressions(expression: whenStmt.Expression))
+                        yield return e;
+                foreach (WhenClause clause in whenStmt.Clauses)
+                foreach (Expression e in EnumerateExpressions(statement: clause.Body))
+                    yield return e;
+                yield break;
+            case UsingStatement usingStmt:
+                foreach (Expression e in EnumerateExpressions(statement: usingStmt.Body))
+                    yield return e;
+                yield break;
+            case LoopStatement loopStmt:
+                foreach (Expression e in EnumerateExpressions(statement: loopStmt.Body))
+                    yield return e;
+                yield break;
+        }
+    }
+
+    /// <summary>
+    /// Yields <paramref name="expression"/> itself plus every nested expression node.
+    /// </summary>
+    private static IEnumerable<Expression> EnumerateExpressions(Expression expression)
+    {
+        yield return expression;
+        switch (expression)
+        {
+            case CallExpression call:
+                foreach (Expression e in EnumerateExpressions(expression: call.Callee))
+                    yield return e;
+                foreach (Expression arg in call.Arguments)
+                foreach (Expression e in EnumerateExpressions(expression: arg))
+                    yield return e;
+                yield break;
+            case CreatorExpression creator:
+                foreach ((string _, Expression value) in creator.MemberVariables)
+                foreach (Expression e in EnumerateExpressions(expression: value))
+                    yield return e;
+                yield break;
+            case MemberExpression member:
+                foreach (Expression e in EnumerateExpressions(expression: member.Object))
+                    yield return e;
+                yield break;
+            case NamedArgumentExpression named:
+                foreach (Expression e in EnumerateExpressions(expression: named.Value))
+                    yield return e;
+                yield break;
+            case BinaryExpression binary:
+                foreach (Expression e in EnumerateExpressions(expression: binary.Left))
+                    yield return e;
+                foreach (Expression e in EnumerateExpressions(expression: binary.Right))
+                    yield return e;
+                yield break;
+            case UnaryExpression unary:
+                foreach (Expression e in EnumerateExpressions(expression: unary.Operand))
+                    yield return e;
+                yield break;
+            case ConditionalExpression conditional:
+                foreach (Expression e in EnumerateExpressions(expression: conditional.Condition))
+                    yield return e;
+                foreach (Expression e in EnumerateExpressions(expression: conditional.TrueExpression))
+                    yield return e;
+                foreach (Expression e in EnumerateExpressions(expression: conditional.FalseExpression))
+                    yield return e;
                 yield break;
         }
     }
