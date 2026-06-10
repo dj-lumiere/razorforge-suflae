@@ -279,6 +279,7 @@ routine F16.max(you: F16) -> F16
 ### :param min_val: The lower bound to enforce.
 ### :param max_val: The upper bound to enforce.
 ### :returns: `me` if already in range, otherwise the nearest bound.
+@positional
 routine F16.clamp(min_val: F16, max_val: F16) -> F16
   return me.min(max_val).max(min_val)
 

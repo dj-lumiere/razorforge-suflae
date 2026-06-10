@@ -79,13 +79,19 @@ public sealed partial class SemanticVerifier
         };
 
         // Compiler-generated bodies are re-analyzed in a synthetic scope where some calls
-        // cannot be re-resolved (generic-def owners, method-generic locals, wired routines).
-        // Their synthesizer/cloner annotations are correct by construction — never replace
-        // a good annotation with <error> there. Downgrading cascades: an errored receiver
-        // kills resolution of every enclosing call, and codegen then rejects the whole body
-        // ("Synthesized body codegen failed" warnings).
-        if (_isInCompilerGeneratedBody && resultType is ErrorTypeInfo
-            && expression.ResolvedType is { } existingAnnotation and not ErrorTypeInfo)
+        // cannot be re-resolved (generic-def owners, method-generic locals, wired routines,
+        // type names outside their import snapshot). Their synthesizer/cloner annotations are
+        // correct by construction — never make an annotation WORSE there: don't replace a good
+        // annotation with <error>, and don't replace a concrete type with one that still
+        // contains generic parameters (e.g. `sub[S8](...)` annotated S8 by real analysis must
+        // not regress to T when the variant-body re-analysis fails to resolve `S8`).
+        // Downgrading cascades: a degraded receiver kills resolution of every enclosing call,
+        // and codegen then rejects the whole body ("Synthesized body codegen failed").
+        if (_isInCompilerGeneratedBody
+            && expression.ResolvedType is { } existingAnnotation and not ErrorTypeInfo
+            && (resultType is ErrorTypeInfo
+                || (ContainsUnresolvedGenericParameter(type: resultType)
+                    && !ContainsUnresolvedGenericParameter(type: existingAnnotation))))
         {
             return existingAnnotation;
         }
@@ -93,6 +99,31 @@ public sealed partial class SemanticVerifier
         // Set the resolved type directly (no conversion needed)
         expression.ResolvedType = resultType;
         return resultType;
+    }
+
+    /// <summary>
+    /// True when <paramref name="type"/> is, or structurally contains, an unresolved
+    /// generic type parameter (a less-concrete annotation than any fully resolved type).
+    /// </summary>
+    private static bool ContainsUnresolvedGenericParameter(TypeSymbol type)
+    {
+        if (type is GenericParameterTypeInfo)
+        {
+            return true;
+        }
+
+        if (type.TypeArguments is { Count: > 0 } args)
+        {
+            foreach (TypeSymbol arg in args)
+            {
+                if (ContainsUnresolvedGenericParameter(type: arg))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private TypeSymbol AnalyzeIdentifierExpression(IdentifierExpression id) // NOSONAR S3776

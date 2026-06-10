@@ -319,6 +319,7 @@ routine F32.max(you: F32) -> F32
 ### :param min_val: The lower bound to enforce.
 ### :param max_val: The upper bound to enforce.
 ### :returns: `me` if already in range, otherwise the nearest bound.
+@positional
 routine F32.clamp(min_val: F32, max_val: F32) -> F32
   return me.min(max_val).max(min_val)
 

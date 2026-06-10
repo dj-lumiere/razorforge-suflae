@@ -408,7 +408,7 @@ routine U32.$bitxor(you: U32) -> U32
 ### Returns the bitwise complement of this value.
 ### :returns: `~me` — each bit flipped.
 routine U32.$bitnot() -> U32
-  return bit_xor[U32](a: me, b: -1)
+  return bit_xor[U32](a: me, b: U32_MAX)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)
@@ -479,6 +479,7 @@ routine U32.max(you: U32) -> U32
 ### :param min_val: The lower bound (inclusive).
 ### :param max_val: The upper bound (inclusive).
 ### :returns: `min_val` if `me < min_val`; `max_val` if `me > max_val`; otherwise `me`.
+@positional
 routine U32.clamp(min_val: U32, max_val: U32) -> U32
   return me.min(max_val).max(min_val)
 

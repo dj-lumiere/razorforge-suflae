@@ -325,6 +325,7 @@ routine D32.max(you: D32) -> D32
 ### :param min_val: The lower bound to enforce.
 ### :param max_val: The upper bound to enforce.
 ### :returns: The resulting `D32` value.
+@positional
 routine D32.clamp(min_val: D32, max_val: D32) -> D32
   return me.min(max_val).max(min_val)
 

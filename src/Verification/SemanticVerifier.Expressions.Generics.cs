@@ -301,6 +301,16 @@ public sealed partial class SemanticVerifier
                                    _registry.LookupRoutineByName(name: funcId.Name);
             if (routine != null)
             {
+                // Capture the generic-def shape BEFORE swapping to the resolution: explicit
+                // type arguments give a complete substitution map, which (a) types bare-literal
+                // arguments via expectedType (`sub[S8](a: 0, ...)` makes 0 an S8, not an
+                // UndecidedInteger) and (b) produces a CONCRETE annotated return type. Without
+                // this, the call used to annotate ResolvedType=T — harmless for direct emission
+                // (intrinsics emit from the explicit TypeArguments) but fatal for any consumer
+                // that needs the value's type, e.g. the Maybe-carrier construction inside
+                // generated try_/check_ variant bodies.
+                Dictionary<string, TypeSymbol>? typeSubs = null;
+                IReadOnlyList<ParameterInfo> declParams = routine.Parameters;
                 if (routine.IsGenericDefinition)
                 {
                     if (routine.GenericParameters == null ||
@@ -313,6 +323,15 @@ public sealed partial class SemanticVerifier
                         return ErrorTypeInfo.Instance;
                     }
 
+                    typeSubs = new Dictionary<string, TypeSymbol>(comparer: StringComparer.Ordinal);
+                    for (int i = 0; i < routine.GenericParameters.Count; i++)
+                    {
+                        if (typeArgs[index: i] is TypeInfo concreteArg)
+                        {
+                            typeSubs[key: routine.GenericParameters[index: i]] = concreteArg;
+                        }
+                    }
+
                     routine = _registry.GetOrCreateRoutineResolution(genericDef: routine,
                         typeArguments: typeArgs.ToList());
                 }
@@ -321,9 +340,20 @@ public sealed partial class SemanticVerifier
                 generic.LoweringKind = ClassifyStandaloneRoutineCall(routine: routine);
                 generic.IsInFlight = routine.IsInFlightReturn;
 
-                foreach (Expression arg in generic.Arguments)
+                for (int argIdx = 0; argIdx < generic.Arguments.Count; argIdx++)
                 {
-                    AnalyzeExpression(expression: arg);
+                    Expression arg = generic.Arguments[index: argIdx];
+                    ParameterInfo? param = arg is NamedArgumentExpression namedArg
+                        ? declParams.FirstOrDefault(predicate: p => p.Name == namedArg.Name)
+                        : argIdx < declParams.Count
+                            ? declParams[index: argIdx]
+                            : null;
+                    TypeSymbol? expected = param?.Type is { } paramType
+                        ? typeSubs != null
+                            ? SubstituteTypeParams(type: paramType, substitution: typeSubs)
+                            : paramType
+                        : null;
+                    AnalyzeExpression(expression: arg, expectedType: expected);
                 }
 
                 if (routine.ReturnType == null)
@@ -331,8 +361,17 @@ public sealed partial class SemanticVerifier
                     return _registry.LookupType(name: "Blank") ?? ErrorTypeInfo.Instance;
                 }
 
-                // Substitute generic type parameters in return type
                 TypeInfo returnType = routine.ReturnType;
+
+                // Explicit type arguments: substitute them through the whole return type
+                // (bare T, nested Hijacked[T], tuples, …) in one general pass.
+                if (typeSubs != null)
+                {
+                    return SubstituteTypeParams(type: returnType, substitution: typeSubs);
+                }
+
+                // Legacy fallbacks for routines looked up as pre-built resolutions.
+                // Substitute generic type parameters in return type
                 if (returnType is GenericParameterTypeInfo && routine.GenericParameters != null)
                 {
                     int paramIndex = routine.GenericParameters

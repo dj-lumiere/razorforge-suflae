@@ -529,6 +529,7 @@ routine S8.max(you: S8) -> S8
 ### :param min_val: The lower bound (inclusive).
 ### :param max_val: The upper bound (inclusive).
 ### :returns: `min_val` if `me < min_val`; `max_val` if `me > max_val`; otherwise `me`.
+@positional
 routine S8.clamp(min_val: S8, max_val: S8) -> S8
   return me.min(max_val).max(min_val)
 

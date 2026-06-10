@@ -327,6 +327,7 @@ routine F64.max(you: F64) -> F64
 ### :param min_val: The lower bound to enforce.
 ### :param max_val: The upper bound to enforce.
 ### :returns: `me` if already in range, otherwise the nearest bound.
+@positional
 routine F64.clamp(min_val: F64, max_val: F64) -> F64
   return me.min(max_val).max(min_val)
 

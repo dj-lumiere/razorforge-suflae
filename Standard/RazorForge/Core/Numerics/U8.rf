@@ -402,7 +402,7 @@ routine U8.$bitxor(you: U8) -> U8
 ### Returns the bitwise complement of this value.
 ### :returns: `~me` — each bit flipped.
 routine U8.$bitnot() -> U8
-  return bit_xor[U8](a: me, b: -1)
+  return bit_xor[U8](a: me, b: U8_MAX)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)
@@ -473,6 +473,7 @@ routine U8.max(you: U8) -> U8
 ### :param min_val: The lower bound (inclusive).
 ### :param max_val: The upper bound (inclusive).
 ### :returns: `min_val` if `me < min_val`; `max_val` if `me > max_val`; otherwise `me`.
+@positional
 routine U8.clamp(min_val: U8, max_val: U8) -> U8
   return me.min(max_val).max(min_val)
 

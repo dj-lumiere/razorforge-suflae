@@ -384,39 +384,122 @@ _ => GrammarDiagnosticCode.UnexpectedToken
     #region Error Recovery
 
     /// <summary>
-    /// Skip tokens until we find a synchronization point for error recovery
+    /// Skip tokens until we find a top-level synchronization point for error recovery.
+    /// Indent-aware: whole indented regions are skipped as units (otherwise the parser
+    /// resumes inside a block body it never entered, misparses every line of it, and a
+    /// single error cascades through the rest of the file). The indentation bookkeeping
+    /// is reset to base first, because the error may have escaped from inside blocks
+    /// whose levels were already pushed.
     /// </summary>
     protected void Synchronize()
     {
-        Advance();
+        while (_indentationStack.Count > 1)
+        {
+            _indentationStack.Pop();
+        }
+        _currentIndentationLevel = _indentationStack.Peek();
 
+        int depth = 0;
+        bool first = true;
         while (!IsAtEnd)
         {
-            if (PeekToken(offset: -1)
-                   .Type == TokenType.Newline)
+            TokenType t = CurrentToken.Type;
+            if (t == TokenType.Indent)
             {
-                return;
+                depth++;
+                Advance();
+                first = false;
+                continue;
             }
 
-            switch (CurrentToken.Type)
+            if (t == TokenType.Dedent)
             {
-                case TokenType.Entity:
-                case TokenType.Record:
-                case TokenType.Choice:
-                case TokenType.Flags:
-                case TokenType.Variant:
-                case TokenType.Protocol:
-                case TokenType.Routine:
-                case TokenType.Var:
-                case TokenType.Preset:
-                case TokenType.If:
-                case TokenType.Unless:
-                case TokenType.While:
-                case TokenType.For:
-                case TokenType.Return:
-                case TokenType.Throw:
-                case TokenType.Absent:
+                if (depth > 0) depth--;
+                Advance();
+                first = false;
+                continue;
+            }
+
+            if (!first && depth == 0)
+            {
+                if (PeekToken(offset: -1)
+                       .Type is TokenType.Newline or TokenType.Dedent)
+                {
                     return;
+                }
+
+                switch (t)
+                {
+                    case TokenType.Entity:
+                    case TokenType.Record:
+                    case TokenType.Choice:
+                    case TokenType.Flags:
+                    case TokenType.Variant:
+                    case TokenType.Protocol:
+                    case TokenType.Routine:
+                    case TokenType.Var:
+                    case TokenType.Preset:
+                    case TokenType.If:
+                    case TokenType.Unless:
+                    case TokenType.While:
+                    case TokenType.For:
+                    case TokenType.Return:
+                    case TokenType.Throw:
+                    case TokenType.Absent:
+                        return;
+                }
+            }
+
+            Advance();
+            first = false;
+        }
+    }
+
+    /// <summary>
+    /// Statement-level error recovery inside an indented block: skips to the start of
+    /// the next statement at THIS block's nesting depth without escaping the block.
+    /// Nested Indent/Dedent pairs belonging to the failed statement's sub-blocks are
+    /// skipped as opaque regions (their levels were never pushed onto the indentation
+    /// stack once the inner ParseIndentedBlock catch handles its own errors).
+    /// Stops without consuming a Dedent that would close this block, so the enclosing
+    /// block loop terminates normally.
+    /// </summary>
+    protected void SynchronizeWithinBlock()
+    {
+        int depth = 0;
+        while (!IsAtEnd)
+        {
+            TokenType t = CurrentToken.Type;
+            if (t == TokenType.Indent)
+            {
+                depth++;
+                Advance();
+                continue;
+            }
+
+            if (t == TokenType.Dedent)
+            {
+                if (depth == 0)
+                {
+                    return; // closes OUR block — leave it for the block loop
+                }
+
+                depth--;
+                Advance();
+                continue;
+            }
+
+            if (t == TokenType.Newline && depth == 0)
+            {
+                Advance();
+                if (Check(type: TokenType.Indent))
+                {
+                    // Orphaned body of the failed statement (e.g. the block under a bad
+                    // `if` header) — skip it as a region instead of tripping over it.
+                    continue;
+                }
+
+                return; // next token starts a fresh statement at our level
             }
 
             Advance();

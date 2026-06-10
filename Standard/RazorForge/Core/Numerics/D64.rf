@@ -318,6 +318,7 @@ routine D64.max(you: D64) -> D64
 ### :param min_val: The lower bound to enforce.
 ### :param max_val: The upper bound to enforce.
 ### :returns: The resulting `D64` value.
+@positional
 routine D64.clamp(min_val: D64, max_val: D64) -> D64
   return me.min(max_val).max(min_val)
 

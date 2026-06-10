@@ -1089,8 +1089,20 @@ public partial class Parser
                 continue;
             }
 
-            Statement stmt = ParseStatement();
-            statements.Add(item: stmt);
+            try
+            {
+                Statement stmt = ParseStatement();
+                statements.Add(item: stmt);
+            }
+            catch (GrammarException ex)
+            {
+                // Statement-level recovery: record the error, resynchronize to the next
+                // statement in THIS block, and keep parsing — one bad statement must not
+                // discard the rest of the routine (or cascade through the rest of the file).
+                _errors.Add(item: ex.Message);
+                Console.Error.WriteLine(value: ex.Message);
+                SynchronizeWithinBlock();
+            }
         }
 
         // Process dedent tokens

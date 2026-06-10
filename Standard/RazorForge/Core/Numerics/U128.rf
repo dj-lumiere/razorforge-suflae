@@ -396,7 +396,7 @@ routine U128.$bitxor(you: U128) -> U128
 ### Returns the bitwise complement of this value.
 ### :returns: `~me` — each bit flipped.
 routine U128.$bitnot() -> U128
-  return bit_xor[U128](a: me, b: -1)
+  return bit_xor[U128](a: me, b: U128_MAX)
 
 # ============================================================================
 # Shift Operations (<<, <<?>, >>, <<<, >>>)
@@ -467,6 +467,7 @@ routine U128.max(you: U128) -> U128
 ### :param min_val: The lower bound (inclusive).
 ### :param max_val: The upper bound (inclusive).
 ### :returns: `min_val` if `me < min_val`; `max_val` if `me > max_val`; otherwise `me`.
+@positional
 routine U128.clamp(min_val: U128, max_val: U128) -> U128
   return me.min(max_val).max(min_val)
 

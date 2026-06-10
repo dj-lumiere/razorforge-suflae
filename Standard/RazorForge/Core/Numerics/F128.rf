@@ -496,6 +496,7 @@ routine F128.max(you: F128) -> F128
 ### :param min_val: The lower bound to enforce.
 ### :param max_val: The upper bound to enforce.
 ### :returns: `me` if already in range, otherwise the nearest bound.
+@positional
 routine F128.clamp(min_val: F128, max_val: F128) -> F128
   return me.min(max_val).max(min_val)
 

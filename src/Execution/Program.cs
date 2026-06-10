@@ -561,7 +561,7 @@ internal partial class Program
                     value: $"  {Path.GetFileName(path: file)} ({errors.Count} errors):");
                 foreach (SemanticError error in errors)
                 {
-                    Console.WriteLine(value: $"    {error.FormattedMessage}");
+                    DiagnosticRenderer.Print(error: error, indent: "    ");
                 }
 
                 Console.WriteLine();
@@ -637,7 +637,7 @@ internal partial class Program
                 Console.WriteLine(value: $"=== ERRORS ({result.Errors.Count}) ===");
                 foreach (SemanticError error in result.Errors)
                 {
-                    Console.WriteLine(value: $"  {error.FormattedMessage}");
+                    DiagnosticRenderer.Print(error: error);
                 }
 
                 Console.WriteLine();
@@ -651,7 +651,7 @@ internal partial class Program
                 Console.WriteLine(value: $"=== WARNINGS ({result.Warnings.Count}) ===");
                 foreach (SemanticWarning warning in result.Warnings)
                 {
-                    Console.WriteLine(value: $"  {warning.FormattedMessage}");
+                    DiagnosticRenderer.Print(warning: warning);
                 }
             }
 
@@ -988,7 +988,7 @@ internal partial class Program
                 Console.WriteLine(value: $"=== BUILD ERRORS ({buildResult.Errors.Count}) ===");
                 foreach (SemanticError error in buildResult.Errors)
                 {
-                    Console.WriteLine(value: $"  {error.FormattedMessage}");
+                    DiagnosticRenderer.Print(error: error);
                 }
 
                 Console.WriteLine();
@@ -1081,7 +1081,7 @@ internal partial class Program
                 Console.WriteLine(value: $"=== ERRORS ({result.Errors.Count}) ===");
                 foreach (SemanticError error in result.Errors)
                 {
-                    Console.WriteLine(value: $"  {error.FormattedMessage}");
+                    DiagnosticRenderer.Print(error: error);
                 }
 
                 Console.WriteLine();
@@ -1095,7 +1095,7 @@ internal partial class Program
                 Console.WriteLine(value: $"=== WARNINGS ({result.Warnings.Count}) ===");
                 foreach (SemanticWarning warning in result.Warnings)
                 {
-                    Console.WriteLine(value: $"  {warning.FormattedMessage}");
+                    DiagnosticRenderer.Print(warning: warning);
                 }
             }
 
@@ -1238,7 +1238,7 @@ internal partial class Program
                 Console.WriteLine(value: $"=== BUILD ERRORS ({buildResult.Errors.Count}) ===");
                 foreach (SemanticError error in buildResult.Errors)
                 {
-                    Console.WriteLine(value: $"  {error.FormattedMessage}");
+                    DiagnosticRenderer.Print(error: error);
                 }
 
                 Console.WriteLine();
@@ -1309,7 +1309,7 @@ internal partial class Program
                 Console.WriteLine(value: $"=== ERRORS ({result.Errors.Count}) ===");
                 foreach (SemanticError error in result.Errors)
                 {
-                    Console.WriteLine(value: $"  {error.FormattedMessage}");
+                    DiagnosticRenderer.Print(error: error);
                 }
 
                 Console.WriteLine();
@@ -1323,7 +1323,7 @@ internal partial class Program
                 Console.WriteLine(value: $"=== WARNINGS ({result.Warnings.Count}) ===");
                 foreach (SemanticWarning warning in result.Warnings)
                 {
-                    Console.WriteLine(value: $"  {warning.FormattedMessage}");
+                    DiagnosticRenderer.Print(warning: warning);
                 }
             }
 

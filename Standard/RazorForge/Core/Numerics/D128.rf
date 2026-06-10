@@ -385,6 +385,7 @@ routine D128.max(you: D128) -> D128
 ### :param min_val: The lower bound to enforce.
 ### :param max_val: The upper bound to enforce.
 ### :returns: The resulting `D128` value.
+@positional
 routine D128.clamp(min_val: D128, max_val: D128) -> D128
   return me.min(max_val).max(min_val)
 

@@ -521,6 +521,7 @@ routine S16.max(you: S16) -> S16
 ### :param min_val: The lower bound (inclusive).
 ### :param max_val: The upper bound (inclusive).
 ### :returns: `min_val` if `me < min_val`; `max_val` if `me > max_val`; otherwise `me`.
+@positional
 routine S16.clamp(min_val: S16, max_val: S16) -> S16
   return me.min(max_val).max(min_val)
 
