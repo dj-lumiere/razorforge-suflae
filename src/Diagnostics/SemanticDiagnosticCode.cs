@@ -906,11 +906,12 @@ public enum SemanticDiagnosticCode
 public static class SemanticDiagnosticCodeExtensions
 {
     /// <summary>
-    /// Formats code as RF-Snnn (e.g., S001, S100)
+    /// Formats code as RF-Snnn (e.g., RF-S001, RF-S100) — matching the RF-G/SF-G grammar
+    /// code convention and the published documentation.
     /// </summary>
     public static string ToCodeString(this SemanticDiagnosticCode code)
     {
-        return $"S{(int)code:D3}";
+        return $"RF-S{(int)code:D3}";
     }
 
     /// <summary>

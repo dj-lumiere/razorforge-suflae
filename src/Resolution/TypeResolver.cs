@@ -236,7 +236,7 @@ internal sealed class TypeResolver
 
         // Type not found
         _sa.ReportError(code: SemanticDiagnosticCode.UnknownType,
-            message: $"Unknown type '{typeExpr.Name}'.",
+            message: $"Unknown type '{typeExpr.Name}'.{_sa.UnknownTypeSuggestion(typeName: typeExpr.Name)}",
             location: typeExpr.Location);
         return ErrorTypeInfo.Instance;
     }
@@ -298,7 +298,7 @@ internal sealed class TypeResolver
         if (genericDef == null)
         {
             _sa.ReportError(code: SemanticDiagnosticCode.UnknownType,
-                message: $"Unknown type '{typeExpr.Name}'.",
+                message: $"Unknown type '{typeExpr.Name}'.{_sa.UnknownTypeSuggestion(typeName: typeExpr.Name)}",
                 location: typeExpr.Location);
             return ErrorTypeInfo.Instance;
         }

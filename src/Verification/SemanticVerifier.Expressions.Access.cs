@@ -270,7 +270,8 @@ public sealed partial class SemanticVerifier
         else
         {
             ReportError(code: SemanticDiagnosticCode.MemberNotFound,
-                message: $"Type '{objectType.Name}' does not have a member '{member.PropertyName}'.",
+                message:
+                $"Type '{objectType.Name}' does not have a member '{member.PropertyName}'.{DidYouMean(target: member.PropertyName, candidates: MemberSuggestionCandidates(type: lookupType))}",
                 location: member.Location);
         }
         return ErrorTypeInfo.Instance;
@@ -926,7 +927,8 @@ public sealed partial class SemanticVerifier
         if (type == null)
         {
             ReportError(code: SemanticDiagnosticCode.UnknownType,
-                message: $"Unknown type '{creator.TypeName}'. Check the spelling, and make sure the module that defines it is imported.",
+                message:
+                $"Unknown type '{creator.TypeName}'. Check the spelling, and make sure the module that defines it is imported.{DidYouMean(target: creator.TypeName, candidates: TypeSuggestionCandidates())}",
                 location: creator.Location);
             return ErrorTypeInfo.Instance;
         }

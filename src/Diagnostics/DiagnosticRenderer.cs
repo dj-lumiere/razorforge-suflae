@@ -29,10 +29,52 @@ public static class DiagnosticRenderer
         && Environment.GetEnvironmentVariable(variable: "NO_COLOR") == null
         && Environment.GetEnvironmentVariable(variable: "TERM") != "dumb";
 
+    /// <summary>
+    /// Cap on diagnostics rendered per batch: a cascade after one bad declaration can
+    /// produce hundreds of follow-on errors, and nobody acts on more than the first
+    /// screenful. The summary line still reports the true total.
+    /// </summary>
+    private const int MaxRenderedPerBatch = 20;
+
     /// <summary>Renders a semantic error (header + excerpt) to standard output.</summary>
     public static void Print(SemanticError error, string indent = "  ") =>
         PrintDiagnostic(severity: "error", severityColor: ConsoleColor.Red,
             header: error.FormattedMessage, location: error.Location, indent: indent);
+
+    /// <summary>Renders up to <see cref="MaxRenderedPerBatch"/> errors, then a suppression note.</summary>
+    public static void PrintAll(System.Collections.Generic.IReadOnlyList<SemanticError> errors,
+        string indent = "  ")
+    {
+        int shown = Math.Min(val1: errors.Count, val2: MaxRenderedPerBatch);
+        for (int i = 0; i < shown; i++)
+        {
+            Print(error: errors[index: i], indent: indent);
+        }
+
+        if (errors.Count > shown)
+        {
+            Console.WriteLine(
+                value:
+                $"{indent}... and {errors.Count - shown} more errors not shown. Fix the first batch and rebuild.");
+        }
+    }
+
+    /// <summary>Renders up to <see cref="MaxRenderedPerBatch"/> warnings, then a suppression note.</summary>
+    public static void PrintAll(System.Collections.Generic.IReadOnlyList<SemanticWarning> warnings,
+        string indent = "  ")
+    {
+        int shown = Math.Min(val1: warnings.Count, val2: MaxRenderedPerBatch);
+        for (int i = 0; i < shown; i++)
+        {
+            Print(warning: warnings[index: i], indent: indent);
+        }
+
+        if (warnings.Count > shown)
+        {
+            Console.WriteLine(
+                value: $"{indent}... and {warnings.Count - shown} more warnings not shown.");
+        }
+    }
 
     /// <summary>Renders a semantic warning (header + excerpt) to standard output.</summary>
     public static void Print(SemanticWarning warning, string indent = "  ") =>

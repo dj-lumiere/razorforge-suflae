@@ -84,6 +84,17 @@ public sealed class TargetConfig
                 cacheLineSize: 64,
                 targetOS: "windows",
                 targetArch: "x86_64"),
+            // Intel Macs use Mach-O mangling (m:o) — without this case they fell through
+            // to the Linux triple and produced ELF-flavored IR.
+            Architecture.X64 when isMacOS => new TargetConfig(
+                triple: "x86_64-apple-darwin",
+                dataLayout:
+                "e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128",
+                pointerBitWidth: 64,
+                pageSize: 4096,
+                cacheLineSize: 64,
+                targetOS: "macos",
+                targetArch: "x86_64"),
             Architecture.X64 => new TargetConfig(
                 triple: "x86_64-unknown-linux-gnu",
                 dataLayout:

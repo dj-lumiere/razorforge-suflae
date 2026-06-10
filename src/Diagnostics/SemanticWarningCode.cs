@@ -204,11 +204,11 @@ public static class SemanticWarningCodeExtensions
     extension(SemanticWarningCode code)
     {
         /// <summary>
-        /// Formats code as RF-Wnnn (e.g., RF-W001, RF-W100)
+        /// Formats code as RF-Wnnn (e.g., RF-W001, RF-W100) — matching the RF-S/RF-G convention.
         /// </summary>
         public string ToCodeString()
         {
-            return $"SW{(int)code:D3}";
+            return $"RF-W{(int)code:D3}";
         }
         /// <summary>
         /// Gets the warning category for grouping and documentation.

@@ -253,7 +253,8 @@ public sealed partial class SemanticVerifier
         }
 
         ReportError(code: SemanticDiagnosticCode.UnknownIdentifier,
-            message: $"Unknown identifier '{id.Name}'.",
+            message:
+            $"Unknown identifier '{id.Name}'.{DidYouMean(target: id.Name, candidates: IdentifierSuggestionCandidates())}",
             location: id.Location);
         return ErrorTypeInfo.Instance;
     }

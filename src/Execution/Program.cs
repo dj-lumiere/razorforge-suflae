@@ -55,7 +55,13 @@ internal partial class Program
                         .TrimStart(trimChar: '-');
 
         // Check if first arg is a command or a file
-        bool isCommand = command is "parse" or "tokenize" or "codegen" or BuildCommand or "buildandrun" or "check" or "validate-stdlib" or "help";
+        bool isCommand = command is "parse" or "tokenize" or "codegen" or BuildCommand or "buildandrun" or "check" or "validate-stdlib" or "help" or "version" or "v";
+
+        if (command is "version" or "v")
+        {
+            PrintVersion();
+            return 0;
+        }
 
         if (!isCommand)
         {
@@ -336,7 +342,7 @@ internal partial class Program
     /// </summary>
     private static void PrintUsage()
     {
-        Console.WriteLine(value: "RazorForge Builder");
+        Console.WriteLine(value: $"RazorForge Builder {GetVersionString()}");
         Console.WriteLine();
         Console.WriteLine(value: "Usage:");
         Console.WriteLine(
@@ -372,12 +378,42 @@ internal partial class Program
             "  RazorForge validate-stdlib [rf|sf]              - Validate stdlib routine bodies");
         Console.WriteLine(
             value: "  RazorForge help                                 - Show this help");
+        Console.WriteLine(
+            value: "  RazorForge version                              - Show compiler version");
         Console.WriteLine();
         Console.WriteLine(
             value: "  <source-file>: .rf file for RazorForge or .sf file for Suflae");
         Console.WriteLine(
             value: "  If no entry file is given, searches for razorforge.toml in the current");
         Console.WriteLine(value: "  directory and parent directories.");
+    }
+
+    /// <summary>Prints the compiler version (from assembly metadata) to standard output.</summary>
+    private static void PrintVersion()
+    {
+        Console.WriteLine(value: $"RazorForge {GetVersionString()}");
+    }
+
+    /// <summary>
+    /// Returns the compiler version string from assembly metadata, preferring the
+    /// informational version (e.g. "0.0.1-alpha") and stripping any "+commit" suffix.
+    /// </summary>
+    private static string GetVersionString()
+    {
+        var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+        string version = assembly
+                        .GetCustomAttributes(
+                             attributeType: typeof(System.Reflection.AssemblyInformationalVersionAttribute),
+                             inherit: false)
+                        .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
+                        .FirstOrDefault()
+                       ?.InformationalVersion
+                     ?? assembly.GetName()
+                                .Version
+                               ?.ToString()
+                     ?? "unknown";
+        int plusIndex = version.IndexOf(value: '+');
+        return plusIndex > 0 ? $"v{version[..plusIndex]}" : $"v{version}";
     }
 
     /// <summary>Returns true if the given file path has a <c>.sf</c> extension (Suflae source file).</summary>
@@ -635,10 +671,7 @@ internal partial class Program
             {
                 Console.WriteLine();
                 Console.WriteLine(value: $"=== ERRORS ({result.Errors.Count}) ===");
-                foreach (SemanticError error in result.Errors)
-                {
-                    DiagnosticRenderer.Print(error: error);
-                }
+                DiagnosticRenderer.PrintAll(errors: result.Errors);
 
                 Console.WriteLine();
                 Console.WriteLine(value: "Code generation aborted due to errors.");
@@ -649,10 +682,7 @@ internal partial class Program
             {
                 Console.WriteLine();
                 Console.WriteLine(value: $"=== WARNINGS ({result.Warnings.Count}) ===");
-                foreach (SemanticWarning warning in result.Warnings)
-                {
-                    DiagnosticRenderer.Print(warning: warning);
-                }
+                DiagnosticRenderer.PrintAll(warnings: result.Warnings);
             }
 
             // Code Generation
@@ -986,10 +1016,7 @@ internal partial class Program
             {
                 Console.WriteLine();
                 Console.WriteLine(value: $"=== BUILD ERRORS ({buildResult.Errors.Count}) ===");
-                foreach (SemanticError error in buildResult.Errors)
-                {
-                    DiagnosticRenderer.Print(error: error);
-                }
+                DiagnosticRenderer.PrintAll(errors: buildResult.Errors);
 
                 Console.WriteLine();
                 Console.WriteLine(value: "Build aborted due to errors.");
@@ -1079,10 +1106,7 @@ internal partial class Program
             {
                 Console.WriteLine();
                 Console.WriteLine(value: $"=== ERRORS ({result.Errors.Count}) ===");
-                foreach (SemanticError error in result.Errors)
-                {
-                    DiagnosticRenderer.Print(error: error);
-                }
+                DiagnosticRenderer.PrintAll(errors: result.Errors);
 
                 Console.WriteLine();
                 Console.WriteLine(value: "Code generation aborted due to errors.");
@@ -1093,10 +1117,7 @@ internal partial class Program
             {
                 Console.WriteLine();
                 Console.WriteLine(value: $"=== WARNINGS ({result.Warnings.Count}) ===");
-                foreach (SemanticWarning warning in result.Warnings)
-                {
-                    DiagnosticRenderer.Print(warning: warning);
-                }
+                DiagnosticRenderer.PrintAll(warnings: result.Warnings);
             }
 
             // Executable targets must declare a `start` or `start!` routine in one of the
@@ -1236,10 +1257,7 @@ internal partial class Program
             {
                 Console.WriteLine();
                 Console.WriteLine(value: $"=== BUILD ERRORS ({buildResult.Errors.Count}) ===");
-                foreach (SemanticError error in buildResult.Errors)
-                {
-                    DiagnosticRenderer.Print(error: error);
-                }
+                DiagnosticRenderer.PrintAll(errors: buildResult.Errors);
 
                 Console.WriteLine();
                 Console.WriteLine(value: "Check failed due to errors.");
@@ -1307,10 +1325,7 @@ internal partial class Program
             {
                 Console.WriteLine();
                 Console.WriteLine(value: $"=== ERRORS ({result.Errors.Count}) ===");
-                foreach (SemanticError error in result.Errors)
-                {
-                    DiagnosticRenderer.Print(error: error);
-                }
+                DiagnosticRenderer.PrintAll(errors: result.Errors);
 
                 Console.WriteLine();
                 Console.WriteLine(value: "Check failed due to errors.");
@@ -1321,10 +1336,7 @@ internal partial class Program
             {
                 Console.WriteLine();
                 Console.WriteLine(value: $"=== WARNINGS ({result.Warnings.Count}) ===");
-                foreach (SemanticWarning warning in result.Warnings)
-                {
-                    DiagnosticRenderer.Print(warning: warning);
-                }
+                DiagnosticRenderer.PrintAll(warnings: result.Warnings);
             }
 
             Console.WriteLine();
