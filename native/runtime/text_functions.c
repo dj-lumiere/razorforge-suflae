@@ -27,17 +27,34 @@ extern uint16_t rf_f16_from_f32(float x);
 // Formatting: Binary Floating Point
 // ============================================================================
 
+// Canonical NaN/Inf spellings. printf's output for specials is platform-flavored
+// (MSVC UCRT prints "-nan(ind)", glibc prints "-nan"), so format them ourselves —
+// sign-aware "nan" / "-nan" / "inf" / "-inf", matching the glibc spelling.
+// Returns NULL for ordinary finite values.
+static char* format_special_float(double value)
+{
+    if (!isnan(value) && !isinf(value)) return NULL;
+    char* buffer = (char*)malloc(8);
+    if (!buffer) return NULL;
+    snprintf(buffer, 8, "%s%s", signbit(value) ? "-" : "", isnan(value) ? "nan" : "inf");
+    return buffer;
+}
+
 rf_address rf_format_F16(rf_U16 value)
 {
+    float f = rf_f16_to_f32(value);
+    char* special = format_special_float((double)f);
+    if (special) return (rf_address)special;
     char* buffer = (char*)malloc(64);
     if (!buffer) return 0;
-    float f = rf_f16_to_f32(value);
     snprintf(buffer, 64, "%.4g", (double)f);
     return (rf_address)buffer;
 }
 
 rf_address rf_format_F32(float value)
 {
+    char* special = format_special_float((double)value);
+    if (special) return (rf_address)special;
     char* buffer = (char*)malloc(64);
     if (!buffer) return 0;
     snprintf(buffer, 64, "%.7g", (double)value);
@@ -46,6 +63,8 @@ rf_address rf_format_F32(float value)
 
 rf_address rf_format_F64(double value)
 {
+    char* special = format_special_float(value);
+    if (special) return (rf_address)special;
     char* buffer = (char*)malloc(64);
     if (!buffer) return 0;
     snprintf(buffer, 64, "%.15g", value);

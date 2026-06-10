@@ -809,9 +809,13 @@ public partial class LlvmCodeGenerator
             : string.Empty;
 
     /// <summary>
-    /// Checks if an external("C") function returns a struct type that needs sret on Windows x64.
-    /// On MSVC ABI, C structs > 8 bytes are returned via a hidden first pointer parameter (sret).
-    /// LLVM's {i64, i64} return convention uses RAX:RDX registers, which doesn't match.
+    /// Checks if an external("C") function returns a struct type that must be called with an
+    /// explicit sret pointer to match the platform C ABI.
+    /// Win64 (MSVC): aggregates larger than 8 bytes return via a hidden sret pointer.
+    /// SysV x86-64 / AAPCS64: aggregates up to 16 bytes return in registers (RAX:RDX / x0:x1),
+    /// which LLVM's natural aggregate-return lowering already matches — forcing sret there
+    /// shifts every C argument by one slot and leaves the result alloca unwritten
+    /// (the Linux-CI D128 "1/3 = garbage" bug); only >16-byte aggregates go through memory.
     /// </summary>
     private bool NeedsCExternSret(RoutineInfo routine)
     {
@@ -828,7 +832,7 @@ public partial class LlvmCodeGenerator
         }
 
         int size = GetTypeSize(type: routine.ReturnType);
-        return size > 8;
+        return _target.TargetOS == "windows" ? size > 8 : size > 16;
     }
 
     /// <summary>
