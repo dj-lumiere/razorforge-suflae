@@ -7,8 +7,12 @@ on:
     branches: [main]
 
 jobs:
-  build:
+  build-linux:
     runs-on: ubuntu-latest
+    # Gitea Actions also reads .github/workflows; if this repo is ever mirrored
+    # back to a Gitea instance with runners, this guard keeps the jobs from
+    # queueing forever there (github.server_url is the Gitea URL in that case).
+    if: github.server_url == 'https://github.com'
 
     steps:
       - name: Checkout
@@ -150,6 +154,16 @@ jobs:
           export CXXFLAGS="-D_GNU_SOURCE -Wno-implicit-function-declaration"
           ./build.sh
 
+      # SonarQube lives inside the tailnet; join it as an ephemeral node so the
+      # hosted runner can reach SONAR_HOST_URL. Requires a Tailscale OAuth
+      # client (scope: auth_keys) and an ACL tag `tag:ci`.
+      - name: Connect to tailnet for SonarQube
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
       - name: Install SonarScanner for .NET
         run: |
           dotnet tool install --global dotnet-sonarscanner
@@ -175,21 +189,54 @@ jobs:
         if: always()
         run: dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
 
-  # Self-hosted Windows runner registered with the `windows` label.
-  # Host prerequisites (act_runner host mode uses the machine's toolchain directly):
-  # Node.js (for JS actions like checkout), git, .NET 10 SDK, CMake + Ninja,
-  # LLVM 20 (clang/opt/llc/lld on PATH). No Sonar here — analysis runs on the
-  # Linux job; this job exists to build the native runtime with MSVC-world
-  # toolchain conventions and run the full test suite (incl. the 92 e2e
-  # fixtures, which compile/link/execute real binaries) on Windows.
   build-windows:
-    runs-on: windows
+    runs-on: windows-latest
+    if: github.server_url == 'https://github.com'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # The hosted image ships an LLVM, but not necessarily 20.x, and the
+      # compiler needs the full tool set (clang/opt/llc/lld) — use the official
+      # clang+llvm release archive, which includes everything, and cache it.
+      - name: Cache LLVM 20 toolchain
+        id: cache-llvm
+        uses: actions/cache@v4
+        with:
+          path: C:\llvm20
+          key: llvm-20.1.8-win64
+
+      - name: Download LLVM 20 toolchain
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          curl.exe -L -o llvm.tar.xz "https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.8/clang+llvm-20.1.8-x86_64-pc-windows-msvc.tar.xz"
+          if ($LASTEXITCODE -ne 0) { throw 'LLVM download failed' }
+          New-Item -ItemType Directory -Force C:\llvm20 | Out-Null
+          tar -xf llvm.tar.xz -C C:\llvm20 --strip-components=1
+          if ($LASTEXITCODE -ne 0) { throw 'LLVM extract failed' }
+          Remove-Item llvm.tar.xz
+
+      - name: Install Ninja and put LLVM on PATH
+        shell: pwsh
+        run: |
+          choco install ninja -y
+          Add-Content $env:GITHUB_PATH 'C:\llvm20\bin'
+
+      - name: Verify toolchain
+        shell: pwsh
+        run: |
+          clang --version
+          opt --version
+          ninja --version
 
       - name: Fetch native library sources
         shell: pwsh
@@ -249,4 +296,79 @@ jobs:
 
       - name: Test
         shell: pwsh
+        run: dotnet test --configuration Release --no-build --verbosity normal
+
+  build-macos:
+    runs-on: macos-15
+    if: github.server_url == 'https://github.com'
+    # First hosted macOS runs are expected to need iteration (dylib rpath
+    # handling, LLVMSharp osx-arm64 runtime, float formatting deltas) — don't
+    # let them block the CI signal. Remove once the job is green.
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install LLVM 20 toolchain
+        run: |
+          brew install llvm@20 ninja
+          # llvm@20 is keg-only; GITHUB_PATH entries are prepended, so this
+          # shadows Apple clang for subsequent steps.
+          echo "$(brew --prefix llvm@20)/bin" >> "$GITHUB_PATH"
+
+      - name: Verify toolchain
+        run: |
+          clang --version
+          opt --version
+
+      - name: Fetch native library sources
+        run: |
+          cd native
+
+          git clone --depth 1 https://github.com/SDL-Hercules-390/decNumber.git decNumber
+          curl -L -o libbf.tar.gz "https://bellard.org/libbf/libbf-2025-06-03.tar.gz"
+          mkdir -p libbf
+          tar -xzf libbf.tar.gz -C libbf --strip-components=1
+          rm libbf.tar.gz
+          git clone --depth 1 https://github.com/libtom/libtommath.git libtommath
+          git clone --depth 1 https://github.com/madler/zlib.git zlib
+          git clone --depth 1 https://github.com/facebook/zstd.git zstd
+          mkdir -p sqlite3
+          curl -L -o sqlite3.zip "https://www.sqlite.org/2025/sqlite-amalgamation-3500000.zip"
+          unzip -q -j sqlite3.zip -d sqlite3
+          rm sqlite3.zip
+          git clone --depth 1 -b stable https://github.com/jedisct1/libsodium.git libsodium
+          git clone --depth 1 -b v2.28.10 https://github.com/Mbed-TLS/mbedtls.git mbedtls2
+          git clone --depth 1 https://github.com/PCRE2Project/pcre2.git pcre2
+          git clone --depth 1 https://github.com/JuliaStrings/utf8proc.git utf8proc
+          git clone --depth 1 https://github.com/ibireme/yyjson.git yyjson
+          git clone --depth 1 https://github.com/cktan/tomlc99.git tomlc99
+          git clone --depth 1 https://github.com/ivmai/bdwgc.git bdwgc
+          git clone --depth 1 https://github.com/libuv/libuv.git libuv
+          git clone --depth 1 https://github.com/higan-emu/libco.git libco
+          git clone --depth 1 https://github.com/jedisct1/minicsv.git minicsv || true
+
+      - name: Build native libraries
+        run: |
+          cd native
+          chmod +x build.sh
+          export CC=clang
+          export CXX=clang++
+          ./build.sh
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Test
         run: dotnet test --configuration Release --no-build --verbosity normal

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# RazorForge packaging script (Linux host -> linux-x64 package).
+# RazorForge packaging script (Unix host -> host-RID package).
 #
-# Produces: dist/razorforge-v<version>-linux-x64.tar.gz (+ sha256 in checksums.txt)
+# Produces: dist/razorforge-v<version>-<rid>.tar.gz (+ sha256 in checksums.txt)
+# where <rid> is the host's RID: linux-x64, osx-arm64, or osx-x64.
 #
 # IMPORTANT: packages the HOST platform only. The native runtime (razorforge_runtime)
 # is built by the host toolchain, and `dotnet publish -r <foreign-rid>` would silently
@@ -13,15 +14,17 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-RID=linux-x64
+case "$(uname -s)" in
+    Linux)  RID=linux-x64 ;;
+    Darwin) if [[ "$(uname -m)" == "arm64" ]]; then RID=osx-arm64; else RID=osx-x64; fi ;;
+    *)
+        echo "package.sh packages Linux/macOS hosts; use scripts/package.ps1 on Windows." >&2
+        exit 1
+        ;;
+esac
 VERSION="${VERSION:-$(sed -n 's/.*<Version>\(.*\)<\/Version>.*/\1/p' RazorForge.csproj | head -1)}"
 NAME="razorforge-v${VERSION}-${RID}"
 OUT="dist/${NAME}"
-
-if [[ "$(uname -s)" != "Linux" ]]; then
-    echo "package.sh packages the Linux host; use scripts/package.ps1 on Windows." >&2
-    exit 1
-fi
 
 echo "=== RazorForge ${VERSION} -> ${NAME} ==="
 rm -rf "$OUT" "dist/${NAME}.tar.gz"
@@ -72,5 +75,10 @@ rm -rf "$SMOKE_DIR"
 
 echo "=== archive + checksum ==="
 tar -C dist -czf "dist/${NAME}.tar.gz" "$NAME"
-(cd dist && sha256sum "${NAME}.tar.gz" >> checksums.txt)
+# macOS has no sha256sum; shasum -a 256 emits the same format.
+if command -v sha256sum >/dev/null 2>&1; then
+    (cd dist && sha256sum "${NAME}.tar.gz" >> checksums.txt)
+else
+    (cd dist && shasum -a 256 "${NAME}.tar.gz" >> checksums.txt)
+fi
 echo "Packaged: dist/${NAME}.tar.gz"

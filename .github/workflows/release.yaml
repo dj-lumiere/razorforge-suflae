@@ -1,23 +1,31 @@
 name: Release
 
-# Tag-triggered release: builds the linux-x64 package on the Linux runner and the
-# win-x64 package on the self-hosted Windows runner (label `windows`), attaching
-# both (plus per-platform checksums) to a Gitea release for the tag.
+# Tag-triggered release: builds the linux-x64 package on the Linux runner, the
+# win-x64 package on the hosted Windows runner, and the osx-arm64 package on the
+# hosted macOS runner, attaching all of them (plus per-platform checksums) to a
+# GitHub release for the tag.
 #
-# The Windows job runs after the Linux one so only one job creates the release;
-# the second invocation of release-action just appends its attachments. If no
-# Windows runner is registered, the windows job sits queued — the Linux release
-# still completes, and the zip can be built with scripts/package.ps1 and attached
-# manually as a fallback.
+# The Windows/macOS jobs run after the Linux one so exactly one job creates the
+# release; later invocations of action-gh-release just append their attachments.
+# If a platform job fails, the release still exists with the other platforms'
+# artifacts — build the missing package locally with scripts/package.ps1 (or
+# package.sh) and attach it manually as a fallback.
+#
+# Releases are created with the workflow's own GITHUB_TOKEN (contents: write);
+# no PAT/RELEASE_TOKEN secret is needed.
 
 on:
   push:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
-  release:
+  release-linux:
     runs-on: ubuntu-latest
+    if: github.server_url == 'https://github.com'
 
     steps:
       - name: Checkout
@@ -105,29 +113,58 @@ jobs:
           # Derive the version from the tag (strip leading 'v') so the artifact
           # name always matches the release even if the csproj lags behind.
           VERSION="${GITHUB_REF_NAME#v}" scripts/package.sh
-          # Per-platform checksum names: both jobs attach to the same release,
+          # Per-platform checksum names: all jobs attach to the same release,
           # and identical filenames would collide.
           mv dist/checksums.txt dist/checksums-linux-x64.txt
 
-      - name: Create Gitea release with artifacts
-        uses: https://gitea.com/actions/release-action@main
+      - name: Create GitHub release with artifacts
+        uses: softprops/action-gh-release@v2
         with:
-          files: |-
+          files: |
             dist/*.tar.gz
             dist/checksums-linux-x64.txt
-          api_key: '${{ secrets.RELEASE_TOKEN }}'
 
   release-windows:
-    runs-on: windows
+    runs-on: windows-latest
     # Run after the Linux job so exactly one job creates the release; this one
     # only appends its attachments.
-    needs: release
+    needs: release-linux
+    if: github.server_url == 'https://github.com'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache LLVM 20 toolchain
+        id: cache-llvm
+        uses: actions/cache@v4
+        with:
+          path: C:\llvm20
+          key: llvm-20.1.8-win64
+
+      - name: Download LLVM 20 toolchain
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          curl.exe -L -o llvm.tar.xz "https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.8/clang+llvm-20.1.8-x86_64-pc-windows-msvc.tar.xz"
+          if ($LASTEXITCODE -ne 0) { throw 'LLVM download failed' }
+          New-Item -ItemType Directory -Force C:\llvm20 | Out-Null
+          tar -xf llvm.tar.xz -C C:\llvm20 --strip-components=1
+          if ($LASTEXITCODE -ne 0) { throw 'LLVM extract failed' }
+          Remove-Item llvm.tar.xz
+
+      - name: Install Ninja and put LLVM on PATH
+        shell: pwsh
+        run: |
+          choco install ninja -y
+          Add-Content $env:GITHUB_PATH 'C:\llvm20\bin'
 
       - name: Fetch native library sources
         shell: pwsh
@@ -182,9 +219,77 @@ jobs:
           Move-Item dist/checksums.txt dist/checksums-win-x64.txt
 
       - name: Attach win-x64 artifacts to the release
-        uses: https://gitea.com/actions/release-action@main
+        uses: softprops/action-gh-release@v2
         with:
-          files: |-
+          files: |
             dist/*.zip
             dist/checksums-win-x64.txt
-          api_key: '${{ secrets.RELEASE_TOKEN }}'
+
+  release-macos:
+    runs-on: macos-15
+    needs: release-linux
+    if: github.server_url == 'https://github.com'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install LLVM 20 toolchain
+        run: |
+          brew install llvm@20 ninja
+          echo "$(brew --prefix llvm@20)/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch native library sources
+        run: |
+          cd native
+
+          git clone --depth 1 https://github.com/SDL-Hercules-390/decNumber.git decNumber
+          curl -L -o libbf.tar.gz "https://bellard.org/libbf/libbf-2025-06-03.tar.gz"
+          mkdir -p libbf
+          tar -xzf libbf.tar.gz -C libbf --strip-components=1
+          rm libbf.tar.gz
+          git clone --depth 1 https://github.com/libtom/libtommath.git libtommath
+          git clone --depth 1 https://github.com/madler/zlib.git zlib
+          git clone --depth 1 https://github.com/facebook/zstd.git zstd
+          mkdir -p sqlite3
+          curl -L -o sqlite3.zip "https://www.sqlite.org/2025/sqlite-amalgamation-3500000.zip"
+          unzip -q -j sqlite3.zip -d sqlite3
+          rm sqlite3.zip
+          git clone --depth 1 -b stable https://github.com/jedisct1/libsodium.git libsodium
+          git clone --depth 1 -b v2.28.10 https://github.com/Mbed-TLS/mbedtls.git mbedtls2
+          git clone --depth 1 https://github.com/PCRE2Project/pcre2.git pcre2
+          git clone --depth 1 https://github.com/JuliaStrings/utf8proc.git utf8proc
+          git clone --depth 1 https://github.com/ibireme/yyjson.git yyjson
+          git clone --depth 1 https://github.com/cktan/tomlc99.git tomlc99
+          git clone --depth 1 https://github.com/ivmai/bdwgc.git bdwgc
+          git clone --depth 1 https://github.com/libuv/libuv.git libuv
+          git clone --depth 1 https://github.com/higan-emu/libco.git libco
+          git clone --depth 1 https://github.com/jedisct1/minicsv.git minicsv || true
+
+      - name: Build native libraries
+        run: |
+          cd native
+          chmod +x build.sh
+          export CC=clang
+          export CXX=clang++
+          ./build.sh
+
+      - name: Package osx-arm64
+        run: |
+          chmod +x scripts/package.sh
+          VERSION="${GITHUB_REF_NAME#v}" scripts/package.sh
+          mv dist/checksums.txt dist/checksums-osx-arm64.txt
+
+      - name: Attach osx-arm64 artifacts to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/checksums-osx-arm64.txt

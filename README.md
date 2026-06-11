@@ -249,7 +249,7 @@ RazorForge/
 - [x] Working compiler → LLVM → native pipeline on Windows/Linux x86-64
 - [x] Ownership model, failable-routine variants, generics, collections, 128-bit numerics
 - [x] Fully green CI: unit tests + end-to-end output-snapshot fixtures
-- [ ] Diagnostics polish: source excerpts with carets, "did you mean" suggestions
+- [x] Diagnostics polish: source excerpts with carets, "did you mean" suggestions
 - [ ] Prebuilt release packages (win-x64, linux-x64)
 
 ### Next
