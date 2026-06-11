@@ -44,6 +44,12 @@ copy lib\*.dll ..\..\bin\Release\net10.0\ 2>nul
 copy bin\*.dll ..\..\bin\Debug\net10.0\ 2>nul
 copy bin\*.dll ..\..\bin\Release\net10.0\ 2>nul
 
+REM Shared libs built by vendored subprojects land in their own subdirs
+REM (bdwgc emits gc.dll into bdwgc\) — the runtime links them dynamically,
+REM so they must sit next to razorforge_runtime.dll.
+copy bdwgc\*.dll ..\..\bin\Debug\net10.0\ 2>nul
+copy bdwgc\*.dll ..\..\bin\Release\net10.0\ 2>nul
+
 REM Also try Release subfolder in case using Visual Studio generator
 copy lib\Release\*.dll ..\..\bin\Debug\net10.0\ 2>nul
 copy lib\Release\*.dll ..\..\bin\Release\net10.0\ 2>nul

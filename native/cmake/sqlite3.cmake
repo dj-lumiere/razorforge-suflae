@@ -32,7 +32,13 @@ if(EXISTS "${SQLITE3_DIR}/sqlite3.c" AND EXISTS "${SQLITE3_DIR}/sqlite3.h")
         _CRT_SECURE_NO_WARNINGS
     )
 
-    if(NOT WIN32)
+    if(APPLE)
+        # _POSIX_C_SOURCE puts the macOS SDK headers in strict-POSIX mode,
+        # hiding the BSD types (u_short & co), flock()'s LOCK_* constants and
+        # the typed-malloc declarations they reference — _DARWIN_C_SOURCE
+        # restores the full Darwin surface instead.
+        target_compile_definitions(rf_sqlite3 PRIVATE _DARWIN_C_SOURCE=1)
+    elseif(NOT WIN32)
         target_compile_definitions(rf_sqlite3 PRIVATE _GNU_SOURCE=1 _POSIX_C_SOURCE=200809L)
     endif()
 

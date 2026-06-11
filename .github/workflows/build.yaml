@@ -301,6 +301,23 @@ jobs:
         shell: pwsh
         run: dotnet build --configuration Release --no-restore
 
+      # The first hosted runs hit DllNotFoundException on razorforge_runtime —
+      # surface the import table and an actual load attempt so a failing Test
+      # step below is diagnosable from the log alone.
+      - name: Diagnose native runtime deps
+        shell: pwsh
+        run: |
+          Get-ChildItem bin\Release\net10.0 -Filter '*.dll' |
+            Where-Object Name -notmatch '^(Microsoft|System)' |
+            Select-Object Name, Length | Format-Table
+          C:\llvm20\bin\llvm-objdump.exe -p bin\Release\net10.0\razorforge_runtime.dll | Select-String 'DLL Name'
+          try {
+            [System.Runtime.InteropServices.NativeLibrary]::Load("$pwd\bin\Release\net10.0\razorforge_runtime.dll") | Out-Null
+            Write-Host 'razorforge_runtime.dll loads OK'
+          } catch {
+            Write-Host "LOAD FAILED: $($_.Exception.Message)"
+          }
+
       - name: Test
         shell: pwsh
         run: dotnet test --configuration Release --no-build --verbosity normal
