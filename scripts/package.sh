@@ -30,6 +30,12 @@ echo "=== RazorForge ${VERSION} -> ${NAME} ==="
 rm -rf "$OUT" "dist/${NAME}.tar.gz"
 mkdir -p dist
 
+echo "=== build native runtime first ==="
+# The csproj's Content globs for native/build/bin|lib are evaluated BEFORE the
+# native build runs during publish — on a fresh checkout publish would silently
+# ship no native artifacts. Build them up front so the globs see real files.
+(cd native && bash build.sh)
+
 echo "=== dotnet publish (self-contained) ==="
 dotnet publish RazorForge.csproj -c Release -r "$RID" --self-contained true -o "$OUT" \
     --verbosity minimal

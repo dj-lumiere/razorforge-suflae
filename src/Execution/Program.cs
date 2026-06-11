@@ -794,7 +794,9 @@ internal partial class Program
 
     /// <summary>The platform-specific link-time artifact of the bundled native runtime.</summary>
     private static string RuntimeLinkLibraryFileName =>
-        OperatingSystem.IsWindows() ? "razorforge_runtime.lib" : "librazorforge_runtime.so";
+        OperatingSystem.IsWindows() ? "razorforge_runtime.lib"
+        : OperatingSystem.IsMacOS() ? "librazorforge_runtime.dylib"
+        : "librazorforge_runtime.so";
 
     private static int BuildNativeRuntime(string exeDir, string nativeBuildDir)
     {

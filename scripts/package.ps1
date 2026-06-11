@@ -25,6 +25,17 @@ if (Test-Path $Out) { Remove-Item -Recurse -Force $Out }
 if (Test-Path "dist\$Name.zip") { Remove-Item -Force "dist\$Name.zip" }
 New-Item -ItemType Directory -Force -Path dist | Out-Null
 
+Write-Host '=== build native runtime first ==='
+# The csproj's Content globs for native\build\bin|lib are evaluated BEFORE the
+# BuildNativeLibraries target runs during publish — on a fresh checkout the
+# directories don't exist yet and publish would silently ship no native
+# artifacts. Build them up front so the globs see real files.
+Push-Location native
+cmd /c build.bat
+$nativeExit = $LASTEXITCODE
+Pop-Location
+if ($nativeExit -ne 0) { throw "native build failed ($nativeExit)" }
+
 Write-Host '=== dotnet publish (self-contained) ==='
 dotnet publish RazorForge.csproj -c Release -r $Rid --self-contained true -o $Out --verbosity minimal
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed ($LASTEXITCODE)" }
