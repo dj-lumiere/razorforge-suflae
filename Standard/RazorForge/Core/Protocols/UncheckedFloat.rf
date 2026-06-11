@@ -1,0 +1,8 @@
+module Core
+
+### Represents the unchecked arithmetic surface for floating-style numeric types.
+### `UncheckedFloat` extends the unchecked arithmetic family with `fdiv fast`
+### division, making it the aggregate protocol for fixed-width float types that
+### expose unchecked operator variants.
+protocol UncheckedFloat obeys UncheckedArithmetic, UncheckedTrueDivisible
+  pass

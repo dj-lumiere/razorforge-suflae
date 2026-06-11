@@ -1,34 +1,57 @@
 module Core
 
-# Common Error Types
-#
-# Built-in error types for common runtime errors.
-# All error types follow the Crashable protocol.
-
-# AbsentValueError - thrown when accessing an absent value
-record AbsentValueError obeys Crashable
+### Represents the crashable raised when code tries to consume an absent optional
+### result as though a value were present.
+crashable AbsentValueError
   pass
 
-routine AbsentValueError.crash_message() -> Text
-  return ptr_to_text(me.message_handle.ptr)
+### Returns the default message for absent-value failures.
+### :returns: The resulting `Text` value.
+@readonly
+routine AbsentValueError.crash_message() -> ?Text
+  return "Attempted to access a value that is absent."
 
-# UserTerminationError - thrown by stop!()
-record UserTerminationError obeys Crashable
+### Represents the crashable used when program execution is terminated by the
+### user or hosting environment.
+crashable UserTerminationError
   pass
 
-routine UserTerminationError.crash_message() -> Text
-  return ptr_to_text(me.message_handle.ptr)
+### Returns the default message for user-requested termination.
+### :returns: The resulting `Text` value.
+@readonly
+routine UserTerminationError.crash_message() -> ?Text
+  return "Program was stopped by user."
 
-# VerificationFailedError - thrown by verify!()
-record VerificationFailedError obeys Crashable
+### Represents the crashable raised when a runtime verification check fails.
+### This is used by generic verification surfaces that enforce invariants and
+### preconditions explicitly.
+crashable VerificationFailedError
   pass
 
-routine VerificationFailedError.crash_message() -> Text
-  return ptr_to_text(me.message_handle.ptr)
+### Returns the default message for verification failures.
+### :returns: The resulting `Text` value.
+@readonly
+routine VerificationFailedError.crash_message() -> ?Text
+  return "A verification check failed."
 
-# LogicBreachedError - thrown by breach!()
-record LogicBreachedError obeys Crashable
+### Represents the crashable raised when code reaches a state that should be
+### impossible if surrounding logic is correct.
+crashable LogicBreachedError
   pass
 
-routine LogicBreachedError.crash_message() -> Text
-  return ptr_to_text(me.message_handle.ptr)
+### Returns the default message for breached logic invariants.
+### :returns: The resulting `Text` value.
+@readonly
+routine LogicBreachedError.crash_message() -> ?Text
+  return "A logic breach was detected."
+
+### Represents the crashable raised when a lookup cannot find a requested key.
+crashable KeyNotFoundError
+  ### Stores the key that could not be resolved.
+  key: Text
+
+### Returns the default message for failed keyed lookup.
+### :returns: The resulting `Text` value.
+@readonly
+routine KeyNotFoundError.crash_message() -> ?Text
+  return f"Key not found: {me.key}"

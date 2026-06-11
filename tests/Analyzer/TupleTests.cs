@@ -1,37 +1,41 @@
-using SemanticAnalysis.Diagnostics;
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Types;
-using Xunit;
+using Compiler.Diagnostics;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for tuple type inference and analysis.
+/// Contains tests for tuple.
 /// </summary>
 public class TupleTests
 {
     #region Type Inference
+    /// <summary>
+    /// Verifies semantic analysis behavior for infers tuple.
+    /// </summary>
 
     [Fact]
-    public void Analyze_AllValueTypes_InfersValueTuple()
+    public void Analyze_InfersTuple()
     {
-        // All elements are value types (S32 is a record/value type)
+        // All tuples are inline structs regardless of element types
         string source = """
                         routine test()
                           var tuple = (1_s32, 2_s32, 3_s32)
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for contains entity and infers tuple type information.
+    /// </summary>
 
     [Fact]
     public void Analyze_ContainsEntity_InfersTuple()
     {
-        // Entity is a reference type, so this should be Tuple
+        // Entity fields stored as ptr in the tuple struct
         string source = """
                         entity Point
                           x: S32
@@ -43,9 +47,12 @@ public class TupleTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for nested tuples and infers the expected type information.
+    /// </summary>
 
     [Fact]
     public void Analyze_NestedTuples_InfersCorrectly()
@@ -56,9 +63,12 @@ public class TupleTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for single element tuple with trailing comma.
+    /// </summary>
 
     [Fact]
     public void Analyze_SingleElementTuple_WithTrailingComma()
@@ -69,13 +79,16 @@ public class TupleTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
     #endregion
 
     #region Tuple Type Category
+    /// <summary>
+    /// Verifies semantic analysis behavior for tuple type without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_TupleType_NoErrors()
@@ -88,13 +101,16 @@ public class TupleTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
     #endregion
 
     #region Mixed Types
+    /// <summary>
+    /// Verifies semantic analysis behavior for mixed numeric types successfully.
+    /// </summary>
 
     [Fact]
     public void Analyze_MixedNumericTypes_Works()
@@ -105,9 +121,12 @@ public class TupleTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for tuple with entity and infers tuple type information.
+    /// </summary>
 
     [Fact]
     public void Analyze_TupleWithEntity_InfersTuple()
@@ -117,18 +136,21 @@ public class TupleTests
                           id: S32
 
                         routine test()
-                          var user = User(id: 42)
+                          var user = User(id: 42s32)
                           var tuple = (1, user)
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
     #endregion
 
     #region For-Loop Destructuring
+    /// <summary>
+    /// Verifies semantic analysis behavior for for loop destructuring non tuple and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_ForLoopDestructuring_NonTuple_ReportsError()
@@ -141,42 +163,60 @@ public class TupleTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.DestructuringArityMismatch);
     }
 
     #endregion
 
-    #region Suflae Syntax
+    #region Tuple destructuring arity
 
+    /// <summary>
+    /// Verifies that assigning a 3-element tuple to a 2-element destructure target reports an arity error.
+    /// </summary>
     [Fact]
-    public void AnalyzeSuflae_TupleLiteral_Works()
+    public void Analyze_TupleAssignmentArityMismatch_TooManySource_ReportsError()
     {
         string source = """
-                        routine test():
-                          var tuple = (1, 2, 3)
+                        routine test()
+                          var a = 1
+                          var b = 2
+                          (a, b) = (1, 2, 3)
+                          return
                         """;
 
-        AnalysisResult result = AnalyzeSuflae(source: source);
-        Assert.Empty(collection: result.Errors);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.DestructuringArityMismatch);
     }
 
+    /// <summary>
+    /// Verifies that assigning a 2-element tuple to a 3-element destructure target reports an arity error.
+    /// </summary>
     [Fact]
-    public void AnalyzeSuflae_NestedTuple_Works()
+    public void Analyze_TupleAssignmentArityMismatch_TooFewSource_ReportsError()
     {
         string source = """
-                        routine test():
-                          var nested = ((1, 2), (3, 4))
+                        routine test()
+                          var a = 1
+                          var b = 2
+                          var c = 3
+                          (a, b, c) = (1, 2)
+                          return
                         """;
 
-        AnalysisResult result = AnalyzeSuflae(source: source);
-        Assert.Empty(collection: result.Errors);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.DestructuringArityMismatch);
     }
 
     #endregion
 
     #region #173: Tuple assignment destructuring
+    /// <summary>
+    /// Verifies semantic analysis behavior for tuple assignment destructuring without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_TupleAssignmentDestructuring_NoError()
@@ -189,9 +229,12 @@ public class TupleTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for tuple assignment non assignable target and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_TupleAssignmentNonAssignableTarget_ReportsError()
@@ -203,7 +246,7 @@ public class TupleTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.InvalidAssignmentTarget);
     }

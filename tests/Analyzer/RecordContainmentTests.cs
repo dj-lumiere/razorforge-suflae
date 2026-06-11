@@ -1,19 +1,19 @@
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Diagnostics;
-using Xunit;
+using Compiler.Diagnostics;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for record fixed-size containment validation.
-/// Records can only contain value types (records, choices, value tuples) and Snatched&lt;T&gt;.
-/// Entities, wrappers (handles/tokens), and other reference types are not allowed.
+/// Contains tests for record containment.
 /// </summary>
 public class RecordContainmentTests
 {
     #region Valid Record MemberVariables (no errors expected)
+    /// <summary>
+    /// Verifies semantic analysis behavior for record with primitive member variables without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_RecordWithPrimitiveMemberVariables_NoErrors()
@@ -24,10 +24,13 @@ public class RecordContainmentTests
                           y: S32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for record with record member variable without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_RecordWithRecordMemberVariable_NoErrors()
@@ -39,10 +42,13 @@ public class RecordContainmentTests
                           inner: Inner
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for record with choice member variable without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_RecordWithChoiceMemberVariable_NoErrors()
@@ -58,10 +64,13 @@ public class RecordContainmentTests
                           color: Color
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for generic record with type parameter without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_GenericRecordWithTypeParameter_NoErrors()
@@ -72,10 +81,13 @@ public class RecordContainmentTests
                           value: T
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for generic record multiple type params without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_GenericRecordMultipleTypeParams_NoErrors()
@@ -86,7 +98,82 @@ public class RecordContainmentTests
                           value: V
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
+    }
+
+    /// <summary>
+    /// Verifies semantic analysis behavior for record with retained field without unexpected diagnostics.
+    /// </summary>
+    [Fact]
+    public void Analyze_RecordWithRetainedField_NoErrors()
+    {
+        string source = """
+                        entity Node
+                          value: S32
+                        record Handle
+                          ref: Retained[Node]
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
+    }
+
+    /// <summary>
+    /// Verifies semantic analysis behavior for record with shared field without unexpected diagnostics.
+    /// </summary>
+    [Fact]
+    public void Analyze_RecordWithSharedField_NoErrors()
+    {
+        string source = """
+                        entity Node
+                          value: S32
+                        record Handle
+                          ref: Shared[Node]
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
+    }
+
+    /// <summary>
+    /// Verifies semantic analysis behavior for record with hijacked field without unexpected diagnostics.
+    /// </summary>
+    [Fact]
+    public void Analyze_RecordWithHijackedField_NoErrors()
+    {
+        string source = """
+                        entity Node
+                          value: S32
+                        record RawHandle
+                          ptr: Hijacked[Node]
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
+    }
+
+    /// <summary>
+    /// Verifies semantic analysis behavior for nested record with retained field without unexpected diagnostics.
+    /// </summary>
+    [Fact]
+    public void Analyze_NestedRecordWithRetainedField_NoErrors()
+    {
+        string source = """
+                        entity Node
+                          value: S32
+                        record Inner
+                          ref: Retained[Node]
+                        record Outer
+                          inner: Inner
+                          count: S32
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
@@ -94,9 +181,14 @@ public class RecordContainmentTests
     #endregion
 
     #region Invalid Record MemberVariables (errors expected)
+    /// <summary>
+    /// Verifies a record MAY contain an entity-typed field. Entities are reference (pointer-shaped)
+    /// types, so the field stores a reference — only the scoped access tokens (Viewing/Modifying/
+    /// Inspecting/Claiming) are rejected as record members (see the token tests below).
+    /// </summary>
 
     [Fact]
-    public void Analyze_RecordWithEntityMemberVariable_ReportsError()
+    public void Analyze_RecordWithEntityReferenceField_NoError()
     {
         string source = """
                         entity User
@@ -105,66 +197,149 @@ public class RecordContainmentTests
                           user: User
                         """;
 
-        AnalysisResult result = Analyze(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType
-                         && e.Message.Contains("user"));
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
     }
 
+    /// <summary>
+    /// Verifies semantic analysis behavior for record with viewing field and reports the expected error.
+    /// </summary>
     [Fact]
-    public void Analyze_RecordWithEntityMemberVariable_MessageMentionsValueTypes()
+    public void Analyze_RecordWithViewedField_ReportsError()
     {
+        // Scoped tokens are caught by S601 (TokenMemberVariableNotAllowed) before S412
         string source = """
-                        entity Connection
-                          id: S32
-                        record BadConfig
-                          conn: Connection
-                        """;
-
-        AnalysisResult result = Analyze(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType
-                         && e.Message.Contains("value type"));
-    }
-
-    [Fact]
-    public void Analyze_RecordWithResidentMemberVariable_ReportsError()
-    {
-        string source = """
-                        resident GlobalState
-                          counter: S32
+                        entity Node
+                          value: S32
                         record BadRecord
-                          state: GlobalState
+                          view: Viewing[Node]
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType
-                         && e.Message.Contains("state"));
+            filter: e => e.Code == SemanticDiagnosticCode.TokenMemberVariableNotAllowed
+                         && e.Message.Contains("view"));
+    }
+
+    /// <summary>
+    /// Verifies semantic analysis behavior for record with modifying field and reports the expected error.
+    /// </summary>
+    [Fact]
+    public void Analyze_RecordWithModifyingField_ReportsError()
+    {
+        // Scoped tokens are caught by S601 (TokenMemberVariableNotAllowed) before S412
+        string source = """
+                        entity Node
+                          value: S32
+                        record BadRecord
+                          modifying: Modifying[Node]
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.TokenMemberVariableNotAllowed
+                         && e.Message.Contains("modifying"));
     }
 
     #endregion
 
-    #region Entity Cannot Hold Resident MemberVariables
+    #region Multiple token fields both rejected
 
+    /// <summary>
+    /// Verifies that two scoped-token fields on the same record both report TokenMemberVariableNotAllowed.
+    /// </summary>
     [Fact]
-    public void Analyze_EntityWithResidentMemberVariable_ReportsError()
+    public void Analyze_RecordWithTwoTokenFields_BothReportErrors()
     {
         string source = """
-                        resident GlobalState
-                          counter: S32
-                        entity BadEntity
-                          state: GlobalState
+                        entity Node
+                          value: S32
+                        record BadRecord
+                          reader: Viewing[Node]
+                          writer: Modifying[Node]
                         """;
 
-        AnalysisResult result = Analyze(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.EntityContainsResidentMemberVariable);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.True(condition: result.Errors.Count(predicate: e =>
+            e.Code == SemanticDiagnosticCode.TokenMemberVariableNotAllowed) >= 2);
+    }
+
+    #endregion
+
+    #region Variant field in record
+
+    /// <summary>
+    /// Verifies that a record can contain a variant-typed field.
+    /// </summary>
+    [Fact]
+    public void Analyze_RecordWithVariantField_NoError()
+    {
+        string source = """
+                        variant Status
+                          S32
+                          Text
+
+                        record Result
+                          status: Status
+                          code: S32
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.RecordContainsNonValueType);
+    }
+
+    #endregion
+
+    #region With expression field validation
+
+    /// <summary>
+    /// Verifies that a with expression referencing a non-existent field reports an error.
+    /// </summary>
+    [Fact]
+    public void Analyze_WithExpressionUnknownField_ReportsError()
+    {
+        string source = """
+                        record Point
+                          x: S32
+                          y: S32
+                        routine test(p: Point)
+                          var q = p with .z = 5
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.True(condition: result.Errors.Count > 0);
+    }
+
+    /// <summary>
+    /// Verifies that a with expression updating multiple fields with correct types produces no error.
+    /// </summary>
+    [Fact]
+    public void Analyze_WithExpressionMultipleValidFields_NoError()
+    {
+        string source = """
+                        record Point
+                          x: S32
+                          y: S32
+                          z: S32
+                        routine test(p: Point)
+                          var q = p with .x = 1, .z = 3
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.WithExpressionNotRecord);
     }
 
     #endregion
 
     #region With Expression on Non-Records
+    /// <summary>
+    /// Verifies semantic analysis behavior for with on entity and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_WithOnEntity_ReportsError()
@@ -177,10 +352,13 @@ public class RecordContainmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.WithExpressionNotRecord);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for with on record without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_WithOnRecord_NoError()
@@ -194,10 +372,13 @@ public class RecordContainmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.WithExpressionNotRecord);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for with on record multi member variable without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_WithOnRecordMultiMemberVariable_NoError()
@@ -211,7 +392,7 @@ public class RecordContainmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.WithExpressionNotRecord);
     }

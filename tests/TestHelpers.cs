@@ -1,21 +1,38 @@
-﻿using System.Runtime.CompilerServices;
-using Xunit;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.CompilerServices;
+using Compiler.Tokenizer;
+using Compiler.Resolution;
+using Verification;
+using Verification.Results;
+using SyntaxTree;
+using TypeModel.Enums;
+using TypeModel.Symbols;
+using TypeModel.Types;
 
 namespace RazorForge.Tests;
 
-using SemanticAnalysis;
-using SemanticAnalysis.Enums;
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Symbols;
-using Compiler.Lexer;
-using SyntaxTree;
-using TypeInfo = SemanticAnalysis.Types.TypeInfo;
+using TypeInfo = TypeInfo;
 
 /// <summary>
 /// Helper methods for parsing and analyzing test code.
 /// </summary>
 public static class TestHelpers
 {
+    private const string ExpectedAtLeastOneError = "Expected at least one error";
+
+    #region Stdlib Snapshots
+
+    // Captured once per process; each AnalyzeSa call restores in microseconds instead of ~0.5 s.
+    private static readonly Lazy<TypeRegistry.StdlibSnapshot> _rfSnapshot =
+        new(valueFactory: () => SemanticVerifier.CaptureStdlibSnapshot(language: Language.RazorForge));
+
+    private static readonly Lazy<TypeRegistry.StdlibSnapshot> _suflaeSnapshot =
+        new(valueFactory: () => SemanticVerifier.CaptureStdlibSnapshot(language: Language.Suflae));
+
+    #endregion
+
     #region RazorForge Helpers
 
     /// <summary>
@@ -63,7 +80,7 @@ public static class TestHelpers
     public static AnalysisResult Analyze(string source, [CallerMemberName] string? fileName = null)
     {
         Program program = Parse(source: source, fileName: fileName);
-        var analyzer = new SemanticAnalyzer(language: Language.RazorForge);
+        var analyzer = new SemanticVerifier(language: Language.RazorForge);
         return analyzer.Analyze(program: program);
     }
 
@@ -112,7 +129,7 @@ public static class TestHelpers
     {
         AnalysisResult result = Analyze(source: source, fileName: fileName);
         Assert.True(condition: result.Errors.Count > 0,
-            userMessage: "Expected at least one error");
+            userMessage: ExpectedAtLeastOneError);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Message.Contains(value: expectedErrorSubstring,
                 comparisonType: StringComparison.OrdinalIgnoreCase));
@@ -154,12 +171,57 @@ public static class TestHelpers
     }
 
     /// <summary>
+    /// Parses and analyzes RazorForge source, stopping after Phase 5 (SA only).
+    /// Skips monomorphization and lowering — use for tests that only check errors or type annotations.
+    /// Uses a pre-analyzed stdlib snapshot so stdlib loading runs once per process, not per test.
+    /// </summary>
+    public static AnalysisResult AnalyzeSa(string source, [CallerMemberName] string? fileName = null)
+    {
+        Program program = Parse(source: source, fileName: fileName);
+        var analyzer = new SemanticVerifier(
+            language: Language.RazorForge,
+            snapshot: _rfSnapshot.Value) { SaOnly = true };
+        return analyzer.Analyze(program: program);
+    }
+
+    /// <summary>
+    /// Asserts that SA-only analysis succeeds without errors.
+    /// </summary>
+    public static AnalysisResult AssertAnalyzesSa(string source, [CallerMemberName] string? fileName = null)
+    {
+        AnalysisResult result = AnalyzeSa(source: source, fileName: fileName);
+        if (result.Errors.Count > 0)
+        {
+            string errorMessages = string.Join(separator: "\n",
+                values: result.Errors.Select(selector: e => $"  - {e.Message} at {e.Location}"));
+            Assert.Fail(
+                message: $"Expected no errors but got {result.Errors.Count}:\n{errorMessages}");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Asserts that SA-only analysis produces the expected error.
+    /// </summary>
+    public static AnalysisResult AssertHasErrorSa(string source, string expectedErrorSubstring, [CallerMemberName] string? fileName = null)
+    {
+        AnalysisResult result = AnalyzeSa(source: source, fileName: fileName);
+        Assert.True(condition: result.Errors.Count > 0,
+            userMessage: ExpectedAtLeastOneError);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Message.Contains(value: expectedErrorSubstring,
+                comparisonType: StringComparison.OrdinalIgnoreCase));
+        return result;
+    }
+
+    /// <summary>
     /// Parses and analyzes Suflae source code.
     /// </summary>
     public static AnalysisResult AnalyzeSuflae(string source, [CallerMemberName] string? fileName = null)
     {
         Program program = ParseSuflae(source: source, fileName: fileName);
-        var analyzer = new SemanticAnalyzer(language: Language.Suflae);
+        var analyzer = new SemanticVerifier(language: Language.Suflae);
         return analyzer.Analyze(program: program);
     }
 
@@ -208,7 +270,51 @@ public static class TestHelpers
     {
         AnalysisResult result = AnalyzeSuflae(source: source, fileName: fileName);
         Assert.True(condition: result.Errors.Count > 0,
-            userMessage: "Expected at least one error");
+            userMessage: ExpectedAtLeastOneError);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Message.Contains(value: expectedErrorSubstring,
+                comparisonType: StringComparison.OrdinalIgnoreCase));
+        return result;
+    }
+
+    /// <summary>
+    /// Parses and analyzes Suflae source, stopping after Phase 5 (SA only).
+    /// Uses a pre-analyzed stdlib snapshot so stdlib loading runs once per process, not per test.
+    /// </summary>
+    public static AnalysisResult AnalyzeSaSuflae(string source, [CallerMemberName] string? fileName = null)
+    {
+        Program program = ParseSuflae(source: source, fileName: fileName);
+        var analyzer = new SemanticVerifier(
+            language: Language.Suflae,
+            snapshot: _suflaeSnapshot.Value) { SaOnly = true };
+        return analyzer.Analyze(program: program);
+    }
+
+    /// <summary>
+    /// Asserts that Suflae SA-only analysis succeeds without errors.
+    /// </summary>
+    public static AnalysisResult AssertAnalyzesSaSuflae(string source, [CallerMemberName] string? fileName = null)
+    {
+        AnalysisResult result = AnalyzeSaSuflae(source: source, fileName: fileName);
+        if (result.Errors.Count > 0)
+        {
+            string errorMessages = string.Join(separator: "\n",
+                values: result.Errors.Select(selector: e => $"  - {e.Message} at {e.Location}"));
+            Assert.Fail(
+                message: $"Expected no errors but got {result.Errors.Count}:\n{errorMessages}");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Asserts that Suflae SA-only analysis produces the expected error.
+    /// </summary>
+    public static AnalysisResult AssertHasErrorSaSuflae(string source, string expectedErrorSubstring, [CallerMemberName] string? fileName = null)
+    {
+        AnalysisResult result = AnalyzeSaSuflae(source: source, fileName: fileName);
+        Assert.True(condition: result.Errors.Count > 0,
+            userMessage: ExpectedAtLeastOneError);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Message.Contains(value: expectedErrorSubstring,
                 comparisonType: StringComparison.OrdinalIgnoreCase));
@@ -222,7 +328,7 @@ public static class TestHelpers
     /// <summary>
     /// Gets a declaration of a specific type from the program.
     /// </summary>
-    public static T GetDeclaration<T>(Program program) where T : IAstNode
+    public static T GetDeclaration<T>(Program program) where T : ISyntaxTreeNode
     {
         T? decl = program.Declarations
                          .OfType<T>()
@@ -234,7 +340,7 @@ public static class TestHelpers
     /// <summary>
     /// Gets all declarations of a specific type from the program.
     /// </summary>
-    public static List<T> GetDeclarations<T>(Program program) where T : IAstNode
+    public static List<T> GetDeclarations<T>(Program program) where T : ISyntaxTreeNode
     {
         return program.Declarations
                       .OfType<T>()

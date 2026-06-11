@@ -1,0 +1,39 @@
+module Tests/Stdlib/DivisionSemanticsApi
+import IO/Console
+
+# Integer floor-division `//` and modulo `%` sign semantics. Floor division
+# rounds toward negative infinity; the remainder takes the divisor's sign.
+# Float `//` is a compile error — use `/` + `.floor()` if rounding is needed.
+routine start()
+  # Positive / positive
+  show(f"7 // 2 = {7_s64 // 2_s64}")
+  show(f"7 % 2 = {7_s64 % 2_s64}")
+
+  # Negative / positive
+  show(f"-7 // 2 = {-7_s64 // 2_s64}")    # floor(-3.5) = -4
+  show(f"-7 % 2 = {-7_s64 % 2_s64}")      # remainder sign = divisor (2) -> 1
+
+  # Positive / negative
+  show(f"7 // -2 = {7_s64 // -2_s64}")    # floor(-3.5) = -4
+  show(f"7 % -2 = {7_s64 % -2_s64}")      # remainder sign = divisor (-2) -> -1
+
+  # Negative / negative
+  show(f"-7 // -2 = {-7_s64 // -2_s64}")  # floor(3.5) = 3
+  show(f"-7 % -2 = {-7_s64 % -2_s64}")    # remainder sign = divisor (-2) -> -1
+
+  # Float true division (no `//` on floats — that's a compile error)
+  show(f"7.0 / 2.0 = {7.0_f64 / 2.0_f64}")
+  show(f"-7.0 / 2.0 = {-7.0_f64 / 2.0_f64}")
+  # Float floor via explicit `.floor()`
+  show(f"floor(7.0 / 2.0) = {(7.0_f64 / 2.0_f64).floor()}")
+  show(f"floor(-7.0 / 2.0) = {(-7.0_f64 / 2.0_f64).floor()}")
+
+  # Divisor invariant: (a // b) * b + (a % b) == a
+  var a = -7_s64
+  var b = 3_s64
+  var q = a // b
+  var r = a % b
+  show(f"invariant: ({q}) * {b} + ({r}) == {a}: {q * b + r == a}")
+
+  show("DONE")
+  return

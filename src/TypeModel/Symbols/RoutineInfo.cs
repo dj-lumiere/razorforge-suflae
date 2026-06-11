@@ -1,0 +1,565 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Compiler.Resolution;
+using Verification.Enums;
+using SyntaxTree;
+using TypeModel.Enums;
+using TypeModel.Types;
+
+namespace TypeModel.Symbols;
+
+using TypeSymbol = TypeInfo;
+
+/// <summary>
+/// Information about a routine (standalone routine, member routine, creator).
+/// </summary>
+public sealed class RoutineInfo
+{
+    /// <summary>The name of the routine (without type prefix).</summary>
+    public string Name { get; }
+
+    /// <summary>Base name for registry lookup (e.g., "Circle.draw", "Math.abs").</summary>
+    public string BaseName
+    {
+        get
+        {
+            if (OwnerType != null)
+            {
+                return $"{OwnerType.Name}.{Name}";
+            }
+
+            return string.IsNullOrEmpty(value: Module)
+                ? Name
+                : $"{Module}.{Name}";
+        }
+    }
+
+    /// <summary>
+    /// Rich signature name for display and identity.
+    /// Member: "Module.OwnerType[Generics].Name(ParamTypes) -> ReturnType".
+    /// Standalone: "Module.Name[Generics](ParamTypes) -> ReturnType".
+    /// </summary>
+    public string FullName
+    {
+        get
+        {
+            string prefix;
+            if (OwnerType != null)
+            {
+                string ownerName = OwnerType.GenericParameters is { Count: > 0 }
+                    ? $"{OwnerType.Name}[{string.Join(separator: ", ", values: OwnerType.GenericParameters)}]"
+                    : OwnerType.Name;
+                prefix = string.IsNullOrEmpty(value: OwnerType.Module)
+                    ? $"{ownerName}.{Name}"
+                    : $"{OwnerType.Module}.{ownerName}.{Name}";
+            }
+            else
+            {
+                string routineName = GenericParameters is { Count: > 0 }
+                    ? $"{Name}[{string.Join(separator: ", ", values: GenericParameters)}]"
+                    : Name;
+                prefix = string.IsNullOrEmpty(value: Module)
+                    ? routineName
+                    : $"{Module}.{routineName}";
+            }
+
+            string paramPart =
+                $"({string.Join(separator: ", ", values: Parameters.Select(selector: p => p.Type.Name))})";
+
+            return ReturnType != null
+                ? $"{prefix}{paramPart} -> {ReturnType.Name}"
+                : $"{prefix}{paramPart}";
+        }
+    }
+
+    /// <summary>
+    /// Stable key for registry lookup: "BaseName[TypeArgs]#Param1,Param2".
+    /// For non-generic or unresolved routines, the type-argument segment is omitted.
+    /// For zero-parameter routines, the key is just "BaseName" or "BaseName[TypeArgs]".
+    /// </summary>
+    public string RegistryKey
+    {
+        get
+        {
+            string baseName = OwnerType != null
+                ? $"{GetTypeIdentity(type: OwnerType)}.{Name}"
+                : string.IsNullOrEmpty(value: Module)
+                    ? Name
+                    : $"{Module}.{Name}";
+            if (TypeArguments is { Count: > 0 })
+            {
+                string typeArgs = string.Join(separator: ",",
+                    values: TypeArguments.Select(GetTypeIdentity));
+                baseName = $"{baseName}[{typeArgs}]";
+            }
+
+            if (Parameters.Count == 0) return baseName;
+
+            string paramTypes = string.Join(separator: ",",
+                values: Parameters.Select(selector: p => GetTypeIdentity(type: p.Type)));
+            return $"{baseName}#{paramTypes}";
+        }
+    }
+
+    /// <summary>
+    /// Stable type identity for cache keys and overload matching.
+    /// Uses fully-qualified resolved type names while preserving generic-parameter
+    /// syntax for open generic definitions like <c>List[T]</c>.
+    /// </summary>
+    public static string GetTypeIdentity(TypeSymbol type)
+    {
+        if (type.GenericParameters is { Count: > 0 } && !type.Name.Contains(value: '['))
+        {
+            string baseName = string.IsNullOrEmpty(value: type.Module)
+                ? type.Name
+                : $"{type.Module}.{type.Name}";
+            return
+                $"{baseName}[{string.Join(separator: ", ", values: type.GenericParameters)}]";
+        }
+
+        return type.FullName;
+    }
+
+    /// <summary>The module-qualified name (e.g., "Core/S8.$add", "IO/Console.show").</summary>
+    public string QualifiedName
+    {
+        get
+        {
+            if (OwnerType != null)
+            {
+                // Member routine: Module/OwnerType.routine (e.g., "Core/S8.$add")
+                return $"{OwnerType.FullName}.{Name}";
+            }
+
+            // Standalone: Module.Name
+            return BaseName;
+        }
+    }
+
+    /// <summary>The kind of routine.</summary>
+    public RoutineKind Kind { get; init; } = RoutineKind.Function;
+
+    /// <summary>The type that owns this routine (for member routines and extension routines).</summary>
+    public TypeSymbol? OwnerType { get; init; }
+
+    /// <summary>Parameters of this routine.</summary>
+    public List<ParameterInfo> Parameters { get; init; } = [];
+
+    /// <summary>
+    /// For lifted lambdas (<see cref="RoutineKind.Lambda"/>): the variables the lambda body captures
+    /// from its enclosing scope (name + type), in closure-field order. Drives closure conversion —
+    /// the lambda compiles to a heap closure <c>{ fn_ptr, capture0, capture1, ... }</c>; the lifted
+    /// function takes the closure pointer as a hidden leading parameter and loads each capture from it
+    /// in its prologue. Empty/null for non-capturing lambdas (which still get the hidden parameter so
+    /// the indirect-call ABI is uniform).
+    /// </summary>
+    public List<(string Name, TypeSymbol Type)>? ClosureCaptures { get; set; }
+
+    /// <summary>Return type. Null means "not yet inferred" (transient during analysis). After body analysis, always Blank or a concrete type.</summary>
+    public TypeSymbol? ReturnType { get; set; }
+
+    /// <summary>True if the source wrote the return type with the `?T` rvalue mark
+    /// (entity rvalue, in-flight). Carried from <see cref="TypeExpression.IsRvalue"/>.
+    /// SA enforces position validity; downstream passes use this to drive auto-bind
+    /// from rvalue `?T` back to lvalue `T` at the binding site.</summary>
+    public bool IsInFlightReturn { get; init; }
+
+    /// <summary>Whether this routine can fail (has ! suffix).</summary>
+    public bool IsFailable { get; init; }
+
+    /// <summary>Whether this routine contains throw statements.</summary>
+    public bool HasThrow { get; set; }
+
+    /// <summary>Whether this routine contains absent statements.</summary>
+    public bool HasAbsent { get; set; }
+
+    /// <summary>Whether this routine calls other failable routines (propagated failability).</summary>
+    public bool HasFailableCalls { get; set; }
+
+    /// <summary>
+    /// Failable routines directly called by this routine. Populated during Phase 5 verification.
+    /// Used by <c>ErrorHandlingVariantPass</c> to propagate <see cref="HasThrow"/> /
+    /// <see cref="HasAbsent"/> / <see cref="ThrowableTypes"/> through the call graph so that
+    /// routines whose failability is purely propagated (e.g. <c>return Foo!(...)</c>) get the
+    /// right wrapper variants (<c>try_</c> / <c>check_</c> / <c>lookup_</c>) generated.
+    /// </summary>
+    public HashSet<RoutineInfo> FailableCallees { get; } = [];
+
+    /// <summary>
+    /// Concrete crashable types directly thrown by this routine (or its corresponding
+    /// <c>check_</c>/<c>lookup_</c> variant). Populated after Phase 5 body analysis.
+    /// Does not include types thrown by called routines (propagated throws).
+    /// </summary>
+    public List<TypeSymbol> ThrowableTypes { get; set; } = [];
+
+    /// <summary>The declared mutation category for this routine (from source annotation).</summary>
+    public MutationCategory DeclaredMutation { get; init; } =
+        MutationCategory.Migratable;
+
+    /// <summary>
+    /// The inferred/final mutation category for this routine.
+    /// Initially set to declared value, then updated by mutation inference.
+    /// </summary>
+    public MutationCategory MutationCategory { get; set; } =
+        MutationCategory.Migratable;
+
+    /// <summary>Generic type parameters, if any.</summary>
+    public List<string>? GenericParameters { get; init; }
+
+    /// <summary>Generic constraints on type parameters.</summary>
+    public List<GenericConstraintDeclaration>? GenericConstraints { get; init; }
+
+    /// <summary>Whether this is a generic routine definition.</summary>
+    public bool IsGenericDefinition => GenericParameters is { Count: > 0 };
+
+    /// <summary>For resolved generics, the type arguments used.</summary>
+    public List<TypeSymbol>? TypeArguments { get; init; }
+
+    /// <summary>
+    /// Parameter indices whose declared type is a marker protocol (<c>Referring[T]</c> or
+    /// <c>Controlling[T]</c>). These slots participate in monomorphization: each concrete
+    /// argument type at a call site produces a distinct specialization, so the protocol
+    /// name never appears in mangled symbols or LLVM IR.
+    /// </summary>
+    public List<int> MarkerProtocolParameterIndices
+    {
+        get
+        {
+            var indices = new List<int>();
+            for (int i = 0; i < Parameters.Count; i++)
+            {
+                if (IsMarkerProtocolType(type: Parameters[index: i].Type))
+                {
+                    indices.Add(item: i);
+                }
+            }
+            return indices;
+        }
+    }
+
+    private static bool IsMarkerProtocolType(TypeSymbol type)
+    {
+        if (type is not ProtocolTypeInfo proto || proto.TypeArguments is not { Count: 1 })
+        {
+            return false;
+        }
+        string fullName = proto.GenericDefinition?.Name ?? proto.Name;
+        int bracket = fullName.IndexOf(value: '[');
+        string baseName = bracket >= 0 ? fullName[..bracket] : fullName;
+        return baseName is "Referring" or "Controlling";
+    }
+
+    /// <summary>Visibility modifier.</summary>
+    public VisibilityModifier Visibility { get; init; } = VisibilityModifier.Open;
+
+    /// <summary>Source location where this routine is defined.</summary>
+    public SourceLocation? Location { get; init; }
+
+    /// <summary>The module this routine belongs to.</summary>
+    public string? Module { get; init; }
+
+    /// <summary>Module path segments (e.g., ["Core", "Memory", "Wrapper"]).</summary>
+    public List<string>? ModulePath { get; init; }
+
+    /// <summary>Annotations on this routine (e.g., @readonly, @inline).</summary>
+    public List<string> Annotations { get; init; } = [];
+
+    /// <summary>Whether this routine is marked @readonly (can be called through Viewing/Inspecting).</summary>
+    public bool IsReadOnly =>
+        Annotations.Contains(value: "readonly") || MutationCategory == MutationCategory.Readonly;
+
+    /// <summary>
+    /// For external("llvm") routines, the LLVM IR template from @llvm_ir annotation.
+    /// Extracted from annotations at access time; null if no @llvm_ir annotation.
+    /// </summary>
+    public string? LlvmIrTemplate
+    {
+        get
+        {
+            foreach (string annotation in Annotations)
+            {
+                if (!annotation.StartsWith(value: "llvm_ir("))
+                {
+                    continue;
+                }
+
+                // Extract template: llvm_ir("template") or llvm_ir(template)
+                int start = annotation.IndexOf(value: '"') + 1;
+                int end = annotation.LastIndexOf(value: '"');
+                if (start > 0 && end > start)
+                {
+                    return annotation[start..end];
+                }
+
+                // Unquoted: strip llvm_ir( prefix and ) suffix
+                ReadOnlySpan<char> content = annotation.AsSpan()["llvm_ir(".Length..];
+                if (content.Length > 0 && content[^1] == ')')
+                {
+                    content = content[..^1];
+                }
+
+                return content.ToString();
+            }
+
+            return null;
+        }
+    }
+
+    /// <summary>For external routines, the calling convention.</summary>
+    public string? CallingConvention { get; init; }
+
+    /// <summary>For external routines, whether it's variadic.</summary>
+    public bool IsVariadic { get; init; }
+
+    /// <summary>Whether this routine is marked dangerous (requires danger! block to call).</summary>
+    public bool IsDangerous { get; init; }
+
+    /// <summary>Storage class: None (instance/module-level), Common (type-level static).</summary>
+    public StorageClass Storage { get; init; } = StorageClass.None;
+
+    /// <summary>Whether this routine is a common (static) routine.</summary>
+    public bool IsCommon => Storage == StorageClass.Common;
+
+    /// <summary>Whether this routine is a lambda / closure expression.</summary>
+    public bool IsLambda => Kind == RoutineKind.Lambda;
+
+    /// <summary>Whether this routine was auto-generated (e.g., derived comparison operators).</summary>
+    public bool IsSynthesized { get; init; }
+
+    /// <summary>
+    /// For wrapper-forwarder synthesized routines: the inner-type method that this forwarder
+    /// delegates to. Used by monomorphization to re-resolve signatures against the concrete
+    /// inner type when the inner method's return depends on the inner's generic parameter.
+    /// </summary>
+    public RoutineInfo? WrapperForwarderInnerMethod { get; init; }
+
+    /// <summary>
+    /// For wrapper-forwarder synthesized routines: the inner type's generic definition
+    /// (e.g. List[T] when wrapping List[T]). Used to look up the concrete inner
+    /// method after monomorphization.
+    /// </summary>
+    public TypeSymbol? WrapperForwarderInnerGenericDef { get; init; }
+
+    /// <summary>The suspended or threaded status of this routine (None, Suspended, Threaded).</summary>
+    public AsyncStatus AsyncStatus { get; init; } = AsyncStatus.None;
+
+    /// <summary>Whether this routine is a suspended routine.</summary>
+    public bool IsSuspended => AsyncStatus is AsyncStatus.Suspended;
+
+    /// <summary>Whether this routine is a threaded (OS-thread) routine.</summary>
+    public bool IsThreaded => AsyncStatus is AsyncStatus.Threaded;
+
+    /// <summary>Whether this routine is any kind of suspended or threaded routine.</summary>
+    public bool IsAsync => IsSuspended || IsThreaded;
+
+    /// <summary>
+    /// For generic definitions, the original generic routine this was resolved from.
+    /// </summary>
+    public RoutineInfo? GenericDefinition { get; init; }
+
+    /// <summary>
+    /// For generated error-handling variants (try_, check_, lookup_), the original routine name
+    /// they were generated from (e.g., "$next" for "try_next", "parse" for "try_parse").
+    /// </summary>
+    public string? OriginalName { get; init; }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RoutineInfo"/> class.
+    /// </summary>
+    /// <param name="name">The name of the routine.</param>
+    public RoutineInfo(string name)
+    {
+        Name = name;
+    }
+
+    /// <summary>
+    /// Creates a resolved version of this generic routine with the given type arguments.
+    /// </summary>
+    /// <param name="typeArguments">The type arguments to substitute for generic parameters.</param>
+    /// <returns>A new <see cref="RoutineInfo"/> with types substituted.</returns>
+    /// <exception cref="InvalidOperationException">Thrown if this is not a generic definition.</exception>
+    /// <exception cref="ArgumentException">Thrown if the number of type arguments doesn't match.</exception>
+    public RoutineInfo CreateInstance(List<TypeSymbol> typeArguments)
+    {
+        if (!IsGenericDefinition)
+        {
+            throw new InvalidOperationException(
+                message: $"Routine '{Name}' is not a generic definition.");
+        }
+
+        if (typeArguments.Count != GenericParameters!.Count)
+        {
+            throw new ArgumentException(
+                message:
+                $"Expected {GenericParameters.Count} type arguments, got {typeArguments.Count}.");
+        }
+
+        // Create type parameter substitution map
+        var substitution = new Dictionary<string, TypeSymbol>();
+        for (int i = 0; i < GenericParameters.Count; i++)
+        {
+            substitution[key: GenericParameters[index: i]] = typeArguments[index: i];
+        }
+
+        // Substitute types in parameters
+        var substitutedParams = Parameters
+                               .Select(selector: p =>
+                                    SubstituteParameterType(param: p, substitution: substitution))
+                               .ToList();
+
+        // Substitute return type
+        TypeSymbol? substitutedReturnType = ReturnType != null
+            ? SubstituteType(type: ReturnType, substitution: substitution)
+            : null;
+
+        return new RoutineInfo(name: Name)
+        {
+            Kind = Kind,
+            OwnerType = OwnerType,
+            Parameters = substitutedParams,
+            ReturnType = substitutedReturnType,
+            IsFailable = IsFailable,
+            DeclaredMutation = DeclaredMutation,
+            MutationCategory = MutationCategory,
+            TypeArguments = typeArguments,
+            GenericDefinition = this,
+            Visibility = Visibility,
+            Location = Location,
+            Module = Module,
+            ModulePath = ModulePath,
+            Annotations = Annotations,
+            CallingConvention = CallingConvention,
+            IsVariadic = IsVariadic,
+            IsDangerous = IsDangerous,
+            IsSynthesized = IsSynthesized,
+            WrapperForwarderInnerMethod = WrapperForwarderInnerMethod,
+            WrapperForwarderInnerGenericDef = WrapperForwarderInnerGenericDef,
+            Storage = Storage,
+            AsyncStatus = AsyncStatus
+        };
+    }
+
+    /// <summary>
+    /// Substitutes the type in a parameter for generic resolution.
+    /// </summary>
+    /// <param name="param">The parameter to substitute.</param>
+    /// <param name="substitution">The type parameter substitution map.</param>
+    /// <returns>A new <see cref="ParameterInfo"/> with the substituted type.</returns>
+    internal static ParameterInfo SubstituteParameterType(ParameterInfo param,
+        Dictionary<string, TypeSymbol> substitution)
+    {
+        TypeSymbol substitutedType = SubstituteType(type: param.Type, substitution: substitution);
+        return param.WithSubstitutedType(newType: substitutedType);
+    }
+
+    /// <summary>
+    /// Recursively substitutes type parameters in a type.
+    /// </summary>
+    /// <param name="type">The type to substitute.</param>
+    /// <param name="substitution">The type parameter substitution map.</param>
+    /// <returns>The substituted type, or the original if no substitution applies.</returns>
+    internal static TypeSymbol SubstituteType(TypeSymbol type,
+        Dictionary<string, TypeSymbol> substitution)
+    {
+        // Associated-type projection (`S/Iter`): substitute the base, then resolve via the base's
+        // binding (instance, or generic-definition fallback). Mirrors RecordTypeInfo.SubstituteType
+        // so reachability/instantiation paths that route through here also resolve projections.
+        if (type is AssociatedProjectionTypeInfo projection)
+        {
+            TypeSymbol newBase = SubstituteType(type: projection.Base, substitution: substitution);
+            TypeInfo? bound = RecordTypeInfo.ProjectAssociatedBinding(baseType: newBase,
+                slot: projection.SlotName);
+            if (bound != null)
+            {
+                return SubstituteType(type: bound, substitution: substitution);
+            }
+            return ReferenceEquals(objA: newBase, objB: projection.Base)
+                ? projection
+                : new AssociatedProjectionTypeInfo(baseType: newBase, slotName: projection.SlotName);
+        }
+
+        if (substitution.TryGetValue(key: type.Name, value: out TypeSymbol? substituted))
+        {
+            return substituted;
+        }
+
+        // Substitute inside routine types (e.g., Routine[(T, T), Bool] -> Routine[(S64, S64), Bool])
+        if (type is RoutineTypeInfo routineType)
+        {
+            var substitutedParams = routineType.ParameterTypes
+                .Select(selector: p => SubstituteType(type: p, substitution: substitution))
+                .ToList();
+            TypeSymbol? substitutedReturn = routineType.ReturnType != null
+                ? SubstituteType(type: routineType.ReturnType, substitution: substitution)
+                : null;
+            return new RoutineTypeInfo(parameterTypes: substitutedParams,
+                returnType: substitutedReturn) { IsFailable = routineType.IsFailable };
+        }
+
+        if (type is TupleTypeInfo tupleType)
+        {
+            var substitutedElements = tupleType.ElementTypes
+                .Select(selector => SubstituteType(type: selector, substitution: substitution))
+                .ToList();
+            bool anyChanged = substitutedElements.Where((element, index) =>
+                    !ReferenceEquals(objA: element, objB: tupleType.ElementTypes[index: index]))
+                .Any();
+            return anyChanged
+                ? new TupleTypeInfo(elementTypes: substitutedElements)
+                : tupleType;
+        }
+
+        if (type is { IsGenericResolution: true, TypeArguments: not null })
+        {
+            var newArgs = type.TypeArguments
+                              .Select(selector: arg =>
+                                   SubstituteType(type: arg, substitution: substitution))
+                              .ToList();
+
+            // Route through the ambient TypeRegistry so entity-type specializations
+            // (e.g. Maybe[Text] -> { Hijacked[T] } layout) are picked up instead of
+            // blindly using the primary generic definition's layout.
+            TypeRegistry? registry = TypeRegistry.Ambient;
+
+            // Use GenericDefinition to create the new resolution (not the resolution itself)
+            if (type is EntityTypeInfo { GenericDefinition: not null } entityType)
+            {
+                return registry != null
+                    ? registry.GetOrCreateResolution(genericDef: entityType.GenericDefinition, typeArguments: newArgs)
+                    : entityType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+            }
+
+            if (type is RecordTypeInfo { GenericDefinition: not null } recordType)
+            {
+                return registry != null
+                    ? registry.GetOrCreateResolution(genericDef: recordType.GenericDefinition, typeArguments: newArgs)
+                    : recordType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+            }
+
+            if (type is ProtocolTypeInfo { GenericDefinition: not null } protocolType)
+            {
+                return registry != null
+                    ? registry.GetOrCreateResolution(genericDef: protocolType.GenericDefinition, typeArguments: newArgs)
+                    : protocolType.GenericDefinition.CreateInstance(typeArguments: newArgs);
+            }
+
+            // WrapperTypeInfo (Retained[T], Shared[T], etc.) — if the registry has a RecordTypeInfo
+            // for the same base name, prefer that so the concrete type stays RecordTypeInfo everywhere.
+            // This avoids the WrapperTypeInfo -> "ptr" codegen mapping mismatch when the actual LLVM
+            // function definition uses the struct layout from the RecordTypeInfo.
+            if (type is WrapperTypeInfo && registry != null)
+            {
+                TypeInfo? recordDef = registry.LookupType(name: type.Name);
+                if (recordDef is RecordTypeInfo { IsGenericDefinition: true })
+                {
+                    return registry.GetOrCreateResolution(genericDef: recordDef, typeArguments: newArgs);
+                }
+            }
+
+            return type.CreateInstance(typeArguments: newArgs);
+        }
+
+        return type;
+    }
+}

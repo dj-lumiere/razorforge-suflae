@@ -1,40 +1,49 @@
-# RazorForge BackIndex - Backward indexing from end
-#
-# Created by the ^ prefix operator on any Integral type.
-# ^1 means last element, ^2 means second-to-last, etc.
-#
-# Usage:
-#   list[^1]     # last element
-#   list[^2]     # second-to-last
-#   text[^1]     # last character
 module Core
 
 
-record BackIndex[I obeys Integral]
-  offset: I
+### Represents an index measured from the end of a collection.
+### `BackIndex` is the type behind `^` syntax such as `list[^1]` and `text[^2]`.
+### :see: {Range[T]}, {Containers-And-Iterators}
+@llvm("i64")
+record BackIndex
+  pass
 
-# Creator from any Integral type
-routine BackIndex[I obeys Integral](offset: I) -> BackIndex[I]
-  return BackIndex[I](offset: offset)
+### Creates a back index from an end-relative offset.
+### :param offset: The end-relative offset where `1` means the last element.
+### :returns: The resulting `BackIndex` value.
+routine BackIndex.$create(offset: U64) -> BackIndex
+  return reinterpret_bits[U64, BackIndex](offset)
 
-# Resolve BackIndex to actual index given collection length
-routine BackIndex[I obeys Integral].resolve(length: UAddr) -> UAddr
-  var offset_uaddr = me.offset.UAddr()
-  if offset_uaddr > length
-    stop!("BackIndex out of bounds")
-  return length - offset_uaddr
+### Resolves this back index against a collection length.
+### For example, `^1` resolves to the last valid position and `^length`
+### resolves to the first element.
+### :param length: The collection length used as the reference point.
+### :returns: The resulting `U64` value.
+@readonly
+routine BackIndex.resolve!(length: U64) -> U64
+  var raw = reinterpret_bits[BackIndex, U64](me)
+  if raw > length
+    throw IndexOutOfBoundsError(index: raw, count: length)
+  return length -% raw
 
-# Get the offset value
-routine BackIndex[I obeys Integral].get_offset() -> I
-  return me.offset
+### Returns the stored end-relative offset.
+### :returns: The resulting `U64` value.
+@readonly
+routine BackIndex.get_offset() -> U64
+  return reinterpret_bits[BackIndex, U64](me)
 
-# Convert offset to UAddr
-routine BackIndex[I obeys Integral].offset_uaddr() -> UAddr
-  return me.offset.UAddr()
+### Returns `true` when both back indices represent the same end-relative
+### offset.
+### :param other: The other value to compare against.
+### :returns: The resulting `Bool` value.
+@readonly
+routine BackIndex.$eq(other: BackIndex) -> Bool
+  return reinterpret_bits[BackIndex, U64](me) == reinterpret_bits[BackIndex, U64](other)
 
-# Comparison operations
-routine BackIndex[I obeys Integral].__eq__(other: BackIndex[I]) -> Bool
-  return me.offset.UAddr() == other.offset.UAddr()
-
-routine BackIndex[I obeys Integral].__cmp__(other: BackIndex[I]) -> ComparisonSign
-  return -me.offset <=> -other.offset
+### Compares this back index with another by effective position from the end.
+### A smaller offset means a position closer to the end of the collection.
+### :param other: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
+@readonly
+routine BackIndex.$cmp(other: BackIndex) -> ComparisonSign
+  return reinterpret_bits[BackIndex, U64](other).$cmp(reinterpret_bits[BackIndex, U64](me))

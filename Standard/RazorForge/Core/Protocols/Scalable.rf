@@ -1,0 +1,13 @@
+module Core
+
+### Represents the protocol for integral scaling.
+### `Scalable` is for values that can be enlarged, repeated, or otherwise scaled
+### by a whole-number factor.
+protocol Scalable
+  ### Returns this value scaled by `you`.
+  ### The meaning of scaling depends on the conforming type but should preserve
+  ### the same logical unit or shape.
+  ### :param you: The scalar multiplier.
+  ### :returns: The resulting `Me` value.
+  @readonly
+  routine Me.$mul(you: Integral) -> ?Me

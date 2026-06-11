@@ -1,75 +1,94 @@
-# RazorForge Range - Generic range for iteration
-#
-# Created by 'to' (inclusive end) or 'til' (exclusive end) infix operators,
-# optionally with 'by' for step. Direction is decided at runtime based on
-# start vs end values.
-#
-# Usage:
-#   0 to 10          # 0, 1, 2, ..., 10 (inclusive end, ascending)
-#   0 til 10          # 0, 1, 2, ..., 9  (exclusive end, ascending)
-#   10 to 0           # 10, 9, 8, ..., 0 (inclusive end, descending)
-#   10 til 0           # 10, 9, 8, ..., 1 (exclusive end, descending)
-#   0 til 20 by 2     # 0, 2, 4, 6, 8, 10, 12, 14, 16, 18
-#   100 til 0 by 10   # 100, 90, 80, 70, 60, 50, 40, 30, 20, 10
-#
-# With collections:
-#   list[0 to 2]       # first 3 elements (inclusive end)
-#   list[0 til 3]      # first 3 elements (exclusive end)
-#   list[^3 til ^0]    # last 3 elements
 module Core
 
-record Range[T] needs FixedNumeric
+### Represents the `Range` record.
+### `Range[T]` describes a lazily iterated arithmetic progression between two bounds.
+### :typeparam T: The type argument bound to `T`.
+record Range[T] obeys Iterable[T] needs T obeys Comparable, Numeric
+  ### Stores the first value in the progression.
   start: T
+  ### Stores the terminating bound.
   end: T
+  ### Stores the step applied between successive values.
   step: T
+  ### Stores whether the terminating bound is included.
   inclusive: Bool  # true for 'to', false for 'til'
 
-# Creator for inclusive range (a to b) with default step 1
+### Creates an inclusive range from `start` to `end` using a step of `1`.
+### :param start: The inclusive starting position.
+### :param end: The terminating bound.
+### :returns: The resulting `Range[T]` value.
 routine Range[T](start: T, end: T) -> Range[T]
   return Range[T](start: start, end: end, step: 1, inclusive: true)
 
-# Creator for range with inclusivity flag (a to b or a til b) with default step 1
+### Creates a range from `start` to `end` using a step of `1`.
+### :param start: The inclusive starting position.
+### :param end: The terminating bound.
+### :param inclusive: `true` to include `end`; `false` to stop before it.
+### :returns: The resulting `Range[T]` value.
 routine Range[T](start: T, end: T, inclusive: Bool) -> Range[T]
   return Range[T](start: start, end: end, step: 1, inclusive: inclusive)
 
-# Creator with step (a to b by c or a til b by c)
+### Creates a range from `start` to `end` with an explicit `step`.
+### :param start: The inclusive starting position.
+### :param end: The terminating bound.
+### :param step: The step applied between yielded values.
+### :param inclusive: `true` to include `end`; `false` to stop before it.
+### :returns: The resulting `Range[T]` value.
 routine Range[T](start: T, end: T, step: T, inclusive: Bool) -> Range[T]
-  if step == 0
-    stop!("Range step cannot be zero")
   return Range[T](start: start, end: end, step: step, inclusive: inclusive)
 
-# Check if range is ascending (start <= end for to, start < end for til)
+### Returns true if this value is ascending.
+### Ascending ranges move from smaller values to larger ones.
+### :returns: The resulting `Bool` value.
+@readonly
 routine Range[T].is_ascending() -> Bool
   return me.start <= me.end
 
-# Get the step size
-routine Range[T].get_step() -> T
+### Returns the step component.
+### This is the increment used for each successive value.
+### :returns: The resulting `T` value.
+@readonly
+routine Range[T].get_step() -> ?T
   return me.step
 
-# Check if range is empty
+### Returns true if this value is empty.
+### Emptiness depends on the bound ordering and whether the end is inclusive.
+### :returns: The resulting `Bool` value.
+@readonly
 routine Range[T].is_empty() -> Bool
-  if me.inclusive
-    if me.is_ascending()
-      return me.start > me.end
-    else
-      return me.start < me.end
-  else
-    return me.start == me.end
+  if me.inclusive and me.is_ascending()
+    return me.start > me.end
+  if me.inclusive and not me.is_ascending()
+    return me.start < me.end
+  return me.start == me.end
 
 # ============================================================================
-# Range iteration support
+# Iterable protocol support
 # ============================================================================
 
-record RangeIterator[T] needs FixedNumeric
+### Represents the `RangeEmitter` entity.
+### `RangeEmitter[T]` holds the mutable iteration state for a `Range[T]`.
+### :typeparam T: The type argument bound to `T`.
+entity RangeEmitter[T] needs T obeys Comparable, Numeric
+  ### Stores the next value to yield.
   current: T
+  ### Stores the terminating bound.
   end: T
+  ### Stores the step size between yielded values.
   step: T
+  ### Stores whether iteration is moving upward.
   ascending: Bool
+  ### Stores whether the terminating bound may be yielded.
   inclusive: Bool
+  ### Stores whether iteration has already completed.
   done: Bool
 
-routine Range[T].iter() -> RangeIterator[T]
-  return RangeIterator[T](
+### Creates an iterator for this value.
+### The emitter starts at `me.start`.
+### :returns: The resulting `RangeEmitter[T]` value.
+@readonly
+routine Range[T].$iter() -> ?RangeEmitter[T]
+  return RangeEmitter[T](
     current: me.start,
     end: me.end,
     step: me.step,
@@ -78,11 +97,15 @@ routine Range[T].iter() -> RangeIterator[T]
     done: me.is_empty()
   )
 
-routine RangeIterator[T].next!() -> T
+### Returns the next value from this iterator.
+### Each successful call yields the current value and advances by `step`.
+### :returns: The resulting `T` value.
+### :absent: Returns absent when the requested value is unavailable.
+routine RangeEmitter[T].$next!() -> ?T
   if me.done
     absent
 
-  var value = me.current
+  var _result = me.current
 
   if me.ascending
     me.current = me.current + me.step
@@ -101,4 +124,4 @@ routine RangeIterator[T].next!() -> T
       if me.current <= me.end
         me.done = true
 
-  return value
+  return _result

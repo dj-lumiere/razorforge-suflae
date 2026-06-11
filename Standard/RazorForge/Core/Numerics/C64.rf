@@ -1,0 +1,233 @@
+module Core
+
+### A complex number with double-precision real and imaginary components.
+### `C64` stores two `F64` values and is the standard complex type for general
+### scientific and numeric code. Use `C128` when quadruple precision is needed.
+record C64 obeys Numeric, Equatable
+  ### The real part.
+  real: F64
+  ### The imaginary part.
+  imag: F64
+
+# Complex constants
+preset C64_ZERO: C64 = C64(real: 0.0_f64, imag: 0.0_f64)
+preset C64_ONE: C64 = C64(real: 1.0_f64, imag: 0.0_f64)
+preset C64_I: C64 = C64(real: 0.0_f64, imag: 1.0_f64)
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+### Constructs a `C64` with the given real component and zero imaginary part.
+### :param from: The real-axis value.
+### :returns: The corresponding `C64` value.
+routine C64.$create(from: F64) -> C64
+  return C64(real: from, imag: 0.0_f64)
+
+### Widens a `C32` to `C64` by extending each component to `F64`.
+### :param from: The single-precision complex value to widen.
+### :returns: A `C64` carrying the same numeric value.
+routine C64.$create(from: C32) -> C64
+  return C64(real: F64(from.real), imag: F64(from.imag))
+
+### Narrows a `C128` to `C64` by truncating each component to `F64`.
+### :param from: The quadruple-precision complex value to narrow.
+### :returns: The nearest representable `C64`.
+routine C64.$create(from: C128) -> C64
+  return C64(real: F64(from.real), imag: F64(from.imag))
+
+### Constructs a `C64` from polar coordinates: `r·cos(θ) + r·sin(θ)·i`.
+### :param r: The modulus (distance from origin).
+### :param theta: The argument (angle in radians).
+### :returns: The complex value at that polar position.
+routine C64.from_polar(r: F64, theta: F64) -> C64
+  return C64(real: r * theta.cos(), imag: r * theta.sin())
+
+# ============================================================================
+# Arithmetic Operations
+# ============================================================================
+
+### Returns the complex sum `me + you` (component-wise addition).
+### :param you: The addend.
+### :returns: A `C64` whose components are the sums of the corresponding components.
+routine C64.$add(you: C64) -> C64
+  return C64(real: me.real + you.real, imag: me.imag + you.imag)
+
+### Returns the complex difference `me - you` (component-wise subtraction).
+### :param you: The value to subtract.
+### :returns: A `C64` whose components are the differences of the corresponding components.
+routine C64.$sub(you: C64) -> C64
+  return C64(real: me.real - you.real, imag: me.imag - you.imag)
+
+### Returns the complex product `me * you` using the formula `(ac−bd) + (ad+bc)i`.
+### :param you: The right operand.
+### :returns: The Gaussian product.
+routine C64.$mul(you: C64) -> C64
+  return C64(real: me.real * you.real - me.imag * you.imag, imag: me.real * you.imag + me.imag * you.real)
+
+### Returns the complex quotient `me / you`.
+### Divides by the squared modulus of `you`.
+### :param you: The divisor.
+### :returns: The complex quotient.
+routine C64.$truediv(you: C64) -> C64
+  var d = you.real * you.real + you.imag * you.imag
+  return C64(real: (me.real * you.real + me.imag * you.imag) / d, imag: (me.imag * you.real - me.real * you.imag) / d)
+
+### Returns the arithmetic negation of this value.
+### :returns: A `C64` with both components negated.
+routine C64.$neg() -> C64
+  return C64(real: -me.real, imag: -me.imag)
+
+# ============================================================================
+# Comparison
+# ============================================================================
+
+### Returns `true` if both components compare equal.
+### :param you: The value to compare against.
+### :returns: `true` if `me.real == you.real` and `me.imag == you.imag`.
+routine C64.$eq(you: C64) -> Bool
+  return me.real == you.real and me.imag == you.imag
+
+# ============================================================================
+# Components and Properties
+# ============================================================================
+
+### Returns the modulus (absolute value) of this complex number.
+### :returns: `√(real² + imag²)`.
+routine C64.abs() -> F64
+  return (me.real * me.real + me.imag * me.imag).sqrt()
+
+### Returns the complex conjugate (negates the imaginary part).
+### :returns: `real - imag·i`.
+routine C64.conjugate() -> C64
+  return C64(real: me.real, imag: -me.imag)
+
+### Returns the squared modulus (avoids the square root of `abs`).
+### :returns: `real² + imag²`.
+routine C64.norm() -> F64
+  return me.real * me.real + me.imag * me.imag
+
+# ============================================================================
+# Trigonometric (sinh/cosh computed from exp since F64 lacks native versions)
+# ============================================================================
+
+### Returns the complex sine using the identity `sin(a+bi) = sin(a)cosh(b) + i·cos(a)sinh(b)`.
+### :returns: The complex sine of this value.
+routine C64.sin() -> C64
+  var ep = me.imag.exp()
+  var em = (-me.imag).exp()
+  var ch = (ep + em) / 2.0_f64
+  var sh = (ep - em) / 2.0_f64
+  return C64(real: me.real.sin() * ch, imag: me.real.cos() * sh)
+
+### Returns the complex cosine using the identity `cos(a+bi) = cos(a)cosh(b) − i·sin(a)sinh(b)`.
+### :returns: The complex cosine of this value.
+routine C64.cos() -> C64
+  var ep = me.imag.exp()
+  var em = (-me.imag).exp()
+  var ch = (ep + em) / 2.0_f64
+  var sh = (ep - em) / 2.0_f64
+  return C64(real: me.real.cos() * ch, imag: -(me.real.sin() * sh))
+
+### Returns the complex tangent of this value.
+### :returns: The complex tangent.
+routine C64.tan() -> C64
+  var a2 = me.real + me.real
+  var b2 = me.imag + me.imag
+  var ep = b2.exp()
+  var em = (-b2).exp()
+  var d = a2.cos() + (ep + em) / 2.0_f64
+  return C64(real: a2.sin() / d, imag: (ep - em) / 2.0_f64 / d)
+
+# ============================================================================
+# Hyperbolic (sinh/cosh computed from exp since F64 lacks native versions)
+# ============================================================================
+
+### Returns the complex hyperbolic sine of this value.
+### :returns: The complex hyperbolic sine.
+routine C64.sinh() -> C64
+  var ep = me.real.exp()
+  var em = (-me.real).exp()
+  var sh = (ep - em) / 2.0_f64
+  var ch = (ep + em) / 2.0_f64
+  return C64(real: sh * me.imag.cos(), imag: ch * me.imag.sin())
+
+### Returns the complex hyperbolic cosine of this value.
+### :returns: The complex hyperbolic cosine.
+routine C64.cosh() -> C64
+  var ep = me.real.exp()
+  var em = (-me.real).exp()
+  var sh = (ep - em) / 2.0_f64
+  var ch = (ep + em) / 2.0_f64
+  return C64(real: ch * me.imag.cos(), imag: sh * me.imag.sin())
+
+### Returns the complex hyperbolic tangent of this value.
+### :returns: The complex hyperbolic tangent.
+routine C64.tanh() -> C64
+  var a2 = me.real + me.real
+  var b2 = me.imag + me.imag
+  var ep = a2.exp()
+  var em = (-a2).exp()
+  var d = (ep + em) / 2.0_f64 + b2.cos()
+  return C64(real: (ep - em) / 2.0_f64 / d, imag: b2.sin() / d)
+
+# ============================================================================
+# Exponential and Square Root
+# ============================================================================
+
+### Returns `e` raised to this complex value using `exp(a+bi) = eᵃ(cos(b) + i·sin(b))`.
+### :returns: The complex exponential.
+routine C64.exp() -> C64
+  var ea = me.real.exp()
+  return C64(real: ea * me.imag.cos(), imag: ea * me.imag.sin())
+
+### Returns the complex square root, choosing the root with non-negative real part.
+### :returns: The principal square root of this value.
+routine C64.sqrt() -> C64
+  var r = me.abs()
+  if r == 0.0_f64
+    return C64_ZERO
+  var rp = ((r + me.real) / 2.0_f64).sqrt()
+  var ip = ((r - me.real) / 2.0_f64).sqrt()
+  if me.imag < 0.0_f64
+    ip = -ip
+  return C64(real: rp, imag: ip)
+
+# ============================================================================
+# Query Routines
+# ============================================================================
+
+### Returns `true` if both the real and imaginary parts are exactly zero.
+### :returns: `true` if `me == C64_ZERO`.
+routine C64.is_zero() -> Bool
+  return me.real == 0.0_f64 and me.imag == 0.0_f64
+
+### Returns `true` if the imaginary part is exactly zero (the value lies on the real axis).
+### :returns: `true` if `me.imag == 0.0`.
+routine C64.is_real() -> Bool
+  return me.imag == 0.0_f64
+
+### Returns `true` if the real part is exactly zero (the value lies on the imaginary axis).
+### :returns: `true` if `me.real == 0.0`.
+routine C64.is_imaginary() -> Bool
+  return me.real == 0.0_f64
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns an xxHash64-based hash of this complex value.
+### :returns: A `U64` hash combining both components.
+routine C64.$fast_hash() -> U64
+  var acc = __hash_round(acc: 0u64, h: me.real.$fast_hash())
+  acc = __hash_round(acc: acc, h: me.imag.$fast_hash())
+  return __hash_finalize(h: acc)
+
+### Returns a SipHash-2-4 keyed hash of this complex value.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
+routine C64.$hash(k0: U64, k1: U64) -> U64
+  var acc = __hash_round(acc: 0u64, h: me.real.$hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.imag.$hash(k0: k0, k1: k1))
+  return __hash_finalize(h: acc)

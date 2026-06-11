@@ -1,0 +1,15 @@
+F32: 3.14
+F64: 2.71828
+F32 add: 4.14
+F64 sub: 1.71828
+F32 mul: 6.28
+F64 div: 1.35914
+F64 1.0 < 2.0: true
+F64 1.0 == 1.0: true
+F64 NaN == NaN: false
+F64 inf: inf
+F64 -inf: -inf
+F64 isnan(nan): true
+F64 isnan(1.0): false
+F64->S64 3.7: 3
+DONE

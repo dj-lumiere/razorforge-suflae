@@ -1,0 +1,213 @@
+module Collections
+
+import BuilderService
+
+### A fixed-size, inline array of `N` elements with value semantics.
+###
+### `Array[T, N]` stores exactly `N` elements packed directly into its own
+### memory footprint — it never heap-allocates. Because it is a record type,
+### copying an `Array` copies all `N` elements, and the size can never change
+### after construction.
+###
+### Use this type when the number of elements is known at compile time and you
+### want stack-allocated, cache-friendly storage without pointer indirection.
+###
+### **When to use**
+### - The element count is a compile-time constant.
+### - You want value semantics (copy = full duplication of contents).
+### - You need a small fixed-size buffer (e.g., a 4×4 matrix, an RGBA colour, a SIMD lane).
+### - Use {List[T]} when the count is only known at runtime or elements are added dynamically.
+### - Use {BitArray[N]} for a compact fixed-size sequence of boolean flags.
+###
+### **Complexity**
+### | Operation | Time |
+### |---|---|
+### | `$getitem!` / `$setitem!` | O(1) |
+### | `first!` / `last!` | O(1) |
+### | `$contains` | O(N) |
+### | `index_of!` | O(N) |
+### | Iteration | O(N) |
+###
+### :typeparam T: The element type stored in the array.
+### :typeparam N: The compile-time element count, supplied as a `U64` literal.
+### :see: {List[T]} for a heap-backed growable sequence.
+### :see: {BitArray[N]} for a compact fixed-size bit sequence.
+@llvm("[{N} x {T}]")
+record Array[T, N] obeys Comparable, Iterable[T], MutableIndexable[T]
+needs N is U64
+relates ArrayIterator[T, N] as Iter
+  # N elements of T stored inline by compiler - no explicit member variables needed
+  pass
+
+# ============================================================================
+# Indexing with Integral (forward index)
+# ============================================================================
+
+### Returns the element at `index`.
+### :param index: The zero-based position to read.
+### :returns: The element stored at that position.
+### :throws: {IndexOutOfBoundsError} if `index >= N`.
+@readonly
+routine Array[T, N].$getitem!(index: U64) -> ?T
+  if index >= N
+    throw IndexOutOfBoundsError(index: index, count: me.count())
+  return element_at[Array[T, N], T](me, index)
+
+### Replaces the element at `index` with `value`.
+### :param index: The zero-based position to update.
+### :param value: The replacement value.
+### :throws: {IndexOutOfBoundsError} if `index >= N`.
+routine Array[T, N].$setitem!(index: U64, value: ?T)
+  if index >= N
+    throw IndexOutOfBoundsError(index: index, count: me.count())
+  me = set_element_at[Array[T, N], T](me, index, value)
+  return
+
+### Tears down each stored element. No-op for value-type elements; releases/frees owned record or
+### entity elements. Invoked through an owning entity's generated `$destroy` field-recursion when
+### the array is an entity field — all `N` inline slots are live, so the full range is visited.
+### (`Array` is a value record, so it has no separate allocation of its own to free.)
+dangerous routine Array[T, N].$destroy()
+  var i = 0u64
+  while i < N
+    element_at[Array[T, N], T](me, i).$destroy()
+    i = i + 1u64
+  return
+
+# ============================================================================
+# Query Operations
+# ============================================================================
+
+### Returns the fixed number of elements in this array.
+### This is always equal to the compile-time parameter `N`.
+### :returns: The element count `N`.
+@readonly
+routine Array[T, N].count() -> U64
+  return N
+
+### Returns true when the compile-time size is zero.
+### :returns: `true` if `N == 0`.
+@readonly
+routine Array[T, N].is_empty() -> Bool
+  return N == 0u64
+
+### Returns the first element of the array.
+### :returns: The element at index `0`.
+### :absent: The array has zero elements (`N == 0`).
+@readonly
+routine Array[T, N].first!() -> ?T
+  if N == 0u64
+    absent
+  return element_at[Array[T, N], T](me, 0u64)
+
+### Returns the last element of the array.
+### :returns: The element at index `N - 1`.
+### :absent: The array has zero elements (`N == 0`).
+@readonly
+routine Array[T, N].last!() -> ?T
+  if N == 0u64
+    absent
+  return element_at[Array[T, N], T](me, N - 1u64)
+
+### Returns true if any element equals `value`.
+### Scans from index 0 to N - 1 using the element type's equality operator.
+### :param value: The value to search for.
+### :returns: `true` if `value` is found; `false` otherwise.
+@readonly
+routine Array[T, N].$contains(value: T) -> Bool
+needs T obeys Equatable
+  for i in 0u64 til N
+    if me[i] == value
+      return true
+  return false
+
+### Returns the index of the first element equal to `value`.
+### :param value: The value to search for.
+### :returns: The zero-based index of the first match.
+### :absent: No element equals `value`.
+@readonly
+routine Array[T, N].index_of!(value: T) -> U64
+needs T obeys Equatable
+  for i in 0u64 til N
+    if me[i] == value
+      return i
+  absent
+
+# ============================================================================
+# Iteration Support
+# ============================================================================
+
+### Walks the elements of a fixed-size `Array[T, N]` from index 0 to N - 1.
+### Because `Array` is a record type, the iterator holds its own copy of the array data.
+### :typeparam T: The element type yielded by the iterator.
+### :typeparam N: The compile-time element count.
+entity ArrayIterator[T, N] obeys Iterator[T]
+  ### Stores the array being iterated.
+  list: Array[T, N]
+  ### Stores the next logical index to read.
+  index: U64
+
+@readonly
+routine Array[T, N].$iter() -> ?ArrayIterator[T, N]
+  return ArrayIterator[T, N](list: me, index: 0u64)
+
+### Returns the next element from the iterator in ascending index order.
+### :returns: The element at the current index.
+### :absent: All `N` elements have been yielded.
+routine ArrayIterator[T, N].$next!() -> ?T
+  if me.index >= U64(N)
+    absent
+  var value = me.list[me.index]
+  me.index = me.index + 1u64
+  return value
+
+# ============================================================================
+# Display
+# ============================================================================
+
+routine Array[T, N].$represent() -> ?Text
+  var result = "Array(["
+  for i in 0u64 til N
+    if i > 0u64
+      result = result + ", "
+    result = result + me[i].$represent()
+  result = result + "])"
+  return result
+
+routine Array[T, N].$diagnose() -> ?Text
+  var result = me.full_type_name() + "(["
+  for i in 0u64 til N
+    if i > 0u64
+      result = result + ", "
+    result = result + me[i].$represent()
+  result = result + "])"
+  return result
+
+### Returns true when both arrays contain equal elements in the same order.
+### :param you: The other array to compare against.
+### :returns: `true` if every corresponding pair of elements is equal.
+### :note: Requires `T` to obey `Equatable`. Arrays of non-equatable element types
+###        (e.g. a `U` that is not equatable) do not get an `$eq`
+###        operator — `==` on such arrays is a build error.
+@readonly
+routine Array[T, N].$eq(you: Array[T, N]) -> Bool
+needs T obeys Equatable
+  for i in 0u64 til N
+    if me[i] != you[i]
+      return false
+  return true
+
+### Lexicographic comparison of two arrays of equal length.
+### Compares element by element from index 0 using `T.$cmp`; returns at the
+### first non-equal pair, or `SAME` when every pair is equal.
+### :param you: The other array to compare against.
+### :returns: `ME_SMALL`, `SAME`, or `ME_LARGE`.
+### :note: Requires `T` to obey `Comparable`.
+@readonly
+routine Array[T, N].$cmp(you: Array[T, N]) -> ComparisonSign
+needs T obeys Comparable
+  for i in 0u64 til N
+    var sign = me[i].$cmp(you[i])
+    if sign isnot SAME
+      return sign
+  return SAME

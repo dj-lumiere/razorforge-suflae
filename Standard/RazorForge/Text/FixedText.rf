@@ -1,5 +1,0 @@
-module Text
-
-resident FixedText[N]
-needs N is UAddr
-  secret letters: FixedList[Letter, N]

@@ -1,0 +1,38 @@
+module Tests/Stdlib/RuntimeErrorArithmeticApi
+import IO/Console
+
+# Runtime arithmetic errors caught via the stdlib `try_*` family
+# (`try_add`/`try_sub`/`try_mul`/`try_pow` etc.) and `try_*` on division/abs.
+# These are the safe (`try_`) variants of the failable operator methods
+# (`$add!`/`$sub!`/`$mul!`/`$floordiv!`/`$mod!`/`$pow!`/`$neg!`/`abs!`), so they
+# are called in method form on the receiver.
+routine start()
+  # --- Checked overflow ---
+  show(f"try_add S64_MAX + 1: {S64_MAX.try_add(you: 1_s64)}")
+  show(f"try_add S64_MAX + 0: {S64_MAX.try_add(you: 0_s64)}")
+  show(f"try_sub S64_MIN - 1: {S64_MIN.try_sub(you: 1_s64)}")
+  show(f"try_mul S64_MAX * 2: {S64_MAX.try_mul(you: 2_s64)}")
+  show(f"try_mul S64_MAX * 1: {S64_MAX.try_mul(you: 1_s64)}")
+  show(f"try_pow 2 ** 62: {(2_s64).try_pow(exp: 62_s64)}")
+  show(f"try_pow 2 ** 63: {(2_s64).try_pow(exp: 63_s64)}")
+
+  # --- U64 unsigned underflow ---
+  show(f"try_sub 0u64 - 1: {(0_u64).try_sub(you: 1_u64)}")
+  show(f"try_sub 5u64 - 3: {(5_u64).try_sub(you: 3_u64)}")
+
+  # --- Division: by zero throws ---
+  show(f"try_div 10 / 0: {(10_s64).try_floordiv(you: 0_s64)}")
+  show(f"try_div 10 / 2: {(10_s64).try_floordiv(you: 2_s64)}")
+  show(f"try_mod 10 % 0: {(10_s64).try_mod(you: 0_s64)}")
+  show(f"try_mod 10 % 3: {(10_s64).try_mod(you: 3_s64)}")
+
+  # --- Unary -: S64_MIN negation overflows ---
+  show(f"try_neg S64_MIN: {S64_MIN.try_neg()}")
+  show(f"try_neg 5: {(5_s64).try_neg()}")
+
+  # --- abs on S64_MIN ---
+  show(f"try_abs S64_MIN: {S64_MIN.try_abs()}")
+  show(f"try_abs -5: {(-5_s64).try_abs()}")
+
+  show("DONE")
+  return

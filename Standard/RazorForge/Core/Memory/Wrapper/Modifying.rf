@@ -1,0 +1,80 @@
+module Core
+
+import BuilderService
+
+### Represents temporary unmanaged mutable access to an entity.
+### `Modifying[T]` is the non-storable access type used for explicit low-level manipulation outside the borrow-safe wrappers.
+### :typeparam T: The entity type being accessed.
+### :see: {Viewing[T]}, {Hijacked[T]}, {Access-Types}
+@llvm("ptr")
+record Modifying[T] obeys Controlling[T]
+  pass
+
+### Produces a temporary unmanaged mutable view of `me`.
+### :returns: The resulting `Modifying[T]` value.
+### :note: Entity-only. Records are value-typed — `me` would be a by-value copy, so mutating
+###        through the returned `Modifying[T]` would write to a stack temporary rather than the
+###        caller's storage. Use `entity` for borrowed mutation.
+routine T.modify() -> Modifying[T]
+needs T is EntityType
+  danger!
+    return Modifying[T](me.hijack())
+
+# NOTE: No creators, no manual methods - all operations handled by compiler
+# The address member variable is managed internally by the `.modify()` implementation
+# Users should NEVER create Modifying[T] values directly
+
+# ============================================================================
+# Resource management — enables `using entity.modify() as h`
+# ============================================================================
+
+### Called on entry to a `using` block; no-op for a modify (access is already established).
+routine Modifying[T].$enter()
+  return
+
+### Called on exit from a `using` block; no-op for a modify (the compiler handles scope cleanup).
+routine Modifying[T].$exit()
+  return
+
+# ============================================================================
+# Marker-protocol coercion ($refer/$control) — yields the inner entity as ?T
+# ============================================================================
+
+### Yields the inner entity as an in-flight `?T` reference for read-only access.
+### Inserted implicitly at call sites whose parameter is `Referring[T]`.
+### :returns: The inner entity as `?T`.
+@[readonly, inline]
+routine Modifying[T].$refer() -> ?T
+  danger!
+    return Hijacked[T](me).as_entity()
+
+### Yields the inner entity as an in-flight `?T` reference for read/write access.
+### Inserted implicitly at call sites whose parameter is `Controlling[T]`.
+### :returns: The inner entity as `?T`.
+@inline
+routine Modifying[T].$control() -> ?T
+  danger!
+    return Hijacked[T](me).as_entity()
+
+# ============================================================================
+# Display (transparent - delegates to inner value)
+# ============================================================================
+
+### Returns the display form of the modifying entity.
+### :returns: The resulting `Text` value.
+@readonly
+routine Modifying[T].$represent() -> ?Text
+  danger!
+    var hijacked = Hijacked[T](me)
+    return hijacked.as_entity().$represent()
+
+### Returns the diagnostic form of the modifying entity.
+### :returns: The resulting `Text` value.
+@readonly
+routine Modifying[T].$diagnose() -> ?Text
+  danger!
+    var hijacked = Hijacked[T](me)
+    return me.type_name() + "(" + hijacked.as_entity().$diagnose() + ")"
+
+dangerous routine Modifying[T].$destroy()
+  return

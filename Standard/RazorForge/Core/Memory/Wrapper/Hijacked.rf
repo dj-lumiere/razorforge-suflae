@@ -1,29 +1,229 @@
-# RazorForge Hijacked[T] - Scoped exclusive access token
-#
-# Hijacked[T] is created ONLY by the `hijacking` syntax, NOT by creators.
-# It provides exclusive modifiable access to entities/residents within a scoped block.
-#
-# Syntax:
-#   hijacking <entity_or_resident> as h
-#       h.member variable = 42  # Exclusive write access
-#   } # h destroyed here, cannot escape scope
-#
-# Properties:
-# - Created by compiler via `hijacking` syntax
-# - Scope-bound: cannot be stored, returned, or escape
-# - Exclusive: cannot be copied (only one handle at a time)
-# - Temporary: source is invalidated during scope, restored on exit
-# - Single-threaded: for multi-threaded use, see Seized[T]
-#
-# This type is a marker for the type system - the compiler handles all operations.
 module Core
 
-record Hijacked[T]
-  secret ptr: Snatched[T]
+import BuilderService
 
-routine T.hijack!() -> Hijacked[T]
-  return Hijacked[T](T.snatch())
+### Represents an unmanaged typed raw pointer.
+### `Hijacked[T]` is the low-level pointer wrapper for memory that is outside RazorForge's ownership and borrow rules.
+### Use it for FFI, allocators, explicit memory layout work, and runtime plumbing where safety is intentionally bypassed.
+### :typeparam T: The pointee type.
+### :see: {Address}, {Modifying[T]}, {Viewing[T]}, {Memory-Types}
+@llvm("ptr")
+record Hijacked[T] obeys Assignable
+  pass
 
-# NOTE: No creators, no methods - all operations handled by compiler
-# The address member variable is managed internally by the hijacking syntax implementation
-# Users should NEVER create Hijacked[T] values directly
+### Returns the raw address carried by this pointer.
+### :returns: The raw address stored in this pointer.
+@readonly
+dangerous routine Hijacked[T].get_address() -> Address
+  return pointer_to_int[T, Address](me)
+
+### Returns a bitwise duplicate of this raw pointer.
+### `Hijacked[T]` is `@llvm("ptr")` so it does not auto-derive `Assignable`; this
+### trivial opt-in body lets `=` and `with` work, with aliasing left to the user
+### just like every other operation on this type.
+### :returns: A bitwise duplicate of this pointer.
+@readonly
+routine Hijacked[T].$copy() -> Hijacked[T]
+  return me
+
+### Returns the raw address of a bare value when it is reinterpreted as a pointer slot.
+### :returns: The address of this value viewed as a pointer-sized slot.
+### :note: For records, the receiver must be an lvalue (a named binding or field path) — the
+###        compiler intercepts the call at the call site and emits the address of the caller's
+###        storage directly. Calling on an rvalue (`make_rec().get_address()`) is a build
+###        error. For entities, the receiver value (already a ptr) is reinterpreted.
+@readonly
+dangerous routine T.get_address() -> Address
+  return pointer_to_int[T, Address](reinterpret_bits[T, Hijacked[T]](me))
+
+### Reinterprets a raw address as `Hijacked[T]`.
+### :param from: The address to wrap.
+### :returns: A `Hijacked[T]` pointer wrapping the given raw address.
+dangerous routine Hijacked[T].$create(from: Address) -> Hijacked[T]
+  return int_to_pointer[Address, T](from)
+
+### Produces an unmanaged pointer alias of `me`.
+### :returns: An unmanaged pointer alias of this value.
+### :note: For entities and `@llvm("ptr")` records (`Retained[T]`, `Tracked[T]`, `CPtr`, etc.)
+###        the receiver's value is already a pointer and the body works as written. For
+###        struct-shaped records, `me.get_address()` is intercepted at the call site to use
+###        the caller's lvalue storage (see `T.get_address()`); the receiver must therefore
+###        be a named lvalue (local/parameter or field chain), and `hijack()` produces a
+###        pointer to the caller's storage.
+@readonly
+dangerous routine T.hijack() -> Hijacked[T]
+  return Hijacked[T](me.get_address())
+
+### Reads the value stored at this address. This is `*ptr` — a raw `load`, no
+### `$copy`, no refcount bump.
+###
+### Mental model: the pointer addresses a slot that holds a `T`; `extract` reads
+### that slot.
+###
+### Refcount caveat: if `T` is a refcounted record (`Bytes`, `Text`, ...) the
+### returned local still runs `$destroy` on scope exit and will decrement the
+### shared control block. The load is a non-owning view that pretends to be
+### owned — keep its lifetime shorter than the real owner, or store the record's
+### underlying primitive fields directly instead of round-tripping through
+### `Hijacked[Record]`.
+### :returns: The value at this address (bitwise copy).
+dangerous routine Hijacked[T].extract() -> ?T
+  return load[T](me)
+
+### Treats this pointer's bit pattern as if it already *were* a `T`. No load,
+### no dereference — `Hijacked[T]` and the entity reference share a layout
+### (both `ptr`), so this is a pure reinterpretation.
+###
+### Mental model: the pointer doesn't *address* a `T`, the pointer *is* a `T`.
+### Use when you already hold the entity's pointer and just want it typed as
+### the entity (the typical case for `@llvm("ptr")` records' plumbing).
+### Contrast with `extract`, which reads the `T` stored *at* the address.
+### :returns: This pointer reinterpreted as `T`.
+dangerous routine Hijacked[T].as_entity() -> ?T
+needs T is EntityType
+  return reinterpret_bits[Hijacked[T], T](me)
+
+### Stores `value` at the address referenced by this pointer.
+### :param value: The value to write.
+dangerous routine Hijacked[T].inject(value: T)
+  store[T](me, value)
+  return
+
+### Loads the value at this pointer reinterpreted as type `U` without type-system checks.
+### :returns: The value stored at this address interpreted as `U`.
+dangerous routine Hijacked[T].extract_as[U]() -> ?U
+  var as_u = me.recast_as[U]()
+  return as_u.extract()
+
+### Writes `value` at this pointer reinterpreted as type `U` without type-system checks.
+### :param value: The value to write at this pointer reinterpreted as `Hijacked[U]`.
+dangerous routine Hijacked[T].inject_as[U](value: U)
+  var as_u = me.recast_as[U]()
+  as_u.inject(value: value)
+  return
+
+### Returns this pointer reinterpreted as `Hijacked[U]`, without loading or storing.
+### :returns: This pointer with its type parameter reinterpreted as `U`.
+dangerous routine Hijacked[T].recast_as[U]() -> Hijacked[U]
+  return reinterpret_bits[Hijacked[T], Hijacked[U]](me)
+
+### Returns the raw address of this pointer.
+### :returns: The raw address stored in this pointer.
+@readonly
+routine Hijacked[T].address() -> Address
+  return pointer_to_int[Hijacked[T], Address](me)
+
+### Steps this pointer forward by {count} elements (element-sized stride, may be negative).
+### :param count: Number of elements to advance.
+### :returns: This pointer advanced by `count` elements of type `T`.
+dangerous routine Hijacked[T].stride(count: S64) -> Hijacked[T]
+  return element_pointer[T](ptr: me, count: count)
+
+### Returns the value at byte offset {offset} from this pointer without moving the pointer.
+### :param offset: The byte offset.
+### :returns: The value stored `offset` bytes from this pointer.
+dangerous routine Hijacked[T].extract_at_offset(offset: ByteSize) -> ?T
+  return me.offset(bytes: offset).extract()
+
+### Writes {value} at byte offset {at} from this pointer without moving the pointer.
+### :param at: The byte offset.
+### :param value: The value to write.
+dangerous routine Hijacked[T].inject_at_offset(at: ByteSize, value: T)
+  me.offset(bytes: at).inject(value: value)
+  return
+
+### Deallocates the memory at this pointer's address.
+dangerous routine Hijacked[T].invalidate()
+  rf_invalidate(me.address())
+  return
+
+### Zeroes out the pointed-to memory without deallocating it.
+dangerous routine Hijacked[T].detonate()
+  rf_set_bytes_at(dest: me.address(), value: 0_u8, size: T.data_size())
+  return
+
+### Returns a null `Hijacked[T]` pointer (address zero).
+### :returns: A null pointer of type `Hijacked[T]`.
+routine hijacked_none[T]() -> Hijacked[T]
+  return Hijacked[T](0_addr)
+
+### Constructs a {Hijacked[T]} from a raw address. Use this instead of
+### `Hijacked[T](addr)` directly when T is a parent-scope generic param,
+### to work around monomorphization not substituting nested CreatorExpression
+### type refs.
+### :param addr: The raw address to wrap.
+### :returns: A `Hijacked[T]` wrapping the given raw address.
+dangerous routine hijacked_from[T](addr: Address) -> Hijacked[T]
+  return Hijacked[T](addr)
+
+### Returns `true` if this pointer is null (address zero).
+### :returns: `true` if this pointer holds address zero.
+@readonly
+routine Hijacked[T].is_none() -> Bool
+  return int_eq[Hijacked[T]](me, hijacked_none[T]())
+
+### Returns this pointer advanced by `bytes` bytes.
+### :param bytes: The byte distance to advance.
+### :returns: This pointer shifted forward by the given number of bytes.
+routine Hijacked[T].offset(bytes: ByteSize) -> Hijacked[T]
+  var addr = pointer_to_int[T, Address](me)
+  return Hijacked[T](addr + bytes)
+
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: `true` if both pointers reference the same address.
+routine Hijacked[T].$eq(you: Hijacked[T]) -> Bool
+  return int_eq[Hijacked[T]](me, you)
+
+### Compares this pointer against another by address.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
+routine Hijacked[T].$cmp(you: Hijacked[T]) -> ComparisonSign
+  danger!
+    return me.address().$cmp(you: you.address())
+
+### Returns an xxHash64 hash of this pointer's address.
+### :returns: An xxHash64 hash of this pointer's address.
+routine Hijacked[T].$fast_hash() -> U64
+  danger!
+    return __hash_leaf(v: U64(me.address()))
+
+### Returns a SipHash-2-4 keyed hash of this pointer's address.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A SipHash-2-4 keyed hash of this pointer's address.
+routine Hijacked[T].$hash(k0: U64, k1: U64) -> U64
+  danger!
+    return __secure_hash_u64(v: U64(me.address()), k0: k0, k1: k1)
+
+# NOTE: All operations on Hijacked[T] are inherently unsafe
+# Undefined behavior can occur if:
+# - Pointer is dangling (object was deallocated)
+# - Pointer is misaligned
+# - Type U in extract_as[U]() doesn't match actual data
+# - Writing to read-only memory
+# - Data races in multi-threaded code
+#
+# Use ONLY when:
+# - Interfacing with C/C++ FFI
+# - Implementing low-level memory allocators
+# - Performance-critical code with manual safety verification
+# - You absolutely know what you're doing
+
+# ============================================================================
+# Display (opaque - address only, no inner value access)
+# ============================================================================
+
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
+@readonly
+routine Hijacked[T].$represent() -> ?Text
+  danger!
+    return me.type_name()
+
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
+@readonly
+routine Hijacked[T].$diagnose() -> ?Text
+  danger!
+    return f"{me.type_name()}(addr: {me.address()}, none: {me.is_none()})"

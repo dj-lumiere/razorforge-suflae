@@ -1,6 +1,390 @@
-# RazorForge Complex - Arbitrary precision complex number type
 module Numerics
 
-entity Complex obeys Numeric, Equatable
+### Represents an arbitrary-precision complex number with decimal real and imaginary components.
+### `Complex` is built on top of {Decimal}, so both components retain decimal precision semantics.
+### Use it for analysis routines that need complex arithmetic without collapsing to machine precision.
+### :see: {Decimal}, {Numeric-Types}
+record Complex obeys Numeric, Equatable, Hashable, FastHashable, Assignable
+  ### Stores the real component.
   secret real: Decimal
+  ### Stores the imaginary component.
   secret imag: Decimal
+
+# Complex constants
+preset COMPLEX_ZERO: Complex = Complex(real: Decimal.zero(), imag: Decimal.zero())
+preset COMPLEX_ONE: Complex = Complex(real: Decimal.one(), imag: Decimal.zero())
+preset COMPLEX_I: Complex = Complex(real: Decimal.zero(), imag: Decimal.one())
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+### Creates the complex zero value.
+### :returns: The resulting `Complex` value.
+routine Complex.$create() -> ?Complex
+  return COMPLEX_ZERO
+
+### Creates a purely real complex value.
+### The imaginary component is initialized to zero.
+### :param real: The real component.
+### :returns: The resulting `Complex` value.
+routine Complex.$create(real: Decimal) -> ?Complex
+  return Complex(real: real, imag: Decimal.zero())
+
+### Creates a complex value from explicit real and imaginary components.
+### :param real: The real component.
+### :param imag: The imaginary component.
+### :returns: The resulting `Complex` value.
+routine Complex.$create(real: Decimal, imag: Decimal) -> ?Complex
+  return Complex(real: real, imag: imag)
+
+### Creates a complex value from polar coordinates.
+### `r` is the radius and `theta` is the angle in radians.
+### :param r: The radius value.
+### :param theta: The angle in radians.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
+@readonly
+common routine Complex.from_polar(r: Decimal, theta: Decimal, precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
+  return Complex(real: r * theta.cos(precision), imag: r * theta.sin(precision))
+
+# ============================================================================
+# Arithmetic Operations
+# ============================================================================
+
+### Adds `you` to this complex value component-wise.
+### :param you: The value to add.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.$add(you: Complex) -> ?Complex
+  return Complex(real: me.real + you.real, imag: me.imag + you.imag)
+
+### Subtracts `you` from this complex value component-wise.
+### :param you: The value to subtract.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.$sub(you: Complex) -> ?Complex
+  return Complex(real: me.real - you.real, imag: me.imag - you.imag)
+
+### Multiplies this value by `you` using the standard complex product rule.
+### :param you: The value to multiply by.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.$mul(you: Complex) -> ?Complex
+  return Complex(real: me.real * you.real - me.imag * you.imag, imag: me.real * you.imag + me.imag * you.real)
+
+### Divides this value by `you`.
+### :param you: The non-zero divisor.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.$truediv(you: Complex) -> ?Complex
+  var d = you.real * you.real + you.imag * you.imag
+  return Complex(
+    real: (me.real * you.real + me.imag * you.imag) / d,
+    imag: (me.imag * you.real - me.real * you.imag) / d
+  )
+
+### Returns the additive inverse of this complex value.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.$neg() -> ?Complex
+  return Complex(real: -me.real, imag: -me.imag)
+
+### Returns `true` when both the real and imaginary components are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Complex.$eq(you: Complex) -> Bool
+  return me.real == you.real and me.imag == you.imag
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns an xxHash64-based hash of this value.
+### Hashes the canonical fixed-precision representation of both components, so
+### equal complex values hash equally.
+### :returns: The 64-bit hash.
+@readonly
+routine Complex.$fast_hash() -> U64
+  return me.represent_with_places(decimal_places: 10_s32).$fast_hash()
+
+### Returns a SipHash-2-4 keyed hash of this value.
+### Hashes the canonical fixed-precision representation under the supplied key pair.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: The 64-bit keyed hash.
+@readonly
+routine Complex.$hash(k0: U64, k1: U64) -> U64
+  return me.represent_with_places(decimal_places: 10_s32).$hash(k0: k0, k1: k1)
+
+# ============================================================================
+# Components and Properties
+# ============================================================================
+
+### Returns the real component.
+### :returns: The resulting `Decimal` value.
+@readonly
+routine Complex.real_part() -> ?Decimal
+  return me.real
+
+### Returns the imaginary component.
+### :returns: The resulting `Decimal` value.
+@readonly
+routine Complex.imag_part() -> ?Decimal
+  return me.imag
+
+### Returns the magnitude of this value.
+### This is equivalent to `sqrt(real^2 + imag^2)`.
+### :returns: The resulting `Decimal` value.
+@readonly
+routine Complex.abs() -> ?Decimal
+  return (me.real * me.real + me.imag * me.imag).sqrt()
+
+### Returns the squared magnitude of this value.
+### Use `norm` when the caller needs relative magnitude without paying for a
+### square root.
+### :returns: The resulting `Decimal` value.
+@readonly
+routine Complex.norm() -> ?Decimal
+  return me.real * me.real + me.imag * me.imag
+
+### Returns the complex conjugate of this value.
+### The real component is preserved and the imaginary component changes sign.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.conjugate() -> ?Complex
+  return Complex(real: me.real, imag: -me.imag)
+
+### Returns the phase angle of this complex value in radians.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Decimal` value.
+@readonly
+routine Complex.arg(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Decimal
+  return me.imag.atan2(me.real, precision)
+
+### Computes the principal complex square root.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.sqrt(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
+  var r = me.abs()
+  if r.is_zero()
+    return COMPLEX_ZERO
+
+  var two = Decimal(2_s64)
+  var rp = (r + me.real).divide(other: two, precision: precision).sqrt(precision)
+  var ip = (r - me.real).divide(other: two, precision: precision).sqrt(precision)
+  if me.imag.is_negative()
+    ip = -ip
+  return Complex(real: rp, imag: ip)
+
+### Computes the complex exponential `e^z`.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.exp(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
+  var ea = me.real.exp(precision)
+  return Complex(real: ea * me.imag.cos(precision), imag: ea * me.imag.sin(precision))
+
+### Computes the principal natural logarithm of this value.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.log(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
+  return Complex(real: me.abs().log(precision), imag: me.arg(precision))
+
+### Raises this value to a complex exponent.
+### :param exp: The exponent value.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.pow(exp: Complex, precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
+  return (exp * me.log(precision)).exp(precision)
+
+### Computes the complex sine of this value.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.sin(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
+  return Complex(
+    real: me.real.sin(precision) * me.imag.cosh(precision),
+    imag: me.real.cos(precision) * me.imag.sinh(precision)
+  )
+
+### Computes the complex cosine of this value.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.cos(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
+  return Complex(
+    real: me.real.cos(precision) * me.imag.cosh(precision),
+    imag: -(me.real.sin(precision) * me.imag.sinh(precision))
+  )
+
+### Computes the complex tangent of this value.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.tan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
+  var a2 = me.real + me.real
+  var b2 = me.imag + me.imag
+  var d = a2.cos(precision) + b2.cosh(precision)
+  return Complex(real: a2.sin(precision).divide(other: d, precision: precision), imag: b2.sinh(precision).divide(other: d, precision: precision))
+
+### Computes the principal inverse sine of this value.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.asin(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
+  var iz = Complex(real: -me.imag, imag: me.real)
+  var w = iz + (COMPLEX_ONE - me * me).sqrt(precision)
+  var v = w.log(precision)
+  return Complex(real: v.imag_part(), imag: -v.real_part())
+
+### Computes the principal inverse cosine of this value.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.acos(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
+  var s = (COMPLEX_ONE - me * me).sqrt(precision)
+  var w = me + Complex(real: -s.imag_part(), imag: s.real_part())
+  var v = w.log(precision)
+  return Complex(real: v.imag_part(), imag: -v.real_part())
+
+### Computes the principal inverse tangent of this value.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.atan(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
+  var one = Decimal.one()
+  var two = Decimal(2_s64)
+  var num = Complex(real: me.real, imag: me.imag + one)
+  var den = Complex(real: -me.real, imag: one - me.imag)
+  var v = (num / den).log(precision)
+  return Complex(real: -v.imag_part().divide(other: two, precision: precision), imag: v.real_part().divide(other: two, precision: precision))
+
+### Computes the complex hyperbolic sine of this value.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.sinh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
+  return Complex(
+    real: me.real.sinh(precision) * me.imag.cos(precision),
+    imag: me.real.cosh(precision) * me.imag.sin(precision)
+  )
+
+### Computes the complex hyperbolic cosine of this value.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.cosh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
+  return Complex(
+    real: me.real.cosh(precision) * me.imag.cos(precision),
+    imag: me.real.sinh(precision) * me.imag.sin(precision)
+  )
+
+### Computes the complex hyperbolic tangent of this value.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.tanh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
+  var a2 = me.real + me.real
+  var b2 = me.imag + me.imag
+  var d = a2.cosh(precision) + b2.cos(precision)
+  return Complex(real: a2.sinh(precision).divide(other: d, precision: precision), imag: b2.sin(precision).divide(other: d, precision: precision))
+
+### Computes the principal inverse hyperbolic sine of this value.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.asinh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
+  return (me + (me * me + COMPLEX_ONE).sqrt(precision)).log(precision)
+
+### Computes the principal inverse hyperbolic cosine of this value.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.acosh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
+  return (me + (me * me - COMPLEX_ONE).sqrt(precision)).log(precision)
+
+### Computes the principal inverse hyperbolic tangent of this value.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.atanh(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
+  var two = Decimal(2_s64)
+  var v = ((COMPLEX_ONE + me) / (COMPLEX_ONE - me)).log(precision)
+  return Complex(real: v.real_part().divide(other: two, precision: precision), imag: v.imag_part().divide(other: two, precision: precision))
+
+### Computes the principal base-10 logarithm of this value.
+### :param precision: The decimal precision to use.
+### :returns: The resulting `Complex` value.
+@readonly
+routine Complex.log10(precision: S32 = DECIMAL_DEFAULT_PRECISION) -> ?Complex
+  var v = me.log(precision)
+  var ln10 = Decimal(10_s64).log(precision)
+  return Complex(real: v.real_part().divide(other: ln10, precision: precision), imag: v.imag_part().divide(other: ln10, precision: precision))
+
+# ============================================================================
+# Query Routines
+# ============================================================================
+
+### Returns `true` when both components are zero.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Complex.is_zero() -> Bool
+  return me.real.is_zero() and me.imag.is_zero()
+
+### Returns `true` when the imaginary component is zero.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Complex.is_real() -> Bool
+  return me.imag.is_zero()
+
+### Returns `true` when the real component is zero.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Complex.is_imaginary() -> Bool
+  return me.real.is_zero()
+
+# ============================================================================
+# Text Representation
+# ============================================================================
+
+### Formats this value compactly as `a+bi` / `a-bi`, with each component in its canonical decimal
+### form (full precision, no trailing zeros — e.g. `1+1i`, not `1.0000000000 + 1.0000000000i`).
+### Standard `$represent` shape (no args) for f-string dispatch.
+### :returns: The resulting `Text` value.
+@readonly
+routine Complex.$represent() -> ?Text
+  var real_text = me.real.$represent()
+  var imag_abs = me.imag.abs().$represent()
+  if me.imag.is_negative()
+    return real_text + "-" + imag_abs + "i"
+  return real_text + "+" + imag_abs + "i"
+
+### Formats this value as `a +/- bi` with the requested precision.
+### :param decimal_places: The number of decimal places to render.
+### :returns: The resulting `Text` value.
+@readonly
+routine Complex.represent_with_places(decimal_places: S32) -> ?Text
+  var real_text = me.real.represent_with_places(decimal_places: decimal_places)
+  var imag_abs = me.imag.abs().represent_with_places(decimal_places: decimal_places)
+  if me.imag.is_negative()
+    return real_text + " - " + imag_abs + "i"
+  return real_text + " + " + imag_abs + "i"
+
+### Returns a diagnostic string that includes the type name wrapper.
+### Standard `$diagnose` shape (no args) for f-string dispatch.
+### :returns: The resulting `Text` value.
+@readonly
+routine Complex.$diagnose() -> ?Text
+  return me.diagnose_with_places(decimal_places: 10_s32)
+
+### Returns a diagnostic string with the requested precision.
+### :param decimal_places: The number of decimal places to render.
+### :returns: The resulting `Text` value.
+@readonly
+routine Complex.diagnose_with_places(decimal_places: S32) -> ?Text
+  return "Complex(" + me.represent_with_places(decimal_places: decimal_places) + ")"

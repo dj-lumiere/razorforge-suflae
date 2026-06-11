@@ -1,0 +1,28 @@
+module Tests/Stdlib/SortedDictApi
+import IO/Console
+import Collections
+
+# SortedDict iterates in key-sorted order -> deterministic.
+# Text is an entity, so the key type is Text.
+routine start()
+  var sd = SortedDict[Text, S64]()
+  discard sd.add(key: "charlie", value: 3)
+  discard sd.add(key: "alpha", value: 1)
+  discard sd.add(key: "bravo", value: 2)
+
+  show(f"size: {sd.count()}")
+  show(f"sd['alpha']: {sd["alpha"]}")
+  show(f"sd['bravo']: {sd["bravo"]}")
+  show(f"sd['charlie']: {sd["charlie"]}")
+
+  # iteration is sorted by key
+  for k in sd
+    show(f"  key: {k}")
+
+  # Rank access (O(log n) — named to signal cost; returns DictEntry[K, V])
+  show(f"sd.get_by_rank(0).key: {sd.get_by_rank!(i: 0_u64).key}")
+  show(f"sd.get_by_rank(1).key: {sd.get_by_rank!(i: 1_u64).key}")
+  show(f"sd.get_by_rank(2).key: {sd.get_by_rank!(i: 2_u64).key}")
+
+  show("DONE")
+  return

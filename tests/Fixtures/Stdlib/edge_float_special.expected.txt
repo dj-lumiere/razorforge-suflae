@@ -1,0 +1,18 @@
+nan: -nan(ind)
+inf: inf
+-inf: -inf
++0: 0
+-0: -0
+nan + 1: -nan(ind)
+nan == nan: false
+nan != nan: true
+nan.is_nan(): true
+1.0.is_nan(): false
+inf + inf: inf
+inf - inf: true
+1.0 / 0.0: inf
+-1.0 / 0.0: -inf
++0 == -0: true
+1.0 / +0: inf
+1.0 / -0: -inf
+DONE

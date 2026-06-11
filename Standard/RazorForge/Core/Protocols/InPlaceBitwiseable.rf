@@ -1,0 +1,21 @@
+module Core
+
+### Represents the protocol for in-place bitwise mutation.
+### `InPlaceBitwiseable` is for mutable values whose bitwise combination
+### operators update the current value directly.
+protocol InPlaceBitwiseable
+  ### Applies bitwise AND with `you` in place.
+  ### :param you: The other value to combine with.
+  ### :note: The right-hand operand should remain unchanged.
+  @writable
+  routine Me.$ibitand(you: Me)
+
+  ### Applies bitwise OR with `you` in place.
+  ### :param you: The other value to combine with.
+  @writable
+  routine Me.$ibitor(you: Me)
+
+  ### Applies bitwise XOR with `you` in place.
+  ### :param you: The other value to combine with.
+  @writable
+  routine Me.$ibitxor(you: Me)

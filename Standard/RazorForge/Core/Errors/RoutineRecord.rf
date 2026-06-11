@@ -1,14 +1,46 @@
 module Core
 
-# RoutineRecord - Runtime routine record for error tracking
-#
-# Each record represents a single routine call in the call history.
-# All member variables are U32 IDs that reference builder-generated lookup tables.
-
+### Represents one frame in a captured runtime routine trace.
+### The stored ids point into builder-generated lookup tables used for stack reporting.
+### This record is intentionally compact because traces are kept inline in runtime error state.
 record RoutineRecord
+  ### Stores the source file identifier.
   file_id: U32
+  ### Stores the routine identifier.
   routine_id: U32
-  namespace_id: U32
-  type_id: U32
+  ### Stores the module identifier.
+  module_id: U32
+  ### Stores the owning type identifier when applicable.
+  type_id: U64
+  ### Stores the one-based source line number.
   line_no: U32
+  ### Stores the one-based source column number.
   column_no: U32
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns an xxHash64-based hash of this routine record.
+### :returns: A `U64` hash combining all identifier fields.
+routine RoutineRecord.$fast_hash() -> U64
+  var acc = __hash_round(acc: 0u64, h: me.file_id.$fast_hash())
+  acc = __hash_round(acc: acc, h: me.routine_id.$fast_hash())
+  acc = __hash_round(acc: acc, h: me.module_id.$fast_hash())
+  acc = __hash_round(acc: acc, h: me.type_id.$fast_hash())
+  acc = __hash_round(acc: acc, h: me.line_no.$fast_hash())
+  acc = __hash_round(acc: acc, h: me.column_no.$fast_hash())
+  return __hash_finalize(h: acc)
+
+### Returns a SipHash-2-4 keyed hash of this routine record.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
+routine RoutineRecord.$hash(k0: U64, k1: U64) -> U64
+  var acc = __hash_round(acc: 0u64, h: me.file_id.$hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.routine_id.$hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.module_id.$hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.type_id.$hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.line_no.$hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.column_no.$hash(k0: k0, k1: k1))
+  return __hash_finalize(h: acc)

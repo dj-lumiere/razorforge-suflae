@@ -1,6 +1,5 @@
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Diagnostics;
-using Xunit;
+using Compiler.Diagnostics;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
@@ -14,6 +13,9 @@ using static TestHelpers;
 public class EmptyBodyValidationTests
 {
     #region Statement Blocks
+    /// <summary>
+    /// Verifies semantic analysis behavior for routine body with pass without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_RoutineBodyWithPass_NoError()
@@ -24,7 +26,27 @@ public class EmptyBodyValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
+    }
+
+    #endregion
+
+    #region Protocol Body
+
+    /// <summary>
+    /// Verifies that a protocol body with only pass (marker protocol) produces no error.
+    /// </summary>
+    [Fact]
+    public void Analyze_ProtocolWithPass_NoError()
+    {
+        string source = """
+                        protocol Marker
+                          pass
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
     }
@@ -32,17 +54,23 @@ public class EmptyBodyValidationTests
     #endregion
 
     #region Type Bodies
+    /// <summary>
+    /// Verifies semantic analysis behavior for empty record body and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_EmptyRecordBody_ReportsError()
     {
-        // record with no body (no indent after header) — followed by another decl to ensure valid parse
+        // record with no body (no indent after header) -> followed by another decl to ensure valid parse
         string source = "record Empty\nrecord Other\n  pass\n";
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for record with pass without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_RecordWithPass_NoError()
@@ -52,10 +80,13 @@ public class EmptyBodyValidationTests
                           pass
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for empty entity body and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_EmptyEntityBody_ReportsError()
@@ -63,10 +94,13 @@ public class EmptyBodyValidationTests
         // entity with no body (no indent after header)
         string source = "entity Empty\nentity Other\n  pass\n";
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for entity with pass without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_EntityWithPass_NoError()
@@ -76,7 +110,7 @@ public class EmptyBodyValidationTests
                           pass
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyBlockWithoutPass);
     }
@@ -84,6 +118,9 @@ public class EmptyBodyValidationTests
     #endregion
 
     #region Enumerations (always error when empty)
+    /// <summary>
+    /// Verifies semantic analysis behavior for empty choice and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_EmptyChoice_ReportsError()
@@ -91,10 +128,13 @@ public class EmptyBodyValidationTests
         // choice with no cases
         string source = "choice Empty\nchoice Other\n  OK\n";
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyEnumerationBody);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for empty variant and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_EmptyVariant_ReportsError()
@@ -102,10 +142,13 @@ public class EmptyBodyValidationTests
         // variant with no cases
         string source = "variant Empty\nvariant Other\n  SOME\n";
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyEnumerationBody);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for empty flags and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_EmptyFlags_ReportsError()
@@ -113,7 +156,7 @@ public class EmptyBodyValidationTests
         // flags with no members
         string source = "flags Empty\nflags Other\n  READ\n";
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.EmptyEnumerationBody);
     }

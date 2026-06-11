@@ -1,6 +1,9 @@
-using SyntaxTree;
-using Compiler.Lexer;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using Compiler.Diagnostics;
+using Compiler.Tokenizer;
+using SyntaxTree;
 
 namespace Compiler.Parser;
 
@@ -11,18 +14,18 @@ public partial class Parser
 {
     #region Token Management
 
-    private Token CurrentToken => Position < Tokens.Count
-        ? Tokens[index: Position]
-        : Tokens[^1];
+    private Token CurrentToken => _position < _tokens.Count
+        ? _tokens[index: _position]
+        : _tokens[^1];
 
     private Token PeekToken(int offset = 1)
     {
-        return Position + offset < Tokens.Count
-            ? Tokens[index: Position + offset]
-            : Tokens[^1];
+        return _position + offset < _tokens.Count
+            ? _tokens[index: _position + offset]
+            : _tokens[^1];
     }
 
-    private bool IsAtEnd => Position >= Tokens.Count || CurrentToken.Type == TokenType.Eof;
+    private bool IsAtEnd => _position >= _tokens.Count || CurrentToken.Type == TokenType.Eof;
 
     /// <summary>
     /// Advance to the next token and return the current one
@@ -32,7 +35,7 @@ public partial class Parser
         Token token = CurrentToken;
         if (!IsAtEnd)
         {
-            Position++;
+            _position++;
         }
 
         return token;
@@ -65,10 +68,12 @@ public partial class Parser
         }
 
         Token current = CurrentToken;
-        throw new GrammarException(
-            GetExpectedTokenCode(type: type),
-            $"{errorMessage}. Expected {type}, got {current.Type}",
-            fileName, current.Line, current.Column, _language);
+        throw new GrammarException(code: GetExpectedTokenCode(type: type),
+            message: $"{errorMessage}. Expected {type}, got {current.Type}",
+            fileName: FileName,
+            line: current.Line,
+            column: current.Column,
+            language: _language);
     }
 
     /// <summary>
@@ -91,8 +96,7 @@ public partial class Parser
             TokenType.Identifier => GrammarDiagnosticCode.ExpectedIdentifier,
             TokenType.LeftParen => GrammarDiagnosticCode.ExpectedLeftParen,
             TokenType.As => GrammarDiagnosticCode.ExpectedAs,
-            TokenType.Waitfor => GrammarDiagnosticCode.ExpectedWaitforAfterDependencies,
-            _ => GrammarDiagnosticCode.UnexpectedToken
+_ => GrammarDiagnosticCode.UnexpectedToken
         };
     }
 
@@ -136,18 +140,21 @@ public partial class Parser
     private bool SkipNewlinesIfFollowedBy(TokenType type)
     {
         int offset = 0;
-        while (PeekToken(offset: offset).Type == TokenType.Newline)
+        while (PeekToken(offset: offset)
+                  .Type == TokenType.Newline)
         {
             offset++;
         }
 
-        if (PeekToken(offset: offset).Type != type)
+        if (PeekToken(offset: offset)
+               .Type != type)
         {
             return true; // Don't skip, but let caller check Match
         }
 
         // Actually consume the newlines
-        while (Match(type: TokenType.Newline)) { }
+        while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
+
         return true;
     }
 
@@ -222,7 +229,7 @@ public partial class Parser
     /// <summary>
     /// Get precedence for binary operators
     /// </summary>
-    protected Precedence GetBinaryPrecedence(TokenType type)
+    protected static Precedence GetBinaryPrecedence(TokenType type)
     {
         return type switch
         {
@@ -236,8 +243,10 @@ public partial class Parser
             // Comparison operators
             TokenType.In or TokenType.Is or TokenType.Obeys => Precedence.Comparison,
             TokenType.NotIn or TokenType.IsNot or TokenType.Disobeys => Precedence.Comparison,
-            TokenType.Less or TokenType.LessEqual or TokenType.Greater or TokenType.GreaterEqual => Precedence.Comparison,
-            TokenType.Equal or TokenType.NotEqual or TokenType.ThreeWayComparison => Precedence.Comparison,
+            TokenType.Less or TokenType.LessEqual or TokenType.Greater or TokenType.GreaterEqual =>
+                Precedence.Comparison,
+            TokenType.Equal or TokenType.NotEqual or TokenType.ThreeWayComparison => Precedence
+               .Comparison,
 
             // Bitwise operators
             TokenType.Pipe => Precedence.BitwiseOr,
@@ -245,21 +254,27 @@ public partial class Parser
             TokenType.Ampersand => Precedence.BitwiseAnd,
 
             // Shift operators
-            TokenType.LeftShift or TokenType.RightShift or TokenType.LogicalLeftShift or TokenType.LogicalRightShift => Precedence.Shift,
+            TokenType.LeftShift or TokenType.RightShift or TokenType.LogicalLeftShift
+                or TokenType.LogicalRightShift => Precedence.Shift,
 
             // Additive operators
             TokenType.Plus or TokenType.Minus => Precedence.Additive,
             TokenType.PlusWrap or TokenType.PlusClamp => Precedence.Additive,
             TokenType.MinusWrap or TokenType.MinusClamp => Precedence.Additive,
+            TokenType.PlusUnchecked or TokenType.MinusUnchecked => Precedence.Additive,
 
             // Multiplicative operators
-            TokenType.Star or TokenType.Slash or TokenType.Divide or TokenType.Percent => Precedence.Multiplicative,
+            TokenType.Star or TokenType.Slash or TokenType.Divide or TokenType.Percent =>
+                Precedence.Multiplicative,
             TokenType.MultiplyWrap or TokenType.MultiplyClamp => Precedence.Multiplicative,
             TokenType.SlashClamp => Precedence.Multiplicative,
+            TokenType.MultiplyUnchecked or TokenType.SlashUnchecked or TokenType.DivideUnchecked
+                or TokenType.PercentUnchecked => Precedence.Multiplicative,
 
             // Power operators
             TokenType.Power => Precedence.Power,
             TokenType.PowerWrap or TokenType.PowerClamp => Precedence.Power,
+            TokenType.PowerUnchecked => Precedence.Power,
 
             _ => Precedence.None
         };
@@ -272,11 +287,12 @@ public partial class Parser
     /// </summary>
     /// <param name="type">The token type to check.</param>
     /// <returns>True if the token is a chainable comparison operator.</returns>
-    protected bool IsChainableComparisonOperator(TokenType type)
+    protected static bool IsChainableComparisonOperator(TokenType type)
     {
         return type switch
         {
-            TokenType.Less or TokenType.LessEqual or TokenType.Greater or TokenType.GreaterEqual or TokenType.Equal => true,
+            TokenType.Less or TokenType.LessEqual or TokenType.Greater or TokenType.GreaterEqual
+                or TokenType.Equal => true,
             _ => false
         };
     }
@@ -287,7 +303,7 @@ public partial class Parser
     /// </summary>
     /// <param name="type">The comparison operator token type.</param>
     /// <returns>-1 for descending (&gt;, &gt;=), 0 for equality (==), 1 for ascending (&lt;, &lt;=).</returns>
-    protected int GetComparisonDirection(TokenType type)
+    protected static int GetComparisonDirection(TokenType type)
     {
         return type switch
         {
@@ -301,15 +317,17 @@ public partial class Parser
     /// <summary>
     /// Validate that comparison chain maintains consistent direction
     /// </summary>
-    protected bool IsValidComparisonChain(List<BinaryOperator> operators)
+    protected static bool IsValidComparisonChain(List<BinaryOperator> operators)
     {
         if (operators.Count <= 1)
         {
             return true;
         }
 
-        var directions = operators.Select(selector: op => GetComparisonDirection(type: BinaryOperatorToToken(op: op)))
-                                  .ToList();
+        var directions = operators
+                        .Select(selector: op =>
+                             GetComparisonDirection(type: BinaryOperatorToToken(op: op)))
+                        .ToList();
 
         // All equality is valid
         if (directions.All(predicate: d => d == 0))
@@ -330,7 +348,7 @@ public partial class Parser
     /// </summary>
     /// <param name="op">The binary operator to convert.</param>
     /// <returns>The corresponding token type.</returns>
-    protected TokenType BinaryOperatorToToken(BinaryOperator op)
+    protected static TokenType BinaryOperatorToToken(BinaryOperator op)
     {
         return op switch
         {
@@ -339,14 +357,15 @@ public partial class Parser
             BinaryOperator.Greater => TokenType.Greater,
             BinaryOperator.GreaterEqual => TokenType.GreaterEqual,
             BinaryOperator.Equal => TokenType.Equal,
-            _ => TokenType.Equal // Non-chainable operators default to equality (won't affect chain validation)
+            _ => TokenType
+               .Equal // Non-chainable operators default to equality (won't affect chain validation)
         };
     }
 
     /// <summary>
     /// Check if operator is right-associative
     /// </summary>
-    protected bool IsRightAssociative(TokenType type)
+    protected static bool IsRightAssociative(TokenType type)
     {
         return type switch
         {
@@ -365,39 +384,122 @@ public partial class Parser
     #region Error Recovery
 
     /// <summary>
-    /// Skip tokens until we find a synchronization point for error recovery
+    /// Skip tokens until we find a top-level synchronization point for error recovery.
+    /// Indent-aware: whole indented regions are skipped as units (otherwise the parser
+    /// resumes inside a block body it never entered, misparses every line of it, and a
+    /// single error cascades through the rest of the file). The indentation bookkeeping
+    /// is reset to base first, because the error may have escaped from inside blocks
+    /// whose levels were already pushed.
     /// </summary>
     protected void Synchronize()
     {
-        Advance();
+        while (_indentationStack.Count > 1)
+        {
+            _indentationStack.Pop();
+        }
+        _currentIndentationLevel = _indentationStack.Peek();
 
+        int depth = 0;
+        bool first = true;
         while (!IsAtEnd)
         {
-            if (PeekToken(offset: -1)
-                   .Type == TokenType.Newline)
+            TokenType t = CurrentToken.Type;
+            if (t == TokenType.Indent)
             {
-                return;
+                depth++;
+                Advance();
+                first = false;
+                continue;
             }
 
-            switch (CurrentToken.Type)
+            if (t == TokenType.Dedent)
             {
-                case TokenType.Entity:
-                case TokenType.Record:
-                case TokenType.Choice:
-                case TokenType.Flags:
-                case TokenType.Variant:
-                case TokenType.Protocol:
-                case TokenType.Routine:
-                case TokenType.Var:
-                case TokenType.Preset:
-                case TokenType.If:
-                case TokenType.Unless:
-                case TokenType.While:
-                case TokenType.For:
-                case TokenType.Return:
-                case TokenType.Throw:
-                case TokenType.Absent:
+                if (depth > 0) depth--;
+                Advance();
+                first = false;
+                continue;
+            }
+
+            if (!first && depth == 0)
+            {
+                if (PeekToken(offset: -1)
+                       .Type is TokenType.Newline or TokenType.Dedent)
+                {
                     return;
+                }
+
+                switch (t)
+                {
+                    case TokenType.Entity:
+                    case TokenType.Record:
+                    case TokenType.Choice:
+                    case TokenType.Flags:
+                    case TokenType.Variant:
+                    case TokenType.Protocol:
+                    case TokenType.Routine:
+                    case TokenType.Var:
+                    case TokenType.Preset:
+                    case TokenType.If:
+                    case TokenType.Unless:
+                    case TokenType.While:
+                    case TokenType.For:
+                    case TokenType.Return:
+                    case TokenType.Throw:
+                    case TokenType.Absent:
+                        return;
+                }
+            }
+
+            Advance();
+            first = false;
+        }
+    }
+
+    /// <summary>
+    /// Statement-level error recovery inside an indented block: skips to the start of
+    /// the next statement at THIS block's nesting depth without escaping the block.
+    /// Nested Indent/Dedent pairs belonging to the failed statement's sub-blocks are
+    /// skipped as opaque regions (their levels were never pushed onto the indentation
+    /// stack once the inner ParseIndentedBlock catch handles its own errors).
+    /// Stops without consuming a Dedent that would close this block, so the enclosing
+    /// block loop terminates normally.
+    /// </summary>
+    protected void SynchronizeWithinBlock()
+    {
+        int depth = 0;
+        while (!IsAtEnd)
+        {
+            TokenType t = CurrentToken.Type;
+            if (t == TokenType.Indent)
+            {
+                depth++;
+                Advance();
+                continue;
+            }
+
+            if (t == TokenType.Dedent)
+            {
+                if (depth == 0)
+                {
+                    return; // closes OUR block — leave it for the block loop
+                }
+
+                depth--;
+                Advance();
+                continue;
+            }
+
+            if (t == TokenType.Newline && depth == 0)
+            {
+                Advance();
+                if (Check(type: TokenType.Indent))
+                {
+                    // Orphaned body of the failed statement (e.g. the block under a bad
+                    // `if` header) — skip it as a region instead of tripping over it.
+                    continue;
+                }
+
+                return; // next token starts a fresh statement at our level
             }
 
             Advance();
@@ -423,7 +525,7 @@ public partial class Parser
     /// <returns>A <see cref="SourceLocation"/> for error reporting.</returns>
     protected SourceLocation GetLocation(Token token)
     {
-        return new SourceLocation(FileName: fileName,
+        return new SourceLocation(FileName: FileName,
             Line: token.Line,
             Column: token.Column,
             Position: token.Position);
@@ -437,11 +539,13 @@ public partial class Parser
     /// <returns>The exception to throw.</returns>
     protected GrammarException ThrowParseError(string message)
     {
-        var token = CurrentToken;
-        return new GrammarException(
-            GrammarDiagnosticCode.UnexpectedToken,
-            message,
-            fileName, token.Line, token.Column, _language);
+        Token token = CurrentToken;
+        return new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
+            message: message,
+            fileName: FileName,
+            line: token.Line,
+            column: token.Column,
+            language: _language);
     }
 
     /// <summary>
@@ -453,10 +557,12 @@ public partial class Parser
     /// <returns>The exception to throw.</returns>
     protected GrammarException ThrowParseError(string message, Token token)
     {
-        return new GrammarException(
-            GrammarDiagnosticCode.UnexpectedToken,
-            message,
-            fileName, token.Line, token.Column, _language);
+        return new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
+            message: message,
+            fileName: FileName,
+            line: token.Line,
+            column: token.Column,
+            language: _language);
     }
 
     /// <summary>
@@ -468,9 +574,13 @@ public partial class Parser
     /// <returns>The exception to throw.</returns>
     protected GrammarException ThrowParseError(GrammarDiagnosticCode code, string message)
     {
-        var token = CurrentToken;
-        return new GrammarException(code, message,
-            fileName, token.Line, token.Column, _language);
+        Token token = CurrentToken;
+        return new GrammarException(code: code,
+            message: message,
+            fileName: FileName,
+            line: token.Line,
+            column: token.Column,
+            language: _language);
     }
 
     /// <summary>
@@ -481,10 +591,15 @@ public partial class Parser
     /// <param name="message">The error message.</param>
     /// <param name="token">The token where the error occurred.</param>
     /// <returns>The exception to throw.</returns>
-    protected GrammarException ThrowParseError(GrammarDiagnosticCode code, string message, Token token)
+    protected GrammarException ThrowParseError(GrammarDiagnosticCode code, string message,
+        Token token)
     {
-        return new GrammarException(code, message,
-            fileName, token.Line, token.Column, _language);
+        return new GrammarException(code: code,
+            message: message,
+            fileName: FileName,
+            line: token.Line,
+            column: token.Column,
+            language: _language);
     }
 
     #endregion
@@ -517,10 +632,17 @@ public partial class Parser
             TokenType.PowerWrap => BinaryOperator.PowerWrap,
             TokenType.PowerClamp => BinaryOperator.PowerClamp,
 
+            // Unchecked variants
+            TokenType.PlusUnchecked => BinaryOperator.AddUnchecked,
+            TokenType.MinusUnchecked => BinaryOperator.SubtractUnchecked,
+            TokenType.MultiplyUnchecked => BinaryOperator.MultiplyUnchecked,
+            TokenType.SlashUnchecked => BinaryOperator.TrueDivideUnchecked,
+            TokenType.DivideUnchecked => BinaryOperator.FloorDivideUnchecked,
+            TokenType.PercentUnchecked => BinaryOperator.ModuloUnchecked,
+            TokenType.PowerUnchecked => BinaryOperator.PowerUnchecked,
+
             TokenType.Equal => BinaryOperator.Equal,
             TokenType.NotEqual => BinaryOperator.NotEqual,
-            TokenType.ReferenceEqual => BinaryOperator.Identical,
-            TokenType.ReferenceNotEqual => BinaryOperator.NotIdentical,
             TokenType.Less => BinaryOperator.Less,
             TokenType.LessEqual => BinaryOperator.LessEqual,
             TokenType.Greater => BinaryOperator.Greater,
@@ -542,13 +664,15 @@ public partial class Parser
             TokenType.Is => BinaryOperator.Is,
             TokenType.IsNot => BinaryOperator.IsNot,
             TokenType.Obeys => BinaryOperator.Obeys,
-            TokenType.Disobeys => BinaryOperator.NotObeys,
+            TokenType.Disobeys => BinaryOperator.Disobeys,
             TokenType.NoneCoalesce => BinaryOperator.NoneCoalesce,
 
-            _ => throw new GrammarException(
-                GrammarDiagnosticCode.UnexpectedToken,
-                $"Unknown binary operator: {tokenType}",
-                fileName, CurrentToken.Line, CurrentToken.Column, _language)
+            _ => throw new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
+                message: $"Unknown binary operator: {tokenType}",
+                fileName: FileName,
+                line: CurrentToken.Line,
+                column: CurrentToken.Column,
+                language: _language)
         };
     }
 
@@ -563,10 +687,12 @@ public partial class Parser
             TokenType.Not => UnaryOperator.Not,
             TokenType.Tilde => UnaryOperator.BitwiseNot,
 
-            _ => throw new GrammarException(
-                GrammarDiagnosticCode.UnexpectedToken,
-                $"Unknown unary operator: {tokenType}",
-                fileName, CurrentToken.Line, CurrentToken.Column, _language)
+            _ => throw new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
+                message: $"Unknown unary operator: {tokenType}",
+                fileName: FileName,
+                line: CurrentToken.Line,
+                column: CurrentToken.Column,
+                language: _language)
         };
     }
 
@@ -581,7 +707,7 @@ public partial class Parser
     /// Types without direct C# equivalents (f128, d32, d64, d128, Integer, Decimal) are stored
     /// as raw strings in the AST. The semantic analyzer handles parsing these using native libraries.
     /// </remarks>
-    protected object ParseNumericLiteral(Token token)
+    protected static object ParseNumericLiteral(Token token)
     {
         string text = token.Text;
 
@@ -607,14 +733,17 @@ public partial class Parser
 
             // Deferred types - store raw string for semantic analyzer to parse with native libraries
             // f128: IEEE binary128, requires LibBF
-            // d32/d64/d128: IEEE decimal floating-point, requires Intel DFP library
-            // Integer/Decimal: arbitrary precision, requires LibBF/MAPM
+            // d32/d64/d128: IEEE decimal floating-point, requires decNumber
+            // Integer: arbitrary precision, requires LibTomMath
+            // Decimal: arbitrary precision, requires decNumber
             TokenType.F128Literal => CleanNumericSuffix(text: text, suffix: "f128"),
             TokenType.D32Literal => CleanNumericSuffix(text: text, suffix: "d32"),
             TokenType.D64Literal => CleanNumericSuffix(text: text, suffix: "d64"),
             TokenType.D128Literal => CleanNumericSuffix(text: text, suffix: "d128"),
-            TokenType.Integer => text,
-            TokenType.Decimal => text,
+            TokenType.IntegerLiteral => text,
+            TokenType.DecimalLiteral => text,
+            TokenType.UndecidedInteger => text,
+            TokenType.UndecidedDecimal => text,
 
             _ => text.Contains(value: '.')
                 ? double.Parse(s: text)
@@ -637,7 +766,7 @@ public partial class Parser
         return cleaned.Replace(oldValue: "_", newValue: "");
     }
 
-    private T ParseTypedInteger<T>(string text, string suffix) where T : struct
+    private static T ParseTypedInteger<T>(string text, string suffix) where T : struct
     {
         // Remove the type suffix
         string cleanText = text.EndsWith(value: suffix)
@@ -646,7 +775,7 @@ public partial class Parser
         return (T)Convert.ChangeType(value: cleanText, conversionType: typeof(T));
     }
 
-    private T ParseTypedFloat<T>(string text, string suffix) where T : struct
+    private static T ParseTypedFloat<T>(string text, string suffix) where T : struct
     {
         // Remove the type suffix
         string cleanText = text.EndsWith(value: suffix)
@@ -671,19 +800,20 @@ public partial class Parser
     protected void AddWarning(string message, Token token, string warningCode,
         WarningSeverity severity = WarningSeverity.Warning)
     {
-        Warnings.Add(item: new BuildWarning(message: message,
+        _warnings.Add(item: new BuildWarning(message: message,
             line: token.Line,
             column: token.Column,
             severity: severity,
-            warningCode: warningCode));
+            warningCode: warningCode,
+            fileName: FileName));
     }
 
     /// <summary>
     /// Get all warnings collected during parsing
     /// </summary>
-    public IReadOnlyList<BuildWarning> GetWarnings()
+    public List<BuildWarning> GetWarnings()
     {
-        return Warnings.AsReadOnly();
+        return _warnings.ToList();
     }
 
     /// <summary>
@@ -693,7 +823,9 @@ public partial class Parser
     {
         if (CurrentToken.Type == TokenType.RightBrace)
         {
-            AddWarning(message: "Unnecessary closing brace detected. This language uses indentation-based scoping, not braces.",
+            AddWarning(
+                message:
+                "Unnecessary closing brace detected. This language uses indentation-based scoping, not braces.",
                 token: CurrentToken,
                 warningCode: WarningCodes.UnnecessaryBraces,
                 severity: WarningSeverity.StyleViolation);

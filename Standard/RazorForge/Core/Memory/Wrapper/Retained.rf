@@ -1,0 +1,119 @@
+module Core
+
+import BuilderService
+
+### Single-threaded strong reference. Thin pointer to {RetainController[T]}.
+### Equivalent to `Rc[T]` in Rust. Copying bumps the strong count; dropping decrements it.
+### :typeparam T: The exclusively owned entity type.
+@llvm("ptr")
+record Retained[T] obeys Controlling[T]
+needs T is EntityType
+  pass
+
+# ============================================================================
+# Construction
+# ============================================================================
+
+### Wraps this entity in a reference-counted {Retained[T]}.
+### Ownership transfers to the RC system; the original binding is invalidated.
+### :returns: The resulting `Retained[T]` value.
+routine T.retain() -> Retained[T]
+needs T is EntityType
+  danger!
+    var ctrl = RetainController[T](data: me.hijack()).hijack()
+    return Retained[T](ctrl)
+
+# ============================================================================
+# Reference counting
+# ============================================================================
+
+### Returns a new strong reference to the same entity, incrementing the strong count.
+### :returns: A new strong handle sharing the same underlying entity.
+routine Retained[T].retain() -> Retained[T]
+  danger!
+    var ctrl = Hijacked[RetainController[T]](me).as_entity()
+    ctrl.increase_strong_count()
+  return me
+
+### Decrements the strong count, destroying the entity when it reaches zero.
+### Destroys the controller when both strong and weak counts reach zero.
+dangerous routine Retained[T].release()
+  var ctrl_ptr = Hijacked[RetainController[T]](me)
+  var ctrl = ctrl_ptr.as_entity()
+  ctrl.decrease_strong_count()
+  return
+
+### Creates a weak reference to the same entity.
+### :returns: A new weak handle to the same entity's controller.
+routine Retained[T].track() -> Tracked[T]
+  danger!
+    var ctrl = Hijacked[RetainController[T]](me).as_entity()
+    ctrl.increase_weak_count()
+    return Tracked[T](me)
+
+# ============================================================================
+# Inspection
+# ============================================================================
+
+### Returns the current strong reference count.
+### :returns: The number of live strong handles to this entity.
+routine Retained[T].strong_count() -> U32
+  danger!
+    var ctrl = Hijacked[RetainController[T]](me).as_entity()
+    return ctrl.strong_count()
+
+### Returns the current weak reference count.
+### :returns: The number of live weak handles to this entity's controller.
+routine Retained[T].weak_count() -> U32
+  danger!
+    var ctrl = Hijacked[RetainController[T]](me).as_entity()
+    return ctrl.weak_count()
+
+# ============================================================================
+# Marker-protocol coercion ($refer/$control) — yields the inner entity as ?T
+# ============================================================================
+
+### Yields the inner entity as an in-flight `?T` reference for read-only access.
+### Inserted implicitly at call sites whose parameter is `Referring[T]`.
+### :returns: The inner entity as `?T`.
+@[readonly, inline]
+routine Retained[T].$refer() -> ?T
+  danger!
+    var ctrl = Hijacked[RetainController[T]](me).as_entity()
+    return ctrl.borrow_data().as_entity()
+
+### Yields the inner entity as an in-flight `?T` reference for read/write access.
+### Inserted implicitly at call sites whose parameter is `Controlling[T]`.
+### :returns: The inner entity as `?T`.
+@inline
+routine Retained[T].$control() -> ?T
+  danger!
+    var ctrl = Hijacked[RetainController[T]](me).as_entity()
+    return ctrl.borrow_data().as_entity()
+
+# ============================================================================
+# Display (transparent — delegates to inner value)
+# ============================================================================
+
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
+@readonly
+routine Retained[T].$represent() -> ?Text
+  danger!
+    var ctrl = Hijacked[RetainController[T]](me).as_entity()
+    return ctrl.borrow_data().as_entity().$represent()
+
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
+@readonly
+routine Retained[T].$diagnose() -> ?Text
+  danger!
+    var ctrl = Hijacked[RetainController[T]](me).as_entity()
+    var rc = ctrl.strong_count()
+    var weak = ctrl.weak_count()
+    var addr = ctrl.borrow_data().get_address()
+    return me.type_name() + "(holding: " + rc.$represent() + ", observing: " + weak.$represent() + ", addr: " + addr.$represent() + ", " + ctrl.borrow_data().as_entity().$diagnose() + ")"
+
+dangerous routine Retained[T].$destroy()
+  me.release()
+  return

@@ -1,41 +1,116 @@
-﻿using SemanticAnalysis.Enums;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using Compiler.Desugaring;
+using Compiler.Instantiation;
+using Compiler.Instantiation.Passes;
+using Compiler.Resolution;
+using Compiler.Targeting;
+using SyntaxTree;
+using TypeModel.Enums;
+using TypeModel.Symbols;
+using TypeModel.Types;
 
 namespace Compiler.CodeGen;
-
-using System.Text;
-using SemanticAnalysis;
-using SemanticAnalysis.Symbols;
-using SemanticAnalysis.Types;
-using SyntaxTree;
 
 /// <summary>
 /// LLVM IR code generator for RazorForge and Suflae.
 /// Consumes a fully-typed AST from the semantic analyzer.
 /// </summary>
-public partial class LLVMCodeGenerator
+public partial class LlvmCodeGenerator
 {
+    private const string EntryLabel = "entry:";
+    private const string RetVoidInstruction = "  ret void";
+
     #region Fields
 
     /// <summary>The type registry from semantic analysis.</summary>
     private readonly TypeRegistry _registry;
 
-    /// <summary>The program AST to generate code for.</summary>
-    private readonly Program _program;
+    /// <summary>AST bodies for compiler-generated derived operators, keyed by RoutineInfo.RegistryKey.</summary>
+    private IReadOnlyDictionary<string, Statement> _synthesizedBodies =
+        new Dictionary<string, Statement>();
+
+    /// <summary>
+    /// Concrete generic method bodies from <see cref="Instantiation.Passes.GenericMonomorphizationPass"/>,
+    /// keyed by <see cref="TypeModel.Symbols.RoutineInfo.RegistryKey"/>.
+    /// Phase B emission iterates this map and emits any body whose
+    /// mangled name has been declared in <see cref="_generatedRoutines"/>.
+    /// </summary>
+    private IReadOnlyDictionary<string, MonomorphizedBody> _instantiatedGenericBodies =
+        new Dictionary<string, MonomorphizedBody>();
+
+    /// <summary>
+    /// Reachable routine RegistryKeys produced by <see cref="RoutineReachabilityPass"/>.
+    /// When non-empty, Phase A's stdlib body emission gates by this set in addition to
+    /// <see cref="_generatedRoutines"/>, preventing the lazy-declaration cascade from
+    /// emitting bodies for unreachable routines.
+    /// </summary>
+    private HashSet<string> _liveRoutineKeys = new(comparer: StringComparer.Ordinal);
+
+    /// <summary>
+    /// Live concrete owner type FullNames from RoutineReachabilityPass. Used to drive Phase C
+    /// monomorphization of synthesized routines (try_next, $represent, $diagnose) for generic owners.
+    /// </summary>
+    private HashSet<string> _liveOwnerTypeNames = new(comparer: StringComparer.Ordinal);
+
+    /// <summary>Wrapper type base names for member forwarding in codegen.</summary>
+    // TODO: It shouldn't know about all these types because they are going to be llvm ptr anyway.
+    private static readonly HashSet<string> WrapperTypeNames =
+    [
+        "Viewing", "Modifying", "Retained", "Tracked", "Inspecting", "Claiming", "Shared",
+        "Watched", "Hijacked"
+    ];
+
+    /// <summary>The user program ASTs to generate code for (single-file or multi-file).</summary>
+    private readonly List<(Program Program, string FilePath, string Module)>
+        _userPrograms;
 
     /// <summary>The stdlib programs to include routine bodies from.</summary>
-    private readonly IReadOnlyList<(Program Program, string FilePath, string Module)> _stdlibPrograms;
+    private readonly List<(Program Program, string FilePath, string Module)>
+        _stdlibPrograms;
 
-    /// <summary>Output buffer for type declarations.</summary>
-    private readonly StringBuilder _typeDeclarations = new();
+    /// <summary>
+    /// Type declarations bucketed by kind and sorted lexicographically within each bucket.
+    /// Emitted in category order: record -> choice -> variant -> entity -> crashable.
+    /// Key = mangled LLVM type name; value = full declaration text (struct line + comment line).
+    /// </summary>
+    private readonly SortedDictionary<string, string> _typeDeclarationsRecord = new();
+
+    private readonly SortedDictionary<string, string> _typeDeclarationsVariant = new();
+    private readonly SortedDictionary<string, string> _typeDeclarationsEntity = new();
+    private readonly SortedDictionary<string, string> _typeDeclarationsCrashable = new();
+
+    /// <summary>
+    /// Closure environment struct declarations for lifted lambdas: <c>%"Closure.&lt;name&gt;" =
+    /// type { ptr, &lt;capture types&gt; }</c>. Keyed by struct name; emitted with the other type
+    /// declarations. See closure conversion in <c>GenerateRoutineBody</c> / the lambda value path.
+    /// </summary>
+    private readonly SortedDictionary<string, string> _typeDeclarationsClosure = new();
 
     /// <summary>Output buffer for global declarations (constants, presets).</summary>
     private readonly StringBuilder _globalDeclarations = new();
 
-    /// <summary>Output buffer for function declarations.</summary>
+    /// <summary>Output buffer for native/extern function declarations (always emitted).</summary>
     private readonly StringBuilder _functionDeclarations = new();
+
+    /// <summary>
+    /// RF function forward declarations keyed by mangled name.
+    /// Entries whose name is in <see cref="_generatedRoutineDefs"/> are suppressed at output
+    /// time to avoid declare+define conflicts in the same LLVM module.
+    /// </summary>
+    private readonly Dictionary<string, string> _rfRoutineDeclarations = new();
 
     /// <summary>Output buffer for function definitions.</summary>
     private readonly StringBuilder _functionDefinitions = new();
+
+    /// <summary>Output buffer for auxiliary top-level helper function definitions.</summary>
+    private readonly StringBuilder _auxRoutineDefinitions = new();
+
+    /// <summary>Thunk symbols already emitted for plain routines used as first-class values
+    /// (see <c>EnsureRoutineValueThunk</c>) — dedups the closure-ABI adapter per routine.</summary>
+    private readonly HashSet<string> _emittedRoutineValueThunks = [];
 
     /// <summary>Counter for generating unique temporary variable names.</summary>
     private int _tempCounter;
@@ -47,39 +122,78 @@ public partial class LLVMCodeGenerator
     private readonly HashSet<string> _generatedTypes = [];
 
     /// <summary>Set of already-generated function declarations to avoid duplicates.</summary>
-    private readonly HashSet<string> _generatedFunctions = [];
+    private readonly HashSet<string> _generatedRoutines = [];
 
     /// <summary>Counter for generating unique string constant names.</summary>
     private int _stringCounter;
 
+    /// <summary>Counter for generating unique C string constant names.</summary>
+    private int _cstrCounter;
+
     /// <summary>Map of string values to their global constant names (for deduplication).</summary>
     private readonly Dictionary<string, string> _stringConstants = new();
 
-    /// <summary>Set of already-declared native functions to avoid duplicate declarations.</summary>
-    private readonly HashSet<string> _declaredNativeFunctions = [];
+    /// <summary>Map of C string values to their global constant names (for deduplication).</summary>
+    private readonly Dictionary<string, string> _cstrConstants = new(StringComparer.Ordinal);
 
-    /// <summary>Map of local variable names to their types for the current function.</summary>
+/// <summary>Map of local variable names to their types for the current function.</summary>
     private readonly Dictionary<string, TypeInfo> _localVariables = new();
 
+    /// <summary>Map of source variable names to unique LLVM variable names (handles shadowing).</summary>
+    private readonly Dictionary<string, string> _localVarLlvmNames = new();
+
+    /// <summary>Counter for deduplicating variable names within a function.</summary>
+    private readonly Dictionary<string, int> _varNameCounts = new();
+
+    /// <summary>List of local entity variables (name, LLVM addr name) for auto-cleanup.</summary>
+    private readonly List<(string Name, string LLVMAddr)> _localEntityVars = [];
+
+    /// <summary>List of local record variables with RC wrapper fields for retain/release.</summary>
+    private readonly List<(string Name, string LLVMAddr, RecordTypeInfo RecordType)>
+        _localRcRecordVars = [];
+
+    /// <summary>List of local variables whose type IS an RC wrapper (Retained[T], Shared[T], etc.).</summary>
+    private readonly List<(string Name, string LLVMAddr, RecordTypeInfo RecordType)>
+        _localRetainedVars = [];
+
     /// <summary>Set of already-generated function definitions to avoid duplicates.</summary>
-    private readonly HashSet<string> _generatedFunctionDefs = [];
+    // TODO: this should be routine info, not string.
+    private readonly HashSet<string> _generatedRoutineDefs = [];
 
     /// <summary>The return type of the current function being generated.</summary>
-    private TypeInfo? _currentFunctionReturnType;
+    private TypeInfo? _currentRoutineReturnType;
 
-    /// <summary>The label of the current basic block (for phi node generation).</summary>
-    private string _currentBlock = "entry";
+    /// <summary>Function-entry alloca instructions emitted once per function.</summary>
+    private readonly StringBuilder _currentRoutineEntryAllocas = new();
+
+    /// <summary>Tracks alloca names already emitted for the current function to prevent duplicates.</summary>
+    private readonly HashSet<string> _emittedAllocaNames = [];
+
+    /// <summary>Type parameter substitution map for generic monomorphization (e.g., "T" -> Character).</summary>
+    private Dictionary<string, TypeInfo>? _typeSubstitutions;
+
+    /// <summary>Target platform configuration (triple, data layout, page size, etc.).</summary>
+    private readonly TargetConfig _target;
+
+    /// <summary>Requested build optimization mode.</summary>
+    private readonly RfBuildMode _buildMode;
 
     /// <summary>Pointer bit width for the target platform (64 for x86_64, 32 for x86).</summary>
     private readonly int _pointerBitWidth;
 
-    /// <summary>Alloca address for the emit slot in emitting routines (null outside emitting context).</summary>
-    private string? _emitSlotAddr;
+    /// <summary>Pointer size in bytes, derived from <see cref="_pointerBitWidth"/>.</summary>
+    private readonly int _pointerSizeBytes;
 
-    /// <summary>LLVM type of the emit slot value.</summary>
-    private string? _emitSlotType;
+    /// <summary>LLVM target triple for the current platform.</summary>
+    private readonly string _targetTriple;
 
-    /// <summary>The routine currently being emitted (for source_routine() / source_module() injection).</summary>
+    /// <summary>LLVM data layout string for the current platform.</summary>
+    private readonly string _dataLayout;
+
+    /// <summary>Whether the current function being generated is failable (has ! suffix, can return absent).</summary>
+    private bool _currentRoutineIsFailable;
+
+    /// <summary>The routine currently being compiled (for source_routine() / source_module() injection).</summary>
     private RoutineInfo? _currentEmittingRoutine;
 
     #endregion
@@ -87,19 +201,155 @@ public partial class LLVMCodeGenerator
     #region Constructor
 
     /// <summary>
-    /// Creates a new LLVM code generator.
+    /// Creates a new LLVM code generator for a single user program.
     /// </summary>
     /// <param name="program">The program AST to generate code for.</param>
     /// <param name="registry">The type registry from semantic analysis.</param>
     /// <param name="stdlibPrograms">Optional stdlib programs for intrinsic routine definitions.</param>
-    /// <param name="pointerBitWidth">Pointer bit width for the target platform (64 for x86_64, 32 for x86).</param>
-    public LLVMCodeGenerator(Program program, TypeRegistry registry, IReadOnlyList<(Program Program, string FilePath, string Module)>? stdlibPrograms = null, int pointerBitWidth = 64)
+    /// <param name="target">Target platform configuration (defaults to current host).</param>
+    /// <param name="buildMode">Build optimization mode (defaults to Debug).</param>
+    /// <param name="instantiatedGenericBodies">The instantiated generic bodies.</param>
+    /// <param name="synthesizedBodies">The synthesized bodies.</param>
+    /// <param name="liveRoutineKeys">Reachable routine keys from RoutineReachabilityPass; empty disables filtering.</param>
+    /// <param name="liveOwnerTypeNames">Live owner type full-names from RoutineReachabilityPass; empty disables filtering.</param>
+    public LlvmCodeGenerator(Program program, TypeRegistry registry,
+        List<(Program Program, string FilePath, string Module)>? stdlibPrograms = null,
+        TargetConfig? target = null, RfBuildMode buildMode = RfBuildMode.Debug,
+        IReadOnlyDictionary<string, Statement>? synthesizedBodies = null,
+        IReadOnlyDictionary<string, MonomorphizedBody>? instantiatedGenericBodies = null,
+        IReadOnlyCollection<string>? liveRoutineKeys = null,
+        IReadOnlyCollection<string>? liveOwnerTypeNames = null) :
+        this(userPrograms:
+            [(program, program.Location.FileName, "")],
+            registry: registry,
+            stdlibPrograms: stdlibPrograms,
+            target: target,
+            buildMode: buildMode,
+            synthesizedBodies: synthesizedBodies,
+            instantiatedGenericBodies: instantiatedGenericBodies,
+            liveRoutineKeys: liveRoutineKeys,
+            liveOwnerTypeNames: liveOwnerTypeNames)
     {
-        _program = program;
+    }
+
+    /// <summary>
+    /// Creates a new LLVM code generator for multiple user programs (multi-file build).
+    /// </summary>
+    /// <param name="userPrograms">The user program ASTs with file paths and module names.</param>
+    /// <param name="registry">The type registry from semantic analysis.</param>
+    /// <param name="stdlibPrograms">Optional stdlib programs for intrinsic routine definitions.</param>
+    /// <param name="target">Target platform configuration (defaults to current host).</param>
+    /// <param name="buildMode">Build optimization mode (defaults to Debug).</param>
+    /// <param name="instantiatedGenericBodies">The instantiated generic bodies.</param>
+    /// <param name="synthesizedBodies">The synthesized bodies.</param>
+    /// <param name="liveRoutineKeys">Reachable routine keys from RoutineReachabilityPass; empty disables filtering.</param>
+    /// <param name="liveOwnerTypeNames">Live owner type full-names from RoutineReachabilityPass; empty disables filtering.</param>
+    public LlvmCodeGenerator(
+        List<(Program Program, string FilePath, string Module)> userPrograms,
+        TypeRegistry registry,
+        List<(Program Program, string FilePath, string Module)>? stdlibPrograms = null,
+        TargetConfig? target = null, RfBuildMode buildMode = RfBuildMode.Debug,
+        IReadOnlyDictionary<string, Statement>? synthesizedBodies = null,
+        IReadOnlyDictionary<string, MonomorphizedBody>? instantiatedGenericBodies = null,
+        IReadOnlyCollection<string>? liveRoutineKeys = null,
+        IReadOnlyCollection<string>? liveOwnerTypeNames = null)
+    {
+        _target = target ?? TargetConfig.ForCurrentHost();
+        if (_target.PointerBitWidth != 64)
+        {
+            throw new ArgumentException(
+                message:
+                $"Only 64-bit targets are currently supported (got {_target.PointerBitWidth}).",
+                paramName: nameof(target));
+        }
+
+        _userPrograms = userPrograms;
         _registry = registry;
         _stdlibPrograms = stdlibPrograms ?? [];
-        _pointerBitWidth = pointerBitWidth;
+        if (synthesizedBodies != null) _synthesizedBodies = synthesizedBodies;
+        if (instantiatedGenericBodies != null)
+            _instantiatedGenericBodies = instantiatedGenericBodies;
+        if (liveRoutineKeys is { Count: > 0 })
+            _liveRoutineKeys = new HashSet<string>(collection: liveRoutineKeys,
+                comparer: StringComparer.Ordinal);
+        if (liveOwnerTypeNames is { Count: > 0 })
+            _liveOwnerTypeNames = new HashSet<string>(collection: liveOwnerTypeNames,
+                comparer: StringComparer.Ordinal);
+        _buildMode = buildMode;
+        _pointerBitWidth = _target.PointerBitWidth;
+        _pointerSizeBytes = _target.PointerBitWidth / 8;
+        _targetTriple = _target.Triple;
+        _dataLayout = _target.DataLayout;
     }
+
+    #endregion
+
+    #region Helpers
+
+    /// <summary>Whether to emit rf_trace_push/rf_trace_pop calls for stack trace diagnostics.</summary>
+    private bool ShouldEmitTrace => _buildMode is RfBuildMode.Debug or RfBuildMode.Release;
+
+    /// <summary>
+    /// Whether to emit trace push/pop for the currently-compiled routine.
+    /// In Release, @inline routines are excluded — they are implementation details
+    /// that inflate the shadow stack without adding navigable frames.
+    /// In Debug, all routines are traced.
+    /// </summary>
+    private bool _traceCurrentRoutine;
+
+    /// <summary>
+    /// Looks up a type by name, trying the current routine's module-qualified name first,
+    /// then falling back to the bare name. Mirrors SemanticVerifier.LookupTypeInCurrentModule.
+    /// </summary>
+    private TypeInfo? LookupTypeInCurrentModule(string name)
+    {
+        string? moduleName = _currentEmittingRoutine?.OwnerType?.Module ??
+                             _currentEmittingRoutine?.Module;
+        if (moduleName != null && !name.Contains(value: '.'))
+        {
+            TypeInfo? qualified = _registry.LookupType(name: $"{moduleName}.{name}");
+            if (qualified != null)
+            {
+                return qualified;
+            }
+        }
+
+        return _registry.LookupType(name: name);
+    }
+
+    /// <summary>
+    /// Gets the generic definition for a resolved generic type, regardless of concrete subtype.
+    /// Returns null for non-generic or non-resolved types.
+    /// </summary>
+    private static TypeInfo? GetGenericBase(TypeInfo type) =>
+        GetGenericBaseStatic(type: type);
+
+    /// <summary>
+    /// Gets the generic definition for a resolved generic type.
+    /// </summary>
+    internal static TypeInfo? GetGenericBaseStatic(TypeInfo type)
+    {
+        return type switch
+        {
+            RecordTypeInfo { GenericDefinition: not null } r => r.GenericDefinition,
+            EntityTypeInfo { GenericDefinition: not null } e => e.GenericDefinition,
+            ProtocolTypeInfo { GenericDefinition: not null } p => p.GenericDefinition,
+            VariantTypeInfo { GenericDefinition: not null } v => v.GenericDefinition,
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Gets the generic definition's name for a resolved generic type.
+    /// Returns null for non-generic or non-resolved types.
+    /// </summary>
+    private static string? GetGenericBaseName(TypeInfo type) =>
+        GetGenericBaseNameStatic(type: type);
+
+    /// <summary>Shared helper for resolved-generic base-name lookups.</summary>
+    internal static string? GetGenericBaseNameStatic(TypeInfo type) =>
+        GetGenericBaseStatic(type: type)
+          ?.Name;
 
     #endregion
 
@@ -109,22 +359,45 @@ public partial class LLVMCodeGenerator
     /// Generates LLVM IR for the entire program.
     /// </summary>
     /// <returns>The generated LLVM IR as a string.</returns>
+    /// <summary>
+    /// When true, prints per-phase wall-clock timings to stderr. Set externally before calling
+    /// <see cref="Generate"/>. Mirrors the <c>sa-timing</c> manifest flag for codegen visibility.
+    /// </summary>
+    public bool Timing { get; set; }
+
+    /// <summary>Generates LLVM IR for all user programs and returns it as a string.</summary>
     public string Generate()
     {
+        bool timing = Timing;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        void Mark(string label)
+        {
+            if (!timing) return;
+            sw.Stop();
+            Console.Error.WriteLine(value: $"[CG] {label}: {sw.ElapsedMilliseconds} ms");
+            sw.Restart();
+        }
+
         // Phase 1: Generate all type declarations
         GenerateTypeDeclarations();
+        Mark(label: "Phase 1 TypeDeclarations");
 
         // Phase 2: Generate function declarations (signatures)
-        GenerateFunctionDeclarations();
+        GenerateRoutineDeclarations();
+        Mark(label: "Phase 2 RoutineDeclarations");
 
         // Phase 3: Generate function definitions (bodies)
-        GenerateFunctionDefinitions();
+        GenerateRoutineDefinitions();
+        Mark(label: "Phase 3 RoutineDefinitions");
 
         // Phase 4: Generate runtime support (if needed)
         GenerateRuntimeSupport();
+        Mark(label: "Phase 4 RuntimeSupport");
 
         // Combine all sections
-        return BuildOutput();
+        string output = BuildOutput();
+        Mark(label: "BuildOutput");
+        return output;
     }
 
     #endregion
@@ -134,89 +407,151 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Generates LLVM type declarations for all types in the registry.
     /// </summary>
-    private void GenerateTypeDeclarations()
+    private void GenerateTypeDeclarations() // NOSONAR S3776
     {
         // Generate entity types (reference types, heap-allocated)
-        foreach (var type in _registry.GetTypesByCategory(TypeCategory.Entity))
+        foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Entity))
         {
             if (type is EntityTypeInfo { IsGenericDefinition: false } entity)
             {
-                GenerateEntityType(entity);
+                // Skip resolutions with unresolved generic parameters at any depth
+                // (e.g., List[BTreeSetNode[T]] where T is nested inside a type argument)
+                if (entity.TypeArguments != null &&
+                    entity.TypeArguments.Any(predicate: ContainsGenericParameter))
+                {
+                    continue;
+                }
+
+                GenerateEntityType(entity: entity);
             }
+        }
+
+        // Generate crashable types (always entity semantics — heap-allocated error types)
+        foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Crashable))
+        {
+            if (type is CrashableTypeInfo crashable)
+                GenerateCrashableType(crashable: crashable);
         }
 
         // Generate record types (value types)
-        foreach (var type in _registry.GetTypesByCategory(TypeCategory.Record))
+        foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Record))
         {
             if (type is RecordTypeInfo { IsGenericDefinition: false } record)
             {
-                GenerateRecordType(record);
+                if (record.TypeArguments != null &&
+                    record.TypeArguments.Any(predicate: t =>
+                        ContainsGenericParameter(t) || t is ErrorTypeInfo ||
+                        ContainsAbstractProjection(t)))
+                {
+                    continue;
+                }
+
+                GenerateRecordType(record: record);
             }
         }
 
-        // Generate resident types (fixed-size reference types) - RazorForge only
-        foreach (var type in _registry.GetTypesByCategory(TypeCategory.Resident))
-        {
-            if (type is ResidentTypeInfo { IsGenericDefinition: false } resident)
-            {
-                GenerateResidentType(resident);
-            }
-        }
-
-        // Generate choice types (enums → single-member-variable records)
-        foreach (var type in _registry.GetTypesByCategory(TypeCategory.Choice))
-        {
-            if (type is ChoiceTypeInfo choice)
-            {
-                GenerateChoiceType(choice);
-            }
-        }
-
-        // Generate variant types (tagged unions → tag + payload record)
-        foreach (var type in _registry.GetTypesByCategory(TypeCategory.Variant))
+        // Generate variant types (tagged unions -> tag + payload record)
+        foreach (TypeInfo type in _registry.GetTypesByCategory(category: TypeCategory.Variant))
         {
             if (type is VariantTypeInfo { IsGenericDefinition: false } variant)
             {
-                GenerateVariantType(variant);
+                GenerateVariantType(variant: variant);
             }
         }
     }
 
     /// <summary>
+    /// Checks if a type contains unresolved generic parameters at any nesting depth.
+    /// </summary>
+    /// <summary>
+    /// True if <paramref name="type"/> is, or contains, an unresolved associated-type projection
+    /// ('Me/Value', 'S/Iter'). Such a type is abstract until monomorphization resolves the slot, so
+    /// a record instantiation built over it (e.g. Maybe[Me/Value] from an abstract protocol method
+    /// signature) is not emittable LLVM IR and must be skipped at the record-declaration sites.
+    /// Kept separate from <see cref="ContainsGenericParameter"/> so routine emission is unaffected.
+    /// </summary>
+    private static bool ContainsAbstractProjection(TypeInfo type)
+    {
+        if (type is AssociatedProjectionTypeInfo)
+        {
+            return true;
+        }
+
+        return type.TypeArguments?.Any(predicate: ContainsAbstractProjection) == true;
+    }
+
+    private static bool ContainsGenericParameter(TypeInfo type)
+    {
+        if (type is GenericParameterTypeInfo or ErrorTypeInfo)
+        {
+            return true;
+        }
+
+        // Protocol self-type ('Me') has no concrete LLVM representation — treat the same as an
+        // unresolved generic parameter so that abstract protocol method stubs are never declared.
+        // Build-time dispatch: concrete implementers emit their own declarations; the abstract
+        // stub with 'Me' in its signature is never valid LLVM IR.
+        if (type is ProtocolSelfTypeInfo)
+        {
+            return true;
+        }
+
+        // Types annotated @llvm("...") always map to a fixed LLVM type regardless of type
+        // arguments — treat as concrete (e.g. Hijacked[DictEntry[K,V]] -> ptr is valid LLVM IR).
+        if (type is RecordTypeInfo { HasDirectBackendType: true })
+        {
+            return false;
+        }
+
+        if (type.TypeArguments == null)
+        {
+            return false;
+        }
+
+        return type.TypeArguments.Any(predicate: ContainsGenericParameter);
+    }
+
+    /// <summary>
     /// Generates LLVM function declarations (signatures only).
     /// Only emits 'declare' for external routines that don't have bodies.
-    /// Routines with bodies (user program and stdlib) are handled by GenerateFunctionDefinitions().
+    /// Routines with bodies (user program and stdlib) are handled by GenerateRoutineDefinitions().
     /// </summary>
-    private void GenerateFunctionDeclarations()
+    private void GenerateRoutineDeclarations() // NOSONAR S3776
     {
-        // Build set of routine names that have bodies (in user program or stdlib)
+        // Build set of routine names that have bodies (in user programs or stdlib)
         var routinesWithBodies = new HashSet<string>();
 
         // User program routines
-        foreach (var decl in _program.Declarations)
+        foreach ((Program userProgram, string _, string _) in _userPrograms)
         {
-            if (decl is RoutineDeclaration routine)
-            {
-                routinesWithBodies.Add(routine.Name);
-            }
-        }
-
-        // Stdlib routines with bodies
-        foreach (var (program, _, _) in _stdlibPrograms)
-        {
-            foreach (var decl in program.Declarations)
+            foreach (ISyntaxTreeNode decl in userProgram.Declarations)
             {
                 if (decl is RoutineDeclaration routine)
                 {
-                    routinesWithBodies.Add(routine.Name);
+                    routinesWithBodies.Add(item: routine.Name);
                 }
             }
         }
 
-        foreach (var routine in _registry.GetAllRoutines())
+        // Stdlib routines with bodies
+        foreach ((Program program, string _, string _) in _stdlibPrograms)
         {
-            // Skip generic definitions and routines with unresolved types
-            if (routine.IsGenericDefinition || HasErrorTypes(routine))
+            foreach (ISyntaxTreeNode decl in program.Declarations)
+            {
+                if (decl is RoutineDeclaration routine)
+                {
+                    routinesWithBodies.Add(item: routine.Name);
+                }
+            }
+        }
+
+        foreach (RoutineInfo routine in _registry.GetAllRoutines())
+        {
+            // Skip generic definitions, routines with unresolved types,
+            // and methods on generic owner types (e.g., Dict[K,V].count)
+            if (routine.IsGenericDefinition || HasErrorTypes(routine: routine) ||
+                routine.OwnerType is { IsGenericDefinition: true } ||
+                routine.OwnerType is GenericParameterTypeInfo)
             {
                 continue;
             }
@@ -227,22 +562,42 @@ public partial class LLVMCodeGenerator
                 continue;
             }
 
+            // Skip abstract protocol methods — they are never called directly; concrete
+            // implementations are reached only through runtime dispatch stubs.
+            if (routine.OwnerType is ProtocolTypeInfo)
+            {
+                continue;
+            }
+
+            // A C-extern routine (e.g. `external("C") rf_allocate_dynamic`) emits under its raw C
+            // symbol and always needs a `declare` — it never has an RF body. Its bare name can
+            // collide with a same-named RF wrapper overload (e.g. `rf_allocate_dynamic(ByteSize)`,
+            // which mangles to a distinct `Core.rf_allocate_dynamic(Core.ByteSize)` symbol). The
+            // body-name skip below would then wrongly drop the C-extern's declaration, producing
+            // `use of undefined value @rf_allocate_dynamic` at opt time when only the raw form is
+            // called. Declare C-externs unconditionally (declarations dedupe by symbol name).
+            bool isCExtern = routine.CallingConvention == "C";
+
             // Skip routines that have bodies (they will be emitted as 'define' in GenerateFunctionDefinitions)
-            string fullName = routine.OwnerType != null ? $"{routine.OwnerType.Name}.{routine.Name}" : routine.Name;
-            if (routinesWithBodies.Contains(routine.Name) || routinesWithBodies.Contains(fullName))
+            string fullName = routine.OwnerType != null
+                ? $"{routine.OwnerType.Name}.{routine.Name}"
+                : routine.Name;
+            if (!isCExtern &&
+                (routinesWithBodies.Contains(item: routine.Name) ||
+                 routinesWithBodies.Contains(item: fullName)))
             {
                 continue;
             }
 
             // Only emit 'declare' for truly external routines
-            GenerateFunctionDeclaration(routine);
+            GenerateRoutineDeclaration(routine: routine);
         }
     }
 
     /// <summary>
     /// Checks if a routine has any error types in its signature.
     /// </summary>
-    private static bool HasErrorTypes(SemanticAnalysis.Symbols.RoutineInfo routine)
+    private static bool HasErrorTypes(RoutineInfo routine)
     {
         // Check return type
         if (routine.ReturnType?.Category == TypeCategory.Error)
@@ -251,7 +606,7 @@ public partial class LLVMCodeGenerator
         }
 
         // Check parameter types
-        foreach (var param in routine.Parameters)
+        foreach (ParameterInfo param in routine.Parameters)
         {
             if (param.Type.Category == TypeCategory.Error)
             {
@@ -266,119 +621,773 @@ public partial class LLVMCodeGenerator
     /// Generates LLVM function definitions (with bodies).
     /// Includes both user program routines and stdlib routines (for intrinsics).
     /// </summary>
-    private void GenerateFunctionDefinitions()
+    private void GenerateRoutineDefinitions()
     {
         // First, generate user program routines (these take priority)
-        foreach (var decl in _program.Declarations)
+        foreach ((Program userProgram, string _, string _) in _userPrograms)
         {
-            if (decl is RoutineDeclaration routine)
-            {
-                GenerateFunctionDefinition(routine);
-            }
-        }
-
-        // Then, generate stdlib routine definitions (for intrinsic operations)
-        // This allows S64.__add__ etc. to have their bodies built
-        // We wrap each in try-catch since some stdlib routines may have parse errors
-        foreach (var (program, _, _) in _stdlibPrograms)
-        {
-            foreach (var decl in program.Declarations)
+            foreach (ISyntaxTreeNode decl in userProgram.Declarations)
             {
                 if (decl is RoutineDeclaration routine)
                 {
-                    try
-                    {
-                        GenerateFunctionDefinition(routine);
-                    }
-                    catch
-                    {
-                        // Skip stdlib routines that have codegen errors
-                        // (likely due to parse errors in stdlib files)
-                    }
+                    GenerateRoutineDefinition(routine: routine);
                 }
             }
         }
 
-        // Finally, generate bodies for synthesized routines (__ne__, __lt__, __le__, __gt__, __ge__)
-        GenerateSynthesizedRoutines();
+        // Unified loop: compile stdlib bodies, emit pre-built generic bodies, generate
+        // synthesized routines, and then build runtime dispatch stubs. Codegen no longer
+        // performs generic discovery or on-demand monomorphization.
+        int prevDefCount;
+        int prevDeclCount;
+        int iterations = 0;
+        const int maxIterations = 100;
+        do
+        {
+            prevDefCount = _generatedRoutineDefs.Count;
+            prevDeclCount = _generatedRoutines.Count;
+
+            // Phase A: Compile stdlib routine bodies for referenced routines
+            foreach ((Program program, string _, string module) in _stdlibPrograms)
+            {
+                foreach (RoutineDeclaration routine in EnumerateStdlibRoutines(program: program))
+                {
+                    // Look up routine info — try multiple keys:
+                    // 1. Raw AST name (e.g., "show")
+                    // 2. Module-qualified (e.g., "IO.show")
+                    // 3. Short name fallback via LookupRoutineByName
+                    // 4. Overload-based lookup using AST parameter types
+                    RoutineInfo? routineInfo = _registry.LookupRoutine(fullName: routine.Name);
+                    if (routineInfo == null && !string.IsNullOrEmpty(value: module))
+                    {
+                        routineInfo =
+                            _registry.LookupRoutine(fullName: $"{module}.{routine.Name}");
+                    }
+
+                    if (routineInfo == null)
+                    {
+                        int dotIdx = routine.Name.IndexOf(value: '.');
+                        if (dotIdx > 0)
+                        {
+                            string shortName = routine.Name[(dotIdx + 1)..];
+                            routineInfo = _registry.LookupRoutine(fullName: shortName) ??
+                                          _registry.LookupRoutineByName(name: shortName);
+                        }
+                        else
+                        {
+                            routineInfo = _registry.LookupRoutineByName(name: routine.Name);
+                        }
+                    }
+
+                    // For overloaded routines (e.g., $create), try to find the
+                    // specific overload matching this AST declaration's parameter types.
+                    // This includes 0-arg overloads — LookupRoutine returns an arbitrary
+                    // overload, so we must disambiguate for all param counts.
+                    if (routineInfo != null)
+                    {
+                        var astParamTypes = new List<TypeInfo>();
+                        foreach (Parameter param in routine.Parameters)
+                        {
+                            if (param.Type != null)
+                            {
+                                string typeName = param.Type.Name;
+                                if (param.Type.GenericArguments is { Count: > 0 })
+                                {
+                                    typeName =
+                                        $"{typeName}[{string.Join(separator: ", ", values: param.Type.GenericArguments.Select(selector: a => a.Name))}]";
+                                }
+
+                                TypeInfo? t = _registry.LookupType(name: typeName);
+                                if (t != null)
+                                {
+                                    astParamTypes.Add(item: t);
+                                }
+                            }
+                        }
+
+                        if (astParamTypes.Count == routine.Parameters.Count)
+                        {
+                            RoutineInfo? overload = _registry.LookupRoutineOverload(
+                                baseName: routineInfo.BaseName,
+                                argTypes: astParamTypes);
+                            if (overload != null)
+                            {
+                                routineInfo = overload;
+                            }
+                        }
+
+                        // Fallback: match AST declaration to the exact registry overload by
+                        // parameter type NAMES. LookupType may fail for generic param types
+                        // like Hijacked[Byte], so astParamTypes can be incomplete and
+                        // LookupRoutineOverload may return the wrong overload (or fail).
+                        // Build the AST param-type name list directly and match against
+                        // candidate parameter type names. Determine the owner type from the
+                        // AST routine name (e.g. "Bytes.$create") rather than the possibly-
+                        // wrong initial routineInfo, since LookupRoutineByName returns an
+                        // arbitrary overload (possibly from a different type).
+                        TypeInfo? resolvedOwner = routineInfo?.OwnerType;
+                        int astDotIdx = routine.Name.IndexOf(value: '.');
+                        if (astDotIdx > 0)
+                        {
+                            string ownerName = routine.Name[..astDotIdx];
+                            TypeInfo? t = _registry.LookupType(name: ownerName);
+                            if (t != null) resolvedOwner = t;
+                        }
+
+                        if (routineInfo != null && resolvedOwner != null)
+                        {
+                            var astParamTypeNames = new List<string>();
+                            foreach (Parameter param in routine.Parameters)
+                            {
+                                if (param.Type == null)
+                                {
+                                    astParamTypeNames.Clear();
+                                    break;
+                                }
+
+                                string tn = param.Type.Name;
+                                if (param.Type.GenericArguments is { Count: > 0 })
+                                {
+                                    tn =
+                                        $"{tn}[{string.Join(separator: ",", values: param.Type.GenericArguments.Select(selector: a => a.Name))}]";
+                                }
+
+                                astParamTypeNames.Add(item: tn);
+                            }
+
+                            if (astParamTypeNames.Count == routine.Parameters.Count)
+                            {
+                                var candidates = new List<RoutineInfo>();
+                                _registry.CollectMemberRoutineCandidates(type: resolvedOwner,
+                                    methodName: routineInfo.Name,
+                                    candidates: candidates);
+
+                                static string NormalizeTypeName(string n)
+                                {
+                                    n = n.Replace(oldValue: " ", newValue: "");
+                                    var sb = new StringBuilder(n.Length);
+                                    var token = new StringBuilder();
+
+                                    static void FlushToken(StringBuilder source,
+                                        StringBuilder dest)
+                                    {
+                                        if (source.Length == 0)
+                                        {
+                                            return;
+                                        }
+
+                                        string segment = source.ToString();
+                                        int lastDot = segment.LastIndexOf(value: '.');
+                                        dest.Append(lastDot >= 0
+                                            ? segment[(lastDot + 1)..]
+                                            : segment);
+                                        source.Clear();
+                                    }
+
+                                    foreach (char ch in n)
+                                    {
+                                        if (char.IsLetterOrDigit(ch) || ch is '_' or '.' or '/')
+                                        {
+                                            token.Append(value: ch);
+                                            continue;
+                                        }
+
+                                        FlushToken(source: token, dest: sb);
+                                        sb.Append(value: ch);
+                                    }
+
+                                    FlushToken(source: token, dest: sb);
+                                    return sb.ToString();
+                                }
+
+                                // Wrapper / generic TypeInfo.Name omits type arguments (e.g. a
+                                // Hijacked[Byte] parameter exposes Type.Name = "Hijacked"), so we
+                                // must rebuild "Name[arg1,arg2,...]" before comparing — otherwise
+                                // overload disambiguation can't distinguish Hijacked[Byte] from
+                                // Hijacked[Character] and silently falls through to a wrong overload.
+                                static string CandidateTypeName(TypeInfo t)
+                                {
+                                    if (t.TypeArguments is { Count: > 0 } typeArgs && !t.Name.Contains(value: '['))
+                                    {
+                                        return $"{t.Name}[{string.Join(separator: ",", values: typeArgs.Select(selector: a => a.Name))}]";
+                                    }
+                                    return t.Name;
+                                }
+
+                                RoutineInfo? match = candidates.FirstOrDefault(predicate: c =>
+                                {
+                                    if (c.Parameters.Count != astParamTypeNames.Count)
+                                        return false;
+                                    if (c.IsFailable != routine.IsFailable) return false;
+                                    for (int i = 0; i < astParamTypeNames.Count; i++)
+                                    {
+                                        string candName =
+                                            NormalizeTypeName(n: CandidateTypeName(c.Parameters[index: i].Type));
+                                        string astName =
+                                            NormalizeTypeName(n: astParamTypeNames[index: i]);
+                                        if (candName == astName) continue;
+                                        return false;
+                                    }
+
+                                    return true;
+                                });
+                                if (match != null)
+                                {
+                                    routineInfo = match;
+                                }
+                            }
+                        }
+                    }
+
+                    // Ensure the resolved routine's failable flag matches the AST routine.
+                    // When failable/non-failable overloads share the same name and parameter types
+                    // (e.g., interpret_as_utf8() and interpret_as_utf8!()), they collide in
+                    // the _routines dictionary under the same RegistryKey. The last registration
+                    // wins, making the first invisible to LookupRoutine. Use LookupMethod
+                    // (which indexes by owner type and preserves all overloads) to find the
+                    // correct variant.
+                    if (routineInfo != null && routineInfo.IsFailable != routine.IsFailable &&
+                        routineInfo.OwnerType != null)
+                    {
+                        RoutineInfo? corrected = _registry.LookupMethod(
+                            type: routineInfo.OwnerType,
+                            methodName: routineInfo.Name,
+                            isFailable: routine.IsFailable);
+                        if (corrected != null)
+                        {
+                            routineInfo = corrected;
+                        }
+                    }
+
+                    if (routineInfo == null || routineInfo.IsGenericDefinition)
+                    {
+                        continue;
+                    }
+
+                    if (HasErrorTypes(routine: routineInfo))
+                    {
+                        continue;
+                    }
+
+                    // Only generate definitions for routines that were declared
+                    string funcName = MangleRoutineName(routine: routineInfo);
+                    if (!_generatedRoutines.Contains(item: funcName))
+                    {
+                        continue;
+                    }
+
+                    // Reachability gate: when LiveRoutineKeys is populated, skip stdlib
+                    // routines not reachable from program entry points. This prevents the
+                    // lazy-declaration cascade (declare X -> emit X -> declare Y -> emit Y)
+                    // from pulling in entire stdlib subgraphs (SortedList, BTreeNode, etc.)
+                    // that the user program never invokes.
+                    if (_liveRoutineKeys.Count > 0
+                        && !_liveRoutineKeys.Contains(item: routineInfo.RegistryKey))
+                    {
+                        continue;
+                    }
+
+                    // Skip if already defined
+                    if (_generatedRoutineDefs.Contains(item: funcName))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        GenerateRoutineDefinition(routine: routine, preResolvedInfo: routineInfo);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine(
+                            value:
+                            $"Warning: Stdlib codegen failed for '{routine.Name}': {ex.Message}");
+                    }
+                }
+            }
+
+            // Phase B: Emit pre-built instantiated generic bodies (monomorphized by GMP in Phase 6).
+            // Gate on the live-routine set so dead instantiations don't drag in their callees.
+            foreach ((string _, MonomorphizedBody body) in _instantiatedGenericBodies)
+            {
+                string instFuncName = MangleRoutineName(routine: body.Info);
+                if (_generatedRoutineDefs.Contains(item: instFuncName)) continue;
+                if (_liveRoutineKeys.Count > 0
+                    && !_liveRoutineKeys.Contains(item: body.Info.RegistryKey))
+                    continue;
+
+                var savedSubs = _typeSubstitutions;
+                _typeSubstitutions = body.TypeSubs;
+                try
+                {
+                    if (body.IsSynthesized)
+                    {
+                        // Empty-body sentinel — pure IR-level synthesis not yet wired; skip.
+                        if (body.Ast.Body is BlockStatement { Statements.Count: 0 })
+                        {
+                            continue;
+                        }
+
+                        _generatedRoutineDefs.Add(item: instFuncName);
+                        _generatedRoutines.Add(item: instFuncName);
+                        EmitSynthesizedBodyFromAst(routine: body.Info, funcName: instFuncName,
+                            body: body.Ast.Body);
+                    }
+                    else
+                    {
+                        GenerateRoutineDefinition(routine: body.Ast, preResolvedInfo: body.Info);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine(
+                        value:
+                        $"Warning: Instantiated generic codegen failed for '{instFuncName}': {ex.Message}");
+                    _generatedRoutineDefs.Remove(item: instFuncName);
+                    _generatedRoutines.Remove(item: instFuncName);
+                }
+                finally
+                {
+                    _typeSubstitutions = savedSubs;
+                }
+            }
+
+            // Phase C: Emit synthesized variant bodies (try_/check_/lookup_ and derived operators).
+            // Gate on the live-routine set: a synthesized $ne body for a dead type would call a
+            // dead $eq, leaving the linker hanging on the dead $eq symbol.
+            foreach ((string key, Statement synthBodyAst) in _synthesizedBodies)
+            {
+                RoutineInfo? synthInfo = _registry.LookupRoutine(fullName: key);
+                if (synthInfo == null || synthInfo.IsGenericDefinition) continue;
+                // Wrapper-forwarder synthesized bodies are anchored on the generic-def owner
+                // (e.g. Retained[T].$eq). Reachability seeds the *concrete* monomorphizations
+                // (Retained[Text].$eq), not the gen-def routine itself, so the gen-def synth
+                // would always fail this gate. The inner per-concrete loop below has its own
+                // liveness check (_generatedRoutines.Contains), so it's safe to bypass here.
+                bool isWrapperForwarderGenDef =
+                    synthInfo is { IsSynthesized: true, WrapperForwarderInnerMethod: not null }
+                    && synthInfo.OwnerType?.IsGenericDefinition == true;
+                if (!isWrapperForwarderGenDef
+                    && _liveRoutineKeys.Count > 0
+                    && !_liveRoutineKeys.Contains(item: synthInfo.RegistryKey))
+                    continue;
+                // Skip routines whose owner type still has unresolved generic parameters
+                // (e.g. $represent/$hash on DictEntry[K, V] — the generic definition).
+                // IsGenericDefinition only covers routines with their own type params (like
+                // hijacked_from[T]); owner-generic types need a separate guard.
+                if (synthInfo.OwnerType != null && ContainsGenericParameter(synthInfo.OwnerType))
+                    continue;
+                // Skip derived operators on generic owner types (e.g. ArrayIterator.$ne).
+                // GMP monomorphizes these into InstantiatedGenericBodies (Phase B); emitting the
+                // generic-def version here would call a non-existent generic $eq/$contains.
+                // Exception: synthesized wrapper forwarder bodies (T.key_get, etc.) are
+                // anchored on the generic-def owner by design. For each concrete resolution,
+                // emit the body with the wrapper's type parameter substituted.
+                if (synthInfo.OwnerType?.IsGenericDefinition == true)
+                {
+                    // Non-wrapper synthesized bodies on generic-def owners (try_next, $represent,
+                    // $diagnose, $hash, $eq for generic types like ListEmitter[T], List[T]).
+                    // For each live concrete instantiation of this owner, lookup the substituted
+                    // method (LookupMethod normalizes generic-def methods onto concrete owners),
+                    // set up _typeSubstitutions, and emit one body per concrete owner.
+                    if (synthInfo is { IsSynthesized: true, WrapperForwarderInnerMethod: null }
+                        && synthInfo.OwnerType.GenericParameters is { Count: > 0 } gParams)
+                    {
+                        TypeInfo genericOwner = synthInfo.OwnerType;
+                        foreach (TypeInfo candidateOwner in _registry.AllConcreteGenericInstancesUnfiltered.ToList())
+                        {
+                            if (candidateOwner.IsGenericDefinition) continue;
+                            if (candidateOwner.TypeArguments is not { Count: > 0 } tArgs) continue;
+                            if (tArgs.Count != gParams.Count) continue;
+                            // Match by generic-def reference: candidate must be an instantiation of genericOwner.
+                            TypeInfo? candidateGenDef = candidateOwner switch
+                            {
+                                RecordTypeInfo r => r.GenericDefinition,
+                                EntityTypeInfo e => e.GenericDefinition,
+                                WrapperTypeInfo w => _registry.LookupType(name: w.Name),
+                                _ => null
+                            };
+                            if (candidateGenDef == null
+                                || !ReferenceEquals(objA: candidateGenDef, objB: genericOwner))
+                                continue;
+                            if (_liveOwnerTypeNames.Count > 0
+                                && !_liveOwnerTypeNames.Contains(item: candidateOwner.FullName))
+                                continue;
+                            RoutineInfo? concreteMethod = _registry.LookupMethod(
+                                type: candidateOwner, methodName: synthInfo.Name);
+                            if (concreteMethod == null) continue;
+                            if (_liveRoutineKeys.Count > 0
+                                && !_liveRoutineKeys.Contains(item: concreteMethod.RegistryKey))
+                                continue;
+                            string monoFuncName = MangleRoutineName(routine: concreteMethod);
+                            if (_generatedRoutineDefs.Contains(item: monoFuncName)) continue;
+                            var savedMonoSubs = _typeSubstitutions;
+                            var newSubs = new Dictionary<string, TypeInfo>(comparer: StringComparer.Ordinal);
+                            for (int gi = 0; gi < gParams.Count; gi++)
+                                newSubs[key: gParams[index: gi]] = tArgs[index: gi];
+                            _typeSubstitutions = newSubs;
+                            try
+                            {
+                                _generatedRoutineDefs.Add(item: monoFuncName);
+                                _generatedRoutines.Add(item: monoFuncName);
+                                // Rewrite the shared generic-def body per concrete owner BEFORE
+                                // emission. The raw AST is shared across every instantiation, so
+                                // BuilderServiceInliningPass had to defer folding its BuilderService
+                                // constants (me.type_name() in synthesized $represent/$diagnose).
+                                // GenericAstRewriter deep-clones, substitutes the type params, folds
+                                // those constants against the concrete owner (same fold logic as the
+                                // inlining pass), and re-resolves routine bindings — emitting the
+                                // unrewritten body instead fails with unresolved-call errors.
+                                var monoStringSubs = newSubs.ToDictionary(
+                                    keySelector: kvp => kvp.Key,
+                                    elementSelector: kvp => kvp.Value.FullName);
+                                Statement rewrittenSynthBody = GenericAstRewriter.RewriteStatement(
+                                    stmt: synthBodyAst,
+                                    subs: monoStringSubs,
+                                    typeSubs: newSubs,
+                                    registry: _registry,
+                                    enclosingRoutine: concreteMethod);
+                                EmitSynthesizedBodyFromAst(routine: concreteMethod,
+                                    funcName: monoFuncName, body: rewrittenSynthBody);
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.Error.WriteLine(value:
+                                    $"Warning: Phase C monomorphized synth codegen failed for '{monoFuncName}': {ex.Message}");
+                                _generatedRoutineDefs.Remove(item: monoFuncName);
+                                _generatedRoutines.Remove(item: monoFuncName);
+                            }
+                            finally
+                            {
+                                _typeSubstitutions = savedMonoSubs;
+                            }
+                        }
+                    }
+                    if (synthInfo is { IsSynthesized: true, WrapperForwarderInnerMethod: not null } &&
+                        synthInfo.OwnerType.GenericParameters is { Count: 1 } wrapperParams)
+                    {
+                        string wrapperParamName = wrapperParams[0];
+                        foreach (RoutineInfo concreteWf in _registry.GetAllRoutineResolutions())
+                        {
+                            if (!concreteWf.IsSynthesized ||
+                                concreteWf.WrapperForwarderInnerMethod == null ||
+                                !ReferenceEquals(objA: concreteWf.GenericDefinition, objB: synthInfo) ||
+                                concreteWf.OwnerType?.TypeArguments is not { Count: 1 })
+                                continue;
+                            string concreteFuncName = MangleRoutineName(routine: concreteWf);
+                            if (!_generatedRoutines.Contains(item: concreteFuncName))
+                                continue;
+                            if (_generatedRoutineDefs.Contains(item: concreteFuncName))
+                                continue;
+                            TypeInfo concreteInner = concreteWf.OwnerType!.TypeArguments![0];
+                            var savedWfSubs = _typeSubstitutions;
+                            _typeSubstitutions = new Dictionary<string, TypeInfo>
+                                { [wrapperParamName] = concreteInner };
+                            try
+                            {
+                                _generatedRoutineDefs.Add(item: concreteFuncName);
+                                _generatedRoutines.Add(item: concreteFuncName);
+                                EmitSynthesizedBodyFromAst(routine: concreteWf,
+                                    funcName: concreteFuncName, body: synthBodyAst);
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.Error.WriteLine(
+                                    value:
+                                    $"Warning: Wrapper forwarder codegen failed for '{concreteFuncName}': {ex.Message}");
+                                _generatedRoutineDefs.Remove(item: concreteFuncName);
+                                _generatedRoutines.Remove(item: concreteFuncName);
+                            }
+                            finally
+                            {
+                                _typeSubstitutions = savedWfSubs;
+                            }
+                        }
+                    }
+                    continue;
+                }
+                string synthFuncName = MangleRoutineName(routine: synthInfo);
+                if (_generatedRoutineDefs.Contains(item: synthFuncName)) continue;
+                _generatedRoutineDefs.Add(item: synthFuncName);
+                _generatedRoutines.Add(item: synthFuncName);
+                try
+                {
+                    EmitSynthesizedBodyFromAst(routine: synthInfo, funcName: synthFuncName,
+                        body: synthBodyAst);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine(
+                        value:
+                        $"Warning: Synthesized body codegen failed for '{key}': {ex.Message}");
+                    _generatedRoutineDefs.Remove(item: synthFuncName);
+                    _generatedRoutines.Remove(item: synthFuncName);
+                }
+            }
+
+            iterations++;
+            if (iterations >= maxIterations)
+            {
+                Console.Error.WriteLine(
+                    value:
+                    $"Warning: GenerateFunctionDefinitions reached {maxIterations} iterations, possible infinite loop");
+                break;
+            }
+        } while (_generatedRoutineDefs.Count > prevDefCount ||
+                 _generatedRoutines.Count > prevDeclCount);
     }
 
     /// <summary>
-    /// Generates runtime support functions (allocation, deallocation, etc.).
-    /// Only declares functions that haven't already been declared via @native.* calls.
+    /// Enumerates all compilable RoutineDeclaration nodes from a stdlib program, including
+    /// routines nested inside CrashableDeclaration.Members (e.g., crash_message synthesized
+    /// from the "message:" directive). Nested routines are yielded with their names prefixed
+    /// by the owning type name (e.g., "DivisionByZeroError.crash_message") so Phase A's
+    /// registry lookup can find the registered method.
     /// </summary>
-    private void GenerateRuntimeSupport()
+    private static IEnumerable<RoutineDeclaration> EnumerateStdlibRoutines(Program program)
     {
-        EmitLine(_functionDeclarations, "; Runtime support functions");
+        foreach (ISyntaxTreeNode decl in program.Declarations)
+        {
+            if (decl is RoutineDeclaration routine)
+            {
+                yield return routine;
+            }
+            else if (decl is CrashableDeclaration crashable)
+            {
+                foreach (SyntaxTree.Declaration member in crashable.Members)
+                {
+                    if (member is RoutineDeclaration memberRoutine)
+                    {
+                        yield return memberRoutine with
+                        {
+                            Name = $"{crashable.Name}.{memberRoutine.Name}"
+                        };
+                    }
+                }
+            }
+        }
+    }
 
-        // Declare only if not already declared via @native.* calls
-        if (_declaredNativeFunctions.Add("rf_alloc"))
-        {
-            EmitLine(_functionDeclarations, "declare ptr @rf_alloc(i64)");
-        }
-        if (_declaredNativeFunctions.Add("rf_free"))
-        {
-            EmitLine(_functionDeclarations, "declare void @rf_free(ptr)");
-        }
-        if (_declaredNativeFunctions.Add("rf_console_print"))
-        {
-            EmitLine(_functionDeclarations, "declare void @rf_console_print(ptr, i64)");
-        }
-        if (_declaredNativeFunctions.Add("rf_console_print_line"))
-        {
-            EmitLine(_functionDeclarations, "declare void @rf_console_print_line(ptr, i64)");
-        }
-
-        EmitLine(_functionDeclarations, "");
+    /// <summary>
+    /// Generates runtime support functions.
+    /// External("C") routines from NativeDeclarations.rf are declared via GenerateRoutineDeclarations().
+    /// </summary>
+    private static void GenerateRuntimeSupport()
+    {
+        // No-op: external("C") routines are handled by GenerateRoutineDeclarations()
+        // via the TypeRegistry (registered from NativeDeclarations.rf).
     }
 
     /// <summary>
     /// Builds the final output by combining all sections.
     /// </summary>
     /// <returns>The complete LLVM IR module.</returns>
-    private string BuildOutput()
+    private string BuildOutput() // NOSONAR S3776
     {
         var output = new StringBuilder();
 
         // Module header
-        output.AppendLine("; ModuleID = 'razorforge_module'");
-        output.AppendLine("source_filename = \"razorforge_module\"");
-        output.AppendLine("target datalayout = \"e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128\"");
-        output.AppendLine("target triple = \"x86_64-pc-windows-msvc\"");
+        output.AppendLine(value: "; ModuleID = 'razorforge_module'");
+        output.AppendLine(value: "source_filename = \"razorforge_module\"");
+        output.AppendLine(handler: $"target datalayout = \"{_dataLayout}\"");
+        output.AppendLine(handler: $"target triple = \"{_targetTriple}\"");
         output.AppendLine();
 
-        // Type declarations
-        if (_typeDeclarations.Length > 0)
+        // Type declarations — record -> choice -> variant -> entity -> crashable, each sorted by name
+        bool anyTypes = _typeDeclarationsRecord.Count > 0 || _typeDeclarationsVariant.Count > 0 ||
+                        _typeDeclarationsEntity.Count > 0 || _typeDeclarationsCrashable.Count > 0 ||
+                        _typeDeclarationsClosure.Count > 0;
+        if (anyTypes)
         {
-            output.AppendLine("; Type declarations");
-            output.Append(_typeDeclarations);
+            output.AppendLine(value: "; Type declarations");
+
+            void EmitTypeSection(string header, SortedDictionary<string, string> bucket)
+            {
+                if (bucket.Count == 0) return;
+                output.AppendLine(handler: $"; -- {header} --");
+                foreach (string decl in bucket.Values) output.Append(value: decl);
+            }
+
+            EmitTypeSection(header: "records", bucket: _typeDeclarationsRecord);
+            EmitTypeSection(header: "variants", bucket: _typeDeclarationsVariant);
+            EmitTypeSection(header: "entities", bucket: _typeDeclarationsEntity);
+            EmitTypeSection(header: "crashables", bucket: _typeDeclarationsCrashable);
+            EmitTypeSection(header: "closures", bucket: _typeDeclarationsClosure);
             output.AppendLine();
         }
 
         // Global declarations
         if (_globalDeclarations.Length > 0)
         {
-            output.AppendLine("; Global declarations");
-            output.Append(_globalDeclarations);
+            output.AppendLine(value: "; Global declarations");
+            output.Append(value: _globalDeclarations);
             output.AppendLine();
         }
 
-        // Function declarations
+        // Native/extern function declarations (always emitted)
         if (_functionDeclarations.Length > 0)
         {
-            output.AppendLine("; Function declarations");
-            output.Append(_functionDeclarations);
+            output.AppendLine(value: "; Function declarations");
+            output.Append(value: _functionDeclarations);
+        }
+
+        // RF function forward declarations — skip any that now have definitions
+        foreach ((string name, string line) in _rfRoutineDeclarations)
+        {
+            if (!_generatedRoutineDefs.Contains(item: name))
+            {
+                output.AppendLine(value: line);
+            }
+        }
+
+        // Inline shadow-stack helpers (only when tracing is on)
+        if (ShouldEmitTrace)
+        {
+            output.AppendLine(value: "; Shadow stack (inline — no DLL call)");
+            // 32-entry ring (power-of-2) — index masked with AND, no branch needed in push.
+            // The printer clamps to the actual depth so only valid frames are shown.
+            output.AppendLine(
+                value:
+                "@_rf_trace_stack = thread_local global [32 x { ptr, ptr, i32, i32 }] zeroinitializer");
+            output.AppendLine(value: "@_rf_trace_depth = thread_local global i32 0");
             output.AppendLine();
+            // push helper — branchless: mask index to [0,31] with AND
+            output.AppendLine(
+                value:
+                "define private void @_rf_trace_push(ptr %r, ptr %f, i32 %ln, i32 %col) alwaysinline {");
+            output.AppendLine(value: EntryLabel);
+            output.AppendLine(value: "  %d = load i32, ptr @_rf_trace_depth");
+            output.AppendLine(value: "  %idx32 = and i32 %d, 31");
+            output.AppendLine(value: "  %idx = zext i32 %idx32 to i64");
+            output.AppendLine(
+                value:
+                "  %slot = getelementptr inbounds [32 x { ptr, ptr, i32, i32 }], ptr @_rf_trace_stack, i64 0, i64 %idx");
+            output.AppendLine(
+                value:
+                "  %p0 = getelementptr inbounds { ptr, ptr, i32, i32 }, ptr %slot, i32 0, i32 0");
+            output.AppendLine(value: "  store ptr %r, ptr %p0");
+            output.AppendLine(
+                value:
+                "  %p1 = getelementptr inbounds { ptr, ptr, i32, i32 }, ptr %slot, i32 0, i32 1");
+            output.AppendLine(value: "  store ptr %f, ptr %p1");
+            output.AppendLine(
+                value:
+                "  %p2 = getelementptr inbounds { ptr, ptr, i32, i32 }, ptr %slot, i32 0, i32 2");
+            output.AppendLine(value: "  store i32 %ln, ptr %p2");
+            output.AppendLine(
+                value:
+                "  %p3 = getelementptr inbounds { ptr, ptr, i32, i32 }, ptr %slot, i32 0, i32 3");
+            output.AppendLine(value: "  store i32 %col, ptr %p3");
+            output.AppendLine(value: "  %nd = add i32 %d, 1");
+            output.AppendLine(value: "  store i32 %nd, ptr @_rf_trace_depth");
+            output.AppendLine(value: RetVoidInstruction);
+            output.AppendLine(value: "}");
+            output.AppendLine();
+            // pop helper — branchless: depth is always > 0 when pop is called (paired with push)
+            output.AppendLine(value: "define private void @_rf_trace_pop() alwaysinline {");
+            output.AppendLine(value: EntryLabel);
+            output.AppendLine(value: "  %d = load i32, ptr @_rf_trace_depth");
+            output.AppendLine(value: "  %nd = add i32 %d, -1");
+            output.AppendLine(value: "  store i32 %nd, ptr @_rf_trace_depth");
+            output.AppendLine(value: RetVoidInstruction);
+            output.AppendLine(value: "}");
+            output.AppendLine();
+            // update-loc helper — overwrites the line/col of the current (topmost) frame.
+            // Codegen emits a call to this before each call expression so the stack trace
+            // reflects the source line where the call originates, not just the enclosing
+            // routine's declaration line. Skip when depth == 0 (no current frame yet —
+            // happens during the entry routine's own setup before its trace_push fires).
+            output.AppendLine(
+                value:
+                "define private void @_rf_trace_update_loc(i32 %ln, i32 %col) alwaysinline {");
+            output.AppendLine(value: EntryLabel);
+            output.AppendLine(value: "  %d = load i32, ptr @_rf_trace_depth");
+            output.AppendLine(value: "  %has = icmp ugt i32 %d, 0");
+            output.AppendLine(value: "  br i1 %has, label %do_update, label %skip");
+            output.AppendLine(value: "do_update:");
+            output.AppendLine(value: "  %top = sub i32 %d, 1");
+            output.AppendLine(value: "  %top32 = and i32 %top, 31");
+            output.AppendLine(value: "  %top64 = zext i32 %top32 to i64");
+            output.AppendLine(
+                value:
+                "  %slot = getelementptr inbounds [32 x { ptr, ptr, i32, i32 }], ptr @_rf_trace_stack, i64 0, i64 %top64");
+            output.AppendLine(
+                value:
+                "  %p2 = getelementptr inbounds { ptr, ptr, i32, i32 }, ptr %slot, i32 0, i32 2");
+            output.AppendLine(value: "  store i32 %ln, ptr %p2");
+            output.AppendLine(
+                value:
+                "  %p3 = getelementptr inbounds { ptr, ptr, i32, i32 }, ptr %slot, i32 0, i32 3");
+            output.AppendLine(value: "  store i32 %col, ptr %p3");
+            output.AppendLine(value: "  br label %skip");
+            output.AppendLine(value: "skip:");
+            output.AppendLine(value: RetVoidInstruction);
+            output.AppendLine(value: "}");
+            output.AppendLine();
+            // printer helper — passes exe TLS data to the DLL
+            output.AppendLine(value: "declare void @rf_print_shadow_stack_data(ptr, i32)");
+            output.AppendLine(value: "define private void @_rf_print_trace_stack() {");
+            output.AppendLine(value: EntryLabel);
+            output.AppendLine(value: "  %depth = load i32, ptr @_rf_trace_depth");
+            output.AppendLine(
+                value:
+                "  call void @rf_print_shadow_stack_data(ptr @_rf_trace_stack, i32 %depth)");
+            output.AppendLine(value: RetVoidInstruction);
+            output.AppendLine(value: "}");
+            output.AppendLine();
+        }
+
+        // Auxiliary helper definitions
+        if (_auxRoutineDefinitions.Length > 0)
+        {
+            output.AppendLine(value: "; Auxiliary function definitions");
+            output.Append(value: _auxRoutineDefinitions);
         }
 
         // Function definitions
         if (_functionDefinitions.Length > 0)
         {
-            output.AppendLine("; Function definitions");
-            output.Append(_functionDefinitions);
+            output.AppendLine(value: "; Function definitions");
+            output.Append(value: _functionDefinitions);
         }
 
-        return output.ToString();
+        // Emit main() entry point that calls the module's start() / start!() routine.
+        // Failable entry points have the symbol decorated with `!`, so we accept both forms.
+        string? startFunc = _generatedRoutineDefs.FirstOrDefault(predicate: f =>
+            f == "start" || f == "start!" ||
+            f.EndsWith(value: ".start") || f.EndsWith(value: ".start!") ||
+            f.EndsWith(value: ".start\"") || f.EndsWith(value: ".start!\""));
+        if (startFunc != null)
+        {
+            // Select trace mode: 2=shadow (debug+release), 1=platform (hardware faults only), 0=none (release-time/space)
+            int traceMode = _buildMode switch
+            {
+                RfBuildMode.Debug or RfBuildMode.Release => 2,
+                _ => 0
+            };
+
+            output.AppendLine(value: "declare void @__rf_set_trace_mode(i32)");
+            if (ShouldEmitTrace)
+                output.AppendLine(value: "declare void @rf_set_stack_printer(ptr)");
+            output.AppendLine();
+            output.AppendLine(value: "; Entry point");
+            output.AppendLine(value: "define i32 @main(i32 %argc, ptr %argv) {");
+            output.AppendLine(value: EntryLabel);
+            output.AppendLine(value: "  call void @rf_runtime_init()");
+            output.AppendLine(handler: $"  call void @__rf_set_trace_mode(i32 {traceMode})");
+            if (ShouldEmitTrace)
+                output.AppendLine(
+                    value: "  call void @rf_set_stack_printer(ptr @_rf_print_trace_stack)");
+            output.AppendLine(handler: $"  call void @{startFunc}()");
+            output.AppendLine(value: "  ret i32 0");
+            output.AppendLine(value: "}");
+        }
+
+        // Normalize to Unix line endings (clang/LLVM requires LF, not CRLF)
+        var normalized = output.ToString()
+                               .Replace(oldValue: "\r\n", newValue: "\n")
+                               .Replace(oldValue: "\r", newValue: "\n");
+        return ApplyTbaa(normalized);
     }
 
     #endregion
@@ -407,9 +1416,53 @@ public partial class LLVMCodeGenerator
     /// <summary>
     /// Emits a line to a StringBuilder.
     /// </summary>
-    private static void EmitLine(StringBuilder sb, string line)
+    private void EmitLine(StringBuilder sb, string line)
     {
-        sb.AppendLine(line);
+        sb.AppendLine(value: line);
+    }
+
+    /// <summary>
+    /// Emits a function-local stack allocation into the current function's entry block.
+    /// This avoids repeated stack growth when the source declaration appears inside loops.
+    /// </summary>
+    private void EmitEntryAlloca(string llvmName, string llvmType)
+    {
+        if (!_emittedAllocaNames.Add(item: llvmName))
+        {
+            return; // Already emitted for this function — pattern variables shared across when arms
+        }
+
+        EmitLine(sb: _currentRoutineEntryAllocas, line: $"  {llvmName} = alloca {llvmType}");
+    }
+
+    /// <summary>
+    /// Emits a null-terminated C string as an LLVM global constant.
+    /// Returns the global name (e.g., "@.cstr.0") which can be used as a ptr.
+    /// </summary>
+    private string EmitCStringConstant(string value)
+    {
+        if (_cstrConstants.TryGetValue(key: value, value: out string? cached))
+            return cached;
+
+        string name = $"@.cstr.{_cstrCounter++}";
+        byte[] utf8 = Encoding.UTF8.GetBytes(s: value + "\0");
+        var sb = new StringBuilder();
+        foreach (byte b in utf8)
+        {
+            if (b is >= 0x20 and < 0x7F && b != (byte)'\\' && b != (byte)'"')
+            {
+                sb.Append(value: (char)b);
+            }
+            else
+            {
+                sb.Append(handler: $"\\{b:X2}");
+            }
+        }
+
+        EmitLine(sb: _globalDeclarations,
+            line: $"{name} = private unnamed_addr constant [{utf8.Length} x i8] c\"{sb}\"");
+        _cstrConstants[value] = name;
+        return name;
     }
 
     #endregion

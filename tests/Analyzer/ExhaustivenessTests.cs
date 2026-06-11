@@ -1,6 +1,6 @@
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Diagnostics;
-using Xunit;
+using System.Linq;
+using Compiler.Diagnostics;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
@@ -11,14 +11,17 @@ using static TestHelpers;
 /// When expressions must be exhaustive (S356 error).
 /// When statements on enumerable types warn if non-exhaustive (W250 warning).
 ///
-/// Note: Variant exhaustiveness tests are deferred — variant case names
+/// Note: Variant exhaustiveness tests are deferred - variant case names
 /// (e.g., Shape.CIRCLE) are not yet resolved by the type system in pattern context.
 /// The exhaustiveness infrastructure supports variants (CheckVariantExhaustiveness)
 /// and will activate once variant type resolution in patterns is implemented.
 /// </summary>
 public class ExhaustivenessTests
 {
-    #region Choice — When Expression
+    #region Choice - When Expression
+    /// <summary>
+    /// Verifies that validates when expression choice all cases covered no error.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_AllCasesCovered_NoError()
@@ -38,10 +41,13 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Verifies that validates when expression choice missing case reports error.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_MissingCase_ReportsError()
@@ -60,10 +66,13 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Verifies that validates when expression choice with else no error.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_WithElse_NoError()
@@ -81,10 +90,13 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Verifies that validates when expression choice shorthand all cases covered no error.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_Shorthand_AllCasesCovered_NoError()
@@ -102,10 +114,13 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Verifies that validates when expression choice equals operator reports error.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_EqualsOperator_ReportsError()
@@ -123,14 +138,17 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.PatternTypeMismatch);
     }
 
     #endregion
 
-    #region Choice — When Statement
+    #region Choice - When Statement
+    /// <summary>
+    /// Verifies that validates when statement choice missing case reports warning.
+    /// </summary>
 
     [Fact]
     public void WhenStatement_Choice_MissingCase_ReportsWarning()
@@ -148,10 +166,13 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Warnings,
             filter: w => w.Code == SemanticWarningCode.NonExhaustiveWhen);
     }
+    /// <summary>
+    /// Verifies that validates when statement choice all cases covered no warning.
+    /// </summary>
 
     [Fact]
     public void WhenStatement_Choice_AllCasesCovered_NoWarning()
@@ -169,10 +190,13 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Warnings,
             filter: w => w.Code == SemanticWarningCode.NonExhaustiveWhen);
     }
+    /// <summary>
+    /// Verifies that validates when statement choice with else no warning.
+    /// </summary>
 
     [Fact]
     public void WhenStatement_Choice_WithElse_NoWarning()
@@ -190,14 +214,17 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Warnings,
             filter: w => w.Code == SemanticWarningCode.NonExhaustiveWhen);
     }
 
     #endregion
 
-    #region Bool — When Expression
+    #region Bool - When Expression
+    /// <summary>
+    /// Verifies that validates when expression bool both cases no error.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Bool_BothCases_NoError()
@@ -210,10 +237,13 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Verifies that validates when expression bool missing false reports error.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Bool_MissingFalse_ReportsError()
@@ -225,10 +255,13 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Verifies that validates when expression bool missing true reports error.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Bool_MissingTrue_ReportsError()
@@ -240,14 +273,17 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
 
     #endregion
 
-    #region Error Handling Types — When Expression
+    #region Error Handling Types - When Expression
+    /// <summary>
+    /// Verifies that validates when expression maybe none and else no error.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Maybe_NoneAndElse_NoError()
@@ -260,7 +296,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
@@ -268,6 +304,9 @@ public class ExhaustivenessTests
     #endregion
 
     #region Wildcard and Else
+    /// <summary>
+    /// Verifies that validates when expression wildcard always exhaustive.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Wildcard_AlwaysExhaustive()
@@ -280,10 +319,13 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Verifies that validates when expression else binding always exhaustive.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_ElseBinding_AlwaysExhaustive()
@@ -296,15 +338,18 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Verifies that validates when expression no else non enumerable type reports error.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_NoElse_NonEnumerableType_ReportsError()
     {
-        // S32 has 2**32 values — without else, cannot be exhaustive
+        // S32 has 2**32 values -> without else, cannot be exhaustive
         string source = """
                         routine test(x: S32) -> S32
                           return when x
@@ -313,7 +358,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
@@ -321,6 +366,9 @@ public class ExhaustivenessTests
     #endregion
 
     #region Error Message Content
+    /// <summary>
+    /// Verifies that validates when expression choice missing case error includes missing case name.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_MissingCase_ErrorIncludesMissingCaseName()
@@ -337,11 +385,14 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch
                          && e.Message.Contains("PENDING"));
     }
+    /// <summary>
+    /// Verifies that validates when expression bool missing case error includes missing value.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Bool_MissingCase_ErrorIncludesMissingValue()
@@ -353,11 +404,14 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch
                          && e.Message.Contains("false"));
     }
+    /// <summary>
+    /// Verifies that validates when statement choice missing cases warning includes missing names.
+    /// </summary>
 
     [Fact]
     public void WhenStatement_Choice_MissingCases_WarningIncludesMissingNames()
@@ -374,7 +428,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         SemanticWarning? warning = result.Warnings
             .FirstOrDefault(predicate: w => w.Code == SemanticWarningCode.NonExhaustiveWhen);
         Assert.NotNull(@object: warning);
@@ -385,7 +439,95 @@ public class ExhaustivenessTests
 
     #endregion
 
-    #region Choice — Unified 'is' Pattern (Phase 12)
+    #region Single-Case Choice Exhaustiveness
+
+    /// <summary>
+    /// Verifies that a when expression covering the only case of a single-case choice is exhaustive.
+    /// </summary>
+    [Fact]
+    public void WhenExpression_Choice_SingleCase_AllCovered_NoError()
+    {
+        string source = """
+                        choice Only
+                          ONE
+
+                        routine test(o: Only) -> S32
+                          return when o
+                            is ONE => 1
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
+    }
+
+    #endregion
+
+    #region Bool - When Statement
+
+    /// <summary>
+    /// Verifies that a when statement on Bool covering both branches produces no warning.
+    /// </summary>
+    [Fact]
+    public void WhenStatement_Bool_BothCases_NoWarning()
+    {
+        string source = """
+                        routine test(b: Bool)
+                          when b
+                            true => show("yes")
+                            false => show("no")
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Warnings,
+            filter: w => w.Code == SemanticWarningCode.NonExhaustiveWhen);
+    }
+
+    /// <summary>
+    /// Verifies that a when statement on Bool missing the false branch reports a warning.
+    /// </summary>
+    [Fact]
+    public void WhenStatement_Bool_MissingFalse_ReportsWarning()
+    {
+        string source = """
+                        routine test(b: Bool)
+                          when b
+                            true => show("yes")
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Warnings,
+            filter: w => w.Code == SemanticWarningCode.NonExhaustiveWhen);
+    }
+
+    /// <summary>
+    /// Verifies that a when statement on Bool with else produces no warning.
+    /// </summary>
+    [Fact]
+    public void WhenStatement_Bool_WithElse_NoWarning()
+    {
+        string source = """
+                        routine test(b: Bool)
+                          when b
+                            true => show("yes")
+                            else => show("no")
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Warnings,
+            filter: w => w.Code == SemanticWarningCode.NonExhaustiveWhen);
+    }
+
+    #endregion
+
+    #region Choice - Unified 'is' Pattern (Phase 12)
+    /// <summary>
+    /// Verifies that validates when expression choice is a pattern all cases no error.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_IsPattern_AllCases_NoError()
@@ -405,10 +547,13 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Verifies that validates when the expression choice is pattern-qualified name no error.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_IsPattern_QualifiedName_NoError()
@@ -428,10 +573,13 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Verifies that validates when expression choice is pattern missing case reports error.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_IsPattern_MissingCase_ReportsError()
@@ -450,10 +598,13 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Verifies that validates when the expression choice is a pattern with else no error.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_IsPattern_WithElse_NoError()
@@ -471,10 +622,13 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NonExhaustiveMatch);
     }
+    /// <summary>
+    /// Verifies that validates when the statement choice is pattern missing case reports warning.
+    /// </summary>
 
     [Fact]
     public void WhenStatement_Choice_IsPattern_MissingCase_ReportsWarning()
@@ -492,10 +646,13 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Warnings,
             filter: w => w.Code == SemanticWarningCode.NonExhaustiveWhen);
     }
+    /// <summary>
+    /// Verifies that validates when expression choice mixed is and equals reports error.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_MixedIsAndEquals_ReportsError()
@@ -515,10 +672,13 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.PatternTypeMismatch);
     }
+    /// <summary>
+    /// Verifies that validates when expression choice is pattern invalid case reports error.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_IsPattern_InvalidCase_ReportsError()
@@ -538,10 +698,13 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ChoiceCaseNotFound);
     }
+    /// <summary>
+    /// Verifies that validates when expression choice is pattern variable binding reports error.
+    /// </summary>
 
     [Fact]
     public void WhenExpression_Choice_IsPattern_VariableBinding_ReportsError()
@@ -559,7 +722,7 @@ public class ExhaustivenessTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.PatternTypeMismatch);
     }

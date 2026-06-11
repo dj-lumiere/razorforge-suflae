@@ -1,0 +1,11 @@
+module Core
+
+### Represents the protocol for shifting a value backward by a duration.
+### `DurationSubtractable` is used by temporal values that can move earlier by a
+### concrete `Duration`.
+protocol DurationSubtractable
+  ### Returns this value shifted backward by `you`.
+  ### :param you: The duration to subtract.
+  ### :returns: The resulting `Me` value.
+  @readonly
+  routine Me.$sub(you: Duration) -> ?Me

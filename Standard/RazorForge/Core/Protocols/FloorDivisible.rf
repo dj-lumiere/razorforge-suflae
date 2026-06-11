@@ -1,9 +1,20 @@
-# FloorDivisible - Protocol for types that support floor division (//) and modulo (%)
 module Core
 
+### Represents the protocol for Euclidean quotient and remainder.
+### `FloorDivisible` is for integer-like types whose division surface produces a
+### quotient and remainder pair rather than a true fractional quotient.
 protocol FloorDivisible
+  ### Returns the quotient of this value and the other value.
+  ### Implementations should keep the result consistent with the associated
+  ### remainder operation.
+  ### :param you: The divisor.
+  ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.__floordiv__(you: Me) -> Me
+  routine Me.$floordiv(you: Me) -> ?Me
 
+  ### Returns the remainder after division.
+  ### This result should correspond to the quotient returned by `$floordiv`.
+  ### :param you: The divisor.
+  ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.__mod__(you: Me) -> Me
+  routine Me.$mod(you: Me) -> ?Me

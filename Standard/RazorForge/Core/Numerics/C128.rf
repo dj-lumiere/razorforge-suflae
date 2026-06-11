@@ -1,0 +1,282 @@
+module Core
+
+### A complex number with quadruple-precision real and imaginary components.
+### `C128` stores two `F128` values and provides the widest complex precision
+### in the stdlib, including a full set of transcendental functions via the
+### LibBF runtime. Use this type when `C64` does not provide enough accuracy.
+record C128 obeys Numeric, Equatable
+  ### The real part.
+  real: F128
+  ### The imaginary part.
+  imag: F128
+
+# Complex constants
+preset C128_ZERO: C128 = C128(real: 0.0_f128, imag: 0.0_f128)
+preset C128_ONE: C128 = C128(real: 1.0_f128, imag: 0.0_f128)
+preset C128_I: C128 = C128(real: 0.0_f128, imag: 1.0_f128)
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+### Constructs a `C128` with the given real component and zero imaginary part.
+### :param from: The real-axis value.
+### :returns: The corresponding `C128` value.
+routine C128.$create(from: F128) -> C128
+  return C128(real: from, imag: 0.0_f128)
+
+### Widens a `C32` to `C128` by extending each component to `F128`.
+### :param from: The single-precision complex value to widen.
+### :returns: A `C128` carrying the same numeric value.
+routine C128.$create(from: C32) -> C128
+  return C128(real: F128(from.real), imag: F128(from.imag))
+
+### Widens a `C64` to `C128` by extending each component to `F128`.
+### :param from: The double-precision complex value to widen.
+### :returns: A `C128` carrying the same numeric value.
+routine C128.$create(from: C64) -> C128
+  return C128(real: F128(from.real), imag: F128(from.imag))
+
+### Constructs a `C128` from polar coordinates: `r·cos(θ) + r·sin(θ)·i`.
+### :param r: The modulus (distance from origin).
+### :param theta: The argument (angle in radians).
+### :returns: The complex value at that polar position.
+routine C128.from_polar(r: F128, theta: F128) -> C128
+  return C128(real: r * theta.cos(), imag: r * theta.sin())
+
+# ============================================================================
+# Arithmetic Operations
+# ============================================================================
+
+### Returns the complex sum `me + you` (component-wise addition).
+### :param you: The addend.
+### :returns: A `C128` whose components are the sums of the corresponding components.
+routine C128.$add(you: C128) -> C128
+  return C128(real: me.real + you.real, imag: me.imag + you.imag)
+
+### Returns the complex difference `me - you` (component-wise subtraction).
+### :param you: The value to subtract.
+### :returns: A `C128` whose components are the differences of the corresponding components.
+routine C128.$sub(you: C128) -> C128
+  return C128(real: me.real - you.real, imag: me.imag - you.imag)
+
+### Returns the complex product `me * you` using the formula `(ac−bd) + (ad+bc)i`.
+### :param you: The right operand.
+### :returns: The Gaussian product.
+routine C128.$mul(you: C128) -> C128
+  return C128(real: me.real * you.real - me.imag * you.imag, imag: me.real * you.imag + me.imag * you.real)
+
+### Returns the complex quotient `me / you`.
+### Divides by the squared modulus of `you`.
+### :param you: The divisor.
+### :returns: The complex quotient.
+routine C128.$truediv(you: C128) -> C128
+  var d = you.real * you.real + you.imag * you.imag
+  return C128(real: (me.real * you.real + me.imag * you.imag) / d, imag: (me.imag * you.real - me.real * you.imag) / d)
+
+### Returns this complex value raised to the complex power `you` via `exp(you * log(me))`.
+### :param you: The complex exponent.
+### :returns: `me ** you` in quadruple precision.
+routine C128.$pow(you: C128) -> C128
+  return (you * me.log()).exp()
+
+### Returns the arithmetic negation of this value.
+### :returns: A `C128` with both components negated.
+routine C128.$neg() -> C128
+  return C128(real: -me.real, imag: -me.imag)
+
+# ============================================================================
+# Comparison
+# ============================================================================
+
+### Returns `true` if both components compare equal.
+### :param you: The value to compare against.
+### :returns: `true` if `me.real == you.real` and `me.imag == you.imag`.
+routine C128.$eq(you: C128) -> Bool
+  return me.real == you.real and me.imag == you.imag
+
+# ============================================================================
+# Components and Properties
+# ============================================================================
+
+### Returns the modulus (absolute value) of this complex number.
+### :returns: `√(real² + imag²)`.
+routine C128.abs() -> F128
+  return (me.real * me.real + me.imag * me.imag).sqrt()
+
+### Returns the phase angle of this complex value in radians.
+### :returns: `atan2(imag, real)`, in the range (−π, π].
+routine C128.arg() -> F128
+  return me.imag.atan2(me.real)
+
+### Returns the complex conjugate (negates the imaginary part).
+### :returns: `real - imag·i`.
+routine C128.conjugate() -> C128
+  return C128(real: me.real, imag: -me.imag)
+
+### Returns the squared modulus (avoids the square root of `abs`).
+### :returns: `real² + imag²`.
+routine C128.norm() -> F128
+  return me.real * me.real + me.imag * me.imag
+
+# ============================================================================
+# Trigonometric (using native F128 sinh/cosh)
+# ============================================================================
+
+### Returns the complex sine using the identity `sin(a+bi) = sin(a)cosh(b) + i·cos(a)sinh(b)`.
+### :returns: The complex sine of this value.
+routine C128.sin() -> C128
+  return C128(real: me.real.sin() * me.imag.cosh(), imag: me.real.cos() * me.imag.sinh())
+
+### Returns the complex cosine using the identity `cos(a+bi) = cos(a)cosh(b) − i·sin(a)sinh(b)`.
+### :returns: The complex cosine of this value.
+routine C128.cos() -> C128
+  return C128(real: me.real.cos() * me.imag.cosh(), imag: -(me.real.sin() * me.imag.sinh()))
+
+### Returns the complex tangent of this value.
+### :returns: The complex tangent.
+routine C128.tan() -> C128
+  var a2 = me.real + me.real
+  var b2 = me.imag + me.imag
+  var d = a2.cos() + b2.cosh()
+  return C128(real: a2.sin() / d, imag: b2.sinh() / d)
+
+### Returns the complex arcsine of this value.
+### :returns: The principal value of `arcsin(me)`.
+routine C128.asin() -> C128
+  var iz = C128(real: -me.imag, imag: me.real)
+  var w = iz + (C128_ONE - me * me).sqrt()
+  var v = w.log()
+  return C128(real: v.imag, imag: -v.real)
+
+### Returns the complex arccosine of this value.
+### :returns: The principal value of `arccos(me)`.
+routine C128.acos() -> C128
+  var s = (C128_ONE - me * me).sqrt()
+  var w = me + C128(real: -s.imag, imag: s.real)
+  var v = w.log()
+  return C128(real: v.imag, imag: -v.real)
+
+### Returns the complex arctangent of this value.
+### :returns: The principal value of `arctan(me)`.
+routine C128.atan() -> C128
+  var num = C128(real: me.real, imag: me.imag + 1.0_f128)
+  var den = C128(real: -me.real, imag: 1.0_f128 - me.imag)
+  var v = (num / den).log()
+  return C128(real: -v.imag / 2.0_f128, imag: v.real / 2.0_f128)
+
+# ============================================================================
+# Hyperbolic (using native F128 sinh/cosh)
+# ============================================================================
+
+### Returns the complex hyperbolic sine of this value.
+### :returns: The complex hyperbolic sine.
+routine C128.sinh() -> C128
+  return C128(real: me.real.sinh() * me.imag.cos(), imag: me.real.cosh() * me.imag.sin())
+
+### Returns the complex hyperbolic cosine of this value.
+### :returns: The complex hyperbolic cosine.
+routine C128.cosh() -> C128
+  return C128(real: me.real.cosh() * me.imag.cos(), imag: me.real.sinh() * me.imag.sin())
+
+### Returns the complex hyperbolic tangent of this value.
+### :returns: The complex hyperbolic tangent.
+routine C128.tanh() -> C128
+  var a2 = me.real + me.real
+  var b2 = me.imag + me.imag
+  var d = a2.cosh() + b2.cos()
+  return C128(real: a2.sinh() / d, imag: b2.sin() / d)
+
+### Returns the complex inverse hyperbolic sine of this value.
+### :returns: The principal value of `arcsinh(me)`.
+routine C128.asinh() -> C128
+  return (me + (me * me + C128_ONE).sqrt()).log()
+
+### Returns the complex inverse hyperbolic cosine of this value.
+### :returns: The principal value of `arccosh(me)`.
+routine C128.acosh() -> C128
+  return (me + (me * me - C128_ONE).sqrt()).log()
+
+### Returns the complex inverse hyperbolic tangent of this value.
+### :returns: The principal value of `arctanh(me)`.
+routine C128.atanh() -> C128
+  var v = ((C128_ONE + me) / (C128_ONE - me)).log()
+  return C128(real: v.real / 2.0_f128, imag: v.imag / 2.0_f128)
+
+# ============================================================================
+# Exponential and Logarithmic
+# ============================================================================
+
+### Returns `e` raised to this complex value using `exp(a+bi) = eᵃ(cos(b) + i·sin(b))`.
+### :returns: The complex exponential.
+routine C128.exp() -> C128
+  var ea = me.real.exp()
+  return C128(real: ea * me.imag.cos(), imag: ea * me.imag.sin())
+
+### Returns the principal natural logarithm of this complex value.
+### :returns: `log(|me|) + i·arg(me)`.
+routine C128.log() -> C128
+  return C128(real: me.abs().log(), imag: me.arg())
+
+### Returns the base-10 logarithm of this complex value.
+### :returns: `log(me) / ln(10)`.
+routine C128.log10() -> C128
+  var v = me.log()
+  return C128(real: v.real / F128_LN_10, imag: v.imag / F128_LN_10)
+
+### Returns the complex square root, choosing the root with non-negative real part.
+### :returns: The principal square root of this value.
+routine C128.sqrt() -> C128
+  var r = me.abs()
+  if r == 0.0_f128
+    return C128_ZERO
+  var rp = ((r + me.real) / 2.0_f128).sqrt()
+  var ip = ((r - me.real) / 2.0_f128).sqrt()
+  if me.imag < 0.0_f128
+    ip = -ip
+  return C128(real: rp, imag: ip)
+
+### Raises this complex value to the complex exponent `exp` via `exp(exp * log(me))`.
+### :param exp: The complex exponent.
+### :returns: `me ** exp` in quadruple precision.
+routine C128.pow(exp: C128) -> C128
+  return (exp * me.log()).exp()
+
+# ============================================================================
+# Query Routines
+# ============================================================================
+
+### Returns `true` if both the real and imaginary parts are exactly zero.
+### :returns: `true` if `me == C128_ZERO`.
+routine C128.is_zero() -> Bool
+  return me.real == 0.0_f128 and me.imag == 0.0_f128
+
+### Returns `true` if the imaginary part is exactly zero (the value lies on the real axis).
+### :returns: `true` if `me.imag == 0.0`.
+routine C128.is_real() -> Bool
+  return me.imag == 0.0_f128
+
+### Returns `true` if the real part is exactly zero (the value lies on the imaginary axis).
+### :returns: `true` if `me.real == 0.0`.
+routine C128.is_imaginary() -> Bool
+  return me.real == 0.0_f128
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns an xxHash64-based hash of this complex value.
+### :returns: A `U64` hash combining both components.
+routine C128.$fast_hash() -> U64
+  var acc = __hash_round(acc: 0u64, h: me.real.$fast_hash())
+  acc = __hash_round(acc: acc, h: me.imag.$fast_hash())
+  return __hash_finalize(h: acc)
+
+### Returns a SipHash-2-4 keyed hash of this complex value.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
+routine C128.$hash(k0: U64, k1: U64) -> U64
+  var acc = __hash_round(acc: 0u64, h: me.real.$hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.imag.$hash(k0: k0, k1: k1))
+  return __hash_finalize(h: acc)

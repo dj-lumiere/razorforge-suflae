@@ -1,6 +1,7 @@
-# SignedIntegral - Bundle protocol for signed fixed-width integers
-# Extends FixedIntegral with Negatable (unary -)
 module Core
 
+### Represents the aggregate protocol for signed fixed-width integers.
+### `SignedIntegral` adds algebraic negation to the `FixedIntegral` surface,
+### making it the common protocol for bounded signed machine integer types.
 protocol SignedIntegral obeys FixedIntegral, Negatable
   pass

@@ -1,0 +1,595 @@
+module Core
+
+### A 16-bit unsigned integer in the range 0 to 65,535.
+###
+### `U16` is commonly used for Unicode code units (UTF-16), audio samples,
+### and other data that fits in 16 bits.
+@llvm("i16")
+record U16 obeys UnsignedIntegral, Ordered, ConstCompatible
+  pass
+
+# Constants for U16 limits
+preset U16_MIN: U16 = 0_u16
+preset U16_MAX: U16 = 65535_u16
+preset U16_ZERO: U16 = 0_u16
+preset U16_ONE: U16 = 1_u16
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+### Converts an `S8` to `U16`, throwing if the value is negative.
+### :param from: The `S8` value to convert.
+### :returns: A `U16` with the same unsigned value as `from`.
+### :throws: {IntegerOverflowError} if `from < 0`.
+routine U16.$create!(from: S8) -> U16
+  if from < 0_s8
+    throw IntegerOverflowError()
+  return sign_extend[S8, U16](from)
+
+### Converts an `S16` to `U16`, throwing if the value is negative.
+### :param from: The `S16` value to convert.
+### :returns: The same bit pattern reinterpreted as an unsigned value.
+### :throws: {IntegerOverflowError} if `from < 0`.
+routine U16.$create!(from: S16) -> U16
+  if from < 0_s16
+    throw IntegerOverflowError()
+  return reinterpret_bits[S16, U16](from)
+
+### Converts an `S32` to `U16`, throwing if the value is outside 0..65535.
+### :param from: The `S32` value to convert.
+### :returns: The lower 16 bits of `from`.
+### :throws: {IntegerOverflowError} if `from` is not in `0..=65535`.
+routine U16.$create!(from: S32) -> U16
+  if not (0_s32 <= from <= 65535_s32)
+    throw IntegerOverflowError()
+  return int_truncate[S32, U16](from)
+
+### Converts an `S64` to `U16`, throwing if the value is outside 0..65535.
+### :param from: The `S64` value to convert.
+### :returns: The lower 16 bits of `from`.
+### :throws: {IntegerOverflowError} if `from` is not in `0..=65535`.
+routine U16.$create!(from: S64) -> U16
+  if not (0_s64 <= from <= 65535_s64)
+    throw IntegerOverflowError()
+  return int_truncate[S64, U16](from)
+
+### Converts an `S128` to `U16`, throwing if the value is outside 0..65535.
+### :param from: The `S128` value to convert.
+### :returns: The lower 16 bits of `from`.
+### :throws: {IntegerOverflowError} if `from` is not in `0..=65535`.
+routine U16.$create!(from: S128) -> U16
+  if not (0_s128 <= from <= 65535_s128)
+    throw IntegerOverflowError()
+  return int_truncate[S128, U16](from)
+
+### Zero-extends a `U8` to `U16`.
+### :param from: The `U8` value to widen.
+### :returns: A `U16` equal in value to `from`.
+routine U16.$create(from: U8) -> U16
+  return zero_extend[U8, U16](from)
+
+### Identity conversion — returns `from` unchanged.
+### :param from: The `U16` value to return.
+### :returns: `from` unchanged.
+routine U16.$create(from: U16) -> U16
+  return from
+
+### Converts a `U32` to `U16`, throwing if the value exceeds 65535.
+### :param from: The `U32` value to convert.
+### :returns: The lower 16 bits of `from`.
+### :throws: {IntegerOverflowError} if `from > 65535`.
+routine U16.$create!(from: U32) -> U16
+  if from > 65535_u32
+    throw IntegerOverflowError()
+  return int_truncate[U32, U16](from)
+
+### Converts a `U64` to `U16`, throwing if the value exceeds 65535.
+### :param from: The `U64` value to convert.
+### :returns: The lower 16 bits of `from`.
+### :throws: {IntegerOverflowError} if `from > 65535`.
+routine U16.$create!(from: U64) -> U16
+  if from > 65535_u64
+    throw IntegerOverflowError()
+  return int_truncate[U64, U16](from)
+
+### Converts a `U128` to `U16`, throwing if the value exceeds 65535.
+### :param from: The `U128` value to convert.
+### :returns: The lower 16 bits of `from`.
+### :throws: {IntegerOverflowError} if `from > 65535`.
+routine U16.$create!(from: U128) -> U16
+  if from > 65535_u128
+    throw IntegerOverflowError()
+  return int_truncate[U128, U16](from)
+
+### Converts an `F16` to `U16` by first converting to `U32`, then truncating.
+### :param from: The `F16` value to convert.
+### :returns: The integer part of `from` as a `U16`.
+### :throws: {IntegerOverflowError} if the integer part exceeds 65535.
+routine U16.$create!(from: F16) -> U16
+  return from.U32!().U16!()
+
+### Converts an `F32` to `U16` by first converting to `U32`, then truncating.
+### :param from: The `F32` value to convert.
+### :returns: The integer part of `from` as a `U16`.
+### :throws: {IntegerOverflowError} if the integer part exceeds 65535.
+routine U16.$create!(from: F32) -> U16
+  return from.U32!().U16!()
+
+### Converts an `F64` to `U16` by first converting to `U32`, then truncating.
+### :param from: The `F64` value to convert.
+### :returns: The integer part of `from` as a `U16`.
+### :throws: {IntegerOverflowError} if the integer part exceeds 65535.
+routine U16.$create!(from: F64) -> U16
+  return from.U32!().U16!()
+
+### Converts an `F128` to `U16` by first converting to `U32`, then truncating.
+### :param from: The `F128` value to convert.
+### :returns: The integer part of `from` as a `U16`.
+### :throws: {IntegerOverflowError} if the integer part exceeds 65535.
+routine U16.$create!(from: F128) -> U16
+  return from.U32!().U16!()
+
+### Converts a `D32` to `U16` by first converting to `U32`, then truncating.
+### :param from: The `D32` value to convert.
+### :returns: The integer part of `from` as a `U16`.
+### :throws: {IntegerOverflowError} if the integer part exceeds 65535.
+routine U16.$create!(from: D32) -> U16
+  return from.U32!().U16!()
+
+### Converts a `D64` to `U16` by first converting to `U32`, then truncating.
+### :param from: The `D64` value to convert.
+### :returns: The integer part of `from` as a `U16`.
+### :throws: {IntegerOverflowError} if the integer part exceeds 65535.
+routine U16.$create!(from: D64) -> U16
+  return from.U32!().U16!()
+
+### Converts a `D128` to `U16` by first converting to `U32`, then truncating.
+### :param from: The `D128` value to convert.
+### :returns: The integer part of `from` as a `U16`.
+### :throws: {IntegerOverflowError} if the integer part exceeds 65535.
+routine U16.$create!(from: D128) -> U16
+  return from.U32!().U16!()
+
+# ============================================================================
+# Arithmetic Operations (trapping on overflow by default)
+# ============================================================================
+
+### Returns the sum and a flag indicating whether the result wrapped around.
+### :param you: The right operand.
+### :returns: A tuple of `(wrapped_sum, overflowed)`.
+routine U16.add_with_overflow(you: U16) -> (U16, Bool)
+  return unsigned_add_checked[U16](me, you)
+
+### Returns the difference and a flag indicating whether the result wrapped around.
+### :param you: The value to subtract.
+### :returns: A tuple of `(wrapped_difference, overflowed)`.
+routine U16.sub_with_overflow(you: U16) -> (U16, Bool)
+  return unsigned_sub_checked[U16](me, you)
+
+### Returns the product and a flag indicating whether the result wrapped around.
+### :param you: The right operand.
+### :returns: A tuple of `(wrapped_product, overflowed)`.
+routine U16.mul_with_overflow(you: U16) -> (U16, Bool)
+  return unsigned_mul_checked[U16](me, you)
+
+### Returns `me + you`, throwing on overflow.
+### :param you: The right operand.
+### :returns: The sum `me + you`.
+### :throws: {IntegerOverflowError} if the result exceeds `U16_MAX`.
+routine U16.$add!(you: U16) -> U16
+  var result = me.add_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
+
+### Returns `me - you`, throwing on underflow.
+### :param you: The value to subtract.
+### :returns: The difference `me - you`.
+### :throws: {IntegerOverflowError} if the result is less than `U16_MIN` (0).
+routine U16.$sub!(you: U16) -> U16
+  var result = me.sub_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
+
+### Returns `me * you`, throwing on overflow.
+### :param you: The right operand.
+### :returns: The product `me * you`.
+### :throws: {IntegerOverflowError} if the result exceeds `U16_MAX`.
+routine U16.$mul!(you: U16) -> U16
+  var result = me.mul_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
+
+### Returns `me * you`, throwing on overflow (alias for `$mul!`).
+### :param you: The right operand.
+### :returns: The product `me * you`.
+### :throws: {IntegerOverflowError} if the result exceeds `U16_MAX`.
+routine U16.$mul(you: U16) -> U16
+  return me.$mul!(you)
+
+### Returns `me // you` (integer division), throwing if `you` is zero.
+### :param you: The divisor.
+### :returns: The quotient `me // you`.
+### :throws: {DivisionByZeroError} if `you == 0`.
+routine U16.$floordiv!(you: U16) -> U16
+  if you == 0
+    throw DivisionByZeroError()
+  return unsigned_div[U16](a: me, b: you)
+
+### Returns `me % you` (integer remainder).
+### :param you: The divisor.
+### :returns: The remainder `me % you`. Behavior is undefined if `you == 0`.
+routine U16.$mod!(you: U16) -> U16
+  if you == 0_u16
+    throw DivisionByZeroError()
+  return unsigned_rem[U16](a: me, b: you)
+
+# ============================================================================
+# Wrapping Arithmetic (+%, -%, *%)
+# ============================================================================
+
+### Returns `(me + you) mod 65536` without overflow check.
+### :param you: The right operand.
+### :returns: The sum modulo 65536.
+routine U16.$add_wrap(you: U16) -> U16
+  return add[U16](a: me, b: you)
+
+### Returns `(me - you) mod 65536` without underflow check.
+### :param you: The value to subtract.
+### :returns: The difference modulo 65536.
+routine U16.$sub_wrap(you: U16) -> U16
+  return sub[U16](a: me, b: you)
+
+### Returns `(me * you) mod 65536` without overflow check.
+### :param you: The right operand.
+### :returns: The product modulo 65536.
+routine U16.$mul_wrap(you: U16) -> U16
+  return mul[U16](a: me, b: you)
+
+# ============================================================================
+# Unchecked Arithmetic (+!, -!, *!, //!, %!)
+# ============================================================================
+
+### Returns `me + you` with undefined behavior on overflow.
+### :param you: The right operand.
+### :returns: The sum, assuming no overflow.
+dangerous routine U16.$add_unchecked(you: U16) -> U16
+  return unsigned_add_exact[U16](a: me, b: you)
+
+### Returns `me - you` with undefined behavior on underflow.
+### :param you: The value to subtract.
+### :returns: The difference, assuming no underflow.
+dangerous routine U16.$sub_unchecked(you: U16) -> U16
+  return unsigned_sub_exact[U16](a: me, b: you)
+
+### Returns `me * you` with undefined behavior on overflow.
+### :param you: The right operand.
+### :returns: The product, assuming no overflow.
+dangerous routine U16.$mul_unchecked(you: U16) -> U16
+  return unsigned_mul_exact[U16](a: me, b: you)
+
+### Returns `me // you` with undefined behavior if `you == 0`.
+### :param you: The divisor.
+### :returns: The quotient, assuming `you != 0`.
+dangerous routine U16.$floordiv_unchecked(you: U16) -> U16
+  return unsigned_div[U16](a: me, b: you)
+
+### Returns `me % you` with undefined behavior if `you == 0`.
+### :param you: The divisor.
+### :returns: The remainder, assuming `you != 0`.
+dangerous routine U16.$mod_unchecked(you: U16) -> U16
+  return unsigned_rem[U16](a: me, b: you)
+
+# ============================================================================
+# Clamping Arithmetic (+^, -^, *^)
+# ============================================================================
+
+### Returns `me + you`, clamped to `U16_MAX` on overflow.
+### :param you: The right operand.
+### :returns: The sum, or `65535` if it would exceed `U16_MAX`.
+routine U16.$add_clamp(you: U16) -> U16
+  return unsigned_add_sat[U16](a: me, b: you)
+
+### Returns `me - you`, clamped to `U16_MIN` on underflow.
+### :param you: The value to subtract.
+### :returns: The difference, or `0` if it would go below `U16_MIN`.
+routine U16.$sub_clamp(you: U16) -> U16
+  return unsigned_sub_sat[U16](a: me, b: you)
+
+### Returns `me * you`, clamped to `U16_MAX` on overflow.
+### :param you: The right operand.
+### :returns: The product, or `65535` if it would exceed `U16_MAX`.
+routine U16.$mul_clamp(you: U16) -> U16
+  var wide = mul[U32](zero_extend[U16, U32](me), zero_extend[U16, U32](you))
+  if unsigned_gt[U32](wide, 65535_u32)
+    return U16_MAX
+  return int_truncate[U32, U16](wide)
+
+# ============================================================================
+# Power Operations (**)
+# ============================================================================
+
+### Returns `me ** exp` and a flag indicating whether the result wrapped around.
+### :param exp: The exponent.
+### :returns: A tuple of `(wrapped_result, overflowed)`.
+### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
+routine U16.pow_with_overflow!(exp: U16) -> (U16, Bool)
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  var result: U16 = 1
+  var base: U16 = me
+  var e: U32 = U32(exp)
+  var overflow = false
+  while e > 0
+    if (e & 1) == 1
+      var mul_result = result.mul_with_overflow(base)
+      result = mul_result.item0
+      overflow = overflow or mul_result.item1
+    e = e >> 1_u32
+    if e > 0
+      var square_result = base.mul_with_overflow(base)
+      base = square_result.item0
+      overflow = overflow or square_result.item1
+  return (result, overflow)
+
+### Returns `me ** exp`, throwing on overflow.
+### :param exp: The exponent.
+### :returns: The result of raising `me` to the power `exp`.
+### :throws: {IntegerOverflowError} if the result exceeds `U16_MAX`.
+### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
+routine U16.$pow!(exp: U16) -> U16
+  var result = me.pow_with_overflow!(exp)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
+
+### Returns `me ** exp` with wrapping arithmetic (mod 65536).
+### :param exp: The exponent.
+### :returns: The result modulo 65536.
+### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
+routine U16.$pow_wrap!(exp: U16) -> U16
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  var result: U16 = 1
+  var base: U16 = me
+  var e: U32 = U32(exp)
+  while e > 0
+    if (e & 1) == 1
+      result = result.$mul_wrap(base)
+    e = e >> 1_u32
+    if e > 0
+      base = base.$mul_wrap(base)
+  return result
+
+### Returns `me ** exp`, clamped to `U16_MAX` on overflow.
+### :param exp: The exponent.
+### :returns: The result, or `65535` if it would overflow.
+### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
+routine U16.$pow_clamp!(exp: U16) -> U16
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  var result: U16 = 1
+  var base: U16 = me
+  var e: U32 = U32(exp)
+  while e > 0
+    if (e & 1) == 1
+      result = result.$mul_clamp(base)
+    base = base.$mul_clamp(base)
+    e = e >> 1_u32
+  return result
+
+# ============================================================================
+# Bitwise Operations
+# ============================================================================
+
+### Returns the bitwise AND of this value and `you`.
+### :param you: The right operand.
+### :returns: `me & you`.
+routine U16.$bitand(you: U16) -> U16
+  return bit_and[U16](a: me, b: you)
+
+### Returns the bitwise OR of this value and `you`.
+### :param you: The right operand.
+### :returns: `me | you`.
+routine U16.$bitor(you: U16) -> U16
+  return bit_or[U16](a: me, b: you)
+
+### Returns the bitwise XOR of this value and `you`.
+### :param you: The right operand.
+### :returns: `me ^ you`.
+routine U16.$bitxor(you: U16) -> U16
+  return bit_xor[U16](a: me, b: you)
+
+### Returns the bitwise complement of this value.
+### :returns: `~me` — each bit flipped.
+routine U16.$bitnot() -> U16
+  return bit_xor[U16](a: me, b: U16_MAX)
+
+# ============================================================================
+# Shift Operations (<<, <<?>, >>, <<<, >>>)
+# For unsigned types, arithmetic and logical shifts behave identically
+# ============================================================================
+
+### Left-shifts this value by `bits` positions, filling vacated bits with zero.
+### :param bits: The number of bit positions to shift left.
+### :returns: `me << bits`.
+routine U16.$ashl(bits: U32) -> U16
+  return shift_left[U16](me, U16(bits))
+
+### Right-shifts this value by `bits` positions, filling vacated bits with zero.
+### :param bits: The number of bit positions to shift right.
+### :returns: `me >> bits` (logical, zero-filling).
+routine U16.$ashr(bits: U32) -> U16
+  return shift_right_unsigned[U16](me, U16(bits))
+
+### Left-shifts this value by `bits` positions (logical shift, same as `$ashl` for unsigned).
+### :param bits: The number of bit positions to shift left.
+### :returns: `me << bits`.
+routine U16.$lshl(bits: U32) -> U16
+  return shift_left[U16](me, U16(bits))
+
+### Right-shifts this value by `bits` positions (logical shift, same as `$ashr` for unsigned).
+### :param bits: The number of bit positions to shift right.
+### :returns: `me >> bits` (zero-filling).
+routine U16.$lshr(bits: U32) -> U16
+  return shift_right_unsigned[U16](me, U16(bits))
+
+# ============================================================================
+# Comparison Operations
+# ============================================================================
+
+### Returns `true` when both values are equal.
+### :param you: The value to compare against.
+### :returns: `true` if `me == you`; `false` otherwise.
+routine U16.$eq(you: U16) -> Bool
+  return int_eq[U16](a: me, b: you)
+
+### Compares this value with `you`, returning the ordering relationship.
+### :param you: The value to compare against.
+### :returns: `ME_SMALL` if `me < you`, `ME_LARGE` if `me > you`, `SAME` if equal.
+routine U16.$cmp(you: U16) -> ComparisonSign
+  if unsigned_lt[U16](me, you)
+    return ME_SMALL
+  if unsigned_gt[U16](me, you)
+    return ME_LARGE
+  return SAME
+
+# ============================================================================
+# Math Operations
+# ============================================================================
+
+### Returns the smaller of this value and `you`.
+### :param you: The value to compare against.
+### :returns: `me` if `me <= you`; otherwise `you`.
+routine U16.min(you: U16) -> U16
+  return if me <= you then me else you
+
+### Returns the larger of this value and `you`.
+### :param you: The value to compare against.
+### :returns: `me` if `me >= you`; otherwise `you`.
+routine U16.max(you: U16) -> U16
+  return if me >= you then me else you
+
+### Returns this value clamped to the range `min_val..=max_val`.
+### :param min_val: The lower bound (inclusive).
+### :param max_val: The upper bound (inclusive).
+### :returns: `min_val` if `me < min_val`; `max_val` if `me > max_val`; otherwise `me`.
+@positional
+routine U16.clamp(min_val: U16, max_val: U16) -> U16
+  return me.min(max_val).max(min_val)
+
+# ============================================================================
+# Bit Manipulation
+# ============================================================================
+
+### Returns the count of set bits (popcount) in this value's 16-bit representation.
+### :returns: The number of `1` bits; between 0 and 16.
+routine U16.count_ones() -> U16
+  return count_ones[U16](me)
+
+### Returns the count of clear bits in this value's 16-bit representation.
+### :returns: `16` minus the popcount; between 0 and 16.
+routine U16.count_zeros() -> U16
+  return 16_u16 -% me.count_ones()
+
+### Returns the number of leading zero bits, starting from the most-significant bit.
+### :returns: The leading zero count; `16` if the value is zero.
+routine U16.leading_zeros() -> U16
+  return leading_zeros[U16](me)
+
+### Returns the number of trailing zero bits, starting from the least-significant bit.
+### :returns: The trailing zero count; `16` if the value is zero.
+routine U16.trailing_zeros() -> U16
+  return trailing_zeros[U16](me)
+
+### Returns the number of leading one bits, starting from the most-significant bit.
+### :returns: The leading one count; `16` if the value is `65535`.
+routine U16.leading_ones() -> U16
+  return me.$bitnot().leading_zeros()
+
+### Returns the number of trailing one bits, starting from the least-significant bit.
+### :returns: The trailing one count; `16` if the value is `65535`.
+routine U16.trailing_ones() -> U16
+  return me.$bitnot().trailing_zeros()
+
+### Returns this value with its bits reversed (bit 15 ↔ bit 0, etc.).
+### :returns: The bit-reversed `U16`.
+routine U16.reverse_bits() -> U16
+  return reverse_bits[U16](me)
+
+### Returns this value with its two bytes swapped (for endianness conversion).
+### :returns: A `U16` with the high and low bytes exchanged.
+routine U16.swap_bytes() -> U16
+  return byte_swap[U16](me)
+
+### Returns `true` if this value is an exact power of two.
+### :returns: `true` if `me` is 1, 2, 4, ..., 32768; `false` otherwise (including zero).
+routine U16.is_power_of_two() -> Bool
+  return me != 0_u16 and (me & (me - 1_u16)) == 0_u16
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+### Returns `true` if this value is zero.
+### :returns: `true` if `me == 0`.
+routine U16.is_zero() -> Bool
+  return me == 0_u16
+
+### Returns `true` if this value is divisible by 2.
+### :returns: `true` if the least-significant bit is 0.
+routine U16.is_even() -> Bool
+  var result = bit_and[U16](a: me, b: 1_u16)
+  return int_eq[U16](a: result, b: 0_u16)
+
+### Returns `true` if this value is not divisible by 2.
+### :returns: `true` if the least-significant bit is 1.
+routine U16.is_odd() -> Bool
+  return not me.is_even()
+
+# ============================================================================
+# Text Representation and Parsing
+# ============================================================================
+
+routine U16.$represent() -> ?Text
+  return U32(me).$represent()
+
+routine U16.$diagnose() -> ?Text
+  return "U16(" + me.$represent() + ")"
+
+### Parses a decimal string into a `U16`.
+### :param from_text: The decimal string to parse (no sign, no prefix).
+### :returns: The parsed `U16` value.
+### :throws: {InvalidValueError} if `from_text` is empty or contains non-digit characters.
+routine U16.$create!(from_text: Text) -> U16
+  if from_text.count() == 0u64
+    throw InvalidValueError(input: from_text, target: "U16")
+  var result = 0u32
+  var i = 0u64
+  while i < from_text.count()
+    var ch = from_text[i]
+    if ch.is_numeric()
+      result = result * 10u32 + U32(ch.digit_value())
+    else
+      throw InvalidValueError(input: from_text, target: "U16")
+    i = i + 1u64
+  return U16(result)
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns an xxHash64-based hash of this value.
+### :returns: A `U64` hash of the 16-bit value.
+routine U16.$fast_hash() -> U64
+  return __hash_leaf(v: zero_extend[U16, U64](me))
+
+### Returns a SipHash-2-4 keyed hash of this value.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
+routine U16.$hash(k0: U64, k1: U64) -> U64
+  return __secure_hash_u64(v: zero_extend[U16, U64](me), k0: k0, k1: k1)

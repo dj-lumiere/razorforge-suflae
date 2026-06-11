@@ -1,0 +1,8 @@
+p == q: true
+p == r: false
+p.$hash() == q.$hash(): true
+p.$hash() == r.$hash(): false
+set contains p: true
+set contains q (equal to p): true
+set contains r: false
+DONE

@@ -1,0 +1,15 @@
+module Core
+
+### Represents the protocol for stable, non-keyed hashing.
+### `FastHashable` is for values that can provide a deterministic hash suitable for
+### deduplication, content addressing, and `FastSet`/`FastDict` membership where
+### the input keys are fully trusted. For untrusted keys (network input, deserialized
+### data) use `Hashable` and the default `Set`/`Dict` instead.
+protocol FastHashable
+  ### Returns the fast (unkeyed) hash of this value.
+  ### Values considered equal should produce the same hash, though unequal values
+  ### may still collide. Suitable only for trusted input; for adversarial keys,
+  ### use `Hashable.$hash(k0, k1)` instead.
+  ### :returns: A `U64` hash code for this value.
+  @readonly
+  routine Me.$fast_hash() -> U64

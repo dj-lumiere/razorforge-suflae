@@ -1,26 +1,58 @@
 module Core
 
+import BuilderService
+
+### Represents an optional record value.
+### `Maybe[T]` stores either a present `T` or the absence of a value without
+### carrying crash information.
+### :typeparam T: The wrapped value type.
 record Maybe[T]
-  secret state: DataState
-  secret handle: Snatched[T]
+  ### Indicates whether the optional currently holds a value.
+  secret present: Bool
+  ### Stores the wrapped value when `present` is true.
+  secret value: T
 
-# Query
-routine Maybe[T].is_valid() -> Bool
-  return me.state == VALID
+### Returns the display form of this optional value.
+### Present values are rendered using the wrapped value's text form.
+### :returns: The resulting `Text` value.
+routine Maybe[T].$represent() -> ?Text
+  if not me.is_present()
+    return "none"
+  return f"{me.value}"
 
-routine Maybe[T].is_none() -> Bool
-  return me.state == ABSENT
+### Returns the diagnostic form of this optional value.
+### This form keeps the `Maybe` wrapper visible for debugging and logs.
+### :returns: The resulting `Text` value.
+routine Maybe[T].$diagnose() -> ?Text
+  if not me.is_present()
+    return f"{me.full_type_name()}(none)"
+  return f"{me.full_type_name()}({me.value})"
 
-routine Maybe[T].state() -> DataState
-  return me.state
+### Frees the wrapped value when present; a no-op when absent. Defined explicitly (rather than
+### auto-derived) so the per-instantiation body is monomorphized and emitted like the other carrier
+### routines, and so the `value` field is only touched when actually present.
+dangerous routine Maybe[T].$destroy()
+  if me.is_present()
+    me.value.$destroy()
+  return
 
-# Coalescing (?? operator)
-routine Maybe[T].__unwrap__(default: T) -> T
-  if me.is_none()
-    return default
-  return me.handle.unwrap()
+### Returns the wrapped value.
+### Use this when absence is a logic error rather than an expected branch.
+### :returns: The contained `T` value.
+### :throws: {AbsentValueError} if this `Maybe` is absent.
+routine Maybe[T].$unwrap!() -> ?T
+  if not me.is_present()
+    throw AbsentValueError()
+  return me.value
 
-routine Maybe[T].__unwrap__(or_else: Routine[Me, T]) -> T
-  if me.is_none()
-    return or_else()
-  return me.handle.unwrap()
+### Returns the wrapped value or `fallback` when absent.
+### This avoids branching at the call site when a fixed fallback is acceptable.
+### :param fallback: The fallback value to return when absent.
+### :returns: The contained `T` value, or `fallback` if this `Maybe` is absent.
+routine Maybe[T].$unwrap_or(fallback: T) -> ?T
+  if not me.is_present()
+    return fallback
+  return me.value
+
+routine Maybe[T].is_present() -> Bool
+  return me.present

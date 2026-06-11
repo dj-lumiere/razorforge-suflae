@@ -1,16 +1,15 @@
 module Core
 
-# Error - Base error record with message and routine trace
-#
-# This is the core error type used by Result[T] and Lookup[T].
-# All member variables are compiler-generated when throw is executed.
-#
-# Size: ~228 bytes (fixed, fits inline in type unions)
-
-record RuntimeError obeys Crashable
+### Represents the fallback crashable used for generic runtime failures.
+### `RuntimeError` is the catch-all error shape for failures that do not have a
+### more specific crashable type.
+crashable RuntimeError
   pass
 
-routine RuntimeError.crash_message() -> Text
-  # Dereference the message pointer to get the string
-  # This is handled by compiler intrinsic
-  return ptr_to_text(me.message_handle.ptr)
+### Returns the default message for an unclassified runtime error.
+### This message is intentionally generic and should be overridden by more
+### specific crashables whenever possible.
+### :returns: The resulting `Text` value.
+@readonly
+routine RuntimeError.crash_message() -> ?Text
+  return "A runtime error occurred."

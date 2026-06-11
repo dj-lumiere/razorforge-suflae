@@ -1,0 +1,37 @@
+module Core
+
+### Represents a 128-bit keyed-hash seed for secure hash tables.
+### `SecureHashKey` is used by `Set` and `Dict` to randomize
+### SipHash state per table instance and reduce collision-based attacks.
+record SecureHashKey
+  ### Stores the first 64-bit SipHash key word.
+  k0: U64
+  ### Stores the second 64-bit SipHash key word.
+  k1: U64
+
+### Generates a fresh key from OS entropy (BCryptGenRandom / getrandom).
+### Each generated key is suitable for seeding an independent secure hash table
+### instance.
+### :returns: The resulting `SecureHashKey` value.
+common routine SecureHashKey.random() -> SecureHashKey
+  return SecureHashKey(k0: rf_random_u64(), k1: rf_random_u64())
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns an xxHash64-based hash of this key.
+### :returns: A `U64` hash combining both 64-bit key words.
+routine SecureHashKey.$fast_hash() -> U64
+  var acc = __hash_round(acc: 0u64, h: __hash_leaf(v: me.k0))
+  acc = __hash_round(acc: acc, h: __hash_leaf(v: me.k1))
+  return __hash_finalize(h: acc)
+
+### Returns a SipHash-2-4 keyed hash of this key.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
+routine SecureHashKey.$hash(k0: U64, k1: U64) -> U64
+  var acc = __hash_round(acc: 0u64, h: __secure_hash_u64(v: me.k0, k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: __secure_hash_u64(v: me.k1, k0: k0, k1: k1))
+  return __hash_finalize(h: acc)

@@ -1,20 +1,23 @@
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Symbols;
-using SemanticAnalysis.Types;
-using SemanticAnalysis.Diagnostics;
-using Xunit;
+using System;
+using Compiler.Diagnostics;
+using Verification.Results;
+using TypeModel.Enums;
+using TypeModel.Symbols;
+using TypeModel.Types;
 
 namespace RazorForge.Tests.Analyzer;
 
-using SemanticAnalysis.Enums;
 using static TestHelpers;
 
 /// <summary>
-/// Tests for semantic analyzer type resolution.
+/// Contains tests for type resolution.
 /// </summary>
 public class TypeResolutionTests
 {
     #region Basic Type Registration
+    /// <summary>
+    /// Verifies semantic analysis behavior for record and registers the expected type metadata.
+    /// </summary>
 
     [Fact]
     public void Analyze_Record_RegistersInTypeRegistry()
@@ -25,12 +28,15 @@ public class TypeResolutionTests
                           y: F32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         TypeInfo? type = result.Registry.GetType(name: "Point");
 
         Assert.NotNull(@object: type);
         Assert.Equal(expected: TypeCategory.Record, actual: type.Category);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for entity and registers the expected type metadata.
+    /// </summary>
 
     [Fact]
     public void Analyze_Entity_RegistersInTypeRegistry()
@@ -40,12 +46,15 @@ public class TypeResolutionTests
                           name: Text
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         TypeInfo? type = result.Registry.GetType(name: "User");
 
         Assert.NotNull(@object: type);
         Assert.Equal(expected: TypeCategory.Entity, actual: type.Category);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for choice and registers the expected type metadata.
+    /// </summary>
 
     [Fact]
     public void Analyze_Choice_RegistersInTypeRegistry()
@@ -58,12 +67,15 @@ public class TypeResolutionTests
                           WEST
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         TypeInfo? type = result.Registry.GetType(name: "Direction");
 
         Assert.NotNull(@object: type);
         Assert.Equal(expected: TypeCategory.Choice, actual: type.Category);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for variant and registers the expected type metadata.
+    /// </summary>
 
     [Fact]
     public void Analyze_Variant_RegistersInTypeRegistry()
@@ -71,16 +83,19 @@ public class TypeResolutionTests
         // Note: Don't use "Result" as it's a well-known error handling type
         string source = """
                         variant MyVariant
-                          SUCCESS: S32
-                          ERROR: Text
+                          S32
+                          Text
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         TypeInfo? type = result.Registry.GetType(name: "MyVariant");
 
         Assert.NotNull(@object: type);
         Assert.Equal(expected: TypeCategory.Variant, actual: type.Category);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for protocol and registers the expected type metadata.
+    /// </summary>
 
     [Fact]
     public void Analyze_Protocol_RegistersInTypeRegistry()
@@ -91,7 +106,7 @@ public class TypeResolutionTests
                           routine Me.display() -> Text
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         TypeInfo? type = result.Registry.GetType(name: "Displayable");
 
         Assert.NotNull(@object: type);
@@ -101,6 +116,9 @@ public class TypeResolutionTests
     #endregion
 
     #region Generic Type Registration
+    /// <summary>
+    /// Verifies semantic analysis behavior for generic record and records generic type parameters.
+    /// </summary>
 
     [Fact]
     public void Analyze_GenericRecord_RegistersWithTypeParameters()
@@ -110,12 +128,15 @@ public class TypeResolutionTests
                           value: T
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         TypeInfo? type = result.Registry.GetType(name: "Container");
 
         Assert.NotNull(@object: type);
         Assert.True(condition: type.IsGenericDefinition);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for generic entity multiple type parameters.
+    /// </summary>
 
     [Fact]
     public void Analyze_GenericEntity_MultipleTypeParameters()
@@ -126,7 +147,7 @@ public class TypeResolutionTests
                           value: V
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         TypeInfo? type = result.Registry.GetType(name: "Pair");
 
         Assert.NotNull(@object: type);
@@ -136,6 +157,9 @@ public class TypeResolutionTests
     #endregion
 
     #region Routine Registration
+    /// <summary>
+    /// Verifies semantic analysis behavior for global routine and registers the expected symbol metadata.
+    /// </summary>
 
     [Fact]
     public void Analyze_GlobalRoutine_RegistersInRegistry()
@@ -145,12 +169,15 @@ public class TypeResolutionTests
                           return name
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         RoutineInfo? routine = result.Registry.GetRoutine(name: "greet");
 
         Assert.NotNull(@object: routine);
         Assert.Equal(expected: RoutineKind.Function, actual: routine.Kind);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for method and records owner type metadata.
+    /// </summary>
 
     [Fact]
     public void Analyze_Method_RegistersWithOwnerType()
@@ -165,12 +192,15 @@ public class TypeResolutionTests
                           return 0.0_f32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         RoutineInfo? routine = result.Registry.GetRoutine(name: "Point.distance");
 
         Assert.NotNull(@object: routine);
         Assert.Equal(expected: RoutineKind.MemberRoutine, actual: routine.Kind);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for failable routine and marks the routine as failable.
+    /// </summary>
 
     [Fact]
     public void Analyze_FailableRoutine_RegistersAsFailable()
@@ -180,7 +210,7 @@ public class TypeResolutionTests
                           return 42
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         RoutineInfo? routine = result.Registry.GetRoutine(name: "get_value");
 
         Assert.NotNull(@object: routine);
@@ -190,6 +220,9 @@ public class TypeResolutionTests
     #endregion
 
     #region Field Resolution
+    /// <summary>
+    /// Verifies semantic analysis behavior for record member variables and resolves member types.
+    /// </summary>
 
     [Fact]
     public void Analyze_RecordMemberVariables_ResolveTypes()
@@ -201,12 +234,15 @@ public class TypeResolutionTests
                           b: U8
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         TypeInfo? type = result.Registry.GetType(name: "Color");
 
         Assert.NotNull(@object: type);
         // Check fields are resolved
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for entity member variables and resolves member types.
+    /// </summary>
 
     [Fact]
     public void Analyze_EntityMemberVariables_ResolveTypes()
@@ -217,7 +253,7 @@ public class TypeResolutionTests
                           page_count: U32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         TypeInfo? type = result.Registry.GetType(name: "Document");
 
         Assert.NotNull(@object: type);
@@ -226,6 +262,9 @@ public class TypeResolutionTests
     #endregion
 
     #region Type Errors
+    /// <summary>
+    /// Verifies semantic analysis behavior for undefined type and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_UndefinedType_ReportsError()
@@ -235,12 +274,15 @@ public class TypeResolutionTests
                           value: UnknownType
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Message.Contains(value: "UnknownType",
                 comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for duplicate type name and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_DuplicateTypeName_ReportsError()
@@ -253,9 +295,12 @@ public class TypeResolutionTests
                           y: F32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for duplicate member variable name and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_DuplicateMemberVariableName_ReportsError()
@@ -266,9 +311,12 @@ public class TypeResolutionTests
                           x: F32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for reserved function prefix and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_ReservedFunctionPrefix_ReportsError()
@@ -279,12 +327,15 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Message.Contains(value: "reserved",
                 comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for reserved function prefix check and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_ReservedFunctionPrefix_Check_ReportsError()
@@ -295,9 +346,12 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for reserved function prefix lookup and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_ReservedFunctionPrefix_Lookup_ReportsError()
@@ -308,13 +362,16 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
 
     #endregion
 
     #region Constraint Validation
+    /// <summary>
+    /// Verifies semantic analysis behavior for valid constraint without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_ValidConstraint_NoError()
@@ -322,16 +379,20 @@ public class TypeResolutionTests
         string source = """
                         protocol Comparable
                           @readonly
-                          routine Me.__cmp__(other: Me) -> S32
+                          routine Me.$cmp(other: Me) -> S32
 
                         record Wrapper[T]
                         needs T obeys Comparable
                           value: T
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.NotNull(@object: result);
         // Should have no constraint-related errors
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for unknown type parameter and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_UnknownTypeParameter_ReportsError()
@@ -342,7 +403,7 @@ public class TypeResolutionTests
                           value: T
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
         Assert.Contains(collection: result.Errors,
             filter: e =>
@@ -353,6 +414,9 @@ public class TypeResolutionTests
     #endregion
 
     #region Protocol Implementation
+    /// <summary>
+    /// Verifies semantic analysis behavior for record follows protocol without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_RecordFollowsProtocol_NoError()
@@ -371,13 +435,17 @@ public class TypeResolutionTests
                           return "point"
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.NotNull(@object: result);
         // Should validate protocol implementation
     }
 
     #endregion
 
     #region Integer Literal Type Inference
+    /// <summary>
+    /// Verifies semantic analysis behavior for return integer literal infers from return type.
+    /// </summary>
 
     [Fact]
     public void Analyze_ReturnIntegerLiteral_InfersFromReturnType()
@@ -387,9 +455,12 @@ public class TypeResolutionTests
                           return 0
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for return integer literal infers U32.
+    /// </summary>
 
     [Fact]
     public void Analyze_ReturnIntegerLiteral_InfersU32()
@@ -399,9 +470,12 @@ public class TypeResolutionTests
                           return 42
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for return integer literal infers S64.
+    /// </summary>
 
     [Fact]
     public void Analyze_ReturnIntegerLiteral_InfersS64()
@@ -411,9 +485,12 @@ public class TypeResolutionTests
                           return 123456789
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for return integer literal in method with return type.
+    /// </summary>
 
     [Fact]
     public void Analyze_ReturnIntegerLiteral_InMethodWithReturnType()
@@ -427,183 +504,83 @@ public class TypeResolutionTests
                           return 0
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
-
-    #endregion
-
-    #region Variant Restrictions
-
-    [Fact]
-    public void Analyze_VariantInMemberVariable_ReportsError()
-    {
-        string source = """
-                        variant Shape
-                          Circle: F32
-                          Rect: F32
-
-                        entity Canvas
-                          current: Shape
-                        """;
-
-        AnalysisResult result = Analyze(source: source);
-        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantMemberVariableNotAllowed);
-    }
+    /// <summary>
+    /// Verifies semantic analysis behavior for var with type annotation infers literal as annotated type.
+    /// </summary>
 
     [Fact]
-    public void Analyze_VariantAsParameter_ReportsError()
+    public void Analyze_VarWithTypeAnnotation_InfersLiteralAsAnnotatedType()
     {
+        // var c: S32 = 123 should infer 123 as S32, not default S64
         string source = """
-                        variant Shape
-                          Circle: F32
-                          Rect: F32
-
-                        routine process(shape: Shape)
-                          pass
-                          return
-                        """;
-
-        AnalysisResult result = Analyze(source: source);
-        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantParameterNotAllowed);
-    }
-
-    [Fact]
-    public void Analyze_VariantMethodDefinition_ReportsError()
-    {
-        string source = """
-                        variant Shape
-                          Circle: F32
-                          Rect: F32
-
-                        @readonly
-                        routine Shape.area() -> F64
-                          return 0.0
-                        """;
-
-        AnalysisResult result = Analyze(source: source);
-        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantMethodNotAllowed);
-    }
-
-    [Fact]
-    public void Analyze_VariantReturnType_NoError()
-    {
-        string source = """
-                        variant Shape
-                          Circle: F32
-                          Rect: F32
-
-                        routine make_shape() -> Shape
-                          return CIRCLE(1.0)
-                        """;
-
-        AnalysisResult result = Analyze(source: source);
-        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantMemberVariableNotAllowed);
-        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantParameterNotAllowed);
-    }
-
-    [Fact]
-    public void AnalyzeSuflae_VariantInMemberVariable_ReportsError()
-    {
-        string source = """
-                        variant Shape
-                          Circle: F32
-                          Rect: F32
-
-                        entity Canvas
-                          current: Shape
-                        """;
-
-        AnalysisResult result = AnalyzeSuflae(source: source);
-        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantMemberVariableNotAllowed);
-    }
-
-    [Fact]
-    public void Analyze_VariantOperatorDefinition_ReportsError()
-    {
-        string source = """
-                        variant Shape
-                          Circle: F32
-                          Rect: F32
-
-                        @readonly
-                        routine Shape.__eq__(you: Shape) -> Bool
-                          return false
-                        """;
-
-        AnalysisResult result = Analyze(source: source);
-        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantMethodNotAllowed);
-    }
-
-    [Fact]
-    public void Analyze_VariantCopy_ReportsError()
-    {
-        string source = """
-                        variant Shape
-                          Circle: F32
-                          Rect: F32
-
-                        routine make_shape() -> Shape
-                          pass
-                          return
-
                         routine test()
-                          var box1 = make_shape()
-                          var box2 = box1
+                          var c: S32 = 123
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
-        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantCopyNotAllowed);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for var with type annotation infers unsigned literal.
+    /// </summary>
 
     [Fact]
-    public void Analyze_VariantReassignment_ReportsError()
+    public void Analyze_VarWithTypeAnnotation_InfersUnsignedLiteral()
     {
         string source = """
-                        variant Shape
-                          Circle: F32
-                          Rect: F32
-
-                        routine make_shape() -> Shape
-                          pass
-                          return
-
                         routine test()
-                          var box = make_shape()
-                          box = make_shape()
+                          var x: U8 = 255
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
-        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantReassignmentNotAllowed);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for var with type annotation rejects out of range literal.
+    /// </summary>
 
     [Fact]
-    public void Analyze_VariantBindFromCall_NoCopyError()
+    public void Analyze_VarWithTypeAnnotation_RejectsOutOfRangeLiteral()
     {
+        // 256 doesn't fit in U8 (0..255), should report overflow
         string source = """
-                        variant Shape
-                          Circle: F32
-                          Rect: F32
-
-                        routine make_shape() -> Shape
-                          pass
-                          return
-
                         routine test()
-                          var result = make_shape()
+                          var x: U8 = 256
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
-        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantCopyNotAllowed);
-        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.VariantReassignmentNotAllowed);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.IntegerLiteralOverflow);
+    }
+    /// <summary>
+    /// Verifies semantic analysis behavior for var with type annotation rejects out of range large value.
+    /// </summary>
+
+    [Fact]
+    public void Analyze_VarWithTypeAnnotation_RejectsOutOfRangeLargeValue()
+    {
+        // 1231231231234 doesn't fit in S32 (-2147483648..2147483647), should report overflow
+        string source = """
+                        routine test()
+                          var c: S32 = 1231231231234
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.IntegerLiteralOverflow);
     }
 
     #endregion
 
     #region Choice Restrictions
+    /// <summary>
+    /// Verifies semantic analysis behavior for choice operator definition and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_ChoiceOperatorDefinition_ReportsError()
@@ -614,13 +591,16 @@ public class TypeResolutionTests
                           NOT_FOUND
 
                         @readonly
-                        routine HttpStatus.__add__(you: HttpStatus) -> HttpStatus
+                        routine HttpStatus.$add(you: HttpStatus) -> HttpStatus
                           return OK
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for choice regular method without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_ChoiceRegularMethod_NoError()
@@ -636,9 +616,12 @@ public class TypeResolutionTests
                           return false
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for choice mixed values and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_ChoiceMixedValues_ReportsError()
@@ -650,9 +633,12 @@ public class TypeResolutionTests
                           INTERNAL_ERROR: 500
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ChoiceMixedValues);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for choice all explicit values without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_ChoiceAllExplicitValues_NoError()
@@ -664,9 +650,12 @@ public class TypeResolutionTests
                           INTERNAL_ERROR: 500
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.ChoiceMixedValues);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for choice all implicit values without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_ChoiceAllImplicitValues_NoError()
@@ -678,13 +667,16 @@ public class TypeResolutionTests
                           BLUE
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.ChoiceMixedValues);
     }
 
     #endregion
 
     #region Error Handling Return Type Restrictions
+    /// <summary>
+    /// Verifies semantic analysis behavior for routine returns maybe and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_RoutineReturnsMaybe_ReportsError()
@@ -695,9 +687,12 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for routine returns result and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_RoutineReturnsResult_ReportsError()
@@ -707,9 +702,12 @@ public class TypeResolutionTests
                           return 42
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for routine returns lookup and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_RoutineReturnsLookup_ReportsError()
@@ -719,9 +717,12 @@ public class TypeResolutionTests
                           return 42
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for failable routine no error handling return type error.
+    /// </summary>
 
     [Fact]
     public void Analyze_FailableRoutine_NoErrorHandlingReturnTypeError()
@@ -731,9 +732,12 @@ public class TypeResolutionTests
                           return 42
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for method returns maybe and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_MethodReturnsMaybe_ReportsError()
@@ -749,32 +753,38 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.ErrorHandlingTypeAsReturnType);
     }
 
     #endregion
 
     #region Const Generic Validation
+    /// <summary>
+    /// Verifies semantic analysis behavior for const generic integer type without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_ConstGeneric_IntegerType_NoError()
     {
         // Integer types implement ConstCompatible and should be valid
         string source = """
-                        resident Buffer[T, N]
-                        needs N is UAddr
+                        entity Buffer[T, N]
+                        needs N is Address
                           data: T
 
-                        routine test(buf: Buffer[U8, UAddr])
+                        routine test(buf: Buffer[U8, Address])
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         // Should not have InvalidConstGenericType error
         Assert.DoesNotContain(result.Errors,
             e => e.Code == SemanticDiagnosticCode.InvalidConstGenericType);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for const generic bool type without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_ConstGeneric_BoolType_NoError()
@@ -789,10 +799,13 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors,
             e => e.Code == SemanticDiagnosticCode.InvalidConstGenericType);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for const generic choice type without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_ConstGeneric_ChoiceType_NoError()
@@ -813,10 +826,13 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors,
             e => e.Code == SemanticDiagnosticCode.InvalidConstGenericType);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for const generic record type and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_ConstGeneric_RecordType_ReportsError()
@@ -834,27 +850,162 @@ public class TypeResolutionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors,
             e => e.Code == SemanticDiagnosticCode.InvalidConstGenericType);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for const generic type mismatch and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_ConstGeneric_TypeMismatch_ReportsError()
     {
         // Type argument doesn't match required const type
         string source = """
-                        resident Buffer[T, N]
-                        needs N is UAddr
+                        entity Buffer[T, N]
+                        needs N is Address
                           data: T
 
                         routine test(buf: Buffer[U8, S32])
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors,
             e => e.Code == SemanticDiagnosticCode.ConstGenericTypeMismatch);
+    }
+
+    /// <summary>
+    /// Verifies semantic analysis behavior for const generic preset literal without unexpected diagnostics.
+    /// </summary>
+
+    [Fact]
+    public void Analyze_ConstGeneric_PresetLiteral_NoError()
+    {
+        string source = """
+                        preset WIDTH: Address = 16addr
+
+                        entity Buffer[T, N]
+                        needs N is Address
+                          data: T
+
+                        routine test(buf: Buffer[U8, WIDTH])
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(result.Errors,
+            e => e.Code == SemanticDiagnosticCode.UnknownType ||
+                 e.Code == SemanticDiagnosticCode.ConstGenericTypeMismatch ||
+                 e.Code == SemanticDiagnosticCode.PresetNotConstant);
+    }
+
+    /// <summary>
+    /// Verifies semantic analysis behavior for const generic preset alias without unexpected diagnostics.
+    /// </summary>
+
+    [Fact]
+    public void Analyze_ConstGeneric_PresetAlias_NoError()
+    {
+        string source = """
+                        preset BASE_WIDTH: Address = 16addr
+                        preset WIDTH: Address = BASE_WIDTH
+
+                        entity Buffer[T, N]
+                        needs N is Address
+                          data: T
+
+                        routine test(buf: Buffer[U8, WIDTH])
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(result.Errors,
+            e => e.Code == SemanticDiagnosticCode.UnknownType ||
+                 e.Code == SemanticDiagnosticCode.ConstGenericTypeMismatch ||
+                 e.Code == SemanticDiagnosticCode.PresetNotConstant);
+    }
+
+    #endregion
+
+    #region Generic Method Resolution (S191, S192, S193)
+    /// <summary>
+    /// Verifies semantic analysis behavior for generic record equality operator without unexpected diagnostics.
+    /// </summary>
+
+    [Fact]
+    public void Analyze_GenericRecord_EqualityOperator_NoError()
+    {
+        // S193: == on generic record resolution should not produce MemberNotFound
+        string source = """
+                        protocol Equatable
+                          @readonly
+                          routine Me.$eq(you: Me) -> Bool
+
+                        record Wrapper[T] obeys Equatable
+                          value: T
+
+                        @readonly
+                        routine Wrapper.$eq(you: Wrapper) -> Bool
+                          return true
+
+                        routine test(a: Wrapper[S32], b: Wrapper[S32]) -> Bool
+                          return a == b
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(result.Errors,
+            e => e.Code == SemanticDiagnosticCode.MemberNotFound);
+    }
+    /// <summary>
+    /// Verifies semantic analysis behavior for generic type void method call without unexpected diagnostics.
+    /// </summary>
+
+    [Fact]
+    public void Analyze_GenericType_VoidMethodCall_NoError()
+    {
+        // S191: Void method call on generic resolution should not produce error type
+        string source = """
+                        record Container[T]
+                          value: T
+
+                        routine Container.reset()
+                          me.value = me.value
+                          return
+
+                        routine test(c: Container[S32])
+                          c.reset()
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(result.Errors,
+            e => e.Code == SemanticDiagnosticCode.MemberNotFound);
+    }
+    /// <summary>
+    /// Verifies semantic analysis behavior for generic type method call resolves via definition.
+    /// </summary>
+
+    [Fact]
+    public void Analyze_GenericType_MethodCall_ResolvesViaDefinition()
+    {
+        // Method on generic type should be found through the generic definition
+        string source = """
+                        record Box[T]
+                          value: T
+
+                        @readonly
+                        routine Box.size() -> S32
+                          return 1
+
+                        routine test(b: Box[S32]) -> S32
+                          return b.size()
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(result.Errors,
+            e => e.Code == SemanticDiagnosticCode.MemberNotFound);
     }
 
     #endregion

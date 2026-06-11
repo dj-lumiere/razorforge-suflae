@@ -1,6 +1,12 @@
-# WrappingMultiplicable - Protocol for types that support wrapping multiplication (*%)
 module Core
 
+### Represents the protocol for modulo-width multiplication.
+### `WrappingMultiplicable` is for bounded bit-width types whose multiplication
+### result discards overflow bits instead of trapping.
 protocol WrappingMultiplicable
+  ### Returns the wrapping product of this value and `you`.
+  ### The result preserves only the low bits that fit in the conforming type.
+  ### :param you: The other factor.
+  ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.__mul_wrap__(you: Me) -> Me
+  routine Me.$mul_wrap(you: Me) -> ?Me

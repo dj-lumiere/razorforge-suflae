@@ -1,15 +1,35 @@
-# Shiftable - Protocol for types that support shift operations (<<, >>, <<<, >>>)
 module Core
 
+### Represents the protocol for bit-shift operations.
+### `Shiftable` separates arithmetic and logical shifting so conforming types
+### can describe sign-extending and zero-filling behavior explicitly.
 protocol Shiftable
+  ### Returns this value arithmetic-left-shifted by `amount`.
+  ### Arithmetic left shift is typically equivalent to shifting the numeric
+  ### bit pattern toward more significant positions.
+  ### :param amount: The shift amount.
+  ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.__ashl__(amount: Integral) -> Me
+  routine Me.$ashl(amount: Integral) -> ?Me
 
+  ### Returns this value arithmetic-right-shifted by `amount`.
+  ### Arithmetic right shift preserves sign semantics for signed-like types.
+  ### :param amount: The shift amount.
+  ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.__ashr__(amount: Integral) -> Me
+  routine Me.$ashr(amount: Integral) -> ?Me
 
+  ### Returns this value logical-left-shifted by `amount`.
+  ### Logical left shift operates on the raw bit pattern without signed-number
+  ### interpretation.
+  ### :param amount: The shift amount.
+  ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.__lshl__(amount: Integral) -> Me
+  routine Me.$lshl(amount: Integral) -> ?Me
 
+  ### Returns this value logical-right-shifted by `amount`.
+  ### Logical right shift fills vacated high bits with zero.
+  ### :param amount: The shift amount.
+  ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.__lshr__(amount: Integral) -> Me
+  routine Me.$lshr(amount: Integral) -> ?Me

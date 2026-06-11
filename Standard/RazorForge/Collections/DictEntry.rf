@@ -1,0 +1,11 @@
+module Core
+
+### Represents one key-value pair used by dictionary-style APIs.
+### `DictEntry[K, V]` appears in dictionary literals, iteration, and constructor helpers.
+### :typeparam K: The key type.
+### :typeparam V: The value type.
+record DictEntry[K, V]
+  ### Stores the entry key.
+  key: K
+  ### Stores the value associated with `key`.
+  value: V

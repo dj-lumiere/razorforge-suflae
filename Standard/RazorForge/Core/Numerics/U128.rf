@@ -1,0 +1,604 @@
+module Core
+
+### A 128-bit unsigned integer in the range 0 to 340,282,366,920,938,463,463,374,607,431,768,211,455.
+###
+### `U128` is used for cryptographic keys, UUIDs, very large counters, and
+### other data that requires more than 64 bits. Note that `U128` does not
+### implement `AtomicType` because hardware atomic operations on 128-bit
+### values are not universally available.
+@llvm("i128")
+record U128 obeys UnsignedIntegral, Ordered, ConstCompatible
+  pass
+
+# Constants for U128 limits
+preset U128_MIN: U128 = 0_u128
+preset U128_MAX: U128 = 340282366920938463463374607431768211455_u128
+preset U128_ZERO: U128 = 0_u128
+preset U128_ONE: U128 = 1_u128
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+### Converts an `S8` to `U128`, throwing if the value is negative.
+### :param from: The `S8` value to convert.
+### :returns: A `U128` with the same unsigned value as `from`.
+### :throws: {IntegerOverflowError} if `from < 0`.
+routine U128.$create!(from: S8) -> U128
+  if from < 0_s8
+    throw IntegerOverflowError()
+  return sign_extend[S8, U128](from)
+
+### Converts an `S16` to `U128`, throwing if the value is negative.
+### :param from: The `S16` value to convert.
+### :returns: A `U128` with the same unsigned value as `from`.
+### :throws: {IntegerOverflowError} if `from < 0`.
+routine U128.$create!(from: S16) -> U128
+  if from < 0_s16
+    throw IntegerOverflowError()
+  return sign_extend[S16, U128](from)
+
+### Converts an `S32` to `U128`, throwing if the value is negative.
+### :param from: The `S32` value to convert.
+### :returns: A `U128` with the same unsigned value as `from`.
+### :throws: {IntegerOverflowError} if `from < 0`.
+routine U128.$create!(from: S32) -> U128
+  if from < 0_s32
+    throw IntegerOverflowError()
+  return sign_extend[S32, U128](from)
+
+### Converts an `S64` to `U128`, throwing if the value is negative.
+### :param from: The `S64` value to convert.
+### :returns: A `U128` with the same unsigned value as `from`.
+### :throws: {IntegerOverflowError} if `from < 0`.
+routine U128.$create!(from: S64) -> U128
+  if from < 0_s64
+    throw IntegerOverflowError()
+  return sign_extend[S64, U128](from)
+
+### Converts an `S128` to `U128`, throwing if the value is negative.
+### :param from: The `S128` value to convert.
+### :returns: The same bit pattern reinterpreted as an unsigned value.
+### :throws: {IntegerOverflowError} if `from < 0`.
+routine U128.$create!(from: S128) -> U128
+  if from < 0_s128
+    throw IntegerOverflowError()
+  return reinterpret_bits[S128, U128](from)
+
+### Zero-extends a `U8` to `U128`.
+### :param from: The `U8` value to widen.
+### :returns: A `U128` equal in value to `from`.
+routine U128.$create(from: U8) -> U128
+  return zero_extend[U8, U128](from)
+
+### Zero-extends a `U16` to `U128`.
+### :param from: The `U16` value to widen.
+### :returns: A `U128` equal in value to `from`.
+routine U128.$create(from: U16) -> U128
+  return zero_extend[U16, U128](from)
+
+### Zero-extends a `U32` to `U128`.
+### :param from: The `U32` value to widen.
+### :returns: A `U128` equal in value to `from`.
+routine U128.$create(from: U32) -> U128
+  return zero_extend[U32, U128](from)
+
+### Zero-extends a `U64` to `U128`.
+### :param from: The `U64` value to widen.
+### :returns: A `U128` equal in value to `from`.
+routine U128.$create(from: U64) -> U128
+  return zero_extend[U64, U128](from)
+
+### Identity conversion — returns `from` unchanged.
+### :param from: The `U128` value to return.
+### :returns: `from` unchanged.
+routine U128.$create(from: U128) -> U128
+  return from
+
+### Converts an `F16` to `U128` via `U64` conversion.
+### :param from: The `F16` value to convert.
+### :returns: The integer part of `from` as a `U128`.
+### :throws: {IntegerOverflowError} if the integer part exceeds `U64_MAX`.
+routine U128.$create!(from: F16) -> U128
+  return from.U64!().U128()
+
+### Converts an `F32` to `U128` via `U64` conversion.
+### :param from: The `F32` value to convert.
+### :returns: The integer part of `from` as a `U128`.
+### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+routine U128.$create!(from: F32) -> U128
+  return from.U64!().U128()
+
+### Converts an `F64` to `U128` via `U64` conversion.
+### :param from: The `F64` value to convert.
+### :returns: The integer part of `from` as a `U128`.
+### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+routine U128.$create!(from: F64) -> U128
+  return from.U64!().U128()
+
+### Converts an `F128` to `U128` via `U64` conversion.
+### :param from: The `F128` value to convert.
+### :returns: The integer part of `from` as a `U128`.
+### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+routine U128.$create!(from: F128) -> U128
+  return from.U64!().U128()
+
+### Converts a `D32` to `U128` via `U64` conversion.
+### :param from: The `D32` value to convert.
+### :returns: The integer part of `from` as a `U128`.
+### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+routine U128.$create!(from: D32) -> U128
+  return from.U64!().U128()
+
+### Converts a `D64` to `U128` via `U64` conversion.
+### :param from: The `D64` value to convert.
+### :returns: The integer part of `from` as a `U128`.
+### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+routine U128.$create!(from: D64) -> U128
+  return from.U64!().U128()
+
+### Converts a `D128` to `U128` via `U64` conversion.
+### :param from: The `D128` value to convert.
+### :returns: The integer part of `from` as a `U128`.
+### :throws: {IntegerOverflowError} if the value is negative or exceeds `U64_MAX`.
+routine U128.$create!(from: D128) -> U128
+  return from.U64!().U128()
+
+# ============================================================================
+# Arithmetic Operations (trapping on overflow by default)
+# ============================================================================
+
+### Returns the sum and a flag indicating whether the result wrapped around.
+### :param you: The right operand.
+### :returns: A tuple of `(wrapped_sum, overflowed)`.
+routine U128.add_with_overflow(you: U128) -> (U128, Bool)
+  return unsigned_add_checked[U128](me, you)
+
+### Returns the difference and a flag indicating whether the result wrapped around.
+### :param you: The value to subtract.
+### :returns: A tuple of `(wrapped_difference, overflowed)`.
+routine U128.sub_with_overflow(you: U128) -> (U128, Bool)
+  return unsigned_sub_checked[U128](me, you)
+
+### Returns the product and a flag indicating whether the result wrapped around.
+### :param you: The right operand.
+### :returns: A tuple of `(wrapped_product, overflowed)`.
+routine U128.mul_with_overflow(you: U128) -> (U128, Bool)
+  return unsigned_mul_checked[U128](me, you)
+
+### Returns `me + you`, throwing on overflow.
+### :param you: The right operand.
+### :returns: The sum `me + you`.
+### :throws: {IntegerOverflowError} if the result exceeds `U128_MAX`.
+routine U128.$add!(you: U128) -> U128
+  var result = me.add_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
+
+### Returns `me - you`, throwing on underflow.
+### :param you: The value to subtract.
+### :returns: The difference `me - you`.
+### :throws: {IntegerOverflowError} if the result is less than `U128_MIN` (0).
+routine U128.$sub!(you: U128) -> U128
+  var result = me.sub_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
+
+### Returns `me * you`, throwing on overflow.
+### :param you: The right operand.
+### :returns: The product `me * you`.
+### :throws: {IntegerOverflowError} if the result exceeds `U128_MAX`.
+routine U128.$mul!(you: U128) -> U128
+  var result = me.mul_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
+
+### Returns `me // you` (integer division), throwing if `you` is zero.
+### :param you: The divisor.
+### :returns: The quotient `me // you`.
+### :throws: {DivisionByZeroError} if `you == 0`.
+routine U128.$floordiv!(you: U128) -> U128
+  if you == 0
+    throw DivisionByZeroError()
+  return unsigned_div[U128](a: me, b: you)
+
+### Returns `me % you` (integer remainder).
+### :param you: The divisor.
+### :returns: The remainder `me % you`. Behavior is undefined if `you == 0`.
+routine U128.$mod!(you: U128) -> U128
+  if you == 0_u128
+    throw DivisionByZeroError()
+  return unsigned_rem[U128](a: me, b: you)
+
+# ============================================================================
+# Wrapping Arithmetic (+%, -%, *%)
+# ============================================================================
+
+### Returns `(me + you) mod 2¹²⁸` without overflow check.
+### :param you: The right operand.
+### :returns: The sum modulo 2¹²⁸.
+routine U128.$add_wrap(you: U128) -> U128
+  return add[U128](a: me, b: you)
+
+### Returns `(me - you) mod 2¹²⁸` without underflow check.
+### :param you: The value to subtract.
+### :returns: The difference modulo 2¹²⁸.
+routine U128.$sub_wrap(you: U128) -> U128
+  return sub[U128](a: me, b: you)
+
+### Returns `(me * you) mod 2¹²⁸` without overflow check.
+### :param you: The right operand.
+### :returns: The product modulo 2¹²⁸.
+routine U128.$mul_wrap(you: U128) -> U128
+  return mul[U128](a: me, b: you)
+
+# ============================================================================
+# Unchecked Arithmetic (+!, -!, *!, //!, %!)
+# ============================================================================
+
+### Returns `me + you` with undefined behavior on overflow.
+### :param you: The right operand.
+### :returns: The sum, assuming no overflow.
+dangerous routine U128.$add_unchecked(you: U128) -> U128
+  return unsigned_add_exact[U128](a: me, b: you)
+
+### Returns `me - you` with undefined behavior on underflow.
+### :param you: The value to subtract.
+### :returns: The difference, assuming no underflow.
+dangerous routine U128.$sub_unchecked(you: U128) -> U128
+  return unsigned_sub_exact[U128](a: me, b: you)
+
+### Returns `me * you` with undefined behavior on overflow.
+### :param you: The right operand.
+### :returns: The product, assuming no overflow.
+dangerous routine U128.$mul_unchecked(you: U128) -> U128
+  return unsigned_mul_exact[U128](a: me, b: you)
+
+### Returns `me // you` with undefined behavior if `you == 0`.
+### :param you: The divisor.
+### :returns: The quotient, assuming `you != 0`.
+dangerous routine U128.$floordiv_unchecked(you: U128) -> U128
+  return unsigned_div[U128](a: me, b: you)
+
+### Returns `me % you` with undefined behavior if `you == 0`.
+### :param you: The divisor.
+### :returns: The remainder, assuming `you != 0`.
+dangerous routine U128.$mod_unchecked(you: U128) -> U128
+  return unsigned_rem[U128](a: me, b: you)
+
+# ============================================================================
+# Clamping Arithmetic (+^, -^, *^)
+# ============================================================================
+
+### Returns `me + you`, clamped to `U128_MAX` on overflow.
+### :param you: The right operand.
+### :returns: The sum, or `U128_MAX` if it would overflow.
+routine U128.$add_clamp(you: U128) -> U128
+  return unsigned_add_sat[U128](a: me, b: you)
+
+### Returns `me - you`, clamped to `U128_MIN` on underflow.
+### :param you: The value to subtract.
+### :returns: The difference, or `0` if it would go below `U128_MIN`.
+routine U128.$sub_clamp(you: U128) -> U128
+  return unsigned_sub_sat[U128](a: me, b: you)
+
+### Returns `me * you`, clamped to `U128_MAX` on overflow.
+### Uses a division-based overflow check since no 256-bit type is available.
+### :param you: The right operand.
+### :returns: The product, or `U128_MAX` if it would overflow.
+routine U128.$mul_clamp(you: U128) -> U128
+  # Can't widen to 256-bit, use division-based overflow check
+  if int_eq[U128](a: me, b: 0_u128) or int_eq[U128](a: you, b: 0_u128)
+    return 0_u128
+  var result = mul[U128](a: me, b: you)
+  if int_ne[U128](unsigned_div[U128](a: result, b: me), you)
+    return U128_MAX
+  return result
+
+# ============================================================================
+# Power Operations (**)
+# ============================================================================
+
+### Returns `me ** exp` and a flag indicating whether the result wrapped around.
+### :param exp: The exponent.
+### :returns: A tuple of `(wrapped_result, overflowed)`.
+### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
+routine U128.pow_with_overflow!(exp: U128) -> (U128, Bool)
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  var result: U128 = 1
+  var base: U128 = me
+  var e: U32 = U32(exp)
+  var overflow = false
+  while e > 0
+    if (e & 1) == 1
+      var mul_result = result.mul_with_overflow(base)
+      result = mul_result.item0
+      overflow = overflow or mul_result.item1
+    e = e >> 1_u32
+    if e > 0
+      var square_result = base.mul_with_overflow(base)
+      base = square_result.item0
+      overflow = overflow or square_result.item1
+  return (result, overflow)
+
+### Returns `me ** exp`, throwing on overflow.
+### :param exp: The exponent.
+### :returns: The result of raising `me` to the power `exp`.
+### :throws: {IntegerOverflowError} if the result exceeds `U128_MAX`.
+### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
+routine U128.$pow!(exp: U128) -> U128
+  var result = me.pow_with_overflow!(exp)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
+
+### Returns `me ** exp` with wrapping arithmetic (mod 2¹²⁸).
+### :param exp: The exponent.
+### :returns: The result modulo 2¹²⁸.
+### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
+routine U128.$pow_wrap!(exp: U128) -> U128
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  var result: U128 = 1
+  var base: U128 = me
+  var e: U32 = U32(exp)
+  while e > 0
+    if (e & 1) == 1
+      result = result.$mul_wrap(base)
+    e = e >> 1_u32
+    if e > 0
+      base = base.$mul_wrap(base)
+  return result
+
+### Returns `me ** exp`, clamped to `U128_MAX` on overflow.
+### :param exp: The exponent.
+### :returns: The result, or `U128_MAX` if it would overflow.
+### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
+routine U128.$pow_clamp!(exp: U128) -> U128
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  var result: U128 = 1
+  var base: U128 = me
+  var e: U32 = U32(exp)
+  while e > 0
+    if (e & 1) == 1
+      result = result.$mul_clamp(base)
+    base = base.$mul_clamp(base)
+    e = e >> 1_u32
+  return result
+
+# ============================================================================
+# Bitwise Operations
+# ============================================================================
+
+### Returns the bitwise AND of this value and `you`.
+### :param you: The right operand.
+### :returns: `me & you`.
+routine U128.$bitand(you: U128) -> U128
+  return bit_and[U128](a: me, b: you)
+
+### Returns the bitwise OR of this value and `you`.
+### :param you: The right operand.
+### :returns: `me | you`.
+routine U128.$bitor(you: U128) -> U128
+  return bit_or[U128](a: me, b: you)
+
+### Returns the bitwise XOR of this value and `you`.
+### :param you: The right operand.
+### :returns: `me ^ you`.
+routine U128.$bitxor(you: U128) -> U128
+  return bit_xor[U128](a: me, b: you)
+
+### Returns the bitwise complement of this value.
+### :returns: `~me` — each bit flipped.
+routine U128.$bitnot() -> U128
+  return bit_xor[U128](a: me, b: U128_MAX)
+
+# ============================================================================
+# Shift Operations (<<, <<?>, >>, <<<, >>>)
+# For unsigned types, arithmetic and logical shifts behave identically
+# ============================================================================
+
+### Left-shifts this value by `bits` positions, filling vacated bits with zero.
+### :param bits: The number of bit positions to shift left.
+### :returns: `me << bits`.
+routine U128.$ashl(bits: U32) -> U128
+  return shift_left[U128](me, U128(bits))
+
+### Right-shifts this value by `bits` positions, filling vacated bits with zero.
+### :param bits: The number of bit positions to shift right.
+### :returns: `me >> bits` (logical, zero-filling).
+routine U128.$ashr(bits: U32) -> U128
+  return shift_right_unsigned[U128](me, U128(bits))
+
+### Left-shifts this value by `bits` positions (logical shift, same as `$ashl` for unsigned).
+### :param bits: The number of bit positions to shift left.
+### :returns: `me << bits`.
+routine U128.$lshl(bits: U32) -> U128
+  return shift_left[U128](me, U128(bits))
+
+### Right-shifts this value by `bits` positions (logical shift, same as `$ashr` for unsigned).
+### :param bits: The number of bit positions to shift right.
+### :returns: `me >> bits` (zero-filling).
+routine U128.$lshr(bits: U32) -> U128
+  return shift_right_unsigned[U128](me, U128(bits))
+
+# ============================================================================
+# Comparison Operations
+# ============================================================================
+
+### Returns `true` when both values are equal.
+### :param you: The value to compare against.
+### :returns: `true` if `me == you`; `false` otherwise.
+routine U128.$eq(you: U128) -> Bool
+  return int_eq[U128](a: me, b: you)
+
+### Compares this value with `you`, returning the ordering relationship.
+### :param you: The value to compare against.
+### :returns: `ME_SMALL` if `me < you`, `ME_LARGE` if `me > you`, `SAME` if equal.
+routine U128.$cmp(you: U128) -> ComparisonSign
+  if unsigned_lt[U128](me, you)
+    return ME_SMALL
+  if unsigned_gt[U128](me, you)
+    return ME_LARGE
+  return SAME
+
+# ============================================================================
+# Math Operations
+# ============================================================================
+
+### Returns the smaller of this value and `you`.
+### :param you: The value to compare against.
+### :returns: `me` if `me <= you`; otherwise `you`.
+routine U128.min(you: U128) -> U128
+  return if me <= you then me else you
+
+### Returns the larger of this value and `you`.
+### :param you: The value to compare against.
+### :returns: `me` if `me >= you`; otherwise `you`.
+routine U128.max(you: U128) -> U128
+  return if me >= you then me else you
+
+### Returns this value clamped to the range `min_val..=max_val`.
+### :param min_val: The lower bound (inclusive).
+### :param max_val: The upper bound (inclusive).
+### :returns: `min_val` if `me < min_val`; `max_val` if `me > max_val`; otherwise `me`.
+@positional
+routine U128.clamp(min_val: U128, max_val: U128) -> U128
+  return me.min(max_val).max(min_val)
+
+# ============================================================================
+# Bit Manipulation
+# ============================================================================
+
+### Returns the count of set bits (popcount) in this value's 128-bit representation.
+### :returns: The number of `1` bits; between 0 and 128.
+routine U128.count_ones() -> U128
+  return count_ones[U128](me)
+
+### Returns the count of clear bits in this value's 128-bit representation.
+### :returns: `128` minus the popcount; between 0 and 128.
+routine U128.count_zeros() -> U128
+  return 128_u128 -% me.count_ones()
+
+### Returns the number of leading zero bits, starting from the most-significant bit.
+### :returns: The leading zero count; `128` if the value is zero.
+routine U128.leading_zeros() -> U128
+  return leading_zeros[U128](me)
+
+### Returns the number of trailing zero bits, starting from the least-significant bit.
+### :returns: The trailing zero count; `128` if the value is zero.
+routine U128.trailing_zeros() -> U128
+  return trailing_zeros[U128](me)
+
+### Returns the number of leading one bits, starting from the most-significant bit.
+### :returns: The leading one count; `128` if the value is `U128_MAX`.
+routine U128.leading_ones() -> U128
+  return me.$bitnot().leading_zeros()
+
+### Returns the number of trailing one bits, starting from the least-significant bit.
+### :returns: The trailing one count; `128` if the value is `U128_MAX`.
+routine U128.trailing_ones() -> U128
+  return me.$bitnot().trailing_zeros()
+
+### Returns this value with its bits reversed (bit 127 ↔ bit 0, etc.).
+### :returns: The bit-reversed `U128`.
+routine U128.reverse_bits() -> U128
+  return reverse_bits[U128](me)
+
+### Returns this value with its 16 bytes swapped (for endianness conversion).
+### :returns: A `U128` with its bytes in reverse order.
+routine U128.swap_bytes() -> U128
+  return byte_swap[U128](me)
+
+### Returns `true` if this value is an exact power of two.
+### :returns: `true` if `me` is 1, 2, 4, ..., 2¹²⁷; `false` otherwise (including zero).
+routine U128.is_power_of_two() -> Bool
+  return me != 0_u128 and (me & (me - 1_u128)) == 0_u128
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+### Returns `true` if this value is zero.
+### :returns: `true` if `me == 0`.
+routine U128.is_zero() -> Bool
+  return me == 0_u128
+
+### Returns `true` if this value is divisible by 2.
+### :returns: `true` if the least-significant bit is 0.
+routine U128.is_even() -> Bool
+  var result = bit_and[U128](a: me, b: 1_u128)
+  return int_eq[U128](a: result, b: 0_u128)
+
+### Returns `true` if this value is not divisible by 2.
+### :returns: `true` if the least-significant bit is 1.
+routine U128.is_odd() -> Bool
+  return not me.is_even()
+
+### Returns the upper 64 bits of this 128-bit value.
+### :returns: Bits 127..64 as a `U64`.
+routine U128.high64() -> U64
+  var shifted = shift_right_unsigned[U128](me, 64_u32)
+  return int_truncate[U128, U64](shifted)
+
+### Returns the lower 64 bits of this 128-bit value.
+### :returns: Bits 63..0 as a `U64`.
+routine U128.low64() -> U64
+  return int_truncate[U128, U64](me)
+
+# ============================================================================
+# Text Representation and Parsing
+# ============================================================================
+
+routine U128.$represent() -> ?Text
+  if me == 0u128
+    return "0"
+  var digits = List[Character]()
+  var remaining = me
+  while remaining > 0u128
+    var digit = U8(unsigned_rem[U128](a: remaining, b: 10u128))
+    remaining = unsigned_div[U128](a: remaining, b: 10u128)
+    digits.add_first(Character(0x0030u32 + U32(digit)))
+  return Text(from_list: steal digits)
+
+routine U128.$diagnose() -> ?Text
+  return "U128(" + me.$represent() + ")"
+
+### Parses a decimal string into a `U128`.
+### :param from_text: The decimal string to parse (no sign, no prefix).
+### :returns: The parsed `U128` value.
+### :throws: {InvalidValueError} if `from_text` is empty or contains non-digit characters.
+routine U128.$create!(from_text: Text) -> U128
+  if from_text.count() == 0u64
+    throw InvalidValueError(input: from_text, target: "U128")
+  var result = 0u128
+  var i = 0u64
+  while i < from_text.count()
+    var ch = from_text[i]
+    if ch.is_numeric()
+      result = result * 10u128 + U128(ch.digit_value())
+    else
+      throw InvalidValueError(input: from_text, target: "U128")
+    i = i + 1u64
+  return result
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns an xxHash64-based hash of this 128-bit value.
+### :returns: A `U64` hash combining both 64-bit halves of the value.
+routine U128.$fast_hash() -> U64
+  return __hash_u128(v: me)
+
+### Returns a SipHash-2-4 keyed hash of this 128-bit value.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
+routine U128.$hash(k0: U64, k1: U64) -> U64
+  return __secure_hash_u128(v: me, k0: k0, k1: k1)

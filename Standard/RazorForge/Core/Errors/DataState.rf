@@ -1,6 +1,0 @@
-module Core
-
-choice DataState
-  VALID: 1
-  ABSENT: 0
-  ERROR: -1

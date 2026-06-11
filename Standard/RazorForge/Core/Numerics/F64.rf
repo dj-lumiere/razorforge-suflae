@@ -1,0 +1,515 @@
+module Core
+
+import Collections
+# Core F64 type definition - maps to LLVM double
+
+### A 64-bit IEEE 754 binary floating-point value (double precision).
+### `F64` is the default floating-point type for general scientific, financial,
+### and system-level numeric code in RazorForge. With 53 bits of significand, it
+### provides about 15–16 significant decimal digits of precision and can represent
+### values up to approximately ±1.8 × 10³⁰⁸.
+###
+### Arithmetic operations throw {NumericOverflowError} when the result is
+### non-finite (infinity or NaN). Use `$truediv_unchecked` for raw IEEE 754
+### semantics without the overflow guard.
+@llvm("double")
+record F64 obeys Numeric, Ordered
+  pass
+
+# IEEE 754 double precision constants
+preset F64_EPSILON: F64 = 2.220446049250313e-16_f64
+preset F64_MIN: F64 = 2.2250738585072014e-308_f64
+preset F64_MAX: F64 = 1.7976931348623157e+308_f64
+preset F64_ZERO: F64 = 0.0_f64
+preset F64_ONE: F64 = 1.0_f64
+preset F64_NAN: F64 = nan_f64
+preset F64_INFINITY: F64 = inf_f64
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+### Converts an `S8` to `F64`. The result is exact for all values.
+### :param from: The signed 8-bit integer to convert.
+### :returns: The corresponding `F64` value.
+routine F64.$create(from: S8) -> F64
+  return signed_to_float[S8, F64](from)
+
+### Converts an `S16` to `F64`. The result is exact for all values.
+### :param from: The signed 16-bit integer to convert.
+### :returns: The corresponding `F64` value.
+routine F64.$create(from: S16) -> F64
+  return signed_to_float[S16, F64](from)
+
+### Converts an `S32` to `F64`. The result is exact for all values.
+### :param from: The signed 32-bit integer to convert.
+### :returns: The corresponding `F64` value.
+routine F64.$create(from: S32) -> F64
+  return signed_to_float[S32, F64](from)
+
+### Converts an `S64` to `F64`.
+### Values with magnitude larger than 2⁵³ may be rounded to the nearest
+### representable double.
+### :param from: The signed 64-bit integer to convert.
+### :returns: The closest representable `F64` value.
+routine F64.$create(from: S64) -> F64
+  return signed_to_float[S64, F64](from)
+
+### Converts an `S128` to `F64`.
+### Precision is limited to approximately 53 bits of significand.
+### :param from: The signed 128-bit integer to convert.
+### :returns: The closest representable `F64` value.
+routine F64.$create(from: S128) -> F64
+  return signed_to_float[S128, F64](from)
+
+### Converts a `U8` to `F64`. The result is exact for all values.
+### :param from: The unsigned 8-bit integer to convert.
+### :returns: The corresponding `F64` value.
+routine F64.$create(from: U8) -> F64
+  return unsigned_to_float[U8, F64](from)
+
+### Converts a `U16` to `F64`. The result is exact for all values.
+### :param from: The unsigned 16-bit integer to convert.
+### :returns: The corresponding `F64` value.
+routine F64.$create(from: U16) -> F64
+  return unsigned_to_float[U16, F64](from)
+
+### Converts a `U32` to `F64`. The result is exact for all values.
+### :param from: The unsigned 32-bit integer to convert.
+### :returns: The corresponding `F64` value.
+routine F64.$create(from: U32) -> F64
+  return unsigned_to_float[U32, F64](from)
+
+### Converts a `U64` to `F64`.
+### Values larger than 2⁵³ may be rounded to the nearest representable double.
+### :param from: The unsigned 64-bit integer to convert.
+### :returns: The closest representable `F64` value.
+routine F64.$create(from: U64) -> F64
+  return unsigned_to_float[U64, F64](from)
+
+### Converts a `U128` to `F64`.
+### Precision is limited to approximately 53 bits of significand.
+### :param from: The unsigned 128-bit integer to convert.
+### :returns: The closest representable `F64` value.
+routine F64.$create(from: U128) -> F64
+  return unsigned_to_float[U128, F64](from)
+
+### Widens a half-precision float to double precision.
+### :param from: The `F16` value to widen.
+### :returns: An `F64` carrying the same numeric value.
+routine F64.$create(from: F16) -> F64
+  return float_extend[F16, F64](from)
+
+### Widens a single-precision float to double precision.
+### :param from: The `F32` value to widen.
+### :returns: An `F64` carrying the same numeric value.
+routine F64.$create(from: F32) -> F64
+  return float_extend[F32, F64](from)
+
+### Returns an existing `F64` unchanged.
+### :param from: The double-precision value to forward.
+### :returns: `from`.
+routine F64.$create(from: F64) -> F64
+  return from
+
+### Narrows a quadruple-precision float to double precision.
+### :param from: The `F128` value to convert.
+### :returns: The nearest representable `F64` value.
+routine F64.$create(from: F128) -> F64
+  return float_narrow[F128, F64](from)
+
+### Converts a decimal32 value to double-precision binary floating point.
+### :param from: The decimal floating-point input value.
+### :returns: The closest representable `F64` value.
+routine F64.$create(from: D32) -> F64
+  var bits = reinterpret_bits[D32, U32](from)
+  return rf_d32_to_f64(bits)
+
+### Converts a decimal64 value to double-precision binary floating point.
+### :param from: The decimal floating-point input value.
+### :returns: The closest representable `F64` value.
+routine F64.$create(from: D64) -> F64
+  var bits = reinterpret_bits[D64, U64](from)
+  return rf_d64_to_f64(bits)
+
+### Converts a decimal128 value to double-precision binary floating point.
+### :param from: The decimal floating-point input value.
+### :returns: The closest representable `F64` value.
+routine F64.$create(from: D128) -> F64
+  return rf_d128_to_f64(low: from.low_bits(), high: from.high_bits())
+
+# ============================================================================
+# Arithmetic Operations
+# ============================================================================
+
+### Returns `me + you`, throwing if the result is non-finite.
+### :param you: The addend.
+### :returns: The double-precision sum.
+### :throws: {NumericOverflowError} if the result is infinity or NaN.
+routine F64.$add!(you: F64) -> F64
+  var result = float_add[F64](a: me, b: you)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"F64 addition produced non-finite result: {me} + {you}")
+  return result
+
+### Returns `me - you`, throwing if the result is non-finite.
+### :param you: The value to subtract.
+### :returns: The double-precision difference.
+### :throws: {NumericOverflowError} if the result is infinity or NaN.
+routine F64.$sub!(you: F64) -> F64
+  var result = float_sub[F64](a: me, b: you)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"F64 subtraction produced non-finite result: {me} - {you}")
+  return result
+
+### Returns `me * you`, throwing if the result is non-finite.
+### :param you: The multiplier.
+### :returns: The double-precision product.
+### :throws: {NumericOverflowError} if the result is infinity or NaN.
+routine F64.$mul!(you: F64) -> F64
+  var result = float_mul[F64](a: me, b: you)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"F64 multiplication produced non-finite result: {me} * {you}")
+  return result
+
+### Returns `me / you`, throwing if the result is non-finite.
+### :param you: The divisor.
+### :returns: The double-precision quotient.
+### :throws: {NumericOverflowError} if the result is infinity or NaN (including division by zero).
+routine F64.$truediv!(you: F64) -> F64
+  var result = float_div[F64](a: me, b: you)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"F64 division produced non-finite result: {me} / {you}")
+  return result
+
+### Returns the arithmetic negation of this value.
+### :returns: `-me` in double precision.
+routine F64.$neg() -> F64
+  return float_neg[F64](me)
+
+### Divides `me` by `you` without overflow checking.
+### Returns infinity or NaN on overflow or zero divisor, following raw IEEE 754 semantics.
+### :param you: The divisor.
+### :returns: The double-precision quotient, possibly infinity or NaN.
+dangerous routine F64.$truediv_unchecked(you: F64) -> F64
+  return float_div_fast[F64](a: me, b: you)
+
+### Adds `me + you` without finiteness checking (raw IEEE 754).
+dangerous routine F64.$add_unchecked(you: F64) -> F64
+  return float_add[F64](a: me, b: you)
+
+### Subtracts `me - you` without finiteness checking (raw IEEE 754).
+dangerous routine F64.$sub_unchecked(you: F64) -> F64
+  return float_sub[F64](a: me, b: you)
+
+### Multiplies `me * you` without finiteness checking (raw IEEE 754).
+dangerous routine F64.$mul_unchecked(you: F64) -> F64
+  return float_mul[F64](a: me, b: you)
+
+# ============================================================================
+# Comparison Operations (ordered - false if NaN)
+# ============================================================================
+
+### Returns `true` if both values are equal under IEEE 754 ordered comparison.
+### :param you: The value to compare against.
+### :returns: `true` if `me == you`; `false` if either operand is NaN.
+routine F64.$eq(you: F64) -> Bool
+  return float_eq[F64](a: me, b: you)
+
+### Compares this value with `you` under IEEE 754 ordered comparison.
+### :param you: The value to compare against.
+### :returns: `ME_SMALL`, `ME_LARGE`, or `SAME`.
+routine F64.$cmp(you: F64) -> ComparisonSign
+  if float_lt[F64](a: me, b: you)
+    return ME_SMALL
+  if float_gt[F64](a: me, b: you)
+    return ME_LARGE
+  return SAME
+
+# ============================================================================
+# Math Operations using intrinsics
+# ============================================================================
+
+### Returns the square root of this value in double precision.
+### :returns: The intrinsic square-root result for `me`.
+routine F64.sqrt() -> F64
+  return sqrt[F64](me)
+
+### Returns the absolute value.
+### :returns: `|me|` in double precision.
+routine F64.abs() -> F64
+  return float_abs[F64](me)
+
+### Rounds this value toward negative infinity.
+### :returns: The greatest integral-valued `F64` not larger than `me`.
+routine F64.floor() -> F64
+  return floor[F64](me)
+
+### Rounds this value toward positive infinity.
+### :returns: The smallest integral-valued `F64` not smaller than `me`.
+routine F64.ceil() -> F64
+  return ceil[F64](me)
+
+### Rounds this value to the nearest integral-valued `F64`.
+### :returns: The rounded result in double precision.
+routine F64.round() -> F64
+  return round[F64](me)
+
+### Discards the fractional part of this value toward zero.
+### :returns: The truncated result in double precision.
+routine F64.int_truncate() -> F64
+  return float_truncate[F64](me)
+
+### Returns the sine of this value, interpreting it as radians.
+### :returns: The double-precision sine result.
+routine F64.sin() -> F64
+  return sin[F64](me)
+
+### Returns the cosine of this value, interpreting it as radians.
+### :returns: The double-precision cosine result.
+routine F64.cos() -> F64
+  return cos[F64](me)
+
+### Returns `e` raised to this value.
+### :returns: The double-precision exponential result.
+routine F64.exp() -> F64
+  return exp[F64](me)
+
+### Returns the natural logarithm of this value.
+### :returns: The double-precision natural-log result.
+routine F64.log() -> F64
+  return log[F64](me)
+
+### Returns the base-10 logarithm of this value.
+### :returns: The double-precision common-log result.
+routine F64.log10() -> F64
+  return log10[F64](me)
+
+### Raises this value to the floating-point power `exp`.
+### :param exp: The exponent applied to `me`.
+### :returns: `me` raised to `exp` in double precision.
+routine F64.pow(exp: F64) -> F64
+  return pow[F64](me, exp)
+
+### Raises this value to `exp` and rejects non-finite results.
+### :param exp: The exponent applied to `me`.
+### :returns: `me` raised to `exp` in double precision.
+### :throws: {NumericOverflowError} if the result is infinity or NaN.
+routine F64.$pow!(exp: F64) -> F64
+  var result = me.pow(exp)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"F64 power produced non-finite result: {me} ** {exp}")
+  return result
+
+### Returns this value with its sign bit replaced by the sign of `sign`.
+### :param sign: The value supplying the sign bit.
+### :returns: A value with the magnitude of `me` and the sign of `sign`.
+routine F64.copysign(sign: F64) -> F64
+  return copysign[F64](me, sign)
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+### Returns the smaller of this value and `you`.
+### :param you: The value to compare against.
+### :returns: The lower of the two values under the ordered comparison rules.
+routine F64.min(you: F64) -> F64
+  return if me <= you then me else you
+
+### Returns the larger of this value and `you`.
+### :param you: The value to compare against.
+### :returns: The greater of the two values under the ordered comparison rules.
+routine F64.max(you: F64) -> F64
+  return if me >= you then me else you
+
+### Restricts this value to the closed interval `[min_val, max_val]`.
+### :param min_val: The lower bound to enforce.
+### :param max_val: The upper bound to enforce.
+### :returns: `me` if already in range, otherwise the nearest bound.
+@positional
+routine F64.clamp(min_val: F64, max_val: F64) -> F64
+  return me.min(max_val).max(min_val)
+
+### Returns `true` if this value is strictly positive (greater than zero).
+### :returns: `true` if `me > 0.0`.
+routine F64.is_positive() -> Bool
+  return me > 0.0_f64
+
+### Returns `true` if this value is strictly negative (less than zero).
+### :returns: `true` if `me < 0.0`.
+routine F64.is_negative() -> Bool
+  return me < 0.0_f64
+
+### Returns `true` if this value compares equal to zero.
+### :returns: `true` if `me == 0.0`.
+routine F64.is_zero() -> Bool
+  return me == 0.0_f64
+
+### Returns `true` when this value is neither NaN nor infinity.
+### :returns: Whether the value is finite.
+routine F64.is_finite() -> Bool
+  return not me.is_nan() and not me.is_infinite()
+
+### Returns `true` when this value encodes an IEEE 754 NaN.
+### :returns: Whether the bit pattern represents a not-a-number payload.
+routine F64.is_nan() -> Bool
+  var bits = me.to_bits()
+  var exponent = bit_and[U64](a: bits, b: 0x7FF0000000000000u64)
+  var mantissa = bit_and[U64](a: bits, b: 0x000FFFFFFFFFFFFF_u64)
+  return exponent == 0x7FF0000000000000u64 and mantissa != 0u64
+
+### Returns `true` when this value encodes positive or negative infinity.
+### :returns: Whether the bit pattern represents an infinity.
+routine F64.is_infinite() -> Bool
+  var bits = me.to_bits()
+  var exponent = bit_and[U64](a: bits, b: 0x7FF0000000000000u64)
+  var mantissa = bit_and[U64](a: bits, b: 0x000FFFFFFFFFFFFF_u64)
+  return exponent == 0x7FF0000000000000u64 and mantissa == 0u64
+
+### Returns the sign of this value as `-1.0`, `0.0`, or `1.0`.
+### :returns: A unit-sign value describing the sign of `me`.
+routine F64.signum() -> F64
+  return when
+    me > 0.0_f64 => 1.0_f64
+    me < 0.0_f64 => -1.0_f64
+    else => 0.0_f64
+
+### Reinterprets this float as its raw IEEE 754 bit pattern.
+### :returns: The underlying `U64` encoding of this value.
+routine F64.to_bits() -> U64
+  return reinterpret_bits[F64, U64](me)
+
+### Reinterprets a raw IEEE 754 bit pattern as an `F64`.
+### :param bits: The exact double-precision encoding to decode.
+### :returns: The `F64` value with that bit pattern.
+common routine F64.from_bits(bits: U64) -> F64
+  return reinterpret_bits[U64, F64](bits)
+
+# ============================================================================
+# Text Representation and Parsing
+# ============================================================================
+
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
+routine F64.$represent() -> ?Text
+  var cstr_result = rf_format_F64(me)
+  return Text(from: CStr(from_ptr: cstr_result))
+
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
+routine F64.$diagnose() -> ?Text
+  return "F64(" + me.$represent() + ")"
+
+### Parses a decimal float literal into an `F64`.
+### :param from_text: The text to parse. Accepts standard decimal notation and
+###   the special values `nan`, `inf`, and `infinity` (case-insensitive, with
+###   optional leading sign).
+### :returns: The `F64` value parsed from the input.
+### :throws: {InvalidValueError} if the text is not a valid float literal.
+routine F64.$create!(from_text: Text) -> F64
+  var len = from_text.count()
+  if len == 0u64
+    throw InvalidValueError(input: from_text, target: "F64")
+  var i = 0u64
+  var first = from_text[0u64]
+  if first == Character(0x002Bu32) or first == Character(0x002Du32)
+    i = 1u64
+    if i >= len
+      throw InvalidValueError(input: from_text, target: "F64")
+  var special = false
+  var rest = len - i
+  if rest >= 3u64
+    var c0 = from_text[i].to_lowercase()
+    var c1 = from_text[i + 1u64].to_lowercase()
+    var c2 = from_text[i + 2u64].to_lowercase()
+    if rest == 3u64 and c0 == Character(0x006Eu32) and c1 == Character(0x0061u32) and c2 == Character(0x006Eu32)
+      special = true
+    if rest == 3u64 and c0 == Character(0x0069u32) and c1 == Character(0x006Eu32) and c2 == Character(0x0066u32)
+      special = true
+    if not special and rest == 8u64 and c0 == Character(0x0069u32) and c1 == Character(0x006Eu32) and c2 == Character(0x0066u32)
+      var c3 = from_text[i + 3u64].to_lowercase()
+      var c4 = from_text[i + 4u64].to_lowercase()
+      var c5 = from_text[i + 5u64].to_lowercase()
+      var c6 = from_text[i + 6u64].to_lowercase()
+      var c7 = from_text[i + 7u64].to_lowercase()
+      if c3 == Character(0x0069u32) and c4 == Character(0x006Eu32) and c5 == Character(0x0069u32) and c6 == Character(0x0074u32) and c7 == Character(0x0079u32)
+        special = true
+  if not special
+    var has_digit = false
+    var has_dot = false
+    var has_exp = false
+    while i < len
+      var ch = from_text[i]
+      if ch.is_numeric()
+        has_digit = true
+      elseif ch == Character(0x002Eu32)
+        if has_dot or has_exp
+          throw InvalidValueError(input: from_text, target: "F64")
+        has_dot = true
+      elseif ch == Character(0x0065u32) or ch == Character(0x0045u32)
+        if has_exp or not has_digit
+          throw InvalidValueError(input: from_text, target: "F64")
+        has_exp = true
+        has_digit = false
+        if i + 1u64 < len
+          var next_ch = from_text[i + 1u64]
+          if next_ch == Character(0x002Bu32) or next_ch == Character(0x002Du32)
+            i = i + 1u64
+      else
+        throw InvalidValueError(input: from_text, target: "F64")
+      i = i + 1u64
+    if not has_digit
+      throw InvalidValueError(input: from_text, target: "F64")
+  var cstr_val = CStr(from: from_text)
+  return rf_parse_F64(cstr_val)
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns an xxHash64-based hash of this value, derived from its raw bit pattern.
+### :returns: A `U64` hash of the 64-bit float encoding.
+routine F64.$fast_hash() -> U64
+  return __hash_leaf(v: reinterpret_bits[F64, U64](me))
+
+# ============================================================================
+# Byte Representation
+# ============================================================================
+
+### Returns the raw bytes of this value in little-endian order.
+### :returns: The resulting `Array[Byte, 8]` value.
+routine F64.to_bytes_le() -> Array[Byte, 8]
+  var raw = reinterpret_bits[F64, U64](me)
+  var result = Array[Byte, 8]()
+  result = set_byte_at(array: result, index: 0u64, value: int_truncate[U64, U8](raw))
+  result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 8_u64)))
+  result = set_byte_at(array: result, index: 2_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 16_u64)))
+  result = set_byte_at(array: result, index: 3_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 24_u64)))
+  result = set_byte_at(array: result, index: 4_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 32_u64)))
+  result = set_byte_at(array: result, index: 5_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 40u64)))
+  result = set_byte_at(array: result, index: 6_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 48_u64)))
+  result = set_byte_at(array: result, index: 7_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 56_u64)))
+  return result
+
+### Returns the raw bytes of this value in big-endian order.
+### :returns: The resulting `Array[Byte, 8]` value.
+routine F64.to_bytes_be() -> Array[Byte, 8]
+  var raw = byte_swap[U64](reinterpret_bits[F64, U64](me))
+  var result = Array[Byte, 8]()
+  result = set_byte_at(array: result, index: 0u64, value: int_truncate[U64, U8](raw))
+  result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 8_u64)))
+  result = set_byte_at(array: result, index: 2_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 16_u64)))
+  result = set_byte_at(array: result, index: 3_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 24_u64)))
+  result = set_byte_at(array: result, index: 4_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 32_u64)))
+  result = set_byte_at(array: result, index: 5_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 40u64)))
+  result = set_byte_at(array: result, index: 6_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 48_u64)))
+  result = set_byte_at(array: result, index: 7_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](raw, 56_u64)))
+  return result
+
+### Returns a keyed hash of this value using SipHash-2-4.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: The resulting `U64` value.
+routine F64.$hash(k0: U64, k1: U64) -> U64
+  return __secure_hash_u64(v: reinterpret_bits[F64, U64](me), k0: k0, k1: k1)

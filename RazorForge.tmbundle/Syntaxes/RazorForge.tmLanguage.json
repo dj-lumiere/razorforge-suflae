@@ -30,22 +30,22 @@
         {
           "comment": "Type declarations",
           "name": "storage.type.razorforge",
-          "match": "\\b(routine|entity|record|resident|choice|variant|protocol|flags)\\b"
+          "match": "\\b(routine|entity|record|choice|variant|protocol|flags|crashable)\\b"
         },
         {
           "comment": "Variable declarations",
           "name": "keyword.declaration.razorforge",
-          "match": "\\b(var|preset|common|define)\\b"
+          "match": "\\b(var|preset|common|define|lateinit|uninit)\\b"
         },
         {
           "comment": "Access and routine modifiers",
           "name": "keyword.modifier.razorforge",
-          "match": "\\b(secret|posted|global|external|dangerous|suspended|threaded|emitting)\\b"
+          "match": "\\b(secret|posted|external|dangerous|suspended|threaded)\\b"
         },
         {
           "comment": "Control flow",
           "name": "keyword.control.razorforge",
-          "match": "\\b(if|elseif|else|then|unless|for|loop|while|when|break|continue|return|throw|absent|becomes|discard|emit)\\b"
+          "match": "\\b(if|elseif|else|then|unless|for|loop|while|when|break|continue|return|throw|absent|becomes|discard)\\b"
         },
         {
           "comment": "Type and pattern operations",
@@ -68,9 +68,9 @@
           "match": "\\b(waitfor|within|after)\\b"
         },
         {
-          "comment": "Generic constraints",
+          "comment": "Generic constraints and associated types",
           "name": "keyword.other.razorforge",
-          "match": "\\b(needs)\\b"
+          "match": "\\b(needs|relates)\\b"
         },
         {
           "comment": "Logical operators",
@@ -103,9 +103,14 @@
           "match": "\\b(true|false)\\b"
         },
         {
-          "comment": "None literal",
+          "comment": "None type (absent-arm type for variants and carriers)",
           "name": "constant.language.null.razorforge",
           "match": "\\b(None)\\b"
+        },
+        {
+          "comment": "none value literal (absent value for Maybe/Lookup/variant-with-None)",
+          "name": "constant.language.null.razorforge",
+          "match": "\\b(none)\\b"
         }
       ]
     },
@@ -204,11 +209,6 @@
     },
     "operators": {
       "patterns": [
-        {
-          "comment": "Intrinsic type attribute",
-          "name": "keyword.other.razorforge",
-          "match": "@intrinsic\\b"
-        },
         {
           "comment": "Compound annotation",
           "name": "storage.modifier.annotation.razorforge",

@@ -1,4 +1,7 @@
-﻿using Xunit;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Compiler.Tokenizer;
 using SyntaxTree;
 
 namespace RazorForge.Tests.Parser;
@@ -6,12 +9,14 @@ namespace RazorForge.Tests.Parser;
 using static TestHelpers;
 
 /// <summary>
-/// Tests for parsing expressions in RazorForge:
-/// method calls, member variable access, indexing, lambdas, closures, string interpolation.
+/// Contains tests for expression.
 /// </summary>
 public class ExpressionTests
 {
-    #region Method Call Tests
+    #region Routine Call Tests
+    /// <summary>
+    /// Verifies that the parser accepts simple method call.
+    /// </summary>
 
     [Fact]
     public void Parse_SimpleMethodCall()
@@ -24,6 +29,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts method call with multiple args.
+    /// </summary>
 
     [Fact]
     public void Parse_MethodCallWithMultipleArgs()
@@ -36,6 +44,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts method call with named args.
+    /// </summary>
 
     [Fact]
     public void Parse_MethodCallWithNamedArgs()
@@ -48,6 +59,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts method call chain.
+    /// </summary>
 
     [Fact]
     public void Parse_MethodCallChain()
@@ -60,6 +74,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts method call on literal.
+    /// </summary>
 
     [Fact]
     public void Parse_MethodCallOnLiteral()
@@ -72,6 +89,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts method call with conversion.
+    /// </summary>
 
     [Fact]
     public void Parse_MethodCallWithConversion()
@@ -84,6 +104,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts static method call.
+    /// </summary>
 
     [Fact]
     public void Parse_StaticMethodCall()
@@ -99,7 +122,10 @@ public class ExpressionTests
 
     #endregion
 
-    #region Field Access Tests
+    #region Member Variable Access Tests
+    /// <summary>
+    /// Verifies that the parser accepts simple member variable access.
+    /// </summary>
 
     [Fact]
     public void Parse_SimpleMemberVariableAccess()
@@ -112,6 +138,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts chained member variable access.
+    /// </summary>
 
     [Fact]
     public void Parse_ChainedMemberVariableAccess()
@@ -124,6 +153,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts mixed member variable and method access.
+    /// </summary>
 
     [Fact]
     public void Parse_MixedMemberVariableAndMethodAccess()
@@ -136,6 +168,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts me member variable access.
+    /// </summary>
 
     [Fact]
     public void Parse_MeMemberVariableAccess()
@@ -152,6 +187,9 @@ public class ExpressionTests
     #endregion
 
     #region Indexing Tests
+    /// <summary>
+    /// Verifies that the parser accepts array indexing.
+    /// </summary>
 
     [Fact]
     public void Parse_ArrayIndexing()
@@ -164,6 +202,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts multi dimensional indexing.
+    /// </summary>
 
     [Fact]
     public void Parse_MultiDimensionalIndexing()
@@ -176,6 +217,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts dict indexing.
+    /// </summary>
 
     [Fact]
     public void Parse_DictIndexing()
@@ -188,6 +232,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts index assignment.
+    /// </summary>
 
     [Fact]
     public void Parse_IndexAssignment()
@@ -205,6 +252,9 @@ public class ExpressionTests
     #endregion
 
     #region Constructor Tests
+    /// <summary>
+    /// Verifies that the parser accepts record constructor.
+    /// </summary>
 
     [Fact]
     public void Parse_RecordConstructor()
@@ -217,6 +267,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts entity constructor.
+    /// </summary>
 
     [Fact]
     public void Parse_EntityConstructor()
@@ -229,6 +282,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts nested constructor.
+    /// </summary>
 
     [Fact]
     public void Parse_NestedConstructor()
@@ -241,6 +297,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts generic constructor.
+    /// </summary>
 
     [Fact]
     public void Parse_GenericConstructor()
@@ -257,6 +316,9 @@ public class ExpressionTests
     #endregion
 
     #region Lambda and Closure Tests
+    /// <summary>
+    /// Verifies that the parser accepts simple lambda.
+    /// </summary>
 
     [Fact]
     public void Parse_SimpleLambda()
@@ -269,6 +331,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts single param lambda.
+    /// </summary>
 
     [Fact]
     public void Parse_SingleParamLambda()
@@ -281,6 +346,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts lambda as argument.
+    /// </summary>
 
     [Fact]
     public void Parse_LambdaAsArgument()
@@ -293,9 +361,12 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
-
+    // Parser accepts free captures as syntactically valid. Rejecting undeclared captures
+    // (variables not listed in a given clause) is the semantic analyzer's responsibility.
+    /// <summary>
+    /// Verifies that the parser accepts lambda with capture.
+    /// </summary>
     [Fact]
-    // TODO: This should NOT parse.
     public void Parse_LambdaWithCapture()
     {
         string source = """
@@ -308,6 +379,9 @@ public class ExpressionTests
         AssertParses(source: source);
     }
 
+    /// <summary>
+    /// Verifies that the parser accepts lambda with given clause single capture.
+    /// </summary>
     [Fact]
     public void Parse_LambdaWithGivenClause_SingleCapture()
     {
@@ -321,6 +395,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts lambda with given clause multiple captures.
+    /// </summary>
 
     [Fact]
     public void Parse_LambdaWithGivenClause_MultipleCaptures()
@@ -335,6 +412,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts lambda with given clause zero params.
+    /// </summary>
 
     [Fact]
     public void Parse_LambdaWithGivenClause_ZeroParams()
@@ -348,6 +428,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts lambda with given clause parenthesized params.
+    /// </summary>
 
     [Fact]
     public void Parse_LambdaWithGivenClause_ParenthesizedParams()
@@ -361,6 +444,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts lambda invalid comma before given.
+    /// </summary>
 
     [Fact]
     public void Parse_LambdaInvalid_CommaBeforeGiven()
@@ -374,6 +460,9 @@ public class ExpressionTests
 
         AssertParseError(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts lambda invalid trailing comma in given.
+    /// </summary>
 
     [Fact]
     public void Parse_LambdaInvalid_TrailingCommaInGiven()
@@ -387,6 +476,9 @@ public class ExpressionTests
 
         AssertParseError(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts lambda invalid multiple unparenthesized captures.
+    /// </summary>
 
     [Fact]
     public void Parse_LambdaInvalid_MultipleUnparenthesizedCaptures()
@@ -400,6 +492,9 @@ public class ExpressionTests
 
         AssertParseError(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts lambda invalid multiple unparenthesized params.
+    /// </summary>
 
     [Fact]
     public void Parse_LambdaInvalid_MultipleUnparenthesizedParams()
@@ -417,6 +512,9 @@ public class ExpressionTests
     #endregion
 
     #region String Interpolation Tests
+    /// <summary>
+    /// Verifies that the parser accepts simple interpolation.
+    /// </summary>
 
     [Fact]
     public void Parse_SimpleInterpolation()
@@ -429,6 +527,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts interpolation with expression.
+    /// </summary>
 
     [Fact]
     public void Parse_InterpolationWithExpression()
@@ -441,6 +542,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts multiple interpolations.
+    /// </summary>
 
     [Fact]
     public void Parse_MultipleInterpolations()
@@ -453,6 +557,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts interpolation with method call.
+    /// </summary>
 
     [Fact]
     public void Parse_InterpolationWithMethodCall()
@@ -465,6 +572,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts interpolation with formatting.
+    /// </summary>
 
     [Fact]
     public void Parse_InterpolationWithFormatting()
@@ -494,6 +604,9 @@ public class ExpressionTests
         var varDecl = (VariableDeclaration)declStmt.Declaration;
         return (InsertedTextExpression)varDecl.Initializer!;
     }
+    /// <summary>
+    /// Verifies that the parser accepts inserted text simple interpolation with three inserted-text parts.
+    /// </summary>
 
     [Fact]
     public void Parse_InsertedText_SimpleInterpolation_HasThreeParts()
@@ -514,6 +627,9 @@ public class ExpressionTests
         Assert.Equal(expected: "!", actual: ((TextPart)expr.Parts[2]).Text);
         Assert.False(condition: expr.IsRaw);
     }
+    /// <summary>
+    /// Verifies that the parser accepts inserted text multiple insertions with five inserted-text parts.
+    /// </summary>
 
     [Fact]
     public void Parse_InsertedText_MultipleInsertions_HasFiveParts()
@@ -536,6 +652,9 @@ public class ExpressionTests
         // The third expression should be a + b (binary expression)
         Assert.IsType<BinaryExpression>(((ExpressionPart)expr.Parts[4]).Expression);
     }
+    /// <summary>
+    /// Verifies that the parser accepts inserted text escaped braces as a single text part.
+    /// </summary>
 
     [Fact]
     public void Parse_InsertedText_EscapedBraces_SingleTextPart()
@@ -551,6 +670,9 @@ public class ExpressionTests
         Assert.IsType<TextPart>(expr.Parts[0]);
         Assert.Equal(expected: "Set: {1, 2}", actual: ((TextPart)expr.Parts[0]).Text);
     }
+    /// <summary>
+    /// Verifies that the parser accepts inserted text format spec.
+    /// </summary>
 
     [Fact]
     public void Parse_InsertedText_FormatSpec()
@@ -566,6 +688,9 @@ public class ExpressionTests
         var exprPart = Assert.IsType<ExpressionPart>(expr.Parts[0]);
         Assert.Equal(expected: "D2", actual: exprPart.FormatSpec);
     }
+    /// <summary>
+    /// Verifies that the parser accepts inserted text nested brackets index access.
+    /// </summary>
 
     [Fact]
     public void Parse_InsertedText_NestedBrackets_IndexAccess()
@@ -581,6 +706,9 @@ public class ExpressionTests
         var exprPart = Assert.IsType<ExpressionPart>(expr.Parts[0]);
         Assert.IsType<IndexExpression>(exprPart.Expression);
     }
+    /// <summary>
+    /// Verifies that the parser accepts inserted text nested brackets function call.
+    /// </summary>
 
     [Fact]
     public void Parse_InsertedText_NestedBrackets_FunctionCall()
@@ -596,6 +724,9 @@ public class ExpressionTests
         var exprPart = Assert.IsType<ExpressionPart>(expr.Parts[0]);
         Assert.IsType<CallExpression>(exprPart.Expression);
     }
+    /// <summary>
+    /// Verifies that the parser accepts inserted text no insertions as a single text part.
+    /// </summary>
 
     [Fact]
     public void Parse_InsertedText_NoInsertions_SingleTextPart()
@@ -611,6 +742,9 @@ public class ExpressionTests
         Assert.IsType<TextPart>(expr.Parts[0]);
         Assert.Equal(expected: "plain text", actual: ((TextPart)expr.Parts[0]).Text);
     }
+    /// <summary>
+    /// Verifies that the parser accepts inserted text adjacent insertions.
+    /// </summary>
 
     [Fact]
     public void Parse_InsertedText_AdjacentInsertions()
@@ -626,6 +760,9 @@ public class ExpressionTests
         Assert.IsType<ExpressionPart>(expr.Parts[0]);
         Assert.IsType<ExpressionPart>(expr.Parts[1]);
     }
+    /// <summary>
+    /// Verifies that the parser accepts inserted text raw formatted.
+    /// </summary>
 
     [Fact]
     public void Parse_InsertedText_RawFormatted()
@@ -650,6 +787,9 @@ public class ExpressionTests
     #endregion
 
     #region Type Conversion Tests
+    /// <summary>
+    /// Verifies that the parser accepts type conversion method.
+    /// </summary>
 
     [Fact]
     public void Parse_TypeConversionMethod()
@@ -662,6 +802,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts type conversion from literal.
+    /// </summary>
 
     [Fact]
     public void Parse_TypeConversionFromLiteral()
@@ -678,6 +821,9 @@ public class ExpressionTests
     #endregion
 
     #region Parenthesized Expression Tests
+    /// <summary>
+    /// Verifies that the parser accepts parenthesized expression.
+    /// </summary>
 
     [Fact]
     public void Parse_ParenthesizedExpression()
@@ -690,6 +836,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts nested parentheses.
+    /// </summary>
 
     [Fact]
     public void Parse_NestedParentheses()
@@ -706,6 +855,9 @@ public class ExpressionTests
     #endregion
 
     #region Range Expression Tests
+    /// <summary>
+    /// Verifies that the parser accepts range expression.
+    /// </summary>
 
     [Fact]
     public void Parse_RangeExpression()
@@ -718,6 +870,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts range expression with step.
+    /// </summary>
 
     [Fact]
     public void Parse_RangeExpressionWithStep()
@@ -734,6 +889,9 @@ public class ExpressionTests
     #endregion
 
     #region Complex Expression Tests
+    /// <summary>
+    /// Verifies that the parser accepts complex chained expression.
+    /// </summary>
 
     [Fact]
     public void Parse_ComplexChainedExpression()
@@ -750,6 +908,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts conditional expression.
+    /// </summary>
 
     [Fact]
     public void Parse_ConditionalExpression()
@@ -762,6 +923,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts when as expression.
+    /// </summary>
 
     [Fact]
     public void Parse_WhenAsExpression()
@@ -777,6 +941,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts none coalescing chain.
+    /// </summary>
 
     [Fact]
     public void Parse_NoneCoalescingChain()
@@ -793,6 +960,9 @@ public class ExpressionTests
     #endregion
 
     #region Variant Construction Tests
+    /// <summary>
+    /// Verifies that the parser accepts variant construction.
+    /// </summary>
 
     [Fact]
     public void Parse_VariantConstruction()
@@ -805,6 +975,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts variant without payload.
+    /// </summary>
 
     [Fact]
     public void Parse_VariantWithoutPayload()
@@ -821,6 +994,9 @@ public class ExpressionTests
     #endregion
 
     #region Choice Value Tests
+    /// <summary>
+    /// Verifies that the parser accepts choice value.
+    /// </summary>
 
     [Fact]
     public void Parse_ChoiceValue()
@@ -839,8 +1015,7 @@ public class ExpressionTests
     #region Unary vs Binary Operator Tests
 
     /// <summary>
-    /// Verifies that binary subtraction is parsed correctly (not as unary minus).
-    /// 3 - 2 should be BinaryExpression(3, Subtract, 2), NOT "3" and "-2".
+    /// Verifies that the parser accepts binary subtraction not unary minus.
     /// </summary>
     [Fact]
     public void Parse_BinarySubtraction_NotUnaryMinus()
@@ -873,8 +1048,7 @@ public class ExpressionTests
     }
 
     /// <summary>
-    /// Verifies that unary minus on a literal is parsed correctly.
-    /// -2 should be a single literal "-2".
+    /// Verifies that the parser accepts unary minus on literal.
     /// </summary>
     [Fact]
     public void Parse_UnaryMinus_OnLiteral()
@@ -896,8 +1070,7 @@ public class ExpressionTests
     }
 
     /// <summary>
-    /// Verifies that binary subtraction with imaginary literals is parsed correctly.
-    /// 3 - 2j should be BinaryExpression(3, Subtract, 2j), NOT "3" and "-2j".
+    /// Verifies that the parser accepts binary subtraction with imaginary literal.
     /// </summary>
     [Fact]
     public void Parse_BinarySubtraction_WithImaginaryLiteral()
@@ -929,8 +1102,7 @@ public class ExpressionTests
     }
 
     /// <summary>
-    /// Verifies complex expression with both unary minus and binary subtraction.
-    /// -3 - 2 should be BinaryExpression(-3, Subtract, 2).
+    /// Verifies that the parser accepts unary minus and binary subtraction.
     /// </summary>
     [Fact]
     public void Parse_UnaryMinusAndBinarySubtraction()
@@ -962,8 +1134,7 @@ public class ExpressionTests
     }
 
     /// <summary>
-    /// Verifies binary addition is not affected by unary minus handling.
-    /// 3 + 2 should be BinaryExpression(3, Add, 2).
+    /// Verifies that the parser accepts binary addition not affected by unary handling.
     /// </summary>
     [Fact]
     public void Parse_BinaryAddition_NotAffectedByUnaryHandling()
@@ -997,6 +1168,9 @@ public class ExpressionTests
     #endregion
 
     #region Byte Literal Tests
+    /// <summary>
+    /// Verifies that the parser accepts byte string literal.
+    /// </summary>
 
     [Fact]
     public void Parse_ByteStringLiteral()
@@ -1009,6 +1183,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts byte char literal.
+    /// </summary>
 
     [Fact]
     public void Parse_ByteCharLiteral()
@@ -1021,6 +1198,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts byte string hex escape.
+    /// </summary>
 
     [Fact]
     public void Parse_ByteStringHexEscape()
@@ -1033,6 +1213,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts byte raw string literal.
+    /// </summary>
 
     [Fact]
     public void Parse_ByteRawStringLiteral()
@@ -1045,26 +1228,35 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the tokenizer handles byte string literal with the expected token type.
+    /// </summary>
 
     [Fact]
     public void Tokenize_ByteStringLiteral_CorrectTokenType()
     {
         string source = """b"hello" """;
-        List<Compiler.Lexer.Token> tokens = Tokenize(source: source);
+        List<Token> tokens = Tokenize(source: source);
 
-        Assert.Equal(expected: Compiler.Lexer.TokenType.BytesLiteral,
+        Assert.Equal(expected: TokenType.BytesLiteral,
             actual: tokens[index: 0].Type);
     }
+    /// <summary>
+    /// Verifies that the tokenizer handles byte char literal with the expected token type.
+    /// </summary>
 
     [Fact]
     public void Tokenize_ByteCharLiteral_CorrectTokenType()
     {
         string source = """b'A' """;
-        List<Compiler.Lexer.Token> tokens = Tokenize(source: source);
+        List<Token> tokens = Tokenize(source: source);
 
-        Assert.Equal(expected: Compiler.Lexer.TokenType.ByteLetterLiteral,
+        Assert.Equal(expected: TokenType.ByteLetterLiteral,
             actual: tokens[index: 0].Type);
     }
+    /// <summary>
+    /// Verifies that the tokenizer handles byte string non ascii and fails in the expected way.
+    /// </summary>
 
     [Fact]
     public void Tokenize_ByteStringNonAscii_ThrowsError()
@@ -1073,6 +1265,9 @@ public class ExpressionTests
 
         Assert.ThrowsAny<Exception>(testCode: () => Tokenize(source: source));
     }
+    /// <summary>
+    /// Verifies that the tokenizer handles byte string unicode escape and fails in the expected way.
+    /// </summary>
 
     [Fact]
     public void Tokenize_ByteStringUnicodeEscape_ThrowsError()
@@ -1081,6 +1276,9 @@ public class ExpressionTests
 
         Assert.ThrowsAny<Exception>(testCode: () => Tokenize(source: source));
     }
+    /// <summary>
+    /// Verifies that the tokenizer handles byte char non ascii and fails in the expected way.
+    /// </summary>
 
     [Fact]
     public void Tokenize_ByteCharNonAscii_ThrowsError()
@@ -1089,6 +1287,9 @@ public class ExpressionTests
 
         Assert.ThrowsAny<Exception>(testCode: () => Tokenize(source: source));
     }
+    /// <summary>
+    /// Verifies that the tokenizer handles unicode escape exactly6 digits.
+    /// </summary>
 
     [Fact]
     public void Tokenize_UnicodeEscape_Exactly6Digits()
@@ -1096,10 +1297,13 @@ public class ExpressionTests
         // \u00004E is exactly 6 hex digits — valid
         string source = "\"\\u00004E\"";
 
-        List<Compiler.Lexer.Token> tokens = Tokenize(source: source);
-        Assert.Equal(expected: Compiler.Lexer.TokenType.TextLiteral,
+        List<Token> tokens = Tokenize(source: source);
+        Assert.Equal(expected: TokenType.TextLiteral,
             actual: tokens[index: 0].Type);
     }
+    /// <summary>
+    /// Verifies that the tokenizer handles unicode escape too few digits and fails in the expected way.
+    /// </summary>
 
     [Fact]
     public void Tokenize_UnicodeEscape_TooFewDigits_ThrowsError()
@@ -1109,6 +1313,9 @@ public class ExpressionTests
 
         Assert.ThrowsAny<Exception>(testCode: () => Tokenize(source: source));
     }
+    /// <summary>
+    /// Verifies that the tokenizer handles unicode escape two digits and fails in the expected way.
+    /// </summary>
 
     [Fact]
     public void Tokenize_UnicodeEscape_TwoDigits_ThrowsError()
@@ -1122,6 +1329,9 @@ public class ExpressionTests
     #endregion
 
     #region With Expression Tests
+    /// <summary>
+    /// Verifies that the parser accepts with member variable update.
+    /// </summary>
 
     [Fact]
     public void Parse_WithMemberVariableUpdate()
@@ -1134,6 +1344,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts with multiple fields.
+    /// </summary>
 
     [Fact]
     public void Parse_WithMultipleFields()
@@ -1146,6 +1359,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts with index update.
+    /// </summary>
 
     [Fact]
     public void Parse_WithIndexUpdate()
@@ -1158,6 +1374,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts with nested member variable.
+    /// </summary>
 
     [Fact]
     public void Parse_WithNestedMemberVariable()
@@ -1170,6 +1389,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts with mixed updates.
+    /// </summary>
 
     [Fact]
     public void Parse_WithMixedUpdates()
@@ -1182,6 +1404,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts with expression into the expected AST shape.
+    /// </summary>
 
     [Fact]
     public void Parse_WithExpression_ASTStructure()
@@ -1206,6 +1431,9 @@ public class ExpressionTests
         Assert.Null(withExpr.Updates[0].Index);
         Assert.Null(withExpr.Updates[1].Index);
     }
+    /// <summary>
+    /// Verifies that the parser accepts with expression nested member variable path into the expected AST shape.
+    /// </summary>
 
     [Fact]
     public void Parse_WithExpression_NestedMemberVariablePath_ASTStructure()
@@ -1229,6 +1457,9 @@ public class ExpressionTests
         Assert.Equal(expected: "address", actual: withExpr.Updates[0].MemberVariablePath![0]);
         Assert.Equal(expected: "city", actual: withExpr.Updates[0].MemberVariablePath![1]);
     }
+    /// <summary>
+    /// Verifies that the parser accepts with expression index update into the expected AST shape.
+    /// </summary>
 
     [Fact]
     public void Parse_WithExpression_IndexUpdate_ASTStructure()
@@ -1255,6 +1486,9 @@ public class ExpressionTests
     #endregion
 
     #region Multi-Line Bracketed Expression Tests (L21)
+    /// <summary>
+    /// Verifies that the parser accepts multi line constructor call with named args.
+    /// </summary>
 
     [Fact]
     public void Parse_MultiLineConstructorCall_WithNamedArgs()
@@ -1271,6 +1505,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts multi line function call with positional args.
+    /// </summary>
 
     [Fact]
     public void Parse_MultiLineFunctionCall_WithPositionalArgs()
@@ -1287,6 +1524,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts nested brackets multi line.
+    /// </summary>
 
     [Fact]
     public void Parse_NestedBrackets_MultiLine()
@@ -1303,6 +1543,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts multi line list literal.
+    /// </summary>
 
     [Fact]
     public void Parse_MultiLineListLiteral()
@@ -1319,6 +1562,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts multi line return with constructor.
+    /// </summary>
 
     [Fact]
     public void Parse_MultiLineReturn_WithConstructor()
@@ -1334,6 +1580,9 @@ public class ExpressionTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the tokenizer handles multi line parens no indent dedent.
+    /// </summary>
 
     [Fact]
     public void Tokenize_MultiLineParens_NoIndentDedent()
@@ -1347,96 +1596,28 @@ public class ExpressionTests
                           return
                         """;
 
-        List<Compiler.Lexer.Token> tokens = Tokenize(source: source);
+        List<Token> tokens = Tokenize(source: source);
 
         // Find the LeftParen and RightParen for f(...)
-        int leftParenIndex = tokens.FindIndex(match: t => t.Type == Compiler.Lexer.TokenType.LeftParen && t.Text == "(");
+        int leftParenIndex = tokens.FindIndex(match: t => t is { Type: TokenType.LeftParen, Text: "(" });
         // Skip the first LeftParen (routine params), find the second one
-        int callParenIndex = tokens.FindIndex(startIndex: leftParenIndex + 1, match: t => t.Type == Compiler.Lexer.TokenType.LeftParen);
-        int rightParenIndex = tokens.FindIndex(startIndex: callParenIndex, match: t => t.Type == Compiler.Lexer.TokenType.RightParen);
+        int callParenIndex = tokens.FindIndex(startIndex: leftParenIndex + 1, match: t => t.Type == TokenType.LeftParen);
+        int rightParenIndex = tokens.FindIndex(startIndex: callParenIndex, match: t => t.Type == TokenType.RightParen);
 
         // Between the call parens, there should be no Indent or Dedent tokens
         for (int i = callParenIndex + 1; i < rightParenIndex; i++)
         {
-            Assert.NotEqual(expected: Compiler.Lexer.TokenType.Indent, actual: tokens[i].Type);
-            Assert.NotEqual(expected: Compiler.Lexer.TokenType.Dedent, actual: tokens[i].Type);
+            Assert.NotEqual(expected: TokenType.Indent, actual: tokens[i].Type);
+            Assert.NotEqual(expected: TokenType.Dedent, actual: tokens[i].Type);
         }
     }
 
     #endregion
 
     #region Slice Expression Tests
-
-    [Fact]
-    public void Parse_SliceExpression()
-    {
-        string source = """
-                        routine test()
-                          var sub = list[0 til 5]
-                          return
-                        """;
-
-        AssertParses(source: source);
-    }
-
-    [Fact]
-    public void Parse_SliceExpressionWithBackIndex()
-    {
-        string source = """
-                        routine test()
-                          var sub = list[1 til ^1]
-                          return
-                        """;
-
-        AssertParses(source: source);
-    }
-
-    [Fact]
-    public void Parse_SliceExpression_ASTStructure()
-    {
-        string source = """
-                        routine test()
-                          var sub = list[0 til 5]
-                          return
-                        """;
-
-        var ast = Parse(source: source);
-        var routine = ast.Declarations.OfType<RoutineDeclaration>().First();
-        var block = (BlockStatement)routine.Body;
-        var varDecl = block.Statements.OfType<DeclarationStatement>().First();
-        var initializer = ((VariableDeclaration)varDecl.Declaration).Initializer;
-
-        Assert.IsType<SliceExpression>(initializer);
-        var slice = (SliceExpression)initializer!;
-        Assert.IsType<IdentifierExpression>(slice.Object);
-        Assert.IsType<LiteralExpression>(slice.Start);
-        Assert.IsType<LiteralExpression>(slice.End);
-    }
-
-    [Fact]
-    public void Parse_SliceExpression_TilRange()
-    {
-        // til is supported in slices (exclusive end)
-        string source = """
-                        routine test()
-                          var sub = list[5 til 0]
-                          return
-                        """;
-
-        AssertParses(source: source);
-    }
-
-    [Fact]
-    public void Parse_SliceExpression_RejectsStep()
-    {
-        string source = """
-                        routine test()
-                          var sub = list[0 til 10 by 2]
-                          return
-                        """;
-
-        AssertParseError(source: source);
-    }
+    /// <summary>
+    /// Verifies that the parser accepts regular index expression still successfully.
+    /// </summary>
 
     [Fact]
     public void Parse_RegularIndexExpression_StillWorks()

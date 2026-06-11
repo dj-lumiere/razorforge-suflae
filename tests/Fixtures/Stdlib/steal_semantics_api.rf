@@ -1,0 +1,46 @@
+module Tests/Stdlib/StealSemanticsApi
+import IO/Console
+
+# Verifies ownership-transfer via `steal`: source is consumed; pattern observable
+# from $destroy not firing twice. Compile-time use-after-steal rejection (S413
+# class) lives in playground BUILDERR fixtures — here we test the *runtime*
+# half: when destruction occurs and that it's exactly-once.
+entity Resource
+  tag: S64
+
+routine Resource.$create(tag: S32) -> ?Resource
+  show(f"  create({tag})")
+  return Resource(tag: S64(tag))
+
+dangerous routine Resource.$destroy()
+  show(f"  destroy({me.tag})")
+  me.tag.$destroy()
+  me.hijack().invalidate()
+  return
+
+routine make_box() -> ?Resource
+  show(" make_box: create")
+  return Resource(tag: 7s32)
+  # ownership transferred to caller — no destroy at make_box exit
+
+routine consume(r: ?Resource)  # this should be ?Resource
+  show(f" consume: tag={r.tag}")
+  return
+  # $destroy fires here when r goes out of scope
+
+routine start()
+  show("--- transfer via return ---")
+  var b = make_box()
+  show(f" got tag={b.tag}")
+
+  show("--- transfer via steal into call ---")
+  consume(r: steal b)
+  show(" after consume() returned; b was stolen")
+
+  show("--- single-owner end-of-scope destroy ---")
+  var x = Resource(tag: 100s32)
+  show(f" using x tag={x.tag}")
+  # x destroyed at start() exit
+
+  show("DONE")
+  return

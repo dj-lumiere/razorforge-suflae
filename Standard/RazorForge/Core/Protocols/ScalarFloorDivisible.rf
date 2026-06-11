@@ -1,0 +1,12 @@
+module Core
+
+### Represents the protocol for floor division by an integral scalar.
+### `ScalarFloorDivisible` is the integer-scaled counterpart to `ScalarDivisible`
+### for types that define Euclidean-style quotient behavior against an integral
+### divisor.
+protocol ScalarFloorDivisible
+  ### Returns this value floor-divided by the scalar `you`.
+  ### :param you: The scalar divisor.
+  ### :returns: The resulting `Me` value.
+  @readonly
+  routine Me.$floordiv(you: Integral) -> ?Me

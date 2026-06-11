@@ -1,0 +1,39 @@
+module Tests/Stdlib/FastDictApi
+import IO/Console
+import Collections.FastDict
+
+# FastDict uses unkeyed xxHash; iterates in insertion order.
+routine start()
+  var d = FastDict[Text, S64]()
+  discard d.add(key: "one", value: 1)
+  discard d.add(key: "two", value: 2)
+  discard d.add(key: "three", value: 3)
+  show(f"size: {d.count()}")
+  show(f"contents: {d}")
+  show(f"contains_key 'two': {"two" in d}")
+  show(f"contains_key 'four': {"four" in d}")
+
+  show(f"d['one']: {d["one"]}")
+  show(f"d['three']: {d["three"]}")
+
+  # add new key — appended at the end
+  discard d.add(key: "four", value: 4)
+  show(f"size after add four: {d.count()}")
+  show(f"contents after add four: {d}")
+
+  # overwrite existing — position unchanged
+  discard d.add(key: "one", value: 100)
+  show(f"d['one'] after overwrite: {d["one"]}")
+  show(f"contents after overwrite one: {d}")
+
+  # remove — entry skipped, others retain order
+  discard d.remove(key: "two")
+  show(f"size after remove two: {d.count()}")
+  show(f"contents after remove two: {d}")
+  show(f"contains_key 'two' after remove: {"two" in d}")
+
+  show(f"diagnose: {d.$diagnose()}")
+  show(f"is_empty: {d.is_empty()}")
+
+  show("DONE")
+  return

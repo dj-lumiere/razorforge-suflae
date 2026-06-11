@@ -1,7 +1,16 @@
-# Hashable - Protocol for types that can be hashed
-# Required for use as keys in Dict, Set, and other hash-based collections
 module Core
 
+### Represents the protocol for keyed, attack-resistant hashing.
+### `Hashable` is the default hashing protocol used by `Set` and `Dict`. Its keyed
+### form (SipHash-2-4 semantics) makes the probe sequence unpredictable to external
+### attackers, so it is safe to use with untrusted input. For trusted keys where
+### every cycle matters, use `FastHashable` and `FastSet`/`FastDict` instead.
 protocol Hashable
+  ### Returns a keyed hash of this value using SipHash-2-4 semantics.
+  ### Implementations should incorporate the full logical value and produce the
+  ### same result for equal values when called with the same key pair.
+  ### :param k0: The first 64-bit key word.
+  ### :param k1: The second 64-bit key word.
+  ### :returns: The resulting `U64` value.
   @readonly
-  routine Me.hash() -> U64
+  routine Me.$hash(k0: U64, k1: U64) -> U64

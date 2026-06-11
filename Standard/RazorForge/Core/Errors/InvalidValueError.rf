@@ -1,0 +1,14 @@
+module Core
+
+### Represents the crashable raised when textual or external input cannot be
+### interpreted as the requested target type or format.
+crashable InvalidValueError
+  ### Stores the original input value that failed conversion.
+  input: Text
+  ### Stores the textual name of the target type or format.
+  target: Text
+
+### Returns the default message for invalid external input.
+### :returns: The resulting `Text` value.
+routine InvalidValueError.crash_message() -> ?Text
+  return f"Cannot parse \"{me.input}\" as {me.target}."

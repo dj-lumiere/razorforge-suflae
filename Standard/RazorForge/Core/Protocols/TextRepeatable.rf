@@ -1,0 +1,12 @@
+module Core
+
+### Represents the protocol for repetition by an integral count.
+### `TextRepeatable` is primarily intended for text-like values whose
+### multiplication operation means concatenating the same value multiple times.
+protocol TextRepeatable
+  ### Returns this value repeated `you` times.
+  ### The repeat count is interpreted as a whole-number multiplicity.
+  ### :param you: The repeat count.
+  ### :returns: The resulting `Me` value.
+  @readonly
+  routine Me.$mul(you: Integral) -> ?Me

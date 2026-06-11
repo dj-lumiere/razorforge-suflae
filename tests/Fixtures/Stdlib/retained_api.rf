@@ -1,0 +1,31 @@
+module Tests/Stdlib/RetainedApi
+import IO/Console
+import BuilderService
+
+entity Node
+  payload: S64
+
+routine start()
+  var n = Node(payload: 42)
+  show(f"n type: {n.type_name()}")
+  show(f"n payload: {n.payload}")
+
+  # move into Retained
+  var r1 = n.retain()
+  show(f"r1 type: {r1.type_name()}")
+  show(f"r1 payload (forwarded): {r1.payload}")
+  show(f"r1 strong_count: {r1.strong_count()}")
+  show(f"r1 weak_count: {r1.weak_count()}")
+
+  # retain again (refcount bump)
+  var r2 = r1.retain()
+  show(f"after r2 = r1.retain(), strong: {r1.strong_count()}")
+
+  # weak
+  var w = r1.track()
+  show(f"w type: {w.type_name()}")
+  show(f"w is_alive: {w.is_alive()}")
+  show(f"strong: {r1.strong_count()} weak: {r1.weak_count()}")
+
+  show("DONE")
+  return

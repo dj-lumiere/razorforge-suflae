@@ -1,0 +1,8 @@
+sort ascending: [1, 1, 2, 3, 4, 5, 6, 9]
+sort_by(>): [9, 6, 5, 4, 3, 2, 1, 1]
+original c (unchanged): [5, 2, 7, 3]
+sorted c: [2, 3, 5, 7]
+sorted_by(>) of c: [7, 5, 3, 2]
+sorted by length: [a, z, xy, hello, world]
+stable by first char: [a1, a2, b1, b2]
+DONE

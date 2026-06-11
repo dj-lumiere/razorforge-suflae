@@ -1,6 +1,13 @@
-# Subtractable - Protocol for types that support subtraction (-)
 module Core
 
+### Represents the protocol for non-mutating subtraction.
+### Types that obey `Subtractable` define a difference operation that returns a
+### new value while preserving both inputs.
 protocol Subtractable
+  ### Returns the difference between this value and the other value.
+  ### The exact interpretation of subtraction depends on the conforming type's
+  ### algebraic domain.
+  ### :param you: The value to subtract.
+  ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.__sub__(you: Me) -> Me
+  routine Me.$sub(you: Me) -> ?Me

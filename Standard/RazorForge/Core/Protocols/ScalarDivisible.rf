@@ -1,0 +1,11 @@
+module Core
+
+### Represents the protocol for true division by an external scalar.
+### `ScalarDivisible` is for values whose natural division operation takes a
+### numeric scale factor rather than another value of the same type.
+protocol ScalarDivisible
+  ### Returns this value divided by the scalar `you`.
+  ### :param you: The scalar divisor.
+  ### :returns: The resulting `Me` value.
+  @readonly
+  routine Me.$truediv(you: Numeric) -> ?Me

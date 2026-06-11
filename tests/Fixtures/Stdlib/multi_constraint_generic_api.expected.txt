@@ -1,0 +1,5 @@
+in_set 20: true
+in_set 99: false
+in_set 'bravo': true
+in_set 'delta': false
+DONE

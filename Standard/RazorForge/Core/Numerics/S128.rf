@@ -1,0 +1,666 @@
+module Core
+
+### A 128-bit signed integer in the range −170,141,183,460,469,231,731,687,303,715,884,105,728
+### to 170,141,183,460,469,231,731,687,303,715,884,105,727.
+###
+### `S128` provides the widest signed integer range in RazorForge, suitable for
+### arbitrary-precision intermediate results, cryptographic computations, and
+### values that can't fit in `S64`. Note that `S128` does not implement `AtomicType`
+### because hardware atomic operations on 128-bit values are not universally available.
+@llvm("i128")
+record S128 obeys SignedIntegral, Ordered, ConstCompatible
+  pass
+
+# Constants for S128 limits
+preset S128_MIN: S128 = -170_141_183_460_469_231_731_687_303_715_884_105_728_s128
+preset S128_MAX: S128 = 170_141_183_460_469_231_731_687_303_715_884_105_727_s128
+preset S128_ZERO: S128 = 0_s128
+preset S128_ONE: S128 = 1_s128
+
+# ============================================================================
+# Checked Creators (crash on overflow)
+# ============================================================================
+
+### Sign-extends an `S8` to `S128` (always succeeds).
+### :param from: The `S8` value to widen.
+### :returns: An `S128` with the same signed value as `from`.
+routine S128.$create(from: S8) -> S128
+  return sign_extend[S8, S128](from)
+
+### Sign-extends an `S16` to `S128` (always succeeds).
+### :param from: The `S16` value to widen.
+### :returns: An `S128` with the same signed value as `from`.
+routine S128.$create(from: S16) -> S128
+  return sign_extend[S16, S128](from)
+
+### Sign-extends an `S32` to `S128` (always succeeds).
+### :param from: The `S32` value to widen.
+### :returns: An `S128` with the same signed value as `from`.
+routine S128.$create(from: S32) -> S128
+  return sign_extend[S32, S128](from)
+
+### Sign-extends an `S64` to `S128` (always succeeds).
+### :param from: The `S64` value to widen.
+### :returns: An `S128` with the same signed value as `from`.
+routine S128.$create(from: S64) -> S128
+  return sign_extend[S64, S128](from)
+
+### Identity conversion — returns `from` unchanged.
+### :param from: The `S128` value to return.
+### :returns: `from` unchanged.
+routine S128.$create(from: S128) -> S128
+  return from
+
+### Zero-extends a `U8` to `S128` (always succeeds — positive values fit).
+### :param from: The `U8` value to widen.
+### :returns: An `S128` equal in value to `from`.
+routine S128.$create(from: U8) -> S128
+  return zero_extend[U8, S128](from)
+
+### Zero-extends a `U16` to `S128` (always succeeds — positive values fit).
+### :param from: The `U16` value to widen.
+### :returns: An `S128` equal in value to `from`.
+routine S128.$create(from: U16) -> S128
+  return zero_extend[U16, S128](from)
+
+### Zero-extends a `U32` to `S128` (always succeeds — positive values fit).
+### :param from: The `U32` value to widen.
+### :returns: An `S128` equal in value to `from`.
+routine S128.$create(from: U32) -> S128
+  return zero_extend[U32, S128](from)
+
+### Zero-extends a `U64` to `S128` (always succeeds — positive values fit).
+### :param from: The `U64` value to widen.
+### :returns: An `S128` equal in value to `from`.
+routine S128.$create(from: U64) -> S128
+  return zero_extend[U64, S128](from)
+
+### Reinterprets a `U128` as `S128` using two's complement, throwing if the value exceeds S128_MAX.
+### :param from: The `U128` value to convert.
+### :returns: The same bit pattern interpreted as `S128`.
+### :throws: {IntegerOverflowError} if `from > 170141183460469231731687303715884105727`.
+routine S128.$create!(from: U128) -> S128
+  if from > 170141183460469231731687303715884105727_u128
+    throw IntegerOverflowError()
+  return reinterpret_bits[U128, S128](from)
+
+### Converts an `F16` to `S128` via `S64` conversion.
+### :param from: The `F16` value to convert.
+### :returns: The integer part of `from` as an `S128`.
+### :throws: {IntegerOverflowError} if the integer part is outside the S64 range.
+routine S128.$create!(from: F16) -> S128
+  return from.S64!().S128()
+
+### Converts an `F32` to `S128` via `S64` conversion.
+### :param from: The `F32` value to convert.
+### :returns: The integer part of `from` as an `S128`.
+### :throws: {IntegerOverflowError} if the integer part is outside the S64 range.
+routine S128.$create!(from: F32) -> S128
+  return from.S64!().S128()
+
+### Converts an `F64` to `S128` via `S64` conversion.
+### :param from: The `F64` value to convert.
+### :returns: The integer part of `from` as an `S128`.
+### :throws: {IntegerOverflowError} if the integer part is outside the S64 range.
+routine S128.$create!(from: F64) -> S128
+  return from.S64!().S128()
+
+### Converts an `F128` to `S128` via `S64` conversion.
+### :param from: The `F128` value to convert.
+### :returns: The integer part of `from` as an `S128`.
+### :throws: {IntegerOverflowError} if the integer part is outside the S64 range.
+routine S128.$create!(from: F128) -> S128
+  return from.S64!().S128()
+
+### Converts a `D32` to `S128` via `S64` conversion.
+### :param from: The `D32` value to convert.
+### :returns: The integer part of `from` as an `S128`.
+### :throws: {IntegerOverflowError} if the integer part is outside the S64 range.
+routine S128.$create!(from: D32) -> S128
+  return from.S64!().S128()
+
+### Converts a `D64` to `S128` via `S64` conversion.
+### :param from: The `D64` value to convert.
+### :returns: The integer part of `from` as an `S128`.
+### :throws: {IntegerOverflowError} if the integer part is outside the S64 range.
+routine S128.$create!(from: D64) -> S128
+  return from.S64!().S128()
+
+### Converts a `D128` to `S128` via `S64` conversion.
+### :param from: The `D128` value to convert.
+### :returns: The integer part of `from` as an `S128`.
+### :throws: {IntegerOverflowError} if the integer part is outside the S64 range.
+routine S128.$create!(from: D128) -> S128
+  return from.S64!().S128()
+
+# ============================================================================
+# Arithmetic Operations (trapping on overflow by default)
+# ============================================================================
+
+### Returns the sum and a flag indicating whether the result overflowed.
+### :param you: The right operand.
+### :returns: A tuple of `(wrapped_sum, overflowed)`.
+routine S128.add_with_overflow(you: S128) -> (S128, Bool)
+  return signed_add_checked[S128](me, you)
+
+### Returns the difference and a flag indicating whether the result overflowed.
+### :param you: The value to subtract.
+### :returns: A tuple of `(wrapped_difference, overflowed)`.
+routine S128.sub_with_overflow(you: S128) -> (S128, Bool)
+  return signed_sub_checked[S128](me, you)
+
+### Returns the product and a flag indicating whether the result overflowed.
+### :param you: The right operand.
+### :returns: A tuple of `(wrapped_product, overflowed)`.
+routine S128.mul_with_overflow(you: S128) -> (S128, Bool)
+  return signed_mul_checked[S128](me, you)
+
+### Returns `me + you`, throwing on overflow.
+### :param you: The right operand.
+### :returns: The sum `me + you`.
+### :throws: {IntegerOverflowError} if the result is outside the S128 range.
+routine S128.$add!(you: S128) -> S128
+  var result = me.add_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
+
+### Returns `me - you`, throwing on overflow.
+### :param you: The value to subtract.
+### :returns: The difference `me - you`.
+### :throws: {IntegerOverflowError} if the result is outside the S128 range.
+routine S128.$sub!(you: S128) -> S128
+  var result = me.sub_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
+
+### Returns `me * you`, throwing on overflow.
+### :param you: The right operand.
+### :returns: The product `me * you`.
+### :throws: {IntegerOverflowError} if the result is outside the S128 range.
+routine S128.$mul!(you: S128) -> S128
+  var result = me.mul_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
+
+### Returns `me // you` (floor division), throwing on errors.
+### Floor division rounds toward negative infinity (unlike truncating division).
+### The special case `S128_MIN // -1` would overflow and throws.
+### :param you: The divisor.
+### :returns: The floor quotient `me // you`.
+### :throws: {DivisionByZeroError} if `you == 0`.
+### :throws: {IntegerOverflowError} if `me == S128_MIN` and `you == -1`.
+routine S128.$floordiv!(you: S128) -> S128
+  if you == 0
+    throw DivisionByZeroError()
+  if me == S128_MIN and you == -1_s128
+    throw IntegerOverflowError()
+  var quotient = signed_div[S128](a: me, b: you)
+  var remainder = signed_rem[S128](a: me, b: you)
+  if remainder < 0_s128
+    if you > 0_s128
+      return quotient - 1_s128
+    return quotient + 1_s128
+  return quotient
+
+### Returns `me % you` (floor modulo), where the result sign matches `you`.
+### :param you: The divisor.
+### :returns: The floor modulo — result has the same sign as `you`.
+### :throws: {DivisionByZeroError} if `you == 0`.
+routine S128.$mod!(you: S128) -> S128
+  if you == 0
+    throw DivisionByZeroError()
+  var remainder = signed_rem[S128](a: me, b: you)
+  if remainder < 0_s128
+    if you > 0_s128
+      return remainder + you
+    return remainder - you
+  return remainder
+
+### Returns `-me` (arithmetic negation), with wrapping behavior on `S128_MIN`.
+### :returns: The negated value. `-S128_MIN` wraps to `S128_MIN`.
+routine S128.$neg!() -> S128
+  if me == S128_MIN
+    throw IntegerOverflowError()
+  return sub[S128](a: 0_s128, b: me)
+
+# ============================================================================
+# Wrapping Arithmetic (+%, -%, *%)
+# ============================================================================
+
+### Returns `(me + you)` with wrapping arithmetic (mod 2¹²⁸, signed).
+### :param you: The right operand.
+### :returns: The sum, wrapping on overflow.
+routine S128.$add_wrap(you: S128) -> S128
+  return add[S128](a: me, b: you)
+
+### Returns `(me - you)` with wrapping arithmetic (mod 2¹²⁸, signed).
+### :param you: The value to subtract.
+### :returns: The difference, wrapping on underflow.
+routine S128.$sub_wrap(you: S128) -> S128
+  return sub[S128](a: me, b: you)
+
+### Returns `(me * you)` with wrapping arithmetic (mod 2¹²⁸, signed).
+### :param you: The right operand.
+### :returns: The product, wrapping on overflow.
+routine S128.$mul_wrap(you: S128) -> S128
+  return mul[S128](a: me, b: you)
+
+# ============================================================================
+# Unchecked Arithmetic (+!, -!, *!, //!, %!)
+# ============================================================================
+
+### Returns `me + you` with undefined behavior on overflow.
+### :param you: The right operand.
+### :returns: The sum, assuming no overflow.
+dangerous routine S128.$add_unchecked(you: S128) -> S128
+  return signed_add_exact[S128](a: me, b: you)
+
+### Returns `me - you` with undefined behavior on overflow.
+### :param you: The value to subtract.
+### :returns: The difference, assuming no overflow.
+dangerous routine S128.$sub_unchecked(you: S128) -> S128
+  return signed_sub_exact[S128](a: me, b: you)
+
+### Returns `me * you` with undefined behavior on overflow.
+### :param you: The right operand.
+### :returns: The product, assuming no overflow.
+dangerous routine S128.$mul_unchecked(you: S128) -> S128
+  return signed_mul_exact[S128](a: me, b: you)
+
+### Returns `me // you` (floor division) with undefined behavior if `you == 0` or overflow.
+### :param you: The divisor.
+### :returns: The floor quotient, assuming `you != 0` and no overflow.
+dangerous routine S128.$floordiv_unchecked(you: S128) -> S128
+  var quotient = signed_div[S128](a: me, b: you)
+  var remainder = signed_rem[S128](a: me, b: you)
+  if remainder < 0_s128
+    if you > 0_s128
+      return quotient - 1_s128
+    return quotient + 1_s128
+  return quotient
+
+### Returns `me % you` (floor modulo) with undefined behavior if `you == 0`.
+### :param you: The divisor.
+### :returns: The floor modulo, assuming `you != 0`.
+dangerous routine S128.$mod_unchecked(you: S128) -> S128
+  var remainder = signed_rem[S128](a: me, b: you)
+  if remainder < 0_s128
+    if you > 0_s128
+      return remainder + you
+    return remainder - you
+  return remainder
+
+# ============================================================================
+# Clamping Arithmetic (+^, -^, *^)
+# ============================================================================
+
+### Returns `me + you`, clamped to `S128_MAX` or `S128_MIN` on overflow.
+### :param you: The right operand.
+### :returns: The sum, or `S128_MAX` / `S128_MIN` if it would overflow.
+routine S128.$add_clamp(you: S128) -> S128
+  return signed_add_sat[S128](a: me, b: you)
+
+### Returns `me - you`, clamped to `S128_MAX` or `S128_MIN` on overflow.
+### :param you: The value to subtract.
+### :returns: The difference, or `S128_MAX` / `S128_MIN` if it would overflow.
+routine S128.$sub_clamp(you: S128) -> S128
+  return signed_sub_sat[S128](a: me, b: you)
+
+### Returns `me * you`, clamped to `S128_MAX` or `S128_MIN` on overflow.
+### Uses a division-based overflow check since no 256-bit type is available.
+### The clamp direction (MAX vs MIN) is determined by whether the operands have the same sign.
+### :param you: The right operand.
+### :returns: The product, or `S128_MAX` / `S128_MIN` if it would overflow.
+routine S128.$mul_clamp(you: S128) -> S128
+  # Can't widen to 256-bit, use division-based overflow check
+  if int_eq[S128](a: me, b: 0_s128) or int_eq[S128](a: you, b: 0_s128)
+    return 0_s128
+  var result = mul[S128](a: me, b: you)
+  if int_ne[S128](signed_div[S128](a: result, b: me), you)
+    # Overflow: clamp to MAX or MIN based on result sign
+    var same_sign = int_eq[Bool](signed_gt[S128](me, 0_s128), signed_gt[S128](you, 0_s128))
+    if same_sign
+      return S128_MAX
+    return S128_MIN
+  return result
+
+# ============================================================================
+# Power Operations (**)
+# ============================================================================
+
+### Returns `me ** exp` and a flag indicating whether the result overflowed.
+### :param exp: The exponent (must be non-negative).
+### :returns: A tuple of `(wrapped_result, overflowed)`.
+### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
+### :throws: {NegativeExponentError} if `exp < 0`.
+routine S128.pow_with_overflow!(exp: S128) -> (S128, Bool)
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  if exp < 0
+    throw NegativeExponentError()
+  var result: S128 = 1
+  var base: S128 = me
+  var e: U32 = U32(exp)
+  var overflow = false
+  while e > 0
+    if (e & 1) == 1
+      var mul_result = result.mul_with_overflow(base)
+      result = mul_result.item0
+      overflow = overflow or mul_result.item1
+    e = e >> 1_u32
+    if e > 0
+      var square_result = base.mul_with_overflow(base)
+      base = square_result.item0
+      overflow = overflow or square_result.item1
+  return (result, overflow)
+
+### Returns `me ** exp`, throwing on overflow.
+### :param exp: The exponent (must be non-negative).
+### :returns: The result of raising `me` to the power `exp`.
+### :throws: {IntegerOverflowError} if the result is outside the S128 range.
+### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
+### :throws: {NegativeExponentError} if `exp < 0`.
+routine S128.$pow!(exp: S128) -> S128
+  var result = me.pow_with_overflow!(exp)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
+
+### Returns `me ** exp` with wrapping arithmetic.
+### :param exp: The exponent (must be non-negative).
+### :returns: The result modulo 2¹²⁸ (signed wrap).
+### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
+### :throws: {NegativeExponentError} if `exp < 0`.
+routine S128.$pow_wrap!(exp: S128) -> S128
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  if exp < 0_s128
+    throw NegativeExponentError()
+  var result: S128 = 1
+  var base: S128 = me
+  var e: U32 = U32(exp)
+  while e > 0
+    if (e & 1) == 1
+      result = result.$mul_wrap(base)
+    e = e >> 1_u32
+    if e > 0
+      base = base.$mul_wrap(base)
+  return result
+
+### Returns `me ** exp`, clamped to `S128_MAX` or `S128_MIN` on overflow.
+### :param exp: The exponent (must be non-negative).
+### :returns: The result, or `S128_MAX` / `S128_MIN` if it would overflow.
+### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
+### :throws: {NegativeExponentError} if `exp < 0`.
+routine S128.$pow_clamp!(exp: S128) -> S128
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  if exp < 0
+    throw NegativeExponentError()
+  var result: S128 = 1
+  var base: S128 = me
+  var e: U32 = U32(exp)
+  while e > 0
+    if (e & 1) == 1
+      result = result.$mul_clamp(base)
+    e = e >> 1_u32
+    if e > 0
+      base = base.$mul_clamp(base)
+  return result
+
+# ============================================================================
+# Bitwise Operations
+# ============================================================================
+
+### Returns the bitwise AND of this value and `you`.
+### :param you: The right operand.
+### :returns: `me & you`.
+routine S128.$bitand(you: S128) -> S128
+  return bit_and[S128](a: me, b: you)
+
+### Returns the bitwise OR of this value and `you`.
+### :param you: The right operand.
+### :returns: `me | you`.
+routine S128.$bitor(you: S128) -> S128
+  return bit_or[S128](a: me, b: you)
+
+### Returns the bitwise XOR of this value and `you`.
+### :param you: The right operand.
+### :returns: `me ^ you`.
+routine S128.$bitxor(you: S128) -> S128
+  return bit_xor[S128](a: me, b: you)
+
+### Returns the bitwise complement of this value.
+### :returns: `~me` — each bit flipped.
+routine S128.$bitnot() -> S128
+  return bit_xor[S128](a: me, b: -1)
+
+# ============================================================================
+# Shift Operations (<<, <<?>, >>, <<<, >>>)
+# ============================================================================
+
+### Left-shifts this value by `bits` positions, filling vacated bits with zero.
+### :param bits: The number of bit positions to shift left.
+### :returns: `me << bits`.
+routine S128.$ashl(bits: U32) -> S128
+  return shift_left[S128](me, S128(bits))
+
+### Right-shifts this value by `bits` positions, sign-filling (arithmetic shift right).
+### :param bits: The number of bit positions to shift right.
+### :returns: `me >> bits`, copying the sign bit into vacated positions.
+routine S128.$ashr(bits: U32) -> S128
+  return shift_right_signed[S128](me, S128(bits))
+
+### Left-shifts this value by `bits` positions (same as `$ashl` for signed integers).
+### :param bits: The number of bit positions to shift left.
+### :returns: `me << bits`.
+routine S128.$lshl(bits: U32) -> S128
+  return shift_left[S128](me, S128(bits))
+
+### Right-shifts this value by `bits` positions, zero-filling (logical shift right).
+### :param bits: The number of bit positions to shift right.
+### :returns: `me >>> bits`, filling vacated bits with zero regardless of sign.
+routine S128.$lshr(bits: U32) -> S128
+  return shift_right_unsigned[S128](me, S128(bits))
+
+# ============================================================================
+# Comparison Operations
+# ============================================================================
+
+### Returns `true` when both values are equal.
+### :param you: The value to compare against.
+### :returns: `true` if `me == you`; `false` otherwise.
+routine S128.$eq(you: S128) -> Bool
+  return int_eq[S128](a: me, b: you)
+
+### Compares this value with `you`, returning the ordering relationship.
+### :param you: The value to compare against.
+### :returns: `ME_SMALL` if `me < you`, `ME_LARGE` if `me > you`, `SAME` if equal.
+routine S128.$cmp(you: S128) -> ComparisonSign
+  if signed_lt[S128](me, you)
+    return ME_SMALL
+  if signed_gt[S128](me, you)
+    return ME_LARGE
+  return SAME
+
+# ============================================================================
+# Math Operations
+# ============================================================================
+
+### Returns the absolute value of this integer.
+### :returns: `-me` if `me < 0`; `me` if `me >= 0`.
+### :throws: {IntegerOverflowError} when `me` is `S128_MIN` (its magnitude is not representable in S128).
+routine S128.abs!() -> S128
+  if me == S128_MIN
+    throw IntegerOverflowError()
+  return int_abs[S128](me)
+
+### Returns the smaller of this value and `you`.
+### :param you: The value to compare against.
+### :returns: `me` if `me <= you`; otherwise `you`.
+routine S128.min(you: S128) -> S128
+  return if me <= you then me else you
+
+### Returns the larger of this value and `you`.
+### :param you: The value to compare against.
+### :returns: `me` if `me >= you`; otherwise `you`.
+routine S128.max(you: S128) -> S128
+  return if me >= you then me else you
+
+### Returns this value clamped to the range `min_val..=max_val`.
+### :param min_val: The lower bound (inclusive).
+### :param max_val: The upper bound (inclusive).
+### :returns: `min_val` if `me < min_val`; `max_val` if `me > max_val`; otherwise `me`.
+@positional
+routine S128.clamp(min_val: S128, max_val: S128) -> S128
+  return me.min(max_val).max(min_val)
+
+# ============================================================================
+# Bit Manipulation
+# ============================================================================
+
+### Returns the count of set bits (popcount) in this value's 128-bit representation.
+### :returns: The number of `1` bits; between 0 and 128.
+routine S128.count_ones() -> S128
+  return count_ones[S128](me)
+
+### Returns the count of clear bits in this value's 128-bit representation.
+### :returns: `128` minus the popcount; between 0 and 128.
+routine S128.count_zeros() -> S128
+  return 128_s128 -% me.count_ones()
+
+### Returns the number of leading zero bits, starting from the most-significant bit.
+### :returns: The leading zero count; `128` if the value is zero.
+routine S128.leading_zeros() -> S128
+  return leading_zeros[S128](me)
+
+### Returns the number of trailing zero bits, starting from the least-significant bit.
+### :returns: The trailing zero count; `128` if the value is zero.
+routine S128.trailing_zeros() -> S128
+  return trailing_zeros[S128](me)
+
+### Returns the number of leading one bits, starting from the most-significant bit.
+### :returns: The leading one count; `128` if the value is `−1` (all bits set).
+routine S128.leading_ones() -> S128
+  return me.$bitnot().leading_zeros()
+
+### Returns the number of trailing one bits, starting from the least-significant bit.
+### :returns: The trailing one count; `128` if the value is `−1` (all bits set).
+routine S128.trailing_ones() -> S128
+  return me.$bitnot().trailing_zeros()
+
+### Returns this value with its bits reversed (bit 127 ↔ bit 0, etc.).
+### :returns: The bit-reversed `S128`.
+routine S128.reverse_bits() -> S128
+  return reverse_bits[S128](me)
+
+### Returns this value with its 16 bytes swapped (for endianness conversion).
+### :returns: An `S128` with its bytes in reverse order.
+routine S128.swap_bytes() -> S128
+  return byte_swap[S128](me)
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+### Returns `true` if this value is greater than zero.
+### :returns: `true` if `me > 0`.
+routine S128.is_positive() -> Bool
+  return me > 0_s128
+
+### Returns `true` if this value is less than zero.
+### :returns: `true` if `me < 0`.
+routine S128.is_negative() -> Bool
+  return me < 0_s128
+
+### Returns `true` if this value is zero.
+### :returns: `true` if `me == 0`.
+routine S128.is_zero() -> Bool
+  return me == 0_s128
+
+### Returns `true` if this value is divisible by 2.
+### :returns: `true` if the least-significant bit is 0.
+routine S128.is_even() -> Bool
+  var result = bit_and[S128](a: me, b: 1_s128)
+  return int_eq[S128](a: result, b: 0_s128)
+
+### Returns `true` if this value is not divisible by 2.
+### :returns: `true` if the least-significant bit is 1.
+routine S128.is_odd() -> Bool
+  return not me.is_even()
+
+### Returns the sign of this value as −1, 0, or 1.
+### :returns: `1` if `me > 0`, `−1` if `me < 0`, `0` if `me == 0`.
+routine S128.signum() -> S128
+  return when
+    me > 0_s128 => 1_s128
+    me < 0_s128 => -1_s128
+    else => 0_s128
+
+# ============================================================================
+# Text Representation and Parsing
+# ============================================================================
+
+routine S128.$represent() -> ?Text
+  if me == 0s128
+    return "0"
+  if me > 0s128
+    return U128(me).$represent()
+  # Use reinterpret_bits (not U128(me)) — U128.$create!(S128) throws on negative inputs,
+  # and we need the raw bit pattern so the two's-complement negation `0u128 -% bits`
+  # yields |me| (works correctly even for S128.MIN, whose absolute value overflows S128).
+  return "-" + (0u128 -% reinterpret_bits[S128, U128](me)).$represent()
+
+routine S128.$diagnose() -> ?Text
+  return "S128(" + me.$represent() + ")"
+
+### Parses a decimal string into an `S128`, accepting an optional leading `+` or `−` sign.
+### :param from_text: The decimal string to parse.
+### :returns: The parsed `S128` value.
+### :throws: {InvalidValueError} if `from_text` is empty, sign-only, or contains non-digit characters.
+routine S128.$create!(from_text: Text) -> S128
+  if from_text.count() == 0u64
+    throw InvalidValueError(input: from_text, target: "S128")
+  var start = 0u64
+  var negative = false
+  var first = from_text[0u64]
+  if first == Character(0x002Du32)
+    negative = true
+    start = 1u64
+  elseif first == Character(0x002Bu32)
+    start = 1u64
+  if start >= from_text.count()
+    throw InvalidValueError(input: from_text, target: "S128")
+  var result = 0u128
+  var i = start
+  while i < from_text.count()
+    var ch = from_text[i]
+    if ch.is_numeric()
+      result = result * 10u128 + U128(ch.digit_value())
+    else
+      throw InvalidValueError(input: from_text, target: "S128")
+    i = i + 1u64
+  if negative
+    if result > 170141183460469231731687303715884105728u128
+      throw IntegerOverflowError()
+    return reinterpret_bits[U128, S128](0u128 -% result)
+  return S128(result)
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns an xxHash64-based hash of this 128-bit value.
+### :returns: A `U64` hash combining both 64-bit halves of the bit pattern.
+routine S128.$fast_hash() -> U64
+  return __hash_u128(v: reinterpret_bits[S128, U128](me))
+
+### Returns a SipHash-2-4 keyed hash of this 128-bit value.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
+routine S128.$hash(k0: U64, k1: U64) -> U64
+  return __secure_hash_u128(v: reinterpret_bits[S128, U128](me), k0: k0, k1: k1)

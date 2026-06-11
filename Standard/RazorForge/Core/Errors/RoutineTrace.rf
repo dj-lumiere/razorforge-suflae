@@ -1,11 +1,45 @@
 module Core
 
-# RoutineTrace - Collection of routine records captured at error time
-#
-# Contains up to 10 routine records, stored inline as a ValueList.
-# The depth member variable indicates how many records are actually valid.
-
+### Represents the call-trace payload captured for runtime failures.
+### `RoutineTrace` is a compact inline record used by diagnostics and crash
+### reporting to preserve the most recent routine frames without heap
+### allocation during failure handling.
 record RoutineTrace
-  frames: ValueList[RoutineRecord, 10]
+  ### Stores the recorded routine frames in caller-to-callee order.
+  ### Only the prefix indicated by `depth` is considered valid.
+  frames: Array[RoutineRecord, 10]
+  ### Stores the number of valid entries currently present in `frames`.
   depth: U32
+  ### Stores whether additional frames were dropped because the trace buffer was
+  ### exhausted.
   truncated: Bool
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns an xxHash64-based hash of this routine trace.
+### :returns: A `U64` hash combining all valid frames, depth, and truncation flag.
+routine RoutineTrace.$fast_hash() -> U64
+  var acc = 0u64
+  var i = 0u64
+  while i < 10u64
+    acc = __hash_round(acc: acc, h: me.frames[i].$fast_hash())
+    i = i + 1_u64
+  acc = __hash_round(acc: acc, h: me.depth.$fast_hash())
+  acc = __hash_round(acc: acc, h: me.truncated.$fast_hash())
+  return __hash_finalize(h: acc)
+
+### Returns a SipHash-2-4 keyed hash of this routine trace.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
+routine RoutineTrace.$hash(k0: U64, k1: U64) -> U64
+  var acc = 0u64
+  var i = 0u64
+  while i < 10u64
+    acc = __hash_round(acc: acc, h: me.frames[i].$hash(k0: k0, k1: k1))
+    i = i + 1_u64
+  acc = __hash_round(acc: acc, h: me.depth.$hash(k0: k0, k1: k1))
+  acc = __hash_round(acc: acc, h: me.truncated.$hash(k0: k0, k1: k1))
+  return __hash_finalize(h: acc)

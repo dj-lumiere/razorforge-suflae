@@ -129,110 +129,120 @@ int64_t rf_cs_integer_exponent(rf_cs_integer_t h)
 #endif // HAVE_LIBBF
 
 // ============================================================================
-// Arbitrary precision decimal parsing (via MAPM) - C# Compiler Interop
-// These functions use rf_cs_ prefix to distinguish from runtime API
+// Arbitrary precision decimal parsing (via decNumber) — C# Compiler Interop
+// Implements the rf_cs_decimal_* symbols the C# NumericLiteralParser P/Invokes
+// (src/Verification/NumericLiteralParser.cs) to parse `dn` Decimal literals at
+// compile time. Backed by decNumber (HAVE_DECNUMBER); a high DECNUMDIGITS lets
+// arbitrary-precision literals parse without rounding. The handle is an opaque
+// heap decNumber, freed via rf_cs_decimal_free.
 // ============================================================================
 
-#ifdef HAVE_MAPM
-#include "../mapm/m_apm.h"
+#ifdef HAVE_DECNUMBER
+#ifndef DECNUMDIGITS
+#define DECNUMDIGITS 1000
+#endif
+#include <decContext.h>
+#include <decNumber.h>
 
-// Opaque handle for arbitrary precision decimals during compilation
-typedef M_APM rf_cs_decimal_t;
+typedef decNumber* rf_cs_decimal_t;
+
+// Per-thread parsing context: arbitrary precision, no traps (errors via status).
+static decContext* rf_cs_dec_ctx(void)
+{
+    static _Thread_local decContext ctx;
+    static _Thread_local int inited = 0;
+    if (!inited) {
+        decContextDefault(&ctx, DEC_INIT_BASE);
+        ctx.digits = DECNUMDIGITS;
+        ctx.emax = 999999999;
+        ctx.emin = -999999999;
+        ctx.round = DEC_ROUND_HALF_EVEN;
+        ctx.traps = 0;
+        inited = 1;
+    }
+    return &ctx;
+}
 
 rf_cs_decimal_t rf_cs_decimal_from_string(const char* str)
 {
-    M_APM num = m_apm_init();
+    decNumber* num = (decNumber*)malloc(sizeof(decNumber));
     if (!num) return NULL;
-
-    m_apm_set_string(num, (char*)str);
+    decContext* ctx = rf_cs_dec_ctx();
+    ctx->status = 0;
+    decNumberFromString(num, str, ctx);
+    if (ctx->status & DEC_Errors) {
+        free(num);
+        return NULL;
+    }
     return num;
 }
 
 void rf_cs_decimal_free(rf_cs_decimal_t h)
 {
-    if (h) {
-        m_apm_free(h);
-    }
+    if (h) free(h);
 }
 
-// Get the sign (-1 = negative, 0 = zero, 1 = positive)
+// Sign: -1 negative, 0 zero, +1 positive.
 int rf_cs_decimal_sign(rf_cs_decimal_t h)
 {
     if (!h) return 0;
-    return m_apm_sign(h);
+    if (decNumberIsZero(h)) return 0;
+    return decNumberIsNegative(h) ? -1 : 1;
 }
 
-// Get the exponent (power of 10)
+// Power-of-ten exponent of the coefficient.
 int rf_cs_decimal_exponent(rf_cs_decimal_t h)
 {
-    if (!h) return 0;
-    return m_apm_exponent(h);
+    return h ? h->exponent : 0;
 }
 
-// Get the number of significant digits
+// Count of significant digits in the coefficient.
 int rf_cs_decimal_significant_digits(rf_cs_decimal_t h)
 {
-    if (!h) return 0;
-    return m_apm_significant_digits(h);
+    return h ? h->digits : 0;
 }
 
-// Check if this is an integer value
+// Integer iff there is no fractional part (exponent >= 0).
 int rf_cs_decimal_is_integer(rf_cs_decimal_t h)
 {
-    if (!h) return 0;
-    return m_apm_is_integer(h);
+    return (h && h->exponent >= 0) ? 1 : 0;
 }
 
-// Convert to string with specified decimal places
-// Caller must free the returned string
+// Negate in place by toggling the sign bit (no-op for zero; no context needed).
+void rf_cs_decimal_negate(rf_cs_decimal_t h)
+{
+    if (h && !decNumberIsZero(h)) h->bits ^= DECNEG;
+}
+
+// Canonical decimal string. Caller (C#) reads then leaks it (matches the
+// DecimalToString contract in NumericLiteralParser.cs). decimal_places is
+// ignored; decNumberToString emits full precision.
 char* rf_cs_decimal_to_string(rf_cs_decimal_t h, int decimal_places)
 {
+    (void)decimal_places;
     if (!h) return NULL;
-
-    // Allocate enough space for the string
-    // max digits = significant_digits + decimal_places + sign + decimal point + null
-    int sig_digits = m_apm_significant_digits(h);
-    int exp = m_apm_exponent(h);
-    size_t buf_size = (size_t)(sig_digits + decimal_places + exp + 10);
-    if (buf_size < 64) buf_size = 64;
-
-    char* buffer = (char*)malloc(buf_size);
-    if (!buffer) return NULL;
-
-    m_apm_to_fixpt_string(buffer, decimal_places, h);
-    return buffer;
+    char* buf = (char*)malloc((size_t)h->digits + 14); // decNumber spec: digits+14
+    if (!buf) return NULL;
+    decNumberToString(h, buf);
+    return buf;
 }
 
-// Convert to integer string (no decimal point)
-// Caller must free the returned string
+// Integer-valued string (fractional part truncated toward zero).
 char* rf_cs_decimal_to_integer_string(rf_cs_decimal_t h)
 {
     if (!h) return NULL;
-
-    int sig_digits = m_apm_significant_digits(h);
-    int exp = m_apm_exponent(h);
-    size_t buf_size = (size_t)(sig_digits + exp + 10);
-    if (buf_size < 64) buf_size = 64;
-
-    char* buffer = (char*)malloc(buf_size);
-    if (!buffer) return NULL;
-
-    m_apm_to_integer_string(buffer, h);
-    return buffer;
+    decContext* ctx = rf_cs_dec_ctx();
+    decNumber tmp;
+    decNumberToIntegralValue(&tmp, h, ctx);
+    char* buf = (char*)malloc((size_t)tmp.digits + 14);
+    if (!buf) return NULL;
+    decNumberToString(&tmp, buf);
+    return buf;
 }
-
-// Negate the value in place
-void rf_cs_decimal_negate(rf_cs_decimal_t h)
-{
-    if (h) {
-        m_apm_negate(h, h);
-    }
-}
-
-#endif // HAVE_MAPM
+#endif // HAVE_DECNUMBER
 
 // ============================================================================
-// Decimal floating point string parsing (Intel DFP)
+// Decimal floating point string parsing (decNumber)
 // These are wrappers around functions in decimal_functions.c
 // ============================================================================
 

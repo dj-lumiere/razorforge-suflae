@@ -1,0 +1,22 @@
+module Tests/Stdlib/NumericArbitraryApi
+import IO/Console
+import Numerics.[Integer, Decimal, Complex]
+
+# Exercises Integer, Decimal, Complex — arbitrary-precision counterparts.
+routine start()
+  var big: Integer = Integer(from: 123_456_789_s64) * Integer(from: 987_654_321_s64)
+  show(f"big: {big}")
+
+  var dec: Decimal = Decimal(from: 1_s64) / Decimal(from: 7_s64)
+  show(f"dec 1/7: {dec}")
+
+  var c: Complex = Complex(real: Decimal(from: 1_s64), imag: Decimal(from: 1_s64))
+  show(f"c: {c}")
+  show(f"c + c: {c + c}")
+
+  # Comparisons
+  show(f"big > 0: {big > Integer(from: 0_s64)}")
+  show(f"big == big: {big == big}")
+
+  show("DONE")
+  return

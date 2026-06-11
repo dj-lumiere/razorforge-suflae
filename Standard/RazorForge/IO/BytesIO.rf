@@ -1,0 +1,434 @@
+module IO/BytesIO
+
+import IO/Console
+
+### Fast-IO numeric parse and format routines that operate directly on raw byte
+### buffers, bypassing the UTF-8 → UTF-32 → Text → parse pipeline that ordinary
+### `T.$create!(from_text:)` walks through.
+###
+### **Use cases:**
+### - Competitive-programming stdin (`10^6` integers in < 1s).
+### - High-throughput pipelines where input is already ASCII bytes.
+###
+### **Conventions:**
+### - `from_digit_bytes!` is **lenient**: skips leading ASCII whitespace
+###   (`SP`/`TAB`/`LF`/`CR`), accepts optional `+`/`-` sign, consumes digits
+###   up to the first non-digit. For strict whole-buffer parsing, use
+###   `T.$create!(from_text:)` instead.
+### - `from_digit_bytes_at!` returns `(value, next_index)` so callers can stream
+###   many integers from a single buffer without re-slicing.
+### - `to_digit_bytes()` is infallible — every integer has a decimal form.
+###
+### **Initial coverage:** S64 and U64 (the 95% case for CP). Other widths
+### (S8/S16/S32/S128, U8/U16/U32/U128) follow the same pattern when needed.
+
+# ============================================================================
+# Internal helpers — ASCII byte predicates without Character/Text allocation.
+# ============================================================================
+
+### Returns true if `b` is one of the ASCII whitespace bytes RF accepts as a
+### token separator: space (0x20), tab (0x09), line-feed (0x0a), carriage-return
+### (0x0d). Form-feed (0x0c) and vertical-tab (0x0b) are NOT recognized — they
+### are rare in CP-style input and including them would slow the hot loop.
+routine __is_ascii_ws(b: Byte) -> Bool
+  return b == Byte(from: 0x20_u8) or b == Byte(from: 0x09_u8) or b == Byte(from: 0x0a_u8) or b == Byte(from: 0x0d_u8)
+
+# ============================================================================
+# S64
+# ============================================================================
+
+### Parses a signed decimal integer directly from a byte buffer. Skips leading
+### ASCII whitespace, accepts an optional `+` or `-` sign, then consumes digits
+### up to the first non-digit (which may be EOF).
+###
+### :param bytes: The buffer to read from.
+### :returns: The parsed `S64` value.
+### :throws: {InvalidValueError} if no digits were found after the optional sign.
+common routine S64.from_digit_bytes!(bytes: Bytes) -> S64
+  var pair = S64.from_digit_bytes_at!(bytes: bytes, start: 0u64)
+  return pair.item0
+
+### Streaming variant: parses a signed decimal integer starting at `start` and
+### returns `(value, next_index)` where `next_index` points one past the last
+### consumed byte. Use this to walk a buffer of many integers without re-slicing.
+###
+### :param bytes: The buffer to read from.
+### :param start: The byte index to begin scanning at. Indices past `bytes.count()`
+###               are treated as EOF and produce {InvalidValueError}.
+### :returns: A tuple `(parsed_value, index_one_past_last_digit)`.
+### :throws: {InvalidValueError} if no digits were found after the optional sign.
+common routine S64.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[S64, U64]
+  var i = start
+
+  # Skip leading whitespace
+  while i < bytes.count() and __is_ascii_ws(b: bytes[i])
+    i = i + 1_u64
+
+  # Optional sign
+  var negative = false
+  if i < bytes.count()
+    if bytes[i] == Byte(from: 0x2D_u8)  # '-'
+      negative = true
+      i = i + 1_u64
+    elseif bytes[i] == Byte(from: 0x2B_u8)  # '+'
+      i = i + 1_u64
+
+  # Must see at least one digit
+  if i >= bytes.count() or not bytes[i].is_digit()
+    throw InvalidValueError(input: "<bytes>", target: "S64")
+
+  var acc: U64 = 0u64
+  while i < bytes.count() and bytes[i].is_digit()
+    var d: U8 = bytes[i].digit_value!()
+    acc = acc * 10u64 + U64(from: d)
+    i = i + 1_u64
+
+  var value: S64 = if negative then -S64(from: acc) else S64(from: acc)
+  return (value, i)
+
+### Formats this `S64` as ASCII decimal digit bytes. The result includes a
+### leading `-` for negative values; positive and zero produce digits only.
+###
+### Marked `!` because the inner `U8(from: S64)` narrowing is failable in the
+### general case. Every per-iteration value is in `[0, 9]` by construction so
+### the failure path is unreachable in practice — but propagating via `!`
+### avoids `danger!` and gives callers `try_to_digit_bytes(...)` for free.
+### :returns: A freshly allocated `Bytes` carrying the digit sequence.
+routine S64.to_digit_bytes!() -> ?Bytes
+  if me == 0_s64
+    var buf: List[Byte] = []
+    buf.add_last(value: Byte(from: 0x30_u8))  # '0'
+    return Bytes(from_list: buf)
+
+  var negative = me.is_negative()
+  # Compute the magnitude in U64 space. `me.abs()` overflows for S64_MIN (|S64_MIN| = 2^63 is not
+  # representable in S64), so reinterpret the bits and take the two's-complement magnitude in U64,
+  # where 2^63 fits. For non-negative values the bit pattern already equals the value.
+  var bits: U64 = reinterpret_bits[S64, U64](me)
+  var mag: U64 = if negative then 0_u64 -% bits else bits
+  var digits: List[Byte] = []
+
+  while mag > 0_u64
+    var d: U64 = mag % 10_u64                       # 0..9
+    var b: U8 = 0x30_u8 + U8(from: d)              # '0' + d
+    digits.add_last(value: Byte(from: b))
+    mag = mag // 10_u64
+
+  if negative
+    digits.add_last(value: Byte(from: 0x2D_u8))    # '-'
+
+  digits.reverse_in_place()
+  return Bytes(from_list: digits)
+
+# ============================================================================
+# U64
+# ============================================================================
+
+### Parses an unsigned decimal integer directly from a byte buffer. Skips leading
+### ASCII whitespace, accepts an optional `+` sign (a `-` sign is rejected), then
+### consumes digits up to the first non-digit.
+###
+### :param bytes: The buffer to read from.
+### :returns: The parsed `U64` value.
+### :throws: {InvalidValueError} if no digits were found or a `-` sign appeared.
+common routine U64.from_digit_bytes!(bytes: Bytes) -> U64
+  var pair = U64.from_digit_bytes_at!(bytes: bytes, start: 0u64)
+  return pair.item0
+
+### Streaming variant of `U64.from_digit_bytes!` — see that routine's doc.
+common routine U64.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[U64, U64]
+  var i = start
+
+  while i < bytes.count() and __is_ascii_ws(b: bytes[i])
+    i = i + 1_u64
+
+  if i < bytes.count() and bytes[i] == Byte(from: 0x2B_u8)
+    i = i + 1_u64
+  elseif i < bytes.count() and bytes[i] == Byte(from: 0x2D_u8)
+    throw InvalidValueError(input: "<bytes>", target: "U64")
+
+  if i >= bytes.count() or not bytes[i].is_digit()
+    throw InvalidValueError(input: "<bytes>", target: "U64")
+
+  var acc: U64 = 0u64
+  while i < bytes.count() and bytes[i].is_digit()
+    var d: U8 = bytes[i].digit_value!()
+    acc = acc * 10u64 + U64(from: d)
+    i = i + 1_u64
+
+  return (acc, i)
+
+### Formats this `U64` as ASCII decimal digit bytes. Zero produces a single
+### `'0'`; otherwise digits-only with no sign.
+###
+### Marked `!` for the same reason as `S64.to_digit_bytes!` — the per-iteration
+### `U8(from: U64)` narrowing is failable in general but unreachable here.
+### :returns: A freshly allocated `Bytes` carrying the digit sequence.
+routine U64.to_digit_bytes!() -> ?Bytes
+  if me == 0u64
+    var buf: List[Byte] = []
+    buf.add_last(value: Byte(from: 0x30_u8))
+    return Bytes(from_list: buf)
+
+  var v = me
+  var digits: List[Byte] = []
+  while v > 0u64
+    var d: U64 = v % 10u64
+    var b: U8 = 0x30_u8 + U8(from: d)
+    digits.add_last(value: Byte(from: b))
+    v = v // 10u64
+
+  digits.reverse_in_place()
+  return Bytes(from_list: digits)
+
+# ============================================================================
+# Narrower signed widths — delegate to S64 then narrow.
+# `T.from_digit_bytes!` will throw {InvalidValueError} via the S64 path; the
+# explicit `T(from: S64)` narrowing additionally throws on out-of-range values.
+# ============================================================================
+
+common routine S8.from_digit_bytes!(bytes: Bytes) -> S8
+  return S8(from: S64.from_digit_bytes!(bytes: bytes))
+
+common routine S8.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[S8, U64]
+  var pair = S64.from_digit_bytes_at!(bytes: bytes, start: start)
+  return (S8(from: pair.item0), pair.item1)
+
+routine S8.to_digit_bytes!() -> ?Bytes
+  return S64(from: me).to_digit_bytes!()
+
+common routine S16.from_digit_bytes!(bytes: Bytes) -> S16
+  return S16(from: S64.from_digit_bytes!(bytes: bytes))
+
+common routine S16.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[S16, U64]
+  var pair = S64.from_digit_bytes_at!(bytes: bytes, start: start)
+  return (S16(from: pair.item0), pair.item1)
+
+routine S16.to_digit_bytes!() -> ?Bytes
+  return S64(from: me).to_digit_bytes!()
+
+common routine S32.from_digit_bytes!(bytes: Bytes) -> S32
+  return S32(from: S64.from_digit_bytes!(bytes: bytes))
+
+common routine S32.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[S32, U64]
+  var pair = S64.from_digit_bytes_at!(bytes: bytes, start: start)
+  return (S32(from: pair.item0), pair.item1)
+
+routine S32.to_digit_bytes!() -> ?Bytes
+  return S64(from: me).to_digit_bytes!()
+
+# ============================================================================
+# Narrower unsigned widths — delegate to U64 then narrow.
+# ============================================================================
+
+common routine U8.from_digit_bytes!(bytes: Bytes) -> U8
+  return U8(from: U64.from_digit_bytes!(bytes: bytes))
+
+common routine U8.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[U8, U64]
+  var pair = U64.from_digit_bytes_at!(bytes: bytes, start: start)
+  return (U8(from: pair.item0), pair.item1)
+
+routine U8.to_digit_bytes!() -> ?Bytes
+  return U64(from: me).to_digit_bytes!()
+
+common routine U16.from_digit_bytes!(bytes: Bytes) -> U16
+  return U16(from: U64.from_digit_bytes!(bytes: bytes))
+
+common routine U16.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[U16, U64]
+  var pair = U64.from_digit_bytes_at!(bytes: bytes, start: start)
+  return (U16(from: pair.item0), pair.item1)
+
+routine U16.to_digit_bytes!() -> ?Bytes
+  return U64(from: me).to_digit_bytes!()
+
+common routine U32.from_digit_bytes!(bytes: Bytes) -> U32
+  return U32(from: U64.from_digit_bytes!(bytes: bytes))
+
+common routine U32.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[U32, U64]
+  var pair = U64.from_digit_bytes_at!(bytes: bytes, start: start)
+  return (U32(from: pair.item0), pair.item1)
+
+routine U32.to_digit_bytes!() -> ?Bytes
+  return U64(from: me).to_digit_bytes!()
+
+# ============================================================================
+# S128 — direct accumulation in S128 (won't fit in S64).
+# ============================================================================
+
+common routine S128.from_digit_bytes!(bytes: Bytes) -> S128
+  var pair = S128.from_digit_bytes_at!(bytes: bytes, start: 0u64)
+  return pair.item0
+
+common routine S128.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[S128, U64]
+  var i = start
+  while i < bytes.count() and __is_ascii_ws(b: bytes[i])
+    i = i + 1_u64
+
+  var negative = false
+  if i < bytes.count()
+    if bytes[i] == Byte(from: 0x2D_u8)
+      negative = true
+      i = i + 1_u64
+    elseif bytes[i] == Byte(from: 0x2B_u8)
+      i = i + 1_u64
+
+  if i >= bytes.count() or not bytes[i].is_digit()
+    throw InvalidValueError(input: "<bytes>", target: "S128")
+
+  var acc: S128 = 0_s128
+  while i < bytes.count() and bytes[i].is_digit()
+    var d: U8 = bytes[i].digit_value!()
+    acc = acc * 10_s128 + S128(from: d)
+    i = i + 1_u64
+
+  var value: S128 = if negative then -acc else acc
+  return (value, i)
+
+routine S128.to_digit_bytes!() -> ?Bytes
+  if me == 0_s128
+    var buf: List[Byte] = []
+    buf.add_last(value: Byte(from: 0x30_u8))
+    return Bytes(from_list: buf)
+
+  var negative = me.is_negative()
+  # Compute the magnitude in U128 space. `me.abs()` overflows for S128_MIN (|S128_MIN| = 2^127 is
+  # not representable in S128), so reinterpret the bits and take the two's-complement magnitude in
+  # U128, where 2^127 fits. For non-negative values the bit pattern already equals the value.
+  var bits: U128 = reinterpret_bits[S128, U128](me)
+  var mag: U128 = if negative then 0_u128 -% bits else bits
+  var digits: List[Byte] = []
+  while mag > 0_u128
+    var d: U128 = mag % 10_u128
+    var b: U8 = 0x30_u8 + U8(from: d)
+    digits.add_last(value: Byte(from: b))
+    mag = mag // 10_u128
+  if negative
+    digits.add_last(value: Byte(from: 0x2D_u8))
+  digits.reverse_in_place()
+  return Bytes(from_list: digits)
+
+# ============================================================================
+# U128 — direct accumulation in U128.
+# ============================================================================
+
+common routine U128.from_digit_bytes!(bytes: Bytes) -> U128
+  var pair = U128.from_digit_bytes_at!(bytes: bytes, start: 0u64)
+  return pair.item0
+
+common routine U128.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[U128, U64]
+  var i = start
+  while i < bytes.count() and __is_ascii_ws(b: bytes[i])
+    i = i + 1_u64
+
+  if i < bytes.count() and bytes[i] == Byte(from: 0x2B_u8)
+    i = i + 1_u64
+  elseif i < bytes.count() and bytes[i] == Byte(from: 0x2D_u8)
+    throw InvalidValueError(input: "<bytes>", target: "U128")
+
+  if i >= bytes.count() or not bytes[i].is_digit()
+    throw InvalidValueError(input: "<bytes>", target: "U128")
+
+  var acc: U128 = 0_u128
+  while i < bytes.count() and bytes[i].is_digit()
+    var d: U8 = bytes[i].digit_value!()
+    acc = acc * 10_u128 + U128(from: d)
+    i = i + 1_u64
+  return (acc, i)
+
+routine U128.to_digit_bytes!() -> ?Bytes
+  if me == 0_u128
+    var buf: List[Byte] = []
+    buf.add_last(value: Byte(from: 0x30_u8))
+    return Bytes(from_list: buf)
+
+  var v = me
+  var digits: List[Byte] = []
+  while v > 0_u128
+    var d: U128 = v % 10_u128
+    var b: U8 = 0x30_u8 + U8(from: d)
+    digits.add_last(value: Byte(from: b))
+    v = v // 10_u128
+  digits.reverse_in_place()
+  return Bytes(from_list: digits)
+
+# ============================================================================
+# Integer (arbitrary precision).
+# ============================================================================
+
+common routine Integer.from_digit_bytes!(bytes: Bytes) -> ?Integer
+  var pair = Integer.from_digit_bytes_at!(bytes: bytes, start: 0u64)
+  return pair.item0
+
+common routine Integer.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[Integer, U64]
+  var i = start
+  while i < bytes.count() and __is_ascii_ws(b: bytes[i])
+    i = i + 1_u64
+
+  var negative = false
+  if i < bytes.count()
+    if bytes[i] == Byte(from: 0x2D_u8)
+      negative = true
+      i = i + 1_u64
+    elseif bytes[i] == Byte(from: 0x2B_u8)
+      i = i + 1_u64
+
+  if i >= bytes.count() or not bytes[i].is_digit()
+    throw InvalidValueError(input: "<bytes>", target: "Integer")
+
+  var acc: Integer = Integer(from: 0_s64)
+  var ten = Integer(from: 10_s64)
+  while i < bytes.count() and bytes[i].is_digit()
+    var d: U8 = bytes[i].digit_value!()
+    acc = acc * ten + Integer(from: d)
+    i = i + 1_u64
+
+  var value: Integer = if negative then -acc else acc
+  return (value, i)
+
+routine Integer.to_digit_bytes!() -> ?Bytes
+  var zero = Integer(from: 0_s64)
+  if me == zero
+    var buf: List[Byte] = []
+    buf.add_last(value: Byte(from: 0x30_u8))
+    return Bytes(from_list: buf)
+
+  var negative = me < zero
+  var abs_val: Integer = if negative then -me else me
+  var ten = Integer(from: 10_s64)
+  var digits: List[Byte] = []
+  while abs_val > zero
+    var d: Integer = abs_val % ten
+    var d_u8: U8 = U8(from: d)
+    var b: U8 = 0x30_u8 + d_u8
+    digits.add_last(value: Byte(from: b))
+    abs_val = abs_val // ten
+  if negative
+    digits.add_last(value: Byte(from: 0x2D_u8))
+  digits.reverse_in_place()
+  return Bytes(from_list: digits)
+
+# ============================================================================
+# Floats / Decimals / Complex — TODO (deferred to a later v0.1.x patch).
+# When implemented they live in this same file (IO/BytesIO) so all Bytes-direct
+# numeric I/O is discoverable under one module.
+#
+# Bytes-direct fast paths for F16/F32/F64/F128, D32/D64/D128, C32/C64/C128,
+# `Decimal`, and `Complex` are NOT implemented yet. The integer surface above
+# covers the CP-critical 95% case; floats/decimals appear far less often in
+# input-heavy problems, and their parsers (sign, integer part, fractional
+# part, exponent, NaN/Inf, IEEE 754 round-half-to-even / round-half-away-from-
+# zero for decimals) are substantial enough that we should design them
+# carefully rather than ship a quick Bytes→Text→parse delegation that wouldn't
+# actually be fast.
+#
+# **Recommended interim:** for float input, convert the Bytes slice to Text
+# (via `CStr` then `Text(from: CStr)`) and call `F64.$create!(from_text:)`.
+# It's the slow path we wanted to avoid, but it's correct and lets v0.0.1a
+# ship with the integer fast path users actually need.
+#
+# **API shape to fill in:**
+#   routine F64.from_digit_bytes!(bytes: Bytes) -> F64
+#   routine F64.from_digit_bytes_at!(bytes: Bytes, start: U64) -> Tuple[F64, U64]
+#   routine F64.to_digit_bytes!() -> ?Bytes
+#   (and identical signatures for every other floating-point + complex type)
+# ============================================================================

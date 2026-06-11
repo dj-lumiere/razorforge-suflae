@@ -1,0 +1,8 @@
+c type: Counter
+c value: 10
+after bump(5): 15
+view type: Viewing[Counter]
+view value: 15
+c represent: Counter(value: 115)
+c diagnose: Tests/Stdlib/OwnedApi.Counter(value: 115)
+DONE

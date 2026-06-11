@@ -1,0 +1,17 @@
+even*2: [4, 8, 12, 16, 20]
+x2>10: [12, 14, 16, 18, 20]
+even*2 take2: [4, 8]
+skip3 take4: [4, 5, 6, 7]
+even*2>10: [12, 16, 20]
+distinct*10: [10, 20, 30, 40]
+sum even*2: 60
+max even*2: 20
+count even*2: 5
+any x2>15: true
+all x2>0: true
+  iter: 4
+  iter: 8
+  iter: 12
+  iter: 16
+  iter: 20
+DONE

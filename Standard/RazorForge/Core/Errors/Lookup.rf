@@ -1,5 +1,57 @@
 module Core
 
+import BuilderService
+
+### Represents the success-or-crash-or-absent carrier used by `lookup_` routines.
+### `Lookup[T]` extends the `Result[T]` carrier shape with an explicit absent
+### state for APIs where "not found" is not itself an error. The full layout
+### is codegen-controlled:
+###   { U64 type_id, [max(sizeof(T), 8) x U8] payload }
+### `type_id == 0` is the absent state with don't-care payload bytes.
+### :typeparam T: The successful return value type.
 record Lookup[T]
-  secret state: DataState
-  secret handle: Snatched[T]
+  ### Identifies the stored payload type, or `0` for the absent state.
+  secret type_id: U64
+
+### Returns the display form of this lookup result.
+### Absent renders as `"none"`; present/crashable arms delegate to the payload's
+### own `$represent`.
+### :returns: The resulting `Text` value.
+routine Lookup[T].$represent() -> Text
+  when me
+    is None =>
+      return "none"
+    is Crashable v =>
+      return v.$represent()
+    is T v =>
+      return v.$represent()
+    else =>
+      return me.type_name()
+
+### Returns the diagnostic form of this lookup result.
+### Format: `f"{full_type_name}(type_id: {type_id}, {payload.$diagnose()})"`,
+### or `f"{full_type_name}(type_id: 0, none)"` for the absent state.
+### :returns: The resulting `Text` value.
+routine Lookup[T].$diagnose() -> Text
+  when me
+    is None =>
+      return f"{me.full_type_name()}(type_id: 0, none)"
+    is Crashable v =>
+      return f"{me.full_type_name()}(type_id: {me.type_id}, {v.$diagnose()})"
+    is T v =>
+      return f"{me.full_type_name()}(type_id: {me.type_id}, {v.$diagnose()})"
+    else =>
+      return f"{me.full_type_name()}(type_id: {me.type_id})"
+
+### Frees the active payload. The absent arm is a no-op; the crashable arm delegates (a no-op for
+### non-owning errors) and the success arm frees `T`. Defined explicitly (not auto-derived) so the
+### per-instantiation body is monomorphized and emitted like `$represent`/`$diagnose`.
+dangerous routine Lookup[T].$destroy()
+  when me
+    is None =>
+      return
+    is T v =>
+      v.$destroy()
+    else =>
+      return
+  return

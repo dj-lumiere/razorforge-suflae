@@ -1,0 +1,10 @@
+module Core
+
+### Represents the crashable raised when a byte is not a valid ASCII decimal digit.
+crashable InvalidDigitError
+  pass
+
+### Returns the default message for invalid ASCII decimal digit failures.
+### :returns: The resulting `Text` value.
+routine InvalidDigitError.crash_message() -> ?Text
+  return "The byte is not a valid ASCII decimal digit (0-9)."

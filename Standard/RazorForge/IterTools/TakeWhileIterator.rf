@@ -1,0 +1,58 @@
+module IterTools
+
+### Represents a lazy adapter that yields values while a predicate remains true.
+### Iteration stops permanently after the first predicate failure.
+### :typeparam T: The element type produced by the source sequence.
+### :typeparam S: The concrete source iterable type (borrowed; enables build-time dispatch).
+entity TakeWhileIterator[T, S] obeys Iterable[T]
+needs S obeys Iterable[T]
+relates TakeWhileEmitter[T, S/Iter] as Iter
+  ### Stores the source iterable (borrowed, not owned).
+  secret source: Hijacked[S]
+  ### Stores the predicate that determines whether iteration should continue.
+  secret predicate: Routine[(T,), Bool]
+
+### Returns the stateful iterator that enforces the continuation predicate.
+### The emitted iterator remembers when the predicate has already failed so it
+### never resumes after termination.
+### :returns: The resulting `TakeWhileEmitter[T, S/Iter]` value.
+@readonly
+routine TakeWhileIterator[T, S].$iter() -> ?TakeWhileEmitter[T, S/Iter]
+  danger!
+    return TakeWhileEmitter[T, S/Iter](source: me.source.as_entity().$iter(), predicate: me.predicate, done: false)
+
+### Iterates over a source sequence until the continuation predicate fails.
+### :typeparam T: The element type produced by the source sequence.
+### :typeparam SE: The concrete source iterator type (borrowed).
+entity TakeWhileEmitter[T, SE] obeys Iterator[T]
+needs SE obeys Iterator[T]
+  ### Stores the underlying source iterator (borrowed).
+  secret source: Hijacked[SE]
+  ### Stores the continuation predicate.
+  secret predicate: Routine[(T,), Bool]
+  ### Stores whether iteration has already terminated.
+  secret done: Bool
+
+### Returns the next value while the continuation predicate still succeeds.
+### Once `done` becomes true, the iterator remains exhausted for all later
+### calls.
+### :returns: The resulting `T` value.
+### :absent: Returns absent when the predicate has failed or the source ends first.
+routine TakeWhileEmitter[T, SE].$next!() -> ?T
+  danger!
+    if me.done
+      absent
+    var item = me.source.as_entity().$next!()
+    if not me.predicate(item)
+      me.done = true
+      absent
+    return item
+
+### Returns a lazy adapter that yields values while `predicate` returns `true`.
+### The first failing value is consumed but not yielded.
+### :param predicate: The predicate that controls when iteration stops.
+### :returns: The resulting `TakeWhileIterator[T, Me]` value.
+@readonly
+routine Iterable[T].take_while(predicate: Routine[(T,), Bool]) -> ?TakeWhileIterator[T, Me]
+  danger!
+    return TakeWhileIterator[T, Me](source: me.hijack(), predicate: predicate)

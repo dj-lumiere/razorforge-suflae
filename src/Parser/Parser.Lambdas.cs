@@ -1,6 +1,6 @@
+using System.Collections.Generic;
+using Compiler.Tokenizer;
 using SyntaxTree;
-using Compiler.Lexer;
-using Compiler.Diagnostics;
 
 namespace Compiler.Parser;
 
@@ -27,7 +27,8 @@ public partial class Parser
             {
                 do
                 {
-                    string captureName = ConsumeIdentifier(errorMessage: "Expected capture variable name");
+                    string captureName =
+                        ConsumeIdentifier(errorMessage: "Expected capture variable name");
                     captures.Add(item: captureName);
                 } while (Match(type: TokenType.Comma));
             }
@@ -37,7 +38,8 @@ public partial class Parser
         else
         {
             // Single identifier form: given x
-            string captureName = ConsumeIdentifier(errorMessage: "Expected capture variable name after 'given'");
+            string captureName =
+                ConsumeIdentifier(errorMessage: "Expected capture variable name after 'given'");
             captures.Add(item: captureName);
         }
 
@@ -72,7 +74,10 @@ public partial class Parser
         Consume(type: TokenType.FatArrow, errorMessage: "Expected '=>' in lambda expression");
 
         Expression body = ParseExpression();
-        return new LambdaExpression(Parameters: parameters, Body: body, Captures: captures, Location: location);
+        return new LambdaExpression(Parameters: parameters,
+            Body: body,
+            Captures: captures,
+            Location: location);
     }
 
     /// <summary>
@@ -99,9 +104,9 @@ public partial class Parser
     ///
     /// The key discriminator is the '=>' or 'given' after the ')'.
     /// </remarks>
-    private bool IsArrowLambdaParameters()
+    private bool IsArrowLambdaParameters() // NOSONAR S3776
     {
-        int savedPosition = Position;
+        int savedPosition = _position;
 
         try
         {
@@ -112,7 +117,7 @@ public partial class Parser
             {
                 Advance(); // consume )
                 bool result = Check(type: TokenType.FatArrow) || Check(type: TokenType.Given);
-                Position = savedPosition;
+                _position = savedPosition;
                 return result;
             }
 
@@ -126,7 +131,7 @@ public partial class Parser
                 // ─────────────────────────────────────────────────────────────────────
                 if (!Check(type: TokenType.Identifier))
                 {
-                    Position = savedPosition;
+                    _position = savedPosition;
                     return false;
                 }
 
@@ -151,7 +156,8 @@ public partial class Parser
                         {
                             depth--;
                         }
-                        else if (depth == 0 && (Check(type: TokenType.Comma) || Check(type: TokenType.RightParen)))
+                        else if (depth == 0 && (Check(type: TokenType.Comma) ||
+                                                Check(type: TokenType.RightParen)))
                         {
                             break;
                         }
@@ -172,20 +178,20 @@ public partial class Parser
                     Advance(); // consume )
                     // Accept either direct => or given ... =>
                     bool result = Check(type: TokenType.FatArrow) || Check(type: TokenType.Given);
-                    Position = savedPosition;
+                    _position = savedPosition;
                     return result;
                 }
                 else
                 {
                     // Not a valid lambda parameter list (e.g., expression like (x + y))
-                    Position = savedPosition;
+                    _position = savedPosition;
                     return false;
                 }
             }
         }
         catch
         {
-            Position = savedPosition;
+            _position = savedPosition;
             return false;
         }
     }
@@ -203,7 +209,8 @@ public partial class Parser
         {
             do
             {
-                string paramName = ConsumeIdentifier(errorMessage: "Expected parameter name in lambda");
+                string paramName =
+                    ConsumeIdentifier(errorMessage: "Expected parameter name in lambda");
                 TypeExpression? paramType = null;
 
                 if (Match(type: TokenType.Colon))
@@ -230,6 +237,9 @@ public partial class Parser
         Consume(type: TokenType.FatArrow, errorMessage: "Expected '=>' after lambda parameters");
 
         Expression body = ParseExpression();
-        return new LambdaExpression(Parameters: parameters, Body: body, Captures: captures, Location: location);
+        return new LambdaExpression(Parameters: parameters,
+            Body: body,
+            Captures: captures,
+            Location: location);
     }
 }

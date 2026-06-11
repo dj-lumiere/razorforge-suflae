@@ -1,6 +1,14 @@
-# ClampingAddable - Protocol for types that support clamping addition (+^)
 module Core
 
+### Represents the protocol for saturating addition.
+### `ClampingAddable` is for bounded types whose addition operator can produce a
+### nearest-bound result instead of failing or wrapping when the mathematical
+### sum is out of range.
 protocol ClampingAddable
+  ### Returns the clamping sum of this value and `you`.
+  ### If the exact mathematical sum is not representable, implementations
+  ### should return the closest supported bound instead of overflowing.
+  ### :param you: The other value to add.
+  ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.__add_clamp__(you: Me) -> Me
+  routine Me.$add_clamp(you: Me) -> ?Me

@@ -1,0 +1,38 @@
+module Tests/Stdlib/MomentApi
+import IO/Console
+
+# Moment: absolute UTC instant. Avoid Moment.now() (non-deterministic).
+routine start()
+  var epoch = Moment.epoch()
+  show(f"epoch: {epoch}")
+
+  var m = Moment(year: 2026, month: 1, day: 15, hour: 12, minute: 30, second: 0)
+  show(f"m: {m}")
+  show(f"m year: {m.year()}")
+  show(f"m month: {m.month()}")
+  show(f"m day: {m.day()}")
+  show(f"m hour: {m.hour()}")
+
+  # from_timestamp deterministic
+  var t = Moment.from_timestamp(seconds: 1_700_000_000_s64)
+  show(f"t (year): {t.year()}")
+  show(f"t (month): {t.month()}")
+
+  # Ordering
+  show(f"epoch < m: {epoch < m}")
+  show(f"m == m: {m == m}")
+  show(f"m != epoch: {m != epoch}")
+
+  # Moment ± Duration → Moment
+  var one_hour = Duration.from_hours(h: 1_s64)
+  var m_plus = m + one_hour
+  var m_minus = m - one_hour
+  show(f"m + 1h hour: {m_plus.hour()}")
+  show(f"m - 1h hour: {m_minus.hour()}")
+
+  # Moment − Moment → Duration
+  var dist = m_plus - m
+  show(f"(m + 1h) - m: {dist}")
+
+  show("DONE")
+  return

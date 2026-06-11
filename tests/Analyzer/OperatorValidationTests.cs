@@ -1,21 +1,19 @@
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Diagnostics;
-using Xunit;
+using Compiler.Diagnostics;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for operator validation rules:
-/// #66: Index operator type-kind restriction
-/// #67: Compound assignment on read-only tokens
-/// #117: Fixed-width numeric type mismatch
-/// #119: BackIndex in Range restriction
+/// Contains tests for operator validation.
 /// </summary>
 public class OperatorValidationTests
 {
     #region #66: Index operator type-kind restriction
+    /// <summary>
+    /// Verifies semantic analysis behavior for index operator on entity without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_IndexOperatorOnEntity_NoError()
@@ -23,18 +21,21 @@ public class OperatorValidationTests
         string source = """
                         protocol Indexable
                           @readonly
-                          routine Me.__getitem__(index: S32) -> S32
+                          routine Me.$getitem(index: S32) -> S32
                         entity Grid obeys Indexable
                           size: S32
                         @readonly
-                        routine Grid.__getitem__(index: S32) -> S32
+                        routine Grid.$getitem(index: S32) -> S32
                           return 0_s32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.IndexOperatorTypeKindRestriction);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for index operator on record and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_IndexOperatorOnRecord_ReportsError()
@@ -42,16 +43,16 @@ public class OperatorValidationTests
         string source = """
                         protocol Indexable
                           @readonly
-                          routine Me.__getitem__(index: S32) -> S32
+                          routine Me.$getitem(index: S32) -> S32
                         record Pair obeys Indexable
                           x: S32
                           y: S32
                         @readonly
-                        routine Pair.__getitem__(index: S32) -> S32
+                        routine Pair.$getitem(index: S32) -> S32
                           return 0_s32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.IndexOperatorTypeKindRestriction);
     }
@@ -59,6 +60,9 @@ public class OperatorValidationTests
     #endregion
 
     #region #117: Fixed-width numeric type mismatch
+    /// <summary>
+    /// Verifies semantic analysis behavior for same fixed width arithmetic without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_SameFixedWidthArithmetic_NoError()
@@ -66,15 +70,18 @@ public class OperatorValidationTests
         string source = """
                         protocol Addable
                           @readonly
-                          routine Me.__add__(other: Me) -> Me
+                          routine Me.$add(other: Me) -> Me
                         routine test(a: S32, b: S32) -> S32
                           return a + b
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FixedWidthTypeMismatch);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for mixed fixed width arithmetic and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_MixedFixedWidthArithmetic_ReportsError()
@@ -84,7 +91,7 @@ public class OperatorValidationTests
                           return a + b
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.FixedWidthTypeMismatch);
     }
@@ -92,6 +99,9 @@ public class OperatorValidationTests
     #endregion
 
     #region #119: BackIndex in Range restriction
+    /// <summary>
+    /// Verifies semantic analysis behavior for back index in range and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_BackIndexInRange_ReportsError()
@@ -102,10 +112,13 @@ public class OperatorValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BackIndexOutsideSubscript);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for back index in slice without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_BackIndexInSlice_NoError()
@@ -116,9 +129,102 @@ public class OperatorValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BackIndexOutsideSubscript);
+    }
+
+    #endregion
+
+    #region Additional fixed-width mismatch cases
+
+    /// <summary>
+    /// Verifies semantic analysis behavior for S8 plus S64 arithmetic and reports a fixed-width mismatch.
+    /// </summary>
+    [Fact]
+    public void Analyze_S8PlusS64_ReportsFixedWidthError()
+    {
+        string source = """
+                        routine test(a: S8, b: S64) -> S64
+                          return a + b
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.FixedWidthTypeMismatch);
+    }
+
+    /// <summary>
+    /// Verifies semantic analysis behavior for S64 arithmetic with itself produces no fixed-width error.
+    /// </summary>
+    [Fact]
+    public void Analyze_S64PlusS64_NoFixedWidthError()
+    {
+        string source = """
+                        routine test(a: S64, b: S64) -> S64
+                          return a + b
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.FixedWidthTypeMismatch);
+    }
+
+    #endregion
+
+    #region BackIndex in range — both ends
+
+    /// <summary>
+    /// Verifies that a back index on both ends of a range reports an error on the first back index.
+    /// </summary>
+    [Fact]
+    public void Analyze_BackIndexBothEndsOfRange_ReportsError()
+    {
+        string source = """
+                        routine test()
+                          var r = (^5 to ^1)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.BackIndexOutsideSubscript);
+    }
+
+    #endregion
+
+    #region S201: Binary operator type mismatch
+    /// <summary>
+    /// Verifies semantic analysis behavior for text plus list reports argument type mismatch.
+    /// </summary>
+
+    [Fact]
+    public void Analyze_TextPlusList_ReportsArgumentTypeMismatch()
+    {
+        string source = """
+                        routine test(t: Text, xs: List[S64]) -> Text
+                          return t + xs
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ArgumentTypeMismatch);
+    }
+    /// <summary>
+    /// Verifies semantic analysis behavior for text plus text without unexpected diagnostics.
+    /// </summary>
+
+    [Fact]
+    public void Analyze_TextPlusText_NoError()
+    {
+        string source = """
+                        routine test(a: Text, b: Text) -> Text
+                          return a + b
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.ArgumentTypeMismatch);
     }
 
     #endregion

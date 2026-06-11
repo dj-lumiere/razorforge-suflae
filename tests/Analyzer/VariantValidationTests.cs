@@ -1,145 +1,133 @@
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Diagnostics;
-using Xunit;
+using Compiler.Diagnostics;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for variant type validation rules:
-/// #59: Variant case containment restrictions
+/// Contains tests for variant validation.
 /// </summary>
 public class VariantValidationTests
 {
-    #region #59: Variant case containment
+    #region #59: Variant member containment
+    /// <summary>
+    /// Verifies semantic analysis behavior for variant with record member without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
-    public void Analyze_VariantWithRecordPayload_NoError()
+    public void Analyze_VariantWithRecordMember_NoError()
     {
         string source = """
                         record Point
                           x: S32
                           y: S32
                         variant Shape
-                          CIRCLE: S32
-                          RECTANGLE: Point
+                          S32
+                          Point
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.VariantCaseContainsInvalidType);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for variant with primitive member without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
-    public void Analyze_VariantWithNestedVariant_ReportsError()
-    {
-        string source = """
-                        variant Inner
-                          A
-                          B: S32
-                        variant Outer
-                          X: Inner
-                          Y
-                        """;
-
-        AnalysisResult result = Analyze(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.VariantCaseContainsInvalidType
-                         && e.Message.Contains("nested variant"));
-    }
-
-    [Fact]
-    public void Analyze_VariantWithPrimitivePayload_NoError()
+    public void Analyze_VariantWithPrimitiveMember_NoError()
     {
         string source = """
                         variant Value
-                          INT: S32
-                          FLOAT: F64
-                          NONE
+                          S32
+                          F64
+                          None
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.VariantCaseContainsInvalidType);
     }
 
     #endregion
 
-    #region #58: Variant must dismantle immediately
+    #region Additional Member Types
 
+    /// <summary>
+    /// Verifies that a variant can contain an entity-typed case.
+    /// </summary>
     [Fact]
-    public void Analyze_VariantDismantledImmediately_NoError()
+    public void Analyze_VariantWithEntityMember_NoError()
     {
         string source = """
-                        variant Shape
-                          Circle: S32
-                          Square: S32
+                        entity Node
+                          value: S32
 
-                        routine make_shape() -> Shape
-                          pass
-                          return
-
-                        routine test()
-                          var s = make_shape()
-                          when s
-                            is Circle(r) => pass
-                            else => pass
+                        variant Container
+                          Node
+                          S32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.VariantNotDismantled);
+            filter: e => e.Code == SemanticDiagnosticCode.VariantCaseContainsInvalidType);
     }
 
+    /// <summary>
+    /// Verifies that a variant can contain a choice-typed case.
+    /// </summary>
     [Fact]
-    public void Analyze_VariantNotDismantled_ReportsError()
+    public void Analyze_VariantWithChoiceMember_NoError()
     {
         string source = """
-                        variant Shape
-                          Circle: S32
-                          Square: S32
+                        choice Color
+                          RED
+                          GREEN
+                          BLUE
 
-                        routine make_shape() -> Shape
-                          pass
-                          return
-
-                        routine other()
-                          return
-
-                        routine test()
-                          var s = make_shape()
-                          other()
-                          when s
-                            is Circle(r) => pass
-                            else => pass
+                        variant Value
+                          Color
+                          S32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.VariantNotDismantled);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.VariantCaseContainsInvalidType);
     }
 
+    /// <summary>
+    /// Verifies that a variant can contain Text as a case.
+    /// </summary>
     [Fact]
-    public void Analyze_VariantNeverDismantled_ReportsError()
+    public void Analyze_VariantWithTextMember_NoError()
     {
         string source = """
-                        variant Shape
-                          Circle: S32
-                          Square: S32
-
-                        routine make_shape() -> Shape
-                          pass
-                          return
-
-                        routine test()
-                          var s = make_shape()
-                          return
+                        variant MaybeText
+                          Text
+                          None
                         """;
 
-        AnalysisResult result = Analyze(source: source);
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Code == SemanticDiagnosticCode.VariantNotDismantled);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.VariantCaseContainsInvalidType);
+    }
+
+    /// <summary>
+    /// Verifies that a variant with named cases and payload types produces no errors.
+    /// </summary>
+    [Fact]
+    public void Analyze_VariantWithNamedCases_NoError()
+    {
+        string source = """
+                        variant Result
+                          SUCCESS: S32
+                          FAILURE: Text
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.VariantCaseContainsInvalidType);
     }
 
     #endregion

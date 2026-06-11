@@ -1,19 +1,19 @@
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Diagnostics;
-using Xunit;
+using Compiler.Diagnostics;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for import validation rules:
-/// #105: Import name collision (two imports expose the same symbol name)
-/// #106: Import position enforcement (imports must appear before other declarations)
+/// Contains tests for import validation.
 /// </summary>
 public class ImportValidationTests
 {
     #region #106: Import position enforcement
+    /// <summary>
+    /// Verifies semantic analysis behavior for import after declaration and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_ImportAfterDeclaration_ReportsError()
@@ -25,10 +25,13 @@ public class ImportValidationTests
                         import Core
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ImportPositionViolation);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for import before declaration without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_ImportBeforeDeclaration_NoError()
@@ -40,10 +43,13 @@ public class ImportValidationTests
                           y: S32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ImportPositionViolation);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for multiple imports before declarations without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_MultipleImportsBeforeDeclarations_NoError()
@@ -57,7 +63,7 @@ public class ImportValidationTests
                           y: S32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ImportPositionViolation);
     }
@@ -65,6 +71,9 @@ public class ImportValidationTests
     #endregion
 
     #region #105: Import name collision
+    /// <summary>
+    /// Verifies semantic analysis behavior for duplicate imported symbol and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_DuplicateImportedSymbol_ReportsError()
@@ -76,10 +85,13 @@ public class ImportValidationTests
                           value: S32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ImportNameCollision);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for disjoint specific imports without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_DisjointSpecificImports_NoError()
@@ -91,7 +103,7 @@ public class ImportValidationTests
                           value: S32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ImportNameCollision);
     }

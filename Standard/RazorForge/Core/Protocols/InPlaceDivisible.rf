@@ -1,0 +1,11 @@
+module Core
+
+### Represents the protocol for in-place true division.
+### `InPlaceDivisible` is for mutable numeric values whose division surface
+### updates the current value with the computed quotient.
+protocol InPlaceDivisible
+  ### Divides this value by `you` in place.
+  ### :param you: The divisor.
+  ### :note: The right-hand operand should remain unchanged.
+  @writable
+  routine Me.$itruediv(you: Me)

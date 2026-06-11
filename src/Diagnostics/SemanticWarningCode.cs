@@ -1,4 +1,4 @@
-namespace SemanticAnalysis.Diagnostics;
+namespace Compiler.Diagnostics;
 
 /// <summary>
 /// Semantic warning codes for RazorForge (RF-W prefix).
@@ -9,7 +9,7 @@ namespace SemanticAnalysis.Diagnostics;
 /// - RF-W050-RF-W099: Unreachable Code Warnings
 /// - RF-W100-RF-W149: Deprecated Feature Warnings
 /// - RF-W150-RF-W199: Redundant Code Warnings
-/// - RF-W200-RF-W249: Modification Warnings
+/// - RF-W200-RF-W249: Mutation Warnings
 /// - RF-W250-RF-W299: Pattern Matching Warnings
 /// - RF-W300-RF-W349: Style Warnings
 /// - RF-W350-RF-W399: Performance Warnings
@@ -90,9 +90,6 @@ public enum SemanticWarningCode
     // REDUNDANT CODE WARNINGS (RF-W150 - RF-W199)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// <summary>Method is readonly, no ! token needed.</summary>
-    UnnecessaryModificationToken = 150,
-
     /// <summary>Redundant type annotation matches inferred type.</summary>
     RedundantTypeAnnotation = 151,
 
@@ -118,11 +115,8 @@ public enum SemanticWarningCode
     /// <summary>Method could be marked @readonly but is not.</summary>
     MethodCouldBeReadonly = 201,
 
-    /// <summary>Calling .hijack() on @initonly record — the record is frozen after construction.</summary>
+    /// <summary>Calling .modify() on @initonly record — the record is frozen after construction.</summary>
     HijackOnInitOnly = 210,
-
-    /// <summary>Task[T] result is not awaited — potential fire-and-forget bug.</summary>
-    UnusedTaskResult = 215,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PATTERN MATCHING WARNINGS (RF-W250 - RF-W299)
@@ -140,9 +134,24 @@ public enum SemanticWarningCode
     /// <summary>Deeply nested conditional expression; consider using 'when' for readability.</summary>
     NestedConditionalExpression = 253,
 
+    /// <summary>Failable routine (!) contains no throw or absent — will never crash.</summary>
+    FailableRoutineNeverCrashes = 254,
+
+    /// <summary>throw/absent in a non-failable routine — add ! suffix or remove the statement.</summary>
+    ThrowAbsentInNonFailable = 255,
+
+    /// <summary>Bare entity type in variant member — use an RC wrapper (Retained[T], etc.) instead.</summary>
+    BareEntityInVariantMember = 256,
+
+    /// <summary>Failable routine called in a non-failable context without error handling.</summary>
+    UnhandledCrashableCall = 257,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // STYLE WARNINGS (RF-W300 - RF-W349)
     // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>Two-argument call without named arguments — recommended but not required.</summary>
+    NamedArgumentRecommended = 258,
 
     /// <summary>Type name does not follow PascalCase convention.</summary>
     TypeNameNotPascalCase = 300,
@@ -163,8 +172,15 @@ public enum SemanticWarningCode
     /// <summary>Allocation in hot loop; consider hoisting.</summary>
     AllocationInLoop = 351,
 
-    /// <summary>Nested Data wrapping (Data(Data(x))) should be flattened.</summary>
-    NestedDataWrapping = 360,
+    /// <summary>
+    /// Implicit copy of a value whose type contains a non-trivially-copyable wrapper
+    /// (`T`, `Retained[T]`, `Tracked[T]`, ...). Each ownership wrapper has its
+    /// own verb (`steal` / `.retain()` / `.track()`) that must appear at every copy site
+    /// so reference-count bumps and ownership transfers are visible in the source.
+    /// Currently emitted as a warning during Phase 1 rollout; will be promoted to a
+    /// hard error once stdlib call sites are migrated.
+    /// </summary>
+    ImplicitWrapperCopy = 361,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // INTERNAL/DEBUG WARNINGS (RF-W400 - RF-W449)
@@ -177,19 +193,22 @@ public enum SemanticWarningCode
     UnknownExpressionType = 401,
 
     /// <summary>Unexpected declaration in statement context.</summary>
-    UnexpectedDeclaration = 402,
+    UnexpectedDeclaration = 402
 }
+/// <summary>
+/// Provides formatting helpers for <see cref="SemanticWarningCode"/>.
+/// </summary>
 
 public static class SemanticWarningCodeExtensions
 {
     extension(SemanticWarningCode code)
     {
         /// <summary>
-        /// Formats code as RF-Wnnn (e.g., RF-W001, RF-W100)
+        /// Formats code as RF-Wnnn (e.g., RF-W001, RF-W100) — matching the RF-S/RF-G convention.
         /// </summary>
         public string ToCodeString()
         {
-            return $"SW{(int)code:D3}";
+            return $"RF-W{(int)code:D3}";
         }
         /// <summary>
         /// Gets the warning category for grouping and documentation.
@@ -202,7 +221,7 @@ public static class SemanticWarningCodeExtensions
                 < 100 => "Unreachable Code",
                 < 150 => "Deprecated Feature",
                 < 200 => "Redundant Code",
-                < 250 => "Modification",
+                < 250 => "Mutation",
                 < 300 => "Pattern Matching",
                 < 350 => "Style",
                 < 400 => "Performance",

@@ -1,8 +1,0 @@
-# Suflae Blank - Unit type (no value)
-
-module Core
-
-import RazorForge/Core.Blank
-
-record Blank
-  pass

@@ -1,12 +1,21 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <SonarQubeTestProject>false</SonarQubeTestProject>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateProgramFile>false</GenerateProgramFile>
+    <Version>0.0.1-alpha</Version>
+    <PackAsTool>true</PackAsTool>
+    <!-- Canonical command name. `forge` is deliberately NOT used: it collides with
+         Foundry's forge (Ethereum toolchain) on developer machines. Users who want
+         `forge` can alias it locally; packages also ship an `rf` short alias. -->
+    <ToolCommandName>razorforge</ToolCommandName>
+    <PackageId>RazorForge</PackageId>
+    <Description>The RazorForge compiler toolchain.</Description>
   </PropertyGroup>
 
   <!-- Native library integration -->
@@ -23,26 +32,42 @@
 
   <!-- Include native libraries in output -->
   <ItemGroup>
-    <Content Include="native\build\bin\**\*.*" LinkBase="." CopyToOutputDirectory="PreserveNewest" Condition="Exists('native\build\bin')"/>
-    <Content Include="native\build\lib\**\*.*" LinkBase="." CopyToOutputDirectory="PreserveNewest" Condition="Exists('native\build\lib')"/>
+    <Content Include="native\build\bin\**\*.*" LinkBase="." CopyToOutputDirectory="PreserveNewest" PackageCopyToOutput="true" Condition="Exists('native\build\bin')"/>
+    <Content Include="native\build\lib\**\*.*" LinkBase="." CopyToOutputDirectory="PreserveNewest" PackageCopyToOutput="true" Condition="Exists('native\build\lib')"/>
+    <Content Include="Standard\**\*" LinkBase="Standard" CopyToOutputDirectory="PreserveNewest" PackageCopyToOutput="true"/>
     <Content Include="RazorForge-Wiki\.gitea\workflows\deploy.yaml" />
     <Content Include="Suflae-Wiki\.gitea\workflows\deploy.yaml" />
+    <Content Update="Standard\RazorForge\Core\Types\SipHash.rf">
+      <LinkBase>Standard\</LinkBase>
+    </Content>
+    <Content Update="Standard\RazorForge\Core\Types\HashHelper.rf">
+      <LinkBase>Standard\</LinkBase>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="native\**\*.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="DebugUtils.CSharp" Version="1.8.0"/>
+    <PackageReference Include="dotnet-framework-sonarscanner" Version="9.2.0" />
     <PackageReference Include="LLVMSharp" Version="20.1.2"/>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0"/>
     <PackageReference Include="xunit" Version="2.6.6"/>
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.6"/>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
+    <PackageReference Include="Tomlyn" Version="0.17.0"/>
     <PackageReference Include="OmniSharp.Extensions.LanguageServer" Version="0.19.9"/>
     <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0"/>
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="src\CodeGen\" />
+    <Folder Include="src\" />
     <Folder Include="tests\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Remove="Standard\RazorForge\Core\CSubsystem\CTypes.rf" />
+  </ItemGroup>
 </Project>

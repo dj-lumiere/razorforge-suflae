@@ -1,0 +1,56 @@
+s8: 42
+s16: 1000
+s32: 100000
+s64: 10000000000
+s128: 170141183460469231731687303715884105727
+s64 neg: -42
+u8: 255
+u16: 65535
+u32: 4000000000
+u64: 18000000000000000000
+u128: 340282366920938463463374607431768211455
+addr: 0x0000_0000_0000_1000
+n: 42
+n big: 123456789012345678901234567890
+n grouped: 1000000
+hex: 255
+hex mixed: 3735928559
+binary: 10
+sep: 1234567
+f16: 1.5
+f32: 3.14
+f64: 2.5
+f128: 1.25
+sci: 1500
+d32: 3.5
+d64: 2.5
+d128: 1.25
+dn: 3.14
+dn exact: 0.3
+j32: C32(real: 0, imag: 2)
+j64: C64(real: 0, imag: 3)
+j64 short: C64(real: 0, imag: 4)
+j128: C128(real: 0, imag: 5)
+jn: 0+6.0i
+true: true
+false: false
+text: hello
+char: A
+byte: \x78
+bytes: \x68\x69
+dur_w: 14d
+dur_d: 3d
+dur_h: 4h
+dur_m: 5m
+dur_s: 6s
+dur_ms: 7ms
+dur_us: 8us
+dur_ns: 9ns
+bs_b: 100B
+bs_kb: 7KiB 832B
+bs_kib: 8KiB
+bs_mb: 1MiB 929KiB 128B
+bs_mib: 2MiB
+bs_gb: 953MiB 690KiB 512B
+bs_gib: 1GiB
+DONE

@@ -1,0 +1,25 @@
+module Tests/Stdlib/NumericComplexApi
+import IO/Console
+
+# Exercises C32, C64, C128 — real+imag pairs.
+routine start()
+  var c32: C32 = C32(real: 1.0_f32, imag: 2.0_f32)
+  var c64: C64 = C64(real: 3.0_f64, imag: 4.0_f64)
+
+  show(f"c32: {c32}")
+  show(f"c64: {c64}")
+
+  show(f"c64 real: {c64.real()}")
+  show(f"c64 imag: {c64.imag()}")
+  show(f"c64 abs: {c64.abs()}")
+
+  # Arithmetic
+  show(f"c64 + c64: {c64 + c64}")
+  show(f"c64 * c64: {c64 * c64}")
+
+  # Equality
+  var c64b: C64 = C64(real: 3.0_f64, imag: 4.0_f64)
+  show(f"c64 == c64b: {c64 == c64b}")
+
+  show("DONE")
+  return

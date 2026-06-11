@@ -1,0 +1,62 @@
+module Tests/Stdlib/PropertyCollectionsApi
+import IO/Console
+
+# Property-style invariants asserted in-RF. Each line prints PASS or FAIL — the
+# snapshot oracle catches regressions even if a property's value happens to
+# match a wrong expected output by coincidence.
+
+routine check(name: Text, ok: Bool)
+  if ok
+    show(f"PASS {name}")
+  else
+    show(f"FAIL {name}")
+  return
+
+routine start()
+  # List: add+remove inverse
+  var l: List[S64] = [1, 2, 3]
+  l.add_last(value: 99)
+  discard l.remove_last!()
+  check(name: "list add_last + remove_last preserves size",
+        ok: l.count() == 3_u64)
+  check(name: "list add_last + remove_last preserves last",
+        ok: l[2] == 3_s64)
+
+  # Set: contains-after-add
+  var s: Set[S64] = {10, 20, 30}
+  discard s.add(value: 40)
+  check(name: "set contains added value",
+        ok: 40_s64 in s)
+
+  # Set: add idempotence
+  var size_before = s.count()
+  discard s.add(value: 40)
+  check(name: "set add duplicate is idempotent",
+        ok: s.count() == size_before)
+
+  # Set: remove inverse
+  discard s.remove(value: 40)
+  check(name: "set remove undoes add",
+        ok: 40_s64 notin s)
+
+  # Dict: add then get
+  var d: Dict[S64, S64] = {1: 10, 2: 20}
+  discard d.add(key: 3, value: 30)
+  check(name: "dict add then index", ok: d[3] == 30_s64)
+  check(name: "dict contains_key after add",
+        ok: 3_s64 in d)
+
+  # Dict: remove inverse
+  discard d.remove(key: 3)
+  check(name: "dict remove undoes add",
+        ok: 3_s64 notin d)
+
+  # Equality symmetry
+  var a: List[S64] = [1, 2, 3]
+  var b: List[S64] = [1, 2, 3]
+  check(name: "list equality reflexive", ok: a == a)
+  check(name: "list equality symmetric",
+        ok: (a == b) == (b == a))
+
+  show("DONE")
+  return

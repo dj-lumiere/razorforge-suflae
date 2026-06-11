@@ -1,19 +1,19 @@
-using SemanticAnalysis.Results;
-using Xunit;
+using System;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for operator protocol enforcement (RF-S411):
-/// - Types must follow required protocol to define operator methods
-/// - Correct protocol conformance allows operator definitions
-/// - Missing protocol conformance reports error
+/// Contains tests for operator protocol.
 /// </summary>
 public class OperatorProtocolTests
 {
     #region Correct Protocol Conformance
+    /// <summary>
+    /// Verifies semantic analysis behavior for addable with follows without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_AddableWithFollows_NoError()
@@ -21,20 +21,23 @@ public class OperatorProtocolTests
         string source = """
                         protocol Addable
                           @readonly
-                          routine Me.__add__(you: Me) -> Me
+                          routine Me.$add(you: Me) -> Me
 
                         record Vector obeys Addable
                           x: S32
                           y: S32
 
                         @readonly
-                        routine Vector.__add__(you: Vector) -> Vector
-                          return Vector(x: me.x + you.x, y: me.y + you.y)
+                        routine Vector.$add(you: Vector) -> Vector
+                          return Vector(x: me.x +% you.x, y: me.y +% you.y)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for equatable with follows without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_EquatableWithFollows_NoError()
@@ -42,20 +45,23 @@ public class OperatorProtocolTests
         string source = """
                         protocol Equatable
                           @readonly
-                          routine Me.__eq__(you: Me) -> Bool
+                          routine Me.$eq(you: Me) -> Bool
 
                         record Point obeys Equatable
                           x: S32
                           y: S32
 
                         @readonly
-                        routine Point.__eq__(you: Point) -> Bool
+                        routine Point.$eq(you: Point) -> Bool
                           return me.x == you.x and me.y == you.y
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for comparable with follows without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_ComparableWithFollows_NoError()
@@ -68,13 +74,13 @@ public class OperatorProtocolTests
 
                         protocol Comparable
                           @readonly
-                          routine Me.__cmp__(you: Me) -> ComparisonSign
+                          routine Me.$cmp(you: Me) -> ComparisonSign
 
                         record Score obeys Comparable
                           value: S32
 
                         @readonly
-                        routine Score.__cmp__(you: Score) -> ComparisonSign
+                        routine Score.$cmp(you: Score) -> ComparisonSign
                           if me.value < you.value
                             return ME_SMALL
                           if me.value > you.value
@@ -82,9 +88,12 @@ public class OperatorProtocolTests
                           return SAME
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for multiple operator protocols without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_MultipleOperatorProtocols_NoError()
@@ -92,32 +101,35 @@ public class OperatorProtocolTests
         string source = """
                         protocol Addable
                           @readonly
-                          routine Me.__add__(you: Me) -> Me
+                          routine Me.$add(you: Me) -> Me
 
                         protocol Subtractable
                           @readonly
-                          routine Me.__sub__(you: Me) -> Me
+                          routine Me.$sub(you: Me) -> Me
 
                         record Complex obeys Addable, Subtractable
                           real: F64
                           imag: F64
 
                         @readonly
-                        routine Complex.__add__(you: Complex) -> Complex
+                        routine Complex.$add(you: Complex) -> Complex
                           return Complex(real: me.real + you.real, imag: me.imag + you.imag)
 
                         @readonly
-                        routine Complex.__sub__(you: Complex) -> Complex
+                        routine Complex.$sub(you: Complex) -> Complex
                           return Complex(real: me.real - you.real, imag: me.imag - you.imag)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
     #endregion
 
     #region Missing Protocol Conformance
+    /// <summary>
+    /// Verifies semantic analysis behavior for add without addable and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_AddWithoutAddable_ReportsError()
@@ -125,26 +137,29 @@ public class OperatorProtocolTests
         string source = """
                         protocol Addable
                           @readonly
-                          routine Me.__add__(you: Me) -> Me
+                          routine Me.$add(you: Me) -> Me
 
                         record Vector
                           x: S32
                           y: S32
 
                         @readonly
-                        routine Vector.__add__(you: Vector) -> Vector
+                        routine Vector.$add(you: Vector) -> Vector
                           return Vector(x: me.x + you.x, y: me.y + you.y)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0,
             userMessage: "Expected error for missing Addable protocol");
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Message.Contains(value: "__add__",
+            filter: e => e.Message.Contains(value: "$add",
                 comparisonType: StringComparison.OrdinalIgnoreCase) &&
                 e.Message.Contains(value: "Addable",
                     comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for eq without equatable and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_EqWithoutEquatable_ReportsError()
@@ -152,26 +167,29 @@ public class OperatorProtocolTests
         string source = """
                         protocol Equatable
                           @readonly
-                          routine Me.__eq__(you: Me) -> Bool
+                          routine Me.$eq(you: Me) -> Bool
 
                         record Point
                           x: S32
                           y: S32
 
                         @readonly
-                        routine Point.__eq__(you: Point) -> Bool
+                        routine Point.$eq(you: Point) -> Bool
                           return me.x == you.x and me.y == you.y
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0,
             userMessage: "Expected error for missing Equatable protocol");
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Message.Contains(value: "__eq__",
+            filter: e => e.Message.Contains(value: "$eq",
                 comparisonType: StringComparison.OrdinalIgnoreCase) &&
                 e.Message.Contains(value: "Equatable",
                     comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for cmp without comparable and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_CmpWithoutComparable_ReportsError()
@@ -184,21 +202,21 @@ public class OperatorProtocolTests
 
                         protocol Comparable
                           @readonly
-                          routine Me.__cmp__(you: Me) -> ComparisonSign
+                          routine Me.$cmp(you: Me) -> ComparisonSign
 
                         record Score
                           value: S32
 
                         @readonly
-                        routine Score.__cmp__(you: Score) -> ComparisonSign
+                        routine Score.$cmp(you: Score) -> ComparisonSign
                           return SAME
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0,
             userMessage: "Expected error for missing Comparable protocol");
         Assert.Contains(collection: result.Errors,
-            filter: e => e.Message.Contains(value: "__cmp__",
+            filter: e => e.Message.Contains(value: "$cmp",
                 comparisonType: StringComparison.OrdinalIgnoreCase) &&
                 e.Message.Contains(value: "Comparable",
                     comparisonType: StringComparison.OrdinalIgnoreCase));
@@ -206,7 +224,94 @@ public class OperatorProtocolTests
 
     #endregion
 
+    #region Wrong Method Signature
+
+    /// <summary>
+    /// Verifies that implementing $eq with the wrong return type produces an error.
+    /// </summary>
+    [Fact]
+    public void Analyze_EqWithWrongReturnType_ReportsError()
+    {
+        string source = """
+                        protocol Equatable
+                          @readonly
+                          routine Me.$eq(you: Me) -> Bool
+
+                        record Point obeys Equatable
+                          x: S32
+                          y: S32
+
+                        @readonly
+                        routine Point.$eq(you: Point) -> S32
+                          return 0_s32
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.True(condition: result.Errors.Count > 0);
+    }
+
+    /// <summary>
+    /// Verifies that implementing $add with wrong parameter type produces an error.
+    /// </summary>
+    [Fact]
+    public void Analyze_AddWithWrongParamType_ReportsError()
+    {
+        string source = """
+                        protocol Addable
+                          @readonly
+                          routine Me.$add(you: Me) -> Me
+
+                        record Vector obeys Addable
+                          x: S32
+                          y: S32
+
+                        @readonly
+                        routine Vector.$add(you: S32) -> Vector
+                          return Vector(x: me.x, y: me.y)
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.True(condition: result.Errors.Count > 0);
+    }
+
+    #endregion
+
+    #region Mixed Operator and Normal Methods
+
+    /// <summary>
+    /// Verifies that a type can define both operator wired methods and regular business methods.
+    /// </summary>
+    [Fact]
+    public void Analyze_MixedOperatorAndNormalMethods_NoError()
+    {
+        string source = """
+                        protocol Addable
+                          @readonly
+                          routine Me.$add(you: Me) -> Me
+
+                        record Vector obeys Addable
+                          x: S32
+                          y: S32
+
+                        @readonly
+                        routine Vector.$add(you: Vector) -> Vector
+                          return Vector(x: me.x +% you.x, y: me.y +% you.y)
+
+                        @readonly
+                        routine Vector.magnitude_squared() -> S32
+                          return me.x * me.x +% me.y * me.y
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+
+    #endregion
+
     #region Non-Operator Methods (No Protocol Required)
+    /// <summary>
+    /// Verifies semantic analysis behavior for create without protocol without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_CreateWithoutProtocol_NoError()
@@ -216,13 +321,16 @@ public class OperatorProtocolTests
                           x: S32
                           y: S32
 
-                        routine Point.__create__() -> Point
+                        routine Point.$create() -> Point
                           return Point(x: 0, y: 0)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for destroy without protocol without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_DestroyWithoutProtocol_NoError()
@@ -231,14 +339,17 @@ public class OperatorProtocolTests
                         entity Resource
                           handle: S32
 
-                        routine Resource.__destroy__()
+                        dangerous routine Resource.$destroy()
                           pass
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for regular method without protocol without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_RegularMethodWithoutProtocol_NoError()
@@ -253,61 +364,10 @@ public class OperatorProtocolTests
                           return 0.0
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
     #endregion
 
-    #region Suflae Tests
-
-    [Fact]
-    public void AnalyzeSuflae_AddableWithFollows_NoError()
-    {
-        string source = """
-                        protocol Addable
-                          @readonly
-                          routine Me.__add__(you: Me) -> Me
-
-                        entity Vector obeys Addable
-                          x: Integer
-                          y: Integer
-
-                        @readonly
-                        routine Vector.__add__(you: Vector) -> Vector
-                          return Vector(x: me.x + you.x, y: me.y + you.y)
-                        """;
-
-        AnalysisResult result = AnalyzeSuflae(source: source);
-        Assert.Empty(collection: result.Errors);
-    }
-
-    [Fact]
-    public void AnalyzeSuflae_AddWithoutAddable_ReportsError()
-    {
-        string source = """
-                        protocol Addable
-                          @readonly
-                          routine Me.__add__(you: Me) -> Me
-
-                        record Vector
-                          x: Integer
-                          y: Integer
-
-                        @readonly
-                        routine Vector.__add__(you: Vector) -> Vector
-                          return Vector(x: me.x + you.x, y: me.y + you.y)
-                        """;
-
-        AnalysisResult result = AnalyzeSuflae(source: source);
-        Assert.True(condition: result.Errors.Count > 0,
-            userMessage: "Expected error for missing Addable protocol");
-        Assert.Contains(collection: result.Errors,
-            filter: e => e.Message.Contains(value: "__add__",
-                comparisonType: StringComparison.OrdinalIgnoreCase) &&
-                e.Message.Contains(value: "Addable",
-                    comparisonType: StringComparison.OrdinalIgnoreCase));
-    }
-
-    #endregion
 }

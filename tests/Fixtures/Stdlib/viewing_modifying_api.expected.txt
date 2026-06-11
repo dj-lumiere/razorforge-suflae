@@ -1,0 +1,7 @@
+v type: Viewing[Box]
+v.value via forward: 7
+m type: Modifying[Box]
+after modify.set(42): 42
+v2 type: Viewing[Box]
+v2.value: 100
+DONE

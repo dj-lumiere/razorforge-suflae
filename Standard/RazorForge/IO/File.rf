@@ -1,0 +1,172 @@
+module IO/File
+import IO/Errors
+
+# ============================================================================
+# FileMode choice
+# ============================================================================
+
+### Enumerates supported file access modes.
+### These modes control how `open!` requests access from the runtime.
+choice FileMode
+  ### Open for reading only; write operations are not permitted.
+  READ
+  ### Open for writing; existing file contents are replaced on open.
+  WRITE
+  ### Open for appending; all writes are added after existing contents.
+  APPEND
+
+# ============================================================================
+# FileHandle entity
+# ============================================================================
+
+### Represents an open file handle.
+### `FileHandle` supports explicit lifecycle control and the `using` protocol.
+entity FileHandle
+  ### Stores the native file descriptor.
+  secret fd: S32
+  ### Stores the mode used to open the file.
+  secret mode: FileMode
+
+# ============================================================================
+# Core operations
+# ============================================================================
+
+### Opens a file using the requested access mode.
+### The returned handle owns the underlying descriptor until `close()` or `$exit()` runs.
+### :param path: The path to open.
+### :param mode: The mode to use for the opened file.
+### :returns: The resulting `FileHandle` value.
+### :throws: May throw {IOError}.
+routine open!(path: Text, mode: FileMode = FileMode.READ) -> ?FileHandle
+  var cstr = CStr(from: path)
+  var mode_val = mode.S32()
+  var fd = rf_file_open(cstr, cstr.count().S32(), mode_val)
+  if fd == -1
+    throw IOError(description: f"Cannot open file: {path}")
+  return FileHandle(fd: fd, mode: mode)
+
+### Closes the file handle.
+### After closing, the handle should be treated as unusable.
+routine FileHandle.close()
+  rf_file_close(me.fd)
+  return
+
+### Reads the remaining file contents as text.
+### Decoding uses lossy UTF-8 conversion for invalid byte sequences.
+### :returns: The resulting `Text` value.
+routine FileHandle.read_all() -> ?Text
+  var ptr = rf_file_read_all(me.fd)
+  var len = rf_get_result_len()
+  var bytes = Bytes(ptr: ptr, count: len)
+  return bytes.decode_as_utf8_lossy()
+
+### Reads the next line as text.
+### The returned text is decoded from the underlying byte stream using lossy UTF-8 conversion.
+### :returns: The resulting `Text` value.
+routine FileHandle.read_line() -> ?Text
+  var ptr = rf_file_read_line(me.fd)
+  var len = rf_get_result_len()
+  var bytes = Bytes(ptr: ptr, count: len)
+  return bytes.decode_as_utf8_lossy()
+
+### Reads up to `count` bytes from the file.
+### Fewer bytes may be returned when end-of-file is reached first.
+### :param count: The maximum byte count to read.
+### :returns: The resulting `Bytes` value.
+routine FileHandle.read_bytes(count: U64) -> ?Bytes
+  var ptr = rf_file_read_bytes(me.fd, count)
+  var len = rf_get_result_len()
+  return Bytes(ptr: ptr, count: len)
+
+### Writes text followed by `end`.
+### This is the text-oriented write helper used by the convenience overloads.
+### :param value: The text to write.
+### :param end: The trailing text to append after `value`.
+routine FileHandle.write(value: Text, end: Text = "\n")
+  var cstr = CStr(from: value)
+  rf_file_write(me.fd, cstr.ptr, cstr.count())
+  var end_cstr = CStr(from: end)
+  rf_file_write(me.fd, end_cstr.ptr, end_cstr.count())
+  return
+
+### Writes a value using its textual representation, then appends `end`.
+### This is intended for formatted output rather than binary serialization.
+### :param value: The value to render and write.
+### :param end: The trailing text to append after `value`.
+routine FileHandle.write[T](value: T, end: Text = "\n")
+  var text = value.$represent()
+  me.write(text, end: end)
+  return
+
+### Writes raw bytes followed by optional trailing text.
+### Use this overload when the payload should not be formatted as text first.
+### :param value: The byte sequence to write.
+### :param end: The trailing text to append after `value`.
+routine FileHandle.write(value: Bytes, end: Text = "")
+  var val_cstr = CStr(from: value)
+  rf_file_write(me.fd, val_cstr.ptr, val_cstr.count())
+  if end.count() > 0
+    var end_cstr = CStr(from: end)
+    rf_file_write(me.fd, end_cstr.ptr, end_cstr.count())
+  return
+
+### Flushes buffered file output.
+### Call this when data must be pushed to the underlying file immediately.
+routine FileHandle.flush()
+  rf_file_flush(me.fd)
+  return
+
+### Returns whether the file handle is at end-of-file.
+### This reports the state of the underlying descriptor at the current cursor position.
+### :returns: The resulting `Bool` value.
+routine FileHandle.is_eof() -> Bool
+  return rf_file_is_eof(me.fd)
+
+# ============================================================================
+# Resource management — enables `using open!(path) as f`
+# ============================================================================
+
+### Enters a `using` scope with this file handle.
+### The handle itself is returned unchanged.
+routine FileHandle.$enter()
+  return
+
+### Closes the file handle when leaving a `using` scope.
+### This provides deterministic cleanup for scoped file access.
+routine FileHandle.$exit()
+  me.close()
+  return
+
+# ============================================================================
+# Convenience one-shot functions
+# ============================================================================
+
+### Opens a file, reads all remaining text, and closes it.
+### This is the simplest one-shot helper for whole-file text reads.
+### :param path: The path to read.
+### :returns: The resulting `Text` value.
+routine read_all!(path: Text) -> ?Text
+  var file = open!(path, mode: FileMode.READ)
+  var content = file.read_all()
+  file.close()
+  return content
+
+### Replaces a file with `content`.
+### Existing contents are discarded before the new text is written.
+### :param path: The path to write.
+### :param content: The text to write.
+routine write_all!(path: Text, content: Text)
+  var file = open!(path, mode: FileMode.WRITE)
+  file.write(content, end: "")
+  file.close()
+  return
+
+### Appends `content` to a file.
+### The file is created according to the runtime's append-open behavior if needed.
+### :param path: The path to append to.
+### :param content: The text to append.
+routine append_all!(path: Text, content: Text)
+  var file = open!(path, mode: FileMode.APPEND)
+  file.write(content, end: "")
+  file.close()
+  return

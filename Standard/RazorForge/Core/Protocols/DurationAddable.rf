@@ -1,0 +1,11 @@
+module Core
+
+### Represents the protocol for shifting a value forward by a duration.
+### `DurationAddable` is used by temporal types such as moments or schedules
+### that can move ahead in time by a concrete `Duration`.
+protocol DurationAddable
+  ### Returns this value shifted forward by `you`.
+  ### :param you: The duration to add.
+  ### :returns: The resulting `Me` value.
+  @readonly
+  routine Me.$add(you: Duration) -> ?Me

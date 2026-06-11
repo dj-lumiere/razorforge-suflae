@@ -13,22 +13,22 @@ typedef int8_t rf_S8;
 typedef int16_t rf_S16;
 typedef int32_t rf_S32;
 typedef int64_t rf_S64;
-// typedef __int128_t rf_S128; // Uncomment if compiler supports it
+typedef __int128 rf_S128;
 
 typedef uint8_t rf_U8;
 typedef uint16_t rf_U16;
 typedef uint32_t rf_U32;
 typedef uint64_t rf_U64;
-// typedef __uint128_t rf_U128; // Uncomment if compiler supports it
+typedef unsigned __int128 rf_U128;
 
 // ==========================================
 // 2. System & Data Types
 // ==========================================
 typedef intptr_t rf_SAddr;   // Signed Pointer-Sized
-typedef uintptr_t rf_UAddr;  // Unsigned Pointer-Sized
+typedef uintptr_t rf_address;  // Unsigned Pointer-Sized
 
 typedef uint8_t rf_Byte;      // 'Byte' is raw 8-bit data
-typedef uint32_t rf_Letter;   // 'Letter' is 32-bit Unicode codepoint
+typedef uint32_t rf_Character;   // 'Character' is 32-bit Unicode codepoint
 
 typedef bool rf_Bool;         // Standard boolean
 
@@ -36,7 +36,6 @@ typedef bool rf_Bool;         // Standard boolean
 // 3. C Interop Types (Platform Dependent)
 // ==========================================
 // These map to the C compiler's native types.
-typedef void rf_CVoid;
 #define rf_CNull    NULL
 
 typedef char rf_CChar;              // Ambiguous sign
@@ -59,7 +58,7 @@ typedef wchar_t rf_CWChar;
 // Variant (tagged union)
 typedef struct rf_Variant {
     rf_U32 tag;
-    rf_UAddr data;
+    rf_address data;
 } rf_Variant;
 
 // Other types

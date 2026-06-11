@@ -1,6 +1,13 @@
-# Addable - Protocol for types that support addition (+)
 module Core
 
+### Represents the protocol for non-mutating addition.
+### Types that obey `Addable` support a sum operation that produces a new value
+### and leaves both operands observationally unchanged.
 protocol Addable
+  ### Returns the sum of this value and `you`.
+  ### Implementations should preserve the invariants of the conforming type and
+  ### leave both operands unchanged.
+  ### :param you: The other value to add.
+  ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.__add__!(you: Me) -> Me
+  routine Me.$add!(you: Me) -> ?Me

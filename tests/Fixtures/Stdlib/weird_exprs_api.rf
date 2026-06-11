@@ -1,0 +1,86 @@
+module Tests/Stdlib/WeirdExprsApi
+
+# Homage to rustc's tests/ui/expr/weird-exprs.rs: expressions that are
+# pathological but LEGAL. Every routine here stresses a parser/SA/codegen
+# corner that once broke (or could break) — if this file compiles and its
+# output is stable, the expression grammar's dark corners are holding.
+
+import IO/Console
+
+# punch_card: parenthesization torture — depth and redundancy
+routine punch_card() -> S64
+  return (((((1))))) + ((((2)))) + (((3))) + ((4)) + (5)
+
+# clamp_chain: @positional chains where every call re-bounds the last
+routine clamp_chain(n: S64) -> S64
+  return n.clamp(0, 100).clamp(5, 40).clamp(10, 39)
+
+# iif: a conditional expression whose branches are themselves weird calls
+routine iif(x: Bool) -> S64
+  return if x then punch_card() else clamp_chain(n: 200)
+
+# truth: negation stacked until it means something again
+routine truth() -> Bool
+  return not not not false
+
+# widen: $create conversion ladder across every signed width
+routine widen() -> S128
+  return S128(S64(S32(S16(S8(1)))))
+
+# bool_set: a Set[Bool] fed by its own insertion results
+routine bool_set() -> U64
+  var seen = Set[Bool]()
+  discard seen.add(value: seen.add(value: true))
+  discard seen.add(value: seen.add(value: false))
+  return seen.count()
+
+# op_zoo: logical shifts, masks, and wrapping arithmetic in one expression
+routine op_zoo(n: U64) -> U64
+  return (((n <<< 2) & 0xFF) | (n >>> 1)) +% (n *% 3)
+
+# chained_cmp: three-way chained comparison as a single expression
+routine chained_cmp(x: S64) -> Bool
+  return 0 <= x <= 10
+
+# back_to_front: BackIndex desugaring mixed with forward indexing
+routine back_to_front() -> S64
+  var items = List[S64]()
+  items.add_last(10)
+  items.add_last(20)
+  items.add_last(30)
+  return items[0] + items[^1] + items[^3]
+
+# zombie_negation: explicit-generic intrinsic with a bare literal inside a
+# failable routine — the try_ variant must still see a concrete S8
+routine zombie_negation!(x: S8) -> S8
+  if x == -128_s8
+    throw IntegerOverflowError()
+  return sub[S8](a: 0, b: x)
+
+# loop_the_loop: bare loop with break, counting by wrapping increments
+routine loop_the_loop() -> S64
+  var spins = 0_s64
+  loop
+    spins +%= 1
+    if spins == 3
+      break
+  return spins
+
+routine start()
+  show(f"punch_card: {punch_card()}")
+  show(f"clamp_chain: {clamp_chain(n: 42)}")
+  show(f"iif(true): {iif(x: true)}")
+  show(f"iif(false): {iif(x: false)}")
+  show(f"truth: {truth()}")
+  show(f"widen: {widen()}")
+  show(f"bool_set: {bool_set()}")
+  show(f"op_zoo: {op_zoo(n: 5_u64)}")
+  show(f"chained_cmp(5): {chained_cmp(x: 5)}")
+  show(f"chained_cmp(11): {chained_cmp(x: 11)}")
+  show(f"back_to_front: {back_to_front()}")
+  var z = try_zombie_negation(x: 5_s8)
+  when z
+    is None => show("zombie: absent")
+    else v => show(f"zombie: {v}")
+  show(f"loop_the_loop: {loop_the_loop()}")
+  return

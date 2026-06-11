@@ -1,0 +1,12 @@
+S64->S8 of 100: 100
+S64->S32 of 12345: 12345
+F64->S64 of 3.7: 3
+F64->S64 of -3.7: -3
+S64->F64 of 42: 42
+U64->S64 of 42: 42
+S64->U64 of 42: 42
+parse '42': 42
+parse 'not a number': none
+  parse 42 -> 42
+  parse junk -> None (expected)
+DONE

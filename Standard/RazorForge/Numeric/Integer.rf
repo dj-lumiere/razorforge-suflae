@@ -1,134 +1,232 @@
 module Numerics
 
-# RazorForge Integer - Arbitrary precision integer type
-# Powered by LibTomMath (https://github.com/libtom/libtommath)
-# License: Public Domain (Unlicense)
-
-import Text.Text
-
-# Opaque handle to LibTomMath mp_int structure
-# The actual memory is managed by the native runtime
-entity Integer obeys Integral, Divisible, Negatable, Ordered
-  secret handle: UAddr
+### Represents an arbitrary-precision signed integer backed by LibTomMath.
+### `Integer` is the unbounded integer type for workloads where fixed-width overflow is not acceptable.
+### It preserves exact integer semantics across arithmetic, parsing, and formatting operations.
+###
+### Layout:
+###   handle: CPtr                                  — LibTomMath bigint handle
+###   ctrl:   Hijacked[ImmutableSharedController]   — atomic strong-count cell (or null)
+###
+### `Integer` is a record (value semantics from the user's view) backed by an
+### atomic-refcounted LibTomMath handle. Copying bumps the underlying refcount
+### via SeqCst atomic; the last drop frees the handle + controller.
+### :see: {Decimal}, {Complex}, {Numeric-Types}
+record Integer obeys Assignable, Integral, Divisible, Negatable, Ordered, Hashable, FastHashable
+  ### Stores the native big-integer handle managed by the runtime.
+  secret handle: CPtr
+  ### Atomic strong-count controller (null for transient stack values is not
+  ### permitted — every Integer either owns or shares a live handle).
+  secret ctrl: Hijacked[ImmutableSharedController]
 
 # ============================================================================
 # Lifecycle Management
 # ============================================================================
 
-# Create a new Integer initialized to zero
-routine Integer.__create__() -> Integer
-  var int = Integer(handle: rf_bigint_new())
+### Creates the integer value `0`.
+### Use this overload when the surrounding context needs an explicit `Integer`
+### instead of a fixed-width literal.
+### :returns: The resulting `Integer` value.
+routine Integer.$create() -> ?Integer
+  var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   return int
 
-# Create Integer from S64
-routine Integer.__create__(value: S64) -> Integer
-  var int = Integer(handle: rf_bigint_new())
-  rf_bigint_set_i64(int.handle, value)
+### Creates an `Integer` from a signed 64-bit source value.
+### The numeric payload is copied into the arbitrary-precision runtime handle,
+### so the result is no longer limited by `S64` range after construction.
+### :param value: The initial signed value.
+### :returns: The resulting `Integer` value.
+routine Integer.$create(value: S64) -> ?Integer
+  var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  rf_bigint_set_i64(handle: int.handle, value: value)
   return int
 
-# Create Integer from U64
-routine Integer.__create__(value: U64) -> Integer
-  var int = Integer(handle: rf_bigint_new())
-  rf_bigint_set_u64(int.handle, value)
+### Creates an `Integer` from an unsigned 64-bit source value.
+### This is the direct widening entry point for exact conversion from native
+### unsigned integer data.
+### :param value: The initial unsigned value.
+### :returns: The resulting `Integer` value.
+routine Integer.$create(value: U64) -> ?Integer
+  var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  rf_bigint_set_u64(handle: int.handle, value: value)
   return int
 
-# Create Integer from string with base (2-36)
-routine Integer.__create__!(text: Text, radix: S32 = 10) -> Integer
-  var int = Integer(handle: rf_bigint_new())
+### Parses an integer from text using the requested radix.
+### The input may include the sign and digits accepted by the selected base.
+### :param text: The textual integer representation.
+### :param radix: The numeric base to use.
+### :returns: The resulting `Integer` value.
+### :throws: {ValueError} if `text` is not a valid integer in `radix`.
+routine Integer.$create!(text: Text, radix: S32 = 10) -> Integer
+  var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   var result = rf_bigint_set_str(int.handle, text.to_cstr(), radix)
   if result != 0
     throw ValueError(f"Invalid integer string: {text}")
   return int
 
-# Destructor - frees the LibTomMath structure
-routine Integer.__destroy__()
-  rf_bigint_clear(me.handle)
-  return
-
-# Copy creator
-routine Integer.__copy__(other: Integer) -> Integer
-  var int = Integer(handle: rf_bigint_new())
-  rf_bigint_copy(int.handle, other.handle)
+### Materializes an `Integer` from a tokenizer-validated decimal digit string.
+### Used by literal lowering for `n` literals (e.g. `123n`); the input is guaranteed
+### valid by the tokenizer, so this is infallible (unlike the public `$create!(text:)`).
+### :param text: The decimal digit string (no suffix, no separators).
+### :returns: The resulting `Integer` value.
+common routine Integer.$from_literal(text: Text) -> Integer
+  var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  discard rf_bigint_set_str(int.handle, text.to_cstr(), 10)
   return int
+
+### Returns a copy of this value with the underlying refcount bumped.
+### The handle is shared; no big-integer data is copied. For values with a null
+### controller (transient zero) the copy is a bitwise duplicate with no atomic op.
+### :returns: The resulting `Integer` value.
+@[readonly, inline]
+routine Integer.$copy() -> Integer
+  danger!
+    if not me.ctrl.is_none()
+      me.ctrl.as_entity().increase_strong_count()
+  return Integer(handle: me.handle, ctrl: me.ctrl)
+
+### Releases this value's reference. Frees the handle + controller when this
+### was the last live ref. No-op when `ctrl` is null.
+dangerous routine Integer.$destroy()
+  if me.ctrl.is_none()
+    return
+  var prev = me.ctrl.as_entity().decrease_strong_count()
+  if prev <= 1_u64
+    rf_bigint_clear(me.handle)
+    me.ctrl.invalidate()
+  return
 
 # ============================================================================
 # Arithmetic Operations
 # ============================================================================
 
-routine Integer.__add__(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new())
+### Adds `other` to this value using exact integer arithmetic.
+### No overflow occurs; the runtime grows the backing storage as needed.
+### :param other: The value to add.
+### :returns: The resulting `Integer` value.
+@readonly
+routine Integer.$add(other: Integer) -> Integer
+  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_add(result.handle, me.handle, other.handle)
   return result
 
-routine Integer.__sub__(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new())
+### Subtracts `other` from this value using exact integer arithmetic.
+### :param other: The value to subtract.
+### :returns: The resulting `Integer` value.
+@readonly
+routine Integer.$sub(other: Integer) -> Integer
+  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_sub(result.handle, me.handle, other.handle)
   return result
 
-routine Integer.__mul__(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new())
+### Multiplies this value by `other` using exact integer arithmetic.
+### :param other: The value to multiply by.
+### :returns: The resulting `Integer` value.
+@readonly
+routine Integer.$mul(other: Integer) -> Integer
+  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_mul(result.handle, me.handle, other.handle)
   return result
 
-routine Integer.__floordiv__(other: Integer) -> Integer
-  var quotient = Integer(handle: rf_bigint_new())
-  var remainder = Integer(handle: rf_bigint_new())
+### Divides this value by `other` and returns the Euclidean quotient.
+### The remainder is computed internally and discarded.
+### :param other: The non-zero divisor.
+### :returns: The integer quotient.
+@readonly
+routine Integer.$floordiv(other: Integer) -> Integer
+  var quotient = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  var remainder = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_div(quotient.handle, remainder.handle, me.handle, other.handle)
-  rf_bigint_clear(remainder.handle)
   return quotient
 
-routine Integer.__rem__(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new())
+### Divides this value by `other` and returns the Euclidean remainder.
+### :param other: The non-zero divisor.
+### :returns: The remainder value associated with `//`.
+@readonly
+routine Integer.$mod(other: Integer) -> Integer
+  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_mod(result.handle, me.handle, other.handle)
   return result
 
-routine Integer.__neg__() -> Integer
-  var result = Integer(handle: rf_bigint_new())
-  rf_bigint_neg(result.handle, me.handle)
+### Returns the additive inverse of this value.
+### :returns: The resulting `Integer` value.
+@readonly
+routine Integer.$neg() -> Integer
+  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  rf_bigint_neg(result: result.handle, a: me.handle)
   return result
 
 # ============================================================================
 # Comparison Operations
 # ============================================================================
 
-routine Integer.__eq__(you: Integer) -> Bool
-  return rf_bigint_cmp(me.handle, other.handle) == 0
+### Returns `true` when both values represent the same mathematical integer.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Integer.$eq(you: Integer) -> Bool
+  return rf_bigint_cmp(a: me.handle, b: you.handle) == 0
 
-routine Integer.__cmp__(you: Integer) -> CompareSign
-  var comparison_value = rf_bigint_cmp(me.handle, other.handle)
+### Compares this value with `you` using numeric ordering.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
+@readonly
+routine Integer.$cmp(you: Integer) -> ComparisonSign
+  var comparison_value = rf_bigint_cmp(a: me.handle, b: you.handle)
   if comparison_value < 0
-    return LEFT_SMALL
+    return ME_SMALL
   elseif comparison_value > 0
-    return RIGHT_SMALL
+    return ME_LARGE
   else
-    return EQUAL
+    return SAME
 
 # ============================================================================
 # Bitwise Operations
 # ============================================================================
 
-routine Integer.__and__(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new())
+### Computes the bitwise AND of this value and `other`.
+### :param other: The other operand.
+### :returns: The resulting `Integer` value.
+@readonly
+routine Integer.$bitand(other: Integer) -> Integer
+  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_and(result.handle, me.handle, other.handle)
   return result
 
-routine Integer.__or__(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new())
+### Computes the bitwise OR of this value and `other`.
+### :param other: The other operand.
+### :returns: The resulting `Integer` value.
+@readonly
+routine Integer.$bitor(other: Integer) -> Integer
+  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_or(result.handle, me.handle, other.handle)
   return result
 
-routine Integer.__xor__(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new())
+### Computes the bitwise XOR of this value and `other`.
+### :param other: The other operand.
+### :returns: The resulting `Integer` value.
+@readonly
+routine Integer.$bitxor(other: Integer) -> Integer
+  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_xor(result.handle, me.handle, other.handle)
   return result
 
-routine Integer.__shl__(bits: S32) -> Integer
-  var result = Integer(handle: rf_bigint_new())
+### Shifts this value left by `bits` positions.
+### Positive left shifts are equivalent to multiplication by powers of two.
+### :param bits: The number of bit positions to shift.
+### :returns: The resulting `Integer` value.
+@readonly
+routine Integer.$shl(bits: S32) -> Integer
+  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_shl(result.handle, me.handle, bits)
   return result
 
-routine Integer.__shr__(bits: S32) -> Integer
-  var result = Integer(handle: rf_bigint_new())
+### Shifts this value right by `bits` positions.
+### :param bits: The number of bit positions to shift.
+### :returns: The resulting `Integer` value.
+@readonly
+routine Integer.$shr(bits: S32) -> Integer
+  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_shr(result.handle, me.handle, bits)
   return result
 
@@ -136,28 +234,47 @@ routine Integer.__shr__(bits: S32) -> Integer
 # Math Operations
 # ============================================================================
 
+### Returns the absolute magnitude of this value.
+### :returns: The resulting `Integer` value.
+@readonly
 routine Integer.abs() -> Integer
-  var result = Integer(handle: rf_bigint_new())
-  rf_bigint_abs(result.handle, me.handle)
+  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  rf_bigint_abs(result: result.handle, a: me.handle)
   return result
 
-routine Integer.__pow__(exp: U32) -> Integer
-  var result = Integer(handle: rf_bigint_new())
+### Raises this value to a non-negative integer exponent.
+### :param exp: The exponent value.
+### :returns: The resulting `Integer` value.
+@readonly
+routine Integer.$pow(exp: U32) -> Integer
+  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_pow(result.handle, me.handle, exp)
   return result
 
+### Returns the integer square root of this value.
+### The result is the greatest integer whose square does not exceed the input.
+### :returns: The resulting `Integer` value.
+@readonly
 routine Integer.sqrt() -> Integer
-  var result = Integer(handle: rf_bigint_new())
-  rf_bigint_sqrt(result.handle, me.handle)
+  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
+  rf_bigint_sqrt(result: result.handle, a: me.handle)
   return result
 
+### Computes the greatest common divisor of this value and `other`.
+### :param other: The other operand.
+### :returns: The resulting `Integer` value.
+@readonly
 routine Integer.gcd(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new())
+  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_gcd(result.handle, me.handle, other.handle)
   return result
 
+### Computes the least common multiple of this value and `other`.
+### :param other: The other operand.
+### :returns: The resulting `Integer` value.
+@readonly
 routine Integer.lcm(other: Integer) -> Integer
-  var result = Integer(handle: rf_bigint_new())
+  var result = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_lcm(result.handle, me.handle, other.handle)
   return result
 
@@ -165,15 +282,27 @@ routine Integer.lcm(other: Integer) -> Integer
 # Utility Methods
 # ============================================================================
 
+### Returns `true` when this value is exactly zero.
+### :returns: The resulting `Bool` value.
+@readonly
 routine Integer.is_zero() -> Bool
   return rf_bigint_is_zero(me.handle) != 0
 
+### Returns `true` when this value is less than zero.
+### :returns: The resulting `Bool` value.
+@readonly
 routine Integer.is_negative() -> Bool
   return rf_bigint_is_neg(me.handle) != 0
 
+### Returns `true` when this value is greater than zero.
+### :returns: The resulting `Bool` value.
+@readonly
 routine Integer.is_positive() -> Bool
   return not me.is_zero() and not me.is_negative()
 
+### Returns the sign of this value as `-1`, `0`, or `1`.
+### :returns: The resulting `S32` value.
+@readonly
 routine Integer.signum() -> S32
   return when
     me.is_positive() => 1
@@ -184,65 +313,121 @@ routine Integer.signum() -> S32
 # Conversions
 # ============================================================================
 
-# Convert to S64 (may overflow/truncate for large values)
-routine S64.__create__!(from: Integer) -> S64
+### Converts an arbitrary-precision integer to `S64`.
+### This conversion is intended for values that are known to fit the target
+### range.
+### :param from: The source value to convert.
+### :returns: The resulting `S64` value.
+routine S64.$create!(from: Integer) -> S64
   return rf_bigint_get_i64(from.handle)
 
-# Convert to U64 (may overflow/truncate for large values)
-routine U64.__create__!(from: Integer) -> U64
+### Converts an arbitrary-precision integer to `U64`.
+### This conversion is intended for non-negative values that fit the target
+### range.
+### :param from: The source value to convert.
+### :returns: The resulting `U64` value.
+routine U64.$create!(from: Integer) -> U64
   return rf_bigint_get_u64(from.handle)
 
-# Convert to string with specified radix (2-36)
-routine Integer.to_text(radix: S32 = 10) -> Text
-  var CStr = rf_bigint_get_str(me.handle, radix)
-  var text = Text.from_cstr(CStr)
-  rf_free(CStr)
+### Formats this value as base-10 text. Standard `$represent` shape (no args)
+### so the f-string machinery can dispatch without supplying a radix.
+### :returns: The resulting `Text` value.
+@readonly
+routine Integer.$represent() -> ?Text
+  return me.represent_radix(radix: 10_s32)
+
+### Formats this value as text in the requested radix.
+### Use when base-10 is not sufficient (e.g. hex/binary debugging).
+### :param radix: The numeric base to use.
+### :returns: The resulting `Text` value.
+@readonly
+routine Integer.represent_radix(radix: S32) -> Text
+  var CStr = rf_bigint_get_str(handle: me.handle, radix: radix)
+  var text = Text(from: CStr)
+  rf_invalidate(pointer_to_int[Byte, Address](CStr.ptr))
   return text
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns an xxHash64-based hash of this value.
+### Hashes the canonical base-10 representation, so equal integers hash equally.
+### :returns: The 64-bit hash.
+@readonly
+routine Integer.$fast_hash() -> U64
+  return me.represent_radix(radix: 10_s32).$fast_hash()
+
+### Returns a SipHash-2-4 keyed hash of this value.
+### Hashes the canonical base-10 representation under the supplied key pair.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: The 64-bit keyed hash.
+@readonly
+routine Integer.$hash(k0: U64, k1: U64) -> U64
+  return me.represent_radix(radix: 10_s32).$hash(k0: k0, k1: k1)
 
 # ============================================================================
 # Factory Methods
 # ============================================================================
 
-# Parse from decimal string - returns None on failure
-routine Integer.__create__!(text: Text) -> Integer
-  var int = Integer(handle: rf_bigint_new())
+### Parses a base-10 integer from text.
+### This is the canonical text-to-`Integer` conversion used by generic parsing
+### surfaces.
+### :param text: The text to parse.
+### :returns: The resulting `Integer` value.
+### :throws: May throw {ParseError}.
+routine Integer.$create!(text: Text) -> Integer
+  var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   var result = rf_bigint_set_str(int.handle, text.to_cstr(), 10)
   if result != 0
-    rf_bigint_clear(int.handle)
     throw ParseError("Invalid integer form")
   return int
 
-# Parse from binary string (without 0b prefix) - returns None on failure
-routine Integer.from_binary!(text: Text) -> Integer
-  var int = Integer(handle: rf_bigint_new())
+### Parses a base-2 integer from text.
+### :param text: The binary digits to parse.
+### :returns: The resulting `Integer` value.
+### :throws: May throw {ParseError}.
+@readonly
+common routine Integer.from_binary!(text: Text) -> Integer
+  var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   var result = rf_bigint_set_str(int.handle, text.to_cstr(), 2)
   if result != 0
-    rf_bigint_clear(int.handle)
     throw ParseError("Invalid integer form")
   return int
 
-# Parse from hexadecimal string (without 0x prefix) - returns None on failure
-routine Integer.from_hex!(text: Text) -> Integer
-  var int = Integer(handle: rf_bigint_new())
+### Parses a base-16 integer from text.
+### :param text: The hexadecimal digits to parse.
+### :returns: The resulting `Integer` value.
+### :throws: May throw {ParseError}.
+@readonly
+common routine Integer.from_hex!(text: Text) -> Integer
+  var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   var result = rf_bigint_set_str(int.handle, text.to_cstr(), 16)
   if result != 0
-    rf_bigint_clear(int.handle)
     throw ParseError("Invalid integer form")
   return int
 
-# Zero constant
-routine Integer.zero() -> Integer
+### Returns the additive identity for `Integer`.
+### :returns: The resulting `Integer` value.
+@readonly
+common routine Integer.zero() -> Integer
   return Integer(0_s64)
 
-# One constant
-routine Integer.one() -> Integer
+### Returns the multiplicative identity for `Integer`.
+### :returns: The resulting `Integer` value.
+@readonly
+common routine Integer.one() -> Integer
   return Integer(1_s64)
 
 # ============================================================================
 # Examples
 # ============================================================================
 
-# Factorial of large numbers
+### Computes `n!` using iterative multiplication.
+### This routine is included as a worked example for larger integer workloads.
+### :param n: The non-negative input value.
+### :returns: The resulting `Integer` value.
 routine factorial(n: Integer) -> Integer
   if n.is_zero() or n == Integer.one()
     return Integer.one()
@@ -256,7 +441,10 @@ routine factorial(n: Integer) -> Integer
 
   return result
 
-# Fibonacci with arbitrary precision
+### Computes the `n`th Fibonacci number using arbitrary-precision integers.
+### This routine demonstrates growth beyond fixed-width integer range.
+### :param n: The zero-based sequence index.
+### :returns: The resulting `Integer` value.
 routine fibonacci_big(n: S64) -> Integer
   if n <= 1
     return Integer(n)

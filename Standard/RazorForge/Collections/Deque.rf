@@ -1,279 +1,449 @@
-# RazorForge Deque[T] - Double-ended queue (growable ring buffer)
-# Entity type with heap allocation
-# O(1) add/remove at both ends, O(1) random access
-#
-# Usage:
-#   var queue = Deque[Task]()
-#   queue.add_last(task1)
-#   queue.add_first(task2)
-#   var front = queue.remove_first!()
-#   var back = queue.remove_last!()
-
 module Collections
 
-entity Deque[T]
-  secret data: Snatched[U8]    # Circular buffer (raw storage for T elements)
-  secret start: UAddr          # Index of first element
-  secret count: UAddr          # Number of elements
-  secret capacity: UAddr       # Total allocated slots
+import BuilderService
+
+### A growable double-ended queue backed by a power-of-two circular buffer.
+###
+### `Deque[T]` supports O(1) amortized insertion and removal at both the front
+### and the back. A bitmask wraps the buffer indices instead of a modulo, so
+### the capacity is always kept at a power of two. Random access by index is O(1)
+### after resolving the physical slot from the logical position.
+###
+### **When to use**
+### - You need fast insertion and removal at both ends.
+### - You need a queue (FIFO) or a stack (LIFO) — or both at once.
+### - You need O(1) rotation without copying elements.
+### - Use {List[T]} instead when you only ever add or remove at the back.
+### - Use {PriorityQueue[TPriority, TElement]} instead when removal order depends on priority.
+###
+### **Complexity**
+### | Operation | Time |
+### |---|---|
+### | `add_last` / `add_first` | O(1) amortized |
+### | `remove_last!` / `remove_first!` | O(1) |
+### | `first!` / `last!` | O(1) |
+### | `$getitem!` / `$setitem!` | O(1) |
+### | `rotate_left` / `rotate_right` | O(1) |
+### | `$contains` | O(n) |
+### | Iteration | O(n) |
+###
+### :typeparam T: The element type stored in the deque.
+### :see: {List[T]} for a simpler growable sequence optimized for back-only append.
+### :see: {PriorityQueue[TPriority, TElement]} for priority-ordered removal.
+entity Deque[T] obeys Iterable[T], MutableIndexable[T]
+relates DequeEmitter[T] as Iter
+  ### Stores the circular buffer backing the deque.
+  ### Elements are laid out in allocation order and interpreted through
+  ### `start` and `count` rather than by physical position alone.
+  secret data: Hijacked[T]
+  ### Stores the physical index of the logical front element.
+  secret start: U64
+  ### Stores the number of live elements currently in the deque.
+  secret count: U64
+  ### Stores the number of element slots allocated in the circular buffer.
+  ### Capacity is always kept as a power of two so index wrapping can use a mask.
+  secret capacity: U64
 
 # ============================================================================
 # Creators
 # ============================================================================
 
-routine Deque[T].__create__() -> Deque[T]
+### Creates an empty deque with no allocated storage.
+### The backing buffer is acquired lazily on first insertion.
+routine Deque[T].$create() -> ?Deque[T]
   return Deque[T](
-    data: snatched_none[U8](),
-    start: 0uaddr,
-    count: 0uaddr,
-    capacity: 0uaddr
+    data: hijacked_none[U8](),
+    start: 0u64,
+    count: 0u64,
+    capacity: 0u64
   )
 
-routine Deque[T].__create__(capacity: UAddr) -> Deque[T]
-  var byte_size = capacity * data_size[T]()
-  return Deque[T](
-    data: Snatched[U8](address: rf_alloc(byte_size)),
-    start: 0uaddr,
-    count: 0uaddr,
-    capacity: capacity
-  )
+### Creates an empty deque with storage pre-allocated for at least `capacity` elements.
+### The requested capacity is rounded up to the next power of two so index wrapping
+### can use a bitmask.
+### :param capacity: The minimum number of elements to reserve space for.
+routine Deque[T].$create(capacity: U64) -> ?Deque[T]
+  var actual = 1u64
+  while actual < capacity
+    actual = actual *% 2u64
+  var byte_size = T.data_size() * actual
+  danger!
+    return Deque[T](
+      data: hijacked_from[T](rf_allocate_dynamic_uninit(byte_size)),
+      start: 0u64,
+      count: 0u64,
+      capacity: actual
+    )
 
 # ============================================================================
 # Internal Helpers
 # ============================================================================
 
-routine Deque[T].wrap_index(index: UAddr) -> UAddr
-  # Wrap index around the circular buffer
-  if me.capacity == 0uaddr
-    return 0uaddr
-  return index % me.capacity
+### Maps a physical index into the range [0, capacity) using a power-of-two bitmask.
+### :param index: The raw physical index to normalize.
+### :returns: The equivalent in-range slot index for the current buffer.
+@readonly
+routine Deque[T].wrap_index(index: U64) -> U64
+  # Capacity is always a power of 2 — use bitmask instead of modulo.
+  return index & (me.capacity -% 1u64)
 
-routine Deque[T].physical_index(logical_index: UAddr) -> UAddr
+### Converts a logical position (0 = front) to the physical slot in the ring buffer.
+### :param logical_index: The zero-based distance from the logical front.
+### :returns: The physical slot index that currently holds that element.
+@readonly
+routine Deque[T].physical_index(logical_index: U64) -> U64
   # Convert logical index (0 = front) to physical index in buffer
-  return me.wrap_index(me.start + logical_index)
+  return me.wrap_index(me.start +% logical_index)
 
-routine Deque[T].read_at(physical_idx: UAddr) -> T
-  var byte_offset = physical_idx * data_size[T]()
-  return me.data.read[T](byte_offset)
+### Reads the element from physical slot `physical_idx` without bounds checking.
+### :param physical_idx: The slot index inside the backing buffer.
+### :returns: The element stored in that slot.
+@readonly
+routine Deque[T].read_at(physical_idx: U64) -> ?T
+  var byte_offset = T.data_size() * physical_idx
+  danger!
+    return me.data.offset(byte_offset).extract()
 
-routine Deque[T].write_at(physical_idx: UAddr, value: T)
-  var byte_offset = physical_idx * data_size[T]()
-  me.data.write[T](byte_offset, value)
+### Writes `value` into physical slot `physical_idx` without bounds checking.
+### :param physical_idx: The slot index inside the backing buffer.
+### :param value: The element to store.
+routine Deque[T].write_at(physical_idx: U64, value: T)
+  var byte_offset = T.data_size() * physical_idx
+  danger!
+    me.data.offset(byte_offset).inject(value)
   return
 
 # ============================================================================
 # Core Operations
 # ============================================================================
 
-routine Deque[T].count() -> UAddr
+### Returns the number of live elements currently stored in the deque.
+### :returns: The live element count.
+@readonly
+routine Deque[T].count() -> U64
   return me.count
 
-routine Deque[T].capacity() -> UAddr
+### Returns the number of element slots available before the next growth step.
+### :returns: The current backing-buffer slot count.
+@readonly
+routine Deque[T].capacity() -> U64
   return me.capacity
 
+### Returns true if the deque currently contains no elements.
+### :returns: `true` when `count()` is zero.
+@readonly
 routine Deque[T].is_empty() -> Bool
-  return me.count == 0uaddr
+  return me.count == 0u64
 
+### Appends `value` at the logical back of the deque.
+### The buffer is doubled automatically when the current capacity is exhausted.
+### :param value: The element to add at the back.
 routine Deque[T].add_last(value: T)
   # Add element to back - O(1) amortized
   if me.count >= me.capacity
     me.grow()
   var idx = me.physical_index(me.count)
-  me.write_at(idx, value)
-  me.count = me.count + 1uaddr
+  me.write_at(physical_idx: idx, value: value)
+  me.count = me.count +% 1u64
   return
 
+### Prepends `value` at the logical front of the deque.
+### The front index is decremented with wraparound using the ring-buffer mask.
+### The buffer is doubled automatically when the current capacity is exhausted.
+### :param value: The element to add at the front.
 routine Deque[T].add_first(value: T)
   # Add element to front - O(1) amortized
   if me.count >= me.capacity
     me.grow()
-  # Decrement start (with wrap)
-  if me.start == 0uaddr
-    me.start = me.capacity - 1uaddr
-  else
-    me.start = me.start - 1uaddr
-  me.write_at(me.start, value)
-  me.count = me.count + 1uaddr
+  # Decrement start with wrap: (start + cap - 1) & (cap - 1) — branchless
+  me.start = me.wrap_index(me.start +% me.capacity -% 1u64)
+  me.write_at(physical_idx: me.start, value: value)
+  me.count = me.count +% 1u64
   return
 
-routine Deque[T].remove_last!() -> T
+### Removes and returns the element at the logical back of the deque.
+### :returns: The element that was at the back.
+### :absent: The deque is empty.
+routine Deque[T].remove_last!() -> ?T
   # Remove and return back element - O(1)
   if me.is_empty()
     absent
-  me.count = me.count - 1uaddr
+  me.count = me.count - 1u64
   var idx = me.physical_index(me.count)
   return me.read_at(idx)
 
-routine Deque[T].remove_first!() -> T
+### Removes and returns the element at the logical front of the deque.
+### :returns: The element that was at the front.
+### :absent: The deque is empty.
+routine Deque[T].remove_first!() -> ?T
   # Remove and return front element - O(1)
   if me.is_empty()
     absent
   var value = me.read_at(me.start)
-  me.start = me.wrap_index(me.start + 1uaddr)
-  me.count = me.count - 1uaddr
+  me.start = me.wrap_index(me.start + 1u64)
+  me.count = me.count - 1u64
   return value
 
-routine Deque[T].first!() -> T
+### Returns the front element without removing it.
+### :returns: The current front element.
+### :absent: The deque is empty.
+@readonly
+routine Deque[T].first!() -> ?T
   # Peek at front element without removing
   if me.is_empty()
     absent
   return me.read_at(me.start)
 
-routine Deque[T].last!() -> T
+### Returns the back element without removing it.
+### :returns: The current back element.
+### :absent: The deque is empty.
+@readonly
+routine Deque[T].last!() -> ?T
   # Peek at back element without removing
   if me.is_empty()
     absent
-  var idx = me.physical_index(me.count - 1uaddr)
+  var idx = me.physical_index(me.count - 1u64)
   return me.read_at(idx)
 
+### Removes every element while preserving the current circular-buffer allocation.
 routine Deque[T].clear()
-  me.start = 0uaddr
-  me.count = 0uaddr
+  me.start = 0u64
+  me.count = 0u64
   return
 
 # ============================================================================
 # Growth
 # ============================================================================
 
+### Grows the backing storage using the deque's standard doubling policy.
+### Empty deques start at four slots; subsequent growth always doubles.
+@migratable
 routine Deque[T].grow()
-  var new_capacity = if me.capacity == 0uaddr then 4uaddr else me.capacity * 2uaddr
+  var new_capacity = if me.capacity == 0u64 then 4u64 else me.capacity *% 2u64
   me.reserve(new_capacity)
   return
 
-routine Deque[T].reserve(new_capacity: UAddr)
-  if new_capacity <= me.capacity
+### Ensures the deque can hold at least `new_capacity` elements without another growth step.
+### The requested capacity is rounded up to the next power of two. Elements are copied into
+### the new buffer in logical order so the front moves to physical slot 0.
+### Requests no larger than the current capacity are ignored.
+### :param new_capacity: The minimum element count to accommodate.
+@migratable
+routine Deque[T].reserve(new_capacity: U64)
+  var actual = 1u64
+  while actual < new_capacity
+    actual = actual *% 2u64
+  if actual <= me.capacity
     return
 
-  var new_byte_size = new_capacity * data_size[T]()
-  var new_data = Snatched[U8](address: rf_alloc(new_byte_size))
+  var new_byte_size = T.data_size() * actual
+  danger!
+    var _new_data = hijacked_from[T](rf_allocate_dynamic_uninit(new_byte_size))
 
-  # Copy elements in logical order (unwrap the ring)
-  var i = 0uaddr
-  while i < me.count
-    var old_idx = me.physical_index(i)
-    var value = me.read_at(old_idx)
-    var new_byte_offset = i * data_size[T]()
-    Snatched[T](address: new_data.address + new_byte_offset).write(value)
-    i = i + 1uaddr
+    # Copy elements in logical order (unwrap the ring)
+    var i = 0u64
+    while i < me.count
+      var old_idx = me.physical_index(i)
+      var value = me.read_at(old_idx)
+      var new_byte_offset = T.data_size() * i
+      _new_data.offset(new_byte_offset).inject(value)
+      i = i +% 1u64
 
-  me.data = new_data
-  me.start = 0uaddr
-  me.capacity = new_capacity
-  return
+    me.data = _new_data
+    me.start = 0u64
+    me.capacity = actual
+    return
 
 # ============================================================================
 # Indexing with Integral (forward index)
 # ============================================================================
 
-routine Deque[T].__getitem__![I](index: I) -> T
-needs I obeys Integral
-  var idx = index.UAddr()
-  if idx >= me.count
-    throw IndexOutOfBoundsError(index: idx, count: me.count)
-  var physical_idx = me.physical_index(idx)
+### Returns the element at the given zero-based logical position.
+### Logical index 0 refers to the front element regardless of its physical slot.
+### :param index: The zero-based logical position to read.
+### :returns: The element at that logical position.
+### :throws: {IndexOutOfBoundsError} if `index >= count()`.
+@readonly
+routine Deque[T].$getitem!(index: U64) -> ?T
+  if index >= me.count
+    throw IndexOutOfBoundsError(index: index, count: me.count)
+  var physical_idx = me.physical_index(index)
   return me.read_at(physical_idx)
 
-routine Deque[T].__setitem__![I](index: I, value: T)
-needs I obeys Integral
-  var idx = index.UAddr()
-  if idx >= me.count
-    throw IndexOutOfBoundsError(index: idx, count: me.count)
-  var physical_idx = me.physical_index(idx)
-  me.write_at(physical_idx, value)
-  return
-
-# ============================================================================
-# Indexing with BackIndex (backward index using ^)
-# ============================================================================
-
-routine Deque[T].__getitem__![I](index: BackIndex[I]) -> T
-needs I obeys Integral
-  var idx = index.resolve(me.count)
-  var physical_idx = me.physical_index(idx)
-  return me.read_at(physical_idx)
-
-routine Deque[T].__setitem__![I](index: BackIndex[I], value: T)
-needs I obeys Integral
-  var idx = index.resolve(me.count)
-  var physical_idx = me.physical_index(idx)
-  me.write_at(physical_idx, value)
+### Replaces the element at the given zero-based logical position.
+### :param index: The zero-based logical position to update.
+### :param value: The replacement element.
+### :throws: {IndexOutOfBoundsError} if `index >= count()`.
+routine Deque[T].$setitem!(index: U64, value: ?T)
+  if index >= me.count
+    throw IndexOutOfBoundsError(index: index, count: me.count)
+  var physical_idx = me.physical_index(index)
+  me.write_at(physical_idx: physical_idx, value: value)
   return
 
 # ============================================================================
 # Rotation
 # ============================================================================
 
-routine Deque[T].rotate_left(n: UAddr)
+### Shifts the logical front toward the back by `n` positions.
+### Elements that fall off the front reappear at the back. Only the front index
+### changes; no elements are copied.
+### :param n: The number of positions to rotate left.
+routine Deque[T].rotate_left(n: U64)
   # Rotate elements left by n positions
   # Front elements move to back
-  if me.count == 0uaddr
+  if me.count == 0u64
     return
-  var shift = n % me.count
-  me.start = me.wrap_index(me.start + shift)
+  var shift = unsigned_rem[U64](n, me.count)
+  me.start = me.wrap_index(me.start +% shift)
   return
 
-routine Deque[T].rotate_right(n: UAddr)
+### Shifts the logical back toward the front by `n` positions.
+### Elements that fall off the back reappear at the front. Only the front index
+### changes; no elements are copied.
+### :param n: The number of positions to rotate right.
+routine Deque[T].rotate_right(n: U64)
   # Rotate elements right by n positions
   # Back elements move to front
-  if me.count == 0uaddr
+  if me.count == 0u64
     return
-  var shift = n % me.count
+  var shift = unsigned_rem[U64](n, me.count)
   if shift > me.start
-    me.start = me.capacity - (shift - me.start)
+    me.start = me.capacity -% (shift -% me.start)
   else
-    me.start = me.start - shift
+    me.start = me.start -% shift
   return
 
 # ============================================================================
 # Iteration Support
 # ============================================================================
 
-routine Deque[T].__seq__() -> DequeIterator[T]
-  return DequeIterator[T](deque: me, index: 0uaddr)
+### Walks the elements of a `Deque[T]` from logical front to back.
+### The iterator captures a raw pointer, the start index, element count, and capacity
+### at creation time so the source deque does not need to remain alive during iteration.
+### :typeparam T: The element type yielded by the iterator.
+entity DequeEmitter[T] obeys Iterator[T]
+  ### Raw pointer into the source deque's circular buffer.
+  secret data: Hijacked[T]
+  ### Front-of-queue physical index captured at iterator creation.
+  secret start: U64
+  ### Element count captured at iterator creation.
+  secret count: U64
+  ### Buffer capacity captured at iterator creation.
+  secret capacity: U64
+  ### Current logical position.
+  secret index: U64
 
-entity DequeIterator[T]
-  deque: Deque[T]
-  index: UAddr
+@readonly
+routine Deque[T].$iter() -> ?DequeEmitter[T]
+  danger!
+    return DequeEmitter[T](
+      data: me.data,
+      start: me.start,
+      count: me.count,
+      capacity: me.capacity,
+      index: 0u64
+    )
 
-routine DequeIterator[T].next!() -> T
-  if me.index >= me.deque.count()
+### Returns the next element from the iterator in front-to-back order.
+### :returns: The next logical element.
+### :absent: All elements captured at iterator creation have been yielded.
+routine DequeEmitter[T].$next!() -> ?T
+  if me.index >= me.count
     absent
-  var value = me.deque[me.index]
-  me.index = me.index + 1uaddr
-  return value
+  var physical = (me.start +% me.index) & (me.capacity -% 1u64)
+  lateinit var _result: T
+  danger!
+    _result = me.data.offset(T.data_size() * physical).extract()
+  me.index = me.index + 1u64
+  return _result
 
 # ============================================================================
 # Utility Operations
 # ============================================================================
 
-routine Deque[T].first_or_default(default_value: T) -> T
+### Returns the front element or `default_value` if the deque is empty.
+### :param default_value: The fallback to return when no element is stored.
+### :returns: The front element if present; `default_value` otherwise.
+@readonly
+routine Deque[T].first_or_default(default_value: T) -> ?T
   if me.is_empty()
     return default_value
   return me.first!()
 
-routine Deque[T].last_or_default(default_value: T) -> T
+### Returns the back element or `default_value` if the deque is empty.
+### :param default_value: The fallback to return when no element is stored.
+### :returns: The back element if present; `default_value` otherwise.
+@readonly
+routine Deque[T].last_or_default(default_value: T) -> ?T
   if me.is_empty()
     return default_value
   return me.last!()
 
-routine Deque[T].contains(value: T) -> Bool
-  var i = 0uaddr
+### Returns true if any element in the deque equals `value`.
+### Scans in logical front-to-back order using the element type's equality operator.
+### :param value: The value to search for.
+### :returns: `true` if `value` is found; `false` if no element matches.
+@readonly
+routine Deque[T].$contains(value: T) -> Bool
+needs T obeys Equatable
+  var i = 0u64
   while i < me.count
     if me[i] == value
       return true
-    i = i + 1uaddr
+    i = i +% 1u64
   return false
 
 # ============================================================================
 # Comparison Operations
 # ============================================================================
 
-routine Deque[T].__eq__(other: Deque[T]) -> Bool
+@readonly
+routine Deque[T].$represent() -> ?Text
+  var result = me.type_name() + "(["
+  var i = 0u64
+  for v in me
+    if i > 0u64
+      result = result + ", "
+    result = result + v.$represent()
+    i = i +% 1u64
+  result = result + "])"
+  return steal result
+
+@readonly
+routine Deque[T].$diagnose() -> ?Text
+  var result = me.full_type_name() + "(count: " + me.count().$represent() + ", ["
+  var i = 0u64
+  for v in me
+    if i > 0u64
+      result = result + ", "
+    result = result + v.$represent()
+    i = i +% 1u64
+  result = result + "])"
+  return steal result
+
+### Returns true if both deques contain the same elements in the same logical order.
+### :param other: The other deque to compare against.
+### :returns: `true` if both have equal count and all corresponding elements are equal.
+@readonly
+routine Deque[T].$eq(other: Referring[Deque[T]]) -> Bool
   if me.count != other.count
     return false
-  var i = 0uaddr
+  var i = 0u64
   while i < me.count
     if me[i] != other[i]
       return false
-    i = i + 1uaddr
+    i = i +% 1u64
   return true
+
+dangerous routine Deque[T].$destroy()
+  # Tear down each live element in logical front-to-back (ring) order before freeing the buffer
+  # (mirrors DequeEmitter.$next!). No-op for value types; frees owned entity elements.
+  var i = 0u64
+  while i < me.count
+    var physical = (me.start +% i) & (me.capacity -% 1u64)
+    me.data.offset(T.data_size() * physical).extract().$destroy()
+    i = i + 1u64
+  me.data.invalidate()
+  me.hijack().invalidate()
+  return

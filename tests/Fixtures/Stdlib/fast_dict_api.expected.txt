@@ -1,0 +1,16 @@
+size: 3
+contents: FastDict({one: 1, two: 2, three: 3})
+contains_key 'two': true
+contains_key 'four': false
+d['one']: 1
+d['three']: 3
+size after add four: 4
+contents after add four: FastDict({one: 1, two: 2, three: 3, four: 4})
+d['one'] after overwrite: 100
+contents after overwrite one: FastDict({one: 100, two: 2, three: 3, four: 4})
+size after remove two: 3
+contents after remove two: FastDict({one: 100, three: 3, four: 4})
+contains_key 'two' after remove: false
+diagnose: Collections.FastDict[Core.Text, Core.S64](count: 3, {one: 100, three: 3, four: 4})
+is_empty: false
+DONE

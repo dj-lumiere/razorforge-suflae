@@ -30,7 +30,7 @@
         {
           "comment": "Type declarations",
           "name": "storage.type.sf",
-          "match": "\\b(routine|entity|record|variant|choice|protocol|flags)\\b"
+          "match": "\\b(routine|entity|record|variant|choice|protocol|flags|crashable)\\b"
         },
         {
           "comment": "Variable declarations",
@@ -98,9 +98,14 @@
           "match": "\\b(true|false)\\b"
         },
         {
-          "comment": "None literal",
+          "comment": "None type (absent-arm type for variants and carriers)",
           "name": "constant.language.null.sf",
           "match": "\\b(None)\\b"
+        },
+        {
+          "comment": "none value literal (absent value for Maybe/Lookup/Result[Blank]/variant-with-None)",
+          "name": "constant.language.null.sf",
+          "match": "\\b(none)\\b"
         }
       ]
     },
@@ -207,11 +212,6 @@
     },
     "operators": {
       "patterns": [
-        {
-          "comment": "Intrinsic type attribute",
-          "name": "keyword.other.sf",
-          "match": "@intrinsic\\b"
-        },
         {
           "comment": "Compound annotation",
           "name": "storage.modifier.annotation.sf",

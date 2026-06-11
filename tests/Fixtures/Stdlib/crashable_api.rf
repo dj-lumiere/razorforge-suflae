@@ -1,0 +1,43 @@
+module Tests/Stdlib/CrashableApi
+import IO/Console
+import BuilderService
+
+# User-defined crashable type — exercises the Crashable protocol surface.
+crashable BadInputError
+  pass
+
+@readonly
+routine BadInputError.crash_message() -> ?Text
+  return "Input was not in the accepted range."
+
+@readonly
+routine BadInputError.crash_title() -> ?Text
+  return "BadInputError"
+
+routine validate!(n: S64) -> S64
+  if n < 0
+    throw BadInputError()
+  return n * 2
+
+routine start()
+  # Happy path: check_ variant returns Result[T] (T is S64 record-typed)
+  var ok = check_validate(n: 5)
+  show(f"ok type: {ok.type_name()}")
+  show(f"ok: {ok}")
+
+  # Failure path
+  var err = check_validate(n: -1)
+  show(f"err: {err}")
+  show(f"err diagnose: {err:?}")
+
+  when err
+    is BadInputError => show("  caught BadInputError")
+    else v           => show(f"  got value: {v}")
+
+  # Stdlib-provided crashables
+  var av = AbsentValueError()
+  show(f"AbsentValueError.crash_title(): {av.crash_title()}")
+  show(f"AbsentValueError.crash_message(): {av.crash_message()}")
+
+  show("DONE")
+  return

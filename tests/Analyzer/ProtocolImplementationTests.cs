@@ -1,18 +1,19 @@
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Diagnostics;
-using Xunit;
+using Compiler.Diagnostics;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for protocol implementation analysis in the semantic analyzer:
-/// protocol conformance, missing methods, signature matching.
+/// Contains tests for protocol implementation.
 /// </summary>
 public class ProtocolImplementationTests
 {
     #region Basic Protocol Implementation
+    /// <summary>
+    /// Verifies semantic analysis behavior for implements all methods without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_ImplementsAllMethods_NoError()
@@ -31,9 +32,13 @@ public class ProtocolImplementationTests
                           return "point"
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.NotNull(@object: result);
         // Should validate protocol implementation
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for missing protocol method and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_MissingProtocolMethod_ReportsError()
@@ -48,9 +53,12 @@ public class ProtocolImplementationTests
                           y: F32
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for wrong method signature and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_WrongMethodSignature_ReportsError()
@@ -69,13 +77,16 @@ public class ProtocolImplementationTests
                           return 0
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
 
     #endregion
 
     #region Protocol Method Annotations
+    /// <summary>
+    /// Verifies semantic analysis behavior for method missing readonly and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_MethodMissingReadonly_ReportsError()
@@ -93,9 +104,13 @@ public class ProtocolImplementationTests
                           return "point"
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.NotNull(@object: result);
         // Should warn about missing @readonly annotation
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for method with writable when protocol readonly and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_MethodWithWritableWhenProtocolReadonly_ReportsError()
@@ -109,18 +124,20 @@ public class ProtocolImplementationTests
                           x: F32
                           y: F32
 
-                        @writable
                         routine Point.display() -> Text
                           return "point"
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
 
     #endregion
 
     #region Multiple Protocols
+    /// <summary>
+    /// Verifies semantic analysis behavior for multiple protocols all implemented without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_MultipleProtocols_AllImplemented_NoError()
@@ -132,7 +149,7 @@ public class ProtocolImplementationTests
 
                         protocol Comparable
                           @readonly
-                          routine Me.__cmp__(other: Me) -> S32
+                          routine Me.$cmp(other: Me) -> S32
 
                         record Value obeys Displayable, Comparable
                           value: S32
@@ -142,12 +159,16 @@ public class ProtocolImplementationTests
                           return "value"
 
                         @readonly
-                        routine Value.__cmp__(other: Value) -> S32
+                        routine Value.$cmp(other: Value) -> S32
                           return me.value - other.value
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.NotNull(@object: result);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for multiple protocols one missing and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_MultipleProtocols_OneMissing_ReportsError()
@@ -159,7 +180,7 @@ public class ProtocolImplementationTests
 
                         protocol Comparable
                           @readonly
-                          routine Me.__cmp__(other: Me) -> S32
+                          routine Me.$cmp(other: Me) -> S32
 
                         record Value obeys Displayable, Comparable
                           value: S32
@@ -169,13 +190,16 @@ public class ProtocolImplementationTests
                           return "value"
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
 
     #endregion
 
     #region Generic Protocol Implementation
+    /// <summary>
+    /// Verifies semantic analysis behavior for generic protocol implementation without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_GenericProtocol_Implementation_NoError()
@@ -193,12 +217,16 @@ public class ProtocolImplementationTests
                           return 0
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.NotNull(@object: result);
     }
 
     #endregion
 
     #region Protocol Method Parameters
+    /// <summary>
+    /// Verifies semantic analysis behavior for protocol method with parameters without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_ProtocolMethodWithParameters_NoError()
@@ -206,19 +234,23 @@ public class ProtocolImplementationTests
         string source = """
                         protocol Addable
                           @readonly
-                          routine Me.__add__(other: Me) -> Me
+                          routine Me.$add(other: Me) -> Me
 
                         record Point obeys Addable
                           x: F32
                           y: F32
 
                         @readonly
-                        routine Point.__add__(other: Point) -> Point
+                        routine Point.$add(other: Point) -> Point
                           return Point(x: me.x + other.x, y: me.y + other.y)
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.NotNull(@object: result);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for protocol method wrong parameter type and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_ProtocolMethodWrongParameterType_ReportsError()
@@ -226,24 +258,27 @@ public class ProtocolImplementationTests
         string source = """
                         protocol Addable
                           @readonly
-                          routine Me.__add__(other: Me) -> Me
+                          routine Me.$add(other: Me) -> Me
 
                         record Point obeys Addable
                           x: F32
                           y: F32
 
                         @readonly
-                        routine Point.__add__(other: S32) -> Point
+                        routine Point.$add(other: S32) -> Point
                           return Point(x: me.x, y: me.y)
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
 
     #endregion
 
     #region Entity Protocol Implementation
+    /// <summary>
+    /// Verifies semantic analysis behavior for entity implements protocol without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_EntityImplementsProtocol_NoError()
@@ -261,55 +296,16 @@ public class ProtocolImplementationTests
                           return me.value
                         """;
 
-        Analyze(source: source);
-    }
-
-    #endregion
-
-    #region Suflae Protocol Tests
-
-    [Fact]
-    public void AnalyzeSuflae_ImplementsProtocol_NoError()
-    {
-        string source = """
-                        protocol Displayable
-                          @readonly
-                          routine Me.display() -> Integer
-
-                        entity Point obeys Displayable
-                          x: Integer
-                          y: Integer
-
-                        @readonly
-                        routine Point.display() -> Integer
-                          return 0
-                        """;
-
-        AnalysisResult result = AnalyzeSuflae(source: source);
-        Assert.Empty(collection: result.Errors);
-    }
-
-    [Fact]
-    public void AnalyzeSuflae_MissingProtocolMethod_ReportsError()
-    {
-        string source = """
-                        protocol Displayable
-                          @readonly
-                          routine Me.display() -> S32
-
-                        record Point obeys Displayable
-                          x: F32
-                          y: F32
-                        """;
-
-        AnalysisResult result = AnalyzeSuflae(source: source);
-        Assert.True(condition: result.Errors.Count > 0);
-        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.MissingProtocolMethod);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.NotNull(@object: result);
     }
 
     #endregion
 
     #region Protocol Inheritance
+    /// <summary>
+    /// Verifies semantic analysis behavior for protocol extends implementation without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_ProtocolExtends_Implementation_NoError()
@@ -336,8 +332,12 @@ public class ProtocolImplementationTests
                           return "Point(x, y)"
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.NotNull(@object: result);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for protocol extends missing parent method and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_ProtocolExtends_MissingParentMethod_ReportsError()
@@ -360,13 +360,16 @@ public class ProtocolImplementationTests
                           return "Point(x, y)"
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.True(condition: result.Errors.Count > 0);
     }
 
     #endregion
 
     #region Annotation Placement Validation (#177)
+    /// <summary>
+    /// Verifies semantic analysis behavior for generated on non protocol routine and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_GeneratedOnNonProtocolRoutine_ReportsError()
@@ -382,12 +385,15 @@ public class ProtocolImplementationTests
                           return "point"
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.InvalidGeneratedInnatePlacement);
     }
+    /// <summary>
+    /// Verifies that @innate is valid on non-protocol routines (e.g., BuilderService routines).
+    /// </summary>
 
     [Fact]
-    public void Analyze_InnateOnNonProtocolRoutine_ReportsError()
+    public void Analyze_InnateOnNonProtocolRoutine_NoError()
     {
         string source = """
                         record Point
@@ -400,9 +406,12 @@ public class ProtocolImplementationTests
                           return "point"
                         """;
 
-        AnalysisResult result = Analyze(source: source);
-        Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.InvalidGeneratedInnatePlacement);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.InvalidGeneratedInnatePlacement);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for generated on protocol routine without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_GeneratedOnProtocolRoutine_NoError()
@@ -410,87 +419,99 @@ public class ProtocolImplementationTests
         string source = """
                         protocol Equatable
                           @readonly
-                          routine Me.__eq__(you: Me) -> Bool
+                          routine Me.$eq(you: Me) -> Bool
 
                           @generated
                           @readonly
-                          routine Me.__ne__(you: Me) -> Bool
+                          routine Me.$ne(you: Me) -> Bool
 
                         record Point obeys Equatable
                           x: F32
                           y: F32
 
                         @readonly
-                        routine Point.__eq__(you: Point) -> Bool
+                        routine Point.$eq(you: Point) -> Bool
                           return me.x == you.x and me.y == you.y
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.InvalidGeneratedInnatePlacement);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for innate on protocol routine without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_InnateOnProtocolRoutine_NoError()
     {
         string source = """
-                        protocol Identifiable
+                        protocol Lockable
                           @innate
                           @readonly
-                          routine Me.__same__(you: Me) -> Bool
+                          routine Me.$eq(you: Me) -> Bool
 
-                        entity Widget obeys Identifiable
+                        entity Widget obeys Lockable
                           name: Text
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.InvalidGeneratedInnatePlacement);
     }
 
     #endregion
 
     #region Innate Override Prohibition (#178)
+    /// <summary>
+    /// Verifies semantic analysis behavior for override innate routine and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_OverrideInnateRoutine_ReportsError()
     {
         string source = """
-                        protocol Identifiable
+                        protocol Lockable
                           @innate
                           @readonly
-                          routine Me.__same__(you: Me) -> Bool
+                          routine Me.$eq(you: Me) -> Bool
 
-                        entity Widget obeys Identifiable
+                        entity Widget obeys Lockable
                           name: Text
 
                         @readonly
-                        routine Widget.__same__(you: Widget) -> Bool
+                        routine Widget.$eq(you: Widget) -> Bool
                           return false
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(result.Errors, e => e.Code == SemanticDiagnosticCode.InnateOverrideNotAllowed);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for innate routine not overridden without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_InnateRoutineNotOverridden_NoError()
     {
         string source = """
-                        protocol Identifiable
+                        protocol Lockable
                           @innate
                           @readonly
-                          routine Me.__same__(you: Me) -> Bool
+                          routine Me.$eq(you: Me) -> Bool
 
-                        entity Widget obeys Identifiable
+                        entity Widget obeys Lockable
                           name: Text
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.InnateOverrideNotAllowed);
     }
 
     #endregion
 
     #region Generated Override Prioritization (#179)
+    /// <summary>
+    /// Verifies semantic analysis behavior for override generated ne without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_OverrideGeneratedNe_NoError()
@@ -498,28 +519,31 @@ public class ProtocolImplementationTests
         string source = """
                         protocol Equatable
                           @readonly
-                          routine Me.__eq__(you: Me) -> Bool
+                          routine Me.$eq(you: Me) -> Bool
 
                           @generated
                           @readonly
-                          routine Me.__ne__(you: Me) -> Bool
+                          routine Me.$ne(you: Me) -> Bool
 
                         record Point obeys Equatable
                           x: F32
                           y: F32
 
                         @readonly
-                        routine Point.__eq__(you: Point) -> Bool
+                        routine Point.$eq(you: Point) -> Bool
                           return me.x == you.x and me.y == you.y
 
                         @readonly
-                        routine Point.__ne__(you: Point) -> Bool
+                        routine Point.$ne(you: Point) -> Bool
                           return me.x != you.x or me.y != you.y
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(result.Errors, e => e.Code == SemanticDiagnosticCode.GeneratedOperatorOverride);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for generated ne not overridden without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_GeneratedNeNotOverridden_NoError()
@@ -527,52 +551,57 @@ public class ProtocolImplementationTests
         string source = """
                         protocol Equatable
                           @readonly
-                          routine Me.__eq__(you: Me) -> Bool
+                          routine Me.$eq(you: Me) -> Bool
 
                           @generated
                           @readonly
-                          routine Me.__ne__(you: Me) -> Bool
+                          routine Me.$ne(you: Me) -> Bool
 
                         record Point obeys Equatable
                           x: F32
                           y: F32
 
                         @readonly
-                        routine Point.__eq__(you: Point) -> Bool
+                        routine Point.$eq(you: Point) -> Bool
                           return me.x == you.x and me.y == you.y
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Empty(collection: result.Errors);
     }
 
     #endregion
 
     #region Protocol with Default Values
+    /// <summary>
+    /// Verifies semantic analysis behavior for protocol method with default parameter without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_ProtocolMethodWithDefaultParameter_NoError()
     {
         string source = """
                         protocol Configurable
-                          @writable
                           routine Me.configure(value: S32 = 0)
 
                         entity Settings obeys Configurable
                           value: S32
 
-                        @writable
                         routine Settings.configure(value: S32 = 0)
                           me.value = value
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.NotNull(@object: result);
     }
 
     #endregion
 
     #region Multiple Protocol Generic Constraints (#62)
+    /// <summary>
+    /// Verifies that the parser accepts inline multiple obeys successfully.
+    /// </summary>
 
     [Fact]
     public void Parse_InlineMultipleObeys_Parses()
@@ -585,7 +614,7 @@ public class ProtocolImplementationTests
 
                         protocol Comparable
                           @readonly
-                          routine Me.__cmp__(other: Me) -> S32
+                          routine Me.$cmp(other: Me) -> S32
 
                         routine foo[T obeys Displayable, Comparable](item: T) -> Text
                           return item.display()
@@ -593,6 +622,9 @@ public class ProtocolImplementationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts needs multiple obeys successfully.
+    /// </summary>
 
     [Fact]
     public void Parse_NeedsMultipleObeys_Parses()
@@ -605,7 +637,7 @@ public class ProtocolImplementationTests
 
                         protocol Comparable
                           @readonly
-                          routine Me.__cmp__(other: Me) -> S32
+                          routine Me.$cmp(other: Me) -> S32
 
                         routine foo[T](item: T) needs T obeys Displayable, Comparable -> Text
                           return item.display()

@@ -1,7 +1,8 @@
-# Integral - Bundle protocol for integer-like operations
-# Does NOT include Divisible (/) - integers use FloorDivisible (//) instead
-# Does NOT include Negatable - unsigned integers can't negate
 module Core
 
+### Represents the aggregate protocol for integer-like numeric types.
+### `Integral` combines exact arithmetic, floor division, exponentiation,
+### bitwise operations, and shifting into the standard surface expected from
+### signed and unsigned integer families.
 protocol Integral obeys Addable, Subtractable, Multiplicable, FloorDivisible, Exponentiable, Bitwiseable, Shiftable
   pass

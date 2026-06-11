@@ -1,17 +1,4 @@
-﻿module Core
-
-# ByteSize - Byte size measurement type
-#
-# Internal representation: raw byte count as U64.
-# Supports both binary (KiB, MiB, GiB) and decimal (KB, MB, GB) units.
-#
-# Literal support: 100b, 64kib, 256kb, 100mib, 1mb, 1gib, 1gb
-#
-# Usage:
-#   var cache = 64kib
-#   var total = cache * 4
-#   var pages = 1gib // 4kib    # 262,144
-#   var remainder = 1024b % 300b # 124b
+module Core
 
 # ============================================================================
 # Constants
@@ -23,131 +10,191 @@ preset BYTES_PER_GIB: U64 = 1_073_741_824_u64
 preset BYTES_PER_TIB: U64 = 1_099_511_627_776_u64
 preset BYTES_PER_PIB: U64 = 1_125_899_906_842_624_u64
 
-preset BYTES_PER_KB: U64 = 1_000_u64
-preset BYTES_PER_MB: U64 = 1_000_000_u64
-preset BYTES_PER_GB: U64 = 1_000_000_000_u64
-preset BYTES_PER_TB: U64 = 1_000_000_000_000_u64
-preset BYTES_PER_PB: U64 = 1_000_000_000_000_000_u64
+preset BYTES_PER_KB: U64 = 1_000u64
+preset BYTES_PER_MB: U64 = 1_000_000u64
+preset BYTES_PER_GB: U64 = 1_000_000_000u64
+preset BYTES_PER_TB: U64 = 1_000_000_000_000u64
+preset BYTES_PER_PB: U64 = 1_000_000_000_000_000u64
 
 # ============================================================================
 # Record definition
 # ============================================================================
 
-record ByteSize obeys Ordered, Addable, Subtractable, FloorDivisible
-  secret value: U64
+### Represents a size or displacement measured in bytes.
+### `ByteSize` is the standard memory-size type for allocation, alignment, buffer math, and address offsets.
+### It supports both binary units such as KiB/MiB and decimal units such as KB/MB.
+### :see: {Address}, {Memory-Types}
+@llvm("i64")
+record ByteSize obeys Ordered, Addable, Subtractable, FloorDivisible, Scalable, ScalarFloorDivisible
+  pass
 
 # ============================================================================
 # Creators
 # ============================================================================
 
-routine ByteSize.__create__(bytes: U64)
-  me.value = bytes
-  return
+### Creates a `ByteSize` from a raw byte count.
+### :param bytes: The number of bytes.
+### :returns: The resulting `ByteSize` value.
+routine ByteSize.$create(bytes: U64) -> ByteSize
+  return reinterpret_bits[U64, ByteSize](bytes)
 
-# Factory methods for larger sizes (no literal support)
-routine ByteSize.terabytes(n: U64) -> ByteSize
-  return ByteSize(n *% BYTES_PER_TB)
+### Returns a decimal terabyte size.
+### :param n: The number of terabytes.
+### :returns: The resulting `ByteSize` value.
+common routine ByteSize.terabytes(n: U64) -> ByteSize
+  return reinterpret_bits[U64, ByteSize](n *% BYTES_PER_TB)
 
-routine ByteSize.tebibytes(n: U64) -> ByteSize
-  return ByteSize(n *% BYTES_PER_TIB)
+### Returns a binary tebibyte size.
+### :param n: The number of tebibytes.
+### :returns: The resulting `ByteSize` value.
+common routine ByteSize.tebibytes(n: U64) -> ByteSize
+  return reinterpret_bits[U64, ByteSize](n *% BYTES_PER_TIB)
 
-routine ByteSize.petabytes(n: U64) -> ByteSize
-  return ByteSize(n *% BYTES_PER_PB)
+### Returns a decimal petabyte size.
+### :param n: The number of petabytes.
+### :returns: The resulting `ByteSize` value.
+common routine ByteSize.petabytes(n: U64) -> ByteSize
+  return reinterpret_bits[U64, ByteSize](n *% BYTES_PER_PB)
 
-routine ByteSize.pebibytes(n: U64) -> ByteSize
-  return ByteSize(n *% BYTES_PER_PIB)
+### Returns a binary pebibyte size.
+### :param n: The number of pebibytes.
+### :returns: The resulting `ByteSize` value.
+common routine ByteSize.pebibytes(n: U64) -> ByteSize
+  return reinterpret_bits[U64, ByteSize](n *% BYTES_PER_PIB)
 
 # ============================================================================
 # Size accessors
 # ============================================================================
 
-# Gets the raw byte count
+### Returns the raw byte count represented by this value.
+### :returns: The resulting `U64` value.
 @readonly
 routine ByteSize.byte_size() -> U64
-  return me.value
+  return reinterpret_bits[ByteSize, U64](me)
 
-# Gets the size in bits
+### Returns the size represented by this value in bits.
+### :returns: The resulting `U64` value.
 @readonly
 routine ByteSize.bit_size() -> U64
-  return me.value * 8_u64
+  return reinterpret_bits[ByteSize, U64](me) * 8_u64
 
 # ============================================================================
 # Binary unit conversions (powers of 1024)
 # ============================================================================
 
+### Returns this size expressed in kibibytes.
+### The conversion uses powers of 1024.
+### :returns: The resulting `F64` value.
 @readonly
 routine ByteSize.kib_size() -> F64
-  return F64(me.value) / 1024.0
+  return F64(reinterpret_bits[ByteSize, U64](me)) / 1024.0
 
+### Returns this size expressed in mebibytes.
+### The conversion uses powers of 1024.
+### :returns: The resulting `F64` value.
 @readonly
 routine ByteSize.mib_size() -> F64
-  return F64(me.value) / 1048576.0
+  return F64(reinterpret_bits[ByteSize, U64](me)) / 1048576.0
 
+### Returns this size expressed in gibibytes.
+### The conversion uses powers of 1024.
+### :returns: The resulting `F64` value.
 @readonly
 routine ByteSize.gib_size() -> F64
-  return F64(me.value) / 1073741824.0
+  return F64(reinterpret_bits[ByteSize, U64](me)) / 1073741824.0
 
 # ============================================================================
 # Decimal unit conversions (powers of 1000)
 # ============================================================================
 
+### Returns this size expressed in kilobytes.
+### The conversion uses powers of 1000.
+### :returns: The resulting `F64` value.
 @readonly
 routine ByteSize.kb_size() -> F64
-  return F64(me.value) / 1000.0
+  return F64(reinterpret_bits[ByteSize, U64](me)) / 1000.0
 
+### Returns this size expressed in megabytes.
+### The conversion uses powers of 1000.
+### :returns: The resulting `F64` value.
 @readonly
 routine ByteSize.mb_size() -> F64
-  return F64(me.value) / 1000000.0
+  return F64(reinterpret_bits[ByteSize, U64](me)) / 1000000.0
 
+### Returns this size expressed in gigabytes.
+### The conversion uses powers of 1000.
+### :returns: The resulting `F64` value.
 @readonly
 routine ByteSize.gb_size() -> F64
-  return F64(me.value) / 1000000000.0
+  return F64(reinterpret_bits[ByteSize, U64](me)) / 1000000000.0
 
 # ============================================================================
 # Arithmetic operators
 # ============================================================================
 
+### Returns `me + you`, adding the two byte sizes.
+### :param you: The addend.
+### :returns: The combined `ByteSize`.
 @readonly
-routine ByteSize.__add__(you: ByteSize) -> ByteSize
-  return ByteSize(me.value + you.value)
+routine ByteSize.$add(you: ByteSize) -> ByteSize
+  return reinterpret_bits[U64, ByteSize](reinterpret_bits[ByteSize, U64](me) + reinterpret_bits[ByteSize, U64](you))
 
+### Returns `me - you`, subtracting `you` from this size.
+### :param you: The size to subtract.
+### :returns: The resulting `ByteSize`.
 @readonly
-routine ByteSize.__sub__(you: ByteSize) -> ByteSize
-  return ByteSize(me.value - you.value)
+routine ByteSize.$sub(you: ByteSize) -> ByteSize
+  return reinterpret_bits[U64, ByteSize](reinterpret_bits[ByteSize, U64](me) - reinterpret_bits[ByteSize, U64](you))
 
-# Scale by integer
+### Returns this size multiplied by an integral factor.
+### :param factor: The scale factor to apply.
+### :returns: The resulting `ByteSize` value.
 @readonly
-routine ByteSize.__mul__(factor: U64) -> ByteSize
-  return ByteSize(me.value *% factor)
+routine ByteSize.$mul(factor: U64) -> ByteSize
+  return reinterpret_bits[U64, ByteSize](reinterpret_bits[ByteSize, U64](me) *% factor)
 
-# Floor division: how many units fit
+### Returns how many times `you` fits into this size.
+### :param you: The size divisor.
+### :returns: The resulting `U64` value.
 @readonly
-routine ByteSize.__floordiv__(you: ByteSize) -> U64
-  return me.value // you.value
+routine ByteSize.$floordiv(you: ByteSize) -> U64
+  return reinterpret_bits[ByteSize, U64](me) // reinterpret_bits[ByteSize, U64](you)
 
-# Divide size evenly by integer
+### Returns this byte size divided by an integral factor.
+### :param divisor: The divisor to apply.
+### :returns: The resulting `ByteSize` value.
 @readonly
 routine ByteSize.div_by(divisor: U64) -> ByteSize
-  return ByteSize(me.value // divisor)
+  return reinterpret_bits[U64, ByteSize](reinterpret_bits[ByteSize, U64](me) // divisor)
 
-# Remainder after floor division
+### Returns the remainder after dividing this size by `you`.
+### :param you: The divisor size.
+### :returns: The remaining `ByteSize`.
 @readonly
-routine ByteSize.__mod__(you: ByteSize) -> ByteSize
-  return ByteSize(me.value % you.value)
+routine ByteSize.$mod(you: ByteSize) -> ByteSize
+  return reinterpret_bits[U64, ByteSize](reinterpret_bits[ByteSize, U64](me) % reinterpret_bits[ByteSize, U64](you))
 
 # ============================================================================
 # Comparison operators
 # ============================================================================
 
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
 @readonly
-routine ByteSize.__eq__(you: ByteSize) -> Bool
-  return me.value == you.value
+routine ByteSize.$eq(you: ByteSize) -> Bool
+  return reinterpret_bits[ByteSize, U64](me) == reinterpret_bits[ByteSize, U64](you)
 
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
 @readonly
-routine ByteSize.__cmp__(you: ByteSize) -> ComparisonSign
-  if me.value < you.value
+routine ByteSize.$cmp(you: ByteSize) -> ComparisonSign
+  var lhs = reinterpret_bits[ByteSize, U64](me)
+  var rhs = reinterpret_bits[ByteSize, U64](you)
+  if lhs < rhs
     return ME_SMALL
-  if me.value > you.value
+  if lhs > rhs
     return ME_LARGE
   return SAME
 
@@ -155,14 +202,71 @@ routine ByteSize.__cmp__(you: ByteSize) -> ComparisonSign
 # Display
 # ============================================================================
 
-routine Text.__create__(from: ByteSize) -> Text
-  if from.value >= BYTES_PER_GIB
-    var gib = F64(from.value) / 1073741824.0
-    return f"{gib} GiB"
-  if from.value >= BYTES_PER_MIB
-    var mib = F64(from.value) / 1048576.0
-    return f"{mib} MiB"
-  if from.value >= BYTES_PER_KIB
-    var kib = F64(from.value) / 1024.0
-    return f"{kib} KiB"
-  return f"{from.value} bytes"
+### Returns the display form of this byte size.
+### Breaks the raw byte count into binary unit components (PiB, TiB, GiB, MiB,
+### KiB, B) and concatenates the non-zero parts, matching the component-wise
+### style of `Duration.$represent`.
+### :returns: The resulting `Text` value.
+routine ByteSize.$represent() -> ?Text
+  var raw = reinterpret_bits[ByteSize, U64](me)
+  if raw == 0u64
+    return "0B"
+
+  var parts = ""
+  var sep = ""
+
+  var pib = raw // BYTES_PER_PIB
+  var rem = raw % BYTES_PER_PIB
+  if pib != 0u64
+    parts = f"{parts}{sep}{pib}PiB"
+    sep = " "
+
+  var tib = rem // BYTES_PER_TIB
+  rem = rem % BYTES_PER_TIB
+  if tib != 0u64
+    parts = f"{parts}{sep}{tib}TiB"
+    sep = " "
+
+  var gib = rem // BYTES_PER_GIB
+  rem = rem % BYTES_PER_GIB
+  if gib != 0u64
+    parts = f"{parts}{sep}{gib}GiB"
+    sep = " "
+
+  var mib = rem // BYTES_PER_MIB
+  rem = rem % BYTES_PER_MIB
+  if mib != 0u64
+    parts = f"{parts}{sep}{mib}MiB"
+    sep = " "
+
+  var kib = rem // BYTES_PER_KIB
+  rem = rem % BYTES_PER_KIB
+  if kib != 0u64
+    parts = f"{parts}{sep}{kib}KiB"
+    sep = " "
+
+  if rem != 0u64
+    parts = f"{parts}{sep}{rem}B"
+
+  return parts
+
+### Returns the diagnostic form of this byte size.
+### :returns: The resulting `Text` value.
+routine ByteSize.$diagnose() -> ?Text
+  return "ByteSize(" + reinterpret_bits[ByteSize, U64](me).$represent() + ")"
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns an xxHash64-based hash of this byte size.
+### :returns: A `U64` hash of the underlying byte count.
+routine ByteSize.$fast_hash() -> U64
+  return __hash_leaf(v: reinterpret_bits[ByteSize, U64](me))
+
+### Returns a SipHash-2-4 keyed hash of this byte size.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
+routine ByteSize.$hash(k0: U64, k1: U64) -> U64
+  return __secure_hash_u64(v: reinterpret_bits[ByteSize, U64](me), k0: k0, k1: k1)

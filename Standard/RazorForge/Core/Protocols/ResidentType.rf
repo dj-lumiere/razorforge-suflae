@@ -1,7 +1,0 @@
-# ResidentType - Marker protocol for all resident types
-# Every resident implicitly conforms to this protocol
-# Provides: Diagnosable (-> Representable), Equatable, Identifiable
-module Core
-
-protocol ResidentType obeys Diagnosable, Equatable, Identifiable
-  pass

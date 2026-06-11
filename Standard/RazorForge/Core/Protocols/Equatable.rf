@@ -1,9 +1,20 @@
-# Equatable - Protocol for types that support equality (==, !=)
 module Core
 
+### Represents the protocol for value equality.
+### Types that obey `Equatable` define whether two values should be treated as
+### the same logical value for comparisons, lookups, and container semantics.
 protocol Equatable
+  ### Returns whether both values are equal.
+  ### Equality should be reflexive, symmetric, and stable for the compared
+  ### values.
+  ### :param you: The other value to compare against.
+  ### :returns: `true` if this value equals `you`.
   @readonly
-  routine Me.__eq__(you: Me) -> Bool
+  routine Me.$eq(you: Me) -> Bool
 
+  ### Returns whether both values are not equal.
+  ### This generated helper is expected to remain the logical inverse of `$eq`.
+  ### :param you: The other value to compare against.
+  ### :returns: `true` if this value does not equal `you`.
   @[readonly, generated]
-  routine Me.__ne__(you: Me) -> Bool
+  routine Me.$ne(you: Me) -> Bool

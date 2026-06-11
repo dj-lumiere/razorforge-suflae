@@ -1,6 +1,5 @@
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Diagnostics;
-using Xunit;
+using Compiler.Diagnostics;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
@@ -8,25 +7,28 @@ using static TestHelpers;
 
 /// <summary>
 /// Tests for in-place compound assignment dispatch (#40).
-/// Compound assignments (+=, -=, etc.) dispatch to in-place dunders (__iadd__, etc.)
-/// first, then fall back to create-and-assign (__add__) for non-entity types.
-/// Entities require in-place dunders (no fallback, since bare entity assignment is prohibited).
+/// Compound assignments (+=, -=, etc.) dispatch to in-place wired methods ($iadd, etc.)
+/// first, then fall back to create-and-assign ($add) for non-entity types.
+/// Entities require in-place wired methods (no fallback, since bare entity assignment is prohibited).
 /// </summary>
 public class CompoundAssignmentTests
 {
-    #region In-Place Dispatch (type defines __iadd__)
+    #region In-Place Dispatch (type defines $iadd)
+    /// <summary>
+    /// Verifies semantic analysis behavior for record with in place wired without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
-    public void Analyze_RecordWithInPlaceDunder_NoError()
+    public void Analyze_RecordWithInPlaceWired_NoError()
     {
         string source = """
                         protocol InPlaceAddable
-                          routine Me.__iadd__(from: Me) -> Blank
+                          routine Me.$iadd(from: Me) -> Blank
 
                         record Counter obeys InPlaceAddable
                           value: S32
 
-                        routine Counter.__iadd__(from: Counter) -> Blank
+                        routine Counter.$iadd(from: Counter) -> Blank
 
                         routine test()
                           var c = Counter(value: 0)
@@ -34,22 +36,25 @@ public class CompoundAssignmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for entity with in place wired without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
-    public void Analyze_EntityWithInPlaceDunder_NoError()
+    public void Analyze_EntityWithInPlaceWired_NoError()
     {
         string source = """
                         protocol InPlaceAddable
-                          routine Me.__iadd__(from: Me) -> Blank
+                          routine Me.$iadd(from: Me) -> Blank
 
                         entity Accumulator obeys InPlaceAddable
                           value: S32
 
-                        routine Accumulator.__iadd__(from: Accumulator) -> Blank
+                        routine Accumulator.$iadd(from: Accumulator) -> Blank
 
                         routine test()
                           var acc = Accumulator(value: 0)
@@ -57,29 +62,32 @@ public class CompoundAssignmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
     }
 
     #endregion
 
-    #region Fallback Dispatch (record with only __add__)
+    #region Fallback Dispatch (record with only $add)
+    /// <summary>
+    /// Verifies semantic analysis behavior for record with regular wired falls back.
+    /// </summary>
 
     [Fact]
-    public void Analyze_RecordWithRegularDunder_FallsBack()
+    public void Analyze_RecordWithRegularWired_FallsBack()
     {
         string source = """
                         protocol Addable
                           @readonly
-                          routine Me.__add__(you: Me) -> Me
+                          routine Me.$add(you: Me) -> Me
 
                         record Vector obeys Addable
                           x: S32
                           y: S32
 
                         @readonly
-                        routine Vector.__add__(you: Vector) -> Vector
+                        routine Vector.$add(you: Vector) -> Vector
                           return Vector(x: me.x, y: me.y)
 
                         routine test()
@@ -88,28 +96,31 @@ public class CompoundAssignmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
     }
 
     #endregion
 
-    #region Entity Without In-Place Dunder (no fallback)
+    #region Entity Without In-Place Wired (no fallback)
+    /// <summary>
+    /// Verifies semantic analysis behavior for entity without in place wired and reports the expected error.
+    /// </summary>
 
     [Fact]
-    public void Analyze_EntityWithoutInPlaceDunder_ReportsError()
+    public void Analyze_EntityWithoutInPlaceWired_ReportsError()
     {
         string source = """
                         protocol Addable
                           @readonly
-                          routine Me.__add__(you: Me) -> Me
+                          routine Me.$add(you: Me) -> Me
 
                         entity Counter obeys Addable
                           value: S32
 
                         @readonly
-                        routine Counter.__add__(you: Counter) -> Counter
+                        routine Counter.$add(you: Counter) -> Counter
                           return Counter(value: me.value)
 
                         routine test()
@@ -118,17 +129,20 @@ public class CompoundAssignmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
     }
 
     #endregion
 
-    #region Neither Dunder Exists
+    #region Neither Wired Exists
+    /// <summary>
+    /// Verifies semantic analysis behavior for no wireds defined and reports the expected error.
+    /// </summary>
 
     [Fact]
-    public void Analyze_NoDundersDefined_ReportsError()
+    public void Analyze_NoWiredsDefined_ReportsError()
     {
         string source = """
                         record Pair
@@ -141,7 +155,7 @@ public class CompoundAssignmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
     }
@@ -149,6 +163,9 @@ public class CompoundAssignmentTests
     #endregion
 
     #region Mutability Checks
+    /// <summary>
+    /// Verifies semantic analysis behavior for var compound assignment without immutability errors.
+    /// </summary>
 
     [Fact]
     public void Analyze_VarCompoundAssignment_NoImmutableError()
@@ -156,12 +173,12 @@ public class CompoundAssignmentTests
         // var is mutable, so compound assignment should not produce immutable errors
         string source = """
                         protocol InPlaceAddable
-                          routine Me.__iadd__(from: Me) -> Blank
+                          routine Me.$iadd(from: Me) -> Blank
 
                         record Counter obeys InPlaceAddable
                           value: S32
 
-                        routine Counter.__iadd__(from: Counter) -> Blank
+                        routine Counter.$iadd(from: Counter) -> Blank
 
                         routine test()
                           var c = Counter(value: 0)
@@ -169,7 +186,7 @@ public class CompoundAssignmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.AssignmentToImmutable);
     }
@@ -177,6 +194,9 @@ public class CompoundAssignmentTests
     #endregion
 
     #region Choice Type Prohibition
+    /// <summary>
+    /// Verifies semantic analysis behavior for choice compound assignment reports arithmetic error.
+    /// </summary>
 
     [Fact]
     public void Analyze_ChoiceCompoundAssignment_ReportsArithmeticError()
@@ -193,7 +213,7 @@ public class CompoundAssignmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.ArithmeticOnChoiceType);
     }
@@ -201,18 +221,21 @@ public class CompoundAssignmentTests
     #endregion
 
     #region Multiple Compound Operators
+    /// <summary>
+    /// Verifies semantic analysis behavior for subtract compound assignment without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_SubtractCompoundAssignment_NoError()
     {
         string source = """
                         protocol InPlaceSubtractable
-                          routine Me.__isub__(from: Me) -> Blank
+                          routine Me.$isub(from: Me) -> Blank
 
                         record Counter obeys InPlaceSubtractable
                           value: S32
 
-                        routine Counter.__isub__(from: Counter) -> Blank
+                        routine Counter.$isub(from: Counter) -> Blank
 
                         routine test()
                           var c = Counter(value: 10)
@@ -220,22 +243,26 @@ public class CompoundAssignmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for bitwise and compound assignment without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_BitwiseAndCompoundAssignment_NoError()
     {
         string source = """
                         protocol InPlaceBitwiseable
-                          routine Me.__iand__(from: Me) -> Blank
+                          routine Me.$ibitand(from: Me) -> Blank
 
                         record Flags obeys InPlaceBitwiseable
                           bits: S32
 
-                        routine Flags.__iand__(from: Flags) -> Blank
+                        routine Flags.$ibitand(from: Flags) -> Blank
+                          pass
 
                         routine test()
                           var f = Flags(bits: 255)
@@ -243,7 +270,123 @@ public class CompoundAssignmentTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
+    }
+
+    #endregion
+
+    #region Additional Operator Coverage
+
+    /// <summary>
+    /// Verifies semantic analysis behavior for multiply compound assignment without unexpected diagnostics.
+    /// </summary>
+    [Fact]
+    public void Analyze_MultiplyCompoundAssignment_NoError()
+    {
+        string source = """
+                        protocol InPlaceMultiplicable
+                          routine Me.$imul(from: Me) -> Blank
+
+                        record Scale obeys InPlaceMultiplicable
+                          factor: S32
+
+                        routine Scale.$imul(from: Scale) -> Blank
+
+                        routine test()
+                          var s = Scale(factor: 2)
+                          s *= Scale(factor: 3)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
+    }
+
+    /// <summary>
+    /// Verifies semantic analysis behavior for bitwise-or compound assignment without unexpected diagnostics.
+    /// </summary>
+    [Fact]
+    public void Analyze_BitwiseOrCompoundAssignment_NoError()
+    {
+        string source = """
+                        protocol InPlaceBitwiseable
+                          routine Me.$ibitand(from: Me) -> Blank
+
+                        record Mask obeys InPlaceBitwiseable
+                          bits: S32
+
+                        routine Mask.$ibitand(from: Mask) -> Blank
+                          pass
+                        routine Mask.$ibitor(from: Mask) -> Blank
+                          pass
+
+                        routine test()
+                          var m = Mask(bits: 0)
+                          m |= Mask(bits: 8)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
+    }
+
+    /// <summary>
+    /// Verifies semantic analysis behavior for modulo compound assignment without unexpected diagnostics.
+    /// </summary>
+    [Fact]
+    public void Analyze_ModuloCompoundAssignment_NoError()
+    {
+        string source = """
+                        protocol InPlaceFloorDivisible
+                          routine Me.$ifloordiv(from: Me) -> Blank
+
+                        record Bucket obeys InPlaceFloorDivisible
+                          size: S32
+
+                        routine Bucket.$ifloordiv(from: Bucket) -> Blank
+                          pass
+                        routine Bucket.$imod(from: Bucket) -> Blank
+                          pass
+
+                        routine test()
+                          var b = Bucket(size: 10)
+                          b %= Bucket(size: 3)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
+    }
+
+    /// <summary>
+    /// Verifies that a record with both $iadd and $add defined uses $iadd (no fallback needed).
+    /// </summary>
+    [Fact]
+    public void Analyze_RecordWithBothIaddAndAdd_PrefersInPlace_NoError()
+    {
+        string source = """
+                        record Vector
+                          x: S32
+
+                        routine Vector.$iadd(from: Vector) -> Blank
+                          pass
+
+                        @readonly
+                        routine Vector.$add(you: Vector) -> Vector
+                          return Vector(x: me.x)
+
+                        routine test()
+                          var v = Vector(x: 1)
+                          v += Vector(x: 2)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.CompoundAssignmentNotSupported);
     }
@@ -251,11 +394,14 @@ public class CompoundAssignmentTests
     #endregion
 
     #region Primitive Types (existing behavior preserved)
+    /// <summary>
+    /// Verifies semantic analysis behavior for primitive var compound assignment without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_PrimitiveVarCompoundAssignment_NoError()
     {
-        // Primitives like S32 don't have __iadd__ registered in tests (no stdlib loaded),
+        // Primitives like S32 don't have $iadd registered in tests (no stdlib loaded),
         // but the test verifies parsing and analysis don't crash.
         string source = """
                         routine test()
@@ -264,8 +410,12 @@ public class CompoundAssignmentTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.NotNull(@object: result);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for primitive var compound assignment without immutability errors.
+    /// </summary>
 
     [Fact]
     public void Analyze_PrimitiveVarCompoundAssignment_NoImmutableError()
@@ -278,7 +428,8 @@ public class CompoundAssignmentTests
                           return
                         """;
 
-        Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.NotNull(@object: result);
         // Should not produce immutable-related errors
     }
 

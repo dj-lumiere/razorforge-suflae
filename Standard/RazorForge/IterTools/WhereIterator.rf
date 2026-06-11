@@ -1,0 +1,66 @@
+module IterTools
+
+### Represents a lazy filtering adapter over a source iterable.
+### The adapter can keep either matching or non-matching items depending on `inverted`.
+### :typeparam T: The element type produced by the source sequence.
+### :typeparam S: The concrete source iterable type (borrowed; enables build-time dispatch).
+entity WhereIterator[T, S] obeys Iterable[T]
+needs S obeys Iterable[T]
+relates WhereEmitter[T, S/Iter] as Iter
+  ### Stores the source iterable (borrowed, not owned).
+  secret source: Hijacked[S]
+  ### Stores the predicate used to test each source value.
+  secret predicate: Routine[(T,), Bool]
+  ### Stores whether the predicate result should be inverted.
+  secret inverted: Bool
+
+### Returns the stateful iterator that applies the filter lazily.
+### Source values are examined only as the caller requests more output values.
+### :returns: The resulting `WhereEmitter[T, S/Iter]` value.
+@readonly
+routine WhereIterator[T, S].$iter() -> ?WhereEmitter[T, S/Iter]
+  danger!
+    return WhereEmitter[T, S/Iter](source: me.source.as_entity().$iter(), predicate: me.predicate, inverted: me.inverted)
+
+### Iterates over a source sequence while yielding only values that satisfy the effective filter.
+### :typeparam T: The element type produced by the source sequence.
+### :typeparam SE: The concrete source iterator type (borrowed).
+entity WhereEmitter[T, SE] obeys Iterator[T]
+needs SE obeys Iterator[T]
+  ### Stores the underlying source iterator (borrowed).
+  secret source: Hijacked[SE]
+  ### Stores the predicate used for filtering.
+  secret predicate: Routine[(T,), Bool]
+  ### Stores whether matches should be inverted.
+  secret inverted: Bool
+
+### Returns the next value that satisfies the effective filter condition.
+### Source values are consumed and discarded until one passes the filter.
+### :returns: The resulting `T` value.
+routine WhereEmitter[T, SE].$next!() -> ?T
+  danger!
+    loop
+      var item = me.source.as_entity().$next!()
+      var matches = me.predicate(item)
+      if me.inverted
+        matches = not matches
+      if matches
+        return item
+
+### Returns a lazy adapter that keeps only values for which `predicate` returns
+### `true`.
+### :param predicate: The filter predicate.
+### :returns: The resulting `WhereIterator[T, Me]` value.
+@readonly
+routine Iterable[T].where(predicate: Routine[(T,), Bool]) -> ?WhereIterator[T, Me]
+  danger!
+    return WhereIterator[T, Me](source: me.hijack(), predicate: predicate, inverted: false)
+
+### Returns a lazy adapter that keeps only values for which `predicate` returns
+### `false`.
+### :param predicate: The filter predicate.
+### :returns: The resulting `WhereIterator[T, Me]` value.
+@readonly
+routine Iterable[T].where_not(predicate: Routine[(T,), Bool]) -> ?WhereIterator[T, Me]
+  danger!
+    return WhereIterator[T, Me](source: me.hijack(), predicate: predicate, inverted: true)

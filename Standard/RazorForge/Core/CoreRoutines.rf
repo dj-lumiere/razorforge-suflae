@@ -1,24 +1,20 @@
-﻿routine stop!()
-  throw UserTerminationError("Stopped by user")
+module Core
 
+### Executes `stop`.
+### :throws: May throw {UserTerminationError}.
+@crash_only
+routine stop!()
+  throw UserTerminationError()
+
+### Performs the `verify` operation on this value.
+### :param expr: The `expr` value.
+### :throws: May throw {VerificationFailedError}.
+@crash_only
 routine verify!(expr: Bool)
-  throw VerificationFailure()
+  throw VerificationFailedError()
 
+### Executes `breach`.
+### :throws: May throw {LogicBreachedError}.
+@crash_only
 routine breach!()
-  throw LogicBreachError()
-
-routine max!(values...: T) needs T obeys Comparable
-  if values.is_empty()
-    throw NoSuchValueError()
-  var result = values[0]
-  for value in values
-    result = result.max(value)
-  return result
-
-routine min!(values...: T) needs T obeys Comparable
-  if values.is_empty()
-    throw NoSuchValueError()
-  var result = values[0]
-  for value in values
-    result = result.min(value)
-  return result
+  throw LogicBreachedError()

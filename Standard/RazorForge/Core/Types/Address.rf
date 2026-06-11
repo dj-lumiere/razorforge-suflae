@@ -1,0 +1,193 @@
+module Core
+
+### Represents a raw machine address value.
+### `Address` is used for pointer interop, low-level memory helpers, and runtime-facing APIs where a typed reference is not available.
+### Prefer typed wrappers such as {Hijacked[T]} when the pointee type is known.
+### :see: {ByteSize}, {Hijacked[T]}, {Memory-Types}
+@llvm("i64")
+record Address
+obeys UnsignedIntegral, Ordered, ConstCompatible, WrappingAddable, WrappingSubtractable
+  pass
+
+# ============================================================================
+# No $create routines — Address has no implicit or explicit conversions.
+# Use Hijacked[T] for converting between Address and other types.
+# ============================================================================
+
+### Returns `from` unchanged.
+### This creator exists only as the identity conversion for `Address`.
+### :param from: The address value to reuse.
+### :returns: The resulting `Address` value.
+routine Address.$create(from: Address) -> Address
+  return from
+
+# ============================================================================
+# Wrapping Arithmetic Operations (+%, -%)
+# These explicitly wrap on overflow - the only arithmetic allowed on Address
+# ============================================================================
+
+### Returns the wrapping sum of two raw addresses.
+### This is intended for low-level pointer arithmetic where wraparound semantics
+### are explicit and acceptable.
+### :param you: The address offset or peer address value to add.
+### :returns: The resulting `Address` value.
+@readonly
+routine Address.$add_wrap(you: Address) -> Address
+  return add[Address](me, you)
+
+### Returns the wrapping difference between two raw addresses.
+### :param you: The address value to subtract.
+### :returns: The resulting `Address` value.
+@readonly
+routine Address.$sub_wrap(you: Address) -> Address
+  return sub[Address](me, you)
+
+# Note: Address × Address and Address // Address have no meaningful semantics
+# (addresses are points in a memory space, not scalars). Use pointer arithmetic
+# via `Address + ByteSize` / `Address - ByteSize` instead, and `Address - Address`
+# to obtain the byte-distance as a `ByteSize`.
+
+# ============================================================================
+# Comparison Operations
+# ============================================================================
+
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Address.$eq(you: Address) -> Bool
+  return int_eq[Address](me, you)
+
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
+@readonly
+routine Address.$cmp(you: Address) -> ComparisonSign
+  if unsigned_lt[Address](me, you)
+    return ME_SMALL
+  if unsigned_gt[Address](me, you)
+    return ME_LARGE
+  return SAME
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+### Returns the smaller of two addresses in unsigned address order.
+### :param you: The other address to compare against.
+### :returns: The resulting `Address` value.
+@readonly
+routine Address.min(you: Address) -> Address
+  if me <= you
+    return me
+  return you
+
+### Returns the larger of two addresses in unsigned address order.
+### :param you: The other address to compare against.
+### :returns: The resulting `Address` value.
+@readonly
+routine Address.max(you: Address) -> Address
+  if me >= you
+    return me
+  return you
+
+### Returns `true` when this address value is a power of two.
+### This is mainly useful for alignment checks and low-level mask logic.
+### :returns: The resulting `Bool` value.
+@readonly
+routine Address.is_power_of_two() -> Bool
+  return me != 0_addr and (me & (me -% 1_addr)) == 0_addr
+
+# ============================================================================
+# ByteSize Arithmetic
+# ============================================================================
+
+### Returns the result of offsetting this address by a byte size.
+### :param offset: The byte count to add.
+### :returns: The resulting `Address` value.
+@readonly
+routine Address.$add(offset: ByteSize) -> Address
+  return add[Address](me, reinterpret_bits[ByteSize, Address](value: offset))
+
+### Returns the byte distance from this address to another address.
+### :param other: The address to subtract.
+### :returns: The resulting `ByteSize` value.
+@readonly
+routine Address.$sub(other: Address) -> ByteSize
+  return ByteSize(U64(sub[Address](me, other)))
+
+### Returns the result of stepping this address back by a byte size.
+### :param offset: The byte count to subtract.
+### :returns: The resulting `Address` value.
+@readonly
+routine Address.$sub(offset: ByteSize) -> Address
+  return sub[Address](me, reinterpret_bits[ByteSize, Address](value: offset))
+
+# ============================================================================
+# Text Representation and Parsing
+# ============================================================================
+
+### Returns the display form of this address.
+### Addresses are rendered in grouped hexadecimal form to make pointer values
+### easier to scan in diagnostics.
+### :returns: The resulting `Text` value.
+@readonly
+routine Address.$represent() -> ?Text
+  # Format as 0xXXXX_XXXX_XXXX_XXXX (64-bit hex with underscore groups)
+  var digits = List[Character]()
+  digits.add_last(Character(0x0030u32))
+  digits.add_last(Character(0x0078u32))
+  var i = 0u32
+  while i < 16u32
+    if i > 0u32 and i % 4u32 == 0u32
+      digits.add_last(Character(0x005Fu32))
+    var shift = (15u32 - i) * 4u32
+    var nibble = U32((U64(me) >> shift) & 0x0Fu64)
+    if nibble < 10u32
+      digits.add_last(Character(0x0030u32 + nibble))
+    else
+      digits.add_last(Character(0x0041u32 + nibble - 10u32))
+    i = i + 1u32
+  return Text(from_list: steal digits)
+
+### Returns the diagnostic form of this address.
+### :returns: The resulting `Text` value.
+@readonly
+routine Address.$diagnose() -> ?Text
+  return "Address(" + me.$represent() + ")"
+
+### Parses an address from hexadecimal text.
+### The accepted format is hex digits with an optional `0x`/`0X` prefix and
+### optional underscore separators.
+### :param from_text: The text to parse.
+### :returns: The resulting `Address` value.
+### :throws: May throw {InvalidValueError}.
+routine Address.$create!(from_text: Text) -> Address
+  # Parses hex format: 0xXXXX_XXXX_XXXX_XXXX
+  if from_text.count() == 0u64
+    throw InvalidValueError(input: from_text, target: "Address")
+  var result = 0u64
+  var i = 0u64
+  # Skip optional "0x" prefix
+  if from_text.count() > 1u64
+    if from_text[0u64] == Character(0x0030u32)
+      if from_text[1u64] == Character(0x0078u32)
+        i = 2u64
+      elseif from_text[1u64] == Character(0x0058u32)
+        i = 2u64
+  if i >= from_text.count()
+    throw InvalidValueError(input: from_text, target: "Address")
+  while i < from_text.count()
+    var cp = from_text[i].codepoint()
+    if 0x0030u32 <= cp <= 0x0039u32
+      result = (result << 4_u32) + U64(cp - 0x0030u32)
+    elseif 0x0041u32 <= cp <= 0x0046u32
+      result = (result << 4_u32) + U64(cp - 0x0041u32 + 10u32)
+    elseif 0x0061u32 <= cp <= 0x0066u32
+      result = (result << 4_u32) + U64(cp - 0x0061u32 + 10u32)
+    elseif cp == 0x005Fu32
+      pass
+    else
+      throw InvalidValueError(input: from_text, target: "Address")
+    i = i + 1u64
+  return Address(result)

@@ -1,0 +1,13 @@
+--- transfer via return ---
+ make_box: create
+  create(7)
+ got tag=7
+--- transfer via steal into call ---
+ consume: tag=7
+  destroy(7)
+ after consume() returned; b was stolen
+--- single-owner end-of-scope destroy ---
+  create(100)
+ using x tag=100
+DONE
+  destroy(100)

@@ -1,0 +1,8 @@
+ok type: Result[S64]
+ok: 10
+err: Input was not in the accepted range.
+err diagnose: Core.Result[Core.S64](type_id: 8592546850043247946, Tests/Stdlib/CrashableApi.BadInputError(Input was not in the accepted range.))
+  caught BadInputError
+AbsentValueError.crash_title(): Absent value error
+AbsentValueError.crash_message(): Attempted to access a value that is absent.
+DONE

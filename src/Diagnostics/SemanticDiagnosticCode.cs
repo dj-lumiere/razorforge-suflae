@@ -1,4 +1,4 @@
-namespace SemanticAnalysis.Diagnostics;
+namespace Compiler.Diagnostics;
 
 /// <summary>
 /// Semantic diagnostic codes for RazorForge (RF-S prefix).
@@ -77,6 +77,12 @@ public enum SemanticDiagnosticCode
     /// <summary>Invalid base prefix in numeric literal (expected 0x, 0o, or 0b).</summary>
     InvalidNumericBase = 15,
 
+    /// <summary>
+    /// The value literal 'none' was used outside a carrier or variant slot.
+    /// Legal contexts: target type is Maybe[T], Lookup[T], or a variant with a None arm.
+    /// </summary>
+    NoneOutsideCarrierSlot = 16,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // BINARY AND UNARY OPERATOR ERRORS (RF-S050 - RF-S099)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -92,9 +98,6 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Bitwise 'not' operator requires an integer operand.</summary>
     BitwiseNotRequiresInteger = 57,
-
-    /// <summary>Identity operator (===, !==) only works with entity/resident types.</summary>
-    IdentityOperatorRequiresReference = 58,
 
     /// <summary>Comparison operator cannot be used with variant types.</summary>
     ComparisonOnVariantType = 59,
@@ -119,9 +122,6 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Unary operator method not found on type.</summary>
     UnaryOperatorNotFound = 66,
-
-    /// <summary>Waitfor 'within' clause requires a Duration type.</summary>
-    WaitforTimeoutNotDuration = 67,
 
     /// <summary>Real-to-Complex promotion only allowed for addition and subtraction.</summary>
     RealComplexPromotionInvalid = 68,
@@ -197,9 +197,6 @@ public enum SemanticDiagnosticCode
     /// <summary>Type is not a reference type (entity) as required by constraint.</summary>
     ReferenceTypeConstraintViolation = 152,
 
-    /// <summary>Type is not a resident type as required by constraint.</summary>
-    ResidentTypeConstraintViolation = 153,
-
     /// <summary>Type is not a routine type as required by constraint.</summary>
     RoutineTypeConstraintViolation = 154,
 
@@ -209,6 +206,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Type is not a variant type as required by constraint.</summary>
     VariantTypeConstraintViolation = 156,
 
+    /// <summary>Type is not a crashable type as required by constraint.</summary>
+    CrashableTypeConstraintViolation = 157,
+
     /// <summary>Invalid const generic type.</summary>
     InvalidConstGenericType = 158,
 
@@ -217,9 +217,6 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Type is not in the allowed set for type equality constraint.</summary>
     TypeEqualityConstraintViolation = 160,
-
-    /// <summary>Type does not satisfy 'from' constraint.</summary>
-    FromConstraintViolation = 161,
 
     /// <summary>Type parameter in constraint is not declared on the type or function.</summary>
     UnknownTypeParameterInConstraint = 163,
@@ -240,7 +237,7 @@ public enum SemanticDiagnosticCode
     /// <summary>While condition must be boolean.</summary>
     WhileConditionNotBool = 204,
 
-    /// <summary>Type is not iterable for for-loop (does not follow Sequenceable protocol).</summary>
+    /// <summary>Type is not iterable for for-loop (does not follow Iterable protocol).</summary>
     TypeNotIterable = 205,
 
     /// <summary>Unknown statement type encountered.</summary>
@@ -283,8 +280,8 @@ public enum SemanticDiagnosticCode
     /// <summary>Compound assignment operator not supported on type.</summary>
     CompoundAssignmentNotSupported = 254,
 
-    /// <summary>Attempting to modify 'me' member variable in a @readonly method.</summary>
-    ModificationInReadonlyMethod = 255,
+    /// <summary>Attempting to mutate 'me' member variable in a @readonly method.</summary>
+    MutationInReadonlyMethod = 255,
 
     /// <summary>Cannot call modifying method on preset variable.</summary>
     ModifyingCallOnImmutable = 256,
@@ -294,6 +291,9 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Preset initializer must be a build-time constant expression.</summary>
     PresetNotConstant = 258,
+
+    /// <summary>Type does not support the given operator (missing wired routine).</summary>
+    TypeDoesNotSupportOperator = 259,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // CONTROL FLOW AND RETURN ERRORS (RF-S300 - RF-S349)
@@ -326,8 +326,6 @@ public enum SemanticDiagnosticCode
     /// <summary>Single-expression when branch should use '=>' syntax instead of block with 'becomes'.</summary>
     SingleExpressionBranchUsesBecomes = 308,
 
-
-
     // ═══════════════════════════════════════════════════════════════════════════
     // PATTERN MATCHING ERRORS (RF-S350 - RF-S399)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -341,10 +339,10 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot match variant pattern against non-variant type.</summary>
     VariantPatternOnNonVariant = 352,
 
-    /// <summary>Variant type does not have the specified case.</summary>
+    /// <summary>Variant type does not have the specified member type.</summary>
     VariantCaseNotFound = 353,
 
-    /// <summary>Variant case has no payload to destructure.</summary>
+    /// <summary>Variant member (None) has no payload to destructure.</summary>
     VariantCaseNoPayload = 354,
 
     /// <summary>Choice type does not have the specified case.</summary>
@@ -390,8 +388,8 @@ public enum SemanticDiagnosticCode
     /// <summary>Routine name uses reserved prefix (try_, check_, lookup_).</summary>
     ReservedRoutinePrefix = 409,
 
-    /// <summary>Routine name uses reserved dunder pattern (__name__) that is not a known operator method.</summary>
-    UnknownDunderMethod = 410,
+    /// <summary>Routine name uses reserved '$' prefix but is not a known wired method.</summary>
+    UnknownWiredRoutine = 410,
 
     /// <summary>Type defines an operator method but does not follow the required protocol.</summary>
     OperatorWithoutProtocol = 411,
@@ -399,8 +397,17 @@ public enum SemanticDiagnosticCode
     /// <summary>Record member variable has a type that is not a value type (entities, wrappers, tokens cannot be stored in records).</summary>
     RecordContainsNonValueType = 412,
 
+    /// <summary>Record contains itself by value (directly or transitively) — infinite storage size.</summary>
+    RecursiveValueRecord = 960,
+
     /// <summary>Entity cannot be directly assigned from another variable. Must use .share() or steal.</summary>
     BareEntityAssignment = 413,
+    /// <summary>
+    /// Implicit copy of a value whose type contains a non-trivially-copyable wrapper
+    /// (`T`, `Retained[T]`, `Tracked[T]`, ...). Each ownership wrapper has its
+    /// own verb (`steal` / `.retain()` / `.track()`) that must appear at every copy site.
+    /// </summary>
+    ImplicitWrapperCopy = 420,
 
     /// <summary>Variant type cannot be stored in member variables.</summary>
     VariantMemberVariableNotAllowed = 414,
@@ -456,9 +463,6 @@ public enum SemanticDiagnosticCode
     /// <summary>Operand is not a flags type for a flags operator.</summary>
     FlagsTypeMismatch = 431,
 
-    /// <summary>Entity member variable cannot be a resident type (residents are global singletons).</summary>
-    EntityContainsResidentMemberVariable = 432,
-
     /// <summary>Enumeration type (choice, variant, flags) must have at least one member/case.</summary>
     EmptyEnumerationBody = 433,
 
@@ -499,6 +503,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Common routine called on object or vice versa.</summary>
     CommonRoutineMismatch = 459,
 
+    /// <summary>Wired routine ($-prefixed) called directly by user code.</summary>
+    DirectWiredRoutineCall = 460,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // CALL AND ARGUMENT ERRORS (RF-S500 - RF-S549)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -536,8 +543,13 @@ public enum SemanticDiagnosticCode
     /// <summary>Routine with 2+ parameters requires named arguments at call site.</summary>
     NamedArgumentRequired = 510,
 
-    /// <summary>Runtime dispatch not supported in RazorForge — mixed-type protocol varargs require all arguments to be the same concrete type.</summary>
-    RuntimeDispatchNotSupported = 511,
+    /// <summary>A user `$create` may not take exactly the type's field-name set — that signature
+    /// is the built-in memberwise constructor and cannot be overridden.</summary>
+    AllFieldsCreatorReserved = 511,
+
+    /// <summary>A call to a `@positional` routine mixes positional and named arguments — a call
+    /// must be either all positional or all named.</summary>
+    MixedPositionalAndNamedArguments = 512,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // COLLECTION LITERAL ERRORS (RF-S550 - RF-S599)
@@ -564,6 +576,9 @@ public enum SemanticDiagnosticCode
     /// <summary>Set element type mismatch.</summary>
     SetElementTypeMismatch = 556,
 
+    /// <summary>Collection literal constructor argument count mismatch (e.g., Array[S64, 4] given 3 args).</summary>
+    ArgumentCountMismatch = 557,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // MEMORY TOKEN ERRORS - RAZORFORGE SPECIFIC (RF-S600 - RF-S649)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -583,8 +598,8 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot steal scope-bound token.</summary>
     StealScopeBoundToken = 604,
 
-    /// <summary>Cannot steal Snatched type.</summary>
-    StealSnatched = 605,
+    /// <summary>Cannot steal Hijacked type.</summary>
+    StealHijacked = 605,
 
     /// <summary>Cannot capture scope-bound token in lambda.</summary>
     LambdaCaptureToken = 606,
@@ -592,7 +607,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot capture raw entity in lambda.</summary>
     LambdaCaptureRawEntity = 607,
 
-    /// <summary>Nested hijacking is not allowed - cannot hijack a member of an already-hijacked object.</summary>
+    /// <summary>Nested grasping is not allowed - cannot grasp a member of an already-grasped object.</summary>
     NestedHijackingNotAllowed = 608,
 
     /// <summary>Dangerous routine called outside a danger! block.</summary>
@@ -601,7 +616,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Lambda captures variable without declaring it in 'given' clause.</summary>
     LambdaCaptureWithoutGiven = 610,
 
-    /// <summary>Using target must have __enter__/__exit__ for resource management.</summary>
+    /// <summary>Using target must have $enter/$exit for resource management.</summary>
     UsingTargetMissingEnterExit = 612,
 
     /// <summary>Using-bound token cannot escape the using block scope.</summary>
@@ -616,48 +631,42 @@ public enum SemanticDiagnosticCode
     /// <summary>Partial access on entity (e.g., entity.field.view()) is not allowed.</summary>
     PartialAccessOnEntity = 616,
 
-    /// <summary>Cannot downgrade token permission (e.g., .view() on Hijacked/Seized).</summary>
+    /// <summary>Cannot downgrade token permission (e.g., .view() on Modifying/Claiming).</summary>
     TokenDowngradeProhibited = 618,
 
-    /// <summary>Same entity cannot be hijacked multiple times in one call.</summary>
+    /// <summary>Same entity cannot be modified multiple times in one call.</summary>
     HijackDuplicateInCall = 620,
 
-    /// <summary>Cannot hijack an already-hijacked token.</summary>
+    /// <summary>Cannot re-modify an already-modifying token.</summary>
     ReHijackingProhibited = 621,
 
     /// <summary>Migratable operation on collection during iteration is not allowed.</summary>
     MigratableDuringIteration = 625,
 
-    /// <summary>Seized[T] cannot be copied or aliased.</summary>
-    SeizedCopyNotAllowed = 626,
+    /// <summary>Claiming[T] cannot be copied or aliased.</summary>
+    ClaimingCopyNotAllowed = 626,
 
-    /// <summary>Snatched[T] method calls require danger! block.</summary>
-    SnatchedRequiresDanger = 627,
+    /// <summary>Cannot write to member variable through read-only wrapper (Viewing, Inspecting).</summary>
+    WriteThroughReadOnlyWrapper = 631,
 
-    /// <summary>.snatch() on Shared/Tracked requires danger! block.</summary>
+    /// <summary>Hijacked[T] method calls require danger! block.</summary>
+    HijackedRequiresDanger = 627,
+
+    /// <summary>.hijack() on Shared/Watched requires danger! block.</summary>
     SnatchRequiresDanger = 628,
 
     /// <summary>inspect!() only valid with MultiRead lock policy.</summary>
     InspectRequiresMultiRead = 629,
 
-    /// <summary>ReadOnly lock policy does not support seize!() or inspect!().</summary>
+    /// <summary>ReadOnly lock policy does not support claim!() or inspect!().</summary>
     ReadOnlyRejectsLocking = 630,
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // MODIFICATION INFERENCE ERRORS (RF-S650 - RF-S699)
+    // MUTATION INFERENCE ERRORS (RF-S650 - RF-S699)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// <summary>Modifying method requires ! token.</summary>
-    ModifyingMethodRequiresToken = 650,
-
-    /// <summary>Cannot call modifying method through read-only token.</summary>
-    ModifyingMethodThroughReadOnlyToken = 651,
-
-    /// <summary>Cannot call migratable method through exclusive token.</summary>
-    MigratableMethodThroughExclusiveToken = 652,
-
-    /// <summary>Modification category conflict detected.</summary>
-    ModificationCategoryConflict = 653,
+    /// <summary>Mutation category conflict detected.</summary>
+    MutationCategoryConflict = 653,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PROTOCOL CONFORMANCE ERRORS (RF-S700 - RF-S749)
@@ -665,6 +674,9 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Thrown value must implement Crashable protocol.</summary>
     ThrowNotCrashable = 700,
+
+    /// <summary>Crashable type missing crash_message() Text implementation.</summary>
+    CrashMessageNotImplemented = 704,
 
     /// <summary>Only record types can be thrown (error types must be records).</summary>
     ThrowRequiresRecordType = 701,
@@ -681,6 +693,26 @@ public enum SemanticDiagnosticCode
     /// <summary>Cannot override an @innate protocol routine.</summary>
     InnateOverrideNotAllowed = 705,
 
+    /// <summary>An annotation was used in an invalid context or with invalid arguments.</summary>
+    InvalidAnnotation = 706,
+
+    /// <summary>Type declares 'obeys Referring[T]' or 'obeys Controlling[T]' but is not in the
+    /// stdlib closed allowlist (Retained/Viewing/Modifying/Hijacked/Tracked + deferred concurrency
+    /// wrappers + entity-T auto-conformance). Marker-protocol obeyers type-erase to ptr layout, so
+    /// the allowlist is the soundness fence preventing user types with incompatible layouts from
+    /// being passed where the routine body assumes T's ptr representation.</summary>
+    MarkerProtocolLayoutViolation = 707,
+
+    /// <summary>A record annotated with @llvm("typename") declares member variables. The
+    /// annotation IS the LLVM layout; user-declared fields are silently discarded by codegen,
+    /// producing unsound representations. Body must be `pass` (or empty).</summary>
+    LlvmAnnotatedRecordMustHavePassBody = 708,
+
+    /// <summary>A non-crashable type (record, entity, …) declares <c>obeys Crashable</c>. The
+    /// Crashable contract — being a throwable error — is conferred ONLY by the <c>crashable</c>
+    /// type kind. Declare the type with the <c>crashable</c> keyword instead.</summary>
+    CrashableObeyedByNonCrashableKind = 709,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // ERROR HANDLING ERRORS (RF-S750 - RF-S799)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -693,9 +725,6 @@ public enum SemanticDiagnosticCode
 
     /// <summary>Error during variant generation.</summary>
     VariantGenerationError = 752,
-
-    /// <summary>Crashable function called without error handling.</summary>
-    UnhandledCrashableCall = 753,
 
     /// <summary>Error handling type (Result/Lookup) cannot be used as parameter type.</summary>
     ErrorHandlingTypeAsParameter = 754,
@@ -712,28 +741,13 @@ public enum SemanticDiagnosticCode
     /// <summary>Result/Lookup stored in variable beyond immediate dismantling.</summary>
     ErrorHandlingTypeStoredInVariable = 758,
 
-    /// <summary>Resident types can only be declared as global variables, not local variables.</summary>
-    ResidentAsLocalVariable = 759,
-
-    /// <summary>The 'global' keyword is only valid for resident type variables.</summary>
-    GlobalOnlyForResidents = 760,
-
-    /// <summary>Resident member variables can only contain records, primitives, Snatched[T], or other residents.</summary>
-    ResidentContainsInvalidType = 761,
-
-    /// <summary>Resident types cannot implement Hashable (identity-based, not content-based).</summary>
-    ResidentHashableProhibited = 762,
-
-    /// <summary>Residents cannot use .share() or .track() — they have program lifetime.</summary>
-    ResidentShareTrackProhibited = 763,
-
-    /// <summary>Variant case cannot contain nested variants, Result[T], Lookup[T], or tokens.</summary>
+/// <summary>Variant member cannot be Result[T], Lookup[T], a token, or a duplicate type.</summary>
     VariantCaseContainsInvalidType = 764,
 
-    /// <summary>Index operators (__getitem__/__setitem__) are only valid on entities and residents.</summary>
+    /// <summary>Index operators ($getitem/$setitem) are only valid on entities.</summary>
     IndexOperatorTypeKindRestriction = 765,
 
-    /// <summary>Cannot use compound assignment on a read-only token (Viewed or Inspected).</summary>
+    /// <summary>Cannot use compound assignment on a read-only token (Viewing or Inspecting).</summary>
     CompoundAssignmentOnReadOnlyToken = 766,
 
     /// <summary>Fixed-width numeric types must match exactly; explicit conversion required.</summary>
@@ -764,7 +778,7 @@ public enum SemanticDiagnosticCode
     InvalidVisibilityCombination = 775,
 
     /// <summary>Conflicting mutation category annotations (e.g., both @readonly and @writable).</summary>
-    MutationCategoryConflict = 776,
+    MutationCategoryContradiction = 776,
 
     /// <summary>Annotation arguments must be build-time constants.</summary>
     AnnotationArgNotConstant = 777,
@@ -775,14 +789,15 @@ public enum SemanticDiagnosticCode
     /// <summary>Annotation arguments must be compile-time constant literals or identifiers.</summary>
     AnnotationArgNotLiteral = 784,
 
-    /// <summary>ValueTuple can only contain value types (records, primitives, choices).</summary>
+    /// <summary>'with' expression base must obey the Assignable protocol.</summary>
+    WithBaseNotAssignable = 785,
+
+    /// <summary>A statement is unreachable: a preceding statement in the same block always diverges
+    /// (return / throw / absent / break / continue), so control can never reach this one.</summary>
+    UnreachableStatement = 786,
+
+    /// <summary>Deprecated — ValueTuple distinction removed, all tuples are inline structs.</summary>
     ValueTupleContainmentViolation = 779,
-
-    /// <summary>FixedTuple can only contain records, choices, residents, or other FixedTuples.</summary>
-    FixedTupleContainmentViolation = 780,
-
-    /// <summary>Result, Lookup, variants, and tokens cannot be boxed to Data.</summary>
-    DataBoxingProhibited = 781,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // LANGUAGE RESTRICTION ERRORS (RF-S800 - RF-S849)
@@ -794,26 +809,30 @@ public enum SemanticDiagnosticCode
     /// <summary>Danger blocks cannot be nested.</summary>
     NestedDangerBlock = 801,
 
+    /// <summary>`?T` rvalue mark is only valid at routine return position (slots are lvalue).</summary>
+    RvalueMarkInSlotPosition = 802,
+
+    /// <summary>Bare entity in return position must use `?T` rvalue mark.</summary>
+    BareEntityReturnMissingRvalueMark = 803,
+
     /// <summary>Blank cannot be used as a generic type argument (it has no value).</summary>
     BlankAsTypeArgument = 805,
 
-    /// <summary>Data? / Maybe&lt;Data&gt; is not allowed — Data already holds None natively.</summary>
-    NullableDataProhibited = 806,
+    /// <summary>A user-defined `$destroy` overrides the compiler's memory teardown, so it must be
+    /// marked `dangerous` — the author takes responsibility for freeing `me` and its fields.</summary>
+    DestroyMustBeDangerous = 807,
 
     /// <summary>Suflae cannot use C interop directly.</summary>
     SuflaeNoCInterop = 810,
 
-    /// <summary>Only Level 3 expressions (identifiers, literals, member access, calls) allowed in f-text.</summary>
-    FTextExpressionLevelRestriction = 815,
+    /// <summary>Two external("C") declarations for the same C symbol disagree on signature.</summary>
+    ExternalSignatureMismatch = 811,
+
+    /// <summary>Invalid f-text format specifier.</summary>
+    InvalidFTextFormatSpec = 816,
 
     /// <summary>Lazy Sequence[T] cannot escape the scope of the token it was created from.</summary>
     SequenceScopeEscape = 820,
-
-    /// <summary>'emit' statement only allowed in generator routines.</summary>
-    EmitOutsideGenerator = 825,
-
-    /// <summary>Generator routine must return Sequence[T] type.</summary>
-    GeneratorReturnType = 826,
 
     /// <summary>Suflae untyped parameter defaults to Data.</summary>
     SuflaeImplicitDataType = 830,
@@ -824,7 +843,7 @@ public enum SemanticDiagnosticCode
     /// <summary>Routine cannot directly return Maybe&lt;T&gt;/Result&lt;T&gt;/Lookup&lt;T&gt; — use failable routines (!) instead.</summary>
     ErrorHandlingTypeAsReturnType = 807,
 
-    /// <summary>Nested Maybe types (Maybe[Maybe[T]] / T??) are not allowed.</summary>
+    ///<summary>Nested Maybe types (Maybe[Maybe[T]] / T??) are not allowed.</summary>
     NestedMaybeProhibited = 808,
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -843,40 +862,56 @@ public enum SemanticDiagnosticCode
     /// <summary>Invalid intrinsic arguments.</summary>
     InvalidIntrinsicArguments = 853,
 
+    /// <summary>Unchecked arithmetic operator used outside a danger block or @dangerous routine.</summary>
+    UncheckedOperatorOutsideDanger = 854,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // CONCURRENCY AND TASK DEPENDENCY ERRORS (RF-S900 - RF-S949)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// <summary>Task dependency expression is not a Lookup&lt;T&gt; type.</summary>
-    DependencyNotLookupType = 900,
-
     /// <summary>Lookup&lt;T&gt; value not dismantled before end of scope.</summary>
     LookupNotDismantled = 901,
 
-    /// <summary>Waitfor expression used outside of suspended/threaded routine.</summary>
-    WaitforOutsideSuspendedRoutine = 902,
+    /// <summary>BuilderService routine called without 'import BuilderService'.</summary>
+    BuilderServiceImportRequired = 950,
 
-    /// <summary>Non-leaf waitfor requires 'within' timeout clause.</summary>
-    WaitforRequiresTimeout = 905,
+    /// <summary>Routine declaration body could not be matched to a registered routine.</summary>
+    UnresolvedRoutineBody = 951,
 
-    /// <summary>Dangerous external routine called without danger! block.</summary>
-    DangerousExternalCallOutsideDanger = 910,
+    /// <summary>Bare entity type used as type argument to Maybe/Result/Lookup. Wrap in Retained[T], Shared[T], or use Owned[T?] for unique ownership.</summary>
+    BareEntityInCarrierType = 953,
 
-    /// <summary>Channel send() makes source variable a deadref.</summary>
-    ChannelSendOwnershipTransfer = 915,
+    /// <summary>Residual high-level AST node survived backend-entry lowering validation.</summary>
+    IllegalBackendResidualNode = 954,
 
-    /// <summary>Resident .lock!<Policy>() can only be called at global initialization time.</summary>
-    ResidentLockTimingRestriction = 920,
+    /// <summary>Backend-visible expression reached backend entry without resolved ABI/storage metadata.</summary>
+    MissingBackendRepresentation = 955,
+
+    /// <summary>Backend-visible routine or expression still carries unresolved generic placeholders.</summary>
+    UnresolvedBackendGeneric = 956,
+
+    /// <summary>Concrete monomorphized routine reached backend entry without a concrete AST body.</summary>
+    MissingMonomorphizedBody = 957,
+
+    /// <summary>Preset identifier survived to backend entry instead of being inlined earlier in the pipeline.</summary>
+    IllegalBackendPresetIdentifier = 958,
+
+    /// <summary>Constructor-like call reached backend entry without semantic lowering metadata.</summary>
+    MissingCallLoweringMetadata = 959,
 }
 
+/// <summary>
+/// Provides formatting helpers for <see cref="SemanticDiagnosticCode"/>.
+/// </summary>
 public static class SemanticDiagnosticCodeExtensions
 {
     /// <summary>
-    /// Formats code as RF-Snnn (e.g., S001, S100)
+    /// Formats code as RF-Snnn (e.g., RF-S001, RF-S100) — matching the RF-G/SF-G grammar
+    /// code convention and the published documentation.
     /// </summary>
     public static string ToCodeString(this SemanticDiagnosticCode code)
     {
-        return $"S{(int)code:D3}";
+        return $"RF-S{(int)code:D3}";
     }
 
     /// <summary>

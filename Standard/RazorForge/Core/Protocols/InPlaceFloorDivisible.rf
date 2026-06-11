@@ -1,0 +1,16 @@
+module Core
+
+### Represents the protocol for in-place Euclidean division operators.
+### `InPlaceFloorDivisible` groups quotient and remainder mutations for
+### integer-like values that support direct update of the left-hand operand.
+protocol InPlaceFloorDivisible
+  ### Applies floor division by `you` in place.
+  ### :param you: The divisor.
+  @writable
+  routine Me.$ifloordiv(you: Me)
+
+  ### Applies modulo by `you` in place.
+  ### This replaces the current value with the remainder associated with `you`.
+  ### :param you: The divisor.
+  @writable
+  routine Me.$imod(you: Me)

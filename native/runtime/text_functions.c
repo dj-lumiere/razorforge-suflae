@@ -2,10 +2,11 @@
  * @file text_functions.c
  * @brief Text formatting and parsing functions for RazorForge runtime
  *
- * Provides rf_format_X and rf_parse_X functions for all primitive types.
- * Function names use PascalCase type identifiers to match RazorForge conventions.
+ * Provides rf_format_X and rf_parse_X functions for floating-point types.
+ * Integer formatting and parsing is now pure RazorForge (see Text.Convert.rf
+ * and Text.Parse.rf).
  *
- * NOTE: Text in RazorForge is UTF-32 encoded. These functions currently return
+ * NOTE: Text in RazorForge is UTF-32 encoded. These functions return
  * heap-allocated C strings (ASCII/UTF-8) which is sufficient for numeric formatting
  * since all numeric characters are in the ASCII range. The codegen layer handles
  * conversion to the internal Text representation.
@@ -14,9 +15,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <inttypes.h>
-#include <errno.h>
-#include <limits.h>
 #include <float.h>
 #include <math.h>
 #include "types.h"
@@ -26,199 +24,54 @@ extern float rf_f16_to_f32(uint16_t x);
 extern uint16_t rf_f16_from_f32(float x);
 
 // ============================================================================
-// Formatting: Signed Integers
-// ============================================================================
-
-rf_UAddr rf_format_S8(rf_S8 value)
-{
-    char* buffer = (char*)malloc(8);
-    if (!buffer) return 0;
-    snprintf(buffer, 8, "%" PRId8, value);
-    return (rf_UAddr)buffer;
-}
-
-rf_UAddr rf_format_S16(rf_S16 value)
-{
-    char* buffer = (char*)malloc(8);
-    if (!buffer) return 0;
-    snprintf(buffer, 8, "%" PRId16, value);
-    return (rf_UAddr)buffer;
-}
-
-rf_UAddr rf_format_S32(rf_S32 value)
-{
-    char* buffer = (char*)malloc(16);
-    if (!buffer) return 0;
-    snprintf(buffer, 16, "%" PRId32, value);
-    return (rf_UAddr)buffer;
-}
-
-rf_UAddr rf_format_S64(rf_S64 value)
-{
-    char* buffer = (char*)malloc(32);
-    if (!buffer) return 0;
-    snprintf(buffer, 32, "%" PRId64, value);
-    return (rf_UAddr)buffer;
-}
-
-rf_UAddr rf_format_SAddr(rf_SAddr value)
-{
-    char* buffer = (char*)malloc(32);
-    if (!buffer) return 0;
-    snprintf(buffer, 32, "%" PRIdPTR, value);
-    return (rf_UAddr)buffer;
-}
-
-// ============================================================================
-// Formatting: Unsigned Integers
-// ============================================================================
-
-rf_UAddr rf_format_U8(rf_U8 value)
-{
-    char* buffer = (char*)malloc(8);
-    if (!buffer) return 0;
-    snprintf(buffer, 8, "%" PRIu8, value);
-    return (rf_UAddr)buffer;
-}
-
-rf_UAddr rf_format_U16(rf_U16 value)
-{
-    char* buffer = (char*)malloc(8);
-    if (!buffer) return 0;
-    snprintf(buffer, 8, "%" PRIu16, value);
-    return (rf_UAddr)buffer;
-}
-
-rf_UAddr rf_format_U32(rf_U32 value)
-{
-    char* buffer = (char*)malloc(16);
-    if (!buffer) return 0;
-    snprintf(buffer, 16, "%" PRIu32, value);
-    return (rf_UAddr)buffer;
-}
-
-rf_UAddr rf_format_U64(rf_U64 value)
-{
-    char* buffer = (char*)malloc(32);
-    if (!buffer) return 0;
-    snprintf(buffer, 32, "%" PRIu64, value);
-    return (rf_UAddr)buffer;
-}
-
-rf_UAddr rf_format_UAddr(rf_UAddr value)
-{
-    char* buffer = (char*)malloc(32);
-    if (!buffer) return 0;
-    snprintf(buffer, 32, "%" PRIuPTR, value);
-    return (rf_UAddr)buffer;
-}
-
-// ============================================================================
 // Formatting: Binary Floating Point
 // ============================================================================
 
-rf_UAddr rf_format_F16(rf_U16 value)
+// Canonical NaN/Inf spellings. printf's output for specials is platform-flavored
+// (MSVC UCRT prints "-nan(ind)", glibc prints "-nan"), so format them ourselves —
+// sign-aware "nan" / "-nan" / "inf" / "-inf", matching the glibc spelling.
+// Returns NULL for ordinary finite values.
+static char* format_special_float(double value)
 {
-    char* buffer = (char*)malloc(64);
-    if (!buffer) return 0;
-    float f = rf_f16_to_f32(value);
-    snprintf(buffer, 64, "%.4g", (double)f);
-    return (rf_UAddr)buffer;
+    if (!isnan(value) && !isinf(value)) return NULL;
+    char* buffer = (char*)malloc(8);
+    if (!buffer) return NULL;
+    snprintf(buffer, 8, "%s%s", signbit(value) ? "-" : "", isnan(value) ? "nan" : "inf");
+    return buffer;
 }
 
-rf_UAddr rf_format_F32(float value)
+rf_address rf_format_F16(rf_U16 value)
 {
+    float f = rf_f16_to_f32(value);
+    char* special = format_special_float((double)f);
+    if (special) return (rf_address)special;
+    char* buffer = (char*)malloc(64);
+    if (!buffer) return 0;
+    snprintf(buffer, 64, "%.4g", (double)f);
+    return (rf_address)buffer;
+}
+
+rf_address rf_format_F32(float value)
+{
+    char* special = format_special_float((double)value);
+    if (special) return (rf_address)special;
     char* buffer = (char*)malloc(64);
     if (!buffer) return 0;
     snprintf(buffer, 64, "%.7g", (double)value);
-    return (rf_UAddr)buffer;
+    return (rf_address)buffer;
 }
 
-rf_UAddr rf_format_F64(double value)
+rf_address rf_format_F64(double value)
 {
+    char* special = format_special_float(value);
+    if (special) return (rf_address)special;
     char* buffer = (char*)malloc(64);
     if (!buffer) return 0;
     snprintf(buffer, 64, "%.15g", value);
-    return (rf_UAddr)buffer;
+    return (rf_address)buffer;
 }
 
 // F128 formatting is in f128_functions.c (requires LibBF)
-
-// ============================================================================
-// Formatting: Bool
-// ============================================================================
-
-rf_UAddr rf_format_Bool(rf_Bool value)
-{
-    char* buffer = (char*)malloc(8);
-    if (!buffer) return 0;
-    memcpy(buffer, value ? "true" : "false", value ? 5 : 6);
-    return (rf_UAddr)buffer;
-}
-
-// ============================================================================
-// Parsing: Signed Integers
-// ============================================================================
-
-rf_S8 rf_parse_S8(const char* str)
-{
-    long val = strtol(str, NULL, 10);
-    return (rf_S8)val;
-}
-
-rf_S16 rf_parse_S16(const char* str)
-{
-    long val = strtol(str, NULL, 10);
-    return (rf_S16)val;
-}
-
-rf_S32 rf_parse_S32(const char* str)
-{
-    long val = strtol(str, NULL, 10);
-    return (rf_S32)val;
-}
-
-rf_S64 rf_parse_S64(const char* str)
-{
-    return (rf_S64)strtoll(str, NULL, 10);
-}
-
-rf_SAddr rf_parse_SAddr(const char* str)
-{
-    return (rf_SAddr)strtoll(str, NULL, 10);
-}
-
-// ============================================================================
-// Parsing: Unsigned Integers
-// ============================================================================
-
-rf_U8 rf_parse_U8(const char* str)
-{
-    unsigned long val = strtoul(str, NULL, 10);
-    return (rf_U8)val;
-}
-
-rf_U16 rf_parse_U16(const char* str)
-{
-    unsigned long val = strtoul(str, NULL, 10);
-    return (rf_U16)val;
-}
-
-rf_U32 rf_parse_U32(const char* str)
-{
-    unsigned long val = strtoul(str, NULL, 10);
-    return (rf_U32)val;
-}
-
-rf_U64 rf_parse_U64(const char* str)
-{
-    return (rf_U64)strtoull(str, NULL, 10);
-}
-
-rf_UAddr rf_parse_UAddr(const char* str)
-{
-    return (rf_UAddr)strtoull(str, NULL, 10);
-}
 
 // ============================================================================
 // Parsing: Binary Floating Point
@@ -241,3 +94,98 @@ double rf_parse_F64(const char* str)
 }
 
 // F128 parsing is in f128_functions.c (requires LibBF)
+
+// ============================================================================
+// Text Concatenation
+// ============================================================================
+
+/**
+ * Concatenates two Text entities, returning a new Text entity.
+ *
+ * Text layout:   { ptr characters }       — pointer to List[Character]
+ * List layout:   { ptr data, i64 count, i64 capacity }
+ * Character:        i32 (UTF-32 codepoint)
+ */
+
+// Forward declaration from memory.c
+extern void* rf_allocate_dynamic(uint64_t bytes);
+
+typedef struct {
+    void* data;
+    int64_t count;
+    int64_t capacity;
+} rf_List;
+
+typedef struct {
+    rf_List* characters;
+} rf_Text;
+
+/**
+ * Formats a pointer as "0xXXXX_XXXX_XXXX_XXXX" and returns a Text entity.
+ * Used by RF entity __diagnose__() to include the heap address.
+ */
+void* rf_format_address(void* ptr)
+{
+    uint64_t addr = (uint64_t)ptr;
+
+    // Format: "0xXXXX_XXXX_XXXX_XXXX" = 2 + 16 + 3 = 21 characters
+    const int len = 21;
+    int32_t* data = (int32_t*)rf_allocate_dynamic((uint64_t)len * sizeof(int32_t));
+
+    // "0x" prefix
+    data[0] = '0';
+    data[1] = 'x';
+
+    // 16 hex digits in groups of 4, separated by underscores
+    const char hex[] = "0123456789ABCDEF";
+    int pos = 2;
+    for (int group = 0; group < 4; group++) {
+        if (group > 0) {
+            data[pos++] = '_';
+        }
+        int shift = (3 - group) * 16;
+        for (int d = 0; d < 4; d++) {
+            int nibble = (int)((addr >> (shift + (3 - d) * 4)) & 0xF);
+            data[pos++] = hex[nibble];
+        }
+    }
+
+    rf_List* list = (rf_List*)rf_allocate_dynamic(sizeof(rf_List));
+    list->data = data;
+    list->count = len;
+    list->capacity = len;
+
+    rf_Text* text = (rf_Text*)rf_allocate_dynamic(sizeof(rf_Text));
+    text->characters = list;
+
+    return text;
+}
+
+void* rf_text_concat(void* text_a, void* text_b)
+{
+    rf_Text* a = (rf_Text*)text_a;
+    rf_Text* b = (rf_Text*)text_b;
+
+    int64_t count_a = a->characters->count;
+    int64_t count_b = b->characters->count;
+    int64_t total = count_a + count_b;
+
+    // Allocate new data array (i32 per codepoint)
+    int32_t* new_data = (int32_t*)rf_allocate_dynamic((uint64_t)total * sizeof(int32_t));
+    if (count_a > 0)
+        memcpy(new_data, a->characters->data, (size_t)count_a * sizeof(int32_t));
+    if (count_b > 0)
+        memcpy(new_data + count_a, b->characters->data, (size_t)count_b * sizeof(int32_t));
+
+    // Allocate new List[Character] struct
+    rf_List* new_list = (rf_List*)rf_allocate_dynamic(sizeof(rf_List));
+    new_list->data = new_data;
+    new_list->count = total;
+    new_list->capacity = total;
+
+    // Allocate new Text wrapper
+    rf_Text* new_text = (rf_Text*)rf_allocate_dynamic(sizeof(rf_Text));
+    new_text->characters = new_list;
+
+    return new_text;
+}

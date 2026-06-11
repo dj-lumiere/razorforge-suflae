@@ -1,7 +1,9 @@
-using SyntaxTree;
-using Compiler.Lexer;
-using SemanticAnalysis.Enums;
+using System;
+using System.Collections.Generic;
 using Compiler.Diagnostics;
+using Compiler.Tokenizer;
+using SyntaxTree;
+using TypeModel.Enums;
 
 namespace Compiler.Parser;
 
@@ -17,17 +19,17 @@ public partial class Parser
     /// <summary>
     /// The list of tokens to parse.
     /// </summary>
-    private readonly List<Token> Tokens;
+    private readonly List<Token> _tokens;
 
     /// <summary>
     /// Current position in the token stream.
     /// </summary>
-    private int Position = 0;
+    private int _position;
 
     /// <summary>
     /// Collection of warnings generated during parsing.
     /// </summary>
-    private readonly List<BuildWarning> Warnings = [];
+    private readonly List<BuildWarning> _warnings = [];
 
     /// <summary>
     /// Collection of errors accumulated during error recovery.
@@ -42,12 +44,15 @@ public partial class Parser
     /// <summary>
     /// Gets all parse errors encountered during parsing.
     /// </summary>
-    public IReadOnlyList<string> GetErrors() => _errors;
+    public List<string> GetErrors()
+    {
+        return _errors;
+    }
 
     /// <summary>
     /// The source file name for error reporting.
     /// </summary>
-    public string fileName = "";
+    public string FileName = "";
 
     /// <summary>
     /// The language being parsed (RazorForge or Suflae).
@@ -67,7 +72,7 @@ public partial class Parser
     /// <summary>
     /// Current indentation level being parsed.
     /// </summary>
-    private int _currentIndentationLevel = 0;
+    private int _currentIndentationLevel;
 
     #endregion
 
@@ -82,23 +87,23 @@ public partial class Parser
     private bool _parsingInlineConditional;
 
     /// <summary>
-    /// Indicates whether we're currently parsing inside a type body (record, entity, resident).
+    /// Indicates whether we're currently parsing inside a type body (record, entity).
     /// When true, allows member variable declarations without var keywords.
     /// </summary>
-    private bool _parsingTypeBody = false;
+    private bool _parsingTypeBody;
 
     /// <summary>
-    /// Indicates whether we're parsing inside a record body (actual record, not entity/resident).
+    /// Indicates whether we're parsing inside a record body (actual record, not entity).
     /// When true, only secret/posted/open modifiers are allowed (not external).
     /// Also var/preset keywords are disallowed (use 'name: Type' syntax).
     /// </summary>
-    private bool _parsingStrictRecordBody = false;
+    private bool _parsingStrictRecordBody;
 
     /// <summary>
     /// Indicates whether we're currently parsing inside a routine body.
     /// When true, nested routine declarations are rejected.
     /// </summary>
-    private bool _inRoutineBody = false;
+    private bool _inRoutineBody;
 
     /// <summary>
     /// Indicates whether we are currently parsing within a 'when' pattern context.
@@ -122,9 +127,9 @@ public partial class Parser
     /// <param name="fileName">Optional source file name for error reporting.</param>
     public Parser(List<Token> tokens, Language language, string? fileName = null)
     {
-        Tokens = tokens;
+        _tokens = tokens;
         _language = language;
-        this.fileName = fileName ?? "unknown";
+        FileName = fileName ?? "unknown";
         _indentationStack.Push(item: 0); // Base indentation level
     }
 
@@ -135,7 +140,7 @@ public partial class Parser
     /// <returns>A <see cref="SyntaxTree.Program"/> containing all top-level declarations.</returns>
     public Program Parse()
     {
-        var declarations = new List<IAstNode>();
+        var declarations = new List<ISyntaxTreeNode>();
 
         while (!IsAtEnd)
         {
@@ -154,7 +159,7 @@ public partial class Parser
                     continue;
                 }
 
-                IAstNode decl = ParseDeclaration();
+                ISyntaxTreeNode decl = ParseDeclaration();
                 declarations.Add(item: decl);
             }
             catch (GrammarException ex)
@@ -163,7 +168,7 @@ public partial class Parser
                 // error[RF-G150]: filename.rf:9:14: message
                 // error[SF-G150]: filename.sf:9:14: message
                 _errors.Add(item: ex.Message);
-                Console.Error.WriteLine(value: ex.Message);
+                DiagnosticRenderer.Print(ex: ex, writer: Console.Error);
                 Synchronize();
             }
         }
@@ -174,7 +179,7 @@ public partial class Parser
     /// <summary>
     /// Parses a single top-level or nested declaration.
     /// Handles: module, import, define, using, var, routine, entity, record, choice, variant, protocol, impl.
-    /// RazorForge-only: resident, external, dangerous modifier, threaded async status.
+    /// RazorForge-only: external, dangerous modifier, threaded async status.
     /// </summary>
     /// <remarks>
     /// Declaration parsing order (checked in sequence):
@@ -201,7 +206,6 @@ public partial class Parser
     ///   routine      - Function declaration
     ///   entity       - Heap-allocated reference type
     ///   record       - Stack-allocated value type
-    ///   resident     - Singleton static type (RazorForge only)
     ///   choice       - Simple enumeration
     ///   variant      - Tagged union (sum type)
     ///   protocol     - Interface/trait definition
@@ -213,7 +217,7 @@ public partial class Parser
     /// </remarks>
     /// <returns>The parsed declaration node.</returns>
     /// <exception cref="GrammarException">Thrown when no valid declaration or statement can be parsed.</exception>
-    private IAstNode ParseDeclaration()
+    private ISyntaxTreeNode ParseDeclaration()
     {
         // ═══════════════════════════════════════════════════════════════════════════
         // SKIP DOC COMMENTS (### comment lines before declarations)
@@ -223,7 +227,7 @@ public partial class Parser
         while (Match(type: TokenType.DocComment))
         {
             // Skip any newlines after doc comments
-            while (Match(type: TokenType.Newline)) { }
+            while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
         }
 
         // ═══════════════════════════════════════════════════════════════════════════
@@ -272,13 +276,12 @@ public partial class Parser
         }
 
         // Parse visibility and storage class modifiers
-        var (visibility, storage) = ParseModifiers();
+        (VisibilityModifier visibility, StorageClass storage) = ParseModifiers();
 
-        // Define declaration with annotations (e.g., @config(target: "windows") define CLong as S32)
+        // Define declaration with annotations (e.g., @llvm("i32") define MyInt as S32)
         if (Match(type: TokenType.Define))
         {
-            // TODO: Pass annotations to DefineDeclaration when supported
-            return ParseDefineDeclaration();
+            return ParseDefineDeclaration(annotations: annotations);
         }
 
         // ═══════════════════════════════════════════════════════════════════════════
@@ -291,6 +294,13 @@ public partial class Parser
         if (_language == Language.RazorForge)
         {
             isDangerous = Match(type: TokenType.Dangerous);
+
+            // Handle: dangerous external("C") routine ... (dangerous before external)
+            if (isDangerous && visibility == VisibilityModifier.Open &&
+                Match(type: TokenType.External))
+            {
+                visibility = VisibilityModifier.External;
+            }
         }
 
         // ═══════════════════════════════════════════════════════════════════════════
@@ -314,56 +324,73 @@ public partial class Parser
                     callingConvention = conventionToken.Text.Trim(trimChar: '"');
                 }
 
-                Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after calling convention");
+                Consume(type: TokenType.RightParen,
+                    errorMessage: "Expected ')' after calling convention");
             }
 
             // Block form: external("C")\n  routine ... routine ...
             // Check for block form: next meaningful token is Newline (not 'routine')
             if (Check(type: TokenType.Newline))
             {
-                return ParseExternalBlockDeclaration(callingConvention: callingConvention, isDangerous: isDangerous);
+                return ParseExternalBlockDeclaration(callingConvention: callingConvention,
+                    isDangerous: isDangerous);
             }
 
             // Single form: external("C") routine foo()
             if (Match(type: TokenType.Routine))
             {
-                return ParseExternalDeclaration(
-                    callingConvention: callingConvention, annotations: annotations, isDangerous: isDangerous);
+                return ParseExternalDeclaration(callingConvention: callingConvention,
+                    annotations: annotations,
+                    isDangerous: isDangerous);
             }
         }
 
         // Field declaration in type bodies: name: Type
         // Detected by identifier followed by colon (no var keyword needed)
-        // Only allowed inside type bodies (record, entity, resident)
+        // Only allowed inside type bodies (record, entity)
         if (_parsingTypeBody && Check(type: TokenType.Identifier) && PeekToken(offset: 1)
                .Type == TokenType.Colon)
         {
             // In record bodies, external is not allowed
             if (_parsingStrictRecordBody && visibility is VisibilityModifier.External)
             {
-                throw new GrammarException(
-                    GrammarDiagnosticCode.InvalidDeclarationInBody,
+                throw new GrammarException(code: GrammarDiagnosticCode.InvalidDeclarationInBody,
+                    message:
                     $"'{visibility.ToString().ToLower()}' is not valid for record member variables. " +
                     "Record member variables can use 'secret', 'posted', or 'open'",
-                    fileName, CurrentToken.Line, CurrentToken.Column, _language);
+                    fileName: FileName,
+                    line: CurrentToken.Line,
+                    column: CurrentToken.Column,
+                    language: _language);
             }
+
             return ParseMemberVariableDeclaration(visibility: visibility);
         }
 
-        // Variable declarations
+        // Variable declarations — optionally prefixed with `lateinit`
+        bool declLateInit = false;
+        if (Check(type: TokenType.LateInit) && PeekToken(offset: 1).Type == TokenType.Var)
+        {
+            Advance(); // consume 'lateinit'
+            declLateInit = true;
+        }
         if (Match(TokenType.Var, TokenType.Preset))
         {
-            // In type bodies (record, entity, resident), var/preset are not allowed
+            // In type bodies (record, entity), var/preset are not allowed
             // MemberVariables use 'name: Type' syntax without var keywords
             if (_parsingTypeBody)
             {
-                throw new GrammarException(
-                    GrammarDiagnosticCode.InvalidDeclarationInBody,
-                    "Type member variables cannot use 'var' or 'preset'. " +
-                    "Use 'name: Type' syntax instead",
-                    fileName, CurrentToken.Line, CurrentToken.Column, _language);
+                throw new GrammarException(code: GrammarDiagnosticCode.InvalidDeclarationInBody,
+                    message: "Type member variables cannot use 'var' or 'preset'. " +
+                             "Use 'name: Type' syntax instead",
+                    fileName: FileName,
+                    line: CurrentToken.Line,
+                    column: CurrentToken.Column,
+                    language: _language);
             }
-            return ParseVariableDeclaration(visibility: visibility, storage: storage);
+
+            return ParseVariableDeclaration(visibility: visibility, storage: storage,
+                annotations: annotations, isLateInit: declLateInit);
         }
 
         // Pass statement/declaration (empty placeholder)
@@ -386,61 +413,55 @@ public partial class Parser
         // ROUTINE DECLARATION (with async status modifiers)
         // ═══════════════════════════════════════════════════════════════════════════
 
-        // Check for suspended modifier before routine
         AsyncStatus asyncStatus = AsyncStatus.None;
-        if (Match(type: TokenType.Suspended))
-        {
-            asyncStatus = AsyncStatus.Suspended;
-        }
-        // RF-only: threaded async status
-        else if (_language == Language.RazorForge && Match(type: TokenType.Threaded))
-        {
-            asyncStatus = AsyncStatus.Threaded;
-        }
 
         // Routine (function) declaration
         if (Match(type: TokenType.Routine))
         {
-            // Validate: global storage is not allowed for routines
-            if (storage == StorageClass.Global)
-            {
-                throw new GrammarException(
-                    GrammarDiagnosticCode.InvalidDeclarationInBody,
-                    "'global' storage class is not valid for routines. " +
-                    "'global' can only be used for file-scope static variables",
-                    fileName, CurrentToken.Line, CurrentToken.Column, _language);
-            }
-            return ParseRoutineDeclaration(visibility: visibility, annotations: annotations, storage: storage, asyncStatus: asyncStatus, isDangerous: isDangerous);
+            return ParseRoutineDeclaration(visibility: visibility,
+                annotations: annotations,
+                storage: storage,
+                asyncStatus: asyncStatus,
+                isDangerous: isDangerous);
         }
 
-        // If we consumed 'suspended'/'threaded' but no 'routine' follows, that's an error
+        // If we consumed async modifiers but no 'routine' follows, that's an error
         if (asyncStatus != AsyncStatus.None)
         {
-            string modifier = asyncStatus == AsyncStatus.Suspended ? "suspended" : "threaded";
-            throw new GrammarException(
-                GrammarDiagnosticCode.UnexpectedToken,
-                $"'{modifier}' must be followed by 'routine'",
-                fileName, CurrentToken.Line, CurrentToken.Column, _language);
+            string modifier = asyncStatus switch
+            {
+                AsyncStatus.Suspended => "suspended",
+                AsyncStatus.Threaded  => "threaded",
+                _                     => asyncStatus.ToString().ToLower()
+            };
+            throw new GrammarException(code: GrammarDiagnosticCode.UnexpectedToken,
+                message: $"'{modifier}' must be followed by 'routine'",
+                fileName: FileName,
+                line: CurrentToken.Line,
+                column: CurrentToken.Column,
+                language: _language);
         }
 
         // Validate: storage class modifiers are not valid for type declarations
         if (storage != StorageClass.None)
         {
-            // Check all type keywords (including RF-only Resident)
-            bool isTypeKeyword = Check(TokenType.Entity, TokenType.Record,
-                TokenType.Choice, TokenType.Flags, TokenType.Variant, TokenType.Protocol);
-
-            if (_language == Language.RazorForge)
-            {
-                isTypeKeyword = isTypeKeyword || Check(type: TokenType.Resident);
-            }
+            bool isTypeKeyword = Check(TokenType.Entity,
+                TokenType.Record,
+                TokenType.Choice,
+                TokenType.Flags,
+                TokenType.Crashable,
+                TokenType.Variant,
+                TokenType.Protocol);
 
             if (isTypeKeyword)
             {
-                throw new GrammarException(
-                    GrammarDiagnosticCode.InvalidDeclarationInBody,
+                throw new GrammarException(code: GrammarDiagnosticCode.InvalidDeclarationInBody,
+                    message:
                     $"'{storage.ToString().ToLower()}' storage class is not valid for type declarations",
-                    fileName, CurrentToken.Line, CurrentToken.Column, _language);
+                    fileName: FileName,
+                    line: CurrentToken.Line,
+                    column: CurrentToken.Column,
+                    language: _language);
             }
         }
 
@@ -455,12 +476,6 @@ public partial class Parser
             return ParseRecordDeclaration(visibility: visibility, annotations: annotations);
         }
 
-        // RF-only: Resident declarations (singleton static types)
-        if (_language == Language.RazorForge && Match(type: TokenType.Resident))
-        {
-            return ParseResidentDeclaration(visibility: visibility);
-        }
-
         if (Match(type: TokenType.Choice))
         {
             return ParseChoiceDeclaration(visibility: visibility);
@@ -469,6 +484,11 @@ public partial class Parser
         if (Match(type: TokenType.Flags))
         {
             return ParseFlagsDeclaration(visibility: visibility);
+        }
+
+        if (Match(type: TokenType.Crashable))
+        {
+            return ParseCrashableDeclaration(visibility: visibility);
         }
 
         if (Match(type: TokenType.Variant))
@@ -485,18 +505,18 @@ public partial class Parser
         // it is an record or protocol)
         if (visibility != VisibilityModifier.Open)
         {
-            string validDeclarations = _language == Language.RazorForge
-                ? "routine, entity, record, resident, choice, variant, protocol, preset, or var"
-                : "routine, entity, record, choice, variant, protocol, preset, or var";
-            throw ThrowParseError(GrammarDiagnosticCode.VisibilityWithoutDeclaration,
-                $"Visibility modifier '{visibility}' must be followed by a declaration " +
-                $"({validDeclarations})");
+            string validDeclarations =
+                "routine, entity, record, choice, variant, protocol, preset, or var";
+            throw ThrowParseError(code: GrammarDiagnosticCode.VisibilityWithoutDeclaration,
+                message: $"Visibility modifier '{visibility}' must be followed by a declaration " +
+                         $"({validDeclarations})");
         }
 
         // If we have annotations but no declaration, that's an error
         if (annotations.Count > 0)
         {
-            throw ThrowParseError(GrammarDiagnosticCode.AnnotationsWithoutDeclaration,
+            throw ThrowParseError(code: GrammarDiagnosticCode.AnnotationsWithoutDeclaration,
+                message:
                 "Annotations must be followed by a declaration (routine, entity, record, etc.)");
         }
 
@@ -546,7 +566,7 @@ public partial class Parser
     ///   expr         - Expression statement (fallback)
     /// </remarks>
     /// <returns>The parsed statement, or null if at end of block.</returns>
-    private Statement ParseStatement()
+    private Statement ParseStatement() // NOSONAR S3776
     {
         // ═══════════════════════════════════════════════════════════════════════════
         // INDENTATION HANDLING
@@ -559,7 +579,7 @@ public partial class Parser
         }
 
         // Skip newlines
-        while (Match(type: TokenType.Newline)) { }
+        while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
 
         // ═══════════════════════════════════════════════════════════════════════════
         // CONTROL FLOW STATEMENTS
@@ -649,11 +669,6 @@ public partial class Parser
             return ParseDiscardStatement();
         }
 
-        if (Match(type: TokenType.Emit))
-        {
-            return ParseEmitStatement();
-        }
-
         // ═══════════════════════════════════════════════════════════════════════════
         // RF-ONLY: MEMORY/SCOPE BLOCKS
         // ═══════════════════════════════════════════════════════════════════════════
@@ -669,6 +684,12 @@ public partial class Parser
         // ═══════════════════════════════════════════════════════════════════════════
 
         // Variable declarations (can appear in statement context)
+        bool stmtLateInit = false;
+        if (Check(type: TokenType.LateInit) && PeekToken(offset: 1).Type == TokenType.Var)
+        {
+            Advance(); // consume 'lateinit'
+            stmtLateInit = true;
+        }
         if (Match(TokenType.Var, TokenType.Preset))
         {
             // Check if this is destructuring: var (a, b) = expr
@@ -677,7 +698,7 @@ public partial class Parser
                 return ParseDestructuringDeclaration();
             }
 
-            VariableDeclaration varDecl = ParseVariableDeclaration();
+            VariableDeclaration varDecl = ParseVariableDeclaration(isLateInit: stmtLateInit);
             // Wrap the variable declaration as a declaration statement
             return new DeclarationStatement(Declaration: varDecl, Location: varDecl.Location);
         }

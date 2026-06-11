@@ -1,6 +1,14 @@
-# ClampingDivisible - Protocol for types that support clamping division (/^)
 module Core
 
+### Represents the protocol for saturating division.
+### `ClampingDivisible` is for bounded numeric types whose division surface can
+### clamp representable overflow conditions instead of propagating them as hard
+### failure or undefined behavior.
 protocol ClampingDivisible
+  ### Returns the clamping quotient of this value and `you`.
+  ### Implementations should preserve normal division semantics when the exact
+  ### quotient is representable and clamp only the out-of-range result cases.
+  ### :param you: The other value to divide by.
+  ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.__truediv_clamp__(you: Me) -> Me
+  routine Me.$truediv_clamp(you: Me) -> ?Me

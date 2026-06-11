@@ -1,0 +1,13 @@
+punch_card: 15
+clamp_chain: 39
+iif(true): 15
+iif(false): 39
+truth: true
+widen: 1
+bool_set: 2
+op_zoo: 37
+chained_cmp(5): true
+chained_cmp(11): false
+back_to_front: 50
+zombie: -5
+loop_the_loop: 3

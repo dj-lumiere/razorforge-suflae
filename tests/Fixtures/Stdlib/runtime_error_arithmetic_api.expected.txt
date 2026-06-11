@@ -1,0 +1,18 @@
+try_add S64_MAX + 1: none
+try_add S64_MAX + 0: 9223372036854775807
+try_sub S64_MIN - 1: none
+try_mul S64_MAX * 2: none
+try_mul S64_MAX * 1: 9223372036854775807
+try_pow 2 ** 62: 4611686018427387904
+try_pow 2 ** 63: none
+try_sub 0u64 - 1: none
+try_sub 5u64 - 3: 2
+try_div 10 / 0: none
+try_div 10 / 2: 5
+try_mod 10 % 0: none
+try_mod 10 % 3: 1
+try_neg S64_MIN: none
+try_neg 5: -5
+try_abs S64_MIN: none
+try_abs -5: 5
+DONE

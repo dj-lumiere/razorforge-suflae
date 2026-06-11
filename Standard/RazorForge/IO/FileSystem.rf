@@ -1,0 +1,242 @@
+module IO/FileSystem
+import IO/Errors
+
+# ============================================================================
+# Existence checks (pure, no crash)
+# ============================================================================
+
+### Returns whether a path exists.
+### This performs a non-throwing existence check suitable for preflight logic.
+### :param path: The path to test.
+### :returns: The resulting `Bool` value.
+routine exists(path: Text) -> Bool
+  var cstr = CStr(from: path)
+  return rf_fs_exists(path: cstr, len: cstr.count().S32())
+
+### Returns whether a path refers to a regular file.
+### Missing paths return `false`.
+### :param path: The path to test.
+### :returns: The resulting `Bool` value.
+routine is_file(path: Text) -> Bool
+  var cstr = CStr(from: path)
+  return rf_fs_is_file(path: cstr, len: cstr.count().S32())
+
+### Returns whether a path refers to a directory.
+### Missing paths return `false`.
+### :param path: The path to test.
+### :returns: The resulting `Bool` value.
+routine is_directory(path: Text) -> Bool
+  var cstr = CStr(from: path)
+  return rf_fs_is_directory(path: cstr, len: cstr.count().S32())
+
+# ============================================================================
+# Directory operations (failable)
+# ============================================================================
+
+### Creates a single directory.
+### Parent directories must already exist.
+### :param path: The directory path to create.
+### :throws: May throw {IOError}.
+routine create_dir!(path: Text)
+  var cstr = CStr(from: path)
+  var result = rf_fs_create_dir(path: cstr, len: cstr.count().S32())
+  if result == -1
+    throw IOError(description: f"Cannot create directory: {path}")
+  return
+
+### Creates a directory and any missing parents.
+### This is the recursive directory-creation helper.
+### :param path: The directory path to create.
+### :throws: May throw {IOError}.
+routine create_dir_all!(path: Text)
+  var cstr = CStr(from: path)
+  var result = rf_fs_create_dir_all(path: cstr, len: cstr.count().S32())
+  if result == -1
+    throw IOError(description: f"Cannot create directories: {path}")
+  return
+
+# ============================================================================
+# File operations (failable)
+# ============================================================================
+
+### Copies a filesystem entry to a new location.
+### Existing destination handling follows the runtime's native copy semantics.
+### :param source: The source path.
+### :param destination: The destination path.
+### :throws: May throw {IOError}.
+routine copy!(source: Text, destination: Text)
+  var src_cstr = CStr(from: source)
+  var dst_cstr = CStr(from: destination)
+  var result = rf_fs_copy(src_cstr, src_cstr.count().S32(), dst_cstr, dst_cstr.count().S32())
+  if result == -1
+    throw IOError(description: f"Cannot copy '{source}' to '{destination}'")
+  return
+
+### Moves or renames a filesystem entry.
+### This may behave as a rename within one filesystem or as a move across locations.
+### :param source: The source path.
+### :param destination: The destination path.
+### :throws: May throw {IOError}.
+routine move!(source: Text, destination: Text)
+  var src_cstr = CStr(from: source)
+  var dst_cstr = CStr(from: destination)
+  var result = rf_fs_move(src_cstr, src_cstr.count().S32(), dst_cstr, dst_cstr.count().S32())
+  if result == -1
+    throw IOError(description: f"Cannot move '{source}' to '{destination}'")
+  return
+
+### Removes a file or empty directory.
+### Use `delete_path_all!` when recursive removal is required.
+### :param path: The path to remove.
+### :throws: May throw {IOError}.
+routine delete_path!(path: Text)
+  var cstr = CStr(from: path)
+  var result = rf_fs_remove(path: cstr, len: cstr.count().S32())
+  if result == -1
+    throw IOError(description: "Cannot remove path")
+  return
+
+### Removes a directory tree recursively.
+### This is the destructive removal helper for non-empty paths.
+### :param path: The path to remove.
+### :throws: May throw {IOError}.
+routine delete_path_all!(path: Text)
+  var cstr = CStr(from: path)
+  var result = rf_fs_remove_all(path: cstr, len: cstr.count().S32())
+  if result == -1
+    throw IOError(description: "Cannot remove directory tree")
+  return
+
+# ============================================================================
+# Path utilities (pure, no OS calls)
+# ============================================================================
+
+### Joins two path segments.
+### This uses the platform path separator rules implemented by the runtime.
+### :param a: The left-hand path segment.
+### :param b: The right-hand path segment.
+### :returns: The resulting `Text` value.
+routine join_path(a: Text, b: Text) -> ?Text
+  var a_cstr = CStr(from: a)
+  var b_cstr = CStr(from: b)
+  var ptr = rf_fs_join_path(a_cstr, a_cstr.count().S32(), b_cstr, b_cstr.count().S32())
+  var len = rf_get_result_len()
+  var bytes = Bytes(ptr: ptr, count: len)
+  return bytes.decode_as_utf8_lossy()
+
+### Returns the parent directory path.
+### Paths without a parent return the runtime's normalized empty-parent representation.
+### :param path: The path to inspect.
+### :returns: The resulting `Text` value.
+routine parent_path(path: Text) -> ?Text
+  var cstr = CStr(from: path)
+  var ptr = rf_fs_parent_path(path: cstr, len: cstr.count().S32())
+  var len = rf_get_result_len()
+  var bytes = Bytes(ptr: ptr, count: len)
+  return bytes.decode_as_utf8_lossy()
+
+### Returns the final path component.
+### Directory separators are removed from the returned value.
+### :param path: The path to inspect.
+### :returns: The resulting `Text` value.
+routine file_name(path: Text) -> ?Text
+  var cstr = CStr(from: path)
+  var ptr = rf_fs_file_name(path: cstr, len: cstr.count().S32())
+  var len = rf_get_result_len()
+  var bytes = Bytes(ptr: ptr, count: len)
+  return bytes.decode_as_utf8_lossy()
+
+### Returns the final path component without its extension.
+### Hidden-file semantics follow the runtime path parser.
+### :param path: The path to inspect.
+### :returns: The resulting `Text` value.
+routine file_stem(path: Text) -> ?Text
+  var cstr = CStr(from: path)
+  var ptr = rf_fs_file_stem(path: cstr, len: cstr.count().S32())
+  var len = rf_get_result_len()
+  var bytes = Bytes(ptr: ptr, count: len)
+  return bytes.decode_as_utf8_lossy()
+
+### Returns the file extension.
+### The returned value omits the leading dot when an extension is present.
+### :param path: The path to inspect.
+### :returns: The resulting `Text` value.
+routine extension(path: Text) -> ?Text
+  var cstr = CStr(from: path)
+  var ptr = rf_fs_extension(path: cstr, len: cstr.count().S32())
+  var len = rf_get_result_len()
+  var bytes = Bytes(ptr: ptr, count: len)
+  return bytes.decode_as_utf8_lossy()
+
+# ============================================================================
+# Path resolution (OS calls, failable)
+# ============================================================================
+
+### Resolves a path to an absolute path.
+### This preserves symbolic links and other non-canonical path components.
+### :param path: The path to resolve.
+### :returns: The resulting `Text` value.
+### :throws: May throw {IOError}.
+routine absolute_path!(path: Text) -> ?Text
+  var cstr = CStr(from: path)
+  var ptr = rf_fs_absolute_path(path: cstr, len: cstr.count().S32())
+  var len = rf_get_result_len()
+  if ptr.is_none()
+    throw IOError(description: f"Cannot resolve absolute path: {path}")
+  var bytes = Bytes(ptr: ptr, count: len)
+  return bytes.decode_as_utf8_lossy()
+
+### Resolves a path to its canonical filesystem location.
+### The returned path reflects the filesystem's normalized casing and link resolution rules.
+### This follows the runtime's normalization rules for links and relative segments.
+### :param path: The path to resolve.
+### :returns: The resulting `Text` value.
+### :throws: May throw {IOError}.
+routine canonical_path!(path: Text) -> ?Text
+  var cstr = CStr(from: path)
+  var ptr = rf_fs_canonical_path(path: cstr, len: cstr.count().S32())
+  var len = rf_get_result_len()
+  if ptr.is_none()
+    throw IOError(description: f"Cannot resolve canonical path: {path}")
+  var bytes = Bytes(ptr: ptr, count: len)
+  return bytes.decode_as_utf8_lossy()
+
+# ============================================================================
+# Permissions
+# ============================================================================
+
+### Returns whether the current process can read a path.
+### This check is non-throwing and is intended for capability probes.
+### :param path: The path to test.
+### :returns: The resulting `Bool` value.
+routine can_read(path: Text) -> Bool
+  var cstr = CStr(from: path)
+  return rf_fs_can_read(path: cstr, len: cstr.count().S32())
+
+### Returns whether the current process can write to a path.
+### This check is non-throwing and is intended for capability probes.
+### :param path: The path to test.
+### :returns: The resulting `Bool` value.
+routine can_write(path: Text) -> Bool
+  var cstr = CStr(from: path)
+  return rf_fs_can_write(path: cstr, len: cstr.count().S32())
+
+### Returns whether the current process can execute a path.
+### This check is non-throwing and is intended for capability probes.
+### :param path: The path to test.
+### :returns: The resulting `Bool` value.
+routine can_execute(path: Text) -> Bool
+  var cstr = CStr(from: path)
+  return rf_fs_can_execute(path: cstr, len: cstr.count().S32())
+
+### Enables or disables the readonly attribute for a path.
+### This adjusts filesystem metadata rather than keeping an in-memory flag.
+### :param path: The path to modify.
+### :param readonly: `true` to enable readonly mode; `false` to disable it.
+### :throws: May throw {IOError}.
+routine set_readonly!(path: Text, readonly: Bool = true)
+  var cstr = CStr(from: path)
+  var result = rf_fs_set_readonly(cstr, cstr.count().S32(), readonly)
+  if result == -1
+    throw IOError(description: f"Cannot set readonly on: {path}")
+  return

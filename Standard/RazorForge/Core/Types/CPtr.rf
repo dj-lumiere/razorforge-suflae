@@ -1,0 +1,83 @@
+module Core
+
+### Represents an opaque native pointer for FFI / runtime-integration use.
+### `CPtr` is the type-erased pointer wrapper used at the C boundary — equivalent to
+### `void*` in C. It carries no information about what it points at; users responsible
+### for ensuring the pointer is used consistently with the foreign side's expectations.
+###
+### `CPtr` replaces the per-handle wrappers that v0.0.1a previously used for arbitrary-
+### precision runtime integration (formerly `BigIntHandle` / `BigDecHandle`). Per-handle
+### type-distinctness was discarded in favor of one canonical opaque pointer; the runtime
+### still distinguishes which native object each handle refers to internally.
+###
+### :see: {Hijacked[T]} for the typed raw-pointer concept used in RF-internal plumbing.
+@llvm("ptr")
+record CPtr obeys Assignable
+  pass
+
+### Returns the raw address stored in this pointer.
+### This is a low-level runtime integration surface, not a stable user API.
+### :returns: The resulting `Address` value.
+@readonly
+dangerous routine CPtr.get_address() -> Address
+  return pointer_to_int[CPtr, Address](me)
+
+### Returns a bitwise duplicate of this raw pointer.
+### `CPtr` is `@llvm("ptr")` so it does not auto-derive `Assignable`; this trivial
+### opt-in body makes `=` and `with` legal at the cost of one line. Aliasing is
+### the user's problem — the same FFI contract that lets `CPtr` exist at all.
+### :returns: A bitwise duplicate of this pointer.
+@readonly
+routine CPtr.$copy() -> CPtr
+  return me
+
+### Reinterprets a raw address as `CPtr`.
+### This does not validate ownership or liveness of the pointed runtime object.
+### :param from: The address to wrap.
+### :returns: The resulting `CPtr` value.
+dangerous routine CPtr.$create(from: Address) -> CPtr
+  return reinterpret_bits[Hijacked[CPtr], CPtr](int_to_pointer[Address, CPtr](from))
+
+### Returns the null `CPtr` value.
+### This sentinel indicates that no live runtime object is associated with the pointer.
+### :returns: The resulting `CPtr` value.
+routine cptr_none() -> CPtr
+  return CPtr(0_addr)
+
+### Returns `true` when this pointer is the null sentinel.
+### :returns: The resulting `Bool` value.
+@readonly
+routine CPtr.is_none() -> Bool
+  return int_eq[CPtr](me, cptr_none())
+
+### Formats this pointer as its raw address.
+### :returns: The resulting `Text` value.
+@readonly
+routine CPtr.$represent() -> ?Text
+  danger!
+    return me.get_address().$represent()
+
+### Diagnostic representation for debugging — same as `$represent`.
+### :returns: The resulting `Text` value.
+@readonly
+routine CPtr.$diagnose() -> ?Text
+  return "CPtr(" + me.$represent() + ")"
+
+### Compatibility helper: alias of `cptr_none()` for legacy bigint-handle call sites.
+### Deprecated — prefer `cptr_none()`.
+routine bigint_handle_none() -> CPtr
+  return cptr_none()
+
+### Compatibility helper: alias of `cptr_none()` for legacy bigdec-handle call sites.
+### Deprecated — prefer `cptr_none()`.
+routine bigdec_handle_none() -> CPtr
+  return cptr_none()
+
+### `CPtr` is a non-owning, type-erased `void*` — it never owns the memory it
+### points at. The pointee may be a stack slot, an interior field address, an
+### FFI-borrowed buffer, or a runtime handle whose real owner frees it explicitly
+### (e.g. `Integer.$destroy` calls `rf_bigint_clear`). Freeing here would either
+### corrupt non-heap memory or double-free an owner-managed handle, so teardown
+### is a deliberate no-op.
+dangerous routine CPtr.$destroy()
+  return

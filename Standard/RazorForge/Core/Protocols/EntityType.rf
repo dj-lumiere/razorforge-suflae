@@ -1,7 +1,8 @@
-# EntityType - Marker protocol for all entity types
-# Every entity implicitly conforms to this protocol
-# Provides: Diagnosable (-> Representable), Equatable, Identifiable
 module Core
 
-protocol EntityType obeys Diagnosable, Equatable, Identifiable
+### Represents the aggregate protocol for entity values.
+### `EntityType` identifies heap-backed or identity-bearing values whose
+### semantics are based on shared instance identity rather than plain structural
+### copying.
+protocol EntityType obeys Diagnosable, Equatable
   pass

@@ -1,0 +1,9 @@
+zero
+negative
+positive
+huge
+red
+green
+blue
+m bound: 42
+DONE

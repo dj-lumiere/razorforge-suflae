@@ -1,9 +1,14 @@
-# Indexable - Protocol for types that support indexing ([])
 module Core
 
-protocol Indexable[K, V]
+### Integer-indexed read access for ordered sequences (List, Deque, Array, BitArray, BitList).
+### Provides the `[]` subscript operator with U64 integer keys.
+### Back-index (`^n`) is handled as a separate overload by each conforming type.
+### Bounds violations throw at runtime.
+### :typeparam V: The element type returned by the indexer.
+protocol Indexable[V]
+  ### Returns the element at zero-based position `index`.
+  ### :param index: The zero-based position to read.
+  ### :returns: The element at that position.
+  ### :throws: {IndexOutOfBoundsError} if `index >= count()`.
   @readonly
-  routine Me.__getitem__!(key: K) -> V
-
-  @writable
-  routine Me.__setitem__!(key: K, value: V)
+  routine Me.$getitem!(index: U64) -> ?V

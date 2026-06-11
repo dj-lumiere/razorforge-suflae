@@ -1,0 +1,388 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [main, wip/*]
+  pull_request:
+    branches: [main]
+
+env:
+  # Vendored subprojects with their own CMakeLists (mbedtls 2.28 in particular)
+  # declare cmake_minimum_required < 3.5, which CMake 4.x refuses outright.
+  # This is CMake's own escape hatch; honored as an env var by CMake >= 4 and
+  # ignored by older CMakes (ubuntu-latest still ships 3.x).
+  CMAKE_POLICY_VERSION_MINIMUM: '3.5'
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install system build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            autoconf \
+            automake \
+            libtool \
+            python3 \
+            curl \
+            wget \
+            ca-certificates \
+            lsb-release \
+            software-properties-common \
+            gnupg
+
+      - name: Install LLVM 20 toolchain
+        run: |
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 20
+          # LLVMSharp NuGet talks to the in-process LLVM C library, but the
+          # RazorForge compiler shells out to `clang` and `opt` for the final
+          # codegen/link step. Make the version-suffixed binaries resolvable
+          # without the suffix.
+          sudo ln -sf /usr/bin/clang-20 /usr/local/bin/clang
+          sudo ln -sf /usr/bin/clang++-20 /usr/local/bin/clang++
+          sudo ln -sf /usr/bin/opt-20 /usr/local/bin/opt
+          sudo ln -sf /usr/bin/llc-20 /usr/local/bin/llc
+          sudo ln -sf /usr/bin/llvm-ar-20 /usr/local/bin/llvm-ar
+          sudo ln -sf /usr/bin/lld-20 /usr/local/bin/lld
+          clang --version
+          opt --version
+
+      - name: Fetch native library sources
+        run: |
+          cd native
+
+          # --- Core (always needed) ---
+          echo "::group::decNumber"
+          git clone --depth 1 https://github.com/SDL-Hercules-390/decNumber.git decNumber
+          echo "::endgroup::"
+
+          echo "::group::libbf"
+          curl -L -o libbf.tar.gz "https://bellard.org/libbf/libbf-2025-06-03.tar.gz"
+          mkdir -p libbf
+          tar -xzf libbf.tar.gz -C libbf --strip-components=1
+          rm libbf.tar.gz
+          echo "::endgroup::"
+
+          echo "::group::libtommath"
+          git clone --depth 1 https://github.com/libtom/libtommath.git libtommath
+          echo "::endgroup::"
+
+          # --- Modules (loaded on demand) ---
+          echo "::group::zlib"
+          git clone --depth 1 https://github.com/madler/zlib.git zlib
+          echo "::endgroup::"
+
+          echo "::group::zstd"
+          git clone --depth 1 https://github.com/facebook/zstd.git zstd
+          echo "::endgroup::"
+
+          echo "::group::sqlite3 (amalgamation)"
+          mkdir -p sqlite3
+          curl -L -o sqlite3.zip "https://www.sqlite.org/2025/sqlite-amalgamation-3500000.zip"
+          unzip -q -j sqlite3.zip -d sqlite3
+          rm sqlite3.zip
+          echo "::endgroup::"
+
+          echo "::group::libsodium"
+          git clone --depth 1 -b stable https://github.com/jedisct1/libsodium.git libsodium
+          echo "::endgroup::"
+
+          echo "::group::mbedtls"
+          git clone --depth 1 -b v2.28.10 https://github.com/Mbed-TLS/mbedtls.git mbedtls2
+          echo "::endgroup::"
+
+          echo "::group::pcre2"
+          git clone --depth 1 https://github.com/PCRE2Project/pcre2.git pcre2
+          echo "::endgroup::"
+
+          echo "::group::utf8proc"
+          git clone --depth 1 https://github.com/JuliaStrings/utf8proc.git utf8proc
+          echo "::endgroup::"
+
+          echo "::group::yyjson"
+          git clone --depth 1 https://github.com/ibireme/yyjson.git yyjson
+          echo "::endgroup::"
+
+          echo "::group::tomlc99"
+          git clone --depth 1 https://github.com/cktan/tomlc99.git tomlc99
+          echo "::endgroup::"
+
+          echo "::group::bdwgc"
+          git clone --depth 1 https://github.com/ivmai/bdwgc.git bdwgc
+          echo "::endgroup::"
+
+          echo "::group::libuv"
+          git clone --depth 1 https://github.com/libuv/libuv.git libuv
+          echo "::endgroup::"
+
+          echo "::group::libco"
+          git clone --depth 1 https://github.com/higan-emu/libco.git libco
+          echo "::endgroup::"
+
+          echo "::group::minicsv"
+          git clone --depth 1 https://github.com/jedisct1/minicsv.git minicsv || true
+          echo "::endgroup::"
+
+      - name: Build native libraries
+        run: |
+          cd native
+          chmod +x build.sh
+          # Clang 16+ promoted -Wimplicit-function-declaration to an error by
+          # default. Vendored libs normally use their own ./configure to detect
+          # POSIX features and avoid the warning; we skip configure, so blanket
+          # the build with -Wno-implicit-function-declaration as a safety net for
+          # libs that pull in their own CMakeLists.txt (mbedtls, pcre2, bdwgc,
+          # libbf, libtommath) — for which the per-target flags in cmake/*.cmake
+          # don't apply. Pair it with _GNU_SOURCE so glibc feature-test macros
+          # expose the full POSIX surface (lseek, mlock, ftruncate, etc.).
+          export CC=clang
+          export CXX=clang++
+          export CFLAGS="-D_GNU_SOURCE -Wno-implicit-function-declaration"
+          export CXXFLAGS="-D_GNU_SOURCE -Wno-implicit-function-declaration"
+          ./build.sh
+
+      # SonarQube lives inside the tailnet; join it as an ephemeral node so the
+      # hosted runner can reach SONAR_HOST_URL. Requires a Tailscale OAuth
+      # client (scope: auth_keys) and an ACL tag `tag:ci`.
+      - name: Connect to tailnet for SonarQube
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Install SonarScanner for .NET
+        run: |
+          dotnet tool install --global dotnet-sonarscanner
+          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: SonarQube Begin
+        run: |
+          dotnet sonarscanner begin \
+            /k:"razorforge-suflae" \
+            /d:sonar.host.url="${{ secrets.SONAR_HOST_URL }}" \
+            /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test --configuration Release --no-build --verbosity normal
+
+      - name: SonarQube End
+        if: always()
+        run: dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
+
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # The hosted image ships an LLVM, but not necessarily 20.x, and the
+      # compiler needs the full tool set (clang/opt/llc/lld) — use the official
+      # clang+llvm release archive, which includes everything, and cache it.
+      - name: Cache LLVM 20 toolchain
+        id: cache-llvm
+        uses: actions/cache@v4
+        with:
+          path: C:\llvm20
+          key: llvm-20.1.8-win64
+
+      - name: Download LLVM 20 toolchain
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          curl.exe -L -o llvm.tar.xz "https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.8/clang+llvm-20.1.8-x86_64-pc-windows-msvc.tar.xz"
+          if ($LASTEXITCODE -ne 0) { throw 'LLVM download failed' }
+          New-Item -ItemType Directory -Force C:\llvm20 | Out-Null
+          tar -xf llvm.tar.xz -C C:\llvm20 --strip-components=1
+          if ($LASTEXITCODE -ne 0) { throw 'LLVM extract failed' }
+          Remove-Item llvm.tar.xz
+
+      - name: Install Ninja and put LLVM on PATH
+        shell: pwsh
+        run: |
+          choco install ninja -y
+          Add-Content $env:GITHUB_PATH 'C:\llvm20\bin'
+
+      - name: Verify toolchain
+        shell: pwsh
+        run: |
+          clang --version
+          opt --version
+          ninja --version
+
+      - name: Fetch native library sources
+        shell: pwsh
+        run: |
+          Set-Location native
+          function Clone($url, $dir, $branch) {
+            $cloneArgs = @('clone', '--depth', '1')
+            if ($branch) { $cloneArgs += @('-b', $branch) }
+            git @cloneArgs $url $dir
+            if ($LASTEXITCODE -ne 0) { throw "clone failed: $url" }
+          }
+          function Fetch($url, $out) {
+            curl.exe -L -o $out $url
+            if ($LASTEXITCODE -ne 0) { throw "download failed: $url" }
+          }
+
+          # --- Core (always needed) ---
+          Clone 'https://github.com/SDL-Hercules-390/decNumber.git' decNumber
+          Fetch 'https://bellard.org/libbf/libbf-2025-06-03.tar.gz' libbf.tar.gz
+          New-Item -ItemType Directory -Force libbf | Out-Null
+          tar -xzf libbf.tar.gz -C libbf --strip-components=1
+          if ($LASTEXITCODE -ne 0) { throw 'libbf extract failed' }
+          Remove-Item libbf.tar.gz
+          Clone 'https://github.com/libtom/libtommath.git' libtommath
+
+          # --- Modules (loaded on demand) ---
+          Clone 'https://github.com/madler/zlib.git' zlib
+          Clone 'https://github.com/facebook/zstd.git' zstd
+          Fetch 'https://www.sqlite.org/2025/sqlite-amalgamation-3500000.zip' sqlite3.zip
+          New-Item -ItemType Directory -Force sqlite3 | Out-Null
+          # Windows tar.exe is bsdtar: reads zip archives, supports --strip-components
+          tar -xf sqlite3.zip -C sqlite3 --strip-components=1
+          if ($LASTEXITCODE -ne 0) { throw 'sqlite3 extract failed' }
+          Remove-Item sqlite3.zip
+          Clone 'https://github.com/jedisct1/libsodium.git' libsodium 'stable'
+          Clone 'https://github.com/Mbed-TLS/mbedtls.git' mbedtls2 'v2.28.10'
+          Clone 'https://github.com/PCRE2Project/pcre2.git' pcre2
+          Clone 'https://github.com/JuliaStrings/utf8proc.git' utf8proc
+          Clone 'https://github.com/ibireme/yyjson.git' yyjson
+          Clone 'https://github.com/cktan/tomlc99.git' tomlc99
+          Clone 'https://github.com/ivmai/bdwgc.git' bdwgc
+          Clone 'https://github.com/libuv/libuv.git' libuv
+          Clone 'https://github.com/higan-emu/libco.git' libco
+
+          # Optional — keep last so a failure doesn't mask required fetches
+          git clone --depth 1 https://github.com/jedisct1/minicsv.git minicsv
+          exit 0
+
+      - name: Restore dependencies
+        shell: pwsh
+        run: dotnet restore
+
+      # native\build.bat runs automatically via the csproj BuildNativeLibraries target
+      - name: Build
+        shell: pwsh
+        run: dotnet build --configuration Release --no-restore
+
+      # The first hosted runs hit DllNotFoundException on razorforge_runtime —
+      # surface the import table and an actual load attempt so a failing Test
+      # step below is diagnosable from the log alone.
+      - name: Diagnose native runtime deps
+        shell: pwsh
+        run: |
+          Get-ChildItem bin\Release\net10.0 -Filter '*.dll' |
+            Where-Object Name -notmatch '^(Microsoft|System)' |
+            Select-Object Name, Length | Format-Table
+          C:\llvm20\bin\llvm-objdump.exe -p bin\Release\net10.0\razorforge_runtime.dll | Select-String 'DLL Name'
+          try {
+            [System.Runtime.InteropServices.NativeLibrary]::Load("$pwd\bin\Release\net10.0\razorforge_runtime.dll") | Out-Null
+            Write-Host 'razorforge_runtime.dll loads OK'
+          } catch {
+            Write-Host "LOAD FAILED: $($_.Exception.Message)"
+          }
+
+      - name: Test
+        shell: pwsh
+        run: dotnet test --configuration Release --no-build --verbosity normal
+
+  build-macos:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install LLVM 20 toolchain
+        run: |
+          brew install llvm@20 ninja
+          # llvm@20 is keg-only; GITHUB_PATH entries are prepended, so this
+          # shadows Apple clang for subsequent steps.
+          echo "$(brew --prefix llvm@20)/bin" >> "$GITHUB_PATH"
+
+      - name: Verify toolchain
+        run: |
+          clang --version
+          opt --version
+
+      - name: Fetch native library sources
+        run: |
+          cd native
+
+          git clone --depth 1 https://github.com/SDL-Hercules-390/decNumber.git decNumber
+          curl -L -o libbf.tar.gz "https://bellard.org/libbf/libbf-2025-06-03.tar.gz"
+          mkdir -p libbf
+          tar -xzf libbf.tar.gz -C libbf --strip-components=1
+          rm libbf.tar.gz
+          git clone --depth 1 https://github.com/libtom/libtommath.git libtommath
+          git clone --depth 1 https://github.com/madler/zlib.git zlib
+          git clone --depth 1 https://github.com/facebook/zstd.git zstd
+          mkdir -p sqlite3
+          curl -L -o sqlite3.zip "https://www.sqlite.org/2025/sqlite-amalgamation-3500000.zip"
+          unzip -q -j sqlite3.zip -d sqlite3
+          rm sqlite3.zip
+          git clone --depth 1 -b stable https://github.com/jedisct1/libsodium.git libsodium
+          git clone --depth 1 -b v2.28.10 https://github.com/Mbed-TLS/mbedtls.git mbedtls2
+          git clone --depth 1 https://github.com/PCRE2Project/pcre2.git pcre2
+          git clone --depth 1 https://github.com/JuliaStrings/utf8proc.git utf8proc
+          git clone --depth 1 https://github.com/ibireme/yyjson.git yyjson
+          git clone --depth 1 https://github.com/cktan/tomlc99.git tomlc99
+          git clone --depth 1 https://github.com/ivmai/bdwgc.git bdwgc
+          git clone --depth 1 https://github.com/libuv/libuv.git libuv
+          git clone --depth 1 https://github.com/higan-emu/libco.git libco
+          git clone --depth 1 https://github.com/jedisct1/minicsv.git minicsv || true
+
+      - name: Build native libraries
+        run: |
+          cd native
+          chmod +x build.sh
+          export CC=clang
+          export CXX=clang++
+          ./build.sh
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test --configuration Release --no-build --verbosity normal

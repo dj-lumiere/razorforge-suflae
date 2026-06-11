@@ -1,0 +1,592 @@
+module Core
+
+import Collections
+
+### Represents a 128-bit IEEE 754 decimal floating-point value.
+### `D128` is the highest-precision fixed-size decimal type in the stdlib and is
+### intended for calculations that need decimal semantics with substantially more
+### precision and range than `D64`.
+record D128 obeys Numeric, Ordered
+  ### Stores the low 64 bits of the runtime decimal128 encoding.
+  secret low: U64
+  ### Stores the high 64 bits of the runtime decimal128 encoding.
+  secret high: U64
+
+# Constants for D128
+preset D128_ZERO: D128 = 0.0_d128
+preset D128_ONE: D128 = 1.0_d128
+
+# ============================================================================
+# Creators
+# ============================================================================
+
+### Converts an `S8` into decimal128 form.
+### :param from: The signed 8-bit integer to convert.
+### :returns: The corresponding `D128` value.
+routine D128.$create(from: S8) -> D128
+  return rf_d128_from_s32(S32(from))
+
+### Converts an `S16` into decimal128 form.
+### :param from: The signed 16-bit integer to convert.
+### :returns: The corresponding `D128` value.
+routine D128.$create(from: S16) -> D128
+  return rf_d128_from_s32(S32(from))
+
+### Converts an `S32` into decimal128 form.
+### :param from: The signed 32-bit integer to convert.
+### :returns: The corresponding `D128` value.
+routine D128.$create(from: S32) -> D128
+  return rf_d128_from_s32(from)
+
+### Converts an `S64` into decimal128 form.
+### :param from: The signed 64-bit integer to convert.
+### :returns: The corresponding `D128` value.
+routine D128.$create(from: S64) -> D128
+  return rf_d128_from_s64(from)
+
+### Converts an `S128` into decimal128 through the supported integer path.
+### :param from: The signed 128-bit integer to convert.
+### :returns: The closest representable `D128` value.
+routine D128.$create(from: S128) -> D128
+  # Convert through S64 - may lose precision
+  return from.S64!().D128()
+
+### Converts a `U8` into decimal128 form.
+### :param from: The unsigned 8-bit integer to convert.
+### :returns: The corresponding `D128` value.
+routine D128.$create(from: U8) -> D128
+  return rf_d128_from_u32(U32(from))
+
+### Converts a `U16` into decimal128 form.
+### :param from: The unsigned 16-bit integer to convert.
+### :returns: The corresponding `D128` value.
+routine D128.$create(from: U16) -> D128
+  return rf_d128_from_u32(U32(from))
+
+### Converts a `U32` into decimal128 form.
+### :param from: The unsigned 32-bit integer to convert.
+### :returns: The corresponding `D128` value.
+routine D128.$create(from: U32) -> D128
+  return rf_d128_from_u32(from)
+
+### Converts a `U64` into decimal128 form.
+### :param from: The unsigned 64-bit integer to convert.
+### :returns: The corresponding `D128` value.
+routine D128.$create(from: U64) -> D128
+  return rf_d128_from_u64(from)
+
+### Converts a `U128` into decimal128 through the supported integer path.
+### :param from: The unsigned 128-bit integer to convert.
+### :returns: The closest representable `D128` value.
+routine D128.$create(from: U128) -> D128
+  # Convert through U64 - may lose precision
+  return from.U64!().D128()
+
+### Converts a half-precision binary float to decimal128.
+### :param from: The binary floating-point input.
+### :returns: The closest representable `D128` value.
+routine D128.$create(from: F16) -> D128
+  return from.F32().D128()
+
+### Converts a single-precision binary float to decimal128.
+### :param from: The binary floating-point input.
+### :returns: The closest representable `D128` value.
+routine D128.$create(from: F32) -> D128
+  return rf_f32_to_d128(from)
+
+### Converts a double-precision binary float to decimal128.
+### :param from: The binary floating-point input.
+### :returns: The closest representable `D128` value.
+routine D128.$create(from: F64) -> D128
+  return rf_f64_to_d128(from)
+
+### Converts a quadruple-precision binary float to decimal128 through the supported runtime path.
+### :param from: The binary floating-point input.
+### :returns: The closest representable `D128` value.
+routine D128.$create(from: F128) -> D128
+  return from.F64!().D128()
+
+### Widens a decimal32 value to decimal128.
+### :param from: The decimal floating-point input.
+### :returns: The corresponding `D128` value.
+routine D128.$create(from: D32) -> D128
+  var bits = from.to_bits()
+  return rf_d32_to_d128(bits)
+
+### Widens a decimal64 value to decimal128.
+### :param from: The decimal floating-point input.
+### :returns: The corresponding `D128` value.
+routine D128.$create(from: D64) -> D128
+  var bits = from.to_bits()
+  return rf_d64_to_d128(bits)
+
+### Returns an existing `D128` unchanged.
+### :param from: The decimal128 value to forward.
+### :returns: `from`.
+routine D128.$create(from: D128) -> D128
+  return from
+
+# ============================================================================
+# Arithmetic Operations
+# ============================================================================
+
+### Returns the decimal sum `me + you`, throwing if the result is non-finite.
+### :param you: The addend.
+### :returns: The resulting `D128` value.
+### :throws: {NumericOverflowError} if the result is non-finite.
+routine D128.$add!(you: D128) -> D128
+  var result = rf_d128_add(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"D128 addition produced non-finite result: {me} + {you}")
+  return result
+
+### Returns the decimal difference `me - you`, throwing if the result is non-finite.
+### :param you: The value to subtract.
+### :returns: The resulting `D128` value.
+### :throws: {NumericOverflowError} if the result is non-finite.
+routine D128.$sub!(you: D128) -> D128
+  var result = rf_d128_sub(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"D128 subtraction produced non-finite result: {me} - {you}")
+  return result
+
+### Returns the decimal product `me * you`, throwing if the result is non-finite.
+### :param you: The multiplier.
+### :returns: The resulting `D128` value.
+### :throws: {NumericOverflowError} if the result is non-finite.
+routine D128.$mul!(you: D128) -> D128
+  var result = rf_d128_mul(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"D128 multiplication produced non-finite result: {me} * {you}")
+  return result
+
+### Returns the decimal quotient `me / you`, throwing if the result is non-finite.
+### :param you: The divisor.
+### :returns: The resulting `D128` value.
+### :throws: {NumericOverflowError} if the result is non-finite (including division by zero).
+routine D128.$truediv!(you: D128) -> D128
+  var result = rf_d128_div(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"D128 division produced non-finite result: {me} / {you}")
+  return result
+
+### Adds `me + you` without finiteness checking (raw IEEE 754-2008 decimal).
+dangerous routine D128.$add_unchecked(you: D128) -> D128
+  return rf_d128_add(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
+
+### Subtracts `me - you` without finiteness checking (raw IEEE 754-2008 decimal).
+dangerous routine D128.$sub_unchecked(you: D128) -> D128
+  return rf_d128_sub(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
+
+### Multiplies `me * you` without finiteness checking (raw IEEE 754-2008 decimal).
+dangerous routine D128.$mul_unchecked(you: D128) -> D128
+  return rf_d128_mul(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
+
+### Divides `me / you` without finiteness checking (raw IEEE 754-2008 decimal).
+dangerous routine D128.$truediv_unchecked(you: D128) -> D128
+  return rf_d128_div(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
+
+### Returns the negated value.
+### :returns: The resulting `D128` value.
+routine D128.$neg() -> D128
+  var zero = D128_ZERO
+  return rf_d128_sub(a_low: zero.low, a_high: zero.high, b_low: me.low, b_high: me.high)
+
+# ============================================================================
+# Comparison Operations
+# ============================================================================
+
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
+routine D128.$eq(you: D128) -> Bool
+  return rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high) == 0
+
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
+routine D128.$cmp(you: D128) -> ComparisonSign
+  var cmp = rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high)
+  if cmp < 0
+    return ME_SMALL
+  if cmp > 0
+    return ME_LARGE
+  return SAME
+
+# ============================================================================
+# Math Operations
+# ============================================================================
+
+### Returns the decimal square root of this value.
+### :returns: The resulting `D128` value.
+routine D128.sqrt() -> D128
+  return rf_d128_sqrt(low: me.low, high: me.high)
+
+### Returns the absolute value.
+### :returns: The resulting `D128` value.
+routine D128.abs() -> D128
+  return rf_d128_abs(low: me.low, high: me.high)
+
+### Rounds this decimal value toward positive infinity.
+### :returns: The resulting `D128` value.
+routine D128.ceil() -> D128
+  return rf_d128_ceil(low: me.low, high: me.high)
+
+### Rounds this decimal value toward negative infinity.
+### :returns: The resulting `D128` value.
+routine D128.floor() -> D128
+  return rf_d128_floor(low: me.low, high: me.high)
+
+### Rounds this decimal value to the nearest integral decimal value.
+### :returns: The resulting `D128` value.
+routine D128.round() -> D128
+  return rf_d128_round(low: me.low, high: me.high)
+
+### Truncates this decimal value toward zero.
+### :returns: The resulting `D128` value.
+routine D128.int_truncate() -> D128
+  return rf_d128_trunc(low: me.low, high: me.high)
+
+# ============================================================================
+# Trigonometric Functions (via F128 conversion + LibBF)
+# ============================================================================
+
+### Returns the sine of this decimal value, interpreting it as radians.
+### :returns: The resulting `D128` value.
+routine D128.sin() -> D128
+  return rf_d128_sin(low: me.low, high: me.high)
+
+### Returns the cosine of this decimal value, interpreting it as radians.
+### :returns: The resulting `D128` value.
+routine D128.cos() -> D128
+  return rf_d128_cos(low: me.low, high: me.high)
+
+### Returns the tangent of this decimal value, interpreting it as radians.
+### :returns: The resulting `D128` value.
+routine D128.tan() -> D128
+  return rf_d128_tan(low: me.low, high: me.high)
+
+### Returns the inverse sine of this decimal value.
+### :returns: The resulting `D128` value.
+routine D128.asin() -> D128
+  return rf_d128_asin(low: me.low, high: me.high)
+
+### Returns the inverse cosine of this decimal value.
+### :returns: The resulting `D128` value.
+routine D128.acos() -> D128
+  return rf_d128_acos(low: me.low, high: me.high)
+
+### Returns the inverse tangent of this decimal value.
+### :returns: The resulting `D128` value.
+routine D128.atan() -> D128
+  return rf_d128_atan(low: me.low, high: me.high)
+
+### Returns the quadrant-aware angle of the point `(x, me)`.
+### :param x: The x-coordinate paired with this y-coordinate.
+### :returns: The resulting `D128` value.
+routine D128.atan2(x: D128) -> D128
+  return rf_d128_atan2(y_low: me.low, y_high: me.high, x_low: x.low, x_high: x.high)
+
+# ============================================================================
+# Hyperbolic Functions (via F128 conversion + LibBF)
+# ============================================================================
+
+### Returns the hyperbolic sine of this decimal value.
+### :returns: The resulting `D128` value.
+routine D128.sinh() -> D128
+  return rf_d128_sinh(low: me.low, high: me.high)
+
+### Returns the hyperbolic cosine of this decimal value.
+### :returns: The resulting `D128` value.
+routine D128.cosh() -> D128
+  return rf_d128_cosh(low: me.low, high: me.high)
+
+### Returns the hyperbolic tangent of this decimal value.
+### :returns: The resulting `D128` value.
+routine D128.tanh() -> D128
+  return rf_d128_tanh(low: me.low, high: me.high)
+
+# ============================================================================
+# Exponential and Logarithmic Functions (via F128 conversion + LibBF)
+# ============================================================================
+
+### Returns `e` raised to this decimal value.
+### :returns: The resulting `D128` value.
+routine D128.exp() -> D128
+  return rf_d128_exp(low: me.low, high: me.high)
+
+### Returns `2` raised to this decimal value.
+### :returns: The resulting `D128` value.
+routine D128.exp2() -> D128
+  return rf_d128_exp2(low: me.low, high: me.high)
+
+### Returns the natural logarithm of this decimal value.
+### :returns: The resulting `D128` value.
+routine D128.log() -> D128
+  return rf_d128_log(low: me.low, high: me.high)
+
+### Returns the base-2 logarithm of this decimal value.
+### :returns: The resulting `D128` value.
+routine D128.log2() -> D128
+  return rf_d128_log2(low: me.low, high: me.high)
+
+### Returns the base-10 logarithm of this decimal value.
+### :returns: The resulting `D128` value.
+routine D128.log10() -> D128
+  return rf_d128_log10(low: me.low, high: me.high)
+
+# ============================================================================
+# Power Functions (via F128 conversion + LibBF)
+# ============================================================================
+
+### Raises this decimal value to the decimal exponent `exp`.
+### :param exp: The exponent value.
+### :returns: The resulting `D128` value.
+routine D128.pow(exp: D128) -> D128
+  return rf_d128_pow(base_low: me.low, base_high: me.high, exp_low: exp.low, exp_high: exp.high)
+
+### Raises this decimal value to `exp` and rejects non-finite results.
+### :param exp: The exponent value.
+### :returns: The resulting `D128` value.
+routine D128.$pow!(exp: D128) -> D128
+  var result = me.pow(exp)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"D128 power produced non-finite result: {me} ** {exp}")
+  return result
+
+### Returns the real cube root of this decimal value.
+### :returns: The resulting `D128` value.
+routine D128.cbrt() -> D128
+  return rf_d128_cbrt(low: me.low, high: me.high)
+
+### Returns the Euclidean length of the vector `(me, y)`.
+### :param y: The second coordinate.
+### :returns: The resulting `D128` value.
+routine D128.hypot(y: D128) -> D128
+  return rf_d128_hypot(x_low: me.low, x_high: me.high, y_low: y.low, y_high: y.high)
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+### Returns the smaller of this value and `you`.
+### :param you: The other value to compare against.
+### :returns: The resulting `D128` value.
+routine D128.min(you: D128) -> D128
+  return if rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high) <= 0 then me else you
+
+### Returns the larger of this value and `you`.
+### :param you: The other value to compare against.
+### :returns: The resulting `D128` value.
+routine D128.max(you: D128) -> D128
+  return if rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: you.low, b_high: you.high) >= 0 then me else you
+
+### Restricts this value to the closed interval `[min_val, max_val]`.
+### :param min_val: The lower bound to enforce.
+### :param max_val: The upper bound to enforce.
+### :returns: The resulting `D128` value.
+@positional
+routine D128.clamp(min_val: D128, max_val: D128) -> D128
+  return me.min(max_val).max(min_val)
+
+### Returns `true` when this decimal value is greater than zero.
+### :returns: The resulting `Bool` value.
+routine D128.is_positive() -> Bool
+  var zero = D128_ZERO
+  return rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: zero.low, b_high: zero.high) > 0
+
+### Returns `true` when this decimal value is less than zero.
+### :returns: The resulting `Bool` value.
+routine D128.is_negative() -> Bool
+  var zero = D128_ZERO
+  return rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: zero.low, b_high: zero.high) < 0
+
+### Returns `true` when this decimal value compares equal to zero.
+### :returns: The resulting `Bool` value.
+routine D128.is_zero() -> Bool
+  var zero = D128_ZERO
+  return rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: zero.low, b_high: zero.high) == 0
+
+### Returns `true` when this decimal value is finite.
+### :returns: Whether the runtime encoding represents a finite number.
+routine D128.is_finite() -> Bool
+  return rf_d128_isfinite(low: me.low, high: me.high) != 0_s32
+
+### Returns the sign of this value as `-1d128`, `0d128`, or `1d128`.
+### :returns: The resulting `D128` value.
+routine D128.signum() -> D128
+  var zero = D128_ZERO
+  var one = D128_ONE
+  return when
+    rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: zero.low, b_high: zero.high) > 0 => one
+    rf_d128_cmp(a_low: me.low, a_high: me.high, b_low: zero.low, b_high: zero.high) < 0 => rf_d128_sub(a_low: zero.low, a_high: zero.high, b_low: one.low, b_high: one.high)
+    else => zero
+
+# ============================================================================
+# Type Conversions
+# ============================================================================
+
+### Returns the low 64 bits of the runtime decimal128 encoding.
+### :returns: The resulting `U64` value.
+routine D128.low_bits() -> U64
+  return me.low
+
+### Returns the high 64 bits of the runtime decimal128 encoding.
+### :returns: The resulting `U64` value.
+routine D128.high_bits() -> U64
+  return me.high
+
+### Reconstructs a decimal128 value from its raw low/high words.
+### :param low: The low 64 bits of the encoding.
+### :param high: The high 64 bits of the encoding.
+### :returns: The resulting `D128` value.
+common routine D128.from_bits(low: U64, high: U64) -> D128
+  return D128(low: low, high: high)
+
+# ============================================================================
+# Text Representation and Parsing
+# ============================================================================
+
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
+routine D128.$represent() -> ?Text
+  var cstr_result = rf_d128_to_string(low: me.low_bits(), high: me.high_bits())
+  return Text(from: CStr(from_ptr: cstr_result))
+
+### Returns the textual representation of this value.
+### :returns: The resulting `Text` value.
+routine D128.$diagnose() -> ?Text
+  return "D128(" + me.$represent() + ")"
+
+### Parses a decimal literal into a `D128`.
+### :param from_text: The text to parse. Accepts standard decimal notation and
+###   the special values `nan`, `inf`, and `infinity` (case-insensitive, with
+###   optional leading sign).
+### :returns: The `D128` value parsed from the input.
+### :throws: {InvalidValueError} if the text is not a valid decimal literal.
+routine D128.$create!(from_text: Text) -> D128
+  var len = from_text.count()
+  if len == 0u64
+    throw InvalidValueError(input: from_text, target: "D128")
+  var i = 0u64
+  var first = from_text[0u64]
+  if first == Character(0x002Bu32) or first == Character(0x002Du32)
+    i = 1u64
+    if i >= len
+      throw InvalidValueError(input: from_text, target: "D128")
+  var special = false
+  var rest = len - i
+  if rest >= 3u64
+    var c0 = from_text[i].to_lowercase()
+    var c1 = from_text[i + 1u64].to_lowercase()
+    var c2 = from_text[i + 2u64].to_lowercase()
+    if rest == 3u64 and c0 == Character(0x006Eu32) and c1 == Character(0x0061u32) and c2 == Character(0x006Eu32)
+      special = true
+    if rest == 3u64 and c0 == Character(0x0069u32) and c1 == Character(0x006Eu32) and c2 == Character(0x0066u32)
+      special = true
+    if not special and rest == 8u64 and c0 == Character(0x0069u32) and c1 == Character(0x006Eu32) and c2 == Character(0x0066u32)
+      var c3 = from_text[i + 3u64].to_lowercase()
+      var c4 = from_text[i + 4u64].to_lowercase()
+      var c5 = from_text[i + 5u64].to_lowercase()
+      var c6 = from_text[i + 6u64].to_lowercase()
+      var c7 = from_text[i + 7u64].to_lowercase()
+      if c3 == Character(0x0069u32) and c4 == Character(0x006Eu32) and c5 == Character(0x0069u32) and c6 == Character(0x0074u32) and c7 == Character(0x0079u32)
+        special = true
+  if not special
+    var has_digit = false
+    var has_dot = false
+    var has_exp = false
+    while i < len
+      var ch = from_text[i]
+      if ch.is_numeric()
+        has_digit = true
+      elseif ch == Character(0x002Eu32)
+        if has_dot or has_exp
+          throw InvalidValueError(input: from_text, target: "D128")
+        has_dot = true
+      elseif ch == Character(0x0065u32) or ch == Character(0x0045u32)
+        if has_exp or not has_digit
+          throw InvalidValueError(input: from_text, target: "D128")
+        has_exp = true
+        has_digit = false
+        if i + 1u64 < len
+          var next_ch = from_text[i + 1u64]
+          if next_ch == Character(0x002Bu32) or next_ch == Character(0x002Du32)
+            i = i + 1u64
+      else
+        throw InvalidValueError(input: from_text, target: "D128")
+      i = i + 1u64
+    if not has_digit
+      throw InvalidValueError(input: from_text, target: "D128")
+  var cstr_val = CStr(from: from_text)
+  return rf_d128_from_string(cstr_val)
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns an xxHash64-based hash of this value via the 128-bit hash path.
+### :returns: A `U64` hash derived from the full decimal128 encoding.
+routine D128.$fast_hash() -> U64
+  return __hash_u128(v: U128(me.low) | (U128(me.high) << 64_u32))
+
+# ============================================================================
+# Byte Representation
+# ============================================================================
+
+### Returns the raw bytes of this value in little-endian order.
+### :returns: The resulting `Array[Byte, 16]` value.
+routine D128.to_bytes_le() -> Array[Byte, 16]
+  var raw = U128(me.low) | (U128(me.high) << 64_u32)
+  var lo = int_truncate[U128, U64](raw)
+  var hi = int_truncate[U128, U64](shift_right_unsigned[U128](raw, 64_u128))
+  var result = Array[Byte, 16]()
+  result = set_byte_at(array: result, index: 0u64, value: int_truncate[U64, U8](lo))
+  result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 8_u64)))
+  result = set_byte_at(array: result, index: 2_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 16_u64)))
+  result = set_byte_at(array: result, index: 3_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 24_u64)))
+  result = set_byte_at(array: result, index: 4_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 32_u64)))
+  result = set_byte_at(array: result, index: 5_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 40u64)))
+  result = set_byte_at(array: result, index: 6_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 48_u64)))
+  result = set_byte_at(array: result, index: 7_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 56_u64)))
+  result = set_byte_at(array: result, index: 8_u64, value: int_truncate[U64, U8](hi))
+  result = set_byte_at(array: result, index: 9_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 8_u64)))
+  result = set_byte_at(array: result, index: 10u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 16_u64)))
+  result = set_byte_at(array: result, index: 11_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 24_u64)))
+  result = set_byte_at(array: result, index: 12_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 32_u64)))
+  result = set_byte_at(array: result, index: 13_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 40u64)))
+  result = set_byte_at(array: result, index: 14_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 48_u64)))
+  result = set_byte_at(array: result, index: 15_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 56_u64)))
+  return result
+
+### Returns the raw bytes of this value in big-endian order.
+### :returns: The resulting `Array[Byte, 16]` value.
+routine D128.to_bytes_be() -> Array[Byte, 16]
+  var raw = U128(me.low) | (U128(me.high) << 64_u32)
+  var lo = byte_swap[U64](int_truncate[U128, U64](shift_right_unsigned[U128](raw, 64_u128)))
+  var hi = byte_swap[U64](int_truncate[U128, U64](raw))
+  var result = Array[Byte, 16]()
+  result = set_byte_at(array: result, index: 0u64, value: int_truncate[U64, U8](lo))
+  result = set_byte_at(array: result, index: 1_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 8_u64)))
+  result = set_byte_at(array: result, index: 2_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 16_u64)))
+  result = set_byte_at(array: result, index: 3_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 24_u64)))
+  result = set_byte_at(array: result, index: 4_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 32_u64)))
+  result = set_byte_at(array: result, index: 5_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 40u64)))
+  result = set_byte_at(array: result, index: 6_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 48_u64)))
+  result = set_byte_at(array: result, index: 7_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](lo, 56_u64)))
+  result = set_byte_at(array: result, index: 8_u64, value: int_truncate[U64, U8](hi))
+  result = set_byte_at(array: result, index: 9_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 8_u64)))
+  result = set_byte_at(array: result, index: 10u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 16_u64)))
+  result = set_byte_at(array: result, index: 11_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 24_u64)))
+  result = set_byte_at(array: result, index: 12_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 32_u64)))
+  result = set_byte_at(array: result, index: 13_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 40u64)))
+  result = set_byte_at(array: result, index: 14_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 48_u64)))
+  result = set_byte_at(array: result, index: 15_u64, value: int_truncate[U64, U8](shift_right_unsigned[U64](hi, 56_u64)))
+  return result
+
+### Returns a keyed hash of this value using SipHash-2-4.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: The resulting `U64` value.
+routine D128.$hash(k0: U64, k1: U64) -> U64
+  return __secure_hash_u128(v: U128(me.low) | (U128(me.high) << 64_u32), k0: k0, k1: k1)

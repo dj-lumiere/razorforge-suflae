@@ -1,0 +1,11 @@
+module Core
+
+### Represents the protocol for in-place exponentiation.
+### `InPlaceExponentiable` is for mutable numeric values that update themselves
+### with a power result instead of returning a separate value.
+protocol InPlaceExponentiable
+  ### Raises this value by `you` in place.
+  ### :param you: The exponent value.
+  ### :note: The right-hand operand should remain unchanged.
+  @writable
+  routine Me.$ipow(you: Me)

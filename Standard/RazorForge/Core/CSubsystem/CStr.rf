@@ -1,9 +1,9 @@
 # RazorForge C String Type (CStr)
 # Null-terminated char* wrapper for C FFI interop
 #
-# CStr is a value type that wraps a raw pointer (UAddr) to a null-terminated
-# sequence of bytes. It provides safe access to C strings without copying
-# unless explicitly requested.
+# CStr is a value type that wraps a raw pointer (Hijacked[Byte]) to a
+# null-terminated sequence of bytes. It provides safe access to C strings
+# without copying unless explicitly requested.
 #
 # Key characteristics:
 # - Value semantics (no heap allocation for the wrapper itself)
@@ -12,194 +12,162 @@
 # - Encoding-agnostic (typically ASCII or UTF-8 in modern code)
 #
 # Memory ownership:
-# - CStr(from_ptr: UAddr) - wraps existing memory, does NOT take ownership
+# - CStr(from_ptr: Hijacked[Byte]) - wraps existing memory, does NOT take ownership
 # - CStr(from_text: Bytes) - allocates NEW memory, caller owns it
 # - CStr.copy() - allocates NEW memory, caller owns it
-#
-# For wide character strings (wchar_t*), see CWStr.rf
-import Collections.List
-import Bytes.Bytes
 
 module Core
 
-# ============================================================================
-# CStr Record Definition
-# ============================================================================
-
-# C string record (null-terminated char*)
-# Value type wrapper around raw pointer - no heap allocation for wrapper
+### Represents a null-terminated narrow C string.
+### `CStr` is the FFI wrapper for `char*` values that follow the C null-termination contract.
+### The wrapper itself is value-typed; ownership depends on how the pointer was obtained.
+### :see: {Bytes}, {C-Subsystem}
+@llvm("ptr")
 record CStr
-  ptr: UAddr  # Raw pointer to null-terminated Byte sequence
+  pass
 
-# Null pointer constant for CStr comparisons
-preset CSTR_NULL: CStr = CStr(ptr: 0uaddr)
+preset CSTR_NULL: CStr = reinterpret_bits[Hijacked[Byte], CStr](hijacked_none[Byte]())
 
-# ============================================================================
-# Creators
-# ============================================================================
+### Returns the raw null-terminated byte pointer backing this C string.
+### :returns: The underlying `Hijacked[Byte]` pointer.
+@readonly
+routine CStr.ptr() -> Hijacked[Byte]
+  return reinterpret_bits[CStr, Hijacked[Byte]](me)
 
-# Create CStr from raw pointer (wraps existing memory, does NOT copy)
-# WARNING: The pointed-to memory must remain valid for the lifetime of this CStr
-routine CStr.__create__(from_ptr: UAddr) -> CStr
-  return CStr(ptr: from_ptr)
+### Wraps an existing null-terminated byte pointer as `CStr`.
+### No copy is performed and ownership is not changed.
+### :param from_ptr: The pointer to wrap.
+### :returns: The resulting `CStr` value.
+routine CStr.$create(from_ptr: Hijacked[Byte]) -> CStr
+  return reinterpret_bits[Hijacked[Byte], CStr](from_ptr)
 
-# Create CStr from Bytes (allocates NEW memory with null terminator)
-# The caller is responsible for freeing this memory when done
-routine CStr.__create__(from: Bytes) -> CStr
+### Wraps an existing raw address as `CStr`.
+### No copy is performed and ownership is not changed.
+### :param from_ptr: The address to wrap.
+### :returns: The resulting `CStr` value.
+routine CStr.$create(from_ptr: Address) -> CStr
+  return reinterpret_bits[Hijacked[Byte], CStr](Hijacked[Byte](from_ptr))
+
+### Creates a null-terminated C string by copying raw bytes and appending a trailing null byte.
+### :param from: The byte sequence to copy.
+### :returns: The resulting `CStr` value.
+routine CStr.$create(from: Bytes) -> CStr
   var len = from.count()
-  var buffer = Snatched[U8](address: rf_alloc(len + 1u64))
+  danger!
+    var buffer = Hijacked[Byte](rf_allocate_dynamic(len + 1u64))
 
-  var i: U64 = 0u64
-  loop
-    if i >= len
-      break
-    Snatched[U8](address: buffer.address + i).write(from[i].byte_value())
-    i = i + 1u64
-  # Null terminator
-  Snatched[U8](address: buffer.address + len).write(0u8)
+    var i: U64 = 0u64
+    loop
+      if i >= len
+        break
+      buffer.offset(i.bytes()).inject(from[i])
+      i = i + 1u64
+    buffer.offset(len.bytes()).inject(BYTE_NULL)
 
-  return CStr(ptr: buffer.address)
+    return reinterpret_bits[Hijacked[Byte], CStr](buffer)
 
-# Create CStr from Text (encodes UTF-32 codepoints to UTF-8 with null terminator)
-# The caller is responsible for freeing this memory when done
-routine CStr.__create__(from: Text) -> CStr
+### Creates a UTF-8 encoded null-terminated C string from `Text`.
+### :param from: The text value to encode and copy.
+### :returns: The resulting `CStr` value.
+routine CStr.$create(from: Text) -> CStr
   var len = from.count()
-  if len == 0u64
-    var buffer = Snatched[U8](address: rf_alloc(1u64))
-    Snatched[U8](address: buffer.address).write(0u8)
-    return CStr(ptr: buffer.address)
+  danger!
+    if len == 0u64
+      var empty_buffer = Hijacked[Byte](rf_allocate_dynamic(1u64))
+      empty_buffer.inject(BYTE_NULL)
+      return reinterpret_bits[Hijacked[Byte], CStr](empty_buffer)
 
-  # Worst case: each codepoint needs 4 bytes + null terminator
-  var max_bytes = len * 4u64 + 1u64
-  var buffer = Snatched[U8](address: rf_alloc(max_bytes))
-  var write_pos: U64 = 0u64
-  var i: U64 = 0u64
+    var max_bytes = len * 4u64 + 1u64
+    var buffer = Hijacked[Byte](rf_allocate_dynamic(max_bytes))
+    var write_pos: U64 = 0u64
+    var i: U64 = 0u64
 
-  while i < len
-    var cp = from[i].codepoint()
+    while i < len
+      var cp = from[i].codepoint()
 
-    if cp <= 0x7Fu32
-      # 1-byte ASCII
-      Snatched[U8](address: buffer.address + write_pos).write(U8(cp))
-      write_pos = write_pos + 1u64
-    elseif cp <= 0x7FFu32
-      # 2-byte sequence
-      Snatched[U8](address: buffer.address + write_pos).write(U8(0xC0u32 | (cp >> 6u32)))
-      Snatched[U8](address: buffer.address + write_pos + 1u64).write(U8(0x80u32 | (cp & 0x3Fu32)))
-      write_pos = write_pos + 2u64
-    elseif cp <= 0xFFFFu32
-      # 3-byte sequence
-      Snatched[U8](address: buffer.address + write_pos).write(U8(0xE0u32 | (cp >> 12u32)))
-      Snatched[U8](address: buffer.address + write_pos + 1u64).write(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32)))
-      Snatched[U8](address: buffer.address + write_pos + 2u64).write(U8(0x80u32 | (cp & 0x3Fu32)))
-      write_pos = write_pos + 3u64
-    else
-      # 4-byte sequence
-      Snatched[U8](address: buffer.address + write_pos).write(U8(0xF0u32 | (cp >> 18u32)))
-      Snatched[U8](address: buffer.address + write_pos + 1u64).write(U8(0x80u32 | ((cp >> 12u32) & 0x3Fu32)))
-      Snatched[U8](address: buffer.address + write_pos + 2u64).write(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32)))
-      Snatched[U8](address: buffer.address + write_pos + 3u64).write(U8(0x80u32 | (cp & 0x3Fu32)))
-      write_pos = write_pos + 4u64
+      if cp <= 0x7Fu32
+        buffer.offset(write_pos.bytes()).inject(Byte(U8(cp)))
+        write_pos = write_pos + 1u64
+      elseif cp <= 0x7FFu32
+        buffer.offset(write_pos.bytes()).inject(Byte(U8(0xC0u32 | (cp >> 6u32))))
+        buffer.offset((write_pos + 1u64).bytes()).inject(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
+        write_pos = write_pos + 2u64
+      elseif cp <= 0xFFFFu32
+        buffer.offset(write_pos.bytes()).inject(Byte(U8(0xE0u32 | (cp >> 12u32))))
+        buffer.offset((write_pos + 1u64).bytes()).inject(Byte(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32))))
+        buffer.offset((write_pos + 2u64).bytes()).inject(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
+        write_pos = write_pos + 3u64
+      else
+        buffer.offset(write_pos.bytes()).inject(Byte(U8(0xF0u32 | (cp >> 18u32))))
+        buffer.offset((write_pos + 1u64).bytes()).inject(Byte(U8(0x80u32 | ((cp >> 12u32) & 0x3Fu32))))
+        buffer.offset((write_pos + 2u64).bytes()).inject(Byte(U8(0x80u32 | ((cp >> 6u32) & 0x3Fu32))))
+        buffer.offset((write_pos + 3u64).bytes()).inject(Byte(U8(0x80u32 | (cp & 0x3Fu32))))
+        write_pos = write_pos + 4u64
 
-    i = i + 1u64
+      i = i + 1u64
 
-  # Null terminator
-  Snatched[U8](address: buffer.address + write_pos).write(0u8)
-  return CStr(ptr: buffer.address)
+    buffer.offset(write_pos.bytes()).inject(BYTE_NULL)
+    return reinterpret_bits[Hijacked[Byte], CStr](buffer)
 
-# ============================================================================
-# Core Methods
-# ============================================================================
+### Returns the length of this C string in bytes, excluding the trailing null.
+### :returns: The byte count, not including the null terminator.
+routine CStr.count() -> U64
+  return rf_cstr_count(me)
 
-# Get length of C string (excluding null terminator)
-# O(n) - must scan for null terminator
-routine CStr.count() -> UAddr
-  return rf_strlen(me.ptr)
-
-# Check if C string pointer is null
+### Returns `true` when this wrapper does not reference any C string.
+### :returns: The resulting `Bool` value.
 routine CStr.is_null() -> Bool
-  return me.ptr == 0uaddr
+  danger!
+    return me.ptr().is_none()
 
-# Check if C string is empty (null or zero-length)
+### Returns `true` when this C string is null or has zero length.
+### :returns: The resulting `Bool` value.
 routine CStr.is_empty() -> Bool
-  return me.is_null() or me.length() == 0uaddr
+  return me.is_null() or me.count() == 0u64
 
-# ============================================================================
-# Indexing
-# ============================================================================
+### Returns the byte at `index` in the referenced C string.
+### This does not copy the string and assumes the caller stays within bounds.
+### :param index: The zero-based position to use.
+### :returns: The resulting `Byte` value.
+dangerous routine CStr.$getitem(index: U64) -> Byte
+  return me.ptr().offset(index.bytes()).extract()
 
-# Get Byte at index (no bounds checking in danger zone)
-routine CStr.__getitem__!(index: UAddr) -> U8
-  return read_as![U8](me.ptr + index)
+### Returns whether both values are equal.
+### :param you: The other value to compare against.
+### :returns: The resulting `Bool` value.
+routine CStr.$eq(you: CStr) -> Bool
+  return rf_cstr_compare(a: me, b: you) == 0s32
 
-# ============================================================================
-# Comparison
-# ============================================================================
-
-routine CStr.__eq__(you: CStr) -> Bool
-  return rf_strcmp(me.ptr, you.ptr) == 0s32
-
-routine CStr.__cmp__(you: CStr) -> ComparisonSign
-  var cmp = rf_strcmp(me.ptr, you.ptr)
+### Compares this value with the other value.
+### :param you: The other value to compare against.
+### :returns: The resulting `ComparisonSign` value.
+routine CStr.$cmp(you: CStr) -> ComparisonSign
+  var cmp = rf_cstr_compare(a: me, b: you)
   if cmp < 0s32
     return ME_SMALL
   if cmp > 0s32
     return ME_LARGE
-  return EQUAL
+  return SAME
 
-# ============================================================================
-# Copying
-# ============================================================================
-
-# Copy C string to new allocated memory
-# The caller is responsible for freeing the returned memory
+### Returns an owning copy of this C string.
+### The copied string receives a newly allocated null-terminated buffer.
+### :returns: The resulting `CStr` value.
 routine CStr.copy() -> CStr
-  var len = me.length()
-  var buffer = Snatched[U8](address: rf_alloc(len + 1uaddr))
-  rf_strcpy(buffer.address, me.ptr)
-  return CStr(ptr: buffer.address)
+  var len = me.count()
+  danger!
+    var buffer = Hijacked[Byte](rf_allocate_dynamic(len + 1u64))
+    rf_cstr_copy(dest: CStr(from_ptr: buffer), src: me)
+    return reinterpret_bits[Hijacked[Byte], CStr](buffer)
 
-# ============================================================================
-# Conversion to RazorForge Types
-# ============================================================================
+### Returns a new `CStr` view offset by `n` bytes into the same underlying
+### buffer.
+### :param n: The number of bytes to skip.
+### :returns: The resulting `CStr` value.
+dangerous routine CStr.offset(n: U64) -> CStr
+  return reinterpret_bits[Hijacked[Byte], CStr](me.ptr().offset(n.bytes()))
 
-# Convert CStr to Bytes (copies data, interprets as UTF-8)
-routine CStr.to_text() -> Bytes
-  var len = me.length()
-  if len == 0uaddr
-    return Bytes()
-
-  var list = List[Byte](len)
-  var i: UAddr = 0uaddr
-  loop
-    if i >= len
-      break
-    var byte_val = read_as![U8](me.ptr + i)
-    list.add_last(Byte(codepoint: byte_val))
-    i = i + 1uaddr
-  return Bytes(from_list: list)
-
-# Convert CStr to List[U8] (copies raw bytes, for binary data or legacy encodings)
-routine CStr.to_bytes() -> List[U8]
-  var len = me.length()
-  var list = List[U8](len)
-  var i: UAddr = 0uaddr
-  loop
-    if i >= len
-      break
-    var byte_val = read_as![U8](me.ptr + i)
-    list.add_last(byte_val)
-    i = i + 1uaddr
-  return list
-
-# ============================================================================
-# Pointer Arithmetic (Danger Zone)
-# ============================================================================
-
-# Get pointer offset by n bytes
-routine CStr.offset(n: UAddr) -> CStr
-  return CStr(ptr: me.ptr + n)
-
-# Get pointer to substring starting at index
-routine CStr.from_index(start: UAddr) -> CStr
-  return CStr(ptr: me.ptr + start)
+### Returns a `CStr` view starting at `start` bytes from the current pointer.
+### :param start: The inclusive starting position.
+### :returns: The resulting `CStr` value.
+dangerous routine CStr.from_index(start: U64) -> CStr
+  return reinterpret_bits[Hijacked[Byte], CStr](me.ptr().offset(start.bytes()))

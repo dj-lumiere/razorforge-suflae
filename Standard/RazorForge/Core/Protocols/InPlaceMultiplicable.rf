@@ -1,0 +1,11 @@
+module Core
+
+### Represents the protocol for in-place multiplication.
+### `InPlaceMultiplicable` is for mutable values whose multiplication operator
+### updates the left-hand operand with the product.
+protocol InPlaceMultiplicable
+  ### Multiplies this value by `you` in place.
+  ### :param you: The other factor.
+  ### :note: The right-hand operand should remain unchanged.
+  @writable
+  routine Me.$imul(you: Me)

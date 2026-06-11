@@ -1,0 +1,53 @@
+module IterTools
+
+### Represents a lazy adapter that yields at most `limit` elements from a source sequence.
+### :typeparam T: The element type produced by the source sequence.
+### :typeparam S: The concrete source iterable type (borrowed; enables build-time dispatch).
+entity TakeIterator[T, S] obeys Iterable[T]
+needs S obeys Iterable[T]
+relates TakeEmitter[T, S/Iter] as Iter
+  ### Stores the source iterable (borrowed, not owned).
+  secret source: Hijacked[S]
+  ### Stores the maximum number of values to yield.
+  secret limit: U64
+
+### Returns the stateful iterator that enforces the configured take limit.
+### The emitted iterator decrements its remaining budget on each successful
+### yield.
+### :returns: The resulting `TakeEmitter[T, S/Iter]` value.
+@readonly
+routine TakeIterator[T, S].$iter() -> ?TakeEmitter[T, S/Iter]
+  danger!
+    return TakeEmitter[T, S/Iter](source: me.source.as_entity().$iter(), remaining: me.limit)
+
+### Iterates over at most the configured number of values from the source sequence.
+### :typeparam T: The element type produced by the source sequence.
+### :typeparam SE: The concrete source iterator type (borrowed).
+entity TakeEmitter[T, SE] obeys Iterator[T]
+needs SE obeys Iterator[T]
+  ### Stores the underlying source iterator (borrowed).
+  secret source: Hijacked[SE]
+  ### Stores how many values may still be yielded.
+  secret remaining: U64
+
+### Returns the next value while the remaining take budget is still positive.
+### Iteration stops once the configured limit has been reached, even if the
+### source still has more values available.
+### :returns: The resulting `T` value.
+### :absent: Returns absent when the take limit has been exhausted or the source ends first.
+routine TakeEmitter[T, SE].$next!() -> ?T
+  danger!
+    if me.remaining == 0u64
+      absent
+    var _result = me.source.as_entity().$next!()
+    me.remaining = me.remaining - 1u64
+    return _result
+
+### Returns a lazy adapter that yields at most `count` values.
+### This is useful for truncating potentially long or infinite iterables.
+### :param count: The maximum number of values to take.
+### :returns: The resulting `TakeIterator[T, Me]` value.
+@readonly
+routine Iterable[T].take(count: U64) -> ?TakeIterator[T, Me]
+  danger!
+    return TakeIterator[T, Me](source: me.hijack(), limit: count)

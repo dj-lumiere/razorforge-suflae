@@ -1,18 +1,19 @@
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Diagnostics;
-using Xunit;
+using Compiler.Diagnostics;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for pattern validation in semantic analysis:
-/// variable shadowing, scope isolation, type compatibility.
+/// Contains tests for pattern validation.
 /// </summary>
 public class PatternValidationTests
 {
     #region Variable Shadowing
+    /// <summary>
+    /// Verifies semantic analysis behavior for type pattern shadows outer variable and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_TypePattern_ShadowsOuterVariable_ReportsError()
@@ -26,10 +27,13 @@ public class PatternValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.IdentifierShadowing);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for else pattern shadows outer variable and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_ElsePattern_ShadowsOuterVariable_ReportsError()
@@ -43,10 +47,13 @@ public class PatternValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.IdentifierShadowing);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for type pattern unique variable name no shadowing error.
+    /// </summary>
 
     [Fact]
     public void Analyze_TypePattern_UniqueVariableName_NoShadowingError()
@@ -60,10 +67,13 @@ public class PatternValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.IdentifierShadowing);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for type pattern same name different clauses no shadowing error.
+    /// </summary>
 
     [Fact]
     public void Analyze_TypePattern_SameNameDifferentClauses_NoShadowingError()
@@ -77,7 +87,7 @@ public class PatternValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.IdentifierShadowing);
     }
@@ -85,6 +95,9 @@ public class PatternValidationTests
     #endregion
 
     #region Scope Isolation
+    /// <summary>
+    /// Verifies semantic analysis behavior for when expression clause scopes isolated.
+    /// </summary>
 
     [Fact]
     public void Analyze_WhenExpression_ClauseScopesIsolated()
@@ -98,7 +111,7 @@ public class PatternValidationTests
                           return result
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         // Pattern variables should not leak between clauses or outside the when expression
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.IdentifierShadowing);
@@ -106,7 +119,55 @@ public class PatternValidationTests
 
     #endregion
 
+    #region Pattern Variable Scope Leakage
+
+    /// <summary>
+    /// Verifies that a pattern binding variable is not accessible outside its when clause.
+    /// </summary>
+    [Fact]
+    public void Analyze_PatternBinding_DoesNotLeakOutsideWhen_ReportsError()
+    {
+        string source = """
+                        routine test() -> S32
+                          var x: S32 = 5
+                          when x
+                            is S32 n => pass
+                            else => pass
+                          return n
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.True(condition: result.Errors.Count > 0);
+    }
+
+    /// <summary>
+    /// Verifies that the same binding name used in separate when clauses does not shadow outer scope.
+    /// </summary>
+    [Fact]
+    public void Analyze_SameBindingNameInSeparateClauses_NoShadowingError()
+    {
+        string source = """
+                        variant Value
+                          S32
+                          F64
+
+                        routine test(v: Value) -> S32
+                          return when v
+                            is S32 n => n
+                            else n => 0
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.IdentifierShadowing);
+    }
+
+    #endregion
+
     #region Type Compatibility
+    /// <summary>
+    /// Verifies semantic analysis behavior for type pattern compatible type without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_TypePattern_CompatibleType_NoError()
@@ -120,10 +181,13 @@ public class PatternValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.PatternTypeMismatch);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for type pattern incompatible type and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_TypePattern_IncompatibleType_ReportsError()
@@ -141,7 +205,7 @@ public class PatternValidationTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.PatternTypeMismatch);
     }

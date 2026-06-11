@@ -1,4 +1,4 @@
-using SemanticAnalysis.Enums;
+using TypeModel.Enums;
 
 namespace Compiler.Diagnostics;
 
@@ -158,7 +158,7 @@ public enum GrammarDiagnosticCode
     TupleDependencyCountMismatch = 207,
 
     /// <summary>A RazorForge-only language construct was used in a Suflae source file.</summary>
-    RFOnlyConstruct = 210,
+    RfOnlyConstruct = 210,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PATTERN ERRORS (250 - 299)
@@ -184,8 +184,11 @@ public enum GrammarDiagnosticCode
     InvalidConstraintKind = 301,
 
     /// <summary>A type expression was expected after a constraint keyword but not found.</summary>
-    ExpectedConstraintType = 302,
+    ExpectedConstraintType = 302
 }
+/// <summary>
+/// Provides formatting helpers for <see cref="GrammarDiagnosticCode"/>.
+/// </summary>
 
 public static class GrammarDiagnosticCodeExtensions
 {
@@ -194,7 +197,9 @@ public static class GrammarDiagnosticCodeExtensions
     /// </summary>
     public static string ToCodeString(this GrammarDiagnosticCode code, Language language)
     {
-        string prefix = language == Language.RazorForge ? "RF" : "SF";
+        string prefix = language == Language.RazorForge
+            ? "RF"
+            : "SF";
         return $"{prefix}-G{(int)code:D3}";
     }
 }

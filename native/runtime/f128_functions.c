@@ -228,6 +228,27 @@ f128_t bf_to_f128(const bf_t *a)
     return result;
 }
 
+// Convert f128 to decimal string (caller must free)
+char* rf_f128_to_string(f128_t x)
+{
+    ensure_bf_ctx();
+    bf_t bx;
+    f128_to_bf(&bx, x);
+
+    char *buf;
+    size_t len;
+    // Use bf_ftoa with 36 significant digits (enough for f128's ~34 digits)
+    buf = bf_ftoa(&len, &bx, 10, 36, BF_FTOA_FORMAT_FREE_MIN | BF_RNDN);
+
+    bf_delete(&bx);
+
+    if (!buf) {
+        buf = (char*)malloc(4);
+        strcpy(buf, "NaN");
+    }
+    return buf;
+}
+
 // ============================================================================
 // Conversion from other float types
 // ============================================================================
@@ -1303,6 +1324,280 @@ f128_t rf_f128_round(f128_t x)
     f128_t result = bf_to_f128(&bx);
     bf_delete(&bx);
     return result;
+}
+
+// ============================================================================
+// Windows x64 compiler-rt compatibility: fp128 softfloat ABI functions
+//
+// On Windows x64, LLVM lowers fp128 arithmetic to calls like __addtf3, __subtf3, etc.
+// The Windows x64 calling convention for these functions is:
+//   - fp128 inputs: passed BY POINTER (rcx = ptr to first, rdx = ptr to second)
+//   - fp128 return: returned in xmm0 as a 128-bit SSE2 value (__m128)
+//   - Scalar inputs (float/double/int): passed by value in xmm0 or rcx as usual
+//   - Scalar returns (float/double/int): returned in xmm0 or rax as usual
+//
+// These functions are NOT present in the Windows compiler-rt builtins library
+// (clang_rt.builtins-x86_64.lib) because __float128 / _Float128 is not supported
+// on Windows. We provide them here using our LibBF-based rf_f128_* operations.
+// ============================================================================
+
+#if defined(_WIN64) && defined(__SSE2__)
+#include <emmintrin.h>   /* __m128 */
+
+// Helper: pack f128_t into __m128 for return in xmm0
+static inline __m128 f128t_to_xmm(f128_t x)
+{
+    __m128 r;
+    __builtin_memcpy(&r, &x, 16);
+    return r;
+}
+
+// Helper: 3-way comparison. nan_result picks the unordered outcome so each
+// builtin's truth test stays FALSE for NaN operands: eq/ne/lt/le are checked
+// as ==0 / !=0 / <0 / <=0 (NaN must yield a positive result), while gt/ge are
+// checked as >0 / >=0 (NaN must yield a NEGATIVE result, like libgcc's).
+static inline int f128_cmp_three_way(const f128_t* a, const f128_t* b, int nan_result)
+{
+    if (rf_f128_is_nan(*a) || rf_f128_is_nan(*b)) return nan_result;
+    if (rf_f128_lt(*a, *b)) return -1;
+    if (rf_f128_eq(*a, *b)) return 0;
+    return 1;
+}
+
+// ---- Arithmetic ----
+// Arguments: rcx=ptr_to_first_fp128, rdx=ptr_to_second_fp128
+// Return:    fp128 in xmm0 (__m128)
+
+__m128 __addtf3(const f128_t* a, const f128_t* b) { return f128t_to_xmm(rf_f128_add(*a, *b)); }
+__m128 __subtf3(const f128_t* a, const f128_t* b) { return f128t_to_xmm(rf_f128_sub(*a, *b)); }
+__m128 __multf3(const f128_t* a, const f128_t* b) { return f128t_to_xmm(rf_f128_mul(*a, *b)); }
+__m128 __divtf3(const f128_t* a, const f128_t* b) { return f128t_to_xmm(rf_f128_div(*a, *b)); }
+__m128 __negtf2(const f128_t* a)                  { return f128t_to_xmm(rf_f128_neg(*a)); }
+
+// ---- Comparisons ----
+// Arguments: rcx=ptr_to_first_fp128, rdx=ptr_to_second_fp128
+// Return:    int in eax (LLVM checks sign / zero / nonzero to produce i1)
+//   __eqtf2 / __netf2: LLVM checks (result == 0) for equal, (result != 0) for not-equal
+//   __lttf2 / __letf2: LLVM checks sign bit (result < 0) for less-than
+//   __gttf2 / __getf2: LLVM checks (result > 0) or (result >= 0)
+//   All return -1/0/1 like a standard 3-way compare; NaN yields 1 (or -1 for
+//   gt/ge, whose truth tests would otherwise come out true for NaN).
+
+int __eqtf2(const f128_t* a, const f128_t* b) { return f128_cmp_three_way(a, b, 1); }
+int __netf2(const f128_t* a, const f128_t* b) { return f128_cmp_three_way(a, b, 1); }
+int __lttf2(const f128_t* a, const f128_t* b) { return f128_cmp_three_way(a, b, 1); }
+int __letf2(const f128_t* a, const f128_t* b) { return f128_cmp_three_way(a, b, 1); }
+int __gttf2(const f128_t* a, const f128_t* b) { return f128_cmp_three_way(a, b, -1); }
+int __getf2(const f128_t* a, const f128_t* b) { return f128_cmp_three_way(a, b, -1); }
+int __unordtf2(const f128_t* a, const f128_t* b)
+{
+    return (rf_f128_is_nan(*a) || rf_f128_is_nan(*b)) ? 1 : 0;
+}
+
+// ---- Conversions TO fp128 (scalar in, fp128 out in xmm0) ----
+// float/double args in xmm0; int/long long args in rcx.
+
+__m128 __extendsftf2(float a)          { return f128t_to_xmm(rf_f32_to_f128(a)); }
+__m128 __extenddftf2(double a)         { return f128t_to_xmm(rf_f64_to_f128(a)); }
+__m128 __floatsitf(int a)              { return f128t_to_xmm(rf_s32_to_f128(a)); }
+__m128 __floatditf(long long a)        { return f128t_to_xmm(rf_s64_to_f128((int64_t)a)); }
+__m128 __floatunsitf(unsigned int a)   { return f128t_to_xmm(rf_u32_to_f128(a)); }
+__m128 __floatunditf(unsigned long long a) { return f128t_to_xmm(rf_u64_to_f128((uint64_t)a)); }
+
+// ---- Conversions FROM fp128 (fp128 ptr in rcx, scalar out) ----
+
+float  __trunctfsf2(const f128_t* a)      { return rf_f128_to_f32(*a); }
+double __trunctfdf2(const f128_t* a)      { return rf_f128_to_f64(*a); }
+int    __fixtfsi(const f128_t* a)         { return rf_f128_to_s32(*a); }
+long long __fixtfdi(const f128_t* a)      { return (long long)rf_f128_to_s64(*a); }
+unsigned int __fixunstfsi(const f128_t* a)       { return rf_f128_to_u32(*a); }
+unsigned long long __fixunstfdi(const f128_t* a) { return (unsigned long long)rf_f128_to_u64(*a); }
+
+#elif defined(__APPLE__)
+// ============================================================================
+// fp128 soft-float builtins for Apple platforms
+//
+// LLVM lowers fp128 ops to the same __*tf3/__*tf2 libcalls here, but Apple's
+// compiler-rt does not ship the quad-precision builtins (and long double is
+// only 64-bit on arm64, so there is no libgcc fallback either).
+//
+// ABI: both AAPCS64 (arm64) and SysV x86-64 pass fp128 BY VALUE in SIMD
+// registers (q0/q1 resp. xmm0/xmm1) and return it the same way. A 128-bit
+// vector type has the identical ABI, so it stands in for fp128 below.
+// ============================================================================
+
+typedef uint64_t rf_tf_abi __attribute__((vector_size(16)));
+
+static inline f128_t tf_to_f128t(rf_tf_abi v) { f128_t x; __builtin_memcpy(&x, &v, 16); return x; }
+static inline rf_tf_abi f128t_to_tf(f128_t x) { rf_tf_abi v; __builtin_memcpy(&v, &x, 16); return v; }
+
+// See the Win64 block: nan_result keeps each builtin's truth test false for
+// unordered operands (eq/ne/lt/le need a positive result, gt/ge a negative one).
+static inline int tf_cmp_three_way(rf_tf_abi a, rf_tf_abi b, int nan_result)
+{
+    f128_t fa = tf_to_f128t(a), fb = tf_to_f128t(b);
+    if (rf_f128_is_nan(fa) || rf_f128_is_nan(fb)) return nan_result;
+    if (rf_f128_lt(fa, fb)) return -1;
+    if (rf_f128_eq(fa, fb)) return 0;
+    return 1;
+}
+
+// ---- Arithmetic ----
+
+rf_tf_abi __addtf3(rf_tf_abi a, rf_tf_abi b) { return f128t_to_tf(rf_f128_add(tf_to_f128t(a), tf_to_f128t(b))); }
+rf_tf_abi __subtf3(rf_tf_abi a, rf_tf_abi b) { return f128t_to_tf(rf_f128_sub(tf_to_f128t(a), tf_to_f128t(b))); }
+rf_tf_abi __multf3(rf_tf_abi a, rf_tf_abi b) { return f128t_to_tf(rf_f128_mul(tf_to_f128t(a), tf_to_f128t(b))); }
+rf_tf_abi __divtf3(rf_tf_abi a, rf_tf_abi b) { return f128t_to_tf(rf_f128_div(tf_to_f128t(a), tf_to_f128t(b))); }
+rf_tf_abi __negtf2(rf_tf_abi a)              { return f128t_to_tf(rf_f128_neg(tf_to_f128t(a))); }
+
+// ---- Comparisons ----
+
+int __eqtf2(rf_tf_abi a, rf_tf_abi b) { return tf_cmp_three_way(a, b, 1); }
+int __netf2(rf_tf_abi a, rf_tf_abi b) { return tf_cmp_three_way(a, b, 1); }
+int __lttf2(rf_tf_abi a, rf_tf_abi b) { return tf_cmp_three_way(a, b, 1); }
+int __letf2(rf_tf_abi a, rf_tf_abi b) { return tf_cmp_three_way(a, b, 1); }
+int __gttf2(rf_tf_abi a, rf_tf_abi b) { return tf_cmp_three_way(a, b, -1); }
+int __getf2(rf_tf_abi a, rf_tf_abi b) { return tf_cmp_three_way(a, b, -1); }
+int __unordtf2(rf_tf_abi a, rf_tf_abi b)
+{
+    return (rf_f128_is_nan(tf_to_f128t(a)) || rf_f128_is_nan(tf_to_f128t(b))) ? 1 : 0;
+}
+
+// ---- Conversions TO fp128 ----
+
+rf_tf_abi __extendsftf2(float a)              { return f128t_to_tf(rf_f32_to_f128(a)); }
+rf_tf_abi __extenddftf2(double a)             { return f128t_to_tf(rf_f64_to_f128(a)); }
+rf_tf_abi __floatsitf(int a)                  { return f128t_to_tf(rf_s32_to_f128(a)); }
+rf_tf_abi __floatditf(long long a)            { return f128t_to_tf(rf_s64_to_f128((int64_t)a)); }
+rf_tf_abi __floatunsitf(unsigned int a)       { return f128t_to_tf(rf_u32_to_f128(a)); }
+rf_tf_abi __floatunditf(unsigned long long a) { return f128t_to_tf(rf_u64_to_f128((uint64_t)a)); }
+
+// ---- Conversions FROM fp128 ----
+
+float  __trunctfsf2(rf_tf_abi a)              { return rf_f128_to_f32(tf_to_f128t(a)); }
+double __trunctfdf2(rf_tf_abi a)              { return rf_f128_to_f64(tf_to_f128t(a)); }
+int    __fixtfsi(rf_tf_abi a)                 { return rf_f128_to_s32(tf_to_f128t(a)); }
+long long __fixtfdi(rf_tf_abi a)              { return (long long)rf_f128_to_s64(tf_to_f128t(a)); }
+unsigned int __fixunstfsi(rf_tf_abi a)        { return rf_f128_to_u32(tf_to_f128t(a)); }
+unsigned long long __fixunstfdi(rf_tf_abi a)  { return (unsigned long long)rf_f128_to_u64(tf_to_f128t(a)); }
+
+#endif /* _WIN64 && __SSE2__ / __APPLE__ */
+
+// ============================================================================
+// String parsing
+// ============================================================================
+
+// Parse a null-terminated decimal string (CStr) into an F128 value.
+// Uses LibBF's bf_atof for full 113-bit precision.
+//
+// Out-param ABI: the result is written through `out` rather than returned by value.
+// Windows x64 returns 16-byte aggregates via a hidden sret pointer in rcx, but the
+// RazorForge caller compiles the call as if it returns an fp128 in xmm0 — the two
+// ABIs are incompatible and the function would never effectively execute. Writing
+// through a pointer sidesteps the mismatch.
+void rf_parse_F128(const char* cstr, f128_t* out)
+{
+    if (!cstr || *cstr == '\0') {
+        *out = rf_f128_zero(0);
+        return;
+    }
+    ensure_bf_ctx();
+    bf_t r;
+    bf_init(&bf_ctx, &r);
+    const char *next = NULL;
+    bf_atof(&r, cstr, &next, 10, F128_PREC, BF_RNDN);
+    *out = bf_to_f128(&r);
+    bf_delete(&r);
+}
+
+// ============================================================================
+// String formatting
+// ============================================================================
+
+uint64_t rf_format_F128(f128_t x)
+{
+    bf_t bx;
+    f128_to_bf(&bx, x);
+    size_t len;
+    char *str = bf_ftoa(&len, &bx, 10, 34, BF_FTOA_FORMAT_FREE_MIN | BF_RNDN);
+    bf_delete(&bx);
+    if (!str) return 0;
+    // bf_ftoa allocates with bf_realloc; copy to malloc'd buffer for consistency
+    char *buf = (char*)malloc(len + 1);
+    if (!buf) { bf_realloc(&bf_ctx, str, 0); return 0; }
+    memcpy(buf, str, len + 1);
+    bf_realloc(&bf_ctx, str, 0);
+    return (uint64_t)buf;
+}
+
+// ============================================================================
+// RazorForge-callable ABI bridges
+//
+// RazorForge codegen represents F128 as the LLVM scalar `fp128`, whose call
+// ABI does not match the C ABI of the 16-byte `f128_t` struct on any x86-64
+// platform (SysV passes fp128 in SSE registers but f128_t in integer
+// registers; Win64 returns fp128 in xmm0 but f128_t via hidden sret).
+// These bridges only use ABI-stable parameter forms: f128 inputs arrive as
+// (low, high) u64 pairs and f128 results are written through an out pointer
+// (same approach as rf_parse_F128 above). The by-value rf_f128_* functions
+// remain for C-internal callers (decimal_functions.c, the Win64 builtins).
+// ============================================================================
+
+static f128_t f128_from_parts(uint64_t low, uint64_t high)
+{
+    f128_t v;
+    v.low = low;
+    v.high = high;
+    return v;
+}
+
+void rf_f128_sin_parts(uint64_t low, uint64_t high, f128_t* out)    { *out = rf_f128_sin(f128_from_parts(low, high)); }
+void rf_f128_cos_parts(uint64_t low, uint64_t high, f128_t* out)    { *out = rf_f128_cos(f128_from_parts(low, high)); }
+void rf_f128_tan_parts(uint64_t low, uint64_t high, f128_t* out)    { *out = rf_f128_tan(f128_from_parts(low, high)); }
+void rf_f128_asin_parts(uint64_t low, uint64_t high, f128_t* out)   { *out = rf_f128_asin(f128_from_parts(low, high)); }
+void rf_f128_acos_parts(uint64_t low, uint64_t high, f128_t* out)   { *out = rf_f128_acos(f128_from_parts(low, high)); }
+void rf_f128_atan_parts(uint64_t low, uint64_t high, f128_t* out)   { *out = rf_f128_atan(f128_from_parts(low, high)); }
+void rf_f128_sinh_parts(uint64_t low, uint64_t high, f128_t* out)   { *out = rf_f128_sinh(f128_from_parts(low, high)); }
+void rf_f128_cosh_parts(uint64_t low, uint64_t high, f128_t* out)   { *out = rf_f128_cosh(f128_from_parts(low, high)); }
+void rf_f128_tanh_parts(uint64_t low, uint64_t high, f128_t* out)   { *out = rf_f128_tanh(f128_from_parts(low, high)); }
+void rf_f128_asinh_parts(uint64_t low, uint64_t high, f128_t* out)  { *out = rf_f128_asinh(f128_from_parts(low, high)); }
+void rf_f128_acosh_parts(uint64_t low, uint64_t high, f128_t* out)  { *out = rf_f128_acosh(f128_from_parts(low, high)); }
+void rf_f128_atanh_parts(uint64_t low, uint64_t high, f128_t* out)  { *out = rf_f128_atanh(f128_from_parts(low, high)); }
+void rf_f128_exp_parts(uint64_t low, uint64_t high, f128_t* out)    { *out = rf_f128_exp(f128_from_parts(low, high)); }
+void rf_f128_exp2_parts(uint64_t low, uint64_t high, f128_t* out)   { *out = rf_f128_exp2(f128_from_parts(low, high)); }
+void rf_f128_expm1_parts(uint64_t low, uint64_t high, f128_t* out)  { *out = rf_f128_expm1(f128_from_parts(low, high)); }
+void rf_f128_log_parts(uint64_t low, uint64_t high, f128_t* out)    { *out = rf_f128_log(f128_from_parts(low, high)); }
+void rf_f128_log2_parts(uint64_t low, uint64_t high, f128_t* out)   { *out = rf_f128_log2(f128_from_parts(low, high)); }
+void rf_f128_log10_parts(uint64_t low, uint64_t high, f128_t* out)  { *out = rf_f128_log10(f128_from_parts(low, high)); }
+void rf_f128_log1p_parts(uint64_t low, uint64_t high, f128_t* out)  { *out = rf_f128_log1p(f128_from_parts(low, high)); }
+void rf_f128_cbrt_parts(uint64_t low, uint64_t high, f128_t* out)   { *out = rf_f128_cbrt(f128_from_parts(low, high)); }
+
+void rf_f128_atan2_parts(uint64_t y_low, uint64_t y_high, uint64_t x_low, uint64_t x_high, f128_t* out)
+{
+    *out = rf_f128_atan2(f128_from_parts(y_low, y_high), f128_from_parts(x_low, x_high));
+}
+
+void rf_f128_pow_parts(uint64_t base_low, uint64_t base_high, uint64_t exp_low, uint64_t exp_high, f128_t* out)
+{
+    *out = rf_f128_pow(f128_from_parts(base_low, base_high), f128_from_parts(exp_low, exp_high));
+}
+
+void rf_f128_hypot_parts(uint64_t x_low, uint64_t x_high, uint64_t y_low, uint64_t y_high, f128_t* out)
+{
+    *out = rf_f128_hypot(f128_from_parts(x_low, x_high), f128_from_parts(y_low, y_high));
+}
+
+void rf_f128_copysign_parts(uint64_t value_low, uint64_t value_high, uint64_t sign_low, uint64_t sign_high, f128_t* out)
+{
+    // IEEE binary128 sign bit lives in bit 63 of the high word.
+    (void)sign_low;
+    out->low = value_low;
+    out->high = (value_high & 0x7FFFFFFFFFFFFFFFULL) | (sign_high & 0x8000000000000000ULL);
+}
+
+uint64_t rf_format_F128_parts(uint64_t low, uint64_t high)
+{
+    return rf_format_F128(f128_from_parts(low, high));
 }
 
 #else

@@ -1,5 +1,8 @@
-# Ordered - Bundle protocol combining equality and comparison
 module Core
 
+### Represents the aggregate protocol for orderable values.
+### `Ordered` is the convenience umbrella for types that provide both equality
+### and comparison semantics consistent enough to support the full relational
+### operator family.
 protocol Ordered obeys Equatable, Comparable
   pass

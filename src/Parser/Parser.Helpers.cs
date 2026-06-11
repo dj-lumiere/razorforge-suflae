@@ -1,6 +1,7 @@
+using System.Collections.Generic;
 using Compiler.Diagnostics;
+using Compiler.Tokenizer;
 using SyntaxTree;
-using Compiler.Lexer;
 
 namespace Compiler.Parser;
 
@@ -22,10 +23,8 @@ public partial class Parser
         CheckUnnecessaryBrace();
 
         // Valid implicit terminators: DEDENT, else, elseif, EOF
-        if (Check(type: TokenType.Dedent) ||
-            Check(type: TokenType.Else) ||
-            Check(type: TokenType.Elseif) ||
-            IsAtEnd)
+        if (Check(type: TokenType.Dedent) || Check(type: TokenType.Else) ||
+            Check(type: TokenType.Elseif) || IsAtEnd)
         {
             return;
         }
@@ -38,25 +37,29 @@ public partial class Parser
     /// Consumes an identifier token and returns its text.
     /// </summary>
     /// <param name="errorMessage">Error message to show if token is not an identifier.</param>
+    /// <param name="allowKeywords">Whether contextual keywords may be consumed as identifiers.</param>
     /// <returns>The identifier text.</returns>
     /// <exception cref="GrammarException">Thrown if current token is not a valid identifier.</exception>
     private string ConsumeIdentifier(string errorMessage, bool allowKeywords = false)
     {
-        if (Match(TokenType.Identifier))
+        if (Match(type: TokenType.Identifier))
         {
-            return PeekToken(offset: -1).Text;
+            return PeekToken(offset: -1)
+               .Text;
         }
 
         // Allow 'me' or 'Me' (Self tokens) as a valid identifier for method parameters
         // 'me' is lowercase self reference, 'Me' is the type of self (for protocol method signatures)
         if (Match(TokenType.Me, TokenType.MyType))
         {
-            return PeekToken(offset: -1).Text;
+            return PeekToken(offset: -1)
+               .Text;
         }
 
         // When allowKeywords is true, accept contextual keywords as identifiers
         // (e.g., 'from', 'to', 'by', 'step' as parameter names)
-        if (allowKeywords && CurrentToken.Type != TokenType.Eof && CurrentToken.Type != TokenType.Newline)
+        if (allowKeywords && CurrentToken.Type != TokenType.Eof &&
+            CurrentToken.Type != TokenType.Newline)
         {
             string text = CurrentToken.Text;
             Advance();
@@ -64,21 +67,24 @@ public partial class Parser
         }
 
         Token current = CurrentToken;
-        throw ThrowParseError(GrammarDiagnosticCode.ExpectedIdentifier,
-            $"{errorMessage}. Expected Identifier, got {current.Type}.");
+        throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedIdentifier,
+            message: $"{errorMessage}. Expected Identifier, got {current.Type}.");
     }
 
-    /// <summary>
-    /// Consumes an identifier that can be used as a method/routine name.
-    /// Supports '!' suffix for failable methods.
-    /// </summary>
-    /// <param name="errorMessage">Error message to show if token is not a valid method name.</param>
-    /// <returns>The method name, possibly with '!' suffix for failable methods.</returns>
+    /// <summary>Returns true when <paramref name="type"/> is a keyword token also valid as a method name (e.g. <c>none</c>).</summary>
+    /// <param name="type">The token type to test.</param>
+    private static bool IsKeywordValidAsMethodName(TokenType type) =>
+        type == TokenType.NoneValue;
+
     private string ConsumeMethodName(string errorMessage)
     {
-        if (!Check(type: TokenType.Identifier))
+        // Accept keyword tokens that are also valid identifiers as method names
+        // (e.g. `BitArray[N].none()` — `none` is the absent-value keyword but reads
+        // fine as a member-access name in postfix position).
+        if (!Check(type: TokenType.Identifier) && !IsKeywordValidAsMethodName(CurrentToken.Type))
         {
-            throw ThrowParseError(GrammarDiagnosticCode.ExpectedIdentifier, errorMessage);
+            throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedIdentifier,
+                message: errorMessage);
         }
 
         string name = CurrentToken.Text;
@@ -100,7 +106,8 @@ public partial class Parser
     {
         if (!Match(type: TokenType.Indent))
         {
-            throw ThrowParseError(GrammarDiagnosticCode.ExpectedIndentedBlock, "Expected INDENT token");
+            throw ThrowParseError(code: GrammarDiagnosticCode.ExpectedIndentedBlock,
+                message: "Expected INDENT token");
         }
 
         _currentIndentationLevel++;
@@ -128,25 +135,57 @@ public partial class Parser
             }
             else
             {
-                throw ThrowParseError(GrammarDiagnosticCode.UnexpectedDedent, "Unexpected dedent - no matching indent");
+                throw ThrowParseError(code: GrammarDiagnosticCode.UnexpectedDedent,
+                    message: "Unexpected dedent - no matching indent");
             }
         }
     }
 
     /// <summary>
-    /// Check if we're at a valid indentation level for statements.
+    /// Returns true if the current token sequence looks like generic type arguments
+    /// for a generic call (i.e., <c>func[T]()</c> or <c>func![T]()</c>),
+    /// as opposed to an index expression (<c>arr[0]</c>).
+    /// Disambiguation is purely structural: only the token after the matching <c>]</c>
+    /// is examined — never the content inside <c>[...]</c>.
     /// </summary>
-    private bool IsAtValidIndentationLevel()
+    private bool IsLikelyGenericAfterIdentifier()
     {
-        return _indentationStack.Count > 0;
-    }
+        // func![T](...) — failable generic call: ! always means call
+        if (Check(type: TokenType.Bang) && PeekToken(offset: 1).Type == TokenType.LeftBracket)
+        {
+            return true;
+        }
 
-    /// <summary>
-    /// Get current indentation depth for debugging.
-    /// </summary>
-    private int GetIndentationDepth()
-    {
-        return _indentationStack.Count - 1; // Subtract 1 for base level
+        if (!Check(type: TokenType.LeftBracket))
+        {
+            return false;
+        }
+
+        // Scan forward to find the matching ] without examining content.
+        int offset = 1;
+        int depth = 1;
+        while (depth > 0)
+        {
+            TokenType t = PeekToken(offset: offset).Type;
+            if (t is TokenType.Eof or TokenType.Newline or TokenType.Indent or TokenType.Dedent)
+            {
+                return false;
+            }
+
+            if (t == TokenType.LeftBracket)
+            {
+                depth++;
+            }
+            else if (t == TokenType.RightBracket)
+            {
+                depth--;
+            }
+
+            offset++;
+        }
+
+        // Generic call only when ] is immediately followed by (
+        return PeekToken(offset: offset).Type == TokenType.LeftParen;
     }
 
     #endregion
@@ -162,7 +201,8 @@ public partial class Parser
         SourceLocation location = GetLocation();
 
         // Check for named argument: identifier followed by colon
-        if (Check(type: TokenType.Identifier) && PeekToken(offset: 1).Type == TokenType.Colon)
+        if (Check(type: TokenType.Identifier) && PeekToken(offset: 1)
+               .Type == TokenType.Colon)
         {
             string argName = CurrentToken.Text;
             Advance(); // consume identifier
@@ -175,7 +215,19 @@ public partial class Parser
         }
 
         // Regular positional argument
-        return ParseExpression();
+        Expression expr = ParseExpression();
+
+        // Check for dict entry literal: expr:expr (e.g., 1:2 in Dict(1:2, 3:4))
+        // Named arguments (identifier: expr) are already handled above,
+        // so this catches non-identifier keys like literals: 1:2, "key":val
+        if (Check(type: TokenType.Colon))
+        {
+            Advance(); // consume colon
+            Expression value = ParseExpression();
+            return new DictEntryLiteralExpression(Key: expr, Value: value, Location: location);
+        }
+
+        return expr;
     }
 
     /// <summary>
@@ -188,53 +240,29 @@ public partial class Parser
         var args = new List<Expression>();
 
         // Skip leading newlines
-        while (Match(type: TokenType.Newline)) { }
+        while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
 
         if (!Check(type: TokenType.RightParen))
         {
             do
             {
                 // Skip newlines before each argument (for multi-line formatting)
-                while (Match(type: TokenType.Newline)) { }
+                while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
 
                 args.Add(item: ParseArgument());
 
                 // Skip newlines after each argument (before comma or closing paren)
-                while (Match(type: TokenType.Newline)) { }
+                while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
             } while (Match(type: TokenType.Comma));
         }
 
         // Skip trailing newlines
-        while (Match(type: TokenType.Newline)) { }
+        while (Match(type: TokenType.Newline)) { } // NOSONAR S108: intentional newline-consuming loop
 
         return args;
     }
 
-    /// <summary>
-    /// Parses member variable initializers for record/entity literals: (name1: value1, name2: value2)
-    /// Called after '(' has been consumed.
-    /// </summary>
-    /// <returns>List of member variable name and value pairs.</returns>
-    private List<(string Name, Expression Value)> ParseAllArgsCreatorFields()
-    {
-        var memberVariables = new List<(string Name, Expression Value)>();
 
-        if (!Check(type: TokenType.RightParen))
-        {
-            do
-            {
-                // Parse member variable name
-                string memberVariableName = ConsumeIdentifier(errorMessage: "Expected member variable name in record/entity literal");
-                Consume(type: TokenType.Colon, errorMessage: "Expected ':' after member variable name");
-
-                // Parse member variable value
-                Expression value = ParseExpression();
-                memberVariables.Add(item: (memberVariableName, value));
-            } while (Match(type: TokenType.Comma));
-        }
-
-        return memberVariables;
-    }
 
     #endregion
 
@@ -258,18 +286,31 @@ public partial class Parser
 
         Consume(type: TokenType.RightBracket, errorMessage: "Expected ']' after list elements");
 
-        return new ListLiteralExpression(Elements: elements, ElementType: null, Location: location);
+        return new ListLiteralExpression(Elements: elements,
+            ElementType: null,
+            Location: location);
     }
 
     /// <summary>
     /// Parse set or dict literal: {expr, expr, ...} or {key: value, ...}
     /// The opening '{' has already been consumed.
     /// Disambiguation: If the first element contains ':', it's a dict; otherwise it's a set.
-    /// Empty {} is treated as an empty set.
+    /// Empty {} is an empty set, {:} is an empty dict.
     /// </summary>
     private Expression ParseSetOrDictLiteral(SourceLocation location)
     {
-        // Empty braces -> empty set
+        // {:} -> empty dict
+        if (Check(type: TokenType.Colon))
+        {
+            Advance(); // consume ':'
+            Consume(type: TokenType.RightBrace, errorMessage: "Expected '}' after '{:'");
+            return new DictLiteralExpression(Pairs: [],
+                KeyType: null,
+                ValueType: null,
+                Location: location);
+        }
+
+        // {} -> empty set
         if (Match(type: TokenType.RightBrace))
         {
             return new SetLiteralExpression(Elements: [], ElementType: null, Location: location);
@@ -291,7 +332,8 @@ public partial class Parser
     /// <summary>
     /// Continue parsing dict literal after first key and colon: {key: value, ...}
     /// </summary>
-    private DictLiteralExpression ParseDictLiteralContinuation(Expression firstKey, SourceLocation location)
+    private DictLiteralExpression ParseDictLiteralContinuation(Expression firstKey,
+        SourceLocation location)
     {
         var pairs = new List<(Expression Key, Expression Value)>();
 
@@ -303,7 +345,8 @@ public partial class Parser
         while (Match(type: TokenType.Comma))
         {
             Expression key = ParseExpression();
-            Consume(type: TokenType.Colon, errorMessage: "Expected ':' between dict key and value");
+            Consume(type: TokenType.Colon,
+                errorMessage: "Expected ':' between dict key and value");
             Expression value = ParseExpression();
             pairs.Add(item: (key, value));
         }
@@ -319,7 +362,8 @@ public partial class Parser
     /// <summary>
     /// Continue parsing set literal after first element: {expr, expr, ...}
     /// </summary>
-    private SetLiteralExpression ParseSetLiteralContinuation(Expression firstElement, SourceLocation location)
+    private SetLiteralExpression ParseSetLiteralContinuation(Expression firstElement,
+        SourceLocation location)
     {
         var elements = new List<Expression> { firstElement };
 

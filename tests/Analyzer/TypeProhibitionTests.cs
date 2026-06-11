@@ -1,19 +1,19 @@
-using SemanticAnalysis.Results;
-using SemanticAnalysis.Diagnostics;
-using Xunit;
+using Compiler.Diagnostics;
+using Verification.Results;
 
 namespace RazorForge.Tests.Analyzer;
 
 using static TestHelpers;
 
 /// <summary>
-/// Tests for prohibited type constructions.
-/// Blank cannot be used as a generic type argument anywhere.
-/// Data? / Maybe[Data] is not allowed (Data already supports None).
+/// Contains tests for type prohibition.
 /// </summary>
 public class TypeProhibitionTests
 {
     #region Blank as Type Argument (rejected)
+    /// <summary>
+    /// Verifies semantic analysis behavior for blank nullable and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_BlankNullable_ReportsError()
@@ -25,10 +25,13 @@ public class TypeProhibitionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for explicit maybe blank and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_ExplicitMaybeBlank_ReportsError()
@@ -39,7 +42,7 @@ public class TypeProhibitionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
     }
@@ -47,6 +50,9 @@ public class TypeProhibitionTests
     #endregion
 
     #region Normal nullable types (allowed)
+    /// <summary>
+    /// Verifies semantic analysis behavior for normal nullable without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_NormalNullable_NoErrors()
@@ -57,10 +63,13 @@ public class TypeProhibitionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for blank direct type without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_BlankDirectType_NoErrors()
@@ -72,10 +81,13 @@ public class TypeProhibitionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for result blank without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_ResultBlank_NoErrors()
@@ -87,29 +99,35 @@ public class TypeProhibitionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for lookup blank and reports the expected error.
+    /// </summary>
 
     [Fact]
-    public void Analyze_LookupBlank_NoErrors()
+    public void Analyze_LookupBlank_ReportsError()
     {
-        // Lookup<Blank> is allowed for failable void routines
+        // Lookup<Blank> is ambiguous: Blank is also the absent sentinel in the type_id carrier.
         string source = """
                         routine foo(x: Lookup[Blank])
                           pass
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
-        Assert.DoesNotContain(collection: result.Errors,
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
     }
 
     #endregion
 
     #region Nested Maybe Prohibition
+    /// <summary>
+    /// Verifies semantic analysis behavior for nested maybe and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_NestedMaybe_ReportsError()
@@ -120,10 +138,13 @@ public class TypeProhibitionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.Contains(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NestedMaybeProhibited);
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for single maybe without unexpected diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_SingleMaybe_NoError()
@@ -134,14 +155,56 @@ public class TypeProhibitionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
+        AnalysisResult result = AnalyzeSa(source: source);
         Assert.DoesNotContain(collection: result.Errors,
             filter: e => e.Code == SemanticDiagnosticCode.NestedMaybeProhibited);
     }
 
     #endregion
 
+    #region Additional nullable and collection prohibitions
+
+    /// <summary>
+    /// Verifies that Text? (nullable Text) is allowed and produces no error.
+    /// </summary>
+    [Fact]
+    public void Analyze_TextNullable_NoError()
+    {
+        string source = """
+                        routine find!(text: Text?) -> Text
+                          if text is None
+                            absent
+                          return text
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.DoesNotContain(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.BlankAsTypeArgument);
+    }
+
+    /// <summary>
+    /// Verifies that Maybe[S32?] (explicit nested Maybe) is rejected.
+    /// </summary>
+    [Fact]
+    public void Analyze_ExplicitNestedMaybe_ReportsError()
+    {
+        string source = """
+                        routine test(x: Maybe[S32?])
+                          pass
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Code == SemanticDiagnosticCode.NestedMaybeProhibited);
+    }
+
+    #endregion
+
     #region Byte Literal ASCII Validation
+    /// <summary>
+    /// Verifies semantic analysis behavior for byte literal non ascii and reports the expected error.
+    /// </summary>
 
     [Fact]
     public void Analyze_ByteLiteralNonAscii_ReportsError()
@@ -153,8 +216,11 @@ public class TypeProhibitionTests
                           return
                         """;
 
-        Assert.ThrowsAny<Compiler.Diagnostics.GrammarException>(() => Analyze(source: source));
+        Assert.ThrowsAny<GrammarException>(() => AnalyzeSa(source: source));
     }
+    /// <summary>
+    /// Verifies semantic analysis behavior for byte literal ascii without grammar diagnostics.
+    /// </summary>
 
     [Fact]
     public void Analyze_ByteLiteralAscii_NoGrammarError()
@@ -166,8 +232,8 @@ public class TypeProhibitionTests
                           return
                         """;
 
-        AnalysisResult result = Analyze(source: source);
-        // No GrammarException thrown — lexer accepts ASCII byte literals
+        AnalysisResult result = AnalyzeSa(source: source);
+        // No GrammarException thrown -> lexer accepts ASCII byte literals
         Assert.NotNull(@object: result);
     }
 

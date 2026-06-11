@@ -1,0 +1,605 @@
+module Core
+
+### A 32-bit unsigned integer in the range 0 to 4,294,967,295.
+###
+### `U32` is the natural unsigned integer type for 32-bit quantities such as
+### Unicode code points, IPv4 addresses, pixel colours, and shift amounts
+### (the shift operators expect `U32` for their count argument).
+@llvm("i32")
+record U32 obeys UnsignedIntegral, Ordered, ConstCompatible
+  pass
+
+# Constants for U32 limits
+preset U32_MIN: U32 = 0_u32
+preset U32_MAX: U32 = 4294967295_u32
+preset U32_ZERO: U32 = 0_u32
+preset U32_ONE: U32 = 1_u32
+
+# ============================================================================
+# Checked Creators (crash on overflow)
+# ============================================================================
+
+### Converts an `S8` to `U32`, throwing if the value is negative.
+### :param from: The `S8` value to convert.
+### :returns: A `U32` with the same unsigned value as `from`.
+### :throws: {IntegerOverflowError} if `from < 0`.
+routine U32.$create!(from: S8) -> U32
+  if from < 0_s8
+    throw IntegerOverflowError()
+  return sign_extend[S8, U32](from)
+
+### Converts an `S16` to `U32`, throwing if the value is negative.
+### :param from: The `S16` value to convert.
+### :returns: A `U32` with the same unsigned value as `from`.
+### :throws: {IntegerOverflowError} if `from < 0`.
+routine U32.$create!(from: S16) -> U32
+  if from < 0_s16
+    throw IntegerOverflowError()
+  return sign_extend[S16, U32](from)
+
+### Converts an `S32` to `U32`, throwing if the value is negative.
+### :param from: The `S32` value to convert.
+### :returns: The same bit pattern reinterpreted as an unsigned value.
+### :throws: {IntegerOverflowError} if `from < 0`.
+routine U32.$create!(from: S32) -> U32
+  if from < 0_s32
+    throw IntegerOverflowError()
+  return reinterpret_bits[S32, U32](from)
+
+### Converts an `S64` to `U32`, throwing if the value is outside 0..4294967295.
+### :param from: The `S64` value to convert.
+### :returns: The lower 32 bits of `from`.
+### :throws: {IntegerOverflowError} if `from` is not in `0..=4294967295`.
+routine U32.$create!(from: S64) -> U32
+  if not (0_s64 <= from <= 4294967295_s64)
+    throw IntegerOverflowError()
+  return int_truncate[S64, U32](from)
+
+### Converts an `S128` to `U32`, throwing if the value is outside 0..4294967295.
+### :param from: The `S128` value to convert.
+### :returns: The lower 32 bits of `from`.
+### :throws: {IntegerOverflowError} if `from` is not in `0..=4294967295`.
+routine U32.$create!(from: S128) -> U32
+  if not (0_s128 <= from <= 4294967295_s128)
+    throw IntegerOverflowError()
+  return int_truncate[S128, U32](from)
+
+### Zero-extends a `U8` to `U32`.
+### :param from: The `U8` value to widen.
+### :returns: A `U32` equal in value to `from`.
+routine U32.$create(from: U8) -> U32
+  return zero_extend[U8, U32](from)
+
+### Zero-extends a `U16` to `U32`.
+### :param from: The `U16` value to widen.
+### :returns: A `U32` equal in value to `from`.
+routine U32.$create(from: U16) -> U32
+  return zero_extend[U16, U32](from)
+
+### Identity conversion — returns `from` unchanged.
+### :param from: The `U32` value to return.
+### :returns: `from` unchanged.
+routine U32.$create(from: U32) -> U32
+  return from
+
+### Converts a `U64` to `U32`, throwing if the value exceeds 4294967295.
+### :param from: The `U64` value to convert.
+### :returns: The lower 32 bits of `from`.
+### :throws: {IntegerOverflowError} if `from > 4294967295`.
+routine U32.$create!(from: U64) -> U32
+  if from > 4294967295_u64
+    throw IntegerOverflowError()
+  return int_truncate[U64, U32](from)
+
+### Converts a `U128` to `U32`, throwing if the value exceeds 4294967295.
+### :param from: The `U128` value to convert.
+### :returns: The lower 32 bits of `from`.
+### :throws: {IntegerOverflowError} if `from > 4294967295`.
+routine U32.$create!(from: U128) -> U32
+  if from > 4294967295_u128
+    throw IntegerOverflowError()
+  return int_truncate[U128, U32](from)
+
+### Converts an `F16` to `U32` by widening to `F32` first, then truncating.
+### :param from: The `F16` value to convert.
+### :returns: The integer part of `from` as a `U32`.
+### :throws: {IntegerOverflowError} if the integer part exceeds 4294967295.
+routine U32.$create!(from: F16) -> U32
+  return from.F32().U32!()
+
+### Converts an `F32` to `U32`, truncating toward zero.
+### :param from: The `F32` value to convert.
+### :returns: The integer part of `from` as a `U32`.
+### :throws: {IntegerOverflowError} if the value is negative or exceeds 4294967295.
+routine U32.$create!(from: F32) -> U32
+  if from.is_nan() or not (0.0_f32 <= from <= 4294967295.0_f32)
+    throw IntegerOverflowError()
+  return float_to_unsigned[F32, U32](from)
+
+### Converts an `F64` to `U32`, truncating toward zero.
+### :param from: The `F64` value to convert.
+### :returns: The integer part of `from` as a `U32`.
+### :throws: {IntegerOverflowError} if the value is negative or exceeds 4294967295.
+routine U32.$create!(from: F64) -> U32
+  if from.is_nan() or not (0.0_f64 <= from <= 4294967295.0_f64)
+    throw IntegerOverflowError()
+  return float_to_unsigned[F64, U32](from)
+
+### Converts an `F128` to `U32` by narrowing to `F64` first, then truncating.
+### :param from: The `F128` value to convert.
+### :returns: The integer part of `from` as a `U32`.
+### :throws: {IntegerOverflowError} if the value is negative or exceeds 4294967295.
+routine U32.$create!(from: F128) -> U32
+  return from.F64!().U32!()
+
+### Converts a `D32` to `U32` via `S64` conversion.
+### :param from: The `D32` value to convert.
+### :returns: The integer part of `from` as a `U32`.
+### :throws: {IntegerOverflowError} if the value is negative or exceeds 4294967295.
+routine U32.$create!(from: D32) -> U32
+  return from.S64!().U32!()
+
+### Converts a `D64` to `U32` via `S64` conversion.
+### :param from: The `D64` value to convert.
+### :returns: The integer part of `from` as a `U32`.
+### :throws: {IntegerOverflowError} if the value is negative or exceeds 4294967295.
+routine U32.$create!(from: D64) -> U32
+  return from.S64!().U32!()
+
+### Converts a `D128` to `U32` via `S64` conversion.
+### :param from: The `D128` value to convert.
+### :returns: The integer part of `from` as a `U32`.
+### :throws: {IntegerOverflowError} if the value is negative or exceeds 4294967295.
+routine U32.$create!(from: D128) -> U32
+  return from.S64!().U32!()
+
+# ============================================================================
+# Arithmetic Operations (trapping on overflow by default)
+# ============================================================================
+
+### Returns the sum and a flag indicating whether the result wrapped around.
+### :param you: The right operand.
+### :returns: A tuple of `(wrapped_sum, overflowed)`.
+routine U32.add_with_overflow(you: U32) -> (U32, Bool)
+  return unsigned_add_checked[U32](me, you)
+
+### Returns the difference and a flag indicating whether the result wrapped around.
+### :param you: The value to subtract.
+### :returns: A tuple of `(wrapped_difference, overflowed)`.
+routine U32.sub_with_overflow(you: U32) -> (U32, Bool)
+  return unsigned_sub_checked[U32](me, you)
+
+### Returns the product and a flag indicating whether the result wrapped around.
+### :param you: The right operand.
+### :returns: A tuple of `(wrapped_product, overflowed)`.
+routine U32.mul_with_overflow(you: U32) -> (U32, Bool)
+  return unsigned_mul_checked[U32](me, you)
+
+### Returns `me + you`, throwing on overflow.
+### :param you: The right operand.
+### :returns: The sum `me + you`.
+### :throws: {IntegerOverflowError} if the result exceeds `U32_MAX`.
+routine U32.$add!(you: U32) -> U32
+  var result = me.add_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
+
+### Returns `me - you`, throwing on underflow.
+### :param you: The value to subtract.
+### :returns: The difference `me - you`.
+### :throws: {IntegerOverflowError} if the result is less than `U32_MIN` (0).
+routine U32.$sub!(you: U32) -> U32
+  var result = me.sub_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
+
+### Returns `me * you`, throwing on overflow.
+### :param you: The right operand.
+### :returns: The product `me * you`.
+### :throws: {IntegerOverflowError} if the result exceeds `U32_MAX`.
+routine U32.$mul!(you: U32) -> U32
+  var result = me.mul_with_overflow(you)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
+
+### Returns `me * you`, throwing on overflow (alias for `$mul!`).
+### :param you: The right operand.
+### :returns: The product `me * you`.
+### :throws: {IntegerOverflowError} if the result exceeds `U32_MAX`.
+routine U32.$mul(you: U32) -> U32
+  return me.$mul!(you)
+
+### Returns `me // you` (integer division), throwing if `you` is zero.
+### :param you: The divisor.
+### :returns: The quotient `me // you`.
+### :throws: {DivisionByZeroError} if `you == 0`.
+routine U32.$floordiv!(you: U32) -> U32
+  if you == 0
+    throw DivisionByZeroError()
+  return unsigned_div[U32](a: me, b: you)
+
+### Returns `me % you` (integer remainder).
+### :param you: The divisor.
+### :returns: The remainder `me % you`. Behavior is undefined if `you == 0`.
+routine U32.$mod!(you: U32) -> U32
+  if you == 0_u32
+    throw DivisionByZeroError()
+  return unsigned_rem[U32](a: me, b: you)
+
+# ============================================================================
+# Wrapping Arithmetic (+%, -%, *%)
+# ============================================================================
+
+### Returns `(me + you) mod 2³²` without overflow check.
+### :param you: The right operand.
+### :returns: The sum modulo 4294967296.
+routine U32.$add_wrap(you: U32) -> U32
+  return add[U32](a: me, b: you)
+
+### Returns `(me - you) mod 2³²` without underflow check.
+### :param you: The value to subtract.
+### :returns: The difference modulo 4294967296.
+routine U32.$sub_wrap(you: U32) -> U32
+  return sub[U32](a: me, b: you)
+
+### Returns `(me * you) mod 2³²` without overflow check.
+### :param you: The right operand.
+### :returns: The product modulo 4294967296.
+routine U32.$mul_wrap(you: U32) -> U32
+  return mul[U32](a: me, b: you)
+
+# ============================================================================
+# Unchecked Arithmetic (+!, -!, *!, //!, %!)
+# ============================================================================
+
+### Returns `me + you` with undefined behavior on overflow.
+### :param you: The right operand.
+### :returns: The sum, assuming no overflow.
+dangerous routine U32.$add_unchecked(you: U32) -> U32
+  return unsigned_add_exact[U32](a: me, b: you)
+
+### Returns `me - you` with undefined behavior on underflow.
+### :param you: The value to subtract.
+### :returns: The difference, assuming no underflow.
+dangerous routine U32.$sub_unchecked(you: U32) -> U32
+  return unsigned_sub_exact[U32](a: me, b: you)
+
+### Returns `me * you` with undefined behavior on overflow.
+### :param you: The right operand.
+### :returns: The product, assuming no overflow.
+dangerous routine U32.$mul_unchecked(you: U32) -> U32
+  return unsigned_mul_exact[U32](a: me, b: you)
+
+### Returns `me // you` with undefined behavior if `you == 0`.
+### :param you: The divisor.
+### :returns: The quotient, assuming `you != 0`.
+dangerous routine U32.$floordiv_unchecked(you: U32) -> U32
+  return unsigned_div[U32](a: me, b: you)
+
+### Returns `me % you` with undefined behavior if `you == 0`.
+### :param you: The divisor.
+### :returns: The remainder, assuming `you != 0`.
+dangerous routine U32.$mod_unchecked(you: U32) -> U32
+  return unsigned_rem[U32](a: me, b: you)
+
+# ============================================================================
+# Clamping Arithmetic (+^, -^, *^)
+# ============================================================================
+
+### Returns `me + you`, clamped to `U32_MAX` on overflow.
+### :param you: The right operand.
+### :returns: The sum, or `4294967295` if it would exceed `U32_MAX`.
+routine U32.$add_clamp(you: U32) -> U32
+  return unsigned_add_sat[U32](a: me, b: you)
+
+### Returns `me - you`, clamped to `U32_MIN` on underflow.
+### :param you: The value to subtract.
+### :returns: The difference, or `0` if it would go below `U32_MIN`.
+routine U32.$sub_clamp(you: U32) -> U32
+  return unsigned_sub_sat[U32](a: me, b: you)
+
+### Returns `me * you`, clamped to `U32_MAX` on overflow.
+### :param you: The right operand.
+### :returns: The product, or `4294967295` if it would exceed `U32_MAX`.
+routine U32.$mul_clamp(you: U32) -> U32
+  var wide = mul[U64](zero_extend[U32, U64](me), zero_extend[U32, U64](you))
+  if unsigned_gt[U64](wide, 4294967295_u64)
+    return U32_MAX
+  return int_truncate[U64, U32](wide)
+
+# ============================================================================
+# Power Operations (**)
+# ============================================================================
+
+### Returns `me ** exp` and a flag indicating whether the result wrapped around.
+### :param exp: The exponent.
+### :returns: A tuple of `(wrapped_result, overflowed)`.
+### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
+routine U32.pow_with_overflow!(exp: U32) -> (U32, Bool)
+  var result: U32 = 1
+  var base: U32 = me
+  var e: U32 = exp
+  var overflow = false
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  while e > 0
+    if (e & 1) == 1
+      var mul_result = result.mul_with_overflow(base)
+      result = mul_result.item0
+      overflow = overflow or mul_result.item1
+    e = e >> 1_u32
+    if e > 0
+      var square_result = base.mul_with_overflow(base)
+      base = square_result.item0
+      overflow = overflow or square_result.item1
+  return (result, overflow)
+
+### Returns `me ** exp`, throwing on overflow.
+### :param exp: The exponent.
+### :returns: The result of raising `me` to the power `exp`.
+### :throws: {IntegerOverflowError} if the result exceeds `U32_MAX`.
+### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
+routine U32.$pow!(exp: U32) -> U32
+  var result = me.pow_with_overflow!(exp)
+  if result.item1
+    throw IntegerOverflowError()
+  return result.item0
+
+### Returns `me ** exp` with wrapping arithmetic (mod 2³²).
+### :param exp: The exponent.
+### :returns: The result modulo 4294967296.
+### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
+routine U32.$pow_wrap!(exp: U32) -> U32
+  var result: U32 = 1
+  var base: U32 = me
+  var e: U32 = exp
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  while e > 0
+    if (e & 1) == 1
+      result = result.$mul_wrap(base)
+    e = e >> 1_u32
+    if e > 0
+      base = base.$mul_wrap(base)
+  return result
+
+### Returns `me ** exp`, clamped to `U32_MAX` on overflow.
+### :param exp: The exponent.
+### :returns: The result, or `4294967295` if it would overflow.
+### :throws: {IndeterminateResultError} if `me == 0` and `exp == 0`.
+routine U32.$pow_clamp!(exp: U32) -> U32
+  var result: U32 = 1
+  var base: U32 = me
+  var e: U32 = exp
+  if me == 0 and exp == 0
+    throw IndeterminateResultError()
+  while e > 0
+    if (e & 1) == 1
+      result = result.$mul_clamp(base)
+    base = base.$mul_clamp(base)
+    e = e >> 1_u32
+  return result
+
+# ============================================================================
+# Bitwise Operations
+# ============================================================================
+
+### Returns the bitwise AND of this value and `you`.
+### :param you: The right operand.
+### :returns: `me & you`.
+routine U32.$bitand(you: U32) -> U32
+  return bit_and[U32](a: me, b: you)
+
+### Returns the bitwise OR of this value and `you`.
+### :param you: The right operand.
+### :returns: `me | you`.
+routine U32.$bitor(you: U32) -> U32
+  return bit_or[U32](a: me, b: you)
+
+### Returns the bitwise XOR of this value and `you`.
+### :param you: The right operand.
+### :returns: `me ^ you`.
+routine U32.$bitxor(you: U32) -> U32
+  return bit_xor[U32](a: me, b: you)
+
+### Returns the bitwise complement of this value.
+### :returns: `~me` — each bit flipped.
+routine U32.$bitnot() -> U32
+  return bit_xor[U32](a: me, b: U32_MAX)
+
+# ============================================================================
+# Shift Operations (<<, <<?>, >>, <<<, >>>)
+# For unsigned types, arithmetic and logical shifts behave identically
+# ============================================================================
+
+### Left-shifts this value by `bits` positions, filling vacated bits with zero.
+### :param bits: The number of bit positions to shift left.
+### :returns: `me << bits`.
+routine U32.$ashl(bits: U32) -> U32
+  return shift_left[U32](me, bits)
+
+### Right-shifts this value by `bits` positions, filling vacated bits with zero.
+### :param bits: The number of bit positions to shift right.
+### :returns: `me >> bits` (logical, zero-filling).
+routine U32.$ashr(bits: U32) -> U32
+  return shift_right_unsigned[U32](me, bits)
+
+### Left-shifts this value by `bits` positions (logical shift, same as `$ashl` for unsigned).
+### :param bits: The number of bit positions to shift left.
+### :returns: `me << bits`.
+routine U32.$lshl(bits: U32) -> U32
+  return shift_left[U32](me, bits)
+
+### Right-shifts this value by `bits` positions (logical shift, same as `$ashr` for unsigned).
+### :param bits: The number of bit positions to shift right.
+### :returns: `me >> bits` (zero-filling).
+routine U32.$lshr(bits: U32) -> U32
+  return shift_right_unsigned[U32](me, bits)
+
+# ============================================================================
+# Comparison Operations
+# ============================================================================
+
+### Returns `true` when both values are equal.
+### :param you: The value to compare against.
+### :returns: `true` if `me == you`; `false` otherwise.
+routine U32.$eq(you: U32) -> Bool
+  return int_eq[U32](a: me, b: you)
+
+### Compares this value with `you`, returning the ordering relationship.
+### :param you: The value to compare against.
+### :returns: `ME_SMALL` if `me < you`, `ME_LARGE` if `me > you`, `SAME` if equal.
+routine U32.$cmp(you: U32) -> ComparisonSign
+  if unsigned_lt[U32](me, you)
+    return ME_SMALL
+  if unsigned_gt[U32](me, you)
+    return ME_LARGE
+  return SAME
+
+# ============================================================================
+# Math Operations
+# ============================================================================
+
+### Returns the smaller of this value and `you`.
+### :param you: The value to compare against.
+### :returns: `me` if `me <= you`; otherwise `you`.
+routine U32.min(you: U32) -> U32
+  return if me <= you then me else you
+
+### Returns the larger of this value and `you`.
+### :param you: The value to compare against.
+### :returns: `me` if `me >= you`; otherwise `you`.
+routine U32.max(you: U32) -> U32
+  return if me >= you then me else you
+
+### Returns this value clamped to the range `min_val..=max_val`.
+### :param min_val: The lower bound (inclusive).
+### :param max_val: The upper bound (inclusive).
+### :returns: `min_val` if `me < min_val`; `max_val` if `me > max_val`; otherwise `me`.
+@positional
+routine U32.clamp(min_val: U32, max_val: U32) -> U32
+  return me.min(max_val).max(min_val)
+
+# ============================================================================
+# Bit Manipulation
+# ============================================================================
+
+### Returns the count of set bits (popcount) in this value's 32-bit representation.
+### :returns: The number of `1` bits; between 0 and 32.
+routine U32.count_ones() -> U32
+  return count_ones[U32](me)
+
+### Returns the count of clear bits in this value's 32-bit representation.
+### :returns: `32` minus the popcount; between 0 and 32.
+routine U32.count_zeros() -> U32
+  return 32_u32 -% me.count_ones()
+
+### Returns the number of leading zero bits, starting from the most-significant bit.
+### :returns: The leading zero count; `32` if the value is zero.
+routine U32.leading_zeros() -> U32
+  return leading_zeros[U32](me)
+
+### Returns the number of trailing zero bits, starting from the least-significant bit.
+### :returns: The trailing zero count; `32` if the value is zero.
+routine U32.trailing_zeros() -> U32
+  return trailing_zeros[U32](me)
+
+### Returns the number of leading one bits, starting from the most-significant bit.
+### :returns: The leading one count; `32` if the value is `4294967295`.
+routine U32.leading_ones() -> U32
+  return me.$bitnot().leading_zeros()
+
+### Returns the number of trailing one bits, starting from the least-significant bit.
+### :returns: The trailing one count; `32` if the value is `4294967295`.
+routine U32.trailing_ones() -> U32
+  return me.$bitnot().trailing_zeros()
+
+### Returns this value with its bits reversed (bit 31 ↔ bit 0, etc.).
+### :returns: The bit-reversed `U32`.
+routine U32.reverse_bits() -> U32
+  return reverse_bits[U32](me)
+
+### Returns this value with its four bytes swapped (for endianness conversion).
+### :returns: A `U32` with its bytes in reverse order.
+routine U32.swap_bytes() -> U32
+  return byte_swap[U32](me)
+
+### Returns `true` if this value is an exact power of two.
+### :returns: `true` if `me` is 1, 2, 4, ..., 2147483648; `false` otherwise (including zero).
+routine U32.is_power_of_two() -> Bool
+  return me != 0_u32 and (me & (me -% 1_u32)) == 0_u32
+
+# ============================================================================
+# Utility Methods
+# ============================================================================
+
+### Returns `true` if this value is zero.
+### :returns: `true` if `me == 0`.
+routine U32.is_zero() -> Bool
+  return me == 0_u32
+
+### Returns `true` if this value is divisible by 2.
+### :returns: `true` if the least-significant bit is 0.
+routine U32.is_even() -> Bool
+  var result = bit_and[U32](a: me, b: 1_u32)
+  return int_eq[U32](a: result, b: 0_u32)
+
+### Returns `true` if this value is not divisible by 2.
+### :returns: `true` if the least-significant bit is 1.
+routine U32.is_odd() -> Bool
+  return not me.is_even()
+
+# ============================================================================
+# Text Representation and Parsing
+# ============================================================================
+
+routine U32.$represent() -> ?Text
+  if me == 0u32
+    return "0"
+  var digits = List[Character]()
+  var remaining = me
+  while remaining > 0u32
+    var digit = U8(unsigned_rem[U32](a: remaining, b: 10u32))
+    remaining = unsigned_div[U32](a: remaining, b: 10u32)
+    digits.add_first(Character(0x0030u32 + U32(digit)))
+  return Text(from_list: steal digits)
+
+routine U32.$diagnose() -> ?Text
+  return "U32(" + me.$represent() + ")"
+
+### Parses a decimal string into a `U32`.
+### :param from_text: The decimal string to parse (no sign, no prefix).
+### :returns: The parsed `U32` value.
+### :throws: {InvalidValueError} if `from_text` is empty or contains non-digit characters.
+routine U32.$create!(from_text: Text) -> U32
+  if from_text.count() == 0u64
+    throw InvalidValueError(input: from_text, target: "U32")
+  var result = 0u32
+  var i = 0u64
+  while i < from_text.count()
+    var ch = from_text[i]
+    if ch.is_numeric()
+      result = result * 10u32 + U32(ch.digit_value())
+    else
+      throw InvalidValueError(input: from_text, target: "U32")
+    i = i + 1u64
+  return result
+
+# ============================================================================
+# Hashing
+# ============================================================================
+
+### Returns an xxHash64-based hash of this value.
+### :returns: A `U64` hash of the 32-bit value.
+routine U32.$fast_hash() -> U64
+  return __hash_leaf(v: zero_extend[U32, U64](me))
+
+### Returns a SipHash-2-4 keyed hash of this value.
+### :param k0: The first 64-bit key word.
+### :param k1: The second 64-bit key word.
+### :returns: A `U64` keyed hash suitable for denial-of-service-resistant hash tables.
+routine U32.$hash(k0: U64, k1: U64) -> U64
+  return __secure_hash_u64(v: zero_extend[U32, U64](me), k0: k0, k1: k1)

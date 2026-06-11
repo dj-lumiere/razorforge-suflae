@@ -1,6 +1,12 @@
-# WrappingAddable - Protocol for types that support wrapping addition (+%)
 module Core
 
+### Represents the protocol for modulo-width addition.
+### `WrappingAddable` is for bounded bit-width types whose addition surface
+### discards overflow bits instead of trapping or clamping.
 protocol WrappingAddable
+  ### Returns the wrapping sum of this value and `you`.
+  ### The result is reduced to the bit width of the conforming type.
+  ### :param you: The other value to add.
+  ### :returns: The resulting `Me` value.
   @readonly
-  routine Me.__add_wrap__(you: Me) -> Me
+  routine Me.$add_wrap(you: Me) -> ?Me
