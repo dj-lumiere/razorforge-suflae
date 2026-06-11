@@ -1352,10 +1352,13 @@ static inline __m128 f128t_to_xmm(f128_t x)
     return r;
 }
 
-// Helper: 3-way comparison (returns negative/zero/positive, or 1 for NaN)
-static inline int f128_cmp_three_way(const f128_t* a, const f128_t* b)
+// Helper: 3-way comparison. nan_result picks the unordered outcome so each
+// builtin's truth test stays FALSE for NaN operands: eq/ne/lt/le are checked
+// as ==0 / !=0 / <0 / <=0 (NaN must yield a positive result), while gt/ge are
+// checked as >0 / >=0 (NaN must yield a NEGATIVE result, like libgcc's).
+static inline int f128_cmp_three_way(const f128_t* a, const f128_t* b, int nan_result)
 {
-    if (rf_f128_is_nan(*a) || rf_f128_is_nan(*b)) return 1;
+    if (rf_f128_is_nan(*a) || rf_f128_is_nan(*b)) return nan_result;
     if (rf_f128_lt(*a, *b)) return -1;
     if (rf_f128_eq(*a, *b)) return 0;
     return 1;
@@ -1377,14 +1380,15 @@ __m128 __negtf2(const f128_t* a)                  { return f128t_to_xmm(rf_f128_
 //   __eqtf2 / __netf2: LLVM checks (result == 0) for equal, (result != 0) for not-equal
 //   __lttf2 / __letf2: LLVM checks sign bit (result < 0) for less-than
 //   __gttf2 / __getf2: LLVM checks (result > 0) or (result >= 0)
-//   All return -1/0/1 like a standard 3-way compare; NaN yields 1.
+//   All return -1/0/1 like a standard 3-way compare; NaN yields 1 (or -1 for
+//   gt/ge, whose truth tests would otherwise come out true for NaN).
 
-int __eqtf2(const f128_t* a, const f128_t* b) { return f128_cmp_three_way(a, b); }
-int __netf2(const f128_t* a, const f128_t* b) { return f128_cmp_three_way(a, b); }
-int __lttf2(const f128_t* a, const f128_t* b) { return f128_cmp_three_way(a, b); }
-int __letf2(const f128_t* a, const f128_t* b) { return f128_cmp_three_way(a, b); }
-int __gttf2(const f128_t* a, const f128_t* b) { return f128_cmp_three_way(a, b); }
-int __getf2(const f128_t* a, const f128_t* b) { return f128_cmp_three_way(a, b); }
+int __eqtf2(const f128_t* a, const f128_t* b) { return f128_cmp_three_way(a, b, 1); }
+int __netf2(const f128_t* a, const f128_t* b) { return f128_cmp_three_way(a, b, 1); }
+int __lttf2(const f128_t* a, const f128_t* b) { return f128_cmp_three_way(a, b, 1); }
+int __letf2(const f128_t* a, const f128_t* b) { return f128_cmp_three_way(a, b, 1); }
+int __gttf2(const f128_t* a, const f128_t* b) { return f128_cmp_three_way(a, b, -1); }
+int __getf2(const f128_t* a, const f128_t* b) { return f128_cmp_three_way(a, b, -1); }
 int __unordtf2(const f128_t* a, const f128_t* b)
 {
     return (rf_f128_is_nan(*a) || rf_f128_is_nan(*b)) ? 1 : 0;
@@ -1409,7 +1413,75 @@ long long __fixtfdi(const f128_t* a)      { return (long long)rf_f128_to_s64(*a)
 unsigned int __fixunstfsi(const f128_t* a)       { return rf_f128_to_u32(*a); }
 unsigned long long __fixunstfdi(const f128_t* a) { return (unsigned long long)rf_f128_to_u64(*a); }
 
-#endif /* _WIN64 && __SSE2__ */
+#elif defined(__APPLE__)
+// ============================================================================
+// fp128 soft-float builtins for Apple platforms
+//
+// LLVM lowers fp128 ops to the same __*tf3/__*tf2 libcalls here, but Apple's
+// compiler-rt does not ship the quad-precision builtins (and long double is
+// only 64-bit on arm64, so there is no libgcc fallback either).
+//
+// ABI: both AAPCS64 (arm64) and SysV x86-64 pass fp128 BY VALUE in SIMD
+// registers (q0/q1 resp. xmm0/xmm1) and return it the same way. A 128-bit
+// vector type has the identical ABI, so it stands in for fp128 below.
+// ============================================================================
+
+typedef uint64_t rf_tf_abi __attribute__((vector_size(16)));
+
+static inline f128_t tf_to_f128t(rf_tf_abi v) { f128_t x; __builtin_memcpy(&x, &v, 16); return x; }
+static inline rf_tf_abi f128t_to_tf(f128_t x) { rf_tf_abi v; __builtin_memcpy(&v, &x, 16); return v; }
+
+// See the Win64 block: nan_result keeps each builtin's truth test false for
+// unordered operands (eq/ne/lt/le need a positive result, gt/ge a negative one).
+static inline int tf_cmp_three_way(rf_tf_abi a, rf_tf_abi b, int nan_result)
+{
+    f128_t fa = tf_to_f128t(a), fb = tf_to_f128t(b);
+    if (rf_f128_is_nan(fa) || rf_f128_is_nan(fb)) return nan_result;
+    if (rf_f128_lt(fa, fb)) return -1;
+    if (rf_f128_eq(fa, fb)) return 0;
+    return 1;
+}
+
+// ---- Arithmetic ----
+
+rf_tf_abi __addtf3(rf_tf_abi a, rf_tf_abi b) { return f128t_to_tf(rf_f128_add(tf_to_f128t(a), tf_to_f128t(b))); }
+rf_tf_abi __subtf3(rf_tf_abi a, rf_tf_abi b) { return f128t_to_tf(rf_f128_sub(tf_to_f128t(a), tf_to_f128t(b))); }
+rf_tf_abi __multf3(rf_tf_abi a, rf_tf_abi b) { return f128t_to_tf(rf_f128_mul(tf_to_f128t(a), tf_to_f128t(b))); }
+rf_tf_abi __divtf3(rf_tf_abi a, rf_tf_abi b) { return f128t_to_tf(rf_f128_div(tf_to_f128t(a), tf_to_f128t(b))); }
+rf_tf_abi __negtf2(rf_tf_abi a)              { return f128t_to_tf(rf_f128_neg(tf_to_f128t(a))); }
+
+// ---- Comparisons ----
+
+int __eqtf2(rf_tf_abi a, rf_tf_abi b) { return tf_cmp_three_way(a, b, 1); }
+int __netf2(rf_tf_abi a, rf_tf_abi b) { return tf_cmp_three_way(a, b, 1); }
+int __lttf2(rf_tf_abi a, rf_tf_abi b) { return tf_cmp_three_way(a, b, 1); }
+int __letf2(rf_tf_abi a, rf_tf_abi b) { return tf_cmp_three_way(a, b, 1); }
+int __gttf2(rf_tf_abi a, rf_tf_abi b) { return tf_cmp_three_way(a, b, -1); }
+int __getf2(rf_tf_abi a, rf_tf_abi b) { return tf_cmp_three_way(a, b, -1); }
+int __unordtf2(rf_tf_abi a, rf_tf_abi b)
+{
+    return (rf_f128_is_nan(tf_to_f128t(a)) || rf_f128_is_nan(tf_to_f128t(b))) ? 1 : 0;
+}
+
+// ---- Conversions TO fp128 ----
+
+rf_tf_abi __extendsftf2(float a)              { return f128t_to_tf(rf_f32_to_f128(a)); }
+rf_tf_abi __extenddftf2(double a)             { return f128t_to_tf(rf_f64_to_f128(a)); }
+rf_tf_abi __floatsitf(int a)                  { return f128t_to_tf(rf_s32_to_f128(a)); }
+rf_tf_abi __floatditf(long long a)            { return f128t_to_tf(rf_s64_to_f128((int64_t)a)); }
+rf_tf_abi __floatunsitf(unsigned int a)       { return f128t_to_tf(rf_u32_to_f128(a)); }
+rf_tf_abi __floatunditf(unsigned long long a) { return f128t_to_tf(rf_u64_to_f128((uint64_t)a)); }
+
+// ---- Conversions FROM fp128 ----
+
+float  __trunctfsf2(rf_tf_abi a)              { return rf_f128_to_f32(tf_to_f128t(a)); }
+double __trunctfdf2(rf_tf_abi a)              { return rf_f128_to_f64(tf_to_f128t(a)); }
+int    __fixtfsi(rf_tf_abi a)                 { return rf_f128_to_s32(tf_to_f128t(a)); }
+long long __fixtfdi(rf_tf_abi a)              { return (long long)rf_f128_to_s64(tf_to_f128t(a)); }
+unsigned int __fixunstfsi(rf_tf_abi a)        { return rf_f128_to_u32(tf_to_f128t(a)); }
+unsigned long long __fixunstfdi(rf_tf_abi a)  { return (unsigned long long)rf_f128_to_u64(tf_to_f128t(a)); }
+
+#endif /* _WIN64 && __SSE2__ / __APPLE__ */
 
 // ============================================================================
 // String parsing
