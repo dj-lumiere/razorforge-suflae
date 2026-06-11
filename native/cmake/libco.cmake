@@ -32,6 +32,11 @@ if(LIBCO_SOURCE AND LIBCO_HEADER)
 
     target_include_directories(rf_libco PUBLIC ${LIBCO_DIR})
 
+    # Upstream amd64.c uses the C23 `alignas` keyword. Under the project-wide
+    # C11 it only exists via <stdalign.h>, which glibc happens to pull in
+    # transitively but MSVC-target builds don't — so compile this target as C23.
+    set_target_properties(rf_libco PROPERTIES C_STANDARD 23 C_STANDARD_REQUIRED OFF)
+
     if(CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "GNU")
         target_compile_options(rf_libco PRIVATE -w -Wno-implicit-function-declaration)
         if(NOT WIN32)

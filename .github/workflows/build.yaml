@@ -6,6 +6,13 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  # Vendored subprojects with their own CMakeLists (mbedtls 2.28 in particular)
+  # declare cmake_minimum_required < 3.5, which CMake 4.x refuses outright.
+  # This is CMake's own escape hatch; honored as an env var by CMake >= 4 and
+  # ignored by older CMakes (ubuntu-latest still ships 3.x).
+  CMAKE_POLICY_VERSION_MINIMUM: '3.5'
+
 jobs:
   build-linux:
     runs-on: ubuntu-latest

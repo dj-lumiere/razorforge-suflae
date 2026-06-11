@@ -22,6 +22,11 @@ on:
 permissions:
   contents: write
 
+env:
+  # See build.yaml: lets CMake 4.x configure vendored subprojects (mbedtls 2.28)
+  # that declare cmake_minimum_required < 3.5.
+  CMAKE_POLICY_VERSION_MINIMUM: '3.5'
+
 jobs:
   release-linux:
     runs-on: ubuntu-latest

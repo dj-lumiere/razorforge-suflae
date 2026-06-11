@@ -87,3 +87,6 @@ old
 /test.log
 /test_playground/
 /dist/
+/build_linux.log
+/build_windows.log
+/build_macos.log

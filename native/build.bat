@@ -7,7 +7,19 @@ if not exist build mkdir build
 cd build
 
 echo Configuring with CMake...
-cmake .. -G "Ninja" -DCMAKE_C_COMPILER="C:/Program Files/LLVM/bin/clang.exe" -DCMAKE_CXX_COMPILER="C:/Program Files/LLVM/bin/clang++.exe" -DCMAKE_BUILD_TYPE=Release
+
+REM Prefer the clang on PATH (CI installs LLVM 20 there; matches the toolchain
+REM the compiler itself shells out to). Fall back to the default LLVM install
+REM location for dev machines whose PATH lacks clang.
+set "RF_CLANG=clang"
+set "RF_CLANGXX=clang++"
+where clang >nul 2>nul
+if %ERRORLEVEL% neq 0 (
+    set "RF_CLANG=C:/Program Files/LLVM/bin/clang.exe"
+    set "RF_CLANGXX=C:/Program Files/LLVM/bin/clang++.exe"
+)
+
+cmake .. -G "Ninja" -DCMAKE_C_COMPILER="%RF_CLANG%" -DCMAKE_CXX_COMPILER="%RF_CLANGXX%" -DCMAKE_BUILD_TYPE=Release
 
 if %ERRORLEVEL% neq 0 (
     echo CMake configuration failed!
