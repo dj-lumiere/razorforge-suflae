@@ -56,8 +56,55 @@ cp LICENSE README.md "$OUT/"
 # Foundry's `forge`.)
 ln -sf RazorForge "$OUT/rf"
 
-echo "=== smoke test: version + standalone codegen from the published layout ==="
+echo "=== bundle self-contained LLVM toolchain ==="
+# The compiler resolves <package>/toolchain/bin before PATH (ResolveToolchainTool),
+# and uses that toolchain's ld.lld/ld64.lld for linking. Linux still needs the
+# host's libc dev files (crt1.o); macOS needs the Command Line Tools SDK stubs —
+# both documented in QUICKSTART.md.
+LLVM_VERSION=22.1.7
+CACHE=dist/_cache
+mkdir -p "$CACHE"
+case "$RID" in
+    linux-x64)  LLVM_ASSET="LLVM-${LLVM_VERSION}-Linux-X64" ;;
+    osx-arm64)  LLVM_ASSET="LLVM-${LLVM_VERSION}-macOS-ARM64" ;;
+    *)          LLVM_ASSET="" ;;
+esac
+if [[ -n "$LLVM_ASSET" ]]; then
+    TARBALL="$CACHE/${LLVM_ASSET}.tar.xz"
+    if [[ ! -f "$TARBALL" ]]; then
+        curl -L -o "$TARBALL" "https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/${LLVM_ASSET}.tar.xz"
+    fi
+    LLVM_ROOT="$CACHE/${LLVM_ASSET}"
+    if [[ ! -d "$LLVM_ROOT/bin" ]]; then
+        tar -xf "$TARBALL" -C "$CACHE"
+    fi
+
+    TC="$OUT/toolchain"
+    mkdir -p "$TC/bin" "$TC/lib/clang"
+    # -L: follow symlinks so `clang` is the real binary, not a dangling link.
+    for tool in clang opt lld; do
+        cp -L "$LLVM_ROOT/bin/$tool" "$TC/bin/"
+    done
+    # lld dispatches on argv[0]; clang looks for ld.lld (ELF) / ld64.lld (Mach-O)
+    # next to itself when given -fuse-ld=lld.
+    (cd "$TC/bin" && ln -sf lld ld.lld && ln -sf lld ld64.lld)
+    # Shared libraries the tools load (no-ops for static builds).
+    cp -a "$LLVM_ROOT"/lib/libLLVM*.so* "$TC/lib/" 2>/dev/null || true
+    cp -a "$LLVM_ROOT"/lib/libclang-cpp*.so* "$TC/lib/" 2>/dev/null || true
+    cp -a "$LLVM_ROOT"/lib/libLLVM*.dylib "$TC/lib/" 2>/dev/null || true
+    cp -a "$LLVM_ROOT"/lib/libclang-cpp*.dylib "$TC/lib/" 2>/dev/null || true
+    # clang resource dir: compiler-rt builtins (--rtlib=compiler-rt) live here.
+    cp -a "$LLVM_ROOT/lib/clang/${LLVM_VERSION%%.*}" "$TC/lib/clang/"
+    find "$TC/lib/clang" -type d -name include -exec rm -rf {} + 2>/dev/null || true
+fi
+
+echo "=== add install script + quickstart ==="
+cp scripts/package-assets/install.sh scripts/package-assets/QUICKSTART.md "$OUT/"
+chmod +x "$OUT/install.sh"
+
+echo "=== smoke test: self-contained buildandrun (system toolchain hidden) ==="
 "$OUT/RazorForge" version
+RF_ABS="$(cd "$OUT" && pwd)/RazorForge"
 SMOKE_DIR=$(mktemp -d)
 cat > "$SMOKE_DIR/smoke.rf" <<'EOF'
 module PackageSmoke
@@ -68,9 +115,27 @@ routine start()
   show("packaged razorforge works")
   return
 EOF
-"$OUT/RazorForge" build "$SMOKE_DIR/smoke.rf" "$SMOKE_DIR/smoke.ll"
-test -s "$SMOKE_DIR/smoke.ll"
-echo "smoke codegen OK"
+# Stage a copy of the package OUTSIDE the repo (buildandrun's dev-checkout
+# detection walks up from the exe and would find the repo's native/build tree
+# from dist/), then run from the smoke dir with a minimal PATH — the end-user
+# situation. The bundled toolchain must carry the build; only the OS linker
+# prerequisites (libc dev files / CLT) come from the system.
+STAGE_DIR=$(mktemp -d)
+cp -a "$OUT/." "$STAGE_DIR/"
+RF_ABS="$STAGE_DIR/RazorForge"
+SMOKE_OUT=$( cd "$SMOKE_DIR" && PATH="/usr/bin:/bin" "$RF_ABS" buildandrun smoke.rf 2>&1 ) || {
+    echo "$SMOKE_OUT"
+    echo "self-contained buildandrun smoke failed"
+    rm -rf "$STAGE_DIR"
+    exit 1
+}
+rm -rf "$STAGE_DIR"
+if ! grep -q "packaged razorforge works" <<< "$SMOKE_OUT"; then
+    echo "$SMOKE_OUT"
+    echo "self-contained buildandrun smoke failed (wrong output)"
+    exit 1
+fi
+echo "self-contained buildandrun OK"
 rm -rf "$SMOKE_DIR"
 
 echo "=== archive + checksum ==="

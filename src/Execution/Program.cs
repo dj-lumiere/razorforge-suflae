@@ -935,6 +935,75 @@ internal partial class Program
     }
 
     /// <summary>
+    /// Resolves an LLVM toolchain tool (clang/opt) to a concrete path. Resolution order:
+    /// 1. $RAZORFORGE_LLVM_HOME/bin/&lt;tool&gt; — explicit user override.
+    /// 2. &lt;dir of RazorForge executable&gt;/toolchain/bin/&lt;tool&gt; — self-contained release
+    ///    packages bundle a relocatable LLVM (llvm-mingw on Windows) there.
+    /// 3. The bare tool name, resolved from PATH (dev setups).
+    /// </summary>
+    private static string ResolveToolchainTool(string name)
+    {
+        string exeName = OperatingSystem.IsWindows() ? name + ".exe" : name;
+
+        string? llvmHome = Environment.GetEnvironmentVariable(variable: "RAZORFORGE_LLVM_HOME");
+        if (!string.IsNullOrWhiteSpace(value: llvmHome))
+        {
+            string fromEnv = Path.Combine(path1: llvmHome, path2: "bin", path3: exeName);
+            if (File.Exists(path: fromEnv))
+            {
+                return fromEnv;
+            }
+        }
+
+        string bundled = Path.Combine(path1: AppContext.BaseDirectory, path2: "toolchain",
+            path3: "bin", path4: exeName);
+        return File.Exists(path: bundled) ? bundled : name;
+    }
+
+    private static readonly Lazy<string> ClangTool = new(valueFactory: () => ResolveToolchainTool(name: "clang"));
+    private static readonly Lazy<string> OptTool = new(valueFactory: () => ResolveToolchainTool(name: "opt"));
+
+    /// <summary>
+    /// True when the resolved clang targets *-windows-gnu (llvm-mingw). The bundled Windows
+    /// toolchain is mingw-based so linking is self-contained (no Visual Studio / Windows SDK
+    /// import libraries needed); its GNU-flavored linker rejects lld-link style /flags, so the
+    /// link command line must be built differently.
+    /// </summary>
+    private static readonly Lazy<bool> ClangIsMingw = new(valueFactory: () =>
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = ClangTool.Value,
+                Arguments = "-dumpmachine",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+            using var proc = Process.Start(startInfo: psi);
+            if (proc == null)
+            {
+                return false;
+            }
+
+            string triple = proc.StandardOutput.ReadToEnd().Trim();
+            proc.WaitForExit();
+            return triple.Contains(value: "mingw") || triple.Contains(value: "windows-gnu");
+        }
+        catch
+        {
+            return false;
+        }
+    });
+
+    /// <summary>
     /// Returns the full path to the compiler-rt builtins library (e.g. clang_rt.builtins-x86_64.lib)
     /// by asking clang where it lives.
     /// </summary>
@@ -944,7 +1013,7 @@ internal partial class Program
         {
             var psi = new ProcessStartInfo
             {
-                FileName = "clang",
+                FileName = ClangTool.Value,
                 Arguments = "--print-libgcc-file-name --rtlib=compiler-rt",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
@@ -1481,7 +1550,7 @@ internal partial class Program
         string optArgs = $"-S -passes={optPipeline} \"{llFile}\" -o \"{optFile}\"";
         var optPsi = new ProcessStartInfo
         {
-            FileName = "opt",
+            FileName = OptTool.Value,
             Arguments = optArgs,
             UseShellExecute = false,
             RedirectStandardOutput = true,
@@ -1521,7 +1590,10 @@ internal partial class Program
         string framePointerFlag = buildMode is RfBuildMode.Debug or RfBuildMode.Release
             ? " -fno-omit-frame-pointer"
             : "";
-        string windowsThreadingLibs = OperatingSystem.IsWindows()
+        // MSVC-target clang needs the CRT and kernel32 import libraries named explicitly when
+        // linking from LLVM IR. The mingw-target clang (bundled self-contained toolchain) links
+        // its own CRT and the Win32 import libraries automatically.
+        string windowsThreadingLibs = OperatingSystem.IsWindows() && !ClangIsMingw.Value
             ? " -lucrt -lmsvcrt -lkernel32"
             : "";
         // On Linux/macOS the LLVM IR emits direct calls into libm (floor, exp, pow, …) and the
@@ -1544,7 +1616,7 @@ internal partial class Program
         //   clang --print-libgcc-file-name --rtlib=compiler-rt
         // and add it directly to the linker command line.
         string compilerRtArg;
-        if (OperatingSystem.IsWindows())
+        if (OperatingSystem.IsWindows() && !ClangIsMingw.Value)
         {
             string? compilerRtLib = GetCompilerRtBuiltinsLib();
             if (string.IsNullOrWhiteSpace(value: compilerRtLib))
@@ -1560,16 +1632,21 @@ internal partial class Program
         {
             compilerRtArg = " --rtlib=compiler-rt";
         }
-        string lldFlag = OperatingSystem.IsWindows() ? " -fuse-ld=lld" : "";
-        // Surface every undefined-symbol error during development instead of stopping at lld-link's
-        // default cap (~20). lld-link uses /errorlimit:N; ld.lld has no equivalent cap.
+        // Windows always links via lld. On Linux/macOS the system linker is fine for dev
+        // setups, but when clang came from a bundled/explicit toolchain the host may have
+        // no binutils at all — use that toolchain's own ld.lld (clang searches its own
+        // bin directory for it first).
+        bool clangIsBundled = ClangTool.Value != "clang";
+        string lldFlag = OperatingSystem.IsWindows() || clangIsBundled ? " -fuse-ld=lld" : "";
+        // lld-link-only flags (MSVC-target clang). The mingw toolchain's GNU-flavored ld.lld
+        // rejects /slash-style options:
+        //  - /errorlimit:0 surfaces every undefined-symbol error instead of capping at ~20.
+        //  - The embedded asInvoker manifest stops Windows' Application Information Service from
+        //    heuristically requesting UAC elevation for exe names containing "install"/"update"/
+        //    "setup"/"patch"/"test_dispatch"/… (it never inspects the binary itself).
         string linkerErrorLimitFlag =
-            OperatingSystem.IsWindows() ? " -Wl,/errorlimit:0" : "";
-        // Windows' Application Information Service heuristically requests UAC elevation for
-        // .exe filenames containing words like "install", "update", "setup", "patch",
-        // "test_dispatch"… without checking the binary itself. Embed a manifest declaring
-        // `requestedExecutionLevel=asInvoker` so playground tests can run without elevation.
-        string manifestUacFlag = OperatingSystem.IsWindows()
+            OperatingSystem.IsWindows() && !ClangIsMingw.Value ? " -Wl,/errorlimit:0" : "";
+        string manifestUacFlag = OperatingSystem.IsWindows() && !ClangIsMingw.Value
             ? " -Wl,\"/MANIFESTUAC:level='asInvoker' uiAccess='false'\" -Wl,/MANIFEST:EMBED"
             : "";
         string clangArgs =
@@ -1577,7 +1654,7 @@ internal partial class Program
 
         var clangPsi = new ProcessStartInfo
         {
-            FileName = "clang",
+            FileName = ClangTool.Value,
             Arguments = clangArgs,
             UseShellExecute = false,
             RedirectStandardOutput = true,
@@ -1720,7 +1797,10 @@ internal partial class Program
     /// </summary>
     private static void CleanBuildAndRunOutputs(string llFile, string optFile, string exeFile)
     {
-        string outputDir = Path.GetDirectoryName(path: exeFile) ?? ".";
+        // Normalize before taking the directory: for a bare relative name like
+        // "smoke.exe" GetDirectoryName returns "" (not null), and enumerating ""
+        // throws. Full-path first makes the working-directory case work.
+        string outputDir = Path.GetDirectoryName(path: Path.GetFullPath(path: exeFile)) ?? ".";
         string basePath = Path.Combine(
             path1: outputDir,
             path2: Path.GetFileNameWithoutExtension(path: exeFile));
@@ -1739,7 +1819,7 @@ internal partial class Program
             // Directory unreadable — non-fatal, just skip the sweep.
         }
 
-        string exeOutputDir = Path.GetDirectoryName(path: exeFile) ?? ".";
+        string exeOutputDir = Path.GetDirectoryName(path: Path.GetFullPath(path: exeFile)) ?? ".";
         string[] pathsToDelete =
         [
             llFile,

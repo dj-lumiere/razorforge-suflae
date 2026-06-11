@@ -47,19 +47,20 @@ jobs:
             software-properties-common \
             gnupg
 
-      - name: Install LLVM 20 toolchain
+      - name: Install LLVM 22 toolchain
         run: |
-          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 20
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 22
           # LLVMSharp NuGet talks to the in-process LLVM C library, but the
           # RazorForge compiler shells out to `clang` and `opt` for the final
           # codegen/link step. Make the version-suffixed binaries resolvable
           # without the suffix.
-          sudo ln -sf /usr/bin/clang-20 /usr/local/bin/clang
-          sudo ln -sf /usr/bin/clang++-20 /usr/local/bin/clang++
-          sudo ln -sf /usr/bin/opt-20 /usr/local/bin/opt
-          sudo ln -sf /usr/bin/llc-20 /usr/local/bin/llc
-          sudo ln -sf /usr/bin/llvm-ar-20 /usr/local/bin/llvm-ar
-          sudo ln -sf /usr/bin/lld-20 /usr/local/bin/lld
+          sudo ln -sf /usr/bin/clang-22 /usr/local/bin/clang
+          sudo ln -sf /usr/bin/clang++-22 /usr/local/bin/clang++
+          sudo ln -sf /usr/bin/opt-22 /usr/local/bin/opt
+          sudo ln -sf /usr/bin/llc-22 /usr/local/bin/llc
+          sudo ln -sf /usr/bin/llvm-ar-22 /usr/local/bin/llvm-ar
+          sudo ln -sf /usr/bin/lld-22 /usr/local/bin/lld
+          sudo ln -sf /usr/bin/ld.lld-22 /usr/local/bin/ld.lld
           clang --version
           opt --version
 
@@ -206,24 +207,24 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      # The hosted image ships an LLVM, but not necessarily 20.x, and the
+      # The hosted image ships an LLVM, but not necessarily 22.x, and the
       # compiler needs the full tool set (clang/opt/llc/lld) — use the official
       # clang+llvm release archive, which includes everything, and cache it.
-      - name: Cache LLVM 20 toolchain
+      - name: Cache LLVM 22 toolchain
         id: cache-llvm
         uses: actions/cache@v4
         with:
-          path: C:\llvm20
-          key: llvm-20.1.8-win64
+          path: C:\llvm22
+          key: llvm-22.1.7-win64
 
-      - name: Download LLVM 20 toolchain
+      - name: Download LLVM 22 toolchain
         if: steps.cache-llvm.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
-          curl.exe -L -o llvm.tar.xz "https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.8/clang+llvm-20.1.8-x86_64-pc-windows-msvc.tar.xz"
+          curl.exe -L -o llvm.tar.xz "https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.7/clang+llvm-22.1.7-x86_64-pc-windows-msvc.tar.xz"
           if ($LASTEXITCODE -ne 0) { throw 'LLVM download failed' }
-          New-Item -ItemType Directory -Force C:\llvm20 | Out-Null
-          tar -xf llvm.tar.xz -C C:\llvm20 --strip-components=1
+          New-Item -ItemType Directory -Force C:\llvm22 | Out-Null
+          tar -xf llvm.tar.xz -C C:\llvm22 --strip-components=1
           if ($LASTEXITCODE -ne 0) { throw 'LLVM extract failed' }
           Remove-Item llvm.tar.xz
 
@@ -231,7 +232,7 @@ jobs:
         shell: pwsh
         run: |
           choco install ninja -y
-          Add-Content $env:GITHUB_PATH 'C:\llvm20\bin'
+          Add-Content $env:GITHUB_PATH 'C:\llvm22\bin'
 
       - name: Verify toolchain
         shell: pwsh
@@ -331,12 +332,12 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Install LLVM 20 toolchain
+      - name: Install LLVM 22 toolchain
         run: |
-          brew install llvm@20 ninja
-          # llvm@20 is keg-only; GITHUB_PATH entries are prepended, so this
-          # shadows Apple clang for subsequent steps.
-          echo "$(brew --prefix llvm@20)/bin" >> "$GITHUB_PATH"
+          # `llvm` is the current stable (22.x as of 2026-06); keg-only, and
+          # GITHUB_PATH entries are prepended, so this shadows Apple clang.
+          brew install llvm ninja
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
 
       - name: Verify toolchain
         run: |
