@@ -134,6 +134,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           body_path: scripts/package-assets/RELEASE_NOTES.md
+          prerelease: true
           files: |
             dist/*.tar.gz
             dist/checksums-linux-x64.txt
@@ -245,6 +246,7 @@ jobs:
       - name: Attach win-x64 artifacts to the release
         uses: softprops/action-gh-release@v2
         with:
+          prerelease: true
           files: |
             dist/*.zip
             dist/checksums-win-x64.txt
@@ -321,6 +323,7 @@ jobs:
       - name: Attach osx-arm64 artifacts to the release
         uses: softprops/action-gh-release@v2
         with:
+          prerelease: true
           files: |
             dist/*.tar.gz
             dist/checksums-osx-arm64.txt
