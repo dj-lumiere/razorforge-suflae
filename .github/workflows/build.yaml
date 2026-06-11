@@ -306,7 +306,7 @@ jobs:
           Get-ChildItem bin\Release\net10.0 -Filter '*.dll' |
             Where-Object Name -notmatch '^(Microsoft|System)' |
             Select-Object Name, Length | Format-Table
-          C:\llvm20\bin\llvm-objdump.exe -p bin\Release\net10.0\razorforge_runtime.dll | Select-String 'DLL Name'
+          C:\llvm22\bin\llvm-objdump.exe -p bin\Release\net10.0\razorforge_runtime.dll | Select-String 'DLL Name'
           try {
             [System.Runtime.InteropServices.NativeLibrary]::Load("$pwd\bin\Release\net10.0\razorforge_runtime.dll") | Out-Null
             Write-Host 'razorforge_runtime.dll loads OK'
