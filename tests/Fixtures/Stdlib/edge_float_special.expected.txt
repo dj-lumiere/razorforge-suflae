@@ -1,9 +1,9 @@
-nan: -nan
+nan: -nan(ind)
 inf: inf
 -inf: -inf
 +0: 0
 -0: -0
-nan + 1: -nan
+nan + 1: -nan(ind)
 nan == nan: false
 nan != nan: true
 nan.is_nan(): true

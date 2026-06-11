@@ -30,7 +30,6 @@ env:
 jobs:
   release-linux:
     runs-on: ubuntu-latest
-    if: github.server_url == 'https://github.com'
 
     steps:
       - name: Checkout
@@ -134,7 +133,6 @@ jobs:
     # Run after the Linux job so exactly one job creates the release; this one
     # only appends its attachments.
     needs: release-linux
-    if: github.server_url == 'https://github.com'
 
     steps:
       - name: Checkout
@@ -233,7 +231,6 @@ jobs:
   release-macos:
     runs-on: macos-15
     needs: release-linux
-    if: github.server_url == 'https://github.com'
 
     steps:
       - name: Checkout

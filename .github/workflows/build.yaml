@@ -16,10 +16,6 @@ env:
 jobs:
   build-linux:
     runs-on: ubuntu-latest
-    # Gitea Actions also reads .github/workflows; if this repo is ever mirrored
-    # back to a Gitea instance with runners, this guard keeps the jobs from
-    # queueing forever there (github.server_url is the Gitea URL in that case).
-    if: github.server_url == 'https://github.com'
 
     steps:
       - name: Checkout
@@ -198,7 +194,6 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
-    if: github.server_url == 'https://github.com'
 
     steps:
       - name: Checkout
@@ -324,11 +319,6 @@ jobs:
 
   build-macos:
     runs-on: macos-15
-    if: github.server_url == 'https://github.com'
-    # First hosted macOS runs are expected to need iteration (dylib rpath
-    # handling, LLVMSharp osx-arm64 runtime, float formatting deltas) — don't
-    # let them block the CI signal. Remove once the job is green.
-    continue-on-error: true
 
     steps:
       - name: Checkout
