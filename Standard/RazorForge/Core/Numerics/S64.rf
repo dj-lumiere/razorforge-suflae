@@ -620,7 +620,7 @@ routine S64.is_power_of_two() -> Bool
 # Text Representation and Parsing
 # ============================================================================
 
-routine S64.$represent() -> ?Text
+routine S64.$represent() -> Text
   if me == 0s64
     return "0"
   if me > 0s64
@@ -630,7 +630,7 @@ routine S64.$represent() -> ?Text
   # yields |me| (works correctly even for S64.MIN, whose absolute value overflows S64).
   return "-" + (0u64 -% reinterpret_bits[S64, U64](me)).$represent()
 
-routine S64.$diagnose() -> ?Text
+routine S64.$diagnose() -> Text
   return "S64(" + me.$represent() + ")"
 
 ### Parses a decimal text representation of an `S64`.

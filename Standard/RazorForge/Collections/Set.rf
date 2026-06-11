@@ -384,7 +384,7 @@ routine List[T].$create(from: Set[T]) -> ?List[T]
 # ============================================================================
 
 @readonly
-routine Set[T].$represent() -> ?Text
+routine Set[T].$represent() -> Text
   if me.is_empty()
     return "{}"
   var result = "{"
@@ -398,7 +398,7 @@ routine Set[T].$represent() -> ?Text
   return steal result
 
 @readonly
-routine Set[T].$diagnose() -> ?Text
+routine Set[T].$diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().$represent() + ", {"
   var first = true
   for val in me

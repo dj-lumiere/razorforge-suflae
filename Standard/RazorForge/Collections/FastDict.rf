@@ -508,7 +508,7 @@ routine FastDictIterator[K, V].$next!() -> DictEntry[K, V]
 ### Returns a compact text representation of the dictionary contents.
 ### Entries are rendered as `key: value` pairs in insertion order.
 @readonly
-routine FastDict[K, V].$represent() -> ?Text
+routine FastDict[K, V].$represent() -> Text
   var result = "FastDict({"
   var first = true
   for entry in me
@@ -521,7 +521,7 @@ routine FastDict[K, V].$represent() -> ?Text
 
 ### Returns a diagnostic form that includes the runtime type name and live entry count.
 @readonly
-routine FastDict[K, V].$diagnose() -> ?Text
+routine FastDict[K, V].$diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().$represent() + ", {"
   var first = true
   for entry in me

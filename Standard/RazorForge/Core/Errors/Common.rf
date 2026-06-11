@@ -8,7 +8,7 @@ crashable AbsentValueError
 ### Returns the default message for absent-value failures.
 ### :returns: The resulting `Text` value.
 @readonly
-routine AbsentValueError.crash_message() -> ?Text
+routine AbsentValueError.crash_message() -> Text
   return "Attempted to access a value that is absent."
 
 ### Represents the crashable used when program execution is terminated by the
@@ -19,7 +19,7 @@ crashable UserTerminationError
 ### Returns the default message for user-requested termination.
 ### :returns: The resulting `Text` value.
 @readonly
-routine UserTerminationError.crash_message() -> ?Text
+routine UserTerminationError.crash_message() -> Text
   return "Program was stopped by user."
 
 ### Represents the crashable raised when a runtime verification check fails.
@@ -31,7 +31,7 @@ crashable VerificationFailedError
 ### Returns the default message for verification failures.
 ### :returns: The resulting `Text` value.
 @readonly
-routine VerificationFailedError.crash_message() -> ?Text
+routine VerificationFailedError.crash_message() -> Text
   return "A verification check failed."
 
 ### Represents the crashable raised when code reaches a state that should be
@@ -42,7 +42,7 @@ crashable LogicBreachedError
 ### Returns the default message for breached logic invariants.
 ### :returns: The resulting `Text` value.
 @readonly
-routine LogicBreachedError.crash_message() -> ?Text
+routine LogicBreachedError.crash_message() -> Text
   return "A logic breach was detected."
 
 ### Represents the crashable raised when a lookup cannot find a requested key.
@@ -53,5 +53,5 @@ crashable KeyNotFoundError
 ### Returns the default message for failed keyed lookup.
 ### :returns: The resulting `Text` value.
 @readonly
-routine KeyNotFoundError.crash_message() -> ?Text
+routine KeyNotFoundError.crash_message() -> Text
   return f"Key not found: {me.key}"

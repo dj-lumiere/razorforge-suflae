@@ -382,7 +382,7 @@ needs T obeys Equatable
   return false
 
 @readonly
-routine List[T].$represent() -> ?Text
+routine List[T].$represent() -> Text
   var result = "["
   var i = 0u64
   for v in me
@@ -394,7 +394,7 @@ routine List[T].$represent() -> ?Text
   return steal result
 
 @readonly
-routine List[T].$diagnose() -> ?Text
+routine List[T].$diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().$represent() + ", ["
   var i = 0u64
   for v in me

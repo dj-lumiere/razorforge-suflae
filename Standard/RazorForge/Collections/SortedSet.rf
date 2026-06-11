@@ -981,7 +981,7 @@ routine SortedSetIterator[T].$next!() -> ?T
 ### Returns a compact display form of the set contents in ascending order.
 ### :returns: The resulting `Text` value.
 @readonly
-routine SortedSet[T].$represent() -> ?Text
+routine SortedSet[T].$represent() -> Text
   var result = me.type_name() + "({"
   var i = 0u64
   for v in me
@@ -995,7 +995,7 @@ routine SortedSet[T].$represent() -> ?Text
 ### Returns a diagnostic form that includes the runtime type name and element count.
 ### :returns: The resulting `Text` value.
 @readonly
-routine SortedSet[T].$diagnose() -> ?Text
+routine SortedSet[T].$diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().$represent() + ", {"
   var i = 0u64
   for v in me

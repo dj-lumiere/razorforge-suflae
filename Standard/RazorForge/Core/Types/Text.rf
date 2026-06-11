@@ -51,7 +51,7 @@ dangerous routine Text.$destroy()
 ### Creates an empty text value.
 ### The returned value contains no characters and owns no backing buffer.
 ### :returns: The resulting `Text` value.
-routine Text.$create() -> ?Text
+routine Text.$create() -> Text
   return Text(
     data: hijacked_none[Character](),
     count: 0u64,
@@ -62,7 +62,7 @@ routine Text.$create() -> ?Text
 ### The input characters are copied into a newly allocated immutable buffer.
 ### :param from_list: The characters to copy into the new text value.
 ### :returns: The resulting `Text` value.
-routine Text.$create(from_list: List[Character]) -> ?Text
+routine Text.$create(from_list: List[Character]) -> Text
   var n = from_list.count()
   if n == 0u64
     return Text()
@@ -84,7 +84,7 @@ routine Text.$create(from_list: List[Character]) -> ?Text
 ### This is the most direct way to build one-character text values.
 ### :param from_character: The character to store.
 ### :returns: The resulting `Text` value.
-routine Text.$create(from_character: Character) -> ?Text
+routine Text.$create(from_character: Character) -> Text
   danger!
     var buf = Hijacked[Character](rf_allocate_dynamic(size: Character.data_size()))
     buf.inject(value: from_character)
@@ -98,7 +98,7 @@ routine Text.$create(from_character: Character) -> ?Text
 ### Invalid byte sequences are replaced with the Unicode replacement character.
 ### :param from: The source C string.
 ### :returns: The resulting `Text` value.
-routine Text.$create(from: CStr) -> ?Text
+routine Text.$create(from: CStr) -> Text
   if from.is_null()
     return Text()
   danger!
@@ -192,7 +192,7 @@ routine Text.$getitem!(index: U64) -> Character
 ### :param other: The text to append.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.concat(other: Text) -> ?Text
+routine Text.concat(other: Text) -> Text
   var n = me.count + other.count()
   if n == 0u64
     return Text()
@@ -219,7 +219,7 @@ routine Text.concat(other: Text) -> ?Text
 ### :param other: The text to append.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.$add(other: Text) -> ?Text
+routine Text.$add(other: Text) -> Text
   return me.concat(other)
 
 ### Returns this text repeated `count` times.
@@ -227,7 +227,7 @@ routine Text.$add(other: Text) -> ?Text
 ### :param count: The number of repetitions to produce.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.$mul[I obeys Integral](count: I) -> ?Text
+routine Text.$mul[I obeys Integral](count: I) -> Text
   var times = U64(count)
   if times == 0u64 or me.count == 0u64
     return Text()
@@ -435,7 +435,7 @@ routine Text.find!(other: Text) -> U64
 ### Case conversion follows the behavior defined on `Character`.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.to_uppercase() -> ?Text
+routine Text.to_uppercase() -> Text
   var result = List[Character]()
   for i in 0u64 til me.count
     result.add_last(me[i].to_uppercase())
@@ -445,7 +445,7 @@ routine Text.to_uppercase() -> ?Text
 ### Case conversion follows the behavior defined on `Character`.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.to_lowercase() -> ?Text
+routine Text.to_lowercase() -> Text
   var result = List[Character]()
   for i in 0u64 til me.count
     result.add_last(me[i].to_lowercase())
@@ -455,7 +455,7 @@ routine Text.to_lowercase() -> ?Text
 ### Whitespace is identified using `Character.is_whitespace()`.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.trim() -> ?Text
+routine Text.trim() -> Text
   var start: U64 = 0u64
   loop
     if start >= me.count
@@ -479,7 +479,7 @@ routine Text.trim() -> ?Text
 ### Trailing content is preserved unchanged.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.trim_start() -> ?Text
+routine Text.trim_start() -> Text
   var start: U64 = 0u64
   loop
     if start >= me.count
@@ -496,7 +496,7 @@ routine Text.trim_start() -> ?Text
 ### Leading content is preserved unchanged.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.trim_end() -> ?Text
+routine Text.trim_end() -> Text
   if me.is_empty()
     return me
   var end_idx = me.count
@@ -517,7 +517,7 @@ routine Text.trim_end() -> ?Text
 ### :param new: The replacement value.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.replace(old: Text, new: Text) -> ?Text
+routine Text.replace(old: Text, new: Text) -> Text
   if old.is_empty()
     return me
   var old_count = old.count()
@@ -548,7 +548,7 @@ routine Text.replace(old: Text, new: Text) -> ?Text
 ### :param prefix: The prefix to remove if present.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.remove_prefix(prefix: Text) -> ?Text
+routine Text.remove_prefix(prefix: Text) -> Text
   if me.starts_with(prefix)
     var result = List[Character]()
     for i in prefix.count() til me.count
@@ -561,7 +561,7 @@ routine Text.remove_prefix(prefix: Text) -> ?Text
 ### :param suffix: The suffix to remove if present.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.remove_suffix(suffix: Text) -> ?Text
+routine Text.remove_suffix(suffix: Text) -> Text
   if me.ends_with(suffix)
     var result = List[Character]()
     var end_idx = me.count - suffix.count()
@@ -575,14 +575,14 @@ routine Text.remove_suffix(suffix: Text) -> ?Text
 ### :param times: The number of repetitions to produce.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.repeat(times: U64) -> ?Text
+routine Text.repeat(times: U64) -> Text
   return me.$mul[U64](count: times)
 
 ### Returns a copy with the value order reversed.
 ### Characters are reversed by position; no grapheme-aware processing is applied.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.reverse() -> ?Text
+routine Text.reverse() -> Text
   var result = List[Character]()
   var i = me.count
   loop
@@ -598,7 +598,7 @@ routine Text.reverse() -> ?Text
 ### :param fill: The fill character to use.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.pad_start(width: U64, fill: Character) -> ?Text
+routine Text.pad_start(width: U64, fill: Character) -> Text
   if me.count >= width
     return me
   var result = List[Character]()
@@ -615,7 +615,7 @@ routine Text.pad_start(width: U64, fill: Character) -> ?Text
 ### :param fill: The fill character to use.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.pad_end(width: U64, fill: Character) -> ?Text
+routine Text.pad_end(width: U64, fill: Character) -> Text
   if me.count >= width
     return me
   var result = List[Character]()
@@ -688,7 +688,7 @@ routine Text.split(separator: Text) -> ?List[Text]
 ### :param parts: The parts to combine.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.join(parts: List[Text]) -> ?Text
+routine Text.join(parts: List[Text]) -> Text
   if parts.is_empty()
     return Text()
   var result = List[Character]()
@@ -736,14 +736,14 @@ routine Text.words() -> ?List[Text]
 ### For `Text`, the display form is the value itself.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.$represent() -> ?Text
+routine Text.$represent() -> Text
   return me
 
 ### Returns the diagnostic representation of this text.
 ### The result includes the type name and character count for debugging.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Text.$diagnose() -> ?Text
+routine Text.$diagnose() -> Text
   return f"Text(count: {me.count}, \"{me}\")"
 
 ### Represents the iterator used to traverse a `Text` value.
@@ -759,7 +759,7 @@ entity TextIterator
 ### The iterator starts at index `0`.
 ### :returns: The resulting `TextIterator` value.
 @readonly
-routine Text.$iter() -> ?TextIterator
+routine Text.$iter() -> TextIterator
   return TextIterator(text: me, index: 0u64)
 
 ### Returns the next character from this iterator.

@@ -54,7 +54,7 @@ routine FileHandle.close()
 ### Reads the remaining file contents as text.
 ### Decoding uses lossy UTF-8 conversion for invalid byte sequences.
 ### :returns: The resulting `Text` value.
-routine FileHandle.read_all() -> ?Text
+routine FileHandle.read_all() -> Text
   var ptr = rf_file_read_all(me.fd)
   var len = rf_get_result_len()
   var bytes = Bytes(ptr: ptr, count: len)
@@ -63,7 +63,7 @@ routine FileHandle.read_all() -> ?Text
 ### Reads the next line as text.
 ### The returned text is decoded from the underlying byte stream using lossy UTF-8 conversion.
 ### :returns: The resulting `Text` value.
-routine FileHandle.read_line() -> ?Text
+routine FileHandle.read_line() -> Text
   var ptr = rf_file_read_line(me.fd)
   var len = rf_get_result_len()
   var bytes = Bytes(ptr: ptr, count: len)
@@ -73,7 +73,7 @@ routine FileHandle.read_line() -> ?Text
 ### Fewer bytes may be returned when end-of-file is reached first.
 ### :param count: The maximum byte count to read.
 ### :returns: The resulting `Bytes` value.
-routine FileHandle.read_bytes(count: U64) -> ?Bytes
+routine FileHandle.read_bytes(count: U64) -> Bytes
   var ptr = rf_file_read_bytes(me.fd, count)
   var len = rf_get_result_len()
   return Bytes(ptr: ptr, count: len)
@@ -145,7 +145,7 @@ routine FileHandle.$exit()
 ### This is the simplest one-shot helper for whole-file text reads.
 ### :param path: The path to read.
 ### :returns: The resulting `Text` value.
-routine read_all!(path: Text) -> ?Text
+routine read_all!(path: Text) -> Text
   var file = open!(path, mode: FileMode.READ)
   var content = file.read_all()
   file.close()

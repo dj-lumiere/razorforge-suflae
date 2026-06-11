@@ -604,7 +604,7 @@ routine S128.signum() -> S128
 # Text Representation and Parsing
 # ============================================================================
 
-routine S128.$represent() -> ?Text
+routine S128.$represent() -> Text
   if me == 0s128
     return "0"
   if me > 0s128
@@ -614,7 +614,7 @@ routine S128.$represent() -> ?Text
   # yields |me| (works correctly even for S128.MIN, whose absolute value overflows S128).
   return "-" + (0u128 -% reinterpret_bits[S128, U128](me)).$represent()
 
-routine S128.$diagnose() -> ?Text
+routine S128.$diagnose() -> Text
   return "S128(" + me.$represent() + ")"
 
 ### Parses a decimal string into an `S128`, accepting an optional leading `+` or `−` sign.

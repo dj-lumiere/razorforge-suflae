@@ -116,39 +116,39 @@ routine RoutineInfo.$eq(you: Referring[RoutineInfo]) -> Bool
 ### :returns: The unqualified type name, excluding the module path.
 @readonly
 @innate
-common routine T.type_name() -> ?Text
+common routine T.type_name() -> Text
 ### Returns the unqualified name of this value's type.
 ### This excludes the declaring module path and mirrors the common-form routine.
 ### :returns: The unqualified type name, excluding the module path.
 @readonly
 @innate
-routine T.type_name() -> ?Text
+routine T.type_name() -> Text
 
 ### Returns the module this type is declared in.
 ### Types in the root module return the empty module name.
 ### :returns: The module name, or an empty string for types in the root module.
 @readonly
 @innate
-common routine T.module_name() -> ?Text
+common routine T.module_name() -> Text
 ### Returns the module this value's type is declared in.
 ### Types in the root module return the empty module name.
 ### :returns: The module name, or an empty string for types in the root module.
 @readonly
 @innate
-routine T.module_name() -> ?Text
+routine T.module_name() -> Text
 
 ### Returns the fully qualified `Module.TypeName` of this type.
 ### This is the canonical textual identity used by reflection helpers.
 ### :returns: The fully qualified `Module.TypeName` string.
 @readonly
 @innate
-common routine T.full_type_name() -> ?Text
+common routine T.full_type_name() -> Text
 ### Returns the fully qualified `Module.TypeName` of this value's type.
 ### This is the canonical textual identity used by reflection helpers.
 ### :returns: The fully qualified `Module.TypeName` string.
 @readonly
 @innate
-routine T.full_type_name() -> ?Text
+routine T.full_type_name() -> Text
 
 ### Returns a stable compile-time hash of the fully qualified type name.
 ### The value is deterministic for a given type identity within the compiler.
@@ -351,7 +351,7 @@ routine T.member_variable_info() -> ?List[FieldInfo]
 ### :returns: The variable name as written at the call site.
 @readonly
 @innate
-routine T.var_name() -> ?Text
+routine T.var_name() -> Text
 
 # ============================================================================
 # Standalone platform and build constants
@@ -378,24 +378,24 @@ routine word_size() -> ByteSize
 ### Returns the target operating system name (e.g. `"windows"`, `"linux"`, `"macos"`).
 ### :returns: The OS name string, such as `"windows"`, `"linux"`, or `"macos"`.
 @innate
-routine target_os() -> ?Text
+routine target_os() -> Text
 
 ### Returns the target CPU architecture name (e.g. `"x86_64"`, `"aarch64"`).
 ### :returns: The architecture name string, such as `"x86_64"` or `"aarch64"`.
 @innate
-routine target_arch() -> ?Text
+routine target_arch() -> Text
 
 ### Returns the RazorForge compiler version string.
 ### This is derived from the compiler build, not from project metadata.
 ### :returns: The compiler version string.
 @innate
-routine builder_version() -> ?Text
+routine builder_version() -> Text
 
 ### Returns the ISO-8601 UTC timestamp of this build.
 ### This is the compiler-side build timestamp captured during generation.
 ### :returns: The ISO-8601 UTC build timestamp string.
 @innate
-routine build_timestamp() -> ?Text
+routine build_timestamp() -> Text
 
 ### Returns the current build mode.
 ### This reflects the mode selected for the current compilation.

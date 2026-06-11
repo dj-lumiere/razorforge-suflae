@@ -36,7 +36,7 @@ import IO/Console
 
 # `!` marks a failable routine. The compiler auto-generates try_/check_/lookup_
 # variants, so callers choose how to consume failure — no exceptions involved.
-routine get_text!(n: S64) -> ?Text
+routine get_text!(n: S64) -> Text
   when n
     == 0 => throw DivisionByZeroError()
     == 1 => return "hello"

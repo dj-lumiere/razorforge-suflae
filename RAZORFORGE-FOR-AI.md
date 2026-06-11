@@ -142,7 +142,7 @@ routine add(a: S64, b: S64) -> S64
 routine Point.magnitude() -> F64        # method: Type.name, receiver is `me`
   return F64(me.x * me.x + me.y * me.y).sqrt()
 
-routine get_text!(n: S64) -> ?Text      # `!` = failable
+routine get_text!(n: S64) -> Text      # `!` = failable
   when n
     == 0 => throw DivisionByZeroError()
     else => return "ok"

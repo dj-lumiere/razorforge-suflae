@@ -1029,7 +1029,7 @@ routine SortedDictIterator[K, V].$next!() -> DictEntry[K, V]
 # ============================================================================
 
 @readonly
-routine SortedDict[K, V].$represent() -> ?Text
+routine SortedDict[K, V].$represent() -> Text
   var result = me.type_name() + "({"
   var i = 0u64
   for entry in me
@@ -1041,7 +1041,7 @@ routine SortedDict[K, V].$represent() -> ?Text
   return steal result
 
 @readonly
-routine SortedDict[K, V].$diagnose() -> ?Text
+routine SortedDict[K, V].$diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().$represent() + ", {"
   var i = 0u64
   for entry in me

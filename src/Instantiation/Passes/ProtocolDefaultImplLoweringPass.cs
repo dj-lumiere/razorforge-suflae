@@ -13,7 +13,7 @@ namespace Compiler.Instantiation.Passes;
 /// Lowers protocol default-impl routines to per-implementer routines at the AST level.
 ///
 /// A protocol-extension routine such as
-/// <code>routine Iterable[Text].join(separator: Text) -> ?Text</code>
+/// <code>routine Iterable[Text].join(separator: Text) -> Text</code>
 /// carries a real body whose <c>me</c> is typed as the protocol itself. The body's
 /// nested calls (e.g. <c>for part in me</c> -> <c>me.$iter()</c> / <c>me.$next!()</c>)
 /// cannot resolve statically against an abstract protocol owner; codegen needs the

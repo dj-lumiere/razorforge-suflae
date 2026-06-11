@@ -207,7 +207,7 @@ routine Iterable[T].last_or_default(default: T) -> ?T
 ### :param separator: The text inserted between successive parts.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Iterable[Text].join(separator: Text) -> ?Text
+routine Iterable[Text].join(separator: Text) -> Text
   var result = List[Character]()
   var first = true
   for part in me

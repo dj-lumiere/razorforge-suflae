@@ -9,4 +9,4 @@ protocol Representable
   ### should prefer clarity over implementation detail.
   ### :returns: A human-readable text representation of this value.
   @[readonly, generated]
-  routine Me.$represent() -> ?Text
+  routine Me.$represent() -> Text

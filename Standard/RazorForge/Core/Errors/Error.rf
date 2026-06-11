@@ -11,5 +11,5 @@ crashable RuntimeError
 ### specific crashables whenever possible.
 ### :returns: The resulting `Text` value.
 @readonly
-routine RuntimeError.crash_message() -> ?Text
+routine RuntimeError.crash_message() -> Text
   return "A runtime error occurred."

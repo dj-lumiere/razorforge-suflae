@@ -7,7 +7,7 @@ import IO/Console
 routine subtract(a: S64, b: S64) -> S64
   return a - b
 
-routine greet(name: Text, prefix: Text = "Hello", suffix: Text = "!") -> ?Text
+routine greet(name: Text, prefix: Text = "Hello", suffix: Text = "!") -> Text
   return prefix + ", " + name + suffix
 
 routine start()

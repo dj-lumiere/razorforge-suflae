@@ -6,5 +6,5 @@ crashable InvalidDigitError
 
 ### Returns the default message for invalid ASCII decimal digit failures.
 ### :returns: The resulting `Text` value.
-routine InvalidDigitError.crash_message() -> ?Text
+routine InvalidDigitError.crash_message() -> Text
   return "The byte is not a valid ASCII decimal digit (0-9)."

@@ -8,7 +8,7 @@ crashable MemoryAllocationError
 
 ### Returns the default message for allocation failure.
 ### :returns: The resulting `Text` value.
-routine MemoryAllocationError.crash_message() -> ?Text
+routine MemoryAllocationError.crash_message() -> Text
   return f"Failed to allocate {me.requested_bytes} bytes"
 
 ### Represents the crashable raised when a raw memory access extends beyond the
@@ -23,7 +23,7 @@ crashable MemoryBoundsError
 
 ### Returns the default message for out-of-bounds memory access.
 ### :returns: The resulting `Text` value.
-routine MemoryBoundsError.crash_message() -> ?Text
+routine MemoryBoundsError.crash_message() -> Text
   return f"Memory access at offset {me.offset} with size {me.size} exceeds allocated {me.allocated} bytes"
 
 ### Represents the crashable raised when a requested slice would extend beyond
@@ -38,5 +38,5 @@ crashable SliceBoundsError
 
 ### Returns the default message for invalid slice creation.
 ### :returns: The resulting `Text` value.
-routine SliceBoundsError.crash_message() -> ?Text
+routine SliceBoundsError.crash_message() -> Text
   return f"Slice from {me.offset} with length {me.length} exceeds allocated {me.allocated} bytes"

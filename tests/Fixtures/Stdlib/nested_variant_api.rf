@@ -15,13 +15,13 @@ variant Outer
   None
 
 @readonly
-routine describe_inner(i: Inner) -> ?Text
+routine describe_inner(i: Inner) -> Text
   when i
     is S32 v => return f"inner-s32:{v}"
     is None  => return "inner-none"
 
 @readonly
-routine describe(o: Outer) -> ?Text
+routine describe(o: Outer) -> Text
   when o
     is Inner i => return describe_inner(i: i)
     is Text t  => return f"text:{t}"

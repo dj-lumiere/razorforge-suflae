@@ -246,7 +246,7 @@ routine LocalMoment.$cmp(you: LocalMoment) -> ComparisonSign
 
 ### Returns the display form of this local moment including its UTC offset.
 ### :returns: The resulting `Text` value.
-routine LocalMoment.$represent() -> ?Text
+routine LocalMoment.$represent() -> Text
   var local = me.local_moment()
   var y = local.year()
   var mo = local.month()
@@ -271,7 +271,7 @@ routine LocalMoment.$represent() -> ?Text
 
 ### Returns the diagnostic form of this local moment.
 ### :returns: The resulting `Text` value.
-routine LocalMoment.$diagnose() -> ?Text
+routine LocalMoment.$diagnose() -> Text
   return "LocalMoment(moment: " + me.moment.$diagnose() + ", offset: " + me.offset.$diagnose() + ")"
 
 # ============================================================================

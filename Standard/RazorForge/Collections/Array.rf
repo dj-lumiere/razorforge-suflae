@@ -165,7 +165,7 @@ routine ArrayIterator[T, N].$next!() -> ?T
 # Display
 # ============================================================================
 
-routine Array[T, N].$represent() -> ?Text
+routine Array[T, N].$represent() -> Text
   var result = "Array(["
   for i in 0u64 til N
     if i > 0u64
@@ -174,7 +174,7 @@ routine Array[T, N].$represent() -> ?Text
   result = result + "])"
   return result
 
-routine Array[T, N].$diagnose() -> ?Text
+routine Array[T, N].$diagnose() -> Text
   var result = me.full_type_name() + "(["
   for i in 0u64 til N
     if i > 0u64

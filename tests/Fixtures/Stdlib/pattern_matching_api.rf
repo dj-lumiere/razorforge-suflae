@@ -7,14 +7,14 @@ choice Color
   GREEN
   BLUE
 
-routine classify(n: S64) -> ?Text
+routine classify(n: S64) -> Text
   when n
     == 0       => return "zero"
     < 0        => return "negative"
     > 100      => return "huge"
     else       => return "positive"
 
-routine name_color(c: Color) -> ?Text
+routine name_color(c: Color) -> Text
   when c
     is Color.RED   => return "red"
     is Color.GREEN => return "green"

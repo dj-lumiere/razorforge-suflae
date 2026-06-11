@@ -7,5 +7,5 @@ crashable NegativeExponentError
 
 ### Returns the default message for unsupported negative integer exponents.
 ### :returns: The resulting `Text` value.
-routine NegativeExponentError.crash_message() -> ?Text
+routine NegativeExponentError.crash_message() -> Text
   return "Negative exponent results in a fraction, which is not supported for integer types."

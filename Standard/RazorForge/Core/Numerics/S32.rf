@@ -631,7 +631,7 @@ routine S32.is_power_of_two() -> Bool
 # Text Representation and Parsing
 # ============================================================================
 
-routine S32.$represent() -> ?Text
+routine S32.$represent() -> Text
   if me == 0s32
     return "0"
   if me > 0s32
@@ -641,7 +641,7 @@ routine S32.$represent() -> ?Text
   # yields |me| (works correctly even for S32.MIN, whose absolute value overflows S32).
   return "-" + (0u32 -% reinterpret_bits[S32, U32](me)).$represent()
 
-routine S32.$diagnose() -> ?Text
+routine S32.$diagnose() -> Text
   return "S32(" + me.$represent() + ")"
 
 ### Parses a decimal string into an `S32`, accepting an optional leading `+` or `−` sign.

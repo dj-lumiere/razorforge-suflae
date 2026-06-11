@@ -371,14 +371,14 @@ common routine D64.from_bits(bits: U64) -> D64
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-routine D64.$represent() -> ?Text
+routine D64.$represent() -> Text
   var bits = reinterpret_bits[D64, U64](me)
   var cstr_result = rf_d64_to_string(bits)
   return Text(from: CStr(from_ptr: cstr_result))
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-routine D64.$diagnose() -> ?Text
+routine D64.$diagnose() -> Text
   return "D64(" + me.$represent() + ")"
 
 ### Parses a decimal literal into a `D64`.

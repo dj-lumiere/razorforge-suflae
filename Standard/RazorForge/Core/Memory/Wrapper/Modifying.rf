@@ -63,7 +63,7 @@ routine Modifying[T].$control() -> ?T
 ### Returns the display form of the modifying entity.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Modifying[T].$represent() -> ?Text
+routine Modifying[T].$represent() -> Text
   danger!
     var hijacked = Hijacked[T](me)
     return hijacked.as_entity().$represent()
@@ -71,7 +71,7 @@ routine Modifying[T].$represent() -> ?Text
 ### Returns the diagnostic form of the modifying entity.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Modifying[T].$diagnose() -> ?Text
+routine Modifying[T].$diagnose() -> Text
   danger!
     var hijacked = Hijacked[T](me)
     return me.type_name() + "(" + hijacked.as_entity().$diagnose() + ")"

@@ -132,7 +132,7 @@ routine Address.$sub(offset: ByteSize) -> Address
 ### easier to scan in diagnostics.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Address.$represent() -> ?Text
+routine Address.$represent() -> Text
   # Format as 0xXXXX_XXXX_XXXX_XXXX (64-bit hex with underscore groups)
   var digits = List[Character]()
   digits.add_last(Character(0x0030u32))
@@ -153,7 +153,7 @@ routine Address.$represent() -> ?Text
 ### Returns the diagnostic form of this address.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Address.$diagnose() -> ?Text
+routine Address.$diagnose() -> Text
   return "Address(" + me.$represent() + ")"
 
 ### Parses an address from hexadecimal text.

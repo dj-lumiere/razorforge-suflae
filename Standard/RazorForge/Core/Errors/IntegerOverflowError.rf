@@ -7,5 +7,5 @@ crashable IntegerOverflowError
 
 ### Returns the default message for integer conversion overflow.
 ### :returns: The resulting `Text` value.
-routine IntegerOverflowError.crash_message() -> ?Text
+routine IntegerOverflowError.crash_message() -> Text
   return "Integer overflow: value does not fit in the target type."

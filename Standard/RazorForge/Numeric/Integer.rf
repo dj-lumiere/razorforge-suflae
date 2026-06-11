@@ -27,7 +27,7 @@ record Integer obeys Assignable, Integral, Divisible, Negatable, Ordered, Hashab
 ### Use this overload when the surrounding context needs an explicit `Integer`
 ### instead of a fixed-width literal.
 ### :returns: The resulting `Integer` value.
-routine Integer.$create() -> ?Integer
+routine Integer.$create() -> Integer
   var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   return int
 
@@ -36,7 +36,7 @@ routine Integer.$create() -> ?Integer
 ### so the result is no longer limited by `S64` range after construction.
 ### :param value: The initial signed value.
 ### :returns: The resulting `Integer` value.
-routine Integer.$create(value: S64) -> ?Integer
+routine Integer.$create(value: S64) -> Integer
   var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_set_i64(handle: int.handle, value: value)
   return int
@@ -46,7 +46,7 @@ routine Integer.$create(value: S64) -> ?Integer
 ### unsigned integer data.
 ### :param value: The initial unsigned value.
 ### :returns: The resulting `Integer` value.
-routine Integer.$create(value: U64) -> ?Integer
+routine Integer.$create(value: U64) -> Integer
   var int = Integer(handle: rf_bigint_new(), ctrl: ImmutableSharedController().hijack())
   rf_bigint_set_u64(handle: int.handle, value: value)
   return int
@@ -333,7 +333,7 @@ routine U64.$create!(from: Integer) -> U64
 ### so the f-string machinery can dispatch without supplying a radix.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Integer.$represent() -> ?Text
+routine Integer.$represent() -> Text
   return me.represent_radix(radix: 10_s32)
 
 ### Formats this value as text in the requested radix.

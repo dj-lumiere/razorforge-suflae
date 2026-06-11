@@ -182,7 +182,7 @@ routine Character.to_byte() -> Byte
 ### The display form emits the character itself rather than its numeric code.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Character.$represent() -> ?Text
+routine Character.$represent() -> Text
   var list = List[Character]()
   list.add_last(me)
   return Text(from_list: steal list)
@@ -192,7 +192,7 @@ routine Character.$represent() -> ?Text
 ### code point.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Character.$diagnose() -> ?Text
+routine Character.$diagnose() -> Text
   return "Character(" + me.$represent() + ", " + U32(me).$represent() + ")"
 
 # ============================================================================

@@ -859,7 +859,7 @@ routine SortedListIterator[T].$next!() -> ?T
 # ============================================================================
 
 @readonly
-routine SortedList[T].$represent() -> ?Text
+routine SortedList[T].$represent() -> Text
   var result = me.type_name() + "(["
   var i = 0u64
   for v in me
@@ -871,7 +871,7 @@ routine SortedList[T].$represent() -> ?Text
   return steal result
 
 @readonly
-routine SortedList[T].$diagnose() -> ?Text
+routine SortedList[T].$diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().$represent() + ", ["
   var i = 0u64
   for v in me

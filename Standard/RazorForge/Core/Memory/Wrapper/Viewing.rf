@@ -54,7 +54,7 @@ routine Viewing[T].$refer() -> ?T
 ### Returns the display form of the viewed entity.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Viewing[T].$represent() -> ?Text
+routine Viewing[T].$represent() -> Text
   danger!
     var hijacked = Hijacked[T](me)
     return hijacked.as_entity().$represent()
@@ -62,7 +62,7 @@ routine Viewing[T].$represent() -> ?Text
 ### Returns the diagnostic form of the viewed entity.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Viewing[T].$diagnose() -> ?Text
+routine Viewing[T].$diagnose() -> Text
   danger!
     var hijacked = Hijacked[T](me)
     return me.type_name() + "(" + hijacked.as_entity().$diagnose() + ")"

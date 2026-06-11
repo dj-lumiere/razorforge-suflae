@@ -456,14 +456,14 @@ routine F64.$create(from: Decimal) -> F64
 ### (no args) for f-string dispatch. (`decimal_places: -1` selects decNumber's free-form output.)
 ### :returns: The resulting `Text` value.
 @readonly
-routine Decimal.$represent() -> ?Text
+routine Decimal.$represent() -> Text
   return me.represent_with_places(decimal_places: -1_s32)
 
 ### Formats this decimal as text with the requested fractional precision.
 ### :param decimal_places: The number of decimal places to emit.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Decimal.represent_with_places(decimal_places: S32) -> ?Text
+routine Decimal.represent_with_places(decimal_places: S32) -> Text
   var CStr = rf_bigdec_get_str(handle: me.handle, decimal_places: decimal_places)
   var text = Text(from: CStr)
   rf_invalidate(pointer_to_int[Byte, Address](CStr.ptr))

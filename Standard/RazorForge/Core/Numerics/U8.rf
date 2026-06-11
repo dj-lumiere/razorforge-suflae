@@ -597,10 +597,10 @@ routine U8.is_odd() -> Bool
 # Text Representation and Parsing
 # ============================================================================
 
-routine U8.$represent() -> ?Text
+routine U8.$represent() -> Text
   return U32(me).$represent()
 
-routine U8.$diagnose() -> ?Text
+routine U8.$diagnose() -> Text
   return "U8(" + me.$represent() + ")"
 
 ### Parses a decimal string into a `U8`.

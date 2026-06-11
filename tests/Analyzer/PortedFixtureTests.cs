@@ -48,7 +48,7 @@ public class PortedFixtureTests
     public void Analyze_FailableReturningEntity_TryForm_WhenIsNone_Resolves()
     {
         string source = """
-                        routine get_text!(n: S64) -> ?Text
+                        routine get_text!(n: S64) -> Text
                           when n
                             == 0 => absent
                             == 1 => return "hello"

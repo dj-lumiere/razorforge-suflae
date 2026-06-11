@@ -7,11 +7,11 @@ crashable BadInputError
   pass
 
 @readonly
-routine BadInputError.crash_message() -> ?Text
+routine BadInputError.crash_message() -> Text
   return "Input was not in the accepted range."
 
 @readonly
-routine BadInputError.crash_title() -> ?Text
+routine BadInputError.crash_title() -> Text
   return "BadInputError"
 
 routine validate!(n: S64) -> S64

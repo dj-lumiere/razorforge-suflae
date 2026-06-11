@@ -14,12 +14,12 @@ record Blank
 ### Returns the display form of `Blank`.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Blank.$represent() -> ?Text
+routine Blank.$represent() -> Text
   return "Blank"
 
 ### Returns the diagnostic form of `Blank`.
 ### For this type, the display and diagnostic forms are identical.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Blank.$diagnose() -> ?Text
+routine Blank.$diagnose() -> Text
   return "Blank"

@@ -10,7 +10,7 @@ crashable IndexOutOfBoundsError
 
 ### Returns the default message for failed indexed access.
 ### :returns: The resulting `Text` value.
-routine IndexOutOfBoundsError.crash_message() -> ?Text
+routine IndexOutOfBoundsError.crash_message() -> Text
   return f"Index {me.index} is out of bounds for collection with {me.count} elements"
 
 ### Represents the crashable raised when an operation requires at least one
@@ -21,7 +21,7 @@ crashable EmptyCollectionError
 
 ### Returns the default message for invalid empty-collection operations.
 ### :returns: The resulting `Text` value.
-routine EmptyCollectionError.crash_message() -> ?Text
+routine EmptyCollectionError.crash_message() -> Text
   return f"Cannot {me.operation} on empty collection"
 
 ### Represents the crashable raised when a search operation cannot find any
@@ -31,5 +31,5 @@ crashable ElementNotFoundError
 
 ### Returns the default message for failed element search.
 ### :returns: The resulting `Text` value.
-routine ElementNotFoundError.crash_message() -> ?Text
+routine ElementNotFoundError.crash_message() -> Text
   return "No matching element found"

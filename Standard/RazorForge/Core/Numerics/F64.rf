@@ -392,13 +392,13 @@ common routine F64.from_bits(bits: U64) -> F64
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-routine F64.$represent() -> ?Text
+routine F64.$represent() -> Text
   var cstr_result = rf_format_F64(me)
   return Text(from: CStr(from_ptr: cstr_result))
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-routine F64.$diagnose() -> ?Text
+routine F64.$diagnose() -> Text
   return "F64(" + me.$represent() + ")"
 
 ### Parses a decimal float literal into an `F64`.

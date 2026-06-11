@@ -437,7 +437,7 @@ routine DictIterator[K, V].$next!() -> DictEntry[K, V]
 # ============================================================================
 
 @readonly
-routine Dict[K, V].$represent() -> ?Text
+routine Dict[K, V].$represent() -> Text
   if me.is_empty()
     return "{:}"
   var result = "{"
@@ -451,7 +451,7 @@ routine Dict[K, V].$represent() -> ?Text
   return steal result
 
 @readonly
-routine Dict[K, V].$diagnose() -> ?Text
+routine Dict[K, V].$diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().$represent() + ", {"
   var first = true
   for entry in me

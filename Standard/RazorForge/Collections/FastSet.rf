@@ -403,7 +403,7 @@ routine FastSetIterator[T].$next!() -> ?T
 # ============================================================================
 
 @readonly
-routine FastSet[T].$represent() -> ?Text
+routine FastSet[T].$represent() -> Text
   var result = "FastSet({"
   var first = true
   for val in me
@@ -415,7 +415,7 @@ routine FastSet[T].$represent() -> ?Text
   return steal result
 
 @readonly
-routine FastSet[T].$diagnose() -> ?Text
+routine FastSet[T].$diagnose() -> Text
   var result = me.full_type_name() + "(count: " + me.count().$represent() + ", {"
   var first = true
   for val in me

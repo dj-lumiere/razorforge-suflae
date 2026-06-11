@@ -382,14 +382,14 @@ common routine D32.from_bits(bits: U32) -> D32
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-routine D32.$represent() -> ?Text
+routine D32.$represent() -> Text
   var bits = reinterpret_bits[D32, U32](me)
   var cstr_result = rf_d32_to_string(bits)
   return Text(from: CStr(from_ptr: cstr_result))
 
 ### Returns the textual representation of this value.
 ### :returns: The resulting `Text` value.
-routine D32.$diagnose() -> ?Text
+routine D32.$diagnose() -> Text
   return "D32(" + me.$represent() + ")"
 
 ### Parses a decimal literal into a `D32`.

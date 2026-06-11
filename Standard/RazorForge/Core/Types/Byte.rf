@@ -131,7 +131,7 @@ routine Byte.hex_value!() -> U8
 ### encoding context.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Byte.$represent() -> ?Text
+routine Byte.$represent() -> Text
   var digits = List[Character]()
   digits.add_last(Character(0x005Cu32))  # \
   digits.add_last(Character(0x0078u32))  # x
@@ -153,7 +153,7 @@ routine Byte.$represent() -> ?Text
 ### byte representation.
 ### :returns: The resulting `Text` value.
 @readonly
-routine Byte.$diagnose() -> ?Text
+routine Byte.$diagnose() -> Text
   return "Byte(" + U8(me).$represent() + ", " + me.$represent() + ")"
 
 # ============================================================================
