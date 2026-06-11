@@ -182,7 +182,9 @@ internal partial class Program
     /// <summary>
     /// Resolves the entry file, project root, optional output file, build mode, dump-ast, and sa-timing flags
     /// for build/buildandrun/check commands.
-    /// When no explicit entry file is given, searches for a razorforge.toml manifest.
+    /// Searches for a razorforge.toml manifest in all cases: when no entry file is given the
+    /// manifest supplies the executable; when an explicit entry file is given it overrides
+    /// [target] executable but the manifest's other settings still apply.
     /// ALL build configuration lives in the manifest's [target] section (executable, library,
     /// mode, dump-ast, sa-timing, show-build-stages) — the CLI deliberately takes no flags.
     /// Returns (entryFile, projectRoot, outputFile, buildMode, dumpAst, saTiming, requireStartRoutine, showBuildStages); entryFile is null on error.
@@ -222,8 +224,11 @@ internal partial class Program
             }
         }
 
-        // Explicit source file given — use it directly (debug mode, no manifest)
-        // .toml files are treated as manifests, not source files
+        // Explicit source file given — use it as the entry point, but still honor the
+        // nearest razorforge.toml (walking up from the file's directory): the manifest
+        // remains the single source of build configuration (mode, library deps, debug
+        // fields) even for single-file builds; only [target] executable is overridden.
+        // .toml files are treated as manifests, not source files.
         if (explicitEntry != null &&
             !explicitEntry.EndsWith(value: ".toml", comparisonType: StringComparison.OrdinalIgnoreCase))
         {
@@ -233,11 +238,48 @@ internal partial class Program
                 return (null, null, null, RfBuildMode.Debug, false, false, false, false, []);
             }
 
-            string projectRoot =
+            string entryDir =
                 Path.GetDirectoryName(path: Path.GetFullPath(path: explicitEntry)) ?? ".";
-            // Bare .rf source given without manifest — assume an executable build so codegen
-            // knows to synthesize @main and SA can require a 'start' routine.
-            return (explicitEntry, projectRoot, outputFile, RfBuildMode.Debug, false, false, true, false, []);
+            string? nearbyManifest = ManifestLoader.FindManifest(startDir: entryDir);
+            if (nearbyManifest == null)
+            {
+                // Truly manifest-less — debug defaults. Assume an executable build so
+                // codegen knows to synthesize @main and SA can require a 'start' routine.
+                return (explicitEntry, entryDir, outputFile, RfBuildMode.Debug, false, false,
+                    true, false, []);
+            }
+
+            try
+            {
+                ProjectManifest manifest = ManifestLoader.Load(tomlPath: nearbyManifest,
+                    resolveExecutable: false);
+                BuildTarget target = manifest.Target;
+                RfBuildMode buildMode = ParseBuildMode(mode: target.Mode);
+
+                if (target.ShowBuildStages)
+                {
+                    Console.WriteLine(value: $"Using manifest: {nearbyManifest}");
+                    Console.WriteLine(
+                        value:
+                        $"Executable: {explicitEntry} ({target.Mode}, entry from command line)");
+                    if (target.Libraries.Count > 0)
+                    {
+                        Console.WriteLine(
+                            value:
+                            $"Libraries: {string.Join(separator: ", ", values: target.Libraries)}");
+                    }
+                }
+
+                return (explicitEntry, manifest.ManifestDirectory, outputFile, buildMode,
+                    target.DumpAst, target.SaTiming, true, target.ShowBuildStages,
+                    target.Libraries);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(
+                    value: $"Error loading {ManifestLoader.ManifestFileName}: {ex.Message}");
+                return (null, null, null, RfBuildMode.Debug, false, false, false, false, []);
+            }
         }
 
         // No explicit entry (or .toml manifest given) — load manifest
@@ -268,16 +310,7 @@ internal partial class Program
             ProjectManifest manifest = ManifestLoader.Load(tomlPath: manifestPath);
             BuildTarget target = manifest.Target;
 
-            RfBuildMode buildMode = target.Mode.ToLowerInvariant() switch
-            {
-                "debug" => RfBuildMode.Debug,
-                "release" => RfBuildMode.Release,
-                "release-time" => RfBuildMode.ReleaseTime,
-                "release-space" => RfBuildMode.ReleaseSpace,
-                _ => throw new InvalidOperationException(
-                    $"Unknown build mode '{target.Mode}' in [target]. " +
-                    "Valid modes are: debug, release, release-time, release-space.")
-            };
+            RfBuildMode buildMode = ParseBuildMode(mode: target.Mode);
 
             bool showBuildStages = target.ShowBuildStages;
             if (showBuildStages)
@@ -301,6 +334,23 @@ internal partial class Program
                 value: $"Error loading {ManifestLoader.ManifestFileName}: {ex.Message}");
             return (null, null, null, RfBuildMode.Debug, false, false, false, false, []);
         }
+    }
+
+    /// <summary>
+    /// Maps a [target] mode string to its <see cref="RfBuildMode"/>; throws on unknown modes.
+    /// </summary>
+    private static RfBuildMode ParseBuildMode(string mode)
+    {
+        return mode.ToLowerInvariant() switch
+        {
+            "debug" => RfBuildMode.Debug,
+            "release" => RfBuildMode.Release,
+            "release-time" => RfBuildMode.ReleaseTime,
+            "release-space" => RfBuildMode.ReleaseSpace,
+            _ => throw new InvalidOperationException(
+                $"Unknown build mode '{mode}' in [target]. " +
+                "Valid modes are: debug, release, release-time, release-space.")
+        };
     }
 
     /// <summary>

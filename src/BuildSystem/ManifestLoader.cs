@@ -41,8 +41,11 @@ public static class ManifestLoader
     /// <summary>
     /// Parses a razorforge.toml file and returns a <see cref="ProjectManifest"/>.
     /// Validates that required fields are present and resolves entry modules to files.
+    /// When <paramref name="resolveExecutable"/> is false (an explicit entry file on the
+    /// command line overrides it), <c>executable</c> is optional and left unresolved —
+    /// the manifest still supplies mode, library deps, and debug fields.
     /// </summary>
-    public static ProjectManifest Load(string tomlPath)
+    public static ProjectManifest Load(string tomlPath, bool resolveExecutable = true)
     {
         string fullPath = Path.GetFullPath(path: tomlPath);
         string manifestDir = Path.GetDirectoryName(path: fullPath)!;
@@ -70,8 +73,12 @@ public static class ManifestLoader
                 message: $"{ManifestFileName}: package.name is required.");
         }
 
-        // Build module index for resolving entry modules
-        Dictionary<string, string> moduleIndex = BuildModuleIndex(projectDir: manifestDir);
+        // Build module index for resolving entry modules (skipped when the CLI entry
+        // file overrides [target] executable — avoids a full project scan and lets
+        // scratch builds work even while the manifest's executable module is in flux).
+        Dictionary<string, string>? moduleIndex = resolveExecutable
+            ? BuildModuleIndex(projectDir: manifestDir)
+            : null;
 
         // [target] — the single build description: executable + external library deps.
         if (root.TryGetValue(key: "target", value: out object? targetObj) &&
@@ -152,14 +159,21 @@ public static class ManifestLoader
     }
 
     private static BuildTarget ParseBuildTarget(TomlTable table,
-        Dictionary<string, string> moduleIndex)
+        Dictionary<string, string>? moduleIndex)
     {
-        var target = new BuildTarget
+        var target = new BuildTarget();
+        if (moduleIndex != null)
         {
-            Executable = ReadRequiredString(table: table,
+            target.Executable = ReadRequiredString(table: table,
                 key: "executable",
-                context: "[target]")
-        };
+                context: "[target]");
+        }
+        else if (table.TryGetValue(key: "executable", value: out object? executable))
+        {
+            // Entry file given on the command line — keep the raw module name for
+            // display only; it is neither required nor resolved.
+            target.Executable = executable?.ToString() ?? "";
+        }
 
         // `library` = EXTERNAL dependency directories (requirements.txt-style), relative
         // to the manifest. Accept a single string or an array of strings.
@@ -188,15 +202,20 @@ public static class ManifestLoader
         }
 
         if (table.TryGetValue(key: "dump-ast", value: out object? dumpAst))
-            target.DumpAst = dumpAst is bool and true;
+            target.DumpAst = dumpAst is true;
 
         if (table.TryGetValue(key: "sa-timing", value: out object? saTiming))
-            target.SaTiming = saTiming is bool and true;
+            target.SaTiming = saTiming is true;
 
         if (table.TryGetValue(key: "show-build-stages", value: out object? showStages))
-            target.ShowBuildStages = showStages is bool and true;
+            target.ShowBuildStages = showStages is true;
 
         // Resolve the executable's module name to a file path
+        if (moduleIndex == null)
+        {
+            return target;
+        }
+
         if (!moduleIndex.TryGetValue(key: target.Executable, value: out string? resolvedFile))
         {
             string available = moduleIndex.Count > 0

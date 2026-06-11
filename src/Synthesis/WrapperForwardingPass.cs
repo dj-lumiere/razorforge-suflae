@@ -503,7 +503,20 @@ internal sealed class WrapperForwardingPass
             // each `raw`/`ctrl` identifier and ResolvedRoutine + ResolvedType on each Call.
             // The inner T may still be a GenericParameterTypeInfo at synth time; codegen's
             // ApplyTypeSubstitutions substitutes T at monomorphization.
-            TypeSymbol? retainControllerType = _registry.LookupType(name: "RetainController");
+            //
+            // Annotate with the OPEN instantiation RetainController[T] (T = the wrapper's
+            // param), never the bare generic def. The shared synth body is re-resolved by
+            // later consumers (SA lazy analysis, GMP rewrite, codegen re-lookup) under a
+            // substitution keyed on T; the open form is idempotent there — the same shape
+            // SA bakes into Retained.rf's source bodies — while a bare def gets freshly
+            // instantiated with whatever binding is at hand, double-wrapping the controller
+            // (RetainController[RetainController[X]]) and killing forwarder body emission
+            // (undefined symbol at link).
+            TypeSymbol? retainControllerDef = _registry.LookupType(name: "RetainController");
+            TypeSymbol? retainControllerType = retainControllerDef is { IsGenericDefinition: true }
+                ? _registry.GetOrCreateResolution(genericDef: retainControllerDef,
+                    typeArguments: [innerType])
+                : retainControllerDef;
             TypeSymbol hijackedCtrlType = new WrapperTypeInfo(
                 wrapperName: "Hijacked",
                 innerType: retainControllerType ?? innerType,
