@@ -116,6 +116,15 @@ routine start()
 # Windows: .\bin\Debug\net10.0\RazorForge.exe buildandrun hello.rf
 ```
 
+### Using an AI assistant?
+
+RazorForge isn't in any model's training data yet — assistants will guess
+Rust/Python-flavored syntax that doesn't compile. Point yours at
+[`RAZORFORGE-FOR-AI.md`](RAZORFORGE-FOR-AI.md) (also shipped inside every
+release package): a compact reference of exactly where their assumptions
+break, plus pointers to the 90+ CI-verified example programs in
+[`tests/Fixtures/Stdlib/`](tests/Fixtures/Stdlib/).
+
 ### CLI reference
 
 ```

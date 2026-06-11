@@ -68,6 +68,14 @@ Then from anywhere inside the project:
 razorforge buildandrun
 ```
 
+## Using an AI assistant?
+
+RazorForge is too new to be in any model's training data — assistants will
+confidently generate wrong syntax (positional arguments, missing `return`s,
+inline conditionals). Give your assistant the **`RAZORFORGE-FOR-AI.md`** file
+in this folder first; it lists exactly where their assumptions break, plus the
+90+ verified example programs to copy from.
+
 ## CLI reference
 
 ```

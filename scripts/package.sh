@@ -104,8 +104,8 @@ if [[ -n "$LLVM_ASSET" ]]; then
     find "$TC/lib/clang" -type d -name include -exec rm -rf {} + 2>/dev/null || true
 fi
 
-echo "=== add install script + quickstart ==="
-cp scripts/package-assets/install.sh scripts/package-assets/QUICKSTART.md "$OUT/"
+echo "=== add install script + quickstart + AI reference ==="
+cp scripts/package-assets/install.sh scripts/package-assets/QUICKSTART.md RAZORFORGE-FOR-AI.md "$OUT/"
 chmod +x "$OUT/install.sh"
 
 echo "=== smoke test: self-contained buildandrun (system toolchain hidden) ==="

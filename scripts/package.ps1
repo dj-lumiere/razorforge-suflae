@@ -122,9 +122,10 @@ Copy-Item -Recurse "$mingwRoot\x86_64-w64-mingw32" "$tc\x86_64-w64-mingw32"
 if (Test-Path "$tc\x86_64-w64-mingw32\share") { Remove-Item -Recurse -Force "$tc\x86_64-w64-mingw32\share" }
 Copy-Item "$mingwRoot\LICENSE.TXT" "$tc\LICENSE.llvm-mingw.TXT"
 
-Write-Host '=== add install script + quickstart ==='
+Write-Host '=== add install script + quickstart + AI reference ==='
 Copy-Item "$PSScriptRoot\package-assets\install.ps1" $Out
 Copy-Item "$PSScriptRoot\package-assets\QUICKSTART.md" $Out
+Copy-Item "$PSScriptRoot\..\RAZORFORGE-FOR-AI.md" $Out
 
 Write-Host '=== smoke test: self-contained buildandrun (system toolchain hidden) ==='
 & "$Out\RazorForge.exe" version
