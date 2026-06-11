@@ -75,7 +75,12 @@ old
 /CLAUDE.md
 /rust_bench
 /.cache/clangd/index/
-/scripts/
+# Ignore scratch scripts, but keep the packaging machinery (must be /scripts/*
+# not /scripts/ — git cannot re-include children of an excluded DIRECTORY)
+/scripts/*
+!/scripts/package.ps1
+!/scripts/package.sh
+!/scripts/package-assets/
 /.dotnet_cli/.dotnet/
 /objrun/
 /.dotnet_cli_home/.dotnet/
