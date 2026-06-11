@@ -792,6 +792,44 @@ internal partial class Program
         return false;
     }
 
+    /// <summary>
+    /// The macOS SDK path from `xcrun --show-sdk-path` (Command Line Tools). Apple's own
+    /// clang infers the SDK automatically, but the bundled LLVM clang defaults to `/`,
+    /// where modern macOS keeps no libSystem stubs — every link needs -isysroot.
+    /// </summary>
+    private static readonly Lazy<string?> MacSdkPath = new(valueFactory: () =>
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            return null;
+        }
+
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "/usr/bin/xcrun",
+                Arguments = "--show-sdk-path",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            using var proc = Process.Start(startInfo: psi);
+            if (proc == null)
+            {
+                return null;
+            }
+
+            string path = proc.StandardOutput.ReadToEnd().Trim();
+            proc.WaitForExit();
+            return proc.ExitCode == 0 && Directory.Exists(path: path) ? path : null;
+        }
+        catch
+        {
+            return null;
+        }
+    });
+
     /// <summary>The platform-specific link-time artifact of the bundled native runtime.</summary>
     private static string RuntimeLinkLibraryFileName =>
         OperatingSystem.IsWindows() ? "razorforge_runtime.lib"
@@ -1651,8 +1689,14 @@ internal partial class Program
         string manifestUacFlag = OperatingSystem.IsWindows() && !ClangIsMingw.Value
             ? " -Wl,\"/MANIFESTUAC:level='asInvoker' uiAccess='false'\" -Wl,/MANIFEST:EMBED"
             : "";
+        // The macOS system libraries (-lm/-lSystem/...) only exist as SDK stubs; point
+        // the driver at the Command Line Tools SDK explicitly (see MacSdkPath).
+        string macSysrootArg = OperatingSystem.IsMacOS() &&
+                               !string.IsNullOrWhiteSpace(value: MacSdkPath.Value)
+            ? $" -isysroot \"{MacSdkPath.Value}\""
+            : "";
         string clangArgs =
-            $"{clangOptLevel}{framePointerFlag}{lldFlag} -o \"{exeFile}\" \"{optFile}\" -L\"{runtimeLibDir}\" -lrazorforge_runtime{compilerRtArg}{windowsThreadingLibs}{unixRuntimeLibs}{linkerErrorLimitFlag}{manifestUacFlag}";
+            $"{clangOptLevel}{framePointerFlag}{lldFlag}{macSysrootArg} -o \"{exeFile}\" \"{optFile}\" -L\"{runtimeLibDir}\" -lrazorforge_runtime{compilerRtArg}{windowsThreadingLibs}{unixRuntimeLibs}{linkerErrorLimitFlag}{manifestUacFlag}";
 
         var clangPsi = new ProcessStartInfo
         {
