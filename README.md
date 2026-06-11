@@ -92,7 +92,7 @@ discard seen.add(value: v)   # ignoring a return value is explicit, too
 ### Build from source
 
 ```bash
-git clone https://git.lumi-dev.xyz/Lumi/razorforge-suflae.git
+git clone https://github.com/dj-lumiere/razorforge-suflae.git
 cd razorforge-suflae
 
 dotnet build        # builds the compiler AND the native runtime (via CMake)
@@ -290,9 +290,8 @@ Dual-licensed under MIT and Apache-2.0 — choose either.
 
 ## Community
 
-- **Gitea**: [git.lumi-dev.xyz/Lumi/razorforge-suflae](https://git.lumi-dev.xyz/Lumi/razorforge-suflae)
-- **GitHub Mirror**: [github.com/dj-lumiere/razorforge-lang](https://github.com/dj-lumiere/razorforge-lang)
-- **Issues**: [Report bugs or request features](https://git.lumi-dev.xyz/Lumi/razorforge-suflae/issues)
+- **GitHub**: [github.com/dj-lumiere/razorforge-suflae](https://github.com/dj-lumiere/razorforge-suflae)
+- **Issues**: [Report bugs or request features](https://github.com/dj-lumiere/razorforge-suflae/issues)
 - **Docs
   **: [razorforge.lumi-dev.xyz](https://razorforge.lumi-dev.xyz/) · [suflae.lumi-dev.xyz](https://suflae.lumi-dev.xyz/)
 
