@@ -12,7 +12,7 @@ install needed.
 
 1. Download the package for your platform below and extract it.
 2. Run the installer to put `razorforge` (and `rf`) on your PATH:
-    - **Windows**: `pwsh -File install.ps1`
+    - **Windows**: `install.cmd`
     - **Linux / macOS**: `./install.sh`
 3. Write `hello.rf`:
 

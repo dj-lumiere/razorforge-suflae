@@ -99,9 +99,55 @@ if [[ -n "$LLVM_ASSET" ]]; then
     cp -a "$LLVM_ROOT"/lib/libclang-cpp*.so* "$TC/lib/" 2>/dev/null || true
     cp -a "$LLVM_ROOT"/lib/libLLVM*.dylib "$TC/lib/" 2>/dev/null || true
     cp -a "$LLVM_ROOT"/lib/libclang-cpp*.dylib "$TC/lib/" 2>/dev/null || true
+
+    # The official Linux LLVM binaries are not fully static. Carry every
+    # non-baseline dependency reported by ldd beside the bundled LLVM libraries
+    # and make package creation fail if any dependency remains unresolved.
+    if [[ "$RID" == "linux-x64" ]]; then
+        is_baseline_linux_lib() {
+            case "$(basename "$1")" in
+                linux-vdso.so.*|ld-linux-x86-64.so.*|libc.so.*|libm.so.*|libpthread.so.*|libdl.so.*|librt.so.*|libresolv.so.*)
+                    return 0
+                    ;;
+                *)
+                    return 1
+                    ;;
+            esac
+        }
+
+        copy_linux_tool_deps() {
+            local tool="$1"
+            LD_LIBRARY_PATH="$LLVM_ROOT/lib:$TC/lib:${LD_LIBRARY_PATH:-}" ldd "$tool" |
+                awk '
+                    /=>/ && $3 ~ /^\// { print $3 }
+                    /^[[:space:]]*\// { print $1 }
+                ' |
+                while read -r dep; do
+                    [[ -n "$dep" && -e "$dep" ]] || continue
+                    if is_baseline_linux_lib "$dep"; then
+                        continue
+                    fi
+                    cp -L "$dep" "$TC/lib/$(basename "$dep")"
+                done
+        }
+
+        for tool in clang opt lld; do
+            copy_linux_tool_deps "$LLVM_ROOT/bin/$tool"
+        done
+    fi
     # clang resource dir: compiler-rt builtins (--rtlib=compiler-rt) live here.
     cp -a "$LLVM_ROOT/lib/clang/${LLVM_VERSION%%.*}" "$TC/lib/clang/"
     find "$TC/lib/clang" -type d -name include -exec rm -rf {} + 2>/dev/null || true
+
+    if [[ "$RID" == "linux-x64" ]]; then
+        for tool in "$TC/bin/clang" "$TC/bin/opt" "$TC/bin/lld" "$TC/bin/ld.lld"; do
+            if LD_LIBRARY_PATH="$TC/lib:${LD_LIBRARY_PATH:-}" ldd "$tool" | grep -q "not found"; then
+                LD_LIBRARY_PATH="$TC/lib:${LD_LIBRARY_PATH:-}" ldd "$tool" >&2 || true
+                echo "Bundled LLVM tool has unresolved shared-library dependencies: $tool" >&2
+                exit 1
+            fi
+        done
+    fi
 fi
 
 echo "=== add install script + quickstart + AI reference ==="

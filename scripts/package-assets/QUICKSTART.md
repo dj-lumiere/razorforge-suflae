@@ -9,9 +9,15 @@ programs.
 
 **Windows**
 
-```powershell
-pwsh -File install.ps1
+```bat
+install.cmd
 # then open a new terminal
+```
+
+If you prefer running the PowerShell script directly, use:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
 **Linux / macOS**

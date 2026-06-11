@@ -1,0 +1,187 @@
+name: Linux Package Smoke
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/linux-package-smoke.yaml'
+      - 'RazorForge.csproj'
+      - 'RazorForge.sln'
+      - 'scripts/package.sh'
+      - 'scripts/package-assets/**'
+      - 'src/**'
+      - 'Standard/**'
+      - 'native/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/linux-package-smoke.yaml'
+      - 'RazorForge.csproj'
+      - 'RazorForge.sln'
+      - 'scripts/package.sh'
+      - 'scripts/package-assets/**'
+      - 'src/**'
+      - 'Standard/**'
+      - 'native/**'
+
+permissions:
+  contents: read
+
+env:
+  CMAKE_POLICY_VERSION_MINIMUM: '3.5'
+
+jobs:
+  package-linux:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            clang \
+            lld \
+            llvm \
+            cmake \
+            ninja-build \
+            pkg-config \
+            autoconf \
+            automake \
+            libtool \
+            python3 \
+            curl \
+            wget \
+            ca-certificates \
+            unzip \
+            xz-utils
+
+      - name: Cache package downloads
+        uses: actions/cache@v4
+        with:
+          path: dist/_cache/*.tar.xz
+          key: pkg-llvm-22.1.7-linux-x64
+
+      - name: Fetch native library sources
+        run: |
+          cd native
+
+          git clone --depth 1 https://github.com/SDL-Hercules-390/decNumber.git decNumber
+
+          curl -L -o libbf.tar.gz "https://bellard.org/libbf/libbf-2025-06-03.tar.gz"
+          mkdir -p libbf
+          tar -xzf libbf.tar.gz -C libbf --strip-components=1
+          rm libbf.tar.gz
+
+          git clone --depth 1 https://github.com/libtom/libtommath.git libtommath
+          git clone --depth 1 https://github.com/madler/zlib.git zlib
+          git clone --depth 1 https://github.com/facebook/zstd.git zstd
+
+          mkdir -p sqlite3
+          curl -L -o sqlite3.zip "https://www.sqlite.org/2025/sqlite-amalgamation-3500000.zip"
+          unzip -q -j sqlite3.zip -d sqlite3
+          rm sqlite3.zip
+
+          git clone --depth 1 -b stable https://github.com/jedisct1/libsodium.git libsodium
+          git clone --depth 1 -b v2.28.10 https://github.com/Mbed-TLS/mbedtls.git mbedtls2
+          git clone --depth 1 https://github.com/PCRE2Project/pcre2.git pcre2
+          git clone --depth 1 https://github.com/JuliaStrings/utf8proc.git utf8proc
+          git clone --depth 1 https://github.com/ibireme/yyjson.git yyjson
+          git clone --depth 1 https://github.com/cktan/tomlc99.git tomlc99
+          git clone --depth 1 https://github.com/ivmai/bdwgc.git bdwgc
+          git clone --depth 1 https://github.com/libuv/libuv.git libuv
+          git clone --depth 1 https://github.com/higan-emu/libco.git libco
+          git clone --depth 1 https://github.com/jedisct1/minicsv.git minicsv || true
+
+      - name: Package linux-x64
+        run: |
+          chmod +x scripts/package.sh
+          VERSION=ci-smoke scripts/package.sh
+
+      - name: Upload linux package
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-package
+          path: dist/razorforge-v*-linux-x64.tar.gz
+
+  smoke-linux-package:
+    needs: package-linux
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        distro:
+          - name: ubuntu-22.04
+            image: ubuntu:22.04
+          - name: ubuntu-24.04
+            image: ubuntu:24.04
+          - name: debian-stable
+            image: debian:stable
+          - name: fedora-latest
+            image: fedora:latest
+          - name: archlinux-latest
+            image: archlinux:latest
+
+    steps:
+      - name: Download linux package
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-package
+          path: dist
+
+      - name: Smoke test on ${{ matrix.distro.name }}
+        run: |
+          docker run --rm \
+            -v "$PWD/dist:/pkg:ro" \
+            "${{ matrix.distro.image }}" \
+            /bin/bash -lc '
+              set -euo pipefail
+
+              if command -v apt-get >/dev/null 2>&1; then
+                apt-get update
+                DEBIAN_FRONTEND=noninteractive apt-get install -y tar gzip libc6-dev ca-certificates
+              elif command -v dnf >/dev/null 2>&1; then
+                dnf install -y tar gzip glibc-devel ca-certificates
+              elif command -v pacman >/dev/null 2>&1; then
+                pacman -Sy --noconfirm tar gzip glibc ca-certificates
+              else
+                echo "Unsupported smoke-test image: no known package manager" >&2
+                exit 1
+              fi
+
+              mkdir -p /tmp/rf
+              tar -xzf /pkg/razorforge-v*-linux-x64.tar.gz -C /tmp/rf --strip-components=1
+
+              LD_LIBRARY_PATH="/tmp/rf/toolchain/lib" ldd /tmp/rf/toolchain/bin/clang | tee /tmp/clang.ldd
+              LD_LIBRARY_PATH="/tmp/rf/toolchain/lib" ldd /tmp/rf/toolchain/bin/ld.lld | tee /tmp/ld.lld.ldd
+              if grep -q "not found" /tmp/clang.ldd /tmp/ld.lld.ldd; then
+                echo "Bundled LLVM has unresolved dependencies on ${{ matrix.distro.name }}" >&2
+                exit 1
+              fi
+
+              printf "%s\n" \
+                "module Hello" \
+                "" \
+                "import IO/Console" \
+                "" \
+                "routine start()" \
+                "  show(\"Hello from RazorForge!\")" \
+                "  return" \
+                > /tmp/hello.rf
+
+              env -i PATH=/usr/bin:/bin HOME=/tmp /tmp/rf/RazorForge version
+              cd /tmp
+              env -i PATH=/usr/bin:/bin HOME=/tmp /tmp/rf/RazorForge buildandrun hello.rf
+            '

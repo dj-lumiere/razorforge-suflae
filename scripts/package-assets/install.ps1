@@ -4,7 +4,9 @@
 # work from any terminal. Everything runs from this folder — no admin
 # rights, no registry beyond the user PATH entry, no other downloads.
 #
-# Usage:  pwsh -File install.ps1     (or right-click -> Run with PowerShell)
+# Usage:  install.cmd
+# Or directly from PowerShell 5.1+:
+#   powershell -ExecutionPolicy Bypass -File .\install.ps1
 $ErrorActionPreference = 'Stop'
 
 $dir = $PSScriptRoot

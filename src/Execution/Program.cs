@@ -1003,6 +1003,44 @@ internal partial class Program
     private static readonly Lazy<string> ClangTool = new(valueFactory: () => ResolveToolchainTool(name: "clang"));
     private static readonly Lazy<string> OptTool = new(valueFactory: () => ResolveToolchainTool(name: "opt"));
 
+    private static void ConfigureToolchainEnvironment(ProcessStartInfo psi, string toolPath)
+    {
+        if (toolPath == "clang" || toolPath == "opt")
+        {
+            return;
+        }
+
+        string? binDir = Path.GetDirectoryName(path: toolPath);
+        string? toolchainDir = binDir == null ? null : Path.GetDirectoryName(path: binDir);
+        if (toolchainDir == null)
+        {
+            return;
+        }
+
+        string libDir = Path.Combine(path1: toolchainDir, path2: "lib");
+        if (!Directory.Exists(path: libDir))
+        {
+            return;
+        }
+
+        if (OperatingSystem.IsLinux())
+        {
+            PrependEnvironmentPath(psi, variableName: "LD_LIBRARY_PATH", path: libDir);
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            PrependEnvironmentPath(psi, variableName: "DYLD_LIBRARY_PATH", path: libDir);
+        }
+    }
+
+    private static void PrependEnvironmentPath(ProcessStartInfo psi, string variableName, string path)
+    {
+        psi.Environment.TryGetValue(key: variableName, value: out string? existing);
+        psi.Environment[variableName] = string.IsNullOrWhiteSpace(value: existing)
+            ? path
+            : path + Path.PathSeparator + existing;
+    }
+
     /// <summary>
     /// True when the resolved clang targets *-windows-gnu (llvm-mingw). The bundled Windows
     /// toolchain is mingw-based so linking is self-contained (no Visual Studio / Windows SDK
@@ -1027,6 +1065,7 @@ internal partial class Program
                 RedirectStandardError = true,
                 CreateNoWindow = true
             };
+            ConfigureToolchainEnvironment(psi: psi, toolPath: ClangTool.Value);
             using var proc = Process.Start(startInfo: psi);
             if (proc == null)
             {
@@ -1060,6 +1099,7 @@ internal partial class Program
                 RedirectStandardError = true,
                 CreateNoWindow = true
             };
+            ConfigureToolchainEnvironment(psi: psi, toolPath: ClangTool.Value);
             using var proc = Process.Start(psi);
             if (proc == null) return null;
             string output = proc.StandardOutput.ReadToEnd().Trim();
@@ -1596,6 +1636,7 @@ internal partial class Program
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
+        ConfigureToolchainEnvironment(psi: optPsi, toolPath: OptTool.Value);
 
         try
         {
@@ -1706,6 +1747,7 @@ internal partial class Program
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
+        ConfigureToolchainEnvironment(psi: clangPsi, toolPath: ClangTool.Value);
 
         try
         {
