@@ -9,6 +9,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateProgramFile>false</GenerateProgramFile>
     <Version>0.0.1-alpha</Version>
+    <InvariantGlobalization>true</InvariantGlobalization>
     <PackAsTool>true</PackAsTool>
     <!-- Canonical command name. `forge` is deliberately NOT used: it collides with
          Foundry's forge (Ethereum toolchain) on developer machines. Users who want
