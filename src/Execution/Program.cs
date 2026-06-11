@@ -28,6 +28,18 @@ internal partial class Program
     private const string RazorForgeLanguageName = "RazorForge";
 
     /// <summary>
+    /// Native DLLs a compiled program needs next to its .exe on Windows: the runtime
+    /// itself plus the shared libraries it links dynamically (bdwgc builds as a shared
+    /// gc.dll; whether the runtime's import table retains it varies by linker, so it is
+    /// staged whenever present).
+    /// </summary>
+    private static readonly string[] NativeRuntimeDlls =
+    [
+        "razorforge_runtime.dll",
+        "gc.dll"
+    ];
+
+    /// <summary>
     /// Entry point for the RazorForge builder CLI.
     /// Dispatches to the appropriate command handler based on the first argument.
     /// Returns 0 on success or 1 on error.
@@ -1622,15 +1634,19 @@ internal partial class Program
             return 1;
         }
 
-        // Copy the runtime DLL next to the output .exe so it can be found at runtime
+        // Copy the runtime DLL (and its shared-library dependencies) next to the
+        // output .exe so the loader can find them at runtime
         string? outputDir = Path.GetDirectoryName(path: Path.GetFullPath(path: exeFile));
         if (outputDir != null && exeDir != null)
         {
-            string srcDll = Path.Combine(path1: exeDir, path2: "razorforge_runtime.dll");
-            if (File.Exists(path: srcDll))
+            foreach (string dllName in NativeRuntimeDlls)
             {
-                string dstDll = Path.Combine(path1: outputDir, path2: "razorforge_runtime.dll");
-                TryCopyTolerant(src: srcDll, dst: dstDll);
+                string srcDll = Path.Combine(path1: exeDir, path2: dllName);
+                if (File.Exists(path: srcDll))
+                {
+                    string dstDll = Path.Combine(path1: outputDir, path2: dllName);
+                    TryCopyTolerant(src: srcDll, dst: dstDll);
+                }
             }
         }
 
@@ -1723,6 +1739,7 @@ internal partial class Program
             // Directory unreadable — non-fatal, just skip the sweep.
         }
 
+        string exeOutputDir = Path.GetDirectoryName(path: exeFile) ?? ".";
         string[] pathsToDelete =
         [
             llFile,
@@ -1733,8 +1750,8 @@ internal partial class Program
             basePath + ".ilk",
             basePath + ".exp",
             basePath + ".lib",
-            Path.Combine(path1: Path.GetDirectoryName(path: exeFile) ?? ".",
-                path2: "razorforge_runtime.dll")
+            .. NativeRuntimeDlls.Select(selector: dll =>
+                Path.Combine(path1: exeOutputDir, path2: dll))
         ];
 
         foreach (string path in pathsToDelete.Distinct(comparer: StringComparer.OrdinalIgnoreCase))

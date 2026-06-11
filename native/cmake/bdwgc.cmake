@@ -14,6 +14,15 @@ if(EXISTS "${BDWGC_DIR}/CMakeLists.txt" AND EXISTS "${BDWGC_DIR}/include/gc.h")
     message(STATUS "Found Boehm GC")
 
     set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    # bdwgc renamed its shared/static knob from BUILD_SHARED_LIBS to
+    # GC_BUILD_SHARED_LIBS (default ON) — without forcing the new name it
+    # builds a shared gc.dll/libgc.so that razorforge_runtime then depends on
+    # at load time, which every consumer (tests, fixtures, packages) would
+    # have to ship. Static was always the intent.
+    set(GC_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    # The static archive gets linked into the shared razorforge_runtime, so
+    # its objects must be PIC on ELF platforms.
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
     set(build_tests OFF CACHE BOOL "" FORCE)
     set(enable_cplusplus OFF CACHE BOOL "" FORCE)
     set(enable_docs OFF CACHE BOOL "" FORCE)

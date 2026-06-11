@@ -19,6 +19,16 @@ rf_U64 rf_random_u64(void)
     return value;
 }
 
+#elif defined(__APPLE__)
+#include <sys/random.h>
+
+rf_U64 rf_random_u64(void)
+{
+    rf_U64 value = 0;
+    getentropy(&value, sizeof(value));
+    return value;
+}
+
 #else
 #include <sys/random.h>
 

@@ -20,7 +20,7 @@ where you want native speed and deterministic memory behavior. It is *not* a ker
 language: programs link against the RazorForge runtime library, and there is no freestanding mode.
 
 > **Honesty first:** RazorForge is an early alpha. The compiler, runtime, and standard library
-> work — 1,400+ unit tests and 92 end-to-end snapshot fixtures run green in CI on every commit —
+> work — 1,400+ unit tests and 90+ end-to-end snapshot fixtures run green in CI on every commit —
 > but the language is young, APIs will change, and you will find bugs. Its sibling language
 > **Suflae** is a *design* (see [Suflae status](#suflae-design-preview)) and is **not implemented yet**.
 
