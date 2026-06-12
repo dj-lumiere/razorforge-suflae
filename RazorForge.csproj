@@ -8,7 +8,7 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateProgramFile>false</GenerateProgramFile>
-    <Version>0.0.2-alpha</Version>
+    <Version>0.0.3-alpha</Version>
     <InvariantGlobalization>true</InvariantGlobalization>
     <PackAsTool>true</PackAsTool>
     <!-- Canonical command name. `forge` is deliberately NOT used: it collides with
