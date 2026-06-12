@@ -31,6 +31,14 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 > Command Line Tools. If you have ever built anything on this Mac you already
 > have them; otherwise run `xcode-select --install` once.
 >
+> macOS Gatekeeper: this alpha is not notarized by Apple, so a browser-downloaded
+> archive gets quarantined and macOS refuses to load the bundled libraries
+> (you'd see "libhostfxr.dylib cannot be opened because the developer cannot be
+> verified"). `./install.sh` clears the quarantine attribute automatically; if
+> you see that dialog anyway, run
+> `xattr -dr com.apple.quarantine /path/to/this/folder` once. Downloading with
+> `curl -LO` avoids the quarantine flag entirely.
+>
 > Linux note: linking needs the glibc development files (`crt1.o`). Most dev
 > machines have them; otherwise `sudo apt install libc6-dev` (Debian/Ubuntu)
 > or `sudo dnf install glibc-devel` (Fedora) once.

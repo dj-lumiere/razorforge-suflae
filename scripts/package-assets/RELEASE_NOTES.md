@@ -101,6 +101,14 @@ full CLI reference.
 | `linux-x64` | glibc development files for linking (`apt install libc6-dev` / `dnf install glibc-devel`) |
 | `osx-arm64` | Apple Command Line Tools for linker stubs (`xcode-select --install`)                      |
 
+> **macOS Gatekeeper:** this alpha is not notarized by Apple, so browser
+> downloads are quarantined and macOS will refuse to load the bundled
+> libraries ("libhostfxr.dylib cannot be opened because the developer cannot
+> be verified"). `./install.sh` clears the quarantine attribute automatically;
+> if you hit the dialog anyway, run
+> `xattr -dr com.apple.quarantine /path/to/extracted/folder` once — or
+> download with `curl -LO`, which never sets the quarantine flag.
+
 Checksums for every artifact are attached as `checksums-<platform>.txt`.
 
 ## Docs & feedback
