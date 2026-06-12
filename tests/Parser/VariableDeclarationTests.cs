@@ -594,6 +594,76 @@ public class VariableDeclarationTests
 
         AssertParses(source: source);
     }
+    /// <summary>
+    /// Verifies that the parser accepts a subjectless (condition-based) when expression
+    /// initializer with bare-identifier conditions. Regression test: `flag => 1_s64`
+    /// was previously consumed as a lambda expression instead of condition + arm arrow.
+    /// </summary>
+
+    [Fact]
+    public void Parse_SubjectlessWhenExpressionInitializer()
+    {
+        string source = """
+                        routine test()
+                          var flag = true
+                          var x = when
+                            flag => 1_s64
+                            else => 2_s64
+                          return
+                        """;
+
+        Program program = AssertParses(source: source);
+        RoutineDeclaration routine = GetDeclaration<RoutineDeclaration>(program: program);
+        var body = routine.Body as BlockStatement;
+        Assert.NotNull(@object: body);
+        VariableDeclaration xDecl = body.Statements
+                                        .OfType<DeclarationStatement>()
+                                        .Select(selector: s => s.Declaration)
+                                        .OfType<VariableDeclaration>()
+                                        .First(predicate: v => v.Name == "x");
+        WhenExpression whenExpr = Assert.IsType<WhenExpression>(@object: xDecl.Initializer);
+        Assert.Null(@object: whenExpr.Expression);
+        Assert.Equal(expected: 2, actual: whenExpr.Clauses.Count);
+    }
+    /// <summary>
+    /// Verifies that subjectless when-expression conditions accept boolean operators,
+    /// comparisons, and parenthesized expressions.
+    /// </summary>
+
+    [Fact]
+    public void Parse_SubjectlessWhenInitializerWithBooleanOperators()
+    {
+        string source = """
+                        routine test(n: S64)
+                          var flag = true
+                          var label = when
+                            flag and n > 3 => "big"
+                            (n > 4) => "medium"
+                            else => "small"
+                          return
+                        """;
+
+        AssertParses(source: source);
+    }
+    /// <summary>
+    /// Verifies that a lambda inside a call argument list within a subjectless
+    /// when-expression condition still parses as a lambda (the no-lambda condition
+    /// context is suspended inside argument lists).
+    /// </summary>
+
+    [Fact]
+    public void Parse_SubjectlessWhenInitializerLambdaArgument()
+    {
+        string source = """
+                        routine test(items: ?List[S64])
+                          var label = when
+                            items.any(pred: x => x > 0) => "has positives"
+                            else => "none"
+                          return
+                        """;
+
+        AssertParses(source: source);
+    }
 
     #endregion
 }

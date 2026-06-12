@@ -1111,4 +1111,47 @@ public class PatternMatchingTests
     }
 
     #endregion
+
+    #region Subjectless When Statement Tests
+    /// <summary>
+    /// Verifies that a subjectless when statement accepts a bare-identifier condition.
+    /// Regression test: `flag => show("set")` was previously consumed as a lambda.
+    /// </summary>
+
+    [Fact]
+    public void Parse_SubjectlessWhenStatementBareIdentifierCondition()
+    {
+        string source = """
+                        routine test()
+                          var flag = true
+                          when
+                            flag => show("set")
+                            else => show("unset")
+                          return
+                        """;
+
+        AssertParses(source: source);
+    }
+    /// <summary>
+    /// Verifies that a subjectless when statement still accepts comparison and
+    /// call-shaped conditions alongside boolean operators.
+    /// </summary>
+
+    [Fact]
+    public void Parse_SubjectlessWhenStatementMixedConditions()
+    {
+        string source = """
+                        routine test(n: S64)
+                          var flag = true
+                          when
+                            n > 3 and flag => show("big")
+                            n.is_positive() => show("positive")
+                            else => show("other")
+                          return
+                        """;
+
+        AssertParses(source: source);
+    }
+
+    #endregion
 }

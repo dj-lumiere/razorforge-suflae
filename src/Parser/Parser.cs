@@ -112,6 +112,16 @@ public partial class Parser
     private bool _inWhenPatternContext;
 
     /// <summary>
+    /// Indicates we are parsing the condition of a subjectless (condition-based) 'when' arm.
+    /// Suppresses bare-identifier lambda parsing so `flag => result` reads as
+    /// condition `flag` + arm arrow, not lambda `flag => result`. Unlike
+    /// _inWhenPatternContext it leaves the 'is' operator available, and it is
+    /// suspended inside parentheses and argument lists so explicit lambdas there
+    /// still parse.
+    /// </summary>
+    private bool _inWhenConditionContext;
+
+    /// <summary>
     /// Prevents 'is' expression parsing in when clause bodies.
     /// When true, 'is' is not treated as a pattern-matching operator.
     /// </summary>

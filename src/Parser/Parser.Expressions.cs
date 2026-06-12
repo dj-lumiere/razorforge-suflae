@@ -92,7 +92,8 @@ public partial class Parser
         }
 
         // Arrow lambda expression: x => expr or x given y => expr (single parameter, no parens)
-        if (!_inWhenPatternContext && Check(type: TokenType.Identifier) && (PeekToken(offset: 1)
+        if (!_inWhenPatternContext && !_inWhenConditionContext &&
+            Check(type: TokenType.Identifier) && (PeekToken(offset: 1)
                .Type == TokenType.FatArrow || PeekToken(offset: 1)
                .Type == TokenType.Given))
         {
@@ -116,41 +117,51 @@ public partial class Parser
         // Parenthesized expression, tuple literal, or arrow lambda with parenthesized params
         if (Match(type: TokenType.LeftParen))
         {
-            if (IsArrowLambdaParameters())
+            // Parentheses re-enable bare lambdas inside a when-arm condition.
+            bool savedConditionContext = _inWhenConditionContext;
+            _inWhenConditionContext = false;
+            try
             {
-                return ParseParenthesizedArrowLambda(location: location);
-            }
-
-            // Parse first expression
-            Expression firstExpr = ParseExpression();
-
-            // Check if this is a tuple (has comma) or just parenthesized expression
-            if (Match(type: TokenType.Comma))
-            {
-                // It's a tuple
-                var elements = new List<Expression> { firstExpr };
-
-                // Check for single-element tuple: (expr,)
-                if (Check(type: TokenType.RightParen))
+                if (IsArrowLambdaParameters())
                 {
-                    Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after tuple");
+                    return ParseParenthesizedArrowLambda(location: location);
+                }
+
+                // Parse first expression
+                Expression firstExpr = ParseExpression();
+
+                // Check if this is a tuple (has comma) or just parenthesized expression
+                if (Match(type: TokenType.Comma))
+                {
+                    // It's a tuple
+                    var elements = new List<Expression> { firstExpr };
+
+                    // Check for single-element tuple: (expr,)
+                    if (Check(type: TokenType.RightParen))
+                    {
+                        Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after tuple");
+                        return new TupleLiteralExpression(Elements: elements, Location: location);
+                    }
+
+                    // Multi-element tuple: (expr1, expr2, ...)
+                    do
+                    {
+                        elements.Add(item: ParseExpression());
+                    } while (Match(type: TokenType.Comma) && !Check(type: TokenType.RightParen));
+
+                    Consume(type: TokenType.RightParen,
+                        errorMessage: "Expected ')' after tuple elements");
                     return new TupleLiteralExpression(Elements: elements, Location: location);
                 }
 
-                // Multi-element tuple: (expr1, expr2, ...)
-                do
-                {
-                    elements.Add(item: ParseExpression());
-                } while (Match(type: TokenType.Comma) && !Check(type: TokenType.RightParen));
-
-                Consume(type: TokenType.RightParen,
-                    errorMessage: "Expected ')' after tuple elements");
-                return new TupleLiteralExpression(Elements: elements, Location: location);
+                // Just a parenthesized expression
+                Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after expression");
+                return firstExpr;
             }
-
-            // Just a parenthesized expression
-            Consume(type: TokenType.RightParen, errorMessage: "Expected ')' after expression");
-            return firstExpr;
+            finally
+            {
+                _inWhenConditionContext = savedConditionContext;
+            }
         }
 
         // When expression: when x { pattern => expr, ... }
@@ -241,7 +252,18 @@ public partial class Parser
             }
             else if (isConditionBased)
             {
-                Expression condExpr = ParseExpression();
+                bool savedConditionContext = _inWhenConditionContext;
+                _inWhenConditionContext = true;
+                Expression condExpr;
+                try
+                {
+                    condExpr = ParseExpression();
+                }
+                finally
+                {
+                    _inWhenConditionContext = savedConditionContext;
+                }
+
                 pattern = new ExpressionPattern(Expression: condExpr, Location: clauseLocation);
             }
             else if (Match(type: TokenType.Is))
