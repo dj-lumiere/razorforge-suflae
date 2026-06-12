@@ -90,6 +90,7 @@ Covered today (see `*.rf` files in this directory):
 - Late initialization: `lateinit` — `lateinit var` eager allocation (entity placeholder, zeroed values), branch init, borrow-before-init
 - Fast I/O: `fast_io` — `S64`/`U64.from_digit_bytes!` (+ streaming `_at!`) and `to_digit_bytes()` round-trip; bypasses Text for CP throughput
 - Arithmetic operator family: `arithmetic_operators` — `+`/`+!`/`+%`/`+^` (checked/unchecked-UB/wrap/clamp) on each binary op + unary `-`
+- Decimal transcendentals: `decimal_math` — full sin…log1p/pow/cbrt/hypot surface on D32/D64/D128 (tiered TLFloat routing: binary64/quad/octuple — correctly rounded, platform-identical)
 - Runtime errors — collections: `runtime_error_collections` — `try_remove_last`/`try_remove_first`/`try_remove_at`/`try_first`/`try_last` on empty / out-of-bounds inputs
 - Runtime errors — arithmetic: `runtime_error_arithmetic` — `try_add`/`try_sub`/`try_mul`/`try_pow`/`try_div`/`try_mod`/`try_neg`/`try_abs` overflow & divide-by-zero paths
 
