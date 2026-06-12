@@ -104,10 +104,13 @@ full CLI reference.
 > **macOS Gatekeeper:** this alpha is not notarized by Apple, so browser
 > downloads are quarantined and macOS will refuse to load the bundled
 > libraries ("libhostfxr.dylib cannot be opened because the developer cannot
-> be verified"). `./install.sh` clears the quarantine attribute automatically;
-> if you hit the dialog anyway, run
-> `xattr -dr com.apple.quarantine /path/to/extracted/folder` once — or
-> download with `curl -LO`, which never sets the quarantine flag.
+> be verified"). `./install.sh` fixes this automatically — it clears the
+> quarantine attribute and ad-hoc re-signs the bundled binaries (quarantine
+> removal alone isn't always enough: Apple Silicon requires valid signatures
+> and newer macOS caches Gatekeeper verdicts). Manual equivalent, run once
+> inside the extracted folder:
+> `xattr -dr com.apple.quarantine . && find . -type f \( -name '*.dylib' -o -perm -u+x \) -exec codesign --force --sign - {} \;`
+> Downloading with `curl -LO` avoids the quarantine flag entirely.
 
 Checksums for every artifact are attached as `checksums-<platform>.txt`.
 

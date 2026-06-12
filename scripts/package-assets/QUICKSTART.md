@@ -34,10 +34,18 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1
 > macOS Gatekeeper: this alpha is not notarized by Apple, so a browser-downloaded
 > archive gets quarantined and macOS refuses to load the bundled libraries
 > (you'd see "libhostfxr.dylib cannot be opened because the developer cannot be
-> verified"). `./install.sh` clears the quarantine attribute automatically; if
-> you see that dialog anyway, run
-> `xattr -dr com.apple.quarantine /path/to/this/folder` once. Downloading with
-> `curl -LO` avoids the quarantine flag entirely.
+> verified"). `./install.sh` handles this automatically: it clears the
+> quarantine attribute *and* ad-hoc re-signs the bundled binaries (quarantine
+> removal alone is not always enough — Apple Silicon requires valid signatures,
+> and newer macOS caches Gatekeeper verdicts). If you still hit a dialog, run
+> these two commands once from the extracted folder:
+>
+> ```bash
+> xattr -dr com.apple.quarantine .
+> find . -type f \( -name '*.dylib' -o -perm -u+x \) -exec codesign --force --sign - {} \;
+> ```
+>
+> Downloading with `curl -LO` avoids the quarantine flag entirely.
 >
 > Linux note: linking needs the glibc development files (`crt1.o`). Most dev
 > machines have them; otherwise `sudo apt install libc6-dev` (Debian/Ubuntu)
