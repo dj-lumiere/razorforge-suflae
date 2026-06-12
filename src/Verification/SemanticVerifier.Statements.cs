@@ -583,15 +583,15 @@ public sealed partial class SemanticVerifier
             varType = ErrorTypeInfo.Instance;
         }
 
-        // #16: Plain `var x: T` without an initializer is disallowed (uninitialized memory).
-        // Use `lateinit var x: T` (deferred-init pledge) or `var x: T = uninit` (explicit UB).
+        // #16: Plain `var x: T` without an initializer is disallowed.
+        // Use `lateinit var x: T` (eager allocation, late initialization).
         if (_registry.Language == Language.RazorForge &&
             varDecl is { Type: not null, Initializer: null, IsLateInit: false })
         {
             ReportError(code: SemanticDiagnosticCode.VariableNeedsTypeOrInitializer,
                 message:
                 $"Variable '{varDecl.Name}' has a type annotation but no initializer. " +
-                "Use 'lateinit var' to defer initialization, or '= uninit' for an explicit uninitialized binding.",
+                "Use 'lateinit var' to defer initialization.",
                 location: varDecl.Location);
         }
 

@@ -269,7 +269,6 @@ public static class AstWalker
                 break;
             case LiteralExpression:
             case IdentifierExpression:
-            case UninitExpression:
                 break;
 
             // -------- Patterns --------

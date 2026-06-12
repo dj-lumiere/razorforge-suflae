@@ -38,6 +38,10 @@ include(cmake/decNumber.cmake)
 # https://github.com/libtom/libtommath (Public Domain)
 include(cmake/libtommath.cmake)
 
+# TLFloat - IEEE quad-precision soft-float with correctly-rounded math
+# https://github.com/shibatch/tlfloat (Boost Software License 1.0)
+include(cmake/tlfloat.cmake)
+
 # ============================================================================
 # Third-party libraries — Modules (loaded on demand)
 # ============================================================================
@@ -156,6 +160,12 @@ if(HAVE_LIBBF)
     if(WIN32)
         target_link_libraries(razorforge_runtime compiler_rt_shim)
     endif()
+endif()
+
+# Link TLFloat (F128 soft-float + transcendentals, decimal transcendental bridge)
+if(HAVE_TLFLOAT)
+    target_compile_definitions(razorforge_runtime PRIVATE HAVE_TLFLOAT)
+    target_link_libraries(razorforge_runtime rf_tlfloat)
 endif()
 
 # Link decNumber (D32/D64/D128 + Decimal)
@@ -281,6 +291,11 @@ if(HAVE_LIBBF)
     endif()
 endif()
 
+if(HAVE_TLFLOAT)
+    target_compile_definitions(razorforge_math PRIVATE HAVE_TLFLOAT)
+    target_link_libraries(razorforge_math rf_tlfloat)
+endif()
+
 if(HAVE_DECNUMBER)
     target_compile_definitions(razorforge_math PRIVATE HAVE_DECNUMBER)
     target_link_libraries(razorforge_math decnumber)
@@ -317,6 +332,7 @@ message(STATUS "")
 message(STATUS "RazorForge Native Configuration:")
 message(STATUS "  ── Core ──")
 message(STATUS "  LibBF (f128 + transcendentals): ${HAVE_LIBBF}")
+message(STATUS "  TLFloat (f128 soft-float math):   ${HAVE_TLFLOAT}")
 message(STATUS "  decNumber (d32/d64/d128/Decimal): ${HAVE_DECNUMBER}")
 message(STATUS "  LibTomMath (bigint):              ${HAVE_LIBTOMMATH}")
 message(STATUS "  ── Modules ──")

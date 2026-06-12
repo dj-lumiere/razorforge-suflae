@@ -99,10 +99,13 @@ public partial class LlvmCodeGenerator
         {
             case CallLoweringKind.ValueConversion when arguments.Count == 1 &&
                                                        constructedType is RecordTypeInfo { HasDirectBackendType: true } &&
-                                                       GetExpressionType(expr: arguments[index: 0]) is RecordTypeInfo { HasDirectBackendType: true }:
+                                                       GetExpressionType(expr: arguments[index: 0]) is RecordTypeInfo { HasDirectBackendType: true } convSourceType &&
+                                                       !ConversionNeedsF128Routine(a: constructedType, b: convSourceType):
                 // Both source and target must be @llvm primitive-typed for inline cast.
                 // When source is non-primitive (e.g. Text in `F128!("3.14")`), fall through
                 // to the routine lookup path so it resolves to `Target.$create!(from: src)`.
+                // F128 conversions also fall through: F128's i128 backend type is a bit
+                // carrier, so a scalar cast would reinterpret integers as IEEE bits.
                 return EmitPrimitiveTypeConversion(sb: sb,
                     arg: arguments[index: 0],
                     targetType: constructedType);
@@ -452,6 +455,20 @@ public partial class LlvmCodeGenerator
     /// Otherwise call the routine — same LLVM type with a resolved $create indicates a real
     /// conversion (e.g. CStr.$create(from: Referring[Text])), which a reinterpret would skip.
     /// </summary>
+    /// <summary>
+    /// True when a primitive conversion between the two types must go through the
+    /// resolved $create routine because one side is F128. F128's @llvm type is an
+    /// i128 BIT CARRIER for IEEE binary128 — inline scalar casts (sext/sitofp/
+    /// fptoui/...) would convert the carrier integer, not the float value.
+    /// Same-LLVM-type pairs (e.g. F128 vs U128 reinterprets) are not affected.
+    /// </summary>
+    private bool ConversionNeedsF128Routine(TypeInfo? a, TypeInfo? b)
+    {
+        if (a == null || b == null) return false;
+        bool involvesF128 = a.Name == "F128" || b.Name == "F128";
+        return involvesF128 && GetLlvmType(type: a) != GetLlvmType(type: b);
+    }
+
     private bool ShouldInlineDirectBackendConstruction(RecordTypeInfo record, Expression arg,
         RoutineInfo? resolvedRoutine)
     {
@@ -464,10 +481,18 @@ public partial class LlvmCodeGenerator
         string argLlvm = GetLlvmType(type: argType);
         if (argLlvm != targetLlvm)
         {
+            // F128 conversions must never inline: F128's i128 backend type carries IEEE
+            // bits, so a scalar cast (sext/sitofp/...) would produce garbage. The real
+            // conversion lives in the rf_f128_* bridge called by `$create`.
+            if (ConversionNeedsF128Routine(a: record, b: argType))
+            {
+                return false;
+            }
+
             // Differing LLVM types: only inline as a scalar cast when the source is also
             // @llvm-primitive (e.g. S64→S32 trunc, F32→F64 fpext). When the source is a
             // non-primitive carrier such as Text, inlining would emit a bogus
-            // `ptrtoint ptr to fp128`; the real conversion lives in `$create!` and the
+            // `ptrtoint ptr to i128`; the real conversion lives in `$create!` and the
             // routine call must be honored instead.
             return argType is RecordTypeInfo { HasDirectBackendType: true };
         }

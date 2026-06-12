@@ -598,7 +598,10 @@ public partial class LlvmCodeGenerator
             TokenType.F16Literal => "half",
             TokenType.F32Literal => "float",
             TokenType.F64Literal => "double",
-            TokenType.F128Literal => "fp128",
+            // F128 carries its bits as i128 (never LLVM fp128); literal patterns
+            // compare bit patterns with icmp. Note the IEEE edge divergence:
+            // a NaN pattern matches a bit-identical NaN, and -0.0 != +0.0.
+            TokenType.F128Literal => "i128",
             TokenType.True or TokenType.False => "i1",
             _ => subjectType != null
                 ? GetLlvmType(type: subjectType)

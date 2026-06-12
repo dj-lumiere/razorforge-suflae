@@ -438,10 +438,6 @@ public sealed class RfSyntaxTreePrinter : ISyntaxTreeVisitor<string>
         node.Value.Accept(this);
 
     /// <inheritdoc/>
-    public string VisitUninitExpression(UninitExpression node) => "uninit";
-
-
-    /// <inheritdoc/>
     public string VisitChainedComparisonExpression(ChainedComparisonExpression node)
     {
         var sb = new StringBuilder(node.Operands[0].Accept(this));

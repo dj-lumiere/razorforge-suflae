@@ -87,7 +87,7 @@ Covered today (see `*.rf` files in this directory):
 - Multi-constraint generics: `multi_constraint_generic` — `T obeys Equatable, Hashable`
 - Tuple destructuring in loops: `tuple_in_loops` — `for (i, x) in enumerate()`, zip
 - Module-level state: `global_var`
-- Late initialization: `lateinit_uninit` — `lateinit var` and `= uninit`
+- Late initialization: `lateinit` — `lateinit var` eager allocation (entity placeholder, zeroed values), branch init, borrow-before-init
 - Fast I/O: `fast_io` — `S64`/`U64.from_digit_bytes!` (+ streaming `_at!`) and `to_digit_bytes()` round-trip; bypasses Text for CP throughput
 - Arithmetic operator family: `arithmetic_operators` — `+`/`+!`/`+%`/`+^` (checked/unchecked-UB/wrap/clamp) on each binary op + unary `-`
 - Runtime errors — collections: `runtime_error_collections` — `try_remove_last`/`try_remove_first`/`try_remove_at`/`try_first`/`try_last` on empty / out-of-bounds inputs

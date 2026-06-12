@@ -116,7 +116,7 @@ routine F64.$create(from: F64) -> F64
 ### :param from: The `F128` value to convert.
 ### :returns: The nearest representable `F64` value.
 routine F64.$create(from: F128) -> F64
-  return float_narrow[F128, F64](from)
+  return rf_f128_to_f64_parts(low: from.low_bits(), high: from.high_bits())
 
 ### Converts a decimal32 value to double-precision binary floating point.
 ### :param from: The decimal floating-point input value.

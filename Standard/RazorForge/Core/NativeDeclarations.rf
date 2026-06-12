@@ -715,6 +715,123 @@ external("C") routine rf_f128_hypot_parts(x_low: U64, x_high: U64, y_low: U64, y
 ### :param out: Storage receiving the resulting `F128` value.
 external("C") routine rf_f128_copysign_parts(value_low: U64, value_high: U64, sign_low: U64, sign_high: U64, out: Hijacked[F128])
 
+# ----------------------------------------------------------------------------
+# F128 core operations. F128 carries its bits as an LLVM i128 (never fp128),
+# so arithmetic, comparison, conversion and rounding all route through these
+# bridges instead of native LLVM float instructions.
+# ----------------------------------------------------------------------------
+
+### Returns the sum `a + b` of two `F128` values.
+### :param a_low: The low 64 bits of the left operand.
+### :param a_high: The high 64 bits of the left operand.
+### :param b_low: The low 64 bits of the right operand.
+### :param b_high: The high 64 bits of the right operand.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_add_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[F128])
+### Returns the difference `a - b` of two `F128` values.
+### :param a_low: The low 64 bits of the left operand.
+### :param a_high: The high 64 bits of the left operand.
+### :param b_low: The low 64 bits of the right operand.
+### :param b_high: The high 64 bits of the right operand.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_sub_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[F128])
+### Returns the product `a * b` of two `F128` values.
+### :param a_low: The low 64 bits of the left operand.
+### :param a_high: The high 64 bits of the left operand.
+### :param b_low: The low 64 bits of the right operand.
+### :param b_high: The high 64 bits of the right operand.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_mul_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[F128])
+### Returns the quotient `a / b` of two `F128` values.
+### :param a_low: The low 64 bits of the left operand.
+### :param a_high: The high 64 bits of the left operand.
+### :param b_low: The low 64 bits of the right operand.
+### :param b_high: The high 64 bits of the right operand.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_div_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[F128])
+### Returns the square root of an `F128` value.
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_sqrt_parts(low: U64, high: U64, out: Hijacked[F128])
+### Rounds an `F128` value toward negative infinity.
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_floor_parts(low: U64, high: U64, out: Hijacked[F128])
+### Rounds an `F128` value toward positive infinity.
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_ceil_parts(low: U64, high: U64, out: Hijacked[F128])
+### Rounds an `F128` value to the nearest integer, ties away from zero.
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_round_parts(low: U64, high: U64, out: Hijacked[F128])
+### Discards the fractional part of an `F128` value (rounds toward zero).
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_trunc_parts(low: U64, high: U64, out: Hijacked[F128])
+### Returns whether two `F128` values compare equal (IEEE: false for NaN).
+### :param a_low: The low 64 bits of the left operand.
+### :param a_high: The high 64 bits of the left operand.
+### :param b_low: The low 64 bits of the right operand.
+### :param b_high: The high 64 bits of the right operand.
+### :returns: `1` when equal, `0` otherwise.
+external("C") routine rf_f128_eq_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> S32
+### Returns whether `a < b` (IEEE ordered: false when either is NaN).
+### :param a_low: The low 64 bits of the left operand.
+### :param a_high: The high 64 bits of the left operand.
+### :param b_low: The low 64 bits of the right operand.
+### :param b_high: The high 64 bits of the right operand.
+### :returns: `1` when `a < b`, `0` otherwise.
+external("C") routine rf_f128_lt_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> S32
+### Returns whether `a > b` (IEEE ordered: false when either is NaN).
+### :param a_low: The low 64 bits of the left operand.
+### :param a_high: The high 64 bits of the left operand.
+### :param b_low: The low 64 bits of the right operand.
+### :param b_high: The high 64 bits of the right operand.
+### :returns: `1` when `a > b`, `0` otherwise.
+external("C") routine rf_f128_gt_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> S32
+### Converts a signed 64-bit integer to `F128`.
+### :param x: The integer to convert.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_s64_to_f128_parts(x: S64, out: Hijacked[F128])
+### Converts an unsigned 64-bit integer to `F128`.
+### :param x: The integer to convert.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_u64_to_f128_parts(x: U64, out: Hijacked[F128])
+### Converts a signed 128-bit integer (as low/high words) to `F128`.
+### :param low: The low 64 bits of the integer.
+### :param high: The high 64 bits of the integer.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_s128_to_f128_parts(low: U64, high: U64, out: Hijacked[F128])
+### Converts an unsigned 128-bit integer (as low/high words) to `F128`.
+### :param low: The low 64 bits of the integer.
+### :param high: The high 64 bits of the integer.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_u128_to_f128_parts(low: U64, high: U64, out: Hijacked[F128])
+### Widens an `F32` to `F128` exactly.
+### :param x: The single-precision value to widen.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f32_to_f128_parts(x: F32, out: Hijacked[F128])
+### Widens an `F64` to `F128` exactly.
+### :param x: The double-precision value to widen.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f64_to_f128_parts(x: F64, out: Hijacked[F128])
+### Narrows an `F128` to the nearest `F32`.
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :returns: The nearest single-precision value.
+external("C") routine rf_f128_to_f32_parts(low: U64, high: U64) -> F32
+### Narrows an `F128` to the nearest `F64`.
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :returns: The nearest double-precision value.
+external("C") routine rf_f128_to_f64_parts(low: U64, high: U64) -> F64
+
 # ============================================================================
 # Moment - System Clock
 # ============================================================================
