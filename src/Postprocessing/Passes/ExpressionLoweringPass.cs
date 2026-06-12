@@ -901,8 +901,16 @@ internal sealed class ExpressionLoweringPass(PostprocessingContext ctx)
                     clauses.Add(c with { Body = clauseBody });
                 }
 
+                // Subjectless (condition-based) when-expressions have no subject to lower;
+                // mirror ParseWhenStatement and synthesize a Bool `true` subject — EmitWhen
+                // unconditionally emits the subject expression.
+                Expression whenSubject = loweredSubject ?? new LiteralExpression(
+                    Value: true,
+                    LiteralType: TokenType.True,
+                    Location: loc) { ResolvedType = ctx.Registry.LookupType(name: "Bool") };
+
                 hoisted.Add(new WhenStatement(
-                    Expression: loweredSubject ?? whenExpr.Expression!,
+                    Expression: whenSubject,
                     Clauses: clauses,
                     Location: loc));
 

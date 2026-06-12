@@ -40,10 +40,9 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
     private int _spillCounter;
 
     /// <summary>A live owned binding: its name, type, and resolved <c>$destroy</c> routine.
-    /// <paramref name="IsLateInitEntity"/> marks a `lateinit` entity local, whose binding always
-    /// holds a valid owned allocation (the zeroed placeholder or a later-assigned value).</summary>
-    private readonly record struct Owned(string Name, TypeInfo Type, RoutineInfo Destroy,
-        bool IsLateInitEntity = false);
+    /// An entity binding always holds a valid owned allocation while live (a lateinit zeroed
+    /// placeholder, the declaration initializer, or a later-assigned value).</summary>
+    private readonly record struct Owned(string Name, TypeInfo Type, RoutineInfo Destroy);
 
     public void Run(Program program)
     {
@@ -177,17 +176,21 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
             case BreakStatement or ContinueStatement:
                 return PrefixDestroys(stmt, live, from: loopBoundary, skip: null);
 
-            // A `lateinit` entity local always holds a valid owned allocation (the zeroed
-            // placeholder or a previously assigned value), so plain reassignment must destroy
-            // the current content first or it leaks — the branch-init pattern
-            // (`lateinit var x: T` then `x = T(...)` per branch) would leak a placeholder per
-            // run. The RHS is spilled to a temp before the destroy so it may still read the
+            // An owned entity local always holds a valid owned allocation at a reassignment —
+            // a `lateinit` binding holds the zeroed placeholder or a prior value, a plain
+            // binding was initialized at declaration (block-scoped teardown guarantees the
+            // declaration executed). So reassignment must destroy the current content first
+            // or it leaks: the branch-init pattern (`lateinit var x: T` then `x = T(...)` per
+            // branch) would leak a placeholder per run, and `var r = T(...) ; r = T(...)`
+            // would leak the first allocation. Bindings excluded from `live` (stolen, view,
+            // using, no $destroy) are correctly skipped — same trust as scope-exit teardown.
+            // The RHS is spilled to a temp before the destroy so it may still read the
             // old value; a bare-identifier RHS is a move and needs no spill. User assignments
             // are still in operator form here (ExpressionStatement of `=` BinaryExpression —
             // codegen's EmitBinaryAssign); AssignmentStatement appears in synthesized bodies.
             case AssignmentStatement a when a.Target is IdentifierExpression target &&
-                                            FindLateInitEntity(live, target.Name) is { } owned:
-                return LowerLateInitReassign(original: a, rhs: a.Value,
+                                            FindOwnedEntity(live, target.Name) is { } owned:
+                return LowerEntityReassign(original: a, rhs: a.Value,
                     rebuild: rhs => a with { Value = rhs }, owned: owned);
 
             case ExpressionStatement
@@ -196,8 +199,8 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
                 {
                     Operator: BinaryOperator.Assign, Left: IdentifierExpression target
                 } bin
-            } es when FindLateInitEntity(live, target.Name) is { } owned:
-                return LowerLateInitReassign(original: es, rhs: bin.Right,
+            } es when FindOwnedEntity(live, target.Name) is { } owned:
+                return LowerEntityReassign(original: es, rhs: bin.Right,
                     rebuild: rhs => es with { Expression = bin with { Right = rhs } },
                     owned: owned);
 
@@ -223,10 +226,7 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
                     && !IsViewBinding(v: v)
                     && TryResolveDestroy(type: t, out RoutineInfo? d) && d != null)
                 {
-                    bool lateInitEntity = v is { IsLateInit: true, Initializer: null } &&
-                                          t is EntityTypeInfo;
-                    live.Add(item: new Owned(Name: v.Name, Type: t, Destroy: d,
-                        IsLateInitEntity: lateInitEntity));
+                    live.Add(item: new Owned(Name: v.Name, Type: t, Destroy: d));
                 }
                 continue;
             }
@@ -297,26 +297,27 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
 
     /// <summary>
     /// Finds the innermost live binding named <paramref name="name"/> and returns it only if it
-    /// is a `lateinit` entity local. A shadowing non-lateinit binding correctly yields null.
+    /// is an owned bare-entity local (lateinit or plain) — the bindings whose reassignment must
+    /// tear down the old content. A shadowing non-entity binding correctly yields null.
     /// </summary>
-    private static Owned? FindLateInitEntity(List<Owned> live, string name)
+    private static Owned? FindOwnedEntity(List<Owned> live, string name)
     {
         for (int i = live.Count - 1; i >= 0; i--)
         {
             if (live[index: i].Name != name) continue;
-            return live[index: i].IsLateInitEntity ? live[index: i] : null;
+            return live[index: i].Type is EntityTypeInfo ? live[index: i] : null;
         }
         return null;
     }
 
     /// <summary>
-    /// Rewrites <c>x = EXPR</c> on a lateinit entity local to
+    /// Rewrites <c>x = EXPR</c> on an owned entity local to
     /// <c>var __li_N = EXPR ; x.$destroy() ; x = __li_N</c> so the current content (placeholder
     /// or prior value) is freed exactly once and the RHS still sees the old value.
     /// <paramref name="rebuild"/> reconstructs the assignment statement (whichever AST form it
     /// has) around the spilled RHS.
     /// </summary>
-    private Statement LowerLateInitReassign(Statement original, Expression rhs,
+    private Statement LowerEntityReassign(Statement original, Expression rhs,
         System.Func<Expression, Statement> rebuild, Owned owned)
     {
         var stmts = new List<Statement>();

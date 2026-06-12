@@ -94,6 +94,26 @@ public sealed partial class SemanticVerifier
             return false;
         }
 
+        // Type-category protocols are satisfied by category membership itself: a record obeys
+        // RecordType by BEING a record — no declaration needed (their parent protocols like
+        // Equatable/Hashable are auto-derived for these categories). Without this, a
+        // `needs M obeys RecordType` constraint can only be met by the wrong-spelling
+        // workaround `M is RecordType`.
+        bool categoryMatch = protocolName switch
+        {
+            "RecordType" => type.Category == TypeCategory.Record,
+            "EntityType" => type.Category == TypeCategory.Entity,
+            "ChoiceType" => type.Category == TypeCategory.Choice,
+            "VariantType" => type.Category == TypeCategory.Variant,
+            "FlagsType" => type.Category == TypeCategory.Flags,
+            "Crashable" => type.Category == TypeCategory.Crashable,
+            _ => false
+        };
+        if (categoryMatch)
+        {
+            return true;
+        }
+
         // Generic parameter: check current routine/owner type constraints for obeys declarations.
         // e.g., needs T obeys Equatable means T satisfies Equatable inside this routine's body.
         if (type is GenericParameterTypeInfo)

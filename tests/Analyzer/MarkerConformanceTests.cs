@@ -193,4 +193,81 @@ public class MarkerConformanceTests
             filter: e => e.Message.Contains(value: "innate",
                 comparisonType: StringComparison.OrdinalIgnoreCase));
     }
+    /// <summary>
+    /// Verifies that a generic record INSTANCE satisfies an `obeys RecordType` generic
+    /// constraint. Regression test: instantiated records (e.g. Algebra[S64]) lost the
+    /// auto-derived marker protocols, so `needs M obeys RecordType` was only satisfiable
+    /// via the wrong-spelling workaround `M is RecordType`. Category protocols are now
+    /// satisfied by category membership itself.
+    /// </summary>
+
+    [Fact]
+    public void Analyze_GenericRecordInstance_SatisfiesRecordTypeConstraint()
+    {
+        string source = """
+                        record Algebra[T]
+                          value: T
+
+                        entity Holder[M]
+                        needs M obeys RecordType
+                          tag: S64
+
+                        routine start()
+                          var h = Holder[Algebra[S64]](tag: 1_s64)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+    /// <summary>
+    /// Verifies that an entity satisfies an `obeys EntityType` generic constraint by
+    /// category membership.
+    /// </summary>
+
+    [Fact]
+    public void Analyze_Entity_SatisfiesEntityTypeConstraint()
+    {
+        string source = """
+                        entity Resource
+                          tag: S64
+
+                        entity Keeper[M]
+                        needs M obeys EntityType
+                          tag: S64
+
+                        routine start()
+                          var k = Keeper[Resource](tag: 3_s64)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Empty(collection: result.Errors);
+    }
+    /// <summary>
+    /// Verifies that an entity argument still violates an `obeys RecordType` constraint —
+    /// category-protocol conformance must not become a blanket pass.
+    /// </summary>
+
+    [Fact]
+    public void Analyze_EntityArgument_FailsRecordTypeConstraint()
+    {
+        string source = """
+                        entity Resource
+                          tag: S64
+
+                        entity Holder[M]
+                        needs M obeys RecordType
+                          tag: S64
+
+                        routine start()
+                          var h = Holder[Resource](tag: 2_s64)
+                          return
+                        """;
+
+        AnalysisResult result = AnalyzeSa(source: source);
+        Assert.Contains(collection: result.Errors,
+            filter: e => e.Message.Contains(value: "does not implement protocol 'RecordType'",
+                comparisonType: StringComparison.Ordinal));
+    }
 }

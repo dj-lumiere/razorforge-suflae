@@ -391,7 +391,18 @@ public partial class Parser
             // Case 2: Condition-based when (RF only) - parse full expression as pattern
             else if (isConditionBased)
             {
-                Expression condExpr = ParseExpression();
+                bool savedConditionContext = _inWhenConditionContext;
+                _inWhenConditionContext = true;
+                Expression condExpr;
+                try
+                {
+                    condExpr = ParseExpression();
+                }
+                finally
+                {
+                    _inWhenConditionContext = savedConditionContext;
+                }
+
                 pattern = new ExpressionPattern(Expression: condExpr, Location: clauseLocation);
             }
             // Case 3: 'is' keyword - type pattern

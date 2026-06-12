@@ -1,0 +1,9 @@
+  create(1)
+before reassign
+  create(2)
+  destroy(1)
+after reassign
+  create(3)
+  destroy(2)
+after second reassign
+  destroy(3)
