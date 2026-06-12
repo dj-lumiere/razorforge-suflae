@@ -838,6 +838,20 @@ void rf_parse_F128(const char* cstr, f128_t* out)
 
 uint64_t rf_format_F128(f128_t x)
 {
+    // Canonical specials — "NaN" (always unsigned) / "inf" / "-inf" — matching
+    // F16/F32/F64 and the decimal formats. Checked on the raw bits so LibBF's
+    // own spellings ("NaN"/"Inf"/"-Inf") never surface.
+    uint32_t sp_exp = (uint32_t)((x.high >> 48) & 0x7FFF);
+    uint64_t sp_mant = (x.high & 0x0000FFFFFFFFFFFFULL) | x.low;
+    if (sp_exp == 0x7FFF)
+    {
+        const char* s = sp_mant != 0 ? "NaN" : ((x.high >> 63) ? "-inf" : "inf");
+        char* sbuf = (char*)malloc(8);
+        if (!sbuf) return 0;
+        snprintf(sbuf, 8, "%s", s);
+        return (uint64_t)sbuf;
+    }
+
     bf_t bx;
     f128_to_bf(&bx, x);
     size_t len;

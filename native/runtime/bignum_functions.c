@@ -532,6 +532,21 @@ void rf_bigdec_set_str(rf_bigdecimal a, const char* str)
 
 // -- get ----------------------------------------------------------------------
 
+// Rewrites decNumber's special spellings ("Infinity", "-Infinity", "NaN",
+// "-NaN", "sNaN", ...) in place to the canonical RazorForge forms: "inf",
+// "-inf", "NaN" (NaN is always unsigned). Finite values start with a digit,
+// '-', '.', or '+' followed by digits, so the leading-letter checks cannot
+// misfire on them.
+static void canonicalize_bigdec_special(char* buf)
+{
+    int neg = buf[0] == '-';
+    const char* p = buf + (neg ? 1 : 0);
+    if (p[0] == 'I')                      // "Infinity"
+        memcpy(buf, neg ? "-inf" : "inf\0", 5);
+    else if (p[0] == 'N' || p[0] == 's')  // "NaN" / "sNaN"
+        memcpy(buf, "NaN", 4);
+}
+
 char* rf_bigdec_get_str(rf_bigdecimal a, int decimal_places)
 {
     if (!a) return NULL;
@@ -560,6 +575,7 @@ char* rf_bigdec_get_str(rf_bigdecimal a, int decimal_places)
         decNumberRescale(&target, (decNumber*)a, &exp, get_bigdec_ctx());
         decNumberToString(&target, buf);
     }
+    canonicalize_bigdec_special(buf);
     return buf;
 }
 

@@ -201,11 +201,27 @@ uint32_t rf_d32_from_string(const char* str)
     return from_single(s);
 }
 
+// Rewrites decNumber's special spellings ("Infinity", "-Infinity", "NaN",
+// "-NaN", "sNaN", ...) in place to the canonical RazorForge forms: "inf",
+// "-inf", "NaN" (NaN is always unsigned — payload/sign carry no value
+// information). Finite values start with a digit, '-', '.', or '+' followed
+// by digits, so the leading-letter checks cannot misfire on them.
+static void canonicalize_dec_special(char* buf)
+{
+    int neg = buf[0] == '-';
+    const char* p = buf + (neg ? 1 : 0);
+    if (p[0] == 'I')                      // "Infinity"
+        memcpy(buf, neg ? "-inf" : "inf\0", 5);
+    else if (p[0] == 'N' || p[0] == 's')  // "NaN" / "sNaN"
+        memcpy(buf, "NaN", 4);
+}
+
 char* rf_d32_to_string(uint32_t val)
 {
     char* buf = (char*)malloc(64);
     decSingle s = to_single(val);
     decSingleToString(&s, buf);
+    canonicalize_dec_special(buf);
     return buf;
 }
 
@@ -329,6 +345,7 @@ char* rf_d64_to_string(uint64_t val)
     char* buf = (char*)malloc(64);
     decDouble d = to_double(val);
     decDoubleToString(&d, buf);
+    canonicalize_dec_special(buf);
     return buf;
 }
 
@@ -444,6 +461,7 @@ char* rf_d128_to_string(uint64_t low, uint64_t high)
     char* buf = (char*)malloc(128);
     decQuad q = to_quad(low, high);
     decQuadToString(&q, buf);
+    canonicalize_dec_special(buf);
     return buf;
 }
 
