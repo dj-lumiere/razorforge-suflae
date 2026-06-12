@@ -188,9 +188,11 @@ public partial class LlvmCodeGenerator
 
         switch (varType)
         {
-            // Track entity variables for automatic cleanup at return points
-            // Only track when initialized via constructor (actual heap allocation)
-            case EntityTypeInfo when IsEntityConstructorCall(expr: varDecl.Initializer):
+            // Track entity variables for automatic cleanup at return points.
+            // Tracked when initialized via constructor (actual heap allocation) or as a
+            // lateinit placeholder (allocated below, $create not run).
+            case EntityTypeInfo when IsEntityConstructorCall(expr: varDecl.Initializer) ||
+                                     (varDecl.IsLateInit && varDecl.Initializer == null):
                 _localEntityVars.Add(item: (varDecl.Name, $"%{uniqueName}.addr"));
                 // Zero-init the alloca in the entry block: if the declaration sits inside a
                 // conditional that doesn't execute on the active path, the alloca still exists
@@ -240,12 +242,32 @@ public partial class LlvmCodeGenerator
         // Store initial value if present
         if (varDecl.Initializer == null)
         {
-            return;
-        }
+            // `lateinit var x: T` — eager allocation, late initialization. Entities get a
+            // real heap block ($create not run, no field stores) so the binding is
+            // immediately valid and borrowable, and scope teardown frees a real allocation.
+            // The block must come from the calloc-backed rf_allocate_dynamic (NOT the
+            // _uninit variant): $destroy runs on the placeholder (scope exit, and on
+            // reassignment) and walks its fields — zeroed fields are null-safe to free,
+            // garbage fields are wild pointers. Value types are stored zeroed for the same
+            // reason (RC-field release walks). Zeroed contents are teardown armor, not a
+            // language guarantee — reading before assignment yields meaningless values.
+            if (varDecl.IsLateInit)
+            {
+                if (varType is EntityTypeInfo lateInitEntity)
+                {
+                    int blockSize = lateInitEntity.HeapBlockSize(pointerSize: _pointerSizeBytes);
+                    string placeholder = NextTemp();
+                    EmitLine(sb: sb,
+                        line: $"  {placeholder} = call ptr @rf_allocate_dynamic(i64 {blockSize})");
+                    EmitLine(sb: sb, line: $"  store ptr {placeholder}, ptr {varPtr}");
+                }
+                else
+                {
+                    EmitLine(sb: sb,
+                        line: $"  store {llvmType} {GetZeroValue(type: varType)}, ptr {varPtr}");
+                }
+            }
 
-        // `var x: T = uninit` — alloca only, no store. Reading without prior write is UB.
-        if (varDecl.Initializer is UninitExpression)
-        {
             return;
         }
 

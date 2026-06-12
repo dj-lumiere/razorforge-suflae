@@ -24,7 +24,6 @@ internal sealed class MeReferenceScanner : ISyntaxTreeVisitor<bool>
     public bool VisitIdentifierExpression(IdentifierExpression node) => node.Name == "me";
 
     public bool VisitLiteralExpression(LiteralExpression node) => false;
-    public bool VisitUninitExpression(UninitExpression node) => false;
     public bool VisitTypeExpression(TypeExpression node) => false;
     public bool VisitTypeIdExpression(TypeIdExpression node) => false;
     public bool VisitBreakStatement(BreakStatement node) => false;

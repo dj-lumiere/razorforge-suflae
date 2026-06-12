@@ -90,7 +90,6 @@ internal sealed class BindingTypeRewriter : ISyntaxTreeVisitor<bool>
 
     // ---- pass-throughs ----
     public bool VisitLiteralExpression(LiteralExpression node) => false;
-    public bool VisitUninitExpression(UninitExpression node) => false;
     public bool VisitTypeExpression(TypeExpression node) => false;
     public bool VisitTypeIdExpression(TypeIdExpression node) => false;
     public bool VisitBreakStatement(BreakStatement node) => false;

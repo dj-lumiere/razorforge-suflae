@@ -77,13 +77,14 @@ public partial class Tokenizer
             string suffix =
                 _source.Substring(startIndex: suffixStart, length: _position - suffixStart);
 
-            // Arbitrary precision: `n` → Integer (integer syntax only),
-            // `dn` → Decimal (float syntax only).
+            // Arbitrary precision: `n` → Integer (integer syntax only — `1.5n`
+            // names no integer), `dn` → Decimal (both syntaxes: `1dn` and
+            // `0.5dn` are equally unambiguous, like every other typed suffix).
             if (!isFloat && suffix == ArbitraryIntegerSuffix)
             {
                 AddToken(type: TokenType.IntegerLiteral);
             }
-            else if (isFloat && suffix == ArbitraryDecimalSuffix)
+            else if (suffix == ArbitraryDecimalSuffix)
             {
                 AddToken(type: TokenType.DecimalLiteral);
             }
@@ -218,12 +219,14 @@ public partial class Tokenizer
             string suffix =
                 _source.Substring(startIndex: suffixStart, length: _position - suffixStart);
 
-            // Arbitrary precision: `n` for hex integers, `dn` for hex floats.
+            // Arbitrary precision: `n` for hex integers, `dn` for Decimal (the
+            // integer form is only reachable via the explicit `_dn` spelling —
+            // a bare `d` is a hex digit and gets consumed by the mantissa).
             if (!isHexFloat && suffix == ArbitraryIntegerSuffix)
             {
                 AddToken(type: TokenType.IntegerLiteral);
             }
-            else if (isHexFloat && suffix == ArbitraryDecimalSuffix)
+            else if (suffix == ArbitraryDecimalSuffix)
             {
                 AddToken(type: TokenType.DecimalLiteral);
             }

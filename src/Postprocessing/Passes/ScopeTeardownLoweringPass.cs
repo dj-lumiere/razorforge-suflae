@@ -39,8 +39,11 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
     private readonly TypeInfo? _blankType = ctx.Registry.LookupType(name: "Blank");
     private int _spillCounter;
 
-    /// <summary>A live owned binding: its name, type, and resolved <c>$destroy</c> routine.</summary>
-    private readonly record struct Owned(string Name, TypeInfo Type, RoutineInfo Destroy);
+    /// <summary>A live owned binding: its name, type, and resolved <c>$destroy</c> routine.
+    /// <paramref name="IsLateInitEntity"/> marks a `lateinit` entity local, whose binding always
+    /// holds a valid owned allocation (the zeroed placeholder or a later-assigned value).</summary>
+    private readonly record struct Owned(string Name, TypeInfo Type, RoutineInfo Destroy,
+        bool IsLateInitEntity = false);
 
     public void Run(Program program)
     {
@@ -174,6 +177,30 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
             case BreakStatement or ContinueStatement:
                 return PrefixDestroys(stmt, live, from: loopBoundary, skip: null);
 
+            // A `lateinit` entity local always holds a valid owned allocation (the zeroed
+            // placeholder or a previously assigned value), so plain reassignment must destroy
+            // the current content first or it leaks — the branch-init pattern
+            // (`lateinit var x: T` then `x = T(...)` per branch) would leak a placeholder per
+            // run. The RHS is spilled to a temp before the destroy so it may still read the
+            // old value; a bare-identifier RHS is a move and needs no spill. User assignments
+            // are still in operator form here (ExpressionStatement of `=` BinaryExpression —
+            // codegen's EmitBinaryAssign); AssignmentStatement appears in synthesized bodies.
+            case AssignmentStatement a when a.Target is IdentifierExpression target &&
+                                            FindLateInitEntity(live, target.Name) is { } owned:
+                return LowerLateInitReassign(original: a, rhs: a.Value,
+                    rebuild: rhs => a with { Value = rhs }, owned: owned);
+
+            case ExpressionStatement
+            {
+                Expression: BinaryExpression
+                {
+                    Operator: BinaryOperator.Assign, Left: IdentifierExpression target
+                } bin
+            } es when FindLateInitEntity(live, target.Name) is { } owned:
+                return LowerLateInitReassign(original: es, rhs: bin.Right,
+                    rebuild: rhs => es with { Expression = bin with { Right = rhs } },
+                    owned: owned);
+
             default:
                 return stmt;
         }
@@ -196,7 +223,10 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
                     && !IsViewBinding(v: v)
                     && TryResolveDestroy(type: t, out RoutineInfo? d) && d != null)
                 {
-                    live.Add(item: new Owned(Name: v.Name, Type: t, Destroy: d));
+                    bool lateInitEntity = v is { IsLateInit: true, Initializer: null } &&
+                                          t is EntityTypeInfo;
+                    live.Add(item: new Owned(Name: v.Name, Type: t, Destroy: d,
+                        IsLateInitEntity: lateInitEntity));
                 }
                 continue;
             }
@@ -263,6 +293,49 @@ internal sealed class ScopeTeardownLoweringPass(PostprocessingContext ctx)
         if (stmts.Count == 0) return exit;
         stmts.Add(item: finalExit);
         return new BlockStatement(Statements: stmts, Location: exit.Location);
+    }
+
+    /// <summary>
+    /// Finds the innermost live binding named <paramref name="name"/> and returns it only if it
+    /// is a `lateinit` entity local. A shadowing non-lateinit binding correctly yields null.
+    /// </summary>
+    private static Owned? FindLateInitEntity(List<Owned> live, string name)
+    {
+        for (int i = live.Count - 1; i >= 0; i--)
+        {
+            if (live[index: i].Name != name) continue;
+            return live[index: i].IsLateInitEntity ? live[index: i] : null;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Rewrites <c>x = EXPR</c> on a lateinit entity local to
+    /// <c>var __li_N = EXPR ; x.$destroy() ; x = __li_N</c> so the current content (placeholder
+    /// or prior value) is freed exactly once and the RHS still sees the old value.
+    /// <paramref name="rebuild"/> reconstructs the assignment statement (whichever AST form it
+    /// has) around the spilled RHS.
+    /// </summary>
+    private Statement LowerLateInitReassign(Statement original, Expression rhs,
+        System.Func<Expression, Statement> rebuild, Owned owned)
+    {
+        var stmts = new List<Statement>();
+        Expression finalRhs = rhs;
+
+        // A bare-identifier RHS is a move of an existing binding — no spill needed.
+        if (rhs is not IdentifierExpression)
+        {
+            string tmp = $"__li_{_spillCounter++}";
+            var decl = new VariableDeclaration(Name: tmp, Type: null, Initializer: rhs,
+                Visibility: VisibilityModifier.Secret, Location: original.Location);
+            stmts.Add(item: new DeclarationStatement(Declaration: decl, Location: original.Location));
+            finalRhs = new IdentifierExpression(Name: tmp, Location: original.Location)
+                { ResolvedType = rhs.ResolvedType };
+        }
+
+        stmts.Add(item: MakeDestroyStmt(owned, original.Location));
+        stmts.Add(item: rebuild(finalRhs));
+        return new BlockStatement(Statements: stmts, Location: original.Location);
     }
 
     private bool WillDestroyAny(List<Owned> live, int from, string? skip)

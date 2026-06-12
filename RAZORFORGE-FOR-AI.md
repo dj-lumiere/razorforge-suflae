@@ -88,8 +88,9 @@ preset MAX_RETRIES: S32 = 5   # named constant: UPPER_CASE, explicit type requir
 ```
 
 There is **no `let` and no `const`** — `var` for bindings, `preset` for
-constants. (`lateinit`/`uninit` exist for deferred initialization; see stdlib
-usage before reaching for them.)
+constants. (`lateinit var x: T` defers initialization: storage is allocated at
+the declaration — entities get a real zeroed block, `$create` not run — so the
+binding is immediately valid and borrowable; assign before reading.)
 
 - Checked: `+ - *` (throw on overflow) · wrapping: `+% -% *%` · clamping: `+^ -^ *^`
 - Shifts: `<<` `>>` arithmetic, `<<<` `>>>` logical; shift amounts are `U32`

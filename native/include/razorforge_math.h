@@ -231,10 +231,61 @@ f128_t rf_d128_to_f128(uint64_t x_low, uint64_t x_high);
 d128_t rf_f128_to_d128(f128_t x);
 
 // ============================================================================
-// d128 transcendental functions (via f128 conversion)
-// These convert d128 -> f128, compute using SoftFloat, then convert back.
-// Both d128 and f128 have ~34 decimal digits precision.
+// Decimal transcendental functions (tiered TLFloat routing)
+// decimal -> exact decimal string -> next-size-up TLFloat binary format ->
+// correctly-rounded op -> full-precision string -> decimal.
+// Tiers: d32 -> binary64, d64 -> quad, d128 -> octuple. Each intermediate's
+// slack dwarfs the target's precision, so the final decimal rounding is the
+// only rounding that matters; results are byte-identical across platforms.
 // ============================================================================
+
+uint32_t rf_d32_sin(uint32_t x);
+uint32_t rf_d32_cos(uint32_t x);
+uint32_t rf_d32_tan(uint32_t x);
+uint32_t rf_d32_asin(uint32_t x);
+uint32_t rf_d32_acos(uint32_t x);
+uint32_t rf_d32_atan(uint32_t x);
+uint32_t rf_d32_atan2(uint32_t y, uint32_t x);
+uint32_t rf_d32_sinh(uint32_t x);
+uint32_t rf_d32_cosh(uint32_t x);
+uint32_t rf_d32_tanh(uint32_t x);
+uint32_t rf_d32_asinh(uint32_t x);
+uint32_t rf_d32_acosh(uint32_t x);
+uint32_t rf_d32_atanh(uint32_t x);
+uint32_t rf_d32_exp(uint32_t x);
+uint32_t rf_d32_exp2(uint32_t x);
+uint32_t rf_d32_expm1(uint32_t x);
+uint32_t rf_d32_log(uint32_t x);
+uint32_t rf_d32_log2(uint32_t x);
+uint32_t rf_d32_log10(uint32_t x);
+uint32_t rf_d32_log1p(uint32_t x);
+uint32_t rf_d32_pow(uint32_t base, uint32_t exp);
+uint32_t rf_d32_cbrt(uint32_t x);
+uint32_t rf_d32_hypot(uint32_t x, uint32_t y);
+
+uint64_t rf_d64_sin(uint64_t x);
+uint64_t rf_d64_cos(uint64_t x);
+uint64_t rf_d64_tan(uint64_t x);
+uint64_t rf_d64_asin(uint64_t x);
+uint64_t rf_d64_acos(uint64_t x);
+uint64_t rf_d64_atan(uint64_t x);
+uint64_t rf_d64_atan2(uint64_t y, uint64_t x);
+uint64_t rf_d64_sinh(uint64_t x);
+uint64_t rf_d64_cosh(uint64_t x);
+uint64_t rf_d64_tanh(uint64_t x);
+uint64_t rf_d64_asinh(uint64_t x);
+uint64_t rf_d64_acosh(uint64_t x);
+uint64_t rf_d64_atanh(uint64_t x);
+uint64_t rf_d64_exp(uint64_t x);
+uint64_t rf_d64_exp2(uint64_t x);
+uint64_t rf_d64_expm1(uint64_t x);
+uint64_t rf_d64_log(uint64_t x);
+uint64_t rf_d64_log2(uint64_t x);
+uint64_t rf_d64_log10(uint64_t x);
+uint64_t rf_d64_log1p(uint64_t x);
+uint64_t rf_d64_pow(uint64_t base, uint64_t exp);
+uint64_t rf_d64_cbrt(uint64_t x);
+uint64_t rf_d64_hypot(uint64_t x, uint64_t y);
 
 d128_t rf_d128_sin(uint64_t x_low, uint64_t x_high);
 d128_t rf_d128_cos(uint64_t x_low, uint64_t x_high);
@@ -246,11 +297,16 @@ d128_t rf_d128_atan2(uint64_t y_low, uint64_t y_high, uint64_t x_low, uint64_t x
 d128_t rf_d128_sinh(uint64_t x_low, uint64_t x_high);
 d128_t rf_d128_cosh(uint64_t x_low, uint64_t x_high);
 d128_t rf_d128_tanh(uint64_t x_low, uint64_t x_high);
+d128_t rf_d128_asinh(uint64_t x_low, uint64_t x_high);
+d128_t rf_d128_acosh(uint64_t x_low, uint64_t x_high);
+d128_t rf_d128_atanh(uint64_t x_low, uint64_t x_high);
 d128_t rf_d128_exp(uint64_t x_low, uint64_t x_high);
 d128_t rf_d128_exp2(uint64_t x_low, uint64_t x_high);
+d128_t rf_d128_expm1(uint64_t x_low, uint64_t x_high);
 d128_t rf_d128_log(uint64_t x_low, uint64_t x_high);
 d128_t rf_d128_log2(uint64_t x_low, uint64_t x_high);
 d128_t rf_d128_log10(uint64_t x_low, uint64_t x_high);
+d128_t rf_d128_log1p(uint64_t x_low, uint64_t x_high);
 d128_t rf_d128_pow(uint64_t base_low, uint64_t base_high, uint64_t exp_low, uint64_t exp_high);
 d128_t rf_d128_cbrt(uint64_t x_low, uint64_t x_high);
 d128_t rf_d128_hypot(uint64_t x_low, uint64_t x_high, uint64_t y_low, uint64_t y_high);
@@ -401,10 +457,20 @@ void rf_bigdec_exp(rf_bigdecimal result, int precision, rf_bigdecimal a);
 void rf_bigdec_log(rf_bigdecimal result, int precision, rf_bigdecimal a);
 void rf_bigdec_log10(rf_bigdecimal result, int precision, rf_bigdecimal a);
 
-// Trigonometric, hyperbolic, and transcendental constants (pi, e) are NOT
-// provided — decNumber has no built-in trig/hyperbolic, and we don't ship an
-// MPFR dependency (LGPL conflict). Deferred to a later version once Suflae
-// needs them; until then, use F64/F128 for trig and accept the precision cost.
+// Trigonometric / hyperbolic / constants — LibBF-backed (decNumber has no
+// trig; MPFR is LGPL). Binary working precision scales with the request
+// (digits * log2(10) + guard), so results are correct at any precision.
+void rf_bigdec_sin(rf_bigdecimal result, int precision, rf_bigdecimal a);
+void rf_bigdec_cos(rf_bigdecimal result, int precision, rf_bigdecimal a);
+void rf_bigdec_tan(rf_bigdecimal result, int precision, rf_bigdecimal a);
+void rf_bigdec_asin(rf_bigdecimal result, int precision, rf_bigdecimal a);
+void rf_bigdec_acos(rf_bigdecimal result, int precision, rf_bigdecimal a);
+void rf_bigdec_atan(rf_bigdecimal result, int precision, rf_bigdecimal a);
+void rf_bigdec_sinh(rf_bigdecimal result, int precision, rf_bigdecimal a);
+void rf_bigdec_cosh(rf_bigdecimal result, int precision, rf_bigdecimal a);
+void rf_bigdec_tanh(rf_bigdecimal result, int precision, rf_bigdecimal a);
+void rf_bigdec_pi(rf_bigdecimal result, int precision);
+void rf_bigdec_e(rf_bigdecimal result, int precision);
 
 // Rounding
 void rf_bigdec_ceil(rf_bigdecimal result, rf_bigdecimal a);

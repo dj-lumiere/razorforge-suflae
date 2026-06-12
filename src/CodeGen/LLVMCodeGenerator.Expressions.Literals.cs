@@ -256,13 +256,15 @@ public partial class LlvmCodeGenerator
             return EmitSpecialFloatLiteral(name: numericValue, literalType: literalType);
         }
 
-        // F128: use native parser for full 128-bit precision
+        // F128: use native parser for full 128-bit precision. F128 is an i128
+        // bit carrier in LLVM (never fp128), so the literal is emitted as an
+        // i128 integer constant holding the IEEE binary128 bit pattern
+        // (LLVM hex integer syntax: u0x<Hi16hex><Lo16hex>).
         if (literalType == TokenType.F128Literal)
         {
             NumericLiteralParser.F128 f128 =
                 NumericLiteralParser.ParseF128(str: numericValue);
-            // LLVM fp128 hex format: 0xL<Lo16hex><Hi16hex> (low bits first)
-            return $"0xL{f128.Lo:X16}{f128.Hi:X16}";
+            return $"u0x{f128.Hi:X16}{f128.Lo:X16}";
         }
 
         // Try hex float format first (0x1.ABCDp5)
@@ -285,10 +287,11 @@ public partial class LlvmCodeGenerator
     private static string EmitSpecialFloatLiteral(string name, TokenType literalType)
     {
         // F128 quiet-NaN: exp=all-ones, MSB of mantissa set; F128 inf: exp=all-ones, mantissa=0.
+        // Emitted as an i128 bit-pattern constant (F128 is never LLVM fp128).
         if (literalType == TokenType.F128Literal)
         {
             ulong hi = name == "nan" ? 0x7FFF800000000000UL : 0x7FFF000000000000UL;
-            return $"0xL0000000000000000{hi:X16}";
+            return $"u0x{hi:X16}0000000000000000";
         }
         double d = name == "nan" ? double.NaN : double.PositiveInfinity;
         return EmitDoubleAsLlvmHex(d: d, literalType: literalType);

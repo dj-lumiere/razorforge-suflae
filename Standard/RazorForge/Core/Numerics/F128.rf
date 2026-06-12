@@ -1,13 +1,20 @@
 module Core
 
 import Collections
-# Core F128 type definition - maps to LLVM fp128
+# Core F128 type definition - carries IEEE binary128 bits as LLVM i128.
+#
+# Deliberately NOT mapped to LLVM `fp128`: native fp128 instructions lower to
+# compiler-rt `__*tf*` libcalls whose availability and ABI differ per platform
+# (Windows lacks them entirely; Apple passes them in vector registers). Every
+# F128 operation instead routes through the ABI-stable `rf_f128_*_parts`
+# runtime bridges backed by TLFloat soft-float, making results bit-identical
+# on every platform.
 
 ### Represents a 128-bit IEEE 754 binary floating-point value.
 ### `F128` provides quadruple precision for workloads that need far more range
 ### and significand precision than `F64`, such as numerical analysis, symbolic
 ### support code, and high-accuracy scientific routines.
-@llvm("fp128")
+@llvm("i128")
 record F128 obeys Numeric, Ordered
   pass
 
@@ -30,79 +37,102 @@ preset F128_LN_10: F128 = 2.302585092994045684017991454684364208_f128
 ### :param from: The signed 8-bit integer to convert.
 ### :returns: The corresponding `F128` value.
 routine F128.$create(from: S8) -> F128
-  return signed_to_float[S8, F128](from)
+  return F128(from: sign_extend[S8, S64](from))
 
 ### Converts an `S16` into quadruple-precision floating-point form.
 ### :param from: The signed 16-bit integer to convert.
 ### :returns: The corresponding `F128` value.
 routine F128.$create(from: S16) -> F128
-  return signed_to_float[S16, F128](from)
+  return F128(from: sign_extend[S16, S64](from))
 
 ### Converts an `S32` into quadruple-precision floating-point form.
 ### :param from: The signed 32-bit integer to convert.
 ### :returns: The corresponding `F128` value.
 routine F128.$create(from: S32) -> F128
-  return signed_to_float[S32, F128](from)
+  return F128(from: sign_extend[S32, S64](from))
 
 ### Converts an `S64` into quadruple-precision floating-point form.
 ### :param from: The signed 64-bit integer to convert.
 ### :returns: The closest representable `F128` value.
 routine F128.$create(from: S64) -> F128
-  return signed_to_float[S64, F128](from)
+  lateinit var result: F128
+  danger!
+    rf_s64_to_f128_parts(x: from, out: result.hijack())
+  return result
 
 ### Converts an `S128` into quadruple-precision floating-point form.
 ### :param from: The signed 128-bit integer to convert.
 ### :returns: The closest representable `F128` value.
 routine F128.$create(from: S128) -> F128
-  return signed_to_float[S128, F128](from)
+  var bits = reinterpret_bits[S128, U128](from)
+  var lo = int_truncate[U128, U64](bits)
+  var hi = int_truncate[U128, U64](bits >>> 64u32)
+  lateinit var result: F128
+  danger!
+    rf_s128_to_f128_parts(low: lo, high: hi, out: result.hijack())
+  return result
 
 ### Converts a `U8` into quadruple-precision floating-point form.
 ### :param from: The unsigned 8-bit integer to convert.
 ### :returns: The corresponding `F128` value.
 routine F128.$create(from: U8) -> F128
-  return unsigned_to_float[U8, F128](from)
+  return F128(from: zero_extend[U8, U64](from))
 
 ### Converts a `U16` into quadruple-precision floating-point form.
 ### :param from: The unsigned 16-bit integer to convert.
 ### :returns: The corresponding `F128` value.
 routine F128.$create(from: U16) -> F128
-  return unsigned_to_float[U16, F128](from)
+  return F128(from: zero_extend[U16, U64](from))
 
 ### Converts a `U32` into quadruple-precision floating-point form.
 ### :param from: The unsigned 32-bit integer to convert.
 ### :returns: The corresponding `F128` value.
 routine F128.$create(from: U32) -> F128
-  return unsigned_to_float[U32, F128](from)
+  return F128(from: zero_extend[U32, U64](from))
 
 ### Converts a `U64` into quadruple-precision floating-point form.
 ### :param from: The unsigned 64-bit integer to convert.
 ### :returns: The closest representable `F128` value.
 routine F128.$create(from: U64) -> F128
-  return unsigned_to_float[U64, F128](from)
+  lateinit var result: F128
+  danger!
+    rf_u64_to_f128_parts(x: from, out: result.hijack())
+  return result
 
 ### Converts a `U128` into quadruple-precision floating-point form.
 ### :param from: The unsigned 128-bit integer to convert.
 ### :returns: The closest representable `F128` value.
 routine F128.$create(from: U128) -> F128
-  return unsigned_to_float[U128, F128](from)
+  var lo = int_truncate[U128, U64](from)
+  var hi = int_truncate[U128, U64](from >>> 64u32)
+  lateinit var result: F128
+  danger!
+    rf_u128_to_f128_parts(low: lo, high: hi, out: result.hijack())
+  return result
 
 ### Widens a half-precision float to quadruple precision.
 ### :param from: The `F16` value to widen.
 ### :returns: An `F128` carrying the same numeric value when representable.
 routine F128.$create(from: F16) -> F128
-  return float_extend[F16, F128](from)
+  return F128(from: float_extend[F16, F32](from))
 
 ### Widens a single-precision float to quadruple precision.
 ### :param from: The `F32` value to widen.
 ### :returns: An `F128` carrying the same numeric value when representable.
 routine F128.$create(from: F32) -> F128
-  return float_extend[F32, F128](from)
+  lateinit var result: F128
+  danger!
+    rf_f32_to_f128_parts(x: from, out: result.hijack())
+  return result
 
 ### Widens a double-precision float to quadruple precision.
 ### :param from: The `F64` value to widen.
 ### :returns: An `F128` carrying the same numeric value when representable.
 routine F128.$create(from: F64) -> F128
-  return float_extend[F64, F128](from)
+  lateinit var result: F128
+  danger!
+    rf_f64_to_f128_parts(x: from, out: result.hijack())
+  return result
 
 ### Returns an existing `F128` unchanged.
 ### :param from: The quadruple-precision value to forward.
@@ -114,7 +144,7 @@ routine F128.$create(from: F128) -> F128
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F128` value.
 routine F128.$create(from: D32) -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_d32_to_f128_parts(bits: from.to_bits(), out: result.hijack())
   return result
@@ -123,7 +153,7 @@ routine F128.$create(from: D32) -> F128
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F128` value.
 routine F128.$create(from: D64) -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_d64_to_f128_parts(bits: from.to_bits(), out: result.hijack())
   return result
@@ -132,7 +162,7 @@ routine F128.$create(from: D64) -> F128
 ### :param from: The decimal floating-point input value.
 ### :returns: The closest representable `F128` value.
 routine F128.$create(from: D128) -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_d128_to_f128_parts(low: from.low_bits(), high: from.high_bits(), out: result.hijack())
   return result
@@ -145,7 +175,9 @@ routine F128.$create(from: D128) -> F128
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F128` value.
 routine F128.$add!(you: F128) -> F128
-  var result = float_add[F128](a: me, b: you)
+  lateinit var result: F128
+  danger!
+    rf_f128_add_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits(), out: result.hijack())
   if not result.is_finite()
     throw NumericOverflowError(description: f"F128 addition produced non-finite result: {me} + {you}")
   return result
@@ -154,7 +186,9 @@ routine F128.$add!(you: F128) -> F128
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F128` value.
 routine F128.$sub!(you: F128) -> F128
-  var result = float_sub[F128](a: me, b: you)
+  lateinit var result: F128
+  danger!
+    rf_f128_sub_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits(), out: result.hijack())
   if not result.is_finite()
     throw NumericOverflowError(description: f"F128 subtraction produced non-finite result: {me} - {you}")
   return result
@@ -163,7 +197,9 @@ routine F128.$sub!(you: F128) -> F128
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F128` value.
 routine F128.$mul!(you: F128) -> F128
-  var result = float_mul[F128](a: me, b: you)
+  lateinit var result: F128
+  danger!
+    rf_f128_mul_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits(), out: result.hijack())
   if not result.is_finite()
     throw NumericOverflowError(description: f"F128 multiplication produced non-finite result: {me} * {you}")
   return result
@@ -172,7 +208,9 @@ routine F128.$mul!(you: F128) -> F128
 ### :param you: The other value to compare against.
 ### :returns: The resulting `F128` value.
 routine F128.$truediv!(you: F128) -> F128
-  var result = float_div[F128](a: me, b: you)
+  lateinit var result: F128
+  danger!
+    rf_f128_div_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits(), out: result.hijack())
   if not result.is_finite()
     throw NumericOverflowError(description: f"F128 division produced non-finite result: {me} / {you}")
   return result
@@ -180,26 +218,36 @@ routine F128.$truediv!(you: F128) -> F128
 ### Returns the negated value.
 ### :returns: The resulting `F128` value.
 routine F128.$neg() -> F128
-  return float_neg[F128](me)
+  # Sign-bit flip on the raw encoding (IEEE negation is a pure bit operation).
+  var sign_mask = shift_left[U128](zero_extend[U64, U128](0x8000000000000000u64), 64_u128)
+  return F128.from_bits(bits: bit_xor[U128](a: me.to_bits(), b: sign_mask))
 
 ### Divides `me` by `you` without overflow checking.
 ### Returns infinity or NaN on overflow or zero divisor, following raw IEEE 754 semantics.
 ### :param you: The divisor.
 ### :returns: The quadruple-precision quotient, possibly infinity or NaN.
 dangerous routine F128.$truediv_unchecked(you: F128) -> F128
-  return float_div_fast[F128](a: me, b: you)
+  lateinit var result: F128
+  rf_f128_div_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits(), out: result.hijack())
+  return result
 
 ### Adds `me + you` without finiteness checking (raw IEEE 754).
 dangerous routine F128.$add_unchecked(you: F128) -> F128
-  return float_add[F128](a: me, b: you)
+  lateinit var result: F128
+  rf_f128_add_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits(), out: result.hijack())
+  return result
 
 ### Subtracts `me - you` without finiteness checking (raw IEEE 754).
 dangerous routine F128.$sub_unchecked(you: F128) -> F128
-  return float_sub[F128](a: me, b: you)
+  lateinit var result: F128
+  rf_f128_sub_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits(), out: result.hijack())
+  return result
 
 ### Multiplies `me * you` without finiteness checking (raw IEEE 754).
 dangerous routine F128.$mul_unchecked(you: F128) -> F128
-  return float_mul[F128](a: me, b: you)
+  lateinit var result: F128
+  rf_f128_mul_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits(), out: result.hijack())
+  return result
 
 # ============================================================================
 # Comparison Operations (ordered - false if NaN)
@@ -209,51 +257,68 @@ dangerous routine F128.$mul_unchecked(you: F128) -> F128
 ### :param you: The other value to compare against.
 ### :returns: The resulting `Bool` value.
 routine F128.$eq(you: F128) -> Bool
-  return float_eq[F128](a: me, b: you)
+  return rf_f128_eq_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits()) != 0_s32
 
 ### Compares this value with the other value.
 ### :param you: The other value to compare against.
 ### :returns: The resulting `ComparisonSign` value.
 routine F128.$cmp(you: F128) -> ComparisonSign
-  if float_lt[F128](a: me, b: you)
+  if rf_f128_lt_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits()) != 0_s32
     return ME_SMALL
-  if float_gt[F128](a: me, b: you)
+  if rf_f128_gt_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits()) != 0_s32
     return ME_LARGE
   return SAME
 
 # ============================================================================
-# Math Operations using intrinsics
+# Math Operations (via TLFloat native runtime)
 # ============================================================================
 
 ### Returns the square root of this value in quadruple precision.
-### :returns: The intrinsic square-root result for `me`.
+### :returns: The square-root result for `me`.
 routine F128.sqrt() -> F128
-  return sqrt[F128](me)
+  lateinit var result: F128
+  danger!
+    rf_f128_sqrt_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
+  return result
 
 ### Returns the absolute value.
 ### :returns: The resulting `F128` value.
 routine F128.abs() -> F128
-  return float_abs[F128](me)
+  # Sign-bit clear on the raw encoding (IEEE abs is a pure bit operation).
+  var sign_mask = shift_left[U128](zero_extend[U64, U128](0x8000000000000000u64), 64_u128)
+  return F128.from_bits(bits: bit_and[U128](a: me.to_bits(), b: sign_mask -% 1))
 
 ### Rounds this value toward negative infinity.
 ### :returns: The greatest integral-valued `F128` not larger than `me`.
 routine F128.floor() -> F128
-  return floor[F128](me)
+  lateinit var result: F128
+  danger!
+    rf_f128_floor_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
+  return result
 
 ### Rounds this value toward positive infinity.
 ### :returns: The smallest integral-valued `F128` not smaller than `me`.
 routine F128.ceil() -> F128
-  return ceil[F128](me)
+  lateinit var result: F128
+  danger!
+    rf_f128_ceil_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
+  return result
 
 ### Rounds this value to the nearest integral-valued `F128`.
 ### :returns: The rounded result in quadruple precision.
 routine F128.round() -> F128
-  return round[F128](me)
+  lateinit var result: F128
+  danger!
+    rf_f128_round_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
+  return result
 
 ### Discards the fractional part of this value toward zero.
 ### :returns: The truncated result in quadruple precision.
 routine F128.int_truncate() -> F128
-  return float_truncate[F128](me)
+  lateinit var result: F128
+  danger!
+    rf_f128_trunc_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
+  return result
 
 # ============================================================================
 # Trigonometric Functions (via LibBF native runtime)
@@ -262,7 +327,7 @@ routine F128.int_truncate() -> F128
 ### Returns the sine of this value, interpreting it as radians.
 ### :returns: The quadruple-precision sine result.
 routine F128.sin() -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_sin_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
   return result
@@ -270,7 +335,7 @@ routine F128.sin() -> F128
 ### Returns the cosine of this value, interpreting it as radians.
 ### :returns: The quadruple-precision cosine result.
 routine F128.cos() -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_cos_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
   return result
@@ -278,7 +343,7 @@ routine F128.cos() -> F128
 ### Returns the tangent of this value, interpreting it as radians.
 ### :returns: The quadruple-precision tangent result.
 routine F128.tan() -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_tan_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
   return result
@@ -286,7 +351,7 @@ routine F128.tan() -> F128
 ### Returns the inverse sine of this value.
 ### :returns: The quadruple-precision arcsine result.
 routine F128.asin() -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_asin_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
   return result
@@ -294,7 +359,7 @@ routine F128.asin() -> F128
 ### Returns the inverse cosine of this value.
 ### :returns: The quadruple-precision arccosine result.
 routine F128.acos() -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_acos_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
   return result
@@ -302,7 +367,7 @@ routine F128.acos() -> F128
 ### Returns the inverse tangent of this value.
 ### :returns: The quadruple-precision arctangent result.
 routine F128.atan() -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_atan_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
   return result
@@ -311,7 +376,7 @@ routine F128.atan() -> F128
 ### :param x: The x-coordinate paired with this y-coordinate.
 ### :returns: The quadrant-aware arctangent result.
 routine F128.atan2(x: F128) -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_atan2_parts(y_low: me.low_bits(), y_high: me.high_bits(), x_low: x.low_bits(), x_high: x.high_bits(), out: result.hijack())
   return result
@@ -323,7 +388,7 @@ routine F128.atan2(x: F128) -> F128
 ### Returns the hyperbolic sine of this value.
 ### :returns: The quadruple-precision hyperbolic-sine result.
 routine F128.sinh() -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_sinh_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
   return result
@@ -331,7 +396,7 @@ routine F128.sinh() -> F128
 ### Returns the hyperbolic cosine of this value.
 ### :returns: The quadruple-precision hyperbolic-cosine result.
 routine F128.cosh() -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_cosh_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
   return result
@@ -339,7 +404,7 @@ routine F128.cosh() -> F128
 ### Returns the hyperbolic tangent of this value.
 ### :returns: The quadruple-precision hyperbolic-tangent result.
 routine F128.tanh() -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_tanh_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
   return result
@@ -347,7 +412,7 @@ routine F128.tanh() -> F128
 ### Returns the inverse hyperbolic sine of this value.
 ### :returns: The quadruple-precision inverse-hyperbolic-sine result.
 routine F128.asinh() -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_asinh_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
   return result
@@ -355,7 +420,7 @@ routine F128.asinh() -> F128
 ### Returns the inverse hyperbolic cosine of this value.
 ### :returns: The quadruple-precision inverse-hyperbolic-cosine result.
 routine F128.acosh() -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_acosh_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
   return result
@@ -363,7 +428,7 @@ routine F128.acosh() -> F128
 ### Returns the inverse hyperbolic tangent of this value.
 ### :returns: The quadruple-precision inverse-hyperbolic-tangent result.
 routine F128.atanh() -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_atanh_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
   return result
@@ -375,7 +440,7 @@ routine F128.atanh() -> F128
 ### Returns `e` raised to this value.
 ### :returns: The quadruple-precision exponential result.
 routine F128.exp() -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_exp_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
   return result
@@ -383,7 +448,7 @@ routine F128.exp() -> F128
 ### Returns `2` raised to this value.
 ### :returns: The quadruple-precision base-2 exponential result.
 routine F128.exp2() -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_exp2_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
   return result
@@ -391,7 +456,7 @@ routine F128.exp2() -> F128
 ### Returns `exp(me) - 1` with precision suitable for very small inputs.
 ### :returns: The quadruple-precision exponential-minus-one result.
 routine F128.expm1() -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_expm1_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
   return result
@@ -399,7 +464,7 @@ routine F128.expm1() -> F128
 ### Returns the natural logarithm of this value.
 ### :returns: The quadruple-precision natural-log result.
 routine F128.log() -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_log_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
   return result
@@ -407,7 +472,7 @@ routine F128.log() -> F128
 ### Returns the base-2 logarithm of this value.
 ### :returns: The quadruple-precision binary-log result.
 routine F128.log2() -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_log2_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
   return result
@@ -415,7 +480,7 @@ routine F128.log2() -> F128
 ### Returns the base-10 logarithm of this value.
 ### :returns: The quadruple-precision common-log result.
 routine F128.log10() -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_log10_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
   return result
@@ -423,7 +488,7 @@ routine F128.log10() -> F128
 ### Returns `log(1 + me)` with precision suitable for very small inputs.
 ### :returns: The quadruple-precision log-one-plus result.
 routine F128.log1p() -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_log1p_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
   return result
@@ -436,7 +501,7 @@ routine F128.log1p() -> F128
 ### :param exp: The exponent applied to `me`.
 ### :returns: `me` raised to `exp` in quadruple precision.
 routine F128.pow(exp: F128) -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_pow_parts(base_low: me.low_bits(), base_high: me.high_bits(), exp_low: exp.low_bits(), exp_high: exp.high_bits(), out: result.hijack())
   return result
@@ -453,7 +518,7 @@ routine F128.$pow!(exp: F128) -> F128
 ### Returns the real cube root of this value.
 ### :returns: The quadruple-precision cube-root result.
 routine F128.cbrt() -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_cbrt_parts(low: me.low_bits(), high: me.high_bits(), out: result.hijack())
   return result
@@ -462,7 +527,7 @@ routine F128.cbrt() -> F128
 ### :param y: The second coordinate.
 ### :returns: `sqrt(me * me + y * y)` computed by the runtime helper.
 routine F128.hypot(y: F128) -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_hypot_parts(x_low: me.low_bits(), x_high: me.high_bits(), y_low: y.low_bits(), y_high: y.high_bits(), out: result.hijack())
   return result
@@ -471,7 +536,7 @@ routine F128.hypot(y: F128) -> F128
 ### :param sign: The value supplying the sign bit.
 ### :returns: A value with the magnitude of `me` and the sign of `sign`.
 routine F128.copysign(sign: F128) -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_copysign_parts(value_low: me.low_bits(), value_high: me.high_bits(), sign_low: sign.low_bits(), sign_high: sign.high_bits(), out: result.hijack())
   return result
@@ -598,47 +663,55 @@ routine F128.is_subnormal() -> Bool
 ### :param you: The addend.
 ### :returns: The sum, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
 routine F128.$add_clamp(you: F128) -> F128
-  var result = float_add[F128](a: me, b: you)
+  lateinit var result: F128
+  danger!
+    rf_f128_add_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits(), out: result.hijack())
   if result.is_infinite()
-    return if result.is_positive() then F128_MAX else float_neg[F128](F128_MAX)
+    return if result.is_positive() then F128_MAX else F128_MIN
   return result
 
 ### Returns `me - you`, clamped to `±F128_MAX` if the result overflows to infinity.
 ### :param you: The value to subtract.
 ### :returns: The difference, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
 routine F128.$sub_clamp(you: F128) -> F128
-  var result = float_sub[F128](a: me, b: you)
+  lateinit var result: F128
+  danger!
+    rf_f128_sub_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits(), out: result.hijack())
   if result.is_infinite()
-    return if result.is_positive() then F128_MAX else float_neg[F128](F128_MAX)
+    return if result.is_positive() then F128_MAX else F128_MIN
   return result
 
 ### Returns `me * you`, clamped to `±F128_MAX` if the result overflows to infinity.
 ### :param you: The multiplier.
 ### :returns: The product, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
 routine F128.$mul_clamp(you: F128) -> F128
-  var result = float_mul[F128](a: me, b: you)
+  lateinit var result: F128
+  danger!
+    rf_f128_mul_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits(), out: result.hijack())
   if result.is_infinite()
-    return if result.is_positive() then F128_MAX else float_neg[F128](F128_MAX)
+    return if result.is_positive() then F128_MAX else F128_MIN
   return result
 
 ### Returns `me / you`, clamped to `±F128_MAX` if the result overflows to infinity.
 ### :param you: The divisor.
 ### :returns: The quotient, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
 routine F128.$truediv_clamp(you: F128) -> F128
-  var result = float_div[F128](a: me, b: you)
+  lateinit var result: F128
+  danger!
+    rf_f128_div_parts(a_low: me.low_bits(), a_high: me.high_bits(), b_low: you.low_bits(), b_high: you.high_bits(), out: result.hijack())
   if result.is_infinite()
-    return if result.is_positive() then F128_MAX else float_neg[F128](F128_MAX)
+    return if result.is_positive() then F128_MAX else F128_MIN
   return result
 
 ### Returns `me ** exp`, clamped to `±F128_MAX` if the result overflows to infinity.
 ### :param exp: The exponent applied to `me`.
 ### :returns: The power, or `F128_MAX` / `-F128_MAX` if the result would be infinite.
 routine F128.$pow_clamp(exp: F128) -> F128
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_f128_pow_parts(base_low: me.low_bits(), base_high: me.high_bits(), exp_low: exp.low_bits(), exp_high: exp.high_bits(), out: result.hijack())
   if result.is_infinite()
-    return if result.is_positive() then F128_MAX else float_neg[F128](F128_MAX)
+    return if result.is_positive() then F128_MAX else F128_MIN
   return result
 
 # ============================================================================
@@ -664,12 +737,12 @@ routine F128.S128!() -> S128
 ### Narrows this quadruple-precision value to single precision.
 ### :returns: The nearest representable `F32` value.
 routine F128.F32() -> F32
-  return float_narrow[F128, F32](me)
+  return rf_f128_to_f32_parts(low: me.low_bits(), high: me.high_bits())
 
 ### Narrows this quadruple-precision value to double precision.
 ### :returns: The nearest representable `F64` value.
 routine F128.F64() -> F64
-  return float_narrow[F128, F64](me)
+  return rf_f128_to_f64_parts(low: me.low_bits(), high: me.high_bits())
 
 # ============================================================================
 # Diagnostics and Hashing
@@ -765,7 +838,7 @@ routine F128.$create!(from_text: Text) -> F128
     if not has_digit
       throw InvalidValueError(input: from_text, target: "F128")
   var cstr_val = CStr(from: from_text)
-  var result: F128 = 0.0f128
+  lateinit var result: F128
   danger!
     rf_parse_F128(cstr: cstr_val, out: result.hijack())
   return result

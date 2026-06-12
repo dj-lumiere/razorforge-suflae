@@ -84,6 +84,10 @@ jobs:
           git clone --depth 1 https://github.com/libtom/libtommath.git libtommath
           echo "::endgroup::"
 
+          echo "::group::tlfloat"
+          git clone --depth 1 https://github.com/shibatch/tlfloat.git tlfloat
+          echo "::endgroup::"
+
           # --- Modules (loaded on demand) ---
           echo "::group::zlib"
           git clone --depth 1 https://github.com/madler/zlib.git zlib
@@ -264,6 +268,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'libbf extract failed' }
           Remove-Item libbf.tar.gz
           Clone 'https://github.com/libtom/libtommath.git' libtommath
+          Clone 'https://github.com/shibatch/tlfloat.git' tlfloat
 
           # --- Modules (loaded on demand) ---
           Clone 'https://github.com/madler/zlib.git' zlib
@@ -354,6 +359,7 @@ jobs:
           tar -xzf libbf.tar.gz -C libbf --strip-components=1
           rm libbf.tar.gz
           git clone --depth 1 https://github.com/libtom/libtommath.git libtommath
+          git clone --depth 1 https://github.com/shibatch/tlfloat.git tlfloat
           git clone --depth 1 https://github.com/madler/zlib.git zlib
           git clone --depth 1 https://github.com/facebook/zstd.git zstd
           mkdir -p sqlite3

@@ -306,8 +306,23 @@ routine D128.cosh() -> D128
 routine D128.tanh() -> D128
   return rf_d128_tanh(low: me.low, high: me.high)
 
+### Returns the inverse hyperbolic sine of this decimal value.
+### :returns: The resulting `D128` value.
+routine D128.asinh() -> D128
+  return rf_d128_asinh(low: me.low, high: me.high)
+
+### Returns the inverse hyperbolic cosine of this decimal value.
+### :returns: The resulting `D128` value.
+routine D128.acosh() -> D128
+  return rf_d128_acosh(low: me.low, high: me.high)
+
+### Returns the inverse hyperbolic tangent of this decimal value.
+### :returns: The resulting `D128` value.
+routine D128.atanh() -> D128
+  return rf_d128_atanh(low: me.low, high: me.high)
+
 # ============================================================================
-# Exponential and Logarithmic Functions (via F128 conversion + LibBF)
+# Exponential and Logarithmic Functions (via TLFloat octuple routing)
 # ============================================================================
 
 ### Returns `e` raised to this decimal value.
@@ -319,6 +334,11 @@ routine D128.exp() -> D128
 ### :returns: The resulting `D128` value.
 routine D128.exp2() -> D128
   return rf_d128_exp2(low: me.low, high: me.high)
+
+### Returns `e` raised to this decimal value, minus one (accurate near zero).
+### :returns: The resulting `D128` value.
+routine D128.expm1() -> D128
+  return rf_d128_expm1(low: me.low, high: me.high)
 
 ### Returns the natural logarithm of this decimal value.
 ### :returns: The resulting `D128` value.
@@ -335,8 +355,13 @@ routine D128.log2() -> D128
 routine D128.log10() -> D128
   return rf_d128_log10(low: me.low, high: me.high)
 
+### Returns the natural logarithm of one plus this decimal value (accurate near zero).
+### :returns: The resulting `D128` value.
+routine D128.log1p() -> D128
+  return rf_d128_log1p(low: me.low, high: me.high)
+
 # ============================================================================
-# Power Functions (via F128 conversion + LibBF)
+# Power Functions (via TLFloat octuple routing)
 # ============================================================================
 
 ### Raises this decimal value to the decimal exponent `exp`.

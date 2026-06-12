@@ -1,5 +1,0 @@
-compute(true): 100
-compute(false): 200
-maybe_init(true): 42
-maybe_init(false): -1
-DONE

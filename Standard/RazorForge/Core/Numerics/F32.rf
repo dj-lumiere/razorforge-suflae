@@ -109,7 +109,7 @@ routine F32.$create(from: F64) -> F32
 ### :param from: The `F128` value to convert.
 ### :returns: The nearest representable `F32` value.
 routine F32.$create(from: F128) -> F32
-  return float_narrow[F128, F32](from)
+  return rf_f128_to_f32_parts(low: from.low_bits(), high: from.high_bits())
 
 ### Converts a decimal32 value to single-precision binary floating point.
 ### :param from: The decimal floating-point input value.

@@ -1,0 +1,45 @@
+module Tests/Stdlib/LateInitApi
+import IO/Console
+
+# `lateinit var` = eager allocation, late initialization: storage is allocated at the
+# declaration (entities get a real zeroed heap block, $create not run) so the binding
+# is immediately valid and borrowable; reading before assignment yields meaningless
+# values. Reassigning a lateinit entity destroys the current content (placeholder or
+# prior value) before the new value lands.
+
+entity Box
+  value: S64
+
+routine Box.set(value: S64)
+  me.value = value
+  return
+
+routine compute(use_path_a: Bool) -> S64
+  lateinit var result: S64
+  if use_path_a
+    result = 100
+  else
+    result = 200
+  return result
+
+routine start()
+  show(f"compute(true): {compute(use_path_a: true)}")
+  show(f"compute(false): {compute(use_path_a: false)}")
+
+  # Entity branch-init: the placeholder is destroyed on first assignment.
+  lateinit var b: Box
+  if compute(use_path_a: true) > 150
+    b = Box(value: 1)
+  else
+    b = Box(value: 2)
+  show(f"branch-init box: {b.value}")
+
+  # Entity out-param shape: the placeholder is valid and borrowable before any
+  # assignment — borrow it, write through the borrow, read the result.
+  lateinit var c: Box
+  using c.modify() as m
+    m.set(value: 99)
+  show(f"out-param box: {c.value}")
+
+  show("DONE")
+  return

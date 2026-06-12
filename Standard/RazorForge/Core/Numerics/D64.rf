@@ -295,6 +295,199 @@ routine D64.int_truncate() -> D64
   return reinterpret_bits[U64, D64](result)
 
 # ============================================================================
+# Trigonometric Functions (via TLFloat quad routing)
+# ============================================================================
+
+### Returns the sine of this decimal value, interpreting it as radians.
+### :returns: The resulting `D64` value.
+routine D64.sin() -> D64
+  var bits = reinterpret_bits[D64, U64](me)
+  var result = rf_d64_sin(bits)
+  return reinterpret_bits[U64, D64](result)
+
+### Returns the cosine of this decimal value, interpreting it as radians.
+### :returns: The resulting `D64` value.
+routine D64.cos() -> D64
+  var bits = reinterpret_bits[D64, U64](me)
+  var result = rf_d64_cos(bits)
+  return reinterpret_bits[U64, D64](result)
+
+### Returns the tangent of this decimal value, interpreting it as radians.
+### :returns: The resulting `D64` value.
+routine D64.tan() -> D64
+  var bits = reinterpret_bits[D64, U64](me)
+  var result = rf_d64_tan(bits)
+  return reinterpret_bits[U64, D64](result)
+
+### Returns the inverse sine of this decimal value.
+### :returns: The resulting `D64` value.
+routine D64.asin() -> D64
+  var bits = reinterpret_bits[D64, U64](me)
+  var result = rf_d64_asin(bits)
+  return reinterpret_bits[U64, D64](result)
+
+### Returns the inverse cosine of this decimal value.
+### :returns: The resulting `D64` value.
+routine D64.acos() -> D64
+  var bits = reinterpret_bits[D64, U64](me)
+  var result = rf_d64_acos(bits)
+  return reinterpret_bits[U64, D64](result)
+
+### Returns the inverse tangent of this decimal value.
+### :returns: The resulting `D64` value.
+routine D64.atan() -> D64
+  var bits = reinterpret_bits[D64, U64](me)
+  var result = rf_d64_atan(bits)
+  return reinterpret_bits[U64, D64](result)
+
+### Returns the quadrant-aware angle of the point `(x, me)`.
+### :param x: The x-coordinate paired with this y-coordinate.
+### :returns: The resulting `D64` value.
+routine D64.atan2(x: D64) -> D64
+  var y_bits = reinterpret_bits[D64, U64](me)
+  var x_bits = reinterpret_bits[D64, U64](x)
+  var result = rf_d64_atan2(y: y_bits, x: x_bits)
+  return reinterpret_bits[U64, D64](result)
+
+# ============================================================================
+# Hyperbolic Functions (via TLFloat quad routing)
+# ============================================================================
+
+### Returns the hyperbolic sine of this decimal value.
+### :returns: The resulting `D64` value.
+routine D64.sinh() -> D64
+  var bits = reinterpret_bits[D64, U64](me)
+  var result = rf_d64_sinh(bits)
+  return reinterpret_bits[U64, D64](result)
+
+### Returns the hyperbolic cosine of this decimal value.
+### :returns: The resulting `D64` value.
+routine D64.cosh() -> D64
+  var bits = reinterpret_bits[D64, U64](me)
+  var result = rf_d64_cosh(bits)
+  return reinterpret_bits[U64, D64](result)
+
+### Returns the hyperbolic tangent of this decimal value.
+### :returns: The resulting `D64` value.
+routine D64.tanh() -> D64
+  var bits = reinterpret_bits[D64, U64](me)
+  var result = rf_d64_tanh(bits)
+  return reinterpret_bits[U64, D64](result)
+
+### Returns the inverse hyperbolic sine of this decimal value.
+### :returns: The resulting `D64` value.
+routine D64.asinh() -> D64
+  var bits = reinterpret_bits[D64, U64](me)
+  var result = rf_d64_asinh(bits)
+  return reinterpret_bits[U64, D64](result)
+
+### Returns the inverse hyperbolic cosine of this decimal value.
+### :returns: The resulting `D64` value.
+routine D64.acosh() -> D64
+  var bits = reinterpret_bits[D64, U64](me)
+  var result = rf_d64_acosh(bits)
+  return reinterpret_bits[U64, D64](result)
+
+### Returns the inverse hyperbolic tangent of this decimal value.
+### :returns: The resulting `D64` value.
+routine D64.atanh() -> D64
+  var bits = reinterpret_bits[D64, U64](me)
+  var result = rf_d64_atanh(bits)
+  return reinterpret_bits[U64, D64](result)
+
+# ============================================================================
+# Exponential and Logarithmic Functions (via TLFloat quad routing)
+# ============================================================================
+
+### Returns `e` raised to this decimal value.
+### :returns: The resulting `D64` value.
+routine D64.exp() -> D64
+  var bits = reinterpret_bits[D64, U64](me)
+  var result = rf_d64_exp(bits)
+  return reinterpret_bits[U64, D64](result)
+
+### Returns `2` raised to this decimal value.
+### :returns: The resulting `D64` value.
+routine D64.exp2() -> D64
+  var bits = reinterpret_bits[D64, U64](me)
+  var result = rf_d64_exp2(bits)
+  return reinterpret_bits[U64, D64](result)
+
+### Returns `e` raised to this decimal value, minus one (accurate near zero).
+### :returns: The resulting `D64` value.
+routine D64.expm1() -> D64
+  var bits = reinterpret_bits[D64, U64](me)
+  var result = rf_d64_expm1(bits)
+  return reinterpret_bits[U64, D64](result)
+
+### Returns the natural logarithm of this decimal value.
+### :returns: The resulting `D64` value.
+routine D64.log() -> D64
+  var bits = reinterpret_bits[D64, U64](me)
+  var result = rf_d64_log(bits)
+  return reinterpret_bits[U64, D64](result)
+
+### Returns the base-2 logarithm of this decimal value.
+### :returns: The resulting `D64` value.
+routine D64.log2() -> D64
+  var bits = reinterpret_bits[D64, U64](me)
+  var result = rf_d64_log2(bits)
+  return reinterpret_bits[U64, D64](result)
+
+### Returns the base-10 logarithm of this decimal value.
+### :returns: The resulting `D64` value.
+routine D64.log10() -> D64
+  var bits = reinterpret_bits[D64, U64](me)
+  var result = rf_d64_log10(bits)
+  return reinterpret_bits[U64, D64](result)
+
+### Returns the natural logarithm of one plus this decimal value (accurate near zero).
+### :returns: The resulting `D64` value.
+routine D64.log1p() -> D64
+  var bits = reinterpret_bits[D64, U64](me)
+  var result = rf_d64_log1p(bits)
+  return reinterpret_bits[U64, D64](result)
+
+# ============================================================================
+# Power Functions (via TLFloat quad routing)
+# ============================================================================
+
+### Raises this decimal value to the decimal exponent `exp`.
+### :param exp: The exponent value.
+### :returns: The resulting `D64` value.
+routine D64.pow(exp: D64) -> D64
+  var base_bits = reinterpret_bits[D64, U64](me)
+  var exp_bits = reinterpret_bits[D64, U64](exp)
+  var result = rf_d64_pow(base: base_bits, exp: exp_bits)
+  return reinterpret_bits[U64, D64](result)
+
+### Raises this decimal value to `exp` and rejects non-finite results.
+### :param exp: The exponent value.
+### :returns: The resulting `D64` value.
+### :throws: {NumericOverflowError} if the result is non-finite.
+routine D64.$pow!(exp: D64) -> D64
+  var result = me.pow(exp)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"D64 power produced non-finite result: {me} ** {exp}")
+  return result
+
+### Returns the real cube root of this decimal value.
+### :returns: The resulting `D64` value.
+routine D64.cbrt() -> D64
+  var bits = reinterpret_bits[D64, U64](me)
+  var result = rf_d64_cbrt(bits)
+  return reinterpret_bits[U64, D64](result)
+
+### Returns the Euclidean length of the vector `(me, y)`.
+### :param y: The second coordinate.
+### :returns: The resulting `D64` value.
+routine D64.hypot(y: D64) -> D64
+  var x_bits = reinterpret_bits[D64, U64](me)
+  var y_bits = reinterpret_bits[D64, U64](y)
+  var result = rf_d64_hypot(x: x_bits, y: y_bits)
+  return reinterpret_bits[U64, D64](result)
+
+# ============================================================================
 # Utility Methods
 # ============================================================================
 

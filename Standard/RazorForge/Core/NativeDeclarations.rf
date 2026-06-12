@@ -139,6 +139,56 @@ external("C") routine rf_d32_round(value: U32) -> U32
 ### :returns: The raw decimal32 bits for the truncated result.
 external("C") routine rf_d32_trunc(value: U32) -> U32
 
+# Decimal32 transcendentals — correctly rounded via TLFloat binary64 routing.
+# All take/return BID-form decimal32 bit patterns.
+
+### Returns the sine of a decimal32 value interpreted as radians.
+external("C") routine rf_d32_sin(value: U32) -> U32
+### Returns the cosine of a decimal32 value interpreted as radians.
+external("C") routine rf_d32_cos(value: U32) -> U32
+### Returns the tangent of a decimal32 value interpreted as radians.
+external("C") routine rf_d32_tan(value: U32) -> U32
+### Returns the inverse sine of a decimal32 value.
+external("C") routine rf_d32_asin(value: U32) -> U32
+### Returns the inverse cosine of a decimal32 value.
+external("C") routine rf_d32_acos(value: U32) -> U32
+### Returns the inverse tangent of a decimal32 value.
+external("C") routine rf_d32_atan(value: U32) -> U32
+### Returns the quadrant-aware angle of the point `(x, y)` in decimal32 precision.
+external("C") routine rf_d32_atan2(y: U32, x: U32) -> U32
+### Returns the hyperbolic sine of a decimal32 value.
+external("C") routine rf_d32_sinh(value: U32) -> U32
+### Returns the hyperbolic cosine of a decimal32 value.
+external("C") routine rf_d32_cosh(value: U32) -> U32
+### Returns the hyperbolic tangent of a decimal32 value.
+external("C") routine rf_d32_tanh(value: U32) -> U32
+### Returns the inverse hyperbolic sine of a decimal32 value.
+external("C") routine rf_d32_asinh(value: U32) -> U32
+### Returns the inverse hyperbolic cosine of a decimal32 value.
+external("C") routine rf_d32_acosh(value: U32) -> U32
+### Returns the inverse hyperbolic tangent of a decimal32 value.
+external("C") routine rf_d32_atanh(value: U32) -> U32
+### Returns `e` raised to a decimal32 value.
+external("C") routine rf_d32_exp(value: U32) -> U32
+### Returns `2` raised to a decimal32 value.
+external("C") routine rf_d32_exp2(value: U32) -> U32
+### Returns `e` raised to a decimal32 value, minus one (accurate near zero).
+external("C") routine rf_d32_expm1(value: U32) -> U32
+### Returns the natural logarithm of a decimal32 value.
+external("C") routine rf_d32_log(value: U32) -> U32
+### Returns the base-2 logarithm of a decimal32 value.
+external("C") routine rf_d32_log2(value: U32) -> U32
+### Returns the base-10 logarithm of a decimal32 value.
+external("C") routine rf_d32_log10(value: U32) -> U32
+### Returns the natural logarithm of one plus a decimal32 value (accurate near zero).
+external("C") routine rf_d32_log1p(value: U32) -> U32
+### Raises a decimal32 base to a decimal32 exponent.
+external("C") routine rf_d32_pow(base: U32, exp: U32) -> U32
+### Returns the real cube root of a decimal32 value.
+external("C") routine rf_d32_cbrt(value: U32) -> U32
+### Returns the Euclidean length of the decimal32 vector `(x, y)`.
+external("C") routine rf_d32_hypot(x: U32, y: U32) -> U32
+
 ### Widens a decimal32 value to decimal64 encoding.
 ### :param value: The BID-form decimal32 bit pattern.
 ### :returns: The raw decimal64 bits.
@@ -256,6 +306,56 @@ external("C") routine rf_d64_round(value: U64) -> U64
 ### :param value: The BID-form decimal64 bit pattern.
 ### :returns: The raw decimal64 bits for the truncated result.
 external("C") routine rf_d64_trunc(value: U64) -> U64
+
+# Decimal64 transcendentals — correctly rounded via TLFloat quad routing.
+# All take/return BID-form decimal64 bit patterns.
+
+### Returns the sine of a decimal64 value interpreted as radians.
+external("C") routine rf_d64_sin(value: U64) -> U64
+### Returns the cosine of a decimal64 value interpreted as radians.
+external("C") routine rf_d64_cos(value: U64) -> U64
+### Returns the tangent of a decimal64 value interpreted as radians.
+external("C") routine rf_d64_tan(value: U64) -> U64
+### Returns the inverse sine of a decimal64 value.
+external("C") routine rf_d64_asin(value: U64) -> U64
+### Returns the inverse cosine of a decimal64 value.
+external("C") routine rf_d64_acos(value: U64) -> U64
+### Returns the inverse tangent of a decimal64 value.
+external("C") routine rf_d64_atan(value: U64) -> U64
+### Returns the quadrant-aware angle of the point `(x, y)` in decimal64 precision.
+external("C") routine rf_d64_atan2(y: U64, x: U64) -> U64
+### Returns the hyperbolic sine of a decimal64 value.
+external("C") routine rf_d64_sinh(value: U64) -> U64
+### Returns the hyperbolic cosine of a decimal64 value.
+external("C") routine rf_d64_cosh(value: U64) -> U64
+### Returns the hyperbolic tangent of a decimal64 value.
+external("C") routine rf_d64_tanh(value: U64) -> U64
+### Returns the inverse hyperbolic sine of a decimal64 value.
+external("C") routine rf_d64_asinh(value: U64) -> U64
+### Returns the inverse hyperbolic cosine of a decimal64 value.
+external("C") routine rf_d64_acosh(value: U64) -> U64
+### Returns the inverse hyperbolic tangent of a decimal64 value.
+external("C") routine rf_d64_atanh(value: U64) -> U64
+### Returns `e` raised to a decimal64 value.
+external("C") routine rf_d64_exp(value: U64) -> U64
+### Returns `2` raised to a decimal64 value.
+external("C") routine rf_d64_exp2(value: U64) -> U64
+### Returns `e` raised to a decimal64 value, minus one (accurate near zero).
+external("C") routine rf_d64_expm1(value: U64) -> U64
+### Returns the natural logarithm of a decimal64 value.
+external("C") routine rf_d64_log(value: U64) -> U64
+### Returns the base-2 logarithm of a decimal64 value.
+external("C") routine rf_d64_log2(value: U64) -> U64
+### Returns the base-10 logarithm of a decimal64 value.
+external("C") routine rf_d64_log10(value: U64) -> U64
+### Returns the natural logarithm of one plus a decimal64 value (accurate near zero).
+external("C") routine rf_d64_log1p(value: U64) -> U64
+### Raises a decimal64 base to a decimal64 exponent.
+external("C") routine rf_d64_pow(base: U64, exp: U64) -> U64
+### Returns the real cube root of a decimal64 value.
+external("C") routine rf_d64_cbrt(value: U64) -> U64
+### Returns the Euclidean length of the decimal64 vector `(x, y)`.
+external("C") routine rf_d64_hypot(x: U64, y: U64) -> U64
 
 ### Narrows a decimal64 value to decimal32 encoding.
 ### :param value: The BID-form decimal64 bit pattern.
@@ -444,6 +544,21 @@ external("C") routine rf_d128_cosh(low: U64, high: U64) -> D128
 ### :param high: The high 64 bits of the operand.
 ### :returns: The resulting `D128` value.
 external("C") routine rf_d128_tanh(low: U64, high: U64) -> D128
+### Returns the inverse hyperbolic sine of a decimal128 value.
+### :param low: The low 64 bits of the operand.
+### :param high: The high 64 bits of the operand.
+### :returns: The resulting `D128` value.
+external("C") routine rf_d128_asinh(low: U64, high: U64) -> D128
+### Returns the inverse hyperbolic cosine of a decimal128 value.
+### :param low: The low 64 bits of the operand.
+### :param high: The high 64 bits of the operand.
+### :returns: The resulting `D128` value.
+external("C") routine rf_d128_acosh(low: U64, high: U64) -> D128
+### Returns the inverse hyperbolic tangent of a decimal128 value.
+### :param low: The low 64 bits of the operand.
+### :param high: The high 64 bits of the operand.
+### :returns: The resulting `D128` value.
+external("C") routine rf_d128_atanh(low: U64, high: U64) -> D128
 
 ### Returns `e` raised to a decimal128 value.
 ### :param low: The low 64 bits of the operand.
@@ -455,6 +570,11 @@ external("C") routine rf_d128_exp(low: U64, high: U64) -> D128
 ### :param high: The high 64 bits of the operand.
 ### :returns: The resulting `D128` value.
 external("C") routine rf_d128_exp2(low: U64, high: U64) -> D128
+### Returns `e` raised to a decimal128 value, minus one (accurate near zero).
+### :param low: The low 64 bits of the operand.
+### :param high: The high 64 bits of the operand.
+### :returns: The resulting `D128` value.
+external("C") routine rf_d128_expm1(low: U64, high: U64) -> D128
 ### Returns the natural logarithm of a decimal128 value.
 ### :param low: The low 64 bits of the operand.
 ### :param high: The high 64 bits of the operand.
@@ -470,6 +590,11 @@ external("C") routine rf_d128_log2(low: U64, high: U64) -> D128
 ### :param high: The high 64 bits of the operand.
 ### :returns: The resulting `D128` value.
 external("C") routine rf_d128_log10(low: U64, high: U64) -> D128
+### Returns the natural logarithm of one plus a decimal128 value (accurate near zero).
+### :param low: The low 64 bits of the operand.
+### :param high: The high 64 bits of the operand.
+### :returns: The resulting `D128` value.
+external("C") routine rf_d128_log1p(low: U64, high: U64) -> D128
 
 ### Raises a decimal128 base to a decimal128 exponent.
 ### :param base_low: The low 64 bits of the base.
@@ -714,6 +839,123 @@ external("C") routine rf_f128_hypot_parts(x_low: U64, x_high: U64, y_low: U64, y
 ### :param sign_high: The high 64 bits of the sign source.
 ### :param out: Storage receiving the resulting `F128` value.
 external("C") routine rf_f128_copysign_parts(value_low: U64, value_high: U64, sign_low: U64, sign_high: U64, out: Hijacked[F128])
+
+# ----------------------------------------------------------------------------
+# F128 core operations. F128 carries its bits as an LLVM i128 (never fp128),
+# so arithmetic, comparison, conversion and rounding all route through these
+# bridges instead of native LLVM float instructions.
+# ----------------------------------------------------------------------------
+
+### Returns the sum `a + b` of two `F128` values.
+### :param a_low: The low 64 bits of the left operand.
+### :param a_high: The high 64 bits of the left operand.
+### :param b_low: The low 64 bits of the right operand.
+### :param b_high: The high 64 bits of the right operand.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_add_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[F128])
+### Returns the difference `a - b` of two `F128` values.
+### :param a_low: The low 64 bits of the left operand.
+### :param a_high: The high 64 bits of the left operand.
+### :param b_low: The low 64 bits of the right operand.
+### :param b_high: The high 64 bits of the right operand.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_sub_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[F128])
+### Returns the product `a * b` of two `F128` values.
+### :param a_low: The low 64 bits of the left operand.
+### :param a_high: The high 64 bits of the left operand.
+### :param b_low: The low 64 bits of the right operand.
+### :param b_high: The high 64 bits of the right operand.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_mul_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[F128])
+### Returns the quotient `a / b` of two `F128` values.
+### :param a_low: The low 64 bits of the left operand.
+### :param a_high: The high 64 bits of the left operand.
+### :param b_low: The low 64 bits of the right operand.
+### :param b_high: The high 64 bits of the right operand.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_div_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[F128])
+### Returns the square root of an `F128` value.
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_sqrt_parts(low: U64, high: U64, out: Hijacked[F128])
+### Rounds an `F128` value toward negative infinity.
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_floor_parts(low: U64, high: U64, out: Hijacked[F128])
+### Rounds an `F128` value toward positive infinity.
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_ceil_parts(low: U64, high: U64, out: Hijacked[F128])
+### Rounds an `F128` value to the nearest integer, ties away from zero.
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_round_parts(low: U64, high: U64, out: Hijacked[F128])
+### Discards the fractional part of an `F128` value (rounds toward zero).
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f128_trunc_parts(low: U64, high: U64, out: Hijacked[F128])
+### Returns whether two `F128` values compare equal (IEEE: false for NaN).
+### :param a_low: The low 64 bits of the left operand.
+### :param a_high: The high 64 bits of the left operand.
+### :param b_low: The low 64 bits of the right operand.
+### :param b_high: The high 64 bits of the right operand.
+### :returns: `1` when equal, `0` otherwise.
+external("C") routine rf_f128_eq_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> S32
+### Returns whether `a < b` (IEEE ordered: false when either is NaN).
+### :param a_low: The low 64 bits of the left operand.
+### :param a_high: The high 64 bits of the left operand.
+### :param b_low: The low 64 bits of the right operand.
+### :param b_high: The high 64 bits of the right operand.
+### :returns: `1` when `a < b`, `0` otherwise.
+external("C") routine rf_f128_lt_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> S32
+### Returns whether `a > b` (IEEE ordered: false when either is NaN).
+### :param a_low: The low 64 bits of the left operand.
+### :param a_high: The high 64 bits of the left operand.
+### :param b_low: The low 64 bits of the right operand.
+### :param b_high: The high 64 bits of the right operand.
+### :returns: `1` when `a > b`, `0` otherwise.
+external("C") routine rf_f128_gt_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64) -> S32
+### Converts a signed 64-bit integer to `F128`.
+### :param x: The integer to convert.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_s64_to_f128_parts(x: S64, out: Hijacked[F128])
+### Converts an unsigned 64-bit integer to `F128`.
+### :param x: The integer to convert.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_u64_to_f128_parts(x: U64, out: Hijacked[F128])
+### Converts a signed 128-bit integer (as low/high words) to `F128`.
+### :param low: The low 64 bits of the integer.
+### :param high: The high 64 bits of the integer.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_s128_to_f128_parts(low: U64, high: U64, out: Hijacked[F128])
+### Converts an unsigned 128-bit integer (as low/high words) to `F128`.
+### :param low: The low 64 bits of the integer.
+### :param high: The high 64 bits of the integer.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_u128_to_f128_parts(low: U64, high: U64, out: Hijacked[F128])
+### Widens an `F32` to `F128` exactly.
+### :param x: The single-precision value to widen.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f32_to_f128_parts(x: F32, out: Hijacked[F128])
+### Widens an `F64` to `F128` exactly.
+### :param x: The double-precision value to widen.
+### :param out: Storage receiving the resulting `F128` value.
+external("C") routine rf_f64_to_f128_parts(x: F64, out: Hijacked[F128])
+### Narrows an `F128` to the nearest `F32`.
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :returns: The nearest single-precision value.
+external("C") routine rf_f128_to_f32_parts(low: U64, high: U64) -> F32
+### Narrows an `F128` to the nearest `F64`.
+### :param low: The low 64 bits of the input value.
+### :param high: The high 64 bits of the input value.
+### :returns: The nearest double-precision value.
+external("C") routine rf_f128_to_f64_parts(low: U64, high: U64) -> F64
 
 # ============================================================================
 # Moment - System Clock

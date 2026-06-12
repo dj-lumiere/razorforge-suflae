@@ -1,9 +1,14 @@
-﻿/*
+/*
  * RazorForge Runtime - f128 (Quad Precision) Floating Point Functions
- * IEEE 754 binary128 operations using LibBF library
  *
- * LibBF provides arbitrary precision with full transcendental support.
- * We configure it for 113-bit mantissa (IEEE binary128 precision).
+ * Math (arithmetic, comparisons, conversions, transcendentals) is backed by
+ * TLFloat: correctly-rounded IEEE binary128 soft-float with a full
+ * libm-equivalent function set, bit-identical on every platform.
+ *
+ * String parse/format stays on LibBF: its FREE_MIN decimal style (shortest
+ * exact expansion capped at 12 significant digits, fixed/exponential switch)
+ * is locked in by the fixture snapshots, and LibBF remains in the build for
+ * the bignum compile-time bridges regardless.
  */
 
 #include <stdint.h>
@@ -12,6 +17,28 @@
 #include <stdlib.h>
 #include <math.h>
 #include "../include/razorforge_math.h"
+
+#ifndef HAVE_TLFLOAT
+#error "TLFloat is required for f128 math. Clone it into native/tlfloat (see native/cmake/tlfloat.cmake)."
+#endif
+#include <tlfloat/tlfloat.h>
+
+// f128_t <-> tlfloat_quad carry the same IEEE binary128 bits; tlfloat_quad is
+// either a native __float128 / float128-long-double or a {uint64_t e[2]}
+// struct depending on platform, so convert through memcpy, never by cast.
+static inline tlfloat_quad_ f128_to_q(f128_t x)
+{
+    tlfloat_quad_ q;
+    memcpy(&q, &x, 16);
+    return q;
+}
+
+static inline f128_t q_to_f128(tlfloat_quad_ q)
+{
+    f128_t x;
+    memcpy(&x, &q, 16);
+    return x;
+}
 
 #ifdef HAVE_LIBBF
 #include "libbf.h"
@@ -260,301 +287,65 @@ f128_t rf_f32_to_f128(float x)
 
 f128_t rf_f64_to_f128(double x)
 {
-    f128_t result = {0, 0};
-
-    if (x != x) {  // NaN
-        result.high = 0x7FFF800000000000ULL;
-        return result;
-    }
-
-    if (x == 0.0) {
-        if (1.0 / x < 0) result.high = 0x8000000000000000ULL;  // -0
-        return result;
-    }
-
-    if (x == INFINITY) {
-        result.high = 0x7FFF000000000000ULL;
-        return result;
-    }
-
-    if (x == -INFINITY) {
-        result.high = 0xFFFF000000000000ULL;
-        return result;
-    }
-
-    // Extract f64 components
-    union { double d; uint64_t u; } conv;
-    conv.d = x;
-
-    int sign = (conv.u >> 63) & 1;
-    int exp64 = (conv.u >> 52) & 0x7FF;
-    uint64_t mant64 = conv.u & 0x000FFFFFFFFFFFFFULL;
-
-    if (exp64 == 0) {
-        // Subnormal f64 -> subnormal or zero f128
-        // Approximate as zero for now
-        if (sign) result.high = 0x8000000000000000ULL;
-        return result;
-    }
-
-    // Convert exponent: f64 bias is 1023, f128 bias is 16383
-    int exp128 = exp64 - 1023 + F128_EXP_BIAS;
-
-    // Mantissa: f64 has 52 bits, f128 has 112 bits
-    // Shift left by (112 - 52) = 60 bits
-    uint64_t mant_high = mant64 >> 4;   // Top 48 bits of shifted mantissa
-    uint64_t mant_low = mant64 << 60;   // Bottom 64 bits
-
-    result.high = ((uint64_t)sign << 63) | ((uint64_t)exp128 << 48) | mant_high;
-    result.low = mant_low;
-
-    return result;
+    // Exact widening, including f64 subnormals (the previous hand-rolled
+    // converter flushed them to zero).
+    return q_to_f128(tlfloat_cast_q_d_(x));
 }
 
 float rf_f128_to_f32(f128_t x)
 {
-    return (float)rf_f128_to_f64(x);
+    // Via f64. The intermediate rounding can in principle double-round, but
+    // only for values within half an f64-ulp of an f32 tie — and the previous
+    // truncating converter was strictly less accurate.
+    return (float)tlfloat_cast_d_q(f128_to_q(x));
 }
 
 double rf_f128_to_f64(f128_t x)
 {
-    int sign = (x.high >> 63) & 1;
-    int exp128 = (x.high >> 48) & 0x7FFF;
-    uint64_t mant_high = x.high & 0x0000FFFFFFFFFFFFULL;
-    uint64_t mant_low = x.low;
-
-    if (exp128 == 0x7FFF) {
-        if (mant_high == 0 && mant_low == 0) {
-            return sign ? -INFINITY : INFINITY;
-        }
-        return NAN;
-    }
-
-    if (exp128 == 0 && mant_high == 0 && mant_low == 0) {
-        return sign ? -0.0 : 0.0;
-    }
-
-    // Convert exponent
-    int exp64 = exp128 - F128_EXP_BIAS + 1023;
-
-    if (exp64 >= 0x7FF) {
-        return sign ? -INFINITY : INFINITY;  // Overflow
-    }
-    if (exp64 <= 0) {
-        return sign ? -0.0 : 0.0;  // Underflow
-    }
-
-    // Convert mantissa: take top 52 bits of 112-bit mantissa
-    uint64_t mant64 = (mant_high << 4) | (mant_low >> 60);
-
-    union { uint64_t u; double d; } conv;
-    conv.u = ((uint64_t)sign << 63) | ((uint64_t)exp64 << 52) | mant64;
-
-    return conv.d;
+    // Correctly rounded narrowing with subnormal results (the previous
+    // converter truncated the mantissa and flushed subnormals to zero).
+    return tlfloat_cast_d_q(f128_to_q(x));
 }
 
 // ============================================================================
 // Conversion from/to integers
 // ============================================================================
 
-// Helper: count leading zeros in 64-bit value
-static int clz64(uint64_t x)
-{
-    if (x == 0) return 64;
-#if defined(__GNUC__) || defined(__clang__)
-    return __builtin_clzll(x);
-#else
-    int n = 0;
-    if ((x & 0xFFFFFFFF00000000ULL) == 0) { n += 32; x <<= 32; }
-    if ((x & 0xFFFF000000000000ULL) == 0) { n += 16; x <<= 16; }
-    if ((x & 0xFF00000000000000ULL) == 0) { n += 8;  x <<= 8; }
-    if ((x & 0xF000000000000000ULL) == 0) { n += 4;  x <<= 4; }
-    if ((x & 0xC000000000000000ULL) == 0) { n += 2;  x <<= 2; }
-    if ((x & 0x8000000000000000ULL) == 0) { n += 1; }
-    return n;
-#endif
-}
-
 f128_t rf_s32_to_f128(int32_t x)
 {
-    return rf_s64_to_f128((int64_t)x);
+    return q_to_f128(tlfloat_cast_q_i64_((int64_t)x));
 }
 
 f128_t rf_s64_to_f128(int64_t x)
 {
-    if (x == 0) return rf_f128_zero(0);
-
-    int sign = 0;
-    uint64_t abs_x;
-    if (x < 0) {
-        sign = 1;
-        abs_x = (uint64_t)(-(x + 1)) + 1;  // Handle INT64_MIN correctly
-    } else {
-        abs_x = (uint64_t)x;
-    }
-
-    f128_t result = rf_u64_to_f128(abs_x);
-    if (sign) result.high |= 0x8000000000000000ULL;
-    return result;
+    return q_to_f128(tlfloat_cast_q_i64_(x));
 }
 
 f128_t rf_u32_to_f128(uint32_t x)
 {
-    return rf_u64_to_f128((uint64_t)x);
+    return q_to_f128(tlfloat_cast_q_u64_((uint64_t)x));
 }
 
 f128_t rf_u64_to_f128(uint64_t x)
 {
-    if (x == 0) return rf_f128_zero(0);
-
-    // Find position of MSB (0-63, where 63 is the highest)
-    int msb_pos = 63 - clz64(x);
-
-    // IEEE exponent: value = 1.fraction * 2^(exp - bias)
-    // For integer x with MSB at position msb_pos: x = 2^msb_pos * (1 + fraction)
-    // So exp - bias = msb_pos, thus exp = msb_pos + bias
-    int exp = msb_pos + F128_EXP_BIAS;
-
-    // We need to place the mantissa bits (excluding the implicit 1) into 112 bits
-    // The MSB is the implicit 1, so we have msb_pos bits of actual mantissa
-    // Shift left to align with the 112-bit mantissa field
-    uint64_t mant_high, mant_low;
-
-    if (msb_pos <= 48) {
-        // All mantissa bits fit in mant_high (after removing implicit 1)
-        // Clear the MSB (implicit 1) and shift left to fill 48 bits
-        uint64_t mant = x & ((1ULL << msb_pos) - 1);  // Remove implicit 1
-        mant_high = mant << (48 - msb_pos);
-        mant_low = 0;
-    } else if (msb_pos <= 112) {
-        // Mantissa spans both mant_high and mant_low
-        uint64_t mant = x & ((1ULL << msb_pos) - 1);  // Remove implicit 1
-        int shift = msb_pos - 48;
-        mant_high = mant >> shift;
-        mant_low = mant << (64 - shift);
-    } else {
-        // msb_pos > 112 is impossible for 64-bit integers (max msb_pos = 63)
-        mant_high = 0;
-        mant_low = 0;
-    }
-
-    f128_t result;
-    result.high = ((uint64_t)exp << 48) | mant_high;
-    result.low = mant_low;
-    return result;
+    return q_to_f128(tlfloat_cast_q_u64_(x));
 }
 
-// 128-bit integer to f128 conversions
+// 128-bit integer to f128 conversions. Values above 2^113 round to nearest
+// (the previous hand-rolled converters truncated the lost bits instead).
 
 f128_t rf_u128_to_f128(u128_t x)
 {
-    // Handle zero
-    if (x.high == 0 && x.low == 0) {
-        return rf_f128_zero(0);
-    }
-
-    // If high is zero, delegate to 64-bit version
-    if (x.high == 0) {
-        return rf_u64_to_f128(x.low);
-    }
-
-    // Find MSB position (0-127, where 127 is the highest possible)
-    // MSB is in the high word
-    int msb_in_high = 63 - clz64(x.high);  // 0-63 within high word
-    int msb_pos = 64 + msb_in_high;        // 64-127 overall
-
-    // IEEE exponent: exp = msb_pos + bias
-    int exp = msb_pos + F128_EXP_BIAS;
-
-    // We have 112 explicit mantissa bits in f128
-    // msb_pos bits of actual mantissa (excluding implicit 1)
-    // Need to extract the top 112 bits of the mantissa
-
-    uint64_t mant_high, mant_low;
-
-    // Clear the MSB (implicit 1) from high word
-    uint64_t high_mant = x.high & ((1ULL << msb_in_high) - 1);
-
-    // Mantissa is: high_mant (msb_in_high bits) : x.low (64 bits)
-    // Total mantissa bits = msb_in_high + 64 = msb_pos bits
-    // We need to fit this into 112 bits: mant_high (48) + mant_low (64)
-
-    if (msb_pos <= 48) {
-        // This case won't happen since msb_pos >= 64 when high != 0
-        mant_high = 0;
-        mant_low = 0;
-    } else if (msb_pos <= 112) {
-        // msb_pos is 64-112, mantissa fits exactly or with room to spare
-        // Shift left to align with 112-bit field
-        int shift_left = 112 - msb_pos;  // 0-48
-        if (shift_left >= 64) {
-            // All of low word goes to mant_high
-            mant_high = (high_mant << shift_left) | (x.low << (shift_left - 64));
-            mant_low = 0;
-        } else if (shift_left > 0) {
-            mant_high = (high_mant << shift_left) | (x.low >> (64 - shift_left));
-            mant_low = x.low << shift_left;
-        } else {
-            // shift_left == 0, msb_pos == 112
-            mant_high = high_mant;
-            mant_low = x.low;
-        }
-    } else {
-        // msb_pos > 112, need to shift right (lose precision)
-        int shift_right = msb_pos - 112;  // 1-15 (since max msb_pos = 127)
-
-        // Combine high_mant and x.low, then shift right
-        // Result needs to fit in 112 bits: mant_high (48) + mant_low (64)
-        if (shift_right < 64) {
-            mant_low = (x.low >> shift_right) | (high_mant << (64 - shift_right));
-            mant_high = high_mant >> shift_right;
-        } else {
-            mant_low = high_mant >> (shift_right - 64);
-            mant_high = 0;
-        }
-    }
-
-    // Mask to ensure mant_high is only 48 bits
-    mant_high &= 0xFFFFFFFFFFFFULL;
-
-    f128_t result;
-    result.high = ((uint64_t)exp << 48) | mant_high;
-    result.low = mant_low;
-    return result;
+    tlfloat_uint128_t_ u;
+    memcpy(&u, &x, 16);
+    return q_to_f128(tlfloat_cast_q_u128(u));
 }
 
 f128_t rf_s128_to_f128(s128_t x)
 {
-    // Handle zero
-    if (x.high == 0 && x.low == 0) {
-        return rf_f128_zero(0);
-    }
-
-    int sign = (x.high < 0) ? 1 : 0;
-    u128_t abs_x;
-
-    if (sign) {
-        // Negate: ~x + 1
-        // Handle INT128_MIN (0x8000...0000) correctly
-        if (x.high == (int64_t)0x8000000000000000ULL && x.low == 0) {
-            // This is INT128_MIN, abs value is 2^127
-            abs_x.low = 0;
-            abs_x.high = 0x8000000000000000ULL;
-        } else {
-            // Standard negation
-            abs_x.low = ~x.low + 1;
-            abs_x.high = ~(uint64_t)x.high + (abs_x.low == 0 ? 1 : 0);
-        }
-    } else {
-        abs_x.low = x.low;
-        abs_x.high = (uint64_t)x.high;
-    }
-
-    f128_t result = rf_u128_to_f128(abs_x);
-    if (sign) {
-        result.high |= 0x8000000000000000ULL;
-    }
-    return result;
+    tlfloat_int128_t_ s;
+    memcpy(&s, &x, 16);
+    return q_to_f128(tlfloat_cast_q_i128(s));
 }
 
 int32_t rf_f128_to_s32(f128_t x)
@@ -813,85 +604,32 @@ s128_t rf_f128_to_s128(f128_t x)
 }
 
 // ============================================================================
-// Basic arithmetic using LibBF
+// Basic arithmetic (TLFloat, correctly rounded)
 // ============================================================================
 
 f128_t rf_f128_add(f128_t a, f128_t b)
 {
-    bf_t ba, bb, br;
-    f128_to_bf(&ba, a);
-    f128_to_bf(&bb, b);
-    bf_init(&bf_ctx, &br);
-
-    bf_add(&br, &ba, &bb, F128_PREC, BF_RNDN);
-
-    f128_t result = bf_to_f128(&br);
-    bf_delete(&ba);
-    bf_delete(&bb);
-    bf_delete(&br);
-    return result;
+    return q_to_f128(tlfloat_addq(f128_to_q(a), f128_to_q(b)));
 }
 
 f128_t rf_f128_sub(f128_t a, f128_t b)
 {
-    bf_t ba, bb, br;
-    f128_to_bf(&ba, a);
-    f128_to_bf(&bb, b);
-    bf_init(&bf_ctx, &br);
-
-    bf_sub(&br, &ba, &bb, F128_PREC, BF_RNDN);
-
-    f128_t result = bf_to_f128(&br);
-    bf_delete(&ba);
-    bf_delete(&bb);
-    bf_delete(&br);
-    return result;
+    return q_to_f128(tlfloat_subq(f128_to_q(a), f128_to_q(b)));
 }
 
 f128_t rf_f128_mul(f128_t a, f128_t b)
 {
-    bf_t ba, bb, br;
-    f128_to_bf(&ba, a);
-    f128_to_bf(&bb, b);
-    bf_init(&bf_ctx, &br);
-
-    bf_mul(&br, &ba, &bb, F128_PREC, BF_RNDN);
-
-    f128_t result = bf_to_f128(&br);
-    bf_delete(&ba);
-    bf_delete(&bb);
-    bf_delete(&br);
-    return result;
+    return q_to_f128(tlfloat_mulq(f128_to_q(a), f128_to_q(b)));
 }
 
 f128_t rf_f128_div(f128_t a, f128_t b)
 {
-    bf_t ba, bb, br;
-    f128_to_bf(&ba, a);
-    f128_to_bf(&bb, b);
-    bf_init(&bf_ctx, &br);
-
-    bf_div(&br, &ba, &bb, F128_PREC, BF_RNDN);
-
-    f128_t result = bf_to_f128(&br);
-    bf_delete(&ba);
-    bf_delete(&bb);
-    bf_delete(&br);
-    return result;
+    return q_to_f128(tlfloat_divq(f128_to_q(a), f128_to_q(b)));
 }
 
 f128_t rf_f128_sqrt(f128_t a)
 {
-    bf_t ba, br;
-    f128_to_bf(&ba, a);
-    bf_init(&bf_ctx, &br);
-
-    bf_sqrt(&br, &ba, F128_PREC, BF_RNDN);
-
-    f128_t result = bf_to_f128(&br);
-    bf_delete(&ba);
-    bf_delete(&br);
-    return result;
+    return q_to_f128(tlfloat_sqrtq(f128_to_q(a)));
 }
 
 f128_t rf_f128_neg(f128_t a)
@@ -912,35 +650,17 @@ f128_t rf_f128_abs(f128_t a)
 
 int rf_f128_eq(f128_t a, f128_t b)
 {
-    bf_t ba, bb;
-    f128_to_bf(&ba, a);
-    f128_to_bf(&bb, b);
-    int result = bf_cmp_eq(&ba, &bb);
-    bf_delete(&ba);
-    bf_delete(&bb);
-    return result;
+    return tlfloat_eq_q_q(f128_to_q(a), f128_to_q(b));
 }
 
 int rf_f128_lt(f128_t a, f128_t b)
 {
-    bf_t ba, bb;
-    f128_to_bf(&ba, a);
-    f128_to_bf(&bb, b);
-    int result = bf_cmp_lt(&ba, &bb);
-    bf_delete(&ba);
-    bf_delete(&bb);
-    return result;
+    return tlfloat_lt_q_q(f128_to_q(a), f128_to_q(b));
 }
 
 int rf_f128_le(f128_t a, f128_t b)
 {
-    bf_t ba, bb;
-    f128_to_bf(&ba, a);
-    f128_to_bf(&bb, b);
-    int result = bf_cmp_le(&ba, &bb);
-    bf_delete(&ba);
-    bf_delete(&bb);
-    return result;
+    return tlfloat_le_q_q(f128_to_q(a), f128_to_q(b));
 }
 
 int rf_f128_gt(f128_t a, f128_t b) { return rf_f128_lt(b, a); }
@@ -1009,479 +729,81 @@ f128_t rf_f128_zero(int negative)
 }
 
 // ============================================================================
-// Transcendental functions - FULL PRECISION via LibBF
+// Transcendental functions (TLFloat, correctly rounded at quad precision)
 // ============================================================================
 
-f128_t rf_f128_sin(f128_t x)
-{
-    bf_t bx, br;
-    f128_to_bf(&bx, x);
-    bf_init(&bf_ctx, &br);
-
-    bf_sin(&br, &bx, F128_PREC, BF_RNDN);
-
-    f128_t result = bf_to_f128(&br);
-    bf_delete(&bx);
-    bf_delete(&br);
-    return result;
-}
-
-f128_t rf_f128_cos(f128_t x)
-{
-    bf_t bx, br;
-    f128_to_bf(&bx, x);
-    bf_init(&bf_ctx, &br);
-
-    bf_cos(&br, &bx, F128_PREC, BF_RNDN);
-
-    f128_t result = bf_to_f128(&br);
-    bf_delete(&bx);
-    bf_delete(&br);
-    return result;
-}
-
-f128_t rf_f128_tan(f128_t x)
-{
-    bf_t bx, br;
-    f128_to_bf(&bx, x);
-    bf_init(&bf_ctx, &br);
-
-    bf_tan(&br, &bx, F128_PREC, BF_RNDN);
-
-    f128_t result = bf_to_f128(&br);
-    bf_delete(&bx);
-    bf_delete(&br);
-    return result;
-}
-
-f128_t rf_f128_asin(f128_t x)
-{
-    bf_t bx, br;
-    f128_to_bf(&bx, x);
-    bf_init(&bf_ctx, &br);
-
-    bf_asin(&br, &bx, F128_PREC, BF_RNDN);
-
-    f128_t result = bf_to_f128(&br);
-    bf_delete(&bx);
-    bf_delete(&br);
-    return result;
-}
-
-f128_t rf_f128_acos(f128_t x)
-{
-    bf_t bx, br;
-    f128_to_bf(&bx, x);
-    bf_init(&bf_ctx, &br);
-
-    bf_acos(&br, &bx, F128_PREC, BF_RNDN);
-
-    f128_t result = bf_to_f128(&br);
-    bf_delete(&bx);
-    bf_delete(&br);
-    return result;
-}
-
-f128_t rf_f128_atan(f128_t x)
-{
-    bf_t bx, br;
-    f128_to_bf(&bx, x);
-    bf_init(&bf_ctx, &br);
-
-    bf_atan(&br, &bx, F128_PREC, BF_RNDN);
-
-    f128_t result = bf_to_f128(&br);
-    bf_delete(&bx);
-    bf_delete(&br);
-    return result;
-}
+f128_t rf_f128_sin(f128_t x)  { return q_to_f128(tlfloat_sinq(f128_to_q(x))); }
+f128_t rf_f128_cos(f128_t x)  { return q_to_f128(tlfloat_cosq(f128_to_q(x))); }
+f128_t rf_f128_tan(f128_t x)  { return q_to_f128(tlfloat_tanq(f128_to_q(x))); }
+f128_t rf_f128_asin(f128_t x) { return q_to_f128(tlfloat_asinq(f128_to_q(x))); }
+f128_t rf_f128_acos(f128_t x) { return q_to_f128(tlfloat_acosq(f128_to_q(x))); }
+f128_t rf_f128_atan(f128_t x) { return q_to_f128(tlfloat_atanq(f128_to_q(x))); }
 
 f128_t rf_f128_atan2(f128_t y, f128_t x)
 {
-    bf_t by, bx, br;
-    f128_to_bf(&by, y);
-    f128_to_bf(&bx, x);
-    bf_init(&bf_ctx, &br);
-
-    bf_atan2(&br, &by, &bx, F128_PREC, BF_RNDN);
-
-    f128_t result = bf_to_f128(&br);
-    bf_delete(&by);
-    bf_delete(&bx);
-    bf_delete(&br);
-    return result;
+    return q_to_f128(tlfloat_atan2q(f128_to_q(y), f128_to_q(x)));
 }
 
-f128_t rf_f128_exp(f128_t x)
-{
-    bf_t bx, br;
-    f128_to_bf(&bx, x);
-    bf_init(&bf_ctx, &br);
-
-    bf_exp(&br, &bx, F128_PREC, BF_RNDN);
-
-    f128_t result = bf_to_f128(&br);
-    bf_delete(&bx);
-    bf_delete(&br);
-    return result;
-}
-
-f128_t rf_f128_log(f128_t x)
-{
-    bf_t bx, br;
-    f128_to_bf(&bx, x);
-    bf_init(&bf_ctx, &br);
-
-    bf_log(&br, &bx, F128_PREC, BF_RNDN);
-
-    f128_t result = bf_to_f128(&br);
-    bf_delete(&bx);
-    bf_delete(&br);
-    return result;
-}
+f128_t rf_f128_exp(f128_t x) { return q_to_f128(tlfloat_expq(f128_to_q(x))); }
+f128_t rf_f128_log(f128_t x) { return q_to_f128(tlfloat_logq(f128_to_q(x))); }
 
 f128_t rf_f128_pow(f128_t x, f128_t y)
 {
-    bf_t bx, by, br;
-    f128_to_bf(&bx, x);
-    f128_to_bf(&by, y);
-    bf_init(&bf_ctx, &br);
-
-    bf_pow(&br, &bx, &by, F128_PREC, BF_RNDN);
-
-    f128_t result = bf_to_f128(&br);
-    bf_delete(&bx);
-    bf_delete(&by);
-    bf_delete(&br);
-    return result;
+    return q_to_f128(tlfloat_powq(f128_to_q(x), f128_to_q(y)));
 }
 
-// ============================================================================
-// Derived transcendental functions
-// ============================================================================
+// All previously derived via exp/log identities (with the associated
+// precision loss near 0 / over- and underflow at the range edges); TLFloat
+// implements each one natively.
 
-f128_t rf_f128_sinh(f128_t x)
-{
-    // sinh(x) = (exp(x) - exp(-x)) / 2
-    f128_t ex = rf_f128_exp(x);
-    f128_t emx = rf_f128_exp(rf_f128_neg(x));
-    f128_t two = rf_f64_to_f128(2.0);
-    return rf_f128_div(rf_f128_sub(ex, emx), two);
-}
-
-f128_t rf_f128_cosh(f128_t x)
-{
-    // cosh(x) = (exp(x) + exp(-x)) / 2
-    f128_t ex = rf_f128_exp(x);
-    f128_t emx = rf_f128_exp(rf_f128_neg(x));
-    f128_t two = rf_f64_to_f128(2.0);
-    return rf_f128_div(rf_f128_add(ex, emx), two);
-}
-
-f128_t rf_f128_tanh(f128_t x)
-{
-    // tanh(x) = sinh(x) / cosh(x)
-    return rf_f128_div(rf_f128_sinh(x), rf_f128_cosh(x));
-}
-
-f128_t rf_f128_asinh(f128_t x)
-{
-    // asinh(x) = log(x + sqrt(x^2 + 1))
-    f128_t one = rf_f64_to_f128(1.0);
-    f128_t x2 = rf_f128_mul(x, x);
-    f128_t inner = rf_f128_sqrt(rf_f128_add(x2, one));
-    return rf_f128_log(rf_f128_add(x, inner));
-}
-
-f128_t rf_f128_acosh(f128_t x)
-{
-    // acosh(x) = log(x + sqrt(x^2 - 1))
-    f128_t one = rf_f64_to_f128(1.0);
-    f128_t x2 = rf_f128_mul(x, x);
-    f128_t inner = rf_f128_sqrt(rf_f128_sub(x2, one));
-    return rf_f128_log(rf_f128_add(x, inner));
-}
-
-f128_t rf_f128_atanh(f128_t x)
-{
-    // atanh(x) = 0.5 * log((1+x)/(1-x))
-    f128_t one = rf_f64_to_f128(1.0);
-    f128_t half = rf_f64_to_f128(0.5);
-    f128_t num = rf_f128_add(one, x);
-    f128_t den = rf_f128_sub(one, x);
-    return rf_f128_mul(half, rf_f128_log(rf_f128_div(num, den)));
-}
-
-f128_t rf_f128_log2(f128_t x)
-{
-    // log2(x) = log(x) / log(2)
-    f128_t ln2 = rf_f128_log(rf_f64_to_f128(2.0));
-    return rf_f128_div(rf_f128_log(x), ln2);
-}
-
-f128_t rf_f128_log10(f128_t x)
-{
-    // log10(x) = log(x) / log(10)
-    f128_t ln10 = rf_f128_log(rf_f64_to_f128(10.0));
-    return rf_f128_div(rf_f128_log(x), ln10);
-}
-
-f128_t rf_f128_exp2(f128_t x)
-{
-    // exp2(x) = 2^x = exp(x * log(2))
-    f128_t ln2 = rf_f128_log(rf_f64_to_f128(2.0));
-    return rf_f128_exp(rf_f128_mul(x, ln2));
-}
-
-f128_t rf_f128_expm1(f128_t x)
-{
-    // expm1(x) = exp(x) - 1
-    // TODO: Use Taylor series for small x to avoid precision loss
-    return rf_f128_sub(rf_f128_exp(x), rf_f64_to_f128(1.0));
-}
-
-f128_t rf_f128_log1p(f128_t x)
-{
-    // log1p(x) = log(1 + x)
-    // TODO: Use Taylor series for small x to avoid precision loss
-    return rf_f128_log(rf_f128_add(rf_f64_to_f128(1.0), x));
-}
+f128_t rf_f128_sinh(f128_t x)   { return q_to_f128(tlfloat_sinhq(f128_to_q(x))); }
+f128_t rf_f128_cosh(f128_t x)   { return q_to_f128(tlfloat_coshq(f128_to_q(x))); }
+f128_t rf_f128_tanh(f128_t x)   { return q_to_f128(tlfloat_tanhq(f128_to_q(x))); }
+f128_t rf_f128_asinh(f128_t x)  { return q_to_f128(tlfloat_asinhq(f128_to_q(x))); }
+f128_t rf_f128_acosh(f128_t x)  { return q_to_f128(tlfloat_acoshq(f128_to_q(x))); }
+f128_t rf_f128_atanh(f128_t x)  { return q_to_f128(tlfloat_atanhq(f128_to_q(x))); }
+f128_t rf_f128_log2(f128_t x)   { return q_to_f128(tlfloat_log2q(f128_to_q(x))); }
+f128_t rf_f128_log10(f128_t x)  { return q_to_f128(tlfloat_log10q(f128_to_q(x))); }
+f128_t rf_f128_exp2(f128_t x)   { return q_to_f128(tlfloat_exp2q(f128_to_q(x))); }
+f128_t rf_f128_expm1(f128_t x)  { return q_to_f128(tlfloat_expm1q(f128_to_q(x))); }
+f128_t rf_f128_log1p(f128_t x)  { return q_to_f128(tlfloat_log1pq(f128_to_q(x))); }
+f128_t rf_f128_cbrt(f128_t x)   { return q_to_f128(tlfloat_cbrtq(f128_to_q(x))); }
 
 f128_t rf_f128_hypot(f128_t x, f128_t y)
 {
-    // hypot(x, y) = sqrt(x^2 + y^2)
-    f128_t x2 = rf_f128_mul(x, x);
-    f128_t y2 = rf_f128_mul(y, y);
-    return rf_f128_sqrt(rf_f128_add(x2, y2));
-}
-
-f128_t rf_f128_cbrt(f128_t x)
-{
-    // cbrt(x) = x^(1/3)
-    f128_t third = rf_f64_to_f128(1.0 / 3.0);
-    int neg = rf_f128_is_negative(x);
-    if (neg) x = rf_f128_abs(x);
-    f128_t result = rf_f128_pow(x, third);
-    if (neg) result = rf_f128_neg(result);
-    return result;
+    return q_to_f128(tlfloat_hypotq(f128_to_q(x), f128_to_q(y)));
 }
 
 f128_t rf_f128_fmod(f128_t x, f128_t y)
 {
-    bf_t bx, by, br;
-    f128_to_bf(&bx, x);
-    f128_to_bf(&by, y);
-    bf_init(&bf_ctx, &br);
-
-    bf_rem(&br, &bx, &by, F128_PREC, BF_RNDN, BF_RNDZ);
-
-    f128_t result = bf_to_f128(&br);
-    bf_delete(&bx);
-    bf_delete(&by);
-    bf_delete(&br);
-    return result;
+    return q_to_f128(tlfloat_fmodq(f128_to_q(x), f128_to_q(y)));
 }
 
 // ============================================================================
 // Rounding
 // ============================================================================
 
-f128_t rf_f128_floor(f128_t x)
-{
-    bf_t bx;
-    f128_to_bf(&bx, x);
-    bf_rint(&bx, BF_RNDD);
-    f128_t result = bf_to_f128(&bx);
-    bf_delete(&bx);
-    return result;
-}
-
-f128_t rf_f128_ceil(f128_t x)
-{
-    bf_t bx;
-    f128_to_bf(&bx, x);
-    bf_rint(&bx, BF_RNDU);
-    f128_t result = bf_to_f128(&bx);
-    bf_delete(&bx);
-    return result;
-}
-
-f128_t rf_f128_trunc(f128_t x)
-{
-    bf_t bx;
-    f128_to_bf(&bx, x);
-    bf_rint(&bx, BF_RNDZ);
-    f128_t result = bf_to_f128(&bx);
-    bf_delete(&bx);
-    return result;
-}
+f128_t rf_f128_floor(f128_t x) { return q_to_f128(tlfloat_floorq(f128_to_q(x))); }
+f128_t rf_f128_ceil(f128_t x)  { return q_to_f128(tlfloat_ceilq(f128_to_q(x))); }
+f128_t rf_f128_trunc(f128_t x) { return q_to_f128(tlfloat_truncq(f128_to_q(x))); }
 
 f128_t rf_f128_round(f128_t x)
 {
-    bf_t bx;
-    f128_to_bf(&bx, x);
-    bf_rint(&bx, BF_RNDNA);  // Round to nearest, ties away from zero
-    f128_t result = bf_to_f128(&bx);
-    bf_delete(&bx);
-    return result;
+    // Round to nearest, ties away from zero (C round semantics, matching the
+    // previous BF_RNDNA behavior).
+    return q_to_f128(tlfloat_roundq(f128_to_q(x)));
 }
 
 // ============================================================================
-// Windows x64 compiler-rt compatibility: fp128 softfloat ABI functions
+// REMOVED: __addtf3-family fp128 soft-float builtin shims (Win64 + Apple).
 //
-// On Windows x64, LLVM lowers fp128 arithmetic to calls like __addtf3, __subtf3, etc.
-// The Windows x64 calling convention for these functions is:
-//   - fp128 inputs: passed BY POINTER (rcx = ptr to first, rdx = ptr to second)
-//   - fp128 return: returned in xmm0 as a 128-bit SSE2 value (__m128)
-//   - Scalar inputs (float/double/int): passed by value in xmm0 or rcx as usual
-//   - Scalar returns (float/double/int): returned in xmm0 or rax as usual
-//
-// These functions are NOT present in the Windows compiler-rt builtins library
-// (clang_rt.builtins-x86_64.lib) because __float128 / _Float128 is not supported
-// on Windows. We provide them here using our LibBF-based rf_f128_* operations.
+// RazorForge codegen no longer emits LLVM fp128 instructions anywhere — F128
+// is an i128 bit carrier and every operation calls an rf_f128_*_parts bridge
+// directly — so no compiler-rt __*tf* libcall can be generated and the
+// platform-specific ABI shims that used to live here are gone.
 // ============================================================================
 
-#if defined(_WIN64) && defined(__SSE2__)
-#include <emmintrin.h>   /* __m128 */
 
-// Helper: pack f128_t into __m128 for return in xmm0
-static inline __m128 f128t_to_xmm(f128_t x)
-{
-    __m128 r;
-    __builtin_memcpy(&r, &x, 16);
-    return r;
-}
-
-// Helper: 3-way comparison. nan_result picks the unordered outcome so each
-// builtin's truth test stays FALSE for NaN operands: eq/ne/lt/le are checked
-// as ==0 / !=0 / <0 / <=0 (NaN must yield a positive result), while gt/ge are
-// checked as >0 / >=0 (NaN must yield a NEGATIVE result, like libgcc's).
-static inline int f128_cmp_three_way(const f128_t* a, const f128_t* b, int nan_result)
-{
-    if (rf_f128_is_nan(*a) || rf_f128_is_nan(*b)) return nan_result;
-    if (rf_f128_lt(*a, *b)) return -1;
-    if (rf_f128_eq(*a, *b)) return 0;
-    return 1;
-}
-
-// ---- Arithmetic ----
-// Arguments: rcx=ptr_to_first_fp128, rdx=ptr_to_second_fp128
-// Return:    fp128 in xmm0 (__m128)
-
-__m128 __addtf3(const f128_t* a, const f128_t* b) { return f128t_to_xmm(rf_f128_add(*a, *b)); }
-__m128 __subtf3(const f128_t* a, const f128_t* b) { return f128t_to_xmm(rf_f128_sub(*a, *b)); }
-__m128 __multf3(const f128_t* a, const f128_t* b) { return f128t_to_xmm(rf_f128_mul(*a, *b)); }
-__m128 __divtf3(const f128_t* a, const f128_t* b) { return f128t_to_xmm(rf_f128_div(*a, *b)); }
-__m128 __negtf2(const f128_t* a)                  { return f128t_to_xmm(rf_f128_neg(*a)); }
-
-// ---- Comparisons ----
-// Arguments: rcx=ptr_to_first_fp128, rdx=ptr_to_second_fp128
-// Return:    int in eax (LLVM checks sign / zero / nonzero to produce i1)
-//   __eqtf2 / __netf2: LLVM checks (result == 0) for equal, (result != 0) for not-equal
-//   __lttf2 / __letf2: LLVM checks sign bit (result < 0) for less-than
-//   __gttf2 / __getf2: LLVM checks (result > 0) or (result >= 0)
-//   All return -1/0/1 like a standard 3-way compare; NaN yields 1 (or -1 for
-//   gt/ge, whose truth tests would otherwise come out true for NaN).
-
-int __eqtf2(const f128_t* a, const f128_t* b) { return f128_cmp_three_way(a, b, 1); }
-int __netf2(const f128_t* a, const f128_t* b) { return f128_cmp_three_way(a, b, 1); }
-int __lttf2(const f128_t* a, const f128_t* b) { return f128_cmp_three_way(a, b, 1); }
-int __letf2(const f128_t* a, const f128_t* b) { return f128_cmp_three_way(a, b, 1); }
-int __gttf2(const f128_t* a, const f128_t* b) { return f128_cmp_three_way(a, b, -1); }
-int __getf2(const f128_t* a, const f128_t* b) { return f128_cmp_three_way(a, b, -1); }
-int __unordtf2(const f128_t* a, const f128_t* b)
-{
-    return (rf_f128_is_nan(*a) || rf_f128_is_nan(*b)) ? 1 : 0;
-}
-
-// ---- Conversions TO fp128 (scalar in, fp128 out in xmm0) ----
-// float/double args in xmm0; int/long long args in rcx.
-
-__m128 __extendsftf2(float a)          { return f128t_to_xmm(rf_f32_to_f128(a)); }
-__m128 __extenddftf2(double a)         { return f128t_to_xmm(rf_f64_to_f128(a)); }
-__m128 __floatsitf(int a)              { return f128t_to_xmm(rf_s32_to_f128(a)); }
-__m128 __floatditf(long long a)        { return f128t_to_xmm(rf_s64_to_f128((int64_t)a)); }
-__m128 __floatunsitf(unsigned int a)   { return f128t_to_xmm(rf_u32_to_f128(a)); }
-__m128 __floatunditf(unsigned long long a) { return f128t_to_xmm(rf_u64_to_f128((uint64_t)a)); }
-
-// ---- Conversions FROM fp128 (fp128 ptr in rcx, scalar out) ----
-
-float  __trunctfsf2(const f128_t* a)      { return rf_f128_to_f32(*a); }
-double __trunctfdf2(const f128_t* a)      { return rf_f128_to_f64(*a); }
-int    __fixtfsi(const f128_t* a)         { return rf_f128_to_s32(*a); }
-long long __fixtfdi(const f128_t* a)      { return (long long)rf_f128_to_s64(*a); }
-unsigned int __fixunstfsi(const f128_t* a)       { return rf_f128_to_u32(*a); }
-unsigned long long __fixunstfdi(const f128_t* a) { return (unsigned long long)rf_f128_to_u64(*a); }
-
-#elif defined(__APPLE__)
-// ============================================================================
-// fp128 soft-float builtins for Apple platforms
-//
-// LLVM lowers fp128 ops to the same __*tf3/__*tf2 libcalls here, but Apple's
-// compiler-rt does not ship the quad-precision builtins (and long double is
-// only 64-bit on arm64, so there is no libgcc fallback either).
-//
-// ABI: both AAPCS64 (arm64) and SysV x86-64 pass fp128 BY VALUE in SIMD
-// registers (q0/q1 resp. xmm0/xmm1) and return it the same way. A 128-bit
-// vector type has the identical ABI, so it stands in for fp128 below.
-// ============================================================================
-
-typedef uint64_t rf_tf_abi __attribute__((vector_size(16)));
-
-static inline f128_t tf_to_f128t(rf_tf_abi v) { f128_t x; __builtin_memcpy(&x, &v, 16); return x; }
-static inline rf_tf_abi f128t_to_tf(f128_t x) { rf_tf_abi v; __builtin_memcpy(&v, &x, 16); return v; }
-
-// See the Win64 block: nan_result keeps each builtin's truth test false for
-// unordered operands (eq/ne/lt/le need a positive result, gt/ge a negative one).
-static inline int tf_cmp_three_way(rf_tf_abi a, rf_tf_abi b, int nan_result)
-{
-    f128_t fa = tf_to_f128t(a), fb = tf_to_f128t(b);
-    if (rf_f128_is_nan(fa) || rf_f128_is_nan(fb)) return nan_result;
-    if (rf_f128_lt(fa, fb)) return -1;
-    if (rf_f128_eq(fa, fb)) return 0;
-    return 1;
-}
-
-// ---- Arithmetic ----
-
-rf_tf_abi __addtf3(rf_tf_abi a, rf_tf_abi b) { return f128t_to_tf(rf_f128_add(tf_to_f128t(a), tf_to_f128t(b))); }
-rf_tf_abi __subtf3(rf_tf_abi a, rf_tf_abi b) { return f128t_to_tf(rf_f128_sub(tf_to_f128t(a), tf_to_f128t(b))); }
-rf_tf_abi __multf3(rf_tf_abi a, rf_tf_abi b) { return f128t_to_tf(rf_f128_mul(tf_to_f128t(a), tf_to_f128t(b))); }
-rf_tf_abi __divtf3(rf_tf_abi a, rf_tf_abi b) { return f128t_to_tf(rf_f128_div(tf_to_f128t(a), tf_to_f128t(b))); }
-rf_tf_abi __negtf2(rf_tf_abi a)              { return f128t_to_tf(rf_f128_neg(tf_to_f128t(a))); }
-
-// ---- Comparisons ----
-
-int __eqtf2(rf_tf_abi a, rf_tf_abi b) { return tf_cmp_three_way(a, b, 1); }
-int __netf2(rf_tf_abi a, rf_tf_abi b) { return tf_cmp_three_way(a, b, 1); }
-int __lttf2(rf_tf_abi a, rf_tf_abi b) { return tf_cmp_three_way(a, b, 1); }
-int __letf2(rf_tf_abi a, rf_tf_abi b) { return tf_cmp_three_way(a, b, 1); }
-int __gttf2(rf_tf_abi a, rf_tf_abi b) { return tf_cmp_three_way(a, b, -1); }
-int __getf2(rf_tf_abi a, rf_tf_abi b) { return tf_cmp_three_way(a, b, -1); }
-int __unordtf2(rf_tf_abi a, rf_tf_abi b)
-{
-    return (rf_f128_is_nan(tf_to_f128t(a)) || rf_f128_is_nan(tf_to_f128t(b))) ? 1 : 0;
-}
-
-// ---- Conversions TO fp128 ----
-
-rf_tf_abi __extendsftf2(float a)              { return f128t_to_tf(rf_f32_to_f128(a)); }
-rf_tf_abi __extenddftf2(double a)             { return f128t_to_tf(rf_f64_to_f128(a)); }
-rf_tf_abi __floatsitf(int a)                  { return f128t_to_tf(rf_s32_to_f128(a)); }
-rf_tf_abi __floatditf(long long a)            { return f128t_to_tf(rf_s64_to_f128((int64_t)a)); }
-rf_tf_abi __floatunsitf(unsigned int a)       { return f128t_to_tf(rf_u32_to_f128(a)); }
-rf_tf_abi __floatunditf(unsigned long long a) { return f128t_to_tf(rf_u64_to_f128((uint64_t)a)); }
-
-// ---- Conversions FROM fp128 ----
-
-float  __trunctfsf2(rf_tf_abi a)              { return rf_f128_to_f32(tf_to_f128t(a)); }
-double __trunctfdf2(rf_tf_abi a)              { return rf_f128_to_f64(tf_to_f128t(a)); }
-int    __fixtfsi(rf_tf_abi a)                 { return rf_f128_to_s32(tf_to_f128t(a)); }
-long long __fixtfdi(rf_tf_abi a)              { return (long long)rf_f128_to_s64(tf_to_f128t(a)); }
-unsigned int __fixunstfsi(rf_tf_abi a)        { return rf_f128_to_u32(tf_to_f128t(a)); }
-unsigned long long __fixunstfdi(rf_tf_abi a)  { return (unsigned long long)rf_f128_to_u64(tf_to_f128t(a)); }
-
-#endif /* _WIN64 && __SSE2__ / __APPLE__ */
 
 // ============================================================================
 // String parsing
@@ -1516,6 +838,20 @@ void rf_parse_F128(const char* cstr, f128_t* out)
 
 uint64_t rf_format_F128(f128_t x)
 {
+    // Canonical specials — "NaN" (always unsigned) / "inf" / "-inf" — matching
+    // F16/F32/F64 and the decimal formats. Checked on the raw bits so LibBF's
+    // own spellings ("NaN"/"Inf"/"-Inf") never surface.
+    uint32_t sp_exp = (uint32_t)((x.high >> 48) & 0x7FFF);
+    uint64_t sp_mant = (x.high & 0x0000FFFFFFFFFFFFULL) | x.low;
+    if (sp_exp == 0x7FFF)
+    {
+        const char* s = sp_mant != 0 ? "NaN" : ((x.high >> 63) ? "-inf" : "inf");
+        char* sbuf = (char*)malloc(8);
+        if (!sbuf) return 0;
+        snprintf(sbuf, 8, "%s", s);
+        return (uint64_t)sbuf;
+    }
+
     bf_t bx;
     f128_to_bf(&bx, x);
     size_t len;
@@ -1599,6 +935,84 @@ uint64_t rf_format_F128_parts(uint64_t low, uint64_t high)
 {
     return rf_format_F128(f128_from_parts(low, high));
 }
+
+// ---- Arithmetic / sqrt / rounding bridges ----
+// Added for the fp128-free codegen: F128 is an i128 bit carrier in LLVM and
+// every operation lowers to one of these calls (no fadd/fcmp/fpext on fp128,
+// hence no compiler-rt __*tf* builtins anywhere in emitted code).
+
+void rf_f128_add_parts(uint64_t a_low, uint64_t a_high, uint64_t b_low, uint64_t b_high, f128_t* out)
+{
+    *out = rf_f128_add(f128_from_parts(a_low, a_high), f128_from_parts(b_low, b_high));
+}
+
+void rf_f128_sub_parts(uint64_t a_low, uint64_t a_high, uint64_t b_low, uint64_t b_high, f128_t* out)
+{
+    *out = rf_f128_sub(f128_from_parts(a_low, a_high), f128_from_parts(b_low, b_high));
+}
+
+void rf_f128_mul_parts(uint64_t a_low, uint64_t a_high, uint64_t b_low, uint64_t b_high, f128_t* out)
+{
+    *out = rf_f128_mul(f128_from_parts(a_low, a_high), f128_from_parts(b_low, b_high));
+}
+
+void rf_f128_div_parts(uint64_t a_low, uint64_t a_high, uint64_t b_low, uint64_t b_high, f128_t* out)
+{
+    *out = rf_f128_div(f128_from_parts(a_low, a_high), f128_from_parts(b_low, b_high));
+}
+
+void rf_f128_sqrt_parts(uint64_t low, uint64_t high, f128_t* out)  { *out = rf_f128_sqrt(f128_from_parts(low, high)); }
+void rf_f128_floor_parts(uint64_t low, uint64_t high, f128_t* out) { *out = rf_f128_floor(f128_from_parts(low, high)); }
+void rf_f128_ceil_parts(uint64_t low, uint64_t high, f128_t* out)  { *out = rf_f128_ceil(f128_from_parts(low, high)); }
+void rf_f128_round_parts(uint64_t low, uint64_t high, f128_t* out) { *out = rf_f128_round(f128_from_parts(low, high)); }
+void rf_f128_trunc_parts(uint64_t low, uint64_t high, f128_t* out) { *out = rf_f128_trunc(f128_from_parts(low, high)); }
+
+// ---- Comparison bridges (scalar int return: ABI-safe by value) ----
+
+int32_t rf_f128_eq_parts(uint64_t a_low, uint64_t a_high, uint64_t b_low, uint64_t b_high)
+{
+    return rf_f128_eq(f128_from_parts(a_low, a_high), f128_from_parts(b_low, b_high));
+}
+
+int32_t rf_f128_lt_parts(uint64_t a_low, uint64_t a_high, uint64_t b_low, uint64_t b_high)
+{
+    return rf_f128_lt(f128_from_parts(a_low, a_high), f128_from_parts(b_low, b_high));
+}
+
+int32_t rf_f128_gt_parts(uint64_t a_low, uint64_t a_high, uint64_t b_low, uint64_t b_high)
+{
+    return rf_f128_gt(f128_from_parts(a_low, a_high), f128_from_parts(b_low, b_high));
+}
+
+// ---- Conversion bridges to F128 ----
+// Narrow integer types widen to 64-bit on the RazorForge side first.
+
+void rf_s64_to_f128_parts(int64_t x, f128_t* out)   { *out = rf_s64_to_f128(x); }
+void rf_u64_to_f128_parts(uint64_t x, f128_t* out)  { *out = rf_u64_to_f128(x); }
+
+void rf_s128_to_f128_parts(uint64_t low, uint64_t high, f128_t* out)
+{
+    s128_t v;
+    v.low = low;
+    v.high = (int64_t)high;
+    *out = rf_s128_to_f128(v);
+}
+
+void rf_u128_to_f128_parts(uint64_t low, uint64_t high, f128_t* out)
+{
+    u128_t v;
+    v.low = low;
+    v.high = high;
+    *out = rf_u128_to_f128(v);
+}
+
+void rf_f32_to_f128_parts(float x, f128_t* out)  { *out = rf_f32_to_f128(x); }
+void rf_f64_to_f128_parts(double x, f128_t* out) { *out = rf_f64_to_f128(x); }
+
+// ---- Conversion bridges from F128 (scalar returns: ABI-safe by value) ----
+
+float rf_f128_to_f32_parts(uint64_t low, uint64_t high)  { return rf_f128_to_f32(f128_from_parts(low, high)); }
+double rf_f128_to_f64_parts(uint64_t low, uint64_t high) { return rf_f128_to_f64(f128_from_parts(low, high)); }
 
 #else
 #error "LibBF is required for f128 support. Define HAVE_LIBBF and link against LibBF."

@@ -352,19 +352,20 @@ routine Complex.is_imaginary() -> Bool
 # Text Representation
 # ============================================================================
 
-### Formats this value compactly as `a+bi` / `a-bi`, with each component in its canonical decimal
-### form (full precision, no trailing zeros — e.g. `1+1i`, not `1.0000000000 + 1.0000000000i`).
-### Standard `$represent` shape (no args) for f-string dispatch.
+### Formats this value compactly as `a+bj` / `a-bj`, with each component in its canonical decimal
+### form (full precision, no trailing zeros — e.g. `1+1j`, not `1.0000000000 + 1.0000000000j`).
+### The `j` spelling matches the imaginary literal suffixes (`2j`, `1.5jn`), so output is valid
+### literal syntax. Standard `$represent` shape (no args) for f-string dispatch.
 ### :returns: The resulting `Text` value.
 @readonly
 routine Complex.$represent() -> Text
   var real_text = me.real.$represent()
   var imag_abs = me.imag.abs().$represent()
   if me.imag.is_negative()
-    return real_text + "-" + imag_abs + "i"
-  return real_text + "+" + imag_abs + "i"
+    return real_text + "-" + imag_abs + "j"
+  return real_text + "+" + imag_abs + "j"
 
-### Formats this value as `a +/- bi` with the requested precision.
+### Formats this value as `a +/- bj` with the requested precision.
 ### :param decimal_places: The number of decimal places to render.
 ### :returns: The resulting `Text` value.
 @readonly
@@ -372,8 +373,8 @@ routine Complex.represent_with_places(decimal_places: S32) -> Text
   var real_text = me.real.represent_with_places(decimal_places: decimal_places)
   var imag_abs = me.imag.abs().represent_with_places(decimal_places: decimal_places)
   if me.imag.is_negative()
-    return real_text + " - " + imag_abs + "i"
-  return real_text + " + " + imag_abs + "i"
+    return real_text + " - " + imag_abs + "j"
+  return real_text + " + " + imag_abs + "j"
 
 ### Returns a diagnostic string that includes the type name wrapper.
 ### Standard `$diagnose` shape (no args) for f-string dispatch.

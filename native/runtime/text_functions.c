@@ -29,14 +29,18 @@ extern uint16_t rf_f16_from_f32(float x);
 
 // Canonical NaN/Inf spellings. printf's output for specials is platform-flavored
 // (MSVC UCRT prints "-nan(ind)", glibc prints "-nan"), so format them ourselves —
-// sign-aware "nan" / "-nan" / "inf" / "-inf", matching the glibc spelling.
+// "NaN" (always unsigned: the NaN payload/sign carries no value information) /
+// "inf" / "-inf". Same canonical set as F128 and the decimal formats.
 // Returns NULL for ordinary finite values.
 static char* format_special_float(double value)
 {
     if (!isnan(value) && !isinf(value)) return NULL;
     char* buffer = (char*)malloc(8);
     if (!buffer) return NULL;
-    snprintf(buffer, 8, "%s%s", signbit(value) ? "-" : "", isnan(value) ? "nan" : "inf");
+    if (isnan(value))
+        snprintf(buffer, 8, "NaN");
+    else
+        snprintf(buffer, 8, "%sinf", signbit(value) ? "-" : "");
     return buffer;
 }
 

@@ -45,6 +45,7 @@ Suflae-Wiki/
 /native/inteldecimal/
 /native/libbf/
 /native/libtommath/
+/native/tlfloat/
 /native/mapm/
 
 *.old
