@@ -1,0 +1,21 @@
+title: RazorForge 개발 블로그
+description: >-
+  RazorForge — 빌림 검사기 없는 단일 소유권 메모리 관리와 컴파일러가 만들어 주는
+  오류 처리를 갖춘 네이티브 컴파일 언어 — 를 만들면서 남기는 설계 노트.
+lang: ko
+url: "https://dj-lumiere.github.io"
+baseurl: "/razorforge-suflae"
+theme: minima
+show_excerpts: true
+
+header_pages:
+  - about.md
+
+minima:
+  social_links:
+    github: dj-lumiere
+
+# 알 수 없는 코드 펜스 언어(razorforge)는 빌드 실패 대신 일반 텍스트로 처리
+kramdown:
+  syntax_highlighter_opts:
+    default_lang: text
