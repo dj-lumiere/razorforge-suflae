@@ -1,0 +1,31 @@
+module Tests/Stdlib/DecimalTrigApi
+import IO/Console
+import Numerics.[Decimal]
+
+# Arbitrary-precision Decimal trig/hyperbolic/constants, LibBF-backed at the
+# requested precision (default 50 significant digits). These externs were
+# previously phantom — declared but unimplemented, so any call LINKERR'd.
+
+routine start()
+  var one = Decimal(from: 1_s64)
+  var half = Decimal(from: 1_s64) / Decimal(from: 2_s64)
+
+  show(f"pi: {Decimal.pi()}")
+  show(f"e: {Decimal.e()}")
+
+  show(f"sin(1): {one.sin()}")
+  show(f"cos(1): {one.cos()}")
+  show(f"tan(1): {one.tan()}")
+  show(f"asin(0.5): {half.asin()}")
+  show(f"acos(0.5): {half.acos()}")
+  show(f"atan(1): {one.atan()}")
+  show(f"atan2(1,1): {one.atan2(x: one)}")
+
+  show(f"sinh(1): {one.sinh()}")
+  show(f"cosh(1): {one.cosh()}")
+  show(f"tanh(1): {one.tanh()}")
+
+  show(f"pi(100): {Decimal.pi(100)}")
+
+  show("DONE")
+  return
