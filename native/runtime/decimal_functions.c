@@ -35,6 +35,10 @@
 #include <decDouble.h>
 #include <decQuad.h>
 
+// Decimal transcendentals route through TLFloat's correctly-rounded binary
+// functions (see the "Decimal transcendental functions" section below).
+#include <tlfloat/tlfloat.h>
+
 // ============================================================================
 // Type conversion helpers (raw integers <-> decNumber structs)
 // ============================================================================
@@ -685,152 +689,253 @@ void rf_d128_to_f128_parts(uint64_t low, uint64_t high, f128_t* out)
 }
 
 // ============================================================================
-// d128 transcendental functions via f128 path
+// Decimal transcendental functions via TLFloat (tiered, correctly rounded)
 //
-// Strategy: d128 -> f128 -> LibBF transcendental -> f128 -> d128
-// LibBF provides arbitrary precision transcendentals with exact rounding.
-// Both d128 and f128 have ~34 significant digits.
+// Strategy: decimal -> exact decimal string -> next-size-up TLFloat binary
+// format -> correctly-rounded op -> full-precision string -> decimal.
+// Tiers: d32 (7 digits) -> binary64 (~16), d64 (16) -> quad (~34),
+// d128 (34) -> octuple (~71). Each intermediate's slack dwarfs its target's
+// precision, so the final decimal rounding is the only rounding that matters.
+// TLFloat (not platform libm) at every tier keeps results correctly rounded
+// and byte-identical across platforms.
 // ============================================================================
+
+static double dec32_to_f64(uint32_t bits)
+{
+    char buf[64];
+    decSingle s = to_single(bits);
+    decSingleToString(&s, buf);
+    return tlfloat_strtod(buf, NULL);
+}
+
+static uint32_t f64_to_dec32(double v)
+{
+    char buf[64];
+    tlfloat_snprintf(buf, sizeof(buf), "%.17g", v);
+    decSingle s;
+    decSingleFromString(&s, buf, get_ctx32());
+    return from_single(s);
+}
+
+static tlfloat_quad_ dec64_to_q(uint64_t bits)
+{
+    char buf[64];
+    decDouble d = to_double(bits);
+    decDoubleToString(&d, buf);
+    return tlfloat_strtoq_(buf, NULL);
+}
+
+static uint64_t q_to_dec64(tlfloat_quad_ v)
+{
+    char buf[96];
+    tlfloat_snprintf(buf, sizeof(buf), "%.36Qg", v);
+    decDouble d;
+    decDoubleFromString(&d, buf, get_ctx64());
+    return from_double(d);
+}
+
+static tlfloat_octuple_ dec128_to_o(uint64_t low, uint64_t high)
+{
+    char buf[64];
+    decQuad q = to_quad(low, high);
+    decQuadToString(&q, buf);
+    return tlfloat_strtoo_(buf, NULL);
+}
+
+static d128_t o_to_dec128(tlfloat_octuple_ v)
+{
+    char buf[128];
+    tlfloat_snprintf(buf, sizeof(buf), "%.40Og", v);
+    decQuad q;
+    decQuadFromString(&q, buf, get_ctx128());
+    return from_quad(q);
+}
+
+uint32_t rf_d32_sin(uint32_t x)   { return f64_to_dec32(tlfloat_sin(dec32_to_f64(x))); }
+uint32_t rf_d32_cos(uint32_t x)   { return f64_to_dec32(tlfloat_cos(dec32_to_f64(x))); }
+uint32_t rf_d32_tan(uint32_t x)   { return f64_to_dec32(tlfloat_tan(dec32_to_f64(x))); }
+uint32_t rf_d32_asin(uint32_t x)  { return f64_to_dec32(tlfloat_asin(dec32_to_f64(x))); }
+uint32_t rf_d32_acos(uint32_t x)  { return f64_to_dec32(tlfloat_acos(dec32_to_f64(x))); }
+uint32_t rf_d32_atan(uint32_t x)  { return f64_to_dec32(tlfloat_atan(dec32_to_f64(x))); }
+uint32_t rf_d32_sinh(uint32_t x)  { return f64_to_dec32(tlfloat_sinh(dec32_to_f64(x))); }
+uint32_t rf_d32_cosh(uint32_t x)  { return f64_to_dec32(tlfloat_cosh(dec32_to_f64(x))); }
+uint32_t rf_d32_tanh(uint32_t x)  { return f64_to_dec32(tlfloat_tanh(dec32_to_f64(x))); }
+uint32_t rf_d32_asinh(uint32_t x) { return f64_to_dec32(tlfloat_asinh(dec32_to_f64(x))); }
+uint32_t rf_d32_acosh(uint32_t x) { return f64_to_dec32(tlfloat_acosh(dec32_to_f64(x))); }
+uint32_t rf_d32_atanh(uint32_t x) { return f64_to_dec32(tlfloat_atanh(dec32_to_f64(x))); }
+uint32_t rf_d32_exp(uint32_t x)   { return f64_to_dec32(tlfloat_exp(dec32_to_f64(x))); }
+uint32_t rf_d32_exp2(uint32_t x)  { return f64_to_dec32(tlfloat_exp2(dec32_to_f64(x))); }
+uint32_t rf_d32_expm1(uint32_t x) { return f64_to_dec32(tlfloat_expm1(dec32_to_f64(x))); }
+uint32_t rf_d32_log(uint32_t x)   { return f64_to_dec32(tlfloat_log(dec32_to_f64(x))); }
+uint32_t rf_d32_log2(uint32_t x)  { return f64_to_dec32(tlfloat_log2(dec32_to_f64(x))); }
+uint32_t rf_d32_log10(uint32_t x) { return f64_to_dec32(tlfloat_log10(dec32_to_f64(x))); }
+uint32_t rf_d32_log1p(uint32_t x) { return f64_to_dec32(tlfloat_log1p(dec32_to_f64(x))); }
+uint32_t rf_d32_cbrt(uint32_t x)  { return f64_to_dec32(tlfloat_cbrt(dec32_to_f64(x))); }
+
+uint32_t rf_d32_atan2(uint32_t y, uint32_t x)
+{
+    return f64_to_dec32(tlfloat_atan2(dec32_to_f64(y), dec32_to_f64(x)));
+}
+
+uint32_t rf_d32_pow(uint32_t base, uint32_t exp)
+{
+    return f64_to_dec32(tlfloat_pow(dec32_to_f64(base), dec32_to_f64(exp)));
+}
+
+uint32_t rf_d32_hypot(uint32_t x, uint32_t y)
+{
+    return f64_to_dec32(tlfloat_hypot(dec32_to_f64(x), dec32_to_f64(y)));
+}
+
+uint64_t rf_d64_sin(uint64_t x)   { return q_to_dec64(tlfloat_sinq(dec64_to_q(x))); }
+uint64_t rf_d64_cos(uint64_t x)   { return q_to_dec64(tlfloat_cosq(dec64_to_q(x))); }
+uint64_t rf_d64_tan(uint64_t x)   { return q_to_dec64(tlfloat_tanq(dec64_to_q(x))); }
+uint64_t rf_d64_asin(uint64_t x)  { return q_to_dec64(tlfloat_asinq(dec64_to_q(x))); }
+uint64_t rf_d64_acos(uint64_t x)  { return q_to_dec64(tlfloat_acosq(dec64_to_q(x))); }
+uint64_t rf_d64_atan(uint64_t x)  { return q_to_dec64(tlfloat_atanq(dec64_to_q(x))); }
+uint64_t rf_d64_sinh(uint64_t x)  { return q_to_dec64(tlfloat_sinhq(dec64_to_q(x))); }
+uint64_t rf_d64_cosh(uint64_t x)  { return q_to_dec64(tlfloat_coshq(dec64_to_q(x))); }
+uint64_t rf_d64_tanh(uint64_t x)  { return q_to_dec64(tlfloat_tanhq(dec64_to_q(x))); }
+uint64_t rf_d64_asinh(uint64_t x) { return q_to_dec64(tlfloat_asinhq(dec64_to_q(x))); }
+uint64_t rf_d64_acosh(uint64_t x) { return q_to_dec64(tlfloat_acoshq(dec64_to_q(x))); }
+uint64_t rf_d64_atanh(uint64_t x) { return q_to_dec64(tlfloat_atanhq(dec64_to_q(x))); }
+uint64_t rf_d64_exp(uint64_t x)   { return q_to_dec64(tlfloat_expq(dec64_to_q(x))); }
+uint64_t rf_d64_exp2(uint64_t x)  { return q_to_dec64(tlfloat_exp2q(dec64_to_q(x))); }
+uint64_t rf_d64_expm1(uint64_t x) { return q_to_dec64(tlfloat_expm1q(dec64_to_q(x))); }
+uint64_t rf_d64_log(uint64_t x)   { return q_to_dec64(tlfloat_logq(dec64_to_q(x))); }
+uint64_t rf_d64_log2(uint64_t x)  { return q_to_dec64(tlfloat_log2q(dec64_to_q(x))); }
+uint64_t rf_d64_log10(uint64_t x) { return q_to_dec64(tlfloat_log10q(dec64_to_q(x))); }
+uint64_t rf_d64_log1p(uint64_t x) { return q_to_dec64(tlfloat_log1pq(dec64_to_q(x))); }
+uint64_t rf_d64_cbrt(uint64_t x)  { return q_to_dec64(tlfloat_cbrtq(dec64_to_q(x))); }
+
+uint64_t rf_d64_atan2(uint64_t y, uint64_t x)
+{
+    return q_to_dec64(tlfloat_atan2q(dec64_to_q(y), dec64_to_q(x)));
+}
+
+uint64_t rf_d64_pow(uint64_t base, uint64_t exp)
+{
+    return q_to_dec64(tlfloat_powq(dec64_to_q(base), dec64_to_q(exp)));
+}
+
+uint64_t rf_d64_hypot(uint64_t x, uint64_t y)
+{
+    return q_to_dec64(tlfloat_hypotq(dec64_to_q(x), dec64_to_q(y)));
+}
 
 d128_t rf_d128_sin(uint64_t x_low, uint64_t x_high)
 {
-    f128_t f = rf_d128_to_f128(x_low, x_high);
-    return rf_f128_to_d128(rf_f128_sin(f));
+    return o_to_dec128(tlfloat_sino(dec128_to_o(x_low, x_high)));
 }
 
 d128_t rf_d128_cos(uint64_t x_low, uint64_t x_high)
 {
-    f128_t f = rf_d128_to_f128(x_low, x_high);
-    return rf_f128_to_d128(rf_f128_cos(f));
+    return o_to_dec128(tlfloat_coso(dec128_to_o(x_low, x_high)));
 }
 
 d128_t rf_d128_tan(uint64_t x_low, uint64_t x_high)
 {
-    f128_t f = rf_d128_to_f128(x_low, x_high);
-    return rf_f128_to_d128(rf_f128_tan(f));
+    return o_to_dec128(tlfloat_tano(dec128_to_o(x_low, x_high)));
 }
 
 d128_t rf_d128_asin(uint64_t x_low, uint64_t x_high)
 {
-    f128_t f = rf_d128_to_f128(x_low, x_high);
-    return rf_f128_to_d128(rf_f128_asin(f));
+    return o_to_dec128(tlfloat_asino(dec128_to_o(x_low, x_high)));
 }
 
 d128_t rf_d128_acos(uint64_t x_low, uint64_t x_high)
 {
-    f128_t f = rf_d128_to_f128(x_low, x_high);
-    return rf_f128_to_d128(rf_f128_acos(f));
+    return o_to_dec128(tlfloat_acoso(dec128_to_o(x_low, x_high)));
 }
 
 d128_t rf_d128_atan(uint64_t x_low, uint64_t x_high)
 {
-    f128_t f = rf_d128_to_f128(x_low, x_high);
-    return rf_f128_to_d128(rf_f128_atan(f));
+    return o_to_dec128(tlfloat_atano(dec128_to_o(x_low, x_high)));
 }
 
 d128_t rf_d128_atan2(uint64_t y_low, uint64_t y_high, uint64_t x_low, uint64_t x_high)
 {
-    f128_t fy = rf_d128_to_f128(y_low, y_high);
-    f128_t fx = rf_d128_to_f128(x_low, x_high);
-    return rf_f128_to_d128(rf_f128_atan2(fy, fx));
+    return o_to_dec128(tlfloat_atan2o(dec128_to_o(y_low, y_high), dec128_to_o(x_low, x_high)));
 }
 
 d128_t rf_d128_sinh(uint64_t x_low, uint64_t x_high)
 {
-    f128_t f = rf_d128_to_f128(x_low, x_high);
-    return rf_f128_to_d128(rf_f128_sinh(f));
+    return o_to_dec128(tlfloat_sinho(dec128_to_o(x_low, x_high)));
 }
 
 d128_t rf_d128_cosh(uint64_t x_low, uint64_t x_high)
 {
-    f128_t f = rf_d128_to_f128(x_low, x_high);
-    return rf_f128_to_d128(rf_f128_cosh(f));
+    return o_to_dec128(tlfloat_cosho(dec128_to_o(x_low, x_high)));
 }
 
 d128_t rf_d128_tanh(uint64_t x_low, uint64_t x_high)
 {
-    f128_t f = rf_d128_to_f128(x_low, x_high);
-    return rf_f128_to_d128(rf_f128_tanh(f));
+    return o_to_dec128(tlfloat_tanho(dec128_to_o(x_low, x_high)));
 }
 
 d128_t rf_d128_asinh(uint64_t x_low, uint64_t x_high)
 {
-    f128_t f = rf_d128_to_f128(x_low, x_high);
-    return rf_f128_to_d128(rf_f128_asinh(f));
+    return o_to_dec128(tlfloat_asinho(dec128_to_o(x_low, x_high)));
 }
 
 d128_t rf_d128_acosh(uint64_t x_low, uint64_t x_high)
 {
-    f128_t f = rf_d128_to_f128(x_low, x_high);
-    return rf_f128_to_d128(rf_f128_acosh(f));
+    return o_to_dec128(tlfloat_acosho(dec128_to_o(x_low, x_high)));
 }
 
 d128_t rf_d128_atanh(uint64_t x_low, uint64_t x_high)
 {
-    f128_t f = rf_d128_to_f128(x_low, x_high);
-    return rf_f128_to_d128(rf_f128_atanh(f));
+    return o_to_dec128(tlfloat_atanho(dec128_to_o(x_low, x_high)));
 }
 
 d128_t rf_d128_exp(uint64_t x_low, uint64_t x_high)
 {
-    f128_t f = rf_d128_to_f128(x_low, x_high);
-    return rf_f128_to_d128(rf_f128_exp(f));
+    return o_to_dec128(tlfloat_expo(dec128_to_o(x_low, x_high)));
 }
 
 d128_t rf_d128_exp2(uint64_t x_low, uint64_t x_high)
 {
-    f128_t f = rf_d128_to_f128(x_low, x_high);
-    return rf_f128_to_d128(rf_f128_exp2(f));
+    return o_to_dec128(tlfloat_exp2o(dec128_to_o(x_low, x_high)));
 }
 
 d128_t rf_d128_expm1(uint64_t x_low, uint64_t x_high)
 {
-    f128_t f = rf_d128_to_f128(x_low, x_high);
-    return rf_f128_to_d128(rf_f128_expm1(f));
+    return o_to_dec128(tlfloat_expm1o(dec128_to_o(x_low, x_high)));
 }
 
 d128_t rf_d128_log(uint64_t x_low, uint64_t x_high)
 {
-    f128_t f = rf_d128_to_f128(x_low, x_high);
-    return rf_f128_to_d128(rf_f128_log(f));
+    return o_to_dec128(tlfloat_logo(dec128_to_o(x_low, x_high)));
 }
 
 d128_t rf_d128_log2(uint64_t x_low, uint64_t x_high)
 {
-    f128_t f = rf_d128_to_f128(x_low, x_high);
-    return rf_f128_to_d128(rf_f128_log2(f));
+    return o_to_dec128(tlfloat_log2o(dec128_to_o(x_low, x_high)));
 }
 
 d128_t rf_d128_log10(uint64_t x_low, uint64_t x_high)
 {
-    f128_t f = rf_d128_to_f128(x_low, x_high);
-    return rf_f128_to_d128(rf_f128_log10(f));
+    return o_to_dec128(tlfloat_log10o(dec128_to_o(x_low, x_high)));
 }
 
 d128_t rf_d128_log1p(uint64_t x_low, uint64_t x_high)
 {
-    f128_t f = rf_d128_to_f128(x_low, x_high);
-    return rf_f128_to_d128(rf_f128_log1p(f));
+    return o_to_dec128(tlfloat_log1po(dec128_to_o(x_low, x_high)));
 }
 
 d128_t rf_d128_pow(uint64_t base_low, uint64_t base_high, uint64_t exp_low, uint64_t exp_high)
 {
-    f128_t fb = rf_d128_to_f128(base_low, base_high);
-    f128_t fe = rf_d128_to_f128(exp_low, exp_high);
-    return rf_f128_to_d128(rf_f128_pow(fb, fe));
+    return o_to_dec128(tlfloat_powo(dec128_to_o(base_low, base_high), dec128_to_o(exp_low, exp_high)));
 }
 
 d128_t rf_d128_cbrt(uint64_t x_low, uint64_t x_high)
 {
-    f128_t f = rf_d128_to_f128(x_low, x_high);
-    return rf_f128_to_d128(rf_f128_cbrt(f));
+    return o_to_dec128(tlfloat_cbrto(dec128_to_o(x_low, x_high)));
 }
 
 d128_t rf_d128_hypot(uint64_t x_low, uint64_t x_high, uint64_t y_low, uint64_t y_high)
 {
-    f128_t fx = rf_d128_to_f128(x_low, x_high);
-    f128_t fy = rf_d128_to_f128(y_low, y_high);
-    return rf_f128_to_d128(rf_f128_hypot(fx, fy));
+    return o_to_dec128(tlfloat_hypoto(dec128_to_o(x_low, x_high), dec128_to_o(y_low, y_high)));
 }
 
 // ============================================================================

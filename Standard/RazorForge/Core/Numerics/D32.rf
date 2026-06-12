@@ -302,6 +302,199 @@ routine D32.int_truncate() -> D32
   return reinterpret_bits[U32, D32](result)
 
 # ============================================================================
+# Trigonometric Functions (via TLFloat binary64 routing)
+# ============================================================================
+
+### Returns the sine of this decimal value, interpreting it as radians.
+### :returns: The resulting `D32` value.
+routine D32.sin() -> D32
+  var bits = reinterpret_bits[D32, U32](me)
+  var result = rf_d32_sin(bits)
+  return reinterpret_bits[U32, D32](result)
+
+### Returns the cosine of this decimal value, interpreting it as radians.
+### :returns: The resulting `D32` value.
+routine D32.cos() -> D32
+  var bits = reinterpret_bits[D32, U32](me)
+  var result = rf_d32_cos(bits)
+  return reinterpret_bits[U32, D32](result)
+
+### Returns the tangent of this decimal value, interpreting it as radians.
+### :returns: The resulting `D32` value.
+routine D32.tan() -> D32
+  var bits = reinterpret_bits[D32, U32](me)
+  var result = rf_d32_tan(bits)
+  return reinterpret_bits[U32, D32](result)
+
+### Returns the inverse sine of this decimal value.
+### :returns: The resulting `D32` value.
+routine D32.asin() -> D32
+  var bits = reinterpret_bits[D32, U32](me)
+  var result = rf_d32_asin(bits)
+  return reinterpret_bits[U32, D32](result)
+
+### Returns the inverse cosine of this decimal value.
+### :returns: The resulting `D32` value.
+routine D32.acos() -> D32
+  var bits = reinterpret_bits[D32, U32](me)
+  var result = rf_d32_acos(bits)
+  return reinterpret_bits[U32, D32](result)
+
+### Returns the inverse tangent of this decimal value.
+### :returns: The resulting `D32` value.
+routine D32.atan() -> D32
+  var bits = reinterpret_bits[D32, U32](me)
+  var result = rf_d32_atan(bits)
+  return reinterpret_bits[U32, D32](result)
+
+### Returns the quadrant-aware angle of the point `(x, me)`.
+### :param x: The x-coordinate paired with this y-coordinate.
+### :returns: The resulting `D32` value.
+routine D32.atan2(x: D32) -> D32
+  var y_bits = reinterpret_bits[D32, U32](me)
+  var x_bits = reinterpret_bits[D32, U32](x)
+  var result = rf_d32_atan2(y: y_bits, x: x_bits)
+  return reinterpret_bits[U32, D32](result)
+
+# ============================================================================
+# Hyperbolic Functions (via TLFloat binary64 routing)
+# ============================================================================
+
+### Returns the hyperbolic sine of this decimal value.
+### :returns: The resulting `D32` value.
+routine D32.sinh() -> D32
+  var bits = reinterpret_bits[D32, U32](me)
+  var result = rf_d32_sinh(bits)
+  return reinterpret_bits[U32, D32](result)
+
+### Returns the hyperbolic cosine of this decimal value.
+### :returns: The resulting `D32` value.
+routine D32.cosh() -> D32
+  var bits = reinterpret_bits[D32, U32](me)
+  var result = rf_d32_cosh(bits)
+  return reinterpret_bits[U32, D32](result)
+
+### Returns the hyperbolic tangent of this decimal value.
+### :returns: The resulting `D32` value.
+routine D32.tanh() -> D32
+  var bits = reinterpret_bits[D32, U32](me)
+  var result = rf_d32_tanh(bits)
+  return reinterpret_bits[U32, D32](result)
+
+### Returns the inverse hyperbolic sine of this decimal value.
+### :returns: The resulting `D32` value.
+routine D32.asinh() -> D32
+  var bits = reinterpret_bits[D32, U32](me)
+  var result = rf_d32_asinh(bits)
+  return reinterpret_bits[U32, D32](result)
+
+### Returns the inverse hyperbolic cosine of this decimal value.
+### :returns: The resulting `D32` value.
+routine D32.acosh() -> D32
+  var bits = reinterpret_bits[D32, U32](me)
+  var result = rf_d32_acosh(bits)
+  return reinterpret_bits[U32, D32](result)
+
+### Returns the inverse hyperbolic tangent of this decimal value.
+### :returns: The resulting `D32` value.
+routine D32.atanh() -> D32
+  var bits = reinterpret_bits[D32, U32](me)
+  var result = rf_d32_atanh(bits)
+  return reinterpret_bits[U32, D32](result)
+
+# ============================================================================
+# Exponential and Logarithmic Functions (via TLFloat binary64 routing)
+# ============================================================================
+
+### Returns `e` raised to this decimal value.
+### :returns: The resulting `D32` value.
+routine D32.exp() -> D32
+  var bits = reinterpret_bits[D32, U32](me)
+  var result = rf_d32_exp(bits)
+  return reinterpret_bits[U32, D32](result)
+
+### Returns `2` raised to this decimal value.
+### :returns: The resulting `D32` value.
+routine D32.exp2() -> D32
+  var bits = reinterpret_bits[D32, U32](me)
+  var result = rf_d32_exp2(bits)
+  return reinterpret_bits[U32, D32](result)
+
+### Returns `e` raised to this decimal value, minus one (accurate near zero).
+### :returns: The resulting `D32` value.
+routine D32.expm1() -> D32
+  var bits = reinterpret_bits[D32, U32](me)
+  var result = rf_d32_expm1(bits)
+  return reinterpret_bits[U32, D32](result)
+
+### Returns the natural logarithm of this decimal value.
+### :returns: The resulting `D32` value.
+routine D32.log() -> D32
+  var bits = reinterpret_bits[D32, U32](me)
+  var result = rf_d32_log(bits)
+  return reinterpret_bits[U32, D32](result)
+
+### Returns the base-2 logarithm of this decimal value.
+### :returns: The resulting `D32` value.
+routine D32.log2() -> D32
+  var bits = reinterpret_bits[D32, U32](me)
+  var result = rf_d32_log2(bits)
+  return reinterpret_bits[U32, D32](result)
+
+### Returns the base-10 logarithm of this decimal value.
+### :returns: The resulting `D32` value.
+routine D32.log10() -> D32
+  var bits = reinterpret_bits[D32, U32](me)
+  var result = rf_d32_log10(bits)
+  return reinterpret_bits[U32, D32](result)
+
+### Returns the natural logarithm of one plus this decimal value (accurate near zero).
+### :returns: The resulting `D32` value.
+routine D32.log1p() -> D32
+  var bits = reinterpret_bits[D32, U32](me)
+  var result = rf_d32_log1p(bits)
+  return reinterpret_bits[U32, D32](result)
+
+# ============================================================================
+# Power Functions (via TLFloat binary64 routing)
+# ============================================================================
+
+### Raises this decimal value to the decimal exponent `exp`.
+### :param exp: The exponent value.
+### :returns: The resulting `D32` value.
+routine D32.pow(exp: D32) -> D32
+  var base_bits = reinterpret_bits[D32, U32](me)
+  var exp_bits = reinterpret_bits[D32, U32](exp)
+  var result = rf_d32_pow(base: base_bits, exp: exp_bits)
+  return reinterpret_bits[U32, D32](result)
+
+### Raises this decimal value to `exp` and rejects non-finite results.
+### :param exp: The exponent value.
+### :returns: The resulting `D32` value.
+### :throws: {NumericOverflowError} if the result is non-finite.
+routine D32.$pow!(exp: D32) -> D32
+  var result = me.pow(exp)
+  if not result.is_finite()
+    throw NumericOverflowError(description: f"D32 power produced non-finite result: {me} ** {exp}")
+  return result
+
+### Returns the real cube root of this decimal value.
+### :returns: The resulting `D32` value.
+routine D32.cbrt() -> D32
+  var bits = reinterpret_bits[D32, U32](me)
+  var result = rf_d32_cbrt(bits)
+  return reinterpret_bits[U32, D32](result)
+
+### Returns the Euclidean length of the vector `(me, y)`.
+### :param y: The second coordinate.
+### :returns: The resulting `D32` value.
+routine D32.hypot(y: D32) -> D32
+  var x_bits = reinterpret_bits[D32, U32](me)
+  var y_bits = reinterpret_bits[D32, U32](y)
+  var result = rf_d32_hypot(x: x_bits, y: y_bits)
+  return reinterpret_bits[U32, D32](result)
+
+# ============================================================================
 # Utility Methods
 # ============================================================================
 
