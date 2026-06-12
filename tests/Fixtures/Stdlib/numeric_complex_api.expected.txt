@@ -1,9 +1,9 @@
-c32: C32(real: 1, imag: 2)
-c64: C64(real: 3, imag: 4)
+c32: 1+2j
+c64: 3+4j
 c64 real: 3
 c64 imag: 4
 c64 abs: 5
-c64 + c64: C64(real: 6, imag: 8)
-c64 * c64: C64(real: -7, imag: 24)
+c64 + c64: 6+8j
+c64 * c64: -7+24j
 c64 == c64b: true
 DONE
