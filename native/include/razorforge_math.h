@@ -457,10 +457,20 @@ void rf_bigdec_exp(rf_bigdecimal result, int precision, rf_bigdecimal a);
 void rf_bigdec_log(rf_bigdecimal result, int precision, rf_bigdecimal a);
 void rf_bigdec_log10(rf_bigdecimal result, int precision, rf_bigdecimal a);
 
-// Trigonometric, hyperbolic, and transcendental constants (pi, e) are NOT
-// provided — decNumber has no built-in trig/hyperbolic, and we don't ship an
-// MPFR dependency (LGPL conflict). Deferred to a later version once Suflae
-// needs them; until then, use F64/F128 for trig and accept the precision cost.
+// Trigonometric / hyperbolic / constants — LibBF-backed (decNumber has no
+// trig; MPFR is LGPL). Binary working precision scales with the request
+// (digits * log2(10) + guard), so results are correct at any precision.
+void rf_bigdec_sin(rf_bigdecimal result, int precision, rf_bigdecimal a);
+void rf_bigdec_cos(rf_bigdecimal result, int precision, rf_bigdecimal a);
+void rf_bigdec_tan(rf_bigdecimal result, int precision, rf_bigdecimal a);
+void rf_bigdec_asin(rf_bigdecimal result, int precision, rf_bigdecimal a);
+void rf_bigdec_acos(rf_bigdecimal result, int precision, rf_bigdecimal a);
+void rf_bigdec_atan(rf_bigdecimal result, int precision, rf_bigdecimal a);
+void rf_bigdec_sinh(rf_bigdecimal result, int precision, rf_bigdecimal a);
+void rf_bigdec_cosh(rf_bigdecimal result, int precision, rf_bigdecimal a);
+void rf_bigdec_tanh(rf_bigdecimal result, int precision, rf_bigdecimal a);
+void rf_bigdec_pi(rf_bigdecimal result, int precision);
+void rf_bigdec_e(rf_bigdecimal result, int precision);
 
 // Rounding
 void rf_bigdec_ceil(rf_bigdecimal result, rf_bigdecimal a);

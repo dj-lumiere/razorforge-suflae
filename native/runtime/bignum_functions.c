@@ -418,12 +418,11 @@ int rf_bigint_lcm(rf_bigint* result, rf_bigint* a, rf_bigint* b)
 // DECNUMDIGITS digits (set below). Operations route through decNumber's
 // arbitrary-precision API with a thread-shared default context.
 //
-// Coverage today: lifecycle + set/get + comparison + arithmetic + sqrt + pow
-// + exp + log/log10 + rounding. Trigonometric / hyperbolic / pi / e are
-// NOT included — decNumber doesn't provide them and MPFR's LGPL dynamic-
-// linking requirement is incompatible with shipping a single self-contained
-// razorforge_runtime. Hand-rolled Taylor series on top of decNumber is the
-// natural path when Suflae actually needs them.
+// Coverage: lifecycle + set/get + comparison + arithmetic + sqrt + pow + exp
+// + log/log10 + rounding (decNumber-native), plus trig / hyperbolic / pi / e
+// routed through the vendored MIT LibBF binary core (see the LibBF-backed
+// section below) — decNumber has no trig, and no permissively-licensed
+// decimal-native transcendental library exists (MPFR/arb are LGPL).
 // ============================================================================
 
 // IMPORTANT: this file uses a much higher DECNUMDIGITS than decimal_functions.c
@@ -437,6 +436,20 @@ int rf_bigint_lcm(rf_bigint* result, rf_bigint* a, rf_bigint* b)
 #include <decContext.h>
 
 #include <stdio.h>
+
+// LibBF backs the trig/hyperbolic/pi section below (decNumber has no trig).
+// libbf.h declares global mp_add/mp_sub/mp_mul limb helpers whose names
+// collide with LibTomMath's public API (included above for Integer). The
+// libbf target compiles with these renames (native/cmake/libbf.cmake), so
+// mirror them here: the header's prototypes must land on the renamed symbols
+// the DLL actually exports.
+#define mp_add libbf_mp_add
+#define mp_sub libbf_mp_sub
+#define mp_mul libbf_mp_mul
+#include "libbf.h"
+#undef mp_add
+#undef mp_sub
+#undef mp_mul
 
 static decContext* get_bigdec_ctx(void)
 {
@@ -709,6 +722,276 @@ void rf_bigdec_log10(rf_bigdecimal result, int precision, rf_bigdecimal a)
 {
     if (!result || !a) return;
     with_precision(precision, decNumberLog10, (decNumber*)result, (decNumber*)a);
+}
+
+// -- trig / hyperbolic / constants (LibBF-backed) ------------------------------
+//
+// decNumber provides no trigonometric or hyperbolic functions, and the
+// permissive-license arbitrary-precision landscape has no decimal-native
+// transcendental engine (MPFR/arb are LGPL). These route through the vendored
+// MIT LibBF binary core: decimal -> exact decimal string -> bf_t at
+// (digits * log2(10) + 64 guard bits) -> correctly-rounded LibBF op ->
+// (digits + 10)-digit string -> decimal rounded to the requested precision.
+// The binary working precision scales WITH the request, so the final decimal
+// rounding is the only rounding that matters — the same architecture every
+// permissive implementation of this feature converges on (mpmath, big-math).
+// Hyperbolics are composed from bf_exp with cancellation guards (LibBF has
+// no sinh/cosh/tanh).
+
+extern bf_context_t bf_ctx;
+void ensure_bf_ctx(void);
+
+// Resolves the same effective working precision rule as with_precision().
+static int bigdec_effective_digits(int precision)
+{
+    decContext* ctx = get_bigdec_ctx();
+    return (precision > 0 && precision <= DECNUMDIGITS) ? precision : ctx->digits;
+}
+
+static limb_t bigdec_digits_to_bits(int digits)
+{
+    return (limb_t)((double)digits * 3.3219280948873623) + 64;
+}
+
+static void bigdec_set_nan(decNumber* r)
+{
+    decNumberZero(r);
+    r->bits = DECNAN;
+}
+
+// decimal -> binary. The decimal string is exact, so the only rounding is
+// bf_atof's correct rounding to `prec` bits.
+static void bigdec_to_bf(bf_t* out, const decNumber* a, limb_t prec)
+{
+    char buf[DECNUMDIGITS + 32];
+    decNumberToString(a, buf);
+    bf_atof(out, buf, NULL, 10, prec, BF_RNDN);
+}
+
+// binary -> decimal rounded to `digits`. Formats at digits + 10 significant
+// digits so the decimal parse performs the only visible rounding. LibBF's
+// "NaN"/"Inf" spellings parse cleanly as decNumber specials (and are
+// re-canonicalized by rf_bigdec_get_str on output).
+static void bf_to_bigdec(decNumber* result, const bf_t* v, int digits)
+{
+    size_t len;
+    char* s = bf_ftoa(&len, v, 10, (limb_t)digits + 10,
+                      BF_FTOA_FORMAT_FIXED | BF_RNDN);
+    if (!s) { bigdec_set_nan(result); return; }
+    decContext* ctx = get_bigdec_ctx();
+    int saved = ctx->digits;
+    ctx->digits = digits;
+    decNumberFromString(result, s, ctx);
+    // FIXED-format output keeps trailing zeros (e.g. a saturated tanh would
+    // read back as 1.000…0); reduce to the canonical shortest coefficient,
+    // matching Decimal.$represent's documented shape. Value is unchanged.
+    decNumberReduce(result, result, ctx);
+    ctx->digits = saved;
+    bf_realloc(&bf_ctx, s, 0);
+}
+
+typedef int (*bigdec_bf_op)(bf_t*, const bf_t*, limb_t, bf_flags_t);
+
+static void bigdec_bf_unary(decNumber* result, int precision, const decNumber* a,
+                            bigdec_bf_op op)
+{
+    int digits = bigdec_effective_digits(precision);
+    limb_t prec = bigdec_digits_to_bits(digits);
+    ensure_bf_ctx();
+    bf_t x, r;
+    bf_init(&bf_ctx, &x);
+    bf_init(&bf_ctx, &r);
+    bigdec_to_bf(&x, a, prec);
+    op(&r, &x, prec, BF_RNDN);
+    bf_to_bigdec(result, &r, digits);
+    bf_delete(&x);
+    bf_delete(&r);
+}
+
+// sin/cos/tan/asin/acos: every special input (NaN, ±Infinity) yields NaN.
+// asin/acos domain violations flow through LibBF, which returns NaN itself.
+#define BIGDEC_TRIG(name, bf_fn)                                               \
+    void rf_bigdec_##name(rf_bigdecimal result, int precision, rf_bigdecimal a) \
+    {                                                                           \
+        if (!result || !a) return;                                              \
+        const decNumber* x = (const decNumber*)a;                               \
+        if (decNumberIsSpecial(x)) { bigdec_set_nan((decNumber*)result); return; } \
+        bigdec_bf_unary((decNumber*)result, precision, x, bf_fn);               \
+    }
+
+BIGDEC_TRIG(sin, bf_sin)
+BIGDEC_TRIG(cos, bf_cos)
+BIGDEC_TRIG(tan, bf_tan)
+BIGDEC_TRIG(asin, bf_asin)
+BIGDEC_TRIG(acos, bf_acos)
+
+#undef BIGDEC_TRIG
+
+void rf_bigdec_atan(rf_bigdecimal result, int precision, rf_bigdecimal a)
+{
+    if (!result || !a) return;
+    decNumber* r = (decNumber*)result;
+    const decNumber* x = (const decNumber*)a;
+    if (decNumberIsNaN(x)) { bigdec_set_nan(r); return; }
+    if (decNumberIsInfinite(x))
+    {
+        // atan(±inf) = ±pi/2 — the halving is exact in binary.
+        int digits = bigdec_effective_digits(precision);
+        ensure_bf_ctx();
+        bf_t p;
+        bf_init(&bf_ctx, &p);
+        bf_const_pi(&p, bigdec_digits_to_bits(digits), BF_RNDN);
+        bf_mul_2exp(&p, -1, BF_PREC_INF, BF_RNDN);
+        bf_to_bigdec(r, &p, digits);
+        bf_delete(&p);
+        if (decNumberIsNegative(x)) decNumberCopyNegate(r, r);
+        return;
+    }
+    bigdec_bf_unary(r, precision, x, bf_atan);
+}
+
+// Hyperbolics compose from bf_exp. For |x| < 1 the subtractions in sinh/tanh
+// cancel ~|adjusted exponent| leading digits (sinh(x) ~ x), so the working
+// precision grows by that many digits. Once x is so small that the cubic term
+// falls below the result's ulp (adjexp < -(digits+4)/2), the correctly
+// rounded result IS x rounded to the working precision.
+static int bigdec_adjexp(const decNumber* x)
+{
+    return x->exponent + x->digits - 1;
+}
+
+void rf_bigdec_sinh(rf_bigdecimal result, int precision, rf_bigdecimal a)
+{
+    if (!result || !a) return;
+    decNumber* r = (decNumber*)result;
+    const decNumber* x = (const decNumber*)a;
+    if (decNumberIsNaN(x)) { bigdec_set_nan(r); return; }
+    if (decNumberIsInfinite(x) || decNumberIsZero(x)) { decNumberCopy(r, x); return; }
+
+    int digits = bigdec_effective_digits(precision);
+    int adjexp = bigdec_adjexp(x);
+    if (adjexp < -(digits + 4) / 2 - 1)
+    {
+        with_precision(digits, decNumberPlus, r, x);
+        return;
+    }
+
+    int guard = (adjexp < 0 ? -adjexp : 0) + 8;
+    limb_t prec = bigdec_digits_to_bits(digits + guard);
+    ensure_bf_ctx();
+    bf_t bx, ex, exn;
+    bf_init(&bf_ctx, &bx);
+    bf_init(&bf_ctx, &ex);
+    bf_init(&bf_ctx, &exn);
+    bigdec_to_bf(&bx, x, prec);
+    bf_exp(&ex, &bx, prec, BF_RNDN);
+    bf_neg(&bx);
+    bf_exp(&exn, &bx, prec, BF_RNDN);
+    bf_sub(&ex, &ex, &exn, prec, BF_RNDN);
+    bf_mul_2exp(&ex, -1, BF_PREC_INF, BF_RNDN);
+    bf_to_bigdec(r, &ex, digits);
+    bf_delete(&bx);
+    bf_delete(&ex);
+    bf_delete(&exn);
+}
+
+void rf_bigdec_cosh(rf_bigdecimal result, int precision, rf_bigdecimal a)
+{
+    if (!result || !a) return;
+    decNumber* r = (decNumber*)result;
+    const decNumber* x = (const decNumber*)a;
+    if (decNumberIsNaN(x)) { bigdec_set_nan(r); return; }
+    if (decNumberIsInfinite(x)) { decNumberCopyAbs(r, x); return; }
+
+    int digits = bigdec_effective_digits(precision);
+    limb_t prec = bigdec_digits_to_bits(digits + 8);  // sum never cancels
+    ensure_bf_ctx();
+    bf_t bx, ex, exn;
+    bf_init(&bf_ctx, &bx);
+    bf_init(&bf_ctx, &ex);
+    bf_init(&bf_ctx, &exn);
+    bigdec_to_bf(&bx, x, prec);
+    bf_exp(&ex, &bx, prec, BF_RNDN);
+    bf_neg(&bx);
+    bf_exp(&exn, &bx, prec, BF_RNDN);
+    bf_add(&ex, &ex, &exn, prec, BF_RNDN);
+    bf_mul_2exp(&ex, -1, BF_PREC_INF, BF_RNDN);
+    bf_to_bigdec(r, &ex, digits);
+    bf_delete(&bx);
+    bf_delete(&ex);
+    bf_delete(&exn);
+}
+
+void rf_bigdec_tanh(rf_bigdecimal result, int precision, rf_bigdecimal a)
+{
+    if (!result || !a) return;
+    decNumber* r = (decNumber*)result;
+    const decNumber* x = (const decNumber*)a;
+    if (decNumberIsNaN(x)) { bigdec_set_nan(r); return; }
+    int digits = bigdec_effective_digits(precision);
+    int large = decNumberIsInfinite(x);
+    int adjexp = large ? 0 : bigdec_adjexp(x);
+    // tanh saturates: |x| >= 10^7 puts 1 - |tanh x| below 10^-(8.6e6), far
+    // beyond any representable working precision (digits <= 1000).
+    if (large || adjexp >= 7)
+    {
+        decNumber one;
+        decNumberFromInt32(&one, 1);
+        decNumberCopySign(r, &one, x);
+        return;
+    }
+    if (decNumberIsZero(x)) { decNumberCopy(r, x); return; }
+    if (adjexp < -(digits + 4) / 2 - 1)
+    {
+        with_precision(digits, decNumberPlus, r, x);
+        return;
+    }
+
+    // tanh(x) = (e^{2x} - 1) / (e^{2x} + 1)
+    int guard = (adjexp < 0 ? -adjexp : 0) + 8;
+    limb_t prec = bigdec_digits_to_bits(digits + guard);
+    ensure_bf_ctx();
+    bf_t bx, t, num, den, one;
+    bf_init(&bf_ctx, &bx);
+    bf_init(&bf_ctx, &t);
+    bf_init(&bf_ctx, &num);
+    bf_init(&bf_ctx, &den);
+    bf_init(&bf_ctx, &one);
+    bf_set_si(&one, 1);
+    bigdec_to_bf(&bx, x, prec);
+    bf_mul_2exp(&bx, 1, BF_PREC_INF, BF_RNDN);
+    bf_exp(&t, &bx, prec, BF_RNDN);
+    bf_sub(&num, &t, &one, prec, BF_RNDN);
+    bf_add(&den, &t, &one, prec, BF_RNDN);
+    bf_div(&t, &num, &den, prec, BF_RNDN);
+    bf_to_bigdec(r, &t, digits);
+    bf_delete(&bx);
+    bf_delete(&t);
+    bf_delete(&num);
+    bf_delete(&den);
+    bf_delete(&one);
+}
+
+void rf_bigdec_pi(rf_bigdecimal result, int precision)
+{
+    if (!result) return;
+    int digits = bigdec_effective_digits(precision);
+    ensure_bf_ctx();
+    bf_t p;
+    bf_init(&bf_ctx, &p);
+    bf_const_pi(&p, bigdec_digits_to_bits(digits), BF_RNDN);
+    bf_to_bigdec((decNumber*)result, &p, digits);
+    bf_delete(&p);
+}
+
+void rf_bigdec_e(rf_bigdecimal result, int precision)
+{
+    if (!result) return;
+    // decNumber's own exp is correctly rounded at context precision — no
+    // binary detour needed for e = exp(1).
+    decNumber one;
+    decNumberFromInt32(&one, 1);
+    with_precision(precision, decNumberExp, (decNumber*)result, &one);
 }
 
 // -- rounding -----------------------------------------------------------------
