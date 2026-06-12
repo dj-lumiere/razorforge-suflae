@@ -1,3 +1,57 @@
+## What's new in v0.0.2-alpha
+
+This release is about **decimal precision you can trust** — every decimal type
+now has a complete, correctly-rounded transcendental surface — plus a rework of
+deferred initialization.
+
+### Numerics
+
+- **`F128` is now backed by TLFloat** (correctly rounded quad-precision
+  software float). LLVM's `fp128` type is gone from emitted IR entirely, which
+  removes the platform-specific compiler-rt shims (notably on macOS).
+  Behavioral fixes that come with it: subnormals are computed correctly (they
+  were flushed before), `F128`→`F64` conversion rounds (it truncated), and
+  large-integer→`F128` conversion rounds to nearest.
+- **`D32`/`D64`/`D128` gain the full transcendental surface** — `sin` `cos`
+  `tan` `asin` `acos` `atan` `atan2`, the hyperbolics and their inverses,
+  `exp` `exp2` `expm1` `log` `log2` `log10` `log1p`, `pow`/`$pow!`, `cbrt`,
+  `hypot`. Results are **correctly rounded to the type's last digit and
+  byte-identical on every platform**, via tiered routing through the
+  next-size-up TLFloat binary format (D32 → binary64, D64 → quad, D128 →
+  octuple).
+- **Arbitrary-precision `Decimal` trig now actually exists.** `sin` … `tanh`,
+  `atan2`, `Decimal.pi(precision)`, and `Decimal.e(precision)` were declared
+  in the stdlib but had no implementation — any call failed at link. They are
+  now LibBF-backed with working precision that scales with the request
+  (default 50 significant digits, up to 1000), so a 1000-digit result is as
+  trustworthy as a 50-digit one.
+- **Canonical special values everywhere:** every float and decimal type now
+  prints `inf`, `-inf`, and `NaN` (NaN is always unsigned). Previously the
+  spellings differed by family (`-nan`, `Inf`, `Infinity`).
+
+### Language
+
+- **Breaking:** the `uninit` keyword is removed. Use `lateinit var` instead.
+- **`lateinit` reworked — eager allocation, late initialization.** Storage is
+  allocated at the declaration, so a `lateinit` entity is valid and borrowable
+  immediately (the out-parameter pattern now works instead of crashing), and
+  reassignment destroys the previous contents, so branch-initialization no
+  longer leaks.
+
+### Compiler fixes
+
+- **Default arguments on method calls were silently broken.** Calling any
+  method without an argument that has a declared default (e.g. `d.sin()`,
+  `Decimal.pi()`) emitted a call with the argument *missing* — the callee read
+  whatever happened to be in the register, producing nondeterministic results
+  that varied by platform. Defaults are now materialized at every call site.
+
+All numeric results above are locked by end-to-end fixtures whose expected
+outputs were generated from the runtime itself and cross-checked against
+reference constants.
+
+---
+
 **RazorForge** is a natively compiled, statically typed language built around
 single-ownership memory management (no borrow checker, no GC) and
 compiler-generated error handling. This is an early alpha: the compiler,

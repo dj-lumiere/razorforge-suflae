@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Compiler.Tokenizer;
 using SyntaxTree;
 using TypeModel.Symbols;
 using TypeModel.Types;
@@ -842,6 +843,74 @@ public partial class LlvmCodeGenerator
                     .ToList();
                 method = _registry.GetOrCreateRoutineResolution(genericDef: genericMethodForInference,
                     typeArguments: orderedArgs);
+            }
+        }
+
+        // Supply default arguments for trailing parameters not covered by explicit
+        // arguments (same contract as EmitRoutineCall's free-function fill — SA only
+        // VALIDATES that unbound parameters have defaults; materializing them is
+        // codegen's job). method.Parameters excludes the implicit receiver, so compare
+        // against the explicit-argument count only. Without this, defaulted member
+        // calls (e.g. `Decimal.pi()`, `d.sin()`) emit fewer arguments than the callee
+        // reads — the callee then consumes garbage register contents.
+        if (method is { IsGenericDefinition: false })
+        {
+            for (int i = argValues.Count - receiverSkip; i < method.Parameters.Count; i++)
+            {
+                ParameterInfo param = method.Parameters[index: i];
+                if (!param.HasDefaultValue)
+                    break;
+
+                // Parameter defaults are raw declaration-site AST: PresetInliningPass
+                // only rewrites routine bodies, so a preset-named default (e.g.
+                // `precision: S32 = DECIMAL_DEFAULT_PRECISION`) arrives un-inlined —
+                // resolve it the same way the pass does. Bare literal defaults may
+                // also lack a ResolvedType (never SA-analyzed); stamp the parameter
+                // type so literal emission doesn't misclassify them.
+                Expression defaultExpr = param.DefaultValue!;
+                if (defaultExpr is IdentifierExpression presetId &&
+                    _registry.LookupVariable(presetId.Name) is
+                        { IsPreset: true, PresetValue: not null } presetVar)
+                {
+                    defaultExpr = presetVar.PresetValue is LiteralExpression presetLit
+                        ? presetLit with
+                        {
+                            ResolvedType = presetId.ResolvedType ??
+                                presetVar.PresetValue.ResolvedType ?? param.Type
+                        }
+                        : presetVar.PresetValue;
+                }
+
+                if (defaultExpr is LiteralExpression { ResolvedType: null } bareLit)
+                    defaultExpr = bareLit with { ResolvedType = param.Type };
+
+                // Parameter defaults never pass through LiteralLoweringPass, so numeric
+                // literals still carry the Undecided* tokens that EmitLiteral deliberately
+                // refuses (un-lowered literals in bodies are pipeline bugs). Normalize them
+                // to the concrete token here — the parameter's declared type provides the
+                // context an in-body literal would have gotten from lowering.
+                defaultExpr = defaultExpr switch
+                {
+                    LiteralExpression { LiteralType: TokenType.UndecidedInteger } undInt =>
+                        undInt with { LiteralType = TokenType.IntegerLiteral },
+                    LiteralExpression { LiteralType: TokenType.UndecidedDecimal } undDec =>
+                        undDec with
+                        {
+                            LiteralType = param.Type.Name switch
+                            {
+                                "D32" => TokenType.D32Literal,
+                                "D64" => TokenType.D64Literal,
+                                "D128" => TokenType.D128Literal,
+                                _ => TokenType.DecimalLiteral
+                            }
+                        },
+                    _ => defaultExpr
+                };
+
+                string value = EmitExpression(sb: sb, expr: defaultExpr);
+                argValues.Add(item: value);
+                argTypeInfos.Add(item: param.Type);
+                argTypes.Add(item: GetParameterLlvmType(type: param.Type));
             }
         }
 

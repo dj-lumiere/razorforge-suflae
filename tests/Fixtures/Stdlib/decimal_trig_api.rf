@@ -7,8 +7,8 @@ import Numerics.[Decimal]
 # previously phantom — declared but unimplemented, so any call LINKERR'd.
 
 routine start()
-  var one = Decimal(from: 1_s64)
-  var half = Decimal(from: 1_s64) / Decimal(from: 2_s64)
+  var one = 1dn
+  var half = 0.5dn
 
   show(f"pi: {Decimal.pi()}")
   show(f"e: {Decimal.e()}")
