@@ -876,7 +876,7 @@ external("C") routine rf_f128_mul_parts(a_low: U64, a_high: U64, b_low: U64, b_h
 external("C") routine rf_f128_div_parts(a_low: U64, a_high: U64, b_low: U64, b_high: U64, out: Hijacked[F128])
 ### Returns the square root of an `F128` value.
 ### :param low: The low 64 bits of the input value.
-### :param high: The high 64 bits of the input value.
+### :param high: The high 64 bits of the input value
 ### :param out: Storage receiving the resulting `F128` value.
 external("C") routine rf_f128_sqrt_parts(low: U64, high: U64, out: Hijacked[F128])
 ### Rounds an `F128` value toward negative infinity.

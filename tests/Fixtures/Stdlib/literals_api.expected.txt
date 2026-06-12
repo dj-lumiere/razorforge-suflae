@@ -27,11 +27,11 @@ d64: 2.5
 d128: 1.25
 dn: 3.14
 dn exact: 0.3
-j32: C32(real: 0, imag: 2)
-j64: C64(real: 0, imag: 3)
-j64 short: C64(real: 0, imag: 4)
-j128: C128(real: 0, imag: 5)
-jn: 0+6.0i
+j32: 0+2j
+j64: 0+3j
+j64 short: 0+4j
+j128: 0+5j
+jn: 0+6.0j
 true: true
 false: false
 text: hello

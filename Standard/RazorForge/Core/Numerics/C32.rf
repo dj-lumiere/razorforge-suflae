@@ -214,6 +214,21 @@ routine C32.is_imaginary() -> Bool
   return me.real == 0.0_f32
 
 # ============================================================================
+# Text Representation
+# ============================================================================
+
+### Formats this value compactly as `a+bj` / `a-bj` (e.g. `1.5+2j`). The `j`
+### spelling matches the imaginary literal suffixes, so output is valid
+### literal syntax. Standard `$represent` shape (no args) for f-string dispatch.
+### :returns: The resulting `Text` value.
+routine C32.$represent() -> Text
+  var real_text = me.real.$represent()
+  var imag_abs = me.imag.abs().$represent()
+  if me.imag < 0.0_f32
+    return real_text + "-" + imag_abs + "j"
+  return real_text + "+" + imag_abs + "j"
+
+# ============================================================================
 # Hashing
 # ============================================================================
 

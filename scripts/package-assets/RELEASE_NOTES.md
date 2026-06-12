@@ -38,6 +38,14 @@ deferred initialization.
   reassignment destroys the previous contents, so branch-initialization no
   longer leaks.
 
+- **Typed suffixes now work on integer-form literals.** `1f64`, `1d32`, `1dn`,
+  `1j`, `1jn`, … all tokenize — a literal no longer needs a decimal point just
+  to carry a float/decimal/imaginary suffix.
+- **Complex values print as `a+bj`**, matching the imaginary literal suffixes,
+  so output round-trips as literal syntax. The fixed-width `C32`/`C64`/`C128`
+  gain this representation too (they previously printed the memberwise debug
+  form), and the arbitrary-precision `Complex` switches from `1+1i` to `1+1j`.
+
 ### Compiler fixes
 
 - **Default arguments on method calls were silently broken.** Calling any
