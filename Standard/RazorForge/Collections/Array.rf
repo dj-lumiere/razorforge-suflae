@@ -51,16 +51,21 @@ relates ArrayIterator[T, N] as Iter
 routine Array[T, N].$getitem!(index: U64) -> ?T
   if index >= N
     throw IndexOutOfBoundsError(index: index, count: me.count())
-  return element_at[Array[T, N], T](me, index)
+  # Read in place through the storage pointer — no whole-array copy.
+  danger!
+    return load_element_ref[Array[T, N], T](me.hijack(), index)
 
-### Replaces the element at `index` with `value`.
+### Replaces the element at `index` with `value`, mutating this `Array` in place.
+### `me` is received by reference (struct-record `$setitem!`), so the single-element write through
+### `me.hijack()` reaches the caller's storage directly — no whole-array copy.
 ### :param index: The zero-based position to update.
 ### :param value: The replacement value.
 ### :throws: {IndexOutOfBoundsError} if `index >= N`.
 routine Array[T, N].$setitem!(index: U64, value: ?T)
   if index >= N
     throw IndexOutOfBoundsError(index: index, count: me.count())
-  me = set_element_at[Array[T, N], T](me, index, value)
+  danger!
+    store_element_ref[Array[T, N], T](me.hijack(), index, value)
   return
 
 ### Tears down each stored element. No-op for value-type elements; releases/frees owned record or

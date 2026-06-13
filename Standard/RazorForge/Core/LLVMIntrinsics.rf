@@ -654,6 +654,25 @@ external("llvm") routine element_at[Array, T](array: Array, index: U64) -> ?T
 @llvm_ir("{result} = alloca {Array}\nstore {Array} {array}, ptr {prev}\n{result} = getelementptr {Array}, ptr {prev}, i32 0, i64 {index}\nstore {T} {value}, ptr {prev}\n{result} = load {Array}, ptr {first}")
 external("llvm") routine set_element_at[Array, T](array: Array, index: U64, value: T) -> Array
 
+### Loads the element at `index` from contiguous storage addressed by `ptr`.
+### Unlike {element_at}, this reads in place through the pointer — no whole-aggregate copy. The
+### pointer is typically `me.hijack()` of an inline-backed collection (`Array`, `BitArray`).
+### :param ptr: A pointer to the collection's element storage.
+### :param index: The zero-based element position (strided by `sizeof(T)`).
+### :returns: The element value at `index`.
+@llvm_ir("{result} = getelementptr {T}, ptr {ptr}, i64 {index}\n{result} = load {T}, ptr {prev}")
+external("llvm") routine load_element_ref[Coll, T](ptr: Hijacked[Coll], index: U64) -> T
+
+### Stores `value` into the element at `index` of contiguous storage addressed by `ptr`.
+### Writes a single element in place through the pointer (no whole-aggregate copy); the mutation is
+### visible to the pointer's owner. The pointer is typically `me.hijack()` of an inline-backed
+### collection (`Array`, `BitArray`) whose `$setitem!` receives `me` by reference.
+### :param ptr: A pointer to the collection's element storage.
+### :param index: The zero-based element position (strided by `sizeof(T)`).
+### :param value: The element value to store.
+@llvm_ir("{result} = getelementptr {T}, ptr {ptr}, i64 {index}\nstore {T} {value}, ptr {prev}")
+external("llvm") routine store_element_ref[Coll, T](ptr: Hijacked[Coll], index: U64, value: T)
+
 ### Returns a zero-initialized value of type T.
 ### :returns: The resulting `T` value.
 @llvm_ir("{result} = alloca {T}\nstore {T} zeroinitializer, ptr {prev}\n{result} = load {T}, ptr {prev}")
