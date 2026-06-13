@@ -381,6 +381,15 @@ public sealed partial class SemanticVerifier
                                             _registry.LookupType(name: BlankMemberName) ??
                                             ErrorTypeInfo.Instance;
                     call.IsInFlight = routine.IsInFlightReturn;
+
+                    // A `threaded routine` call spawns an OS thread and yields a Task[T]
+                    // handle (T = the routine's own return type). The handle is awaited via
+                    // `.waitfor()` / `.waitfor(timeout)`. (v0.1 concurrency, Phase 1.)
+                    if (routine.AsyncStatus == AsyncStatus.Threaded)
+                    {
+                        return new TaskTypeInfo(valueType: returnType);
+                    }
+
                     return returnType;
                 }
 
@@ -613,6 +622,14 @@ public sealed partial class SemanticVerifier
             case MemberExpression member:
             {
                 TypeSymbol objectType = AnalyzeExpression(expression: member.Object);
+
+                // Task[T].waitfor() / .waitfor(timeout) — intrinsic join of a threaded task.
+                // waitfor() blocks indefinitely and yields T; waitfor(Duration) yields Lookup[T]
+                // (None on timeout/cancel). (v0.1 concurrency, Phase 1.)
+                if (objectType is TaskTypeInfo waitforTask && member.PropertyName == "waitfor")
+                {
+                    return AnalyzeTaskWaitfor(call: call, taskType: waitforTask);
+                }
 
                 // $iter / $refer / $control are dunder-private to their protocols — only the
                 // corresponding lowering passes may emit them (for-loop → $iter; argument
@@ -1305,6 +1322,50 @@ public sealed partial class SemanticVerifier
             return CallLoweringKind.BuilderIntrinsic;
 
         return CallLoweringKind.DirectRoutine;
+    }
+
+    /// <summary>
+    /// Analyzes a <c>Task[T].waitfor()</c> / <c>.waitfor(timeout)</c> intrinsic join (v0.1).
+    /// <c>waitfor()</c> blocks indefinitely and yields <c>T</c> (the thread either produced a
+    /// value or crashed the program). <c>waitfor(timeout: Duration)</c> yields <c>Lookup[T]</c>
+    /// (None on timeout/cancel).
+    /// </summary>
+    private TypeSymbol AnalyzeTaskWaitfor(CallExpression call, TaskTypeInfo taskType)
+    {
+        call.LoweringKind = CallLoweringKind.RuntimeIntrinsic;
+        TypeSymbol valueType = taskType.ValueType;
+
+        if (call.Arguments.Count == 0)
+        {
+            return valueType;
+        }
+
+        if (call.Arguments.Count == 1)
+        {
+            Expression timeoutExpr = call.Arguments[index: 0] is NamedArgumentExpression named
+                ? named.Value
+                : call.Arguments[index: 0];
+            TypeSymbol? durationType = _registry.LookupType(name: "Duration");
+            TypeSymbol argType =
+                AnalyzeExpression(expression: timeoutExpr, expectedType: durationType);
+            if (GetBaseTypeName(typeName: argType.Name) != "Duration")
+            {
+                ReportError(code: SemanticDiagnosticCode.ArgumentTypeMismatch,
+                    message: $"waitfor timeout must be a Duration, got '{argType.Name}'.",
+                    location: call.Location);
+            }
+
+            TypeSymbol? lookupDef = _registry.LookupType(name: "Lookup");
+            return lookupDef != null
+                ? _registry.GetOrCreateResolution(genericDef: lookupDef,
+                    typeArguments: [valueType])
+                : ErrorTypeInfo.Instance;
+        }
+
+        ReportError(code: SemanticDiagnosticCode.TooManyArguments,
+            message: "waitfor takes at most one argument (an optional Duration timeout).",
+            location: call.Location);
+        return ErrorTypeInfo.Instance;
     }
 
     private static CallLoweringKind ClassifyMethodCall(RoutineInfo method)

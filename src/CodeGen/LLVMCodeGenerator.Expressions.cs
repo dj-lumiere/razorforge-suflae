@@ -182,8 +182,279 @@ public partial class LlvmCodeGenerator
         return thunkSym;
     }
 
+    // ── v0.1 concurrency: threaded routines + Task[T].waitfor ──────────────────────
+
     /// <summary>
-    /// Generates code for an identifier expression (variable reference).
+    /// Registers <c>declare</c> lines for the task runtime functions used by hand-emitted
+    /// threaded-spawn / waitfor IR. Idempotent (keyed by function name).
+    /// </summary>
+    private void EnsureTaskRuntimeDeclares()
+    {
+        _rfRoutineDeclarations[key: "rf_task_create"] = "declare ptr @rf_task_create(i32)";
+        _rfRoutineDeclarations[key: "rf_task_spawn_threaded"] =
+            "declare i32 @rf_task_spawn_threaded(ptr, ptr, ptr)";
+        _rfRoutineDeclarations[key: "rf_task_wait"] = "declare i32 @rf_task_wait(ptr)";
+        _rfRoutineDeclarations[key: "rf_task_wait_within"] =
+            "declare i32 @rf_task_wait_within(ptr, i64, i32)";
+        _rfRoutineDeclarations[key: "rf_task_result_payload"] =
+            "declare ptr @rf_task_result_payload(ptr)";
+        _rfRoutineDeclarations[key: "rf_task_destroy"] = "declare void @rf_task_destroy(ptr)";
+        _rfRoutineDeclarations[key: "rf_task_complete_value"] =
+            "declare void @rf_task_complete_value(ptr, ptr)";
+        _rfRoutineDeclarations[key: "rf_allocate_dynamic"] =
+            "declare ptr @rf_allocate_dynamic(i64)";
+        _rfRoutineDeclarations[key: "rf_invalidate"] = "declare void @rf_invalidate(ptr)";
+    }
+
+    /// <summary>
+    /// Ensures the <c>%"Argpack.&lt;routine&gt;"</c> struct type (one field per parameter, in
+    /// declaration order) is declared, and returns its name. Used to ferry a threaded call's
+    /// arguments across the thread boundary as the task userdata.
+    /// </summary>
+    private string EnsureArgpackType(RoutineInfo routine)
+    {
+        string mangled = MangleRoutineName(routine: routine);
+        string raw = mangled.StartsWith(value: '"') ? mangled[1..^1] : mangled;
+        string name = $"%{Q(name: $"Argpack.{raw}")}";
+        if (!_typeDeclarationsClosure.ContainsKey(key: name))
+        {
+            var fields = routine.Parameters
+                                .Select(selector: p => GetParameterLlvmType(type: p.Type))
+                                .ToList();
+            _typeDeclarationsClosure[key: name] =
+                $"{name} = type {{ {string.Join(separator: ", ", values: fields)} }}\n";
+        }
+
+        return name;
+    }
+
+    /// <summary>
+    /// Emits the entry thunk <c>@&lt;routine&gt;$thread_entry(ptr %task, ptr %userdata)</c>
+    /// matching the C <c>rf_task_entry_fn</c> signature. It unpacks the argpack, calls the real
+    /// routine, heap-boxes the result, completes the task, and frees the argpack. One per routine.
+    /// </summary>
+    private string EnsureThreadEntryThunk(RoutineInfo routine)
+    {
+        string mangled = MangleRoutineName(routine: routine);
+        string realRef = $"@{mangled}";
+        string raw = mangled.StartsWith(value: '"') ? mangled[1..^1] : mangled;
+        string thunkRaw = $"{raw}$thread_entry";
+        string thunkSym = $"@{Q(name: thunkRaw)}";
+        if (!_emittedRoutineValueThunks.Add(item: thunkRaw))
+            return thunkSym;
+
+        string retType = routine.ReturnType != null
+            ? GetLlvmType(type: routine.ReturnType)
+            : "void";
+
+        StringBuilder b = _auxRoutineDefinitions;
+        b.Append(value: $"define void {thunkSym}(ptr %task, ptr %userdata) {{\n");
+        b.Append(value: "entry:\n");
+
+        var callArgs = new List<string>();
+        if (routine.Parameters.Count > 0)
+        {
+            string packType = EnsureArgpackType(routine: routine);
+            for (int i = 0; i < routine.Parameters.Count; i++)
+            {
+                string pt = GetParameterLlvmType(type: routine.Parameters[index: i].Type);
+                b.Append(value:
+                    $"  %fp{i} = getelementptr {packType}, ptr %userdata, i32 0, i32 {i}\n");
+                b.Append(value: $"  %a{i} = load {pt}, ptr %fp{i}\n");
+                callArgs.Add(item: $"{pt} %a{i}");
+            }
+        }
+
+        string argList = string.Join(separator: ", ", values: callArgs);
+        if (retType == "void")
+        {
+            b.Append(value: $"  call void {realRef}({argList})\n");
+            b.Append(value: "  call void @rf_task_complete_value(ptr %task, ptr null)\n");
+        }
+        else
+        {
+            b.Append(value: $"  %r = call {retType} {realRef}({argList})\n");
+            b.Append(value: $"  %bsz.p = getelementptr {retType}, ptr null, i32 1\n");
+            b.Append(value: "  %bsz = ptrtoint ptr %bsz.p to i64\n");
+            b.Append(value: "  %box = call ptr @rf_allocate_dynamic(i64 %bsz)\n");
+            b.Append(value: $"  store {retType} %r, ptr %box\n");
+            b.Append(value: "  call void @rf_task_complete_value(ptr %task, ptr %box)\n");
+        }
+
+        if (routine.Parameters.Count > 0)
+            b.Append(value: "  call void @rf_invalidate(ptr %userdata)\n");
+        b.Append(value: "  ret void\n}\n");
+        return thunkSym;
+    }
+
+    /// <summary>
+    /// Lowers a <c>threaded routine foo(args)</c> call: boxes the arguments, creates an OS-thread
+    /// task, and spawns it on the generated entry thunk. The expression value is the
+    /// <c>rf_task*</c> handle (<c>Task[T]</c> lowers to <c>ptr</c>).
+    /// </summary>
+    private string EmitThreadedSpawn(StringBuilder sb, RoutineInfo routine,
+        List<Expression> arguments)
+    {
+        EnsureTaskRuntimeDeclares();
+        GenerateRoutineDeclaration(routine: routine);
+        string entryThunk = EnsureThreadEntryThunk(routine: routine);
+
+        int n = Math.Min(val1: arguments.Count, val2: routine.Parameters.Count);
+        var values = new List<string>();
+        var types = new List<string>();
+        for (int i = 0; i < n; i++)
+        {
+            string v = EmitExpression(sb: sb, expr: arguments[index: i]);
+            TypeInfo actual = GetExpressionType(expr: arguments[index: i])
+                              ?? routine.Parameters[index: i].Type!;
+            (string cv, string _) = CoerceCallArgumentToParameter(sb: sb,
+                argValue: v,
+                actualType: actual,
+                parameterType: routine.Parameters[index: i].Type);
+            values.Add(item: cv);
+            types.Add(item: GetParameterLlvmType(type: routine.Parameters[index: i].Type));
+        }
+
+        string userdata = "ptr null";
+        if (values.Count > 0)
+        {
+            string packType = EnsureArgpackType(routine: routine);
+            string szp = NextTemp();
+            EmitLine(sb: sb, line: $"  {szp} = getelementptr {packType}, ptr null, i32 1");
+            string sz = NextTemp();
+            EmitLine(sb: sb, line: $"  {sz} = ptrtoint ptr {szp} to i64");
+            string pack = NextTemp();
+            EmitLine(sb: sb, line: $"  {pack} = call ptr @rf_allocate_dynamic(i64 {sz})");
+            for (int i = 0; i < values.Count; i++)
+            {
+                string fp = NextTemp();
+                EmitLine(sb: sb,
+                    line: $"  {fp} = getelementptr {packType}, ptr {pack}, i32 0, i32 {i}");
+                EmitLine(sb: sb, line: $"  store {types[index: i]} {values[index: i]}, ptr {fp}");
+            }
+
+            userdata = $"ptr {pack}";
+        }
+
+        string task = NextTemp();
+        EmitLine(sb: sb, line: $"  {task} = call ptr @rf_task_create(i32 1)");
+        string spawnRc = NextTemp();
+        EmitLine(sb: sb,
+            line:
+            $"  {spawnRc} = call i32 @rf_task_spawn_threaded(ptr {task}, ptr {entryThunk}, {userdata})");
+        return task;
+    }
+
+    /// <summary>
+    /// Lowers <c>task.waitfor()</c> / <c>task.waitfor(timeout)</c>. Blocks on the task; with no
+    /// timeout the value is <c>T</c> (the thread produced a value or crashed the program); with a
+    /// timeout the value is <c>Lookup[T]</c> (None on timeout/cancel). Destroys the task handle.
+    /// </summary>
+    private string EmitTaskWaitfor(StringBuilder sb, MemberExpression member,
+        List<Expression> arguments)
+    {
+        EnsureTaskRuntimeDeclares();
+
+        TypeInfo? receiver = GetExpressionType(expr: member.Object);
+        TypeInfo valueType = receiver is TaskTypeInfo t ? t.ValueType : receiver!;
+        string vt = valueType is EntityTypeInfo or CrashableTypeInfo
+            ? "ptr"
+            : GetLlvmType(type: valueType);
+        string task = EmitExpression(sb: sb, expr: member.Object);
+
+        // No timeout: block indefinitely and return T directly. (The thread either produced a
+        // value or crashed the whole program, so there is no absent case to model.)
+        if (arguments.Count == 0)
+        {
+            EmitLine(sb: sb, line: $"  call i32 @rf_task_wait(ptr {task})");
+            string payload = NextTemp();
+            EmitLine(sb: sb, line: $"  {payload} = call ptr @rf_task_result_payload(ptr {task})");
+            string result = NextTemp();
+            EmitLine(sb: sb, line: $"  {result} = load {vt}, ptr {payload}");
+            EmitLine(sb: sb, line: $"  call void @rf_invalidate(ptr {payload})");
+            EmitLine(sb: sb, line: $"  call void @rf_task_destroy(ptr {task})");
+            return result;
+        }
+
+        // Timeout: rf_task_wait_within → build Lookup[T] (VALUE → T, TIMEOUT/CANCELLED → None).
+        Expression timeoutExpr = arguments[index: 0] is NamedArgumentExpression na
+            ? na.Value
+            : arguments[index: 0];
+        string durationVal = EmitExpression(sb: sb, expr: timeoutExpr);
+        string durLlvm = GetLlvmType(type: GetExpressionType(expr: timeoutExpr)!);
+        // Duration is `record { S64 seconds, U32 nanoseconds }` passed by value.
+        string secs = NextTemp();
+        EmitLine(sb: sb, line: $"  {secs} = extractvalue {durLlvm} {durationVal}, 0");
+        string ns = NextTemp();
+        EmitLine(sb: sb, line: $"  {ns} = extractvalue {durLlvm} {durationVal}, 1");
+
+        string kind = NextTemp();
+        EmitLine(sb: sb,
+            line: $"  {kind} = call i32 @rf_task_wait_within(ptr {task}, i64 {secs}, i32 {ns})");
+
+        string carrierLlvm = GetLookupCarrierLlvmType(valueType: valueType);
+        string valueLbl = NextLabel(prefix: "wf_value");
+        string noneLbl = NextLabel(prefix: "wf_none");
+        string doneLbl = NextLabel(prefix: "wf_done");
+
+        string isValue = NextTemp();
+        EmitLine(sb: sb, line: $"  {isValue} = icmp eq i32 {kind}, 1");
+        EmitLine(sb: sb, line: $"  br i1 {isValue}, label %{valueLbl}, label %{noneLbl}");
+
+        // VALUE arm: load T from the result box, wrap into the Lookup[T] success carrier.
+        EmitLine(sb: sb, line: $"{valueLbl}:");
+        string payloadV = NextTemp();
+        EmitLine(sb: sb, line: $"  {payloadV} = call ptr @rf_task_result_payload(ptr {task})");
+        string successCarrier = EmitLookupSuccessCarrier(sb: sb, valueType: valueType,
+            valuePtr: payloadV, carrierLlvm: carrierLlvm);
+        EmitLine(sb: sb, line: $"  call void @rf_invalidate(ptr {payloadV})");
+        EmitLine(sb: sb, line: $"  br label %{doneLbl}");
+
+        // NONE arm: timeout/cancel → carrier with type_id 0, which is exactly zeroinitializer.
+        EmitLine(sb: sb, line: $"{noneLbl}:");
+        EmitLine(sb: sb, line: $"  br label %{doneLbl}");
+
+        EmitLine(sb: sb, line: $"{doneLbl}:");
+        string carrier = NextTemp();
+        EmitLine(sb: sb,
+            line:
+            $"  {carrier} = phi {carrierLlvm} [ {successCarrier}, %{valueLbl} ], [ zeroinitializer, %{noneLbl} ]");
+        EmitLine(sb: sb, line: $"  call void @rf_task_destroy(ptr {task})");
+        return carrier;
+    }
+
+    /// <summary>
+    /// Builds a <c>Lookup[T]</c> success-carrier SSA value (<c>{ i64 type_id, [N x i8] payload }</c>)
+    /// from a pointer to a boxed <c>T</c>, mirroring <c>EmitInlineCarrierReturn</c>.
+    /// </summary>
+    private string EmitLookupSuccessCarrier(StringBuilder sb, TypeInfo valueType, string valuePtr,
+        string carrierLlvm)
+    {
+        ulong typeId = TypeIdHelper.ComputeTypeId(fullName: valueType.FullName);
+        string vt = valueType is EntityTypeInfo or CrashableTypeInfo
+            ? "ptr"
+            : GetLlvmType(type: valueType);
+        string val = NextTemp();
+        EmitLine(sb: sb, line: $"  {val} = load {vt}, ptr {valuePtr}");
+
+        string slot = NextTemp();
+        EmitLine(sb: sb, line: $"  {slot} = alloca {carrierLlvm}");
+        EmitLine(sb: sb, line: $"  store {carrierLlvm} zeroinitializer, ptr {slot}");
+        string tagPtr = NextTemp();
+        EmitLine(sb: sb,
+            line: $"  {tagPtr} = getelementptr {carrierLlvm}, ptr {slot}, i32 0, i32 0");
+        EmitLine(sb: sb, line: $"  store i64 {typeId}, ptr {tagPtr}");
+        string payPtr = NextTemp();
+        EmitLine(sb: sb,
+            line: $"  {payPtr} = getelementptr {carrierLlvm}, ptr {slot}, i32 0, i32 1");
+        EmitLine(sb: sb, line: $"  store {vt} {val}, ptr {payPtr}");
+        string loaded = NextTemp();
+        EmitLine(sb: sb, line: $"  {loaded} = load {carrierLlvm}, ptr {slot}");
+        return loaded;
+    }
+
+    /// <summary>
+    /// Generates a variable reference.
     /// </summary>
     private string EmitIdentifier(StringBuilder sb, IdentifierExpression identifier)
     {

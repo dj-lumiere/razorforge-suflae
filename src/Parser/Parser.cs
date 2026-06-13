@@ -425,6 +425,12 @@ public partial class Parser
 
         AsyncStatus asyncStatus = AsyncStatus.None;
 
+        // Concurrency modifier: threaded routine foo() (RazorForge only, v0.1)
+        if (_language == Language.RazorForge && Match(type: TokenType.Threaded))
+        {
+            asyncStatus = AsyncStatus.Threaded;
+        }
+
         // Routine (function) declaration
         if (Match(type: TokenType.Routine))
         {

@@ -476,6 +476,9 @@ public enum TokenType
     /// </summary>
     Discard,
 
+    /// <summary>Threaded modifier - marks a routine to run on an OS thread (v0.1 concurrency)</summary>
+    Threaded,
+
     #endregion
 
     #region Keywords - Logical Operators

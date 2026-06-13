@@ -269,6 +269,13 @@ public partial class LlvmCodeGenerator
             }
         }
 
+        // A `threaded routine` call spawns an OS thread; the expression value is the Task[T]
+        // handle (v0.1 concurrency, Phase 1).
+        if (routine is { AsyncStatus: AsyncStatus.Threaded })
+        {
+            return EmitThreadedSpawn(sb: sb, routine: routine, arguments: arguments);
+        }
+
         // Evaluate all arguments
         var argValues = new List<string>();
         var argTypes = new List<string>();
@@ -530,6 +537,12 @@ public partial class LlvmCodeGenerator
         // pass through SemanticVerifier, so they arrive with Unknown. Treat as DirectMemberRoutine.
         if (loweringKind == CallLoweringKind.Unknown)
             loweringKind = CallLoweringKind.DirectMemberRoutine;
+
+        // Task[T].waitfor() / .waitfor(timeout) — intrinsic join of a threaded task.
+        if (member.PropertyName == "waitfor" && GetExpressionType(expr: member.Object) is TaskTypeInfo)
+        {
+            return EmitTaskWaitfor(sb: sb, member: member, arguments: arguments);
+        }
 
         // Dynamic call through a callable FIELD on the receiver (e.g. `me.predicate(item)` in
         // a stdlib iterator emitter, where `predicate` is a `secret predicate: Routine[(T,), Bool]`

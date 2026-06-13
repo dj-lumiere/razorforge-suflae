@@ -229,6 +229,7 @@ public partial class Tokenizer
             _keywords[key: "dangerous"] = TokenType.Dangerous;
             _keywords[key: "external"] = TokenType.External;
             _keywords[key: "steal"] = TokenType.Steal;
+            _keywords[key: "threaded"] = TokenType.Threaded;
         }
 
         // Numeric suffix map - shared between both languages except "j" default
