@@ -552,11 +552,52 @@ public partial class LlvmCodeGenerator
     private void EmitMemberVariableAssignment(StringBuilder sb, MemberExpression member,
         string value, TypeInfo? valueType = null)
     {
-        // Evaluate the object
-        string target = EmitExpression(sb: sb, expr: member.Object);
         TypeInfo? targetType = GetExpressionType(expr: member.Object);
         TryGetTransparentProtocolTarget(type: targetType, targetType: out TypeInfo? lookupType);
         targetType = lookupType ?? targetType;
+
+        // Struct-record field write (no @llvm backend type): address-based. EmitLvalueAddress
+        // computes the record's storage address and recurses through arbitrary lvalue chains
+        // (`x.field`, `a.b.c`, `me.inner`, …), so this is the single path for every struct-record
+        // field assignment — not just bare-local identifiers. GEP to the field index and store.
+        // Wrapper records (`@llvm("ptr")`) and entities have backend types / pointer identity and
+        // are handled by the value-based branches below.
+        if (targetType is RecordTypeInfo { HasDirectBackendType: false } structRecord &&
+            !(GetGenericBaseName(type: structRecord) is { } srBase &&
+              WrapperTypeNames.Contains(item: srBase)))
+        {
+            int sfIndex = -1;
+            MemberVariableInfo? sfInfo = null;
+            for (int i = 0; i < structRecord.MemberVariables.Count; i++)
+            {
+                if (structRecord.MemberVariables[index: i].Name == member.PropertyName)
+                {
+                    sfIndex = i;
+                    sfInfo = structRecord.MemberVariables[index: i];
+                    break;
+                }
+            }
+
+            if (sfIndex < 0 || sfInfo == null)
+            {
+                throw new InvalidOperationException(
+                    message:
+                    $"Member variable '{member.PropertyName}' not found on record '{structRecord.Name}'");
+            }
+
+            string structAddr = EmitLvalueAddress(sb: sb, expr: member.Object);
+            string structTypeName = GetRecordTypeName(record: structRecord);
+            string sFieldPtr = NextTemp();
+            EmitLine(sb: sb,
+                line:
+                $"  {sFieldPtr} = getelementptr {structTypeName}, ptr {structAddr}, i32 0, i32 {sfIndex}");
+            EmitLine(sb: sb,
+                line: $"  store {GetLlvmType(type: sfInfo.Type)} {value}, ptr {sFieldPtr}");
+            return;
+        }
+
+        // Evaluate the object as a value (entity ptr / wrapper ptr) for the remaining branches.
+        string target = EmitExpression(sb: sb, expr: member.Object);
 
         if (targetType is EntityTypeInfo entity)
         {
@@ -675,44 +716,6 @@ public partial class LlvmCodeGenerator
                 value: value,
                 valueType: valueType);
         }
-        // Plain record field write: load current value, insertvalue, store back to alloca
-        else if (targetType is RecordTypeInfo { HasDirectBackendType: false } plainRecord &&
-                 member.Object is IdentifierExpression recIdExpr)
-        {
-            string llvmName =
-                _localVarLlvmNames.TryGetValue(key: recIdExpr.Name, value: out string? recUnique)
-                    ? recUnique
-                    : recIdExpr.Name;
-            string recAllocaPtr = $"%{llvmName}.addr";
-
-            int fieldIndex = -1;
-            MemberVariableInfo? fieldInfo = null;
-            for (int i = 0; i < plainRecord.MemberVariables.Count; i++)
-            {
-                if (plainRecord.MemberVariables[index: i].Name == member.PropertyName)
-                {
-                    fieldIndex = i;
-                    fieldInfo = plainRecord.MemberVariables[index: i];
-                    break;
-                }
-            }
-
-            if (fieldIndex < 0 || fieldInfo == null)
-            {
-                throw new InvalidOperationException(
-                    message:
-                    $"Member variable '{member.PropertyName}' not found on record '{plainRecord.Name}'");
-            }
-
-            string recTypeName = GetRecordTypeName(record: plainRecord);
-            string loaded = NextTemp();
-            EmitLine(sb: sb, line: $"  {loaded} = load {recTypeName}, ptr {recAllocaPtr}");
-            string updated = NextTemp();
-            EmitLine(sb: sb,
-                line:
-                $"  {updated} = insertvalue {recTypeName} {loaded}, {GetLlvmType(type: fieldInfo.Type)} {value}, {fieldIndex}");
-            EmitLine(sb: sb, line: $"  store {recTypeName} {updated}, ptr {recAllocaPtr}");
-        }
         else
         {
             throw new InvalidOperationException(
@@ -750,16 +753,14 @@ public partial class LlvmCodeGenerator
         // discard writes -> so keep the pointer-based dispatch inline for this case.
         if (setItem != null && targetType is RecordTypeInfo &&
             setItem.Name.Contains(value: "$setitem") &&
-            index.Object is IdentifierExpression recId &&
             !isWrapperForwardingSetItem &&
             (!setItem.IsGenericDefinition || targetType.IsGenericResolution))
         {
             string value = EmitExpression(sb: sb, expr: rhs);
-            string llvmName =
-                _localVarLlvmNames.TryGetValue(key: recId.Name, value: out string? unique)
-                    ? unique
-                    : recId.Name;
-            string receiver = $"%{llvmName}.addr";
+            // The receiver must be the storage address so the element write persists in the
+            // caller's frame. EmitLvalueAddress recurses through arbitrary lvalue chains
+            // (`coll[i] = x`, `a.b[i] = x`, `me.inner[i] = x`), replacing the old bare-local-only path.
+            string receiver = EmitLvalueAddress(sb: sb, expr: index.Object);
             string indexValue = EmitExpression(sb: sb, expr: index.Index);
             TypeInfo? indexType = GetExpressionType(expr: index.Index);
 

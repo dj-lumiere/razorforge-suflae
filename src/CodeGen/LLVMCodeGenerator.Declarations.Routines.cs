@@ -394,10 +394,11 @@ public partial class LlvmCodeGenerator
         // Register implicit 'me' parameter for methods (skip for $create static factories and common routines)
         if (routine.OwnerType != null && !IsCreatorRoutine(routine: routine) && !routine.IsCommon)
         {
-            if (IsRecordSetItem(routine: routine))
+            if (IsByRefMeReceiver(routine: routine))
             {
-                // $setitem! on records: %me.addr IS the function parameter (caller's alloca pointer)
-                // No alloca/store needed — mutations go directly to the caller's variable
+                // Struct-record `me` is passed by reference: %me.addr IS the function parameter
+                // (the caller's storage pointer). No alloca/store — mutations and address-taking
+                // (hijack/get_address) reach the caller's variable directly.
                 _localVariables[key: "me"] = routine.OwnerType;
             }
             else
@@ -760,8 +761,10 @@ public partial class LlvmCodeGenerator
             throw new InvalidOperationException(message: "Implicit 'me' requested for routine without owner type.");
         }
 
-        if (IsRecordSetItem(routine: routine))
+        if (IsByRefMeReceiver(routine: routine))
         {
+            // Struct-record `me` is a pointer to the caller's storage (named %me.addr), so the
+            // parameter doubles as the field-access base — no alloca/store prologue needed.
             string nameSuffix = includeName ? " %me.addr" : string.Empty;
             return $"ptr{nameSuffix}";
         }
@@ -836,12 +839,35 @@ public partial class LlvmCodeGenerator
     }
 
     /// <summary>
-    /// Whether this routine is a $setitem on a record type (needs pass-by-pointer for me).
+    /// Whether a record's <c>me</c> is passed by reference (a <c>ptr</c> to the caller's storage)
+    /// rather than by value. This is a purely type-level decision — no per-method special cases:
+    /// <list type="bullet">
+    /// <item><b>By reference</b> — every <i>storage-backed</i> record: a struct record (no
+    /// <c>@llvm</c> backend) or an <c>@llvm</c> record whose backend is an <i>aggregate</i>
+    /// (<c>[N x T]</c>, i.e. <c>Array[T,N]</c> / <c>BitArray[N]</c>). By-ref lets any method mutate
+    /// in place and take stable addresses (hijack/get_address, atomics, C FFI), and avoids copying
+    /// the aggregate on every call.</item>
+    /// <item><b>By value</b> — only <i>scalar</i> <c>@llvm</c> records (<c>iN</c>, <c>fN</c>,
+    /// <c>ptr</c>: numerics, <c>Bool</c>, <c>Hijacked</c>, …). The value <i>is</i> the machine
+    /// register their operators feed to LLVM intrinsics (<c>add i64 %me, %you</c>), so a pointer
+    /// would be wrong. These are pure values and never mutate <c>me</c> in place, so "needs by-value"
+    /// and "mutates in place" never overlap.</item>
+    /// </list>
+    /// Entities are already by-ref via their pointer ABI. This replaces the old <c>$setitem</c>
+    /// name-check: <c>Array.$setitem</c> is by-ref because Array is aggregate-backed, like every
+    /// other Array method — not because of its name.
     /// </summary>
-    private static bool IsRecordSetItem(RoutineInfo routine)
+    internal static bool IsByRefMeRecord(TypeInfo? ownerType) => ownerType switch
     {
-        return routine.OwnerType is RecordTypeInfo && routine.Name.Contains(value: "$setitem");
-    }
+        // Struct record: no @llvm backend -> storage-backed -> by-ref.
+        RecordTypeInfo { HasDirectBackendType: false } => true,
+        // @llvm record: by-ref iff the backend is an aggregate ([N x T]); scalars stay by-value.
+        RecordTypeInfo { HasDirectBackendType: true, BackendType: { } bt } => bt.StartsWith(value: '['),
+        _ => false
+    };
+
+    private static bool IsByRefMeReceiver(RoutineInfo routine) =>
+        IsByRefMeRecord(ownerType: routine.OwnerType);
 
     /// <summary>
     /// Gets the zero/default value for a type.

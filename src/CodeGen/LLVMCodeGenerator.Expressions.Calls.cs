@@ -704,10 +704,20 @@ public partial class LlvmCodeGenerator
                         : "ptr";
 
                     string receiverLlvm3 = GetLlvmType(type: receiverType);
+                    // `s.Type!()` passes the receiver as a by-VALUE argument to `Type.$create(from)`,
+                    // so load the value when the receiver came in by-ref (struct record).
+                    string receiverVal3 = receiver;
+                    if (ReceiverPassedByRef(receiverType: receiverType))
+                    {
+                        receiverVal3 = NextTemp();
+                        EmitLine(sb: sb,
+                            line: $"  {receiverVal3} = load {receiverLlvm3}, ptr {receiver}");
+                    }
+
                     string result3 = NextTemp();
                     EmitLine(sb: sb,
                         line:
-                        $"  {result3} = call {retType3} @{funcName}({receiverLlvm3} {receiver})");
+                        $"  {result3} = call {retType3} @{funcName}({receiverLlvm3} {receiverVal3})");
 
                     return result3;
                 }
@@ -738,10 +748,22 @@ public partial class LlvmCodeGenerator
                             memberVariableName: member.PropertyName);
                     case RecordTypeInfo record when
                         record.MemberVariables.Any(predicate: mv => mv.Name == member.PropertyName):
+                    {
+                        // For by-ref struct records the receiver is the storage address; load the
+                        // record value before the extractvalue-based field read.
+                        string recVal = receiver;
+                        if (ReceiverPassedByRef(receiverType: receiverType))
+                        {
+                            recVal = NextTemp();
+                            EmitLine(sb: sb,
+                                line: $"  {recVal} = load {GetRecordTypeName(record: record)}, ptr {receiver}");
+                        }
+
                         return EmitRecordMemberVariableRead(sb: sb,
-                            recordValue: receiver,
+                            recordValue: recVal,
                             record: record,
                             memberVariableName: member.PropertyName);
+                    }
                 }
 
                 break;
@@ -761,7 +783,12 @@ public partial class LlvmCodeGenerator
             ? new List<string> { receiver }
             : new List<string>();
         var argTypes = methodTakesReceiver
-            ? new List<string> { GetParameterLlvmType(type: receiverType) }
+            ? new List<string>
+            {
+                ReceiverPassedByRef(receiverType: receiverType)
+                    ? "ptr"
+                    : GetParameterLlvmType(type: receiverType)
+            }
             : new List<string>();
         var argTypeInfos = methodTakesReceiver
             ? new List<TypeInfo> { receiverType }
@@ -1333,8 +1360,15 @@ public partial class LlvmCodeGenerator
             return (receiver, typeAsReceiver);
         }
 
-        string emittedReceiver = EmitExpression(sb: sb, expr: member.Object);
         TypeInfo? receiverType = GetExpressionType(expr: member.Object);
+        if (ReceiverPassedByRef(receiverType: receiverType))
+        {
+            // Struct-record methods take `me` by reference: pass the receiver's storage address
+            // (spilling an rvalue receiver to a temp), matching the by-ref `me` parameter ABI.
+            return (EmitLvalueAddress(sb: sb, expr: member.Object), receiverType);
+        }
+
+        string emittedReceiver = EmitExpression(sb: sb, expr: member.Object);
         return (emittedReceiver, receiverType);
     }
 
@@ -1376,45 +1410,51 @@ public partial class LlvmCodeGenerator
                         "in address-of chain.");
                 }
 
-                // For entity parents, the parent's *value* is already a ptr to the entity
-                // struct. For record parents, recurse to get the parent's storage address.
-                string basePtr;
-                List<MemberVariableInfo>? memberVars;
-                string parentLlvmType;
+                // Resolve the field index and base pointer. For record parents this includes the
+                // stale-carrier-shell refresh: some cached generic resolutions (e.g. a Maybe[Text]
+                // pre-registered before Maybe's body was resolved) arrive with empty MemberVariables,
+                // so we repopulate from the generic definition — exactly like the value-read path in
+                // EmitRecordMemberVariableRead, keeping address-of and reads on the same field offsets.
+                // Entity/crashable parents are already ptr values; records recurse for their storage.
+                int fieldIndex = -1;
+                string? parentLlvmType = null;
+                string? basePtr = null;
                 switch (parentType)
                 {
-                    case EntityTypeInfo entityParent:
-                        basePtr = EmitExpression(sb: sb, expr: member.Object);
-                        memberVars = entityParent.MemberVariables;
-                        parentLlvmType = GetEntityTypeName(entity: entityParent);
-                        break;
                     case RecordTypeInfo recordParent:
-                        basePtr = EmitLvalueAddress(sb: sb, expr: member.Object);
-                        memberVars = recordParent.MemberVariables;
-                        parentLlvmType = GetRecordTypeName(record: recordParent);
+                        fieldIndex = ResolveRecordFieldIndex(record: recordParent,
+                            memberVariableName: member.PropertyName);
+                        if (fieldIndex >= 0)
+                        {
+                            basePtr = EmitLvalueAddress(sb: sb, expr: member.Object);
+                            parentLlvmType = GetRecordTypeName(record: recordParent);
+                        }
                         break;
-                    default:
-                        throw new InvalidOperationException(
-                            message:
-                            $"Cannot take address of '.{member.PropertyName}' on a " +
-                            $"'{parentType.Name}' (only entity or record parents are supported).");
+                    case EntityTypeInfo entityParent:
+                        fieldIndex = IndexOfMemberVariable(
+                            memberVariables: entityParent.MemberVariables, name: member.PropertyName);
+                        if (fieldIndex >= 0)
+                        {
+                            basePtr = EmitExpression(sb: sb, expr: member.Object);
+                            parentLlvmType = GetEntityTypeName(entity: entityParent);
+                        }
+                        break;
+                    case CrashableTypeInfo crashableParent:
+                        fieldIndex = IndexOfMemberVariable(
+                            memberVariables: crashableParent.MemberVariables, name: member.PropertyName);
+                        if (fieldIndex >= 0)
+                        {
+                            basePtr = EmitExpression(sb: sb, expr: member.Object);
+                            parentLlvmType = GetCrashableTypeName(crashable: crashableParent);
+                        }
+                        break;
                 }
 
-                int fieldIndex = -1;
-                for (int i = 0; i < memberVars.Count; i++)
+                if (fieldIndex < 0 || basePtr == null || parentLlvmType == null)
                 {
-                    if (memberVars[index: i].Name == member.PropertyName)
-                    {
-                        fieldIndex = i;
-                        break;
-                    }
-                }
-                if (fieldIndex < 0)
-                {
-                    throw new InvalidOperationException(
-                        message:
-                        $"Cannot take address of '.{member.PropertyName}' — no such field " +
-                        $"on '{parentType.Name}'.");
+                    // Not a stored field at a known offset (a genuine rvalue member chain, or a parent
+                    // kind with no struct fields): materialize the value and address the temporary.
+                    return EmitSpillToTempAddress(sb: sb, expr: expr);
                 }
 
                 string fieldPtr = NextTemp();
@@ -1423,13 +1463,83 @@ public partial class LlvmCodeGenerator
                 return fieldPtr;
             }
             default:
-                throw new InvalidOperationException(
-                    message:
-                    $"Cannot take address of expression form '{expr.GetType().Name}'. " +
-                    "Address-of is supported on named locals and field-access chains; " +
-                    "index access (`arr[i].get_address()`) is deferred to post-v0.0.1a.");
+                // Rvalue receiver (call result, constructor, literal, …): no stable storage exists,
+                // so spill the value to a temp and return its address. Lets a by-ref record method
+                // (or get_address/hijack) take the address of a temporary.
+                return EmitSpillToTempAddress(sb: sb, expr: expr);
         }
     }
+
+    /// <summary>Index of the named member variable, or -1 if absent.</summary>
+    private static int IndexOfMemberVariable(List<MemberVariableInfo> memberVariables, string name)
+    {
+        for (int i = 0; i < memberVariables.Count; i++)
+        {
+            if (memberVariables[index: i].Name == name) return i;
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// Finds a record field's index, refreshing <see cref="RecordTypeInfo.MemberVariables"/> from the
+    /// generic definition when the resolution arrived as an empty carrier shell (e.g. a cached
+    /// <c>Maybe[Text]</c> registered before <c>Maybe</c>'s body was resolved). Mirrors the fallback in
+    /// <c>EmitRecordMemberVariableRead</c> so address-of and value reads agree on field offsets.
+    /// </summary>
+    private static int ResolveRecordFieldIndex(RecordTypeInfo record, string memberVariableName)
+    {
+        int idx = IndexOfMemberVariable(memberVariables: record.MemberVariables,
+            name: memberVariableName);
+        if (idx >= 0) return idx;
+
+        if (record.GenericDefinition is RecordTypeInfo gdef && record.TypeArguments != null &&
+            gdef.MemberVariables.Count > 0)
+        {
+            var fresh = (RecordTypeInfo)gdef.CreateInstance(typeArguments: record.TypeArguments);
+            record.MemberVariables = fresh.MemberVariables;
+            return IndexOfMemberVariable(memberVariables: record.MemberVariables,
+                name: memberVariableName);
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// Materializes an expression's value into a fresh entry alloca and returns the alloca pointer.
+    /// Used by <see cref="EmitLvalueAddress"/> when an address is needed but the expression has no
+    /// stable storage — a genuine rvalue (call result, constructor, literal). The temporary is a
+    /// callee-local copy: correct for reads and value-identity operations, but a write through it
+    /// would not reach an original (rvalues have none).
+    /// </summary>
+    private string EmitSpillToTempAddress(StringBuilder sb, Expression expr)
+    {
+        TypeInfo? exprType = GetExpressionType(expr: expr);
+        if (exprType == null)
+        {
+            throw new InvalidOperationException(
+                message:
+                $"Cannot take address of expression form '{expr.GetType().Name}' — " +
+                "unknown type, cannot spill to a temporary.");
+        }
+
+        string val = EmitExpression(sb: sb, expr: expr);
+        string llvm = GetLlvmType(type: exprType);
+        string slot = NextTemp();
+        EmitEntryAlloca(llvmName: slot, llvmType: llvm);
+        EmitLine(sb: sb, line: $"  store {llvm} {val}, ptr {slot}");
+        return slot;
+    }
+
+    /// <summary>
+    /// Whether a method receiver of this type is passed by reference (a <c>ptr</c> to its storage):
+    /// storage-backed records — struct records (no <c>@llvm</c> backend) and aggregate-backed
+    /// <c>@llvm</c> records (<c>[N x T]</c>, e.g. Array/BitArray). Shares the exact predicate with
+    /// the callee-side <c>IsByRefMeReceiver</c> (via <c>IsByRefMeRecord</c>) so call sites pass the
+    /// receiver's address and the matching <c>ptr</c> argument type. Scalar <c>@llvm</c> records stay
+    /// by value.
+    /// </summary>
+    private static bool ReceiverPassedByRef(TypeInfo? receiverType) =>
+        IsByRefMeRecord(ownerType: receiverType);
 
     /// <summary>
     /// Resolves the initial member routine call from semantic compiler state.
