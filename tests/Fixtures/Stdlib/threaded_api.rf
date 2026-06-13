@@ -1,0 +1,41 @@
+module Tests/Stdlib/ThreadedApi
+import IO/Console
+import BuilderService
+
+# v0.1 concurrency, Phase 1: `threaded routine` spawns an OS thread; calling it yields a
+# Task[T] handle; `.waitfor()` joins (-> T) and `.waitfor(timeout)` joins with a deadline
+# (-> Lookup[T], None on timeout/cancel).
+
+threaded routine compute(x: S64, y: S64) -> S64
+  return x * y + 1
+
+# Record return — exercises by-value aggregate handoff across the thread boundary.
+record Point
+  x: S64
+  y: S64
+
+threaded routine make_point(a: S64, b: S64) -> Point
+  return Point(x: a, y: b)
+
+routine start()
+  # 1. spawn, hold the handle, then join.
+  var t = compute(x: 6, y: 7)
+  var r = t.waitfor()
+  show(f"compute => {r}")
+
+  # 2. fused spawn + join.
+  var r2 = compute(x: 2, y: 5).waitfor()
+  show(f"fused => {r2}")
+
+  # 3. record result.
+  var p = make_point(a: 3, b: 4).waitfor()
+  show(f"point => x={p.x} y={p.y}")
+
+  # 4. join with a generous timeout — completes well inside the window, so VALUE.
+  var r3 = compute(x: 3, y: 4).waitfor(5s)
+  when r3
+    is None => show("within => none")
+    is S64 v => show(f"within => {v}")
+    else => show("within => err")
+
+  return
