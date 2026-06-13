@@ -190,20 +190,19 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private void EnsureTaskRuntimeDeclares()
     {
+        // Only the spawn/thunk-exclusive runtime functions are declared here, with the raw `ptr`
+        // ABI the hand-emitted IR uses. The wait-side functions (rf_task_wait/wait_within/
+        // result_payload/destroy) are called from the RF stdlib `Task.retrieve!`, so the normal
+        // extern-declaration path emits them with the RF `Address`(=i64) ABI — declaring them here
+        // too would clash. rf_invalidate is shared, so it matches the existing i64 convention.
         _rfRoutineDeclarations[key: "rf_task_create"] = "declare ptr @rf_task_create(i32)";
         _rfRoutineDeclarations[key: "rf_task_spawn_threaded"] =
             "declare i32 @rf_task_spawn_threaded(ptr, ptr, ptr)";
-        _rfRoutineDeclarations[key: "rf_task_wait"] = "declare i32 @rf_task_wait(ptr)";
-        _rfRoutineDeclarations[key: "rf_task_wait_within"] =
-            "declare i32 @rf_task_wait_within(ptr, i64, i32)";
-        _rfRoutineDeclarations[key: "rf_task_result_payload"] =
-            "declare ptr @rf_task_result_payload(ptr)";
-        _rfRoutineDeclarations[key: "rf_task_destroy"] = "declare void @rf_task_destroy(ptr)";
         _rfRoutineDeclarations[key: "rf_task_complete_value"] =
             "declare void @rf_task_complete_value(ptr, ptr)";
         _rfRoutineDeclarations[key: "rf_allocate_dynamic"] =
             "declare ptr @rf_allocate_dynamic(i64)";
-        _rfRoutineDeclarations[key: "rf_invalidate"] = "declare void @rf_invalidate(ptr)";
+        _rfRoutineDeclarations[key: "rf_invalidate"] = "declare void @rf_invalidate(i64)";
     }
 
     /// <summary>
@@ -282,7 +281,11 @@ public partial class LlvmCodeGenerator
         }
 
         if (routine.Parameters.Count > 0)
-            b.Append(value: "  call void @rf_invalidate(ptr %userdata)\n");
+        {
+            // rf_invalidate takes Address (i64); ptrtoint the userdata pointer first.
+            b.Append(value: "  %udint = ptrtoint ptr %userdata to i64\n");
+            b.Append(value: "  call void @rf_invalidate(i64 %udint)\n");
+        }
         b.Append(value: "  ret void\n}\n");
         return thunkSym;
     }
@@ -342,115 +345,30 @@ public partial class LlvmCodeGenerator
         EmitLine(sb: sb,
             line:
             $"  {spawnRc} = call i32 @rf_task_spawn_threaded(ptr {task}, ptr {entryThunk}, {userdata})");
-        return task;
-    }
 
-    /// <summary>
-    /// Lowers <c>task.waitfor()</c> / <c>task.waitfor(timeout)</c>. Blocks on the task; with no
-    /// timeout the value is <c>T</c> (the thread produced a value or crashed the program); with a
-    /// timeout the value is <c>Lookup[T]</c> (None on timeout/cancel). Destroys the task handle.
-    /// </summary>
-    private string EmitTaskWaitfor(StringBuilder sb, MemberExpression member,
-        List<Expression> arguments)
-    {
-        EnsureTaskRuntimeDeclares();
+        // spawned = (task != null) && (spawn rc != 0). rf_task_spawn_threaded returns 1 on
+        // success, 0 on failure.
+        string createOk = NextTemp();
+        EmitLine(sb: sb, line: $"  {createOk} = icmp ne ptr {task}, null");
+        string spawnOk = NextTemp();
+        EmitLine(sb: sb, line: $"  {spawnOk} = icmp ne i32 {spawnRc}, 0");
+        string spawned = NextTemp();
+        EmitLine(sb: sb, line: $"  {spawned} = and i1 {createOk}, {spawnOk}");
 
-        TypeInfo? receiver = GetExpressionType(expr: member.Object);
-        TypeInfo valueType = receiver is TaskTypeInfo t ? t.ValueType : receiver!;
-        string vt = valueType is EntityTypeInfo or CrashableTypeInfo
-            ? "ptr"
-            : GetLlvmType(type: valueType);
-        string task = EmitExpression(sb: sb, expr: member.Object);
-
-        // No timeout: block indefinitely and return T directly. (The thread either produced a
-        // value or crashed the whole program, so there is no absent case to model.)
-        if (arguments.Count == 0)
-        {
-            EmitLine(sb: sb, line: $"  call i32 @rf_task_wait(ptr {task})");
-            string payload = NextTemp();
-            EmitLine(sb: sb, line: $"  {payload} = call ptr @rf_task_result_payload(ptr {task})");
-            string result = NextTemp();
-            EmitLine(sb: sb, line: $"  {result} = load {vt}, ptr {payload}");
-            EmitLine(sb: sb, line: $"  call void @rf_invalidate(ptr {payload})");
-            EmitLine(sb: sb, line: $"  call void @rf_task_destroy(ptr {task})");
-            return result;
-        }
-
-        // Timeout: rf_task_wait_within → build Lookup[T] (VALUE → T, TIMEOUT/CANCELLED → None).
-        Expression timeoutExpr = arguments[index: 0] is NamedArgumentExpression na
-            ? na.Value
-            : arguments[index: 0];
-        string durationVal = EmitExpression(sb: sb, expr: timeoutExpr);
-        string durLlvm = GetLlvmType(type: GetExpressionType(expr: timeoutExpr)!);
-        // Duration is `record { S64 seconds, U32 nanoseconds }` passed by value.
-        string secs = NextTemp();
-        EmitLine(sb: sb, line: $"  {secs} = extractvalue {durLlvm} {durationVal}, 0");
-        string ns = NextTemp();
-        EmitLine(sb: sb, line: $"  {ns} = extractvalue {durLlvm} {durationVal}, 1");
-
-        string kind = NextTemp();
-        EmitLine(sb: sb,
-            line: $"  {kind} = call i32 @rf_task_wait_within(ptr {task}, i64 {secs}, i32 {ns})");
-
-        string carrierLlvm = GetLookupCarrierLlvmType(valueType: valueType);
-        string valueLbl = NextLabel(prefix: "wf_value");
-        string noneLbl = NextLabel(prefix: "wf_none");
-        string doneLbl = NextLabel(prefix: "wf_done");
-
-        string isValue = NextTemp();
-        EmitLine(sb: sb, line: $"  {isValue} = icmp eq i32 {kind}, 1");
-        EmitLine(sb: sb, line: $"  br i1 {isValue}, label %{valueLbl}, label %{noneLbl}");
-
-        // VALUE arm: load T from the result box, wrap into the Lookup[T] success carrier.
-        EmitLine(sb: sb, line: $"{valueLbl}:");
-        string payloadV = NextTemp();
-        EmitLine(sb: sb, line: $"  {payloadV} = call ptr @rf_task_result_payload(ptr {task})");
-        string successCarrier = EmitLookupSuccessCarrier(sb: sb, valueType: valueType,
-            valuePtr: payloadV, carrierLlvm: carrierLlvm);
-        EmitLine(sb: sb, line: $"  call void @rf_invalidate(ptr {payloadV})");
-        EmitLine(sb: sb, line: $"  br label %{doneLbl}");
-
-        // NONE arm: timeout/cancel → carrier with type_id 0, which is exactly zeroinitializer.
-        EmitLine(sb: sb, line: $"{noneLbl}:");
-        EmitLine(sb: sb, line: $"  br label %{doneLbl}");
-
-        EmitLine(sb: sb, line: $"{doneLbl}:");
-        string carrier = NextTemp();
-        EmitLine(sb: sb,
-            line:
-            $"  {carrier} = phi {carrierLlvm} [ {successCarrier}, %{valueLbl} ], [ zeroinitializer, %{noneLbl} ]");
-        EmitLine(sb: sb, line: $"  call void @rf_task_destroy(ptr {task})");
-        return carrier;
-    }
-
-    /// <summary>
-    /// Builds a <c>Lookup[T]</c> success-carrier SSA value (<c>{ i64 type_id, [N x i8] payload }</c>)
-    /// from a pointer to a boxed <c>T</c>, mirroring <c>EmitInlineCarrierReturn</c>.
-    /// </summary>
-    private string EmitLookupSuccessCarrier(StringBuilder sb, TypeInfo valueType, string valuePtr,
-        string carrierLlvm)
-    {
-        ulong typeId = TypeIdHelper.ComputeTypeId(fullName: valueType.FullName);
-        string vt = valueType is EntityTypeInfo or CrashableTypeInfo
-            ? "ptr"
-            : GetLlvmType(type: valueType);
-        string val = NextTemp();
-        EmitLine(sb: sb, line: $"  {val} = load {vt}, ptr {valuePtr}");
-
-        string slot = NextTemp();
-        EmitLine(sb: sb, line: $"  {slot} = alloca {carrierLlvm}");
-        EmitLine(sb: sb, line: $"  store {carrierLlvm} zeroinitializer, ptr {slot}");
-        string tagPtr = NextTemp();
-        EmitLine(sb: sb,
-            line: $"  {tagPtr} = getelementptr {carrierLlvm}, ptr {slot}, i32 0, i32 0");
-        EmitLine(sb: sb, line: $"  store i64 {typeId}, ptr {tagPtr}");
-        string payPtr = NextTemp();
-        EmitLine(sb: sb,
-            line: $"  {payPtr} = getelementptr {carrierLlvm}, ptr {slot}, i32 0, i32 1");
-        EmitLine(sb: sb, line: $"  store {vt} {val}, ptr {payPtr}");
-        string loaded = NextTemp();
-        EmitLine(sb: sb, line: $"  {loaded} = load {carrierLlvm}, ptr {slot}");
-        return loaded;
+        // Build the Task[T] record value: { task_handle, deadline (zero), has_deadline (false),
+        // spawned }. deadline/has_deadline stay at their zeroinitializer defaults.
+        TypeInfo taskType = _registry.GetOrCreateResolution(
+            genericDef: _registry.LookupType(name: "Task")!,
+            typeArguments: [routine.ReturnType!]);
+        string recLlvm = GetLlvmType(type: taskType);
+        // Address lowers to i64, so the handle pointer must be ptrtoint'd into field 0.
+        string taskInt = NextTemp();
+        EmitLine(sb: sb, line: $"  {taskInt} = ptrtoint ptr {task} to i64");
+        string r0 = NextTemp();
+        EmitLine(sb: sb, line: $"  {r0} = insertvalue {recLlvm} zeroinitializer, i64 {taskInt}, 0");
+        string r1 = NextTemp();
+        EmitLine(sb: sb, line: $"  {r1} = insertvalue {recLlvm} {r0}, i1 {spawned}, 3");
+        return r1;
     }
 
     /// <summary>

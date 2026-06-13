@@ -161,9 +161,6 @@ public partial class LlvmCodeGenerator
             // Routine types (function pointers) -> opaque pointer
             RoutineTypeInfo => "ptr",
 
-            // Task[T] threaded-task handle -> opaque rf_task* pointer
-            TaskTypeInfo => "ptr",
-
             // Const generic values -> map to the underlying integer type
             ConstGenericValueTypeInfo => "i64",
 

@@ -538,12 +538,6 @@ public partial class LlvmCodeGenerator
         if (loweringKind == CallLoweringKind.Unknown)
             loweringKind = CallLoweringKind.DirectMemberRoutine;
 
-        // Task[T].waitfor() / .waitfor(timeout) — intrinsic join of a threaded task.
-        if (member.PropertyName == "waitfor" && GetExpressionType(expr: member.Object) is TaskTypeInfo)
-        {
-            return EmitTaskWaitfor(sb: sb, member: member, arguments: arguments);
-        }
-
         // Dynamic call through a callable FIELD on the receiver (e.g. `me.predicate(item)` in
         // a stdlib iterator emitter, where `predicate` is a `secret predicate: Routine[(T,), Bool]`
         // field). SA classifies these as DynamicCall. There is no method named `predicate`; load
