@@ -856,7 +856,11 @@ public partial class LlvmCodeGenerator
     /// </summary>
     private static bool IsByRefMeReceiver(RoutineInfo routine)
     {
-        return routine.OwnerType is RecordTypeInfo { HasDirectBackendType: false };
+        // `$setitem` always needs by-ref `me` so the element write reaches the caller's storage —
+        // even on inline-backed records like Array[T, N] (`@llvm`-style `[N x T]`), whose call site
+        // passes the receiver address. Struct records (no direct backend type) are by-ref too.
+        return IsRecordSetItem(routine: routine)
+            || routine.OwnerType is RecordTypeInfo { HasDirectBackendType: false };
     }
 
     /// <summary>

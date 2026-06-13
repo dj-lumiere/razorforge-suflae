@@ -320,11 +320,35 @@ public partial class LlvmCodeGenerator
             comparisonType: StringComparison.Ordinal);
         if (toIdx < 0) return null;
         string operand = line.Substring(startIndex: valueStart, length: toIdx - valueStart);
-        // operand is "<Type> <Value>", split on first space.
-        int sep = operand.IndexOf(value: ' ');
-        if (sep < 0) return null;
-        string fromType = operand.Substring(startIndex: 0, length: sep);
-        string val = operand.Substring(startIndex: sep + 1);
+        // operand is "<Type> <Value>". Most types are space-free, but inline-array aggregates
+        // (`[N x T]`, possibly nested) contain spaces — split after the balanced closing bracket
+        // in that case; otherwise split on the first space.
+        string fromType;
+        string val;
+        if (operand.StartsWith(value: '['))
+        {
+            int depth = 0;
+            int close = -1;
+            for (int i = 0; i < operand.Length; i++)
+            {
+                if (operand[index: i] == '[') depth++;
+                else if (operand[index: i] == ']' && --depth == 0)
+                {
+                    close = i;
+                    break;
+                }
+            }
+            if (close < 0 || close + 1 >= operand.Length) return null;
+            fromType = operand.Substring(startIndex: 0, length: close + 1);
+            val = operand.Substring(startIndex: close + 1).Trim();
+        }
+        else
+        {
+            int sep = operand.IndexOf(value: ' ');
+            if (sep < 0) return null;
+            fromType = operand.Substring(startIndex: 0, length: sep);
+            val = operand.Substring(startIndex: sep + 1);
+        }
         string toType = line.Substring(startIndex: toIdx + 4).Trim();
         if (toType != "ptr") return null;
         // Struct types in our IR are named %"Record.X" or %"Entity.X" or anonymous %Record.X.
@@ -333,7 +357,12 @@ public partial class LlvmCodeGenerator
         // to inttoptr upstream by FixIntPtrBitcast; ptr→ptr is a no-op and need not match.
         bool isStruct = fromType.StartsWith(value: '%');
         bool isFloat = fromType is "fp128" or "double" or "float" or "half" or "bfloat" or "x86_fp80" or "ppc_fp128";
-        if (!isStruct && !isFloat) return null;
+        // Inline-array aggregate backends (`[N x T]`, e.g. Array[T,N] / BitArray[N]) also cannot
+        // bitcast to ptr. Their universal `get_address`/`hijack` bodies are dead code (the real call
+        // is intercepted at the call site), but the materialized definition must still compile —
+        // spill the aggregate to a fresh alloca and use its pointer, same as the struct case.
+        bool isArray = fromType.StartsWith(value: '[');
+        if (!isStruct && !isFloat && !isArray) return null;
         return (fromType, val, resultName);
     }
 
